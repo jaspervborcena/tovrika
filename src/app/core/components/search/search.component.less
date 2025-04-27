@@ -1,0 +1,79 @@
+.search-wrapper {
+  margin: 20px 0; /* Top and bottom margin */
+  display: flex;
+  flex-direction: column; /* Stack elements vertically */
+  align-items: center; /* Centers horizontally */
+}
+
+.search-container {
+  display: flex;
+  align-items: center;
+  background: white;
+  padding: 8px;
+  border-radius: 8px;
+  box-shadow: 0px 2px 5px rgba(0, 0, 0, 0.1); /* Optional shadow */
+}
+
+.search-input {
+  padding: 8px 12px;
+  border: 2px solid #ccc;
+  border-radius: 5px;
+  width: 400px;
+  font-size: 16px;
+  margin-right: 10px;
+}
+
+.search-button {
+  background-color: #007bff;
+  border: none;
+  padding: 8px 10px;
+  border-radius: 5px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.search-button:hover {
+  background-color: #0056b3;
+}
+
+.search-icon {
+  color: white;
+}
+
+.register-prompt {
+  margin-top: 10px; /* Adds space between search bar and text */
+  font-size: 14px;
+  color: #333;
+  text-align: center;
+}
+
+.register-prompt a {
+  color: #007bff;
+  text-decoration: none;
+  font-weight: bold;
+}
+
+.register-prompt a:hover {
+  text-decoration: underline;
+}
+
+@media (max-width: 768px) {
+  .search-container {
+    max-width: 90%; /* Makes it fill most of the screen */
+  }
+
+  .search-input {
+    width: 100%; /* Takes full width inside container */
+    font-size: 14px; /* Slightly smaller text */
+  }
+
+  .search-button {
+    padding: 6px 8px; /* Adjust button padding */
+  }
+
+  .register-prompt {
+    font-size: 12px; /* Smaller text for mobile */
+  }
+}

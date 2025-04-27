@@ -1,0 +1,98 @@
+<form [formGroup]="playForm" class="form-wrap">
+  <!-- Options Section -->
+
+  <div class="options">
+    <button
+      class="option-btn"
+      [class.active]="activeTime === '14:00:00'"
+      (click)="selectTime('14:00:00')"
+    >
+      2PM
+    </button>
+    <button
+      class="option-btn"
+      [class.active]="activeTime === '17:00:00'"
+      (click)="selectTime('17:00:00')"
+    >
+      5PM
+    </button>
+    <button
+      class="option-btn"
+      [class.active]="activeTime === '21:00:00'"
+      (click)="selectTime('21:00:00')"
+    >
+      9PM
+    </button>
+  </div>
+  <div *ngIf="errorMessage" class="error-message">
+    {{ errorMessage }}
+  </div>
+  <div *ngIf="successMessage" class="success-message">
+    {{ successMessage }}
+  </div> 
+  <!-- Main Layout -->
+  <div class="container">
+    <!-- Combination Input Field -->
+    <div class="keypad-wrapper">
+    <div class="combination-area">
+      Combination
+      <input
+        #combinationInput
+        formControlName="combination"
+        class="combination-input"
+        placeholder="3 digts"
+        maxlength="3"
+        type="text"
+      />
+      
+    </div>
+  </div>
+    <div class="keypad-wrapper">
+      <!-- Target Input -->
+      <div class="target-area">
+        <input
+          #targetInput
+          formControlName="target"
+          class="target-input"
+          placeholder="Enter target amount here"
+          (focus)="setActiveField('target')"
+          maxlength="3"
+          type="text"
+        />
+        <p>Target</p>
+      </div>
+
+      <!-- Ramble Input -->
+      <div class="ramble-area">
+        <input
+          #rambleInput
+          formControlName="ramble"
+          class="ramble-input"
+          placeholder="Enter ramble amount here"
+          (focus)="setActiveField('ramble')"
+          maxlength="3"
+          type="text"
+        />
+        <p>Ramble</p>
+      </div>
+    </div>
+
+    <!-- Keypad -->
+    <div class="keypad">
+      <button type="button" (click)="handleKeyPress('7')">7</button>
+      <button type="button" (click)="handleKeyPress('8')">8</button>
+      <button type="button" (click)="handleKeyPress('9')">9</button>
+      <button type="button" (click)="handleKeyPress('4')">4</button>
+      <button type="button" (click)="handleKeyPress('5')">5</button>
+      <button type="button" (click)="handleKeyPress('6')">6</button>
+      <button type="button" (click)="handleKeyPress('1')">1</button>
+      <button type="button" (click)="handleKeyPress('2')">2</button>
+      <button type="button" (click)="handleKeyPress('3')">3</button>
+      <button type="button" (click)="handleKeyPress('C')" class="clear">C</button>
+      <button type="button" (click)="handleKeyPress('0')" class="zero">0</button>
+      <button type="button" (click)="handleKeyPress('⌫')" class="backspace">⌫</button>
+    </div>
+  </div>
+
+  <button type="submit" class="add-bet" (click)="addBet()">Add Bet</button>
+</form>

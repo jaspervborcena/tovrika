@@ -1,0 +1,33 @@
+<div class="sign-in-container">
+  <div class="sign-in-form">
+    <h2>Sign In</h2>
+    <form [formGroup]="signInForm" (ngSubmit)="onSubmit()">
+      <div>
+        <label for="email">Email</label>
+        <input id="email" type="email" formControlName="email" placeholder="Email" />
+      </div>
+      <div>
+        <label for="password">Password</label>
+        <input id="password" type="password" formControlName="password" placeholder="Password" />
+      </div>
+
+      <!-- Stay Signed In & Forgot Password -->
+     <!-- Stay Signed In & Forgot Password -->
+<div class="signin-options">
+  <div class="stay-signed-in">
+    <input type="checkbox" id="staySignedIn" formControlName="staySignedIn">
+    <label for="staySignedIn">Stay Signed In</label>
+  </div>
+  <a href="/forgot-password" class="forgot-password">Forgot Password?</a>
+</div>
+
+
+      <button type="submit" [disabled]="signInForm.invalid">Sign In</button>
+    </form>
+
+    <p *ngIf="errorMessage" class="error">{{ errorMessage }}</p>
+
+    <!-- Create Account Button -->
+    <!-- <a href="/register" class="create-account-btn">Create an Account</a> -->
+  </div>
+</div>

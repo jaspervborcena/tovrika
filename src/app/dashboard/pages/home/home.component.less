@@ -1,0 +1,115 @@
+#myCanvas {
+  background-color: transparent; /* Use transparent if you want no background */
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+  width: 400px;
+  height: 400px;
+}
+
+.fancy-button {
+  background-color: #4CAF50; /* Green */
+  border: none;
+  color: white;
+  padding: 5px 8px; /* Smaller padding for mobile */
+  text-align: center;
+  text-decoration: none;
+  display: inline-block;
+  font-size: 16px; /* Font size for the add button */
+  margin: 4px 2px;
+  cursor: pointer;
+  border-radius: 5px; /* Rounded corners */
+  transition: background-color 0.3s, transform 0.2s; /* Transition for hover effect */
+}
+
+.add-button {
+  font-size: 20px; /* Size for the add button */
+  width: 40px; /* Fixed width for the add button */
+  height: 40px; /* Fixed height for the add button */
+  background-color: #4CAF50; /* Green */
+}
+
+.remove-button {
+  background-color: red; /* Red background */
+  color: white; /* White text */
+  border: none; /* No border */
+  padding: 5px; /* Same padding for consistency */
+  font-size: 20px; /* Font size for remove button */
+  cursor: pointer;
+  border-radius: 5px; /* Rounded corners */
+  width: 40px; /* Fixed width for remove button */
+  height: 40px; /* Fixed height for remove button */
+}
+
+.scrollable-list {
+  max-height: 400px; /* Adjust this value as needed */
+  overflow-y: auto;
+  width: 100%;
+  margin-top: 10px;
+}
+
+.list-item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  list-style-type: none; /* Remove bullets */
+  margin-bottom: 5px;
+  justify-content: start;
+}
+
+/* Styles specifically for the winners list */
+.winners-list {
+  list-style-type: none; /* Remove bullets from the winners list */
+  padding: 0; /* Remove default padding */
+  margin: 0; /* Remove default margin */
+}
+
+@media (max-width: 768px) {
+  div {
+    flex-direction: column; /* Stack items vertically on smaller screens */
+  }
+
+  .myCanvas {
+    width: 100%; /* Full width on small screens */
+  }
+
+  .scrollable-list, .prizes, .winners {
+    width: 100%; /* Ensure lists take full width */
+  }
+}
+.ads-container {
+  width: 200px; /* Adjust as per your layout */
+  height: 400px; /* Match the canvas height */
+  background-color: lightgray;
+  padding: 10px;
+  border-radius: 5px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  margin-left: 10px;
+  margin-right: 10px;
+}
+/* Default style (for larger screens like desktop or laptop) */
+.Ads {
+  width: 200px;
+  height: 100vh;
+  margin-right: 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* Hide Ads for screen sizes 768px and below (tablets, phones) */
+@media screen and (max-width: 768px) {
+  .Ads {
+    display: none;
+  }
+}
+.close-btn {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  cursor: pointer;
+  padding: 0;
+}

@@ -1,0 +1,54 @@
+.container {
+    display: flex;
+    flex-direction: column; /* Stack header on top of content */
+    height: 100vh; /* Full viewport height */
+    width: 100%; /* Full width */
+    overflow: hidden; /* Prevent overflow issues */
+    align-items: center;
+  }
+  
+  .header {
+    display: flex;
+    justify-content: center; /* Center-align buttons in the header */
+    align-items: center; /* Vertically center header content */
+    background-color: #003366; /* Dark blue background */
+    color: white; /* White font for visibility */
+    padding: 10px 0; /* Space around the header */
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2); /* Optional shadow for depth */
+    flex-shrink: 0; /* Prevent the header from shrinking */
+  }
+  
+  .header-options {
+    display: flex;
+    gap: 10px; /* Space between buttons */
+  }
+  
+  .option-btn {
+    padding: 10px 15px; /* Add spacing inside buttons */
+    font-size: 16px; /* Text size for readability */
+    font-weight: bold; /* Bold text for emphasis */
+    color: white; /* White text for visibility */
+    background-color: transparent; /* No background by default */
+    border: none; /* Remove button borders */
+    border-radius: 5px; /* Rounded corners for smooth design */
+    cursor: pointer; /* Pointer cursor for interactivity */
+    transition: all 0.3s ease-in-out; /* Smooth hover and active effects */
+  
+    &:hover {
+      background-color: #002244; /* Darker blue on hover */
+    }
+  
+    &.active {
+      background-color: #4CAF50; /* Green background for active button */
+      color: white; /* Keep white text */
+      font-weight: bold; /* Emphasize the active state */
+    }
+  }
+  
+  .content {
+    flex: 1; /* Content takes up the remaining space */
+    background-color: #f8f9fa; /* Light background for content */
+    overflow-y: auto; /* Enable vertical scrolling for overflowing content */
+    padding: 20px; /* Add padding for spacing */
+  }
+  

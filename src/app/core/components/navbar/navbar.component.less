@@ -1,0 +1,154 @@
+/* General Navbar Styling */
+nav {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem;
+  background-color: #333;
+  color: white;
+}
+
+.logo-container {
+  cursor: pointer; /* Makes it clickable */
+  display: flex;
+  align-items: center;
+  text-decoration: none; /* Removes default link styling */
+}
+
+.logo {
+  width: 50px; /* Default size */
+  height: auto;
+}
+
+/* Tooltip default */
+.tooltip {
+  font-size: 16px;
+  background: black;
+  color: white;
+  padding: 5px 10px;
+  border-radius: 5px;
+  visibility: hidden;
+  opacity: 0;
+  transition: opacity 0.3s ease-in-out;
+}
+
+/* Show tooltip on hover */
+.logo-container:hover .tooltip {
+  visibility: visible;
+  opacity: 1;
+}
+
+/* Responsive Adjustments */
+@media (max-width: 768px) {
+  .logo {
+    width: 45px; /* Smaller logo */
+  }
+
+  .tooltip {
+    font-size: 14px; /* Adjust tooltip text size */
+  }
+}
+
+@media (max-width: 480px) {
+  .logo {
+    width: 35px; /* Even smaller for small phones */
+  }
+
+  .tooltip {
+    font-size: 12px;
+    padding: 3px 8px;
+  }
+}
+
+.title {
+  font-size: 1.5rem;
+  font-weight: bold;
+}
+
+/* Menu Icon (Hamburger) */
+.menu-icon {
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.bar {
+  width: 25px;
+  height: 3px;
+  background-color: white;
+  transition: 0.3s;
+}
+
+/* Navbar Icons */
+.nav-icons {
+  display: flex;
+  list-style: none;
+  gap: 20px;
+}
+
+.icon-container {
+  position: relative;
+  padding: 10px;
+  border-radius: 8px; /* Smooth rounded corners */
+  transition: background-color 0.3s ease-in-out;
+}
+
+/* Highlight Effect on Hover */
+.icon-container:hover {
+  background-color: rgba(255, 255, 255, 0.2); /* Light highlight */
+}
+
+/* Icons */
+.icon-container a {
+  text-decoration: none;
+  color: white;
+  font-size: 22px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  transition: color 0.3s ease-in-out;
+}
+
+/* Tooltip */
+.tooltip {
+  visibility: hidden;
+  background-color: rgba(0, 0, 0, 0.8);
+  color: white;
+  text-align: center;
+  padding: 5px 10px;
+  border-radius: 5px;
+  position: absolute;
+  bottom: -30px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 12px;
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 0.3s ease-in-out;
+}
+
+/* Show Tooltip on Hover */
+.icon-container:hover .tooltip {
+  visibility: visible;
+  opacity: 1;
+}
+
+/* Cart Badge (Hidden when 0 items) */
+.cart-quantity {
+  background: red;
+  color: white;
+  font-size: 12px;
+  font-weight: bold;
+  padding: 2px 6px;
+  border-radius: 50%;
+  position: absolute;
+  top: -5px;
+  right: -10px;
+  display: inline-block;
+}
+
+/* Hide Cart Badge if No Items */
+[ngIf="totalQuantity() === 0"] {
+  display: none;
+}

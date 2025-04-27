@@ -1,0 +1,58 @@
+<nav>
+  <div class="logo-container" (click)="navigateHome()">
+    <img src="/assets/images/gameoffortunes.png" alt="gameoffortunes Logo" class="logo">
+    <span class="tooltip">gameoffortunes</span>
+  </div>
+  
+  
+
+  <!-- <div class="menu-icon" (click)="toggleMenu()">
+    <span class="bar"></span>
+    <span class="bar"></span>
+    <span class="bar"></span>
+  </div> -->
+
+    
+  <ul class="nav-icons">
+    <!-- Sign In / Sign Out -->
+    <li class="icon-container">
+      <a (click)="isLoggedIn() ? signOut() : navigateToSignIn()">
+        <i class="fa" [ngClass]="isLoggedIn() ? 'fa-sign-out-alt' : 'fa-sign-in-alt'"></i>
+        <span class="tooltip">{{ isLoggedIn() ? 'Sign Out' : 'Sign In' }}</span>
+      </a>
+    </li>
+    
+    <!-- Favorite -->
+    <li class="icon-container">
+      <a href="#">
+        <i class="fa fa-heart"></i>
+        <span class="tooltip">Favorite</span>
+      </a>
+    </li>
+
+    <!-- Gift -->
+    <li class="icon-container">
+      <a href="#">
+        <i class="fa fa-gift"></i>
+        <span class="tooltip">Gift</span>
+      </a>
+    </li>
+
+
+    <!-- Draw -->
+    <li class="icon-container" *ngIf="isLoggedIn()">
+      <a href="/draw">
+          <i class="fa-regular fa-snowflake"></i>
+          <span class="tooltip">Draw</span>
+      </a>
+  </li>
+    
+    <!-- Add to Cart -->
+    <li class="icon-container">
+      <a href="#" title="Cart">
+        <i class="fas fa-shopping-cart"></i>
+      </a>
+    </li>
+
+  </ul>
+</nav>

@@ -1,0 +1,90 @@
+<div id="wheel-container" [formGroup]="wheelForm">
+  <audio id="spinSound" src="assets/sounds/spin.mp3"></audio>
+  <audio id="congratsSound" src="assets/sounds/congrats.mp3"></audio>
+<!-- In your play-wheel.component.html -->
+
+
+  <div style="display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap;">
+    <!-- Ads Column -->
+    <div *ngIf="!isMobile && showAds" class="Ads" style="width: 200px; height: 100vh; margin-right: 10px; display: flex; flex-direction: column; align-items: center;">
+      <button class="close-btn" (click)="closeAds()" style="align-self: flex-end;">&times;</button>
+      <h5>Ads</h5>
+      <div class="ads-container" style="flex-grow: 1; display: flex; justify-content: center; align-items: center;">
+        <p>Your ad content here</p>
+      </div>
+    </div>
+    <!-- Canvas Column -->
+    <div style="flex-grow: 1; display: flex; flex-direction: column; align-items: center;">
+      <!-- <canvas id="myCanvas" class="myCanvas" width="400" height="400" style="background-color: transparent;"></canvas> -->
+      <canvas id="myCanvas" width="500" height="500" style="border:1px solid #000;"></canvas>
+
+    </div>
+
+    <!-- Prizes Column -->
+    <div style="width: 400px; margin-right: 10px;">
+      <div style="margin-top: 20px; width: 100%;">
+        <button class="fancy-button" (click)="spinWheel()">Spin Wheel</button>
+        <button class="fancy-button" (click)="shuffle()">Shuffle</button>
+        <button class="fancy-button" (click)="sort()">Sort</button>
+        <!-- <button class="fancy-button" (click)="removeAll()" [disabled]="wheelSegments.length < 2">Remove All</button> -->
+      </div>
+
+      <!-- Add Item Section -->
+       <p>Once you add an item the default names in the wheel will be deleted.</p>
+      <div style="display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: center; margin-top: 10px;">
+        <input type="text" formControlName="newItem" placeholder="Add item" (keyup.enter)="addItem()" />
+        <button class="fancy-button add-button" (click)="addItem()">+</button>
+      </div>
+
+      <!-- List of Players -->
+      <h5>List of Players</h5>
+      <div class="scrollable-list" style="max-height: 350px; overflow-y: auto; width: 100%; margin-top: 10px;">
+        <ul style="margin: 0; padding: 0; width: 100%;">
+          <li *ngFor="let segment of wheelSegments; let i = index" class="list-item">
+            <span>{{ i + 1 }}. {{ segment.text }} ({{ segment.fillStyle }})</span>
+            <button class="remove-button" (click)="removeItem(i)">-</button>
+          </li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- Prizes Column -->
+    <div style="width: 300px;">
+      <!-- Add Prize Section -->
+      <h5>Add Prize</h5>
+      <div style="display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: center; margin-bottom: 10px;">
+        <input type="text" formControlName="newPrize" placeholder="Add prize" (keyup.enter)="addPrize()" />
+        <button class="fancy-button add-button" (click)="addPrize()">+</button>
+      </div>
+
+      <h5>Prizes</h5>
+      <div class="scrollable-list" style="max-height: 120px; overflow-y: auto; margin-bottom: 10px;">
+        <ul>
+          <li *ngFor="let prize of prizes; let i = index" [ngClass]="{'strikethrough': wonPrizes[i]}">
+            {{ prize }}
+          </li>
+        </ul>
+      </div>
+
+      <h5>Winners</h5>
+      <p>You can add the players back to the game.</p>
+      <div class="scrollable-list" style="max-height: 350px; overflow-y: auto; width: 100%; margin-top: 10px;">
+        <ul style="margin: 0; padding: 0; width: 100%;">
+          <li *ngFor="let winner of winners; let i = index" class="list-item">
+            <span>{{ winner.name }} - {{ winner.prize }}</span>
+            <button class="add-button" (click)="addWinnerBack(winner, i)">+</button>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- Winner Alert Modal -->
+  <app-winners-alert 
+    [isModalOpen]="isModalOpen" 
+    [modalTitle]="'Congratulation'" 
+    [modalWinner]="winnerName" 
+    [prize]="prizeName" 
+    (playerRemoved)="onPlayerRemoved($event)">
+  </app-winners-alert>
+</div>

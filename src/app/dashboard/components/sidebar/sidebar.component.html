@@ -1,0 +1,51 @@
+<div class="header-options">
+    <table class="table-header">
+      <tr>
+        <td>
+          <button
+            class="option-btn"
+            [class.active]="activeSection === 'play'"
+            (click)="navigateTo('draw/play')"
+          >
+            Play
+          </button>
+        </td>
+        <td>
+          <button
+            class="option-btn"
+            [class.active]="activeSection === 'transaction'"
+            (click)="navigateTo('draw/transaction')"
+          >
+            Transactions
+          </button>
+        </td>
+        <td>
+          <button
+            class="option-btn"
+            [class.active]="activeSection === 'cancelled-tickets'"
+            (click)="navigateTo('cancelled-tickets')"
+          >
+            Cancelled Tickets
+          </button>
+        </td>
+        <td>
+          <button
+            class="option-btn"
+            [class.active]="activeSection === 'winnings'"
+            (click)="navigateTo('winnings')"
+          >
+            Winnings
+          </button>
+        </td>
+        <td>
+          <button
+            class="option-btn"
+            [class.active]="activeSection === 'results'"
+            (click)="navigateTo('results')"
+          >
+            Results
+          </button>
+        </td>
+      </tr>
+    </table>
+  </div>
