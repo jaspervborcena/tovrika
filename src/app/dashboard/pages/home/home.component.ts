@@ -500,7 +500,11 @@ defaultSegments(): void {
   }
 
   checkScreenSize() {
-    this.isMobile = window.innerWidth <= 768; // Adjust threshold as needed
+    if (typeof window !== 'undefined') {
+      this.isMobile = window.innerWidth <= 768; // Adjust threshold as needed
+  }
+  
+    
   }
 
 

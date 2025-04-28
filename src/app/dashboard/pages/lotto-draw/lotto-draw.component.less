@@ -1,11 +1,17 @@
-.container {
-    display: flex;
-    flex-direction: column; /* Stack header on top of content */
-    height: 100vh; /* Full viewport height */
-    width: 100%; /* Full width */
-    overflow: hidden; /* Prevent overflow issues */
-    align-items: center;
-  }
+.transaction-grid {
+  width: 100%;
+  max-width: 90vw;
+  max-height: 400px;
+  overflow-x: auto;
+  overflow-y: auto;
+  margin: 0 auto;
+  display: block;
+  white-space: nowrap;
+  text-align: left; /* ✅ Ensure content is left-aligned */
+  direction: ltr; /* ✅ Left-to-right content alignment */
+}
+
+
   
   .header {
     display: flex;
@@ -17,6 +23,21 @@
     box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2); /* Optional shadow for depth */
     flex-shrink: 0; /* Prevent the header from shrinking */
   }
+  .content {
+    flex: 1; /* Content takes up the remaining space */
+    background: #fff;
+    height: 100%;
+    overflow-x: auto; /* ✅ Enables horizontal scrolling */
+    overflow-y: auto; /* ✅ Allows vertical scrolling */
+    white-space: nowrap; /* ✅ Prevents line breaks for horizontal scrolling */
+  }
+  
+  // .content {
+  //   flex: 1; /* Content takes up the remaining space */
+  //   background-color: #f8f9fa; /* Light background for content */
+  //   overflow-y: auto; /* Enable vertical scrolling for overflowing content */
+  //   padding: 20px; /* Add padding for spacing */
+  // }
   
   .header-options {
     display: flex;
@@ -43,12 +64,5 @@
       color: white; /* Keep white text */
       font-weight: bold; /* Emphasize the active state */
     }
-  }
-  
-  .content {
-    flex: 1; /* Content takes up the remaining space */
-    background-color: #f8f9fa; /* Light background for content */
-    overflow-y: auto; /* Enable vertical scrolling for overflowing content */
-    padding: 20px; /* Add padding for spacing */
   }
   

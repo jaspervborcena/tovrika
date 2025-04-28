@@ -3,7 +3,7 @@
     justify-content: center; /* Center horizontally */
     align-items: center; /* Center vertically */
     width: 100%; /* Full width header */
-    background-color: #003366; /* Dark blue background */
+    background-color:transparent; /* Dark blue background */
     padding: 10px 0; /* Add padding for spacing */
     gap: 15px; /* Space between buttons */
   }
@@ -18,25 +18,29 @@
     padding: 0; /* Remove unnecessary padding */
   }
   
+  .options {
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+  }
+  
   .option-btn {
-    display: block; /* Block-level for full width */
-    padding: 10px 15px; /* Add spacing inside buttons */
-    font-size: 16px; /* Font size for readability */
-    font-weight: bold; /* Bold text for emphasis */
-    color: white; /* White text color */
-    background-color: transparent; /* No background by default */
-    border: 2px solid #003366; /* Border matches header background */
-    border-radius: 5px; /* Smooth rounded corners */
-    cursor: pointer; /* Pointer cursor for interactivity */
-    transition: background-color 0.3s ease-in-out; /* Smooth hover effect */
+    background-color: #007bff;
+    color: white;
+    font-size: 16px;
+    border: none;
+    border-radius: 30px;
+    padding: 10px 20px;
+    cursor: pointer;
+    transition: all 0.3s ease;
   
     &:hover {
-      background-color: #002244; /* Darker blue on hover */
+      background-color: #0056b3;
     }
   
     &.active {
-      background-color: #4CAF50; /* Green for active state */
-      border: 2px solid white; /* White border for emphasis */
+      background-color: #28a745; // Green color for active button
+      cursor: not-allowed; // Prevent clicking the active button again
     }
   }
   

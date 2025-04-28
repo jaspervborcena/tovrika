@@ -14,23 +14,20 @@ export class LottoDrawService {
   constructor(private firestore: Firestore) {}
 
   // Initialize service and load Lotto draws on startup
-  initializeLottoDraws(): void {
-    const drawCollection = collection(this.firestore, this.collectionName);
-
-    getDocs(drawCollection)
-      .then((querySnapshot) => {
-        const lottoDraws: LottoDraw[] = [];
-        querySnapshot.forEach((doc) => {
-          // Map the DocumentData into your LottoDraw model
-          const data = doc.data() as LottoDraw;
-          lottoDraws.push({ ...data, id: doc.id });
-        });
-        this.lottoDrawsSignal.set(lottoDraws);
-      })
-      .catch((err) => {
-        console.error('Error fetching lotto draws:', err);
-      });
+  async initializeLottoDraws(): Promise<void> {
+    try {
+      const drawCollection = collection(this.firestore, this.collectionName);
+      const querySnapshot = await getDocs(drawCollection);
+      const lottoDraws: LottoDraw[] = querySnapshot.docs.map(doc => ({
+        ...(doc.data() as LottoDraw),
+        id: doc.id
+      }));
+      this.lottoDrawsSignal.set(lottoDraws);
+    } catch (error) {
+      console.error('Error fetching lotto draws:', error);
+    }
   }
+  
 
   // Trigger lotto draws initialization explicitly from component or service
   get lottoDraws(): LottoDraw[] {
@@ -38,7 +35,7 @@ export class LottoDrawService {
   }
 
   // Method to add a LottoDraw only if the drawId doesn't exist
-  async addLottoDraw(draw: LottoDraw, betType: string, uid: string): Promise<string> {
+  async addLottoDraw(draw: LottoDraw, betType: string, uid: string | null,email:string | null): Promise<string> {
     try {
       const drawCollection = collection(this.firestore, this.collectionName);
       const drawQuery = query(drawCollection, where("drawId", "==", draw.drawId));
@@ -46,7 +43,7 @@ export class LottoDrawService {
   
       if (querySnapshot.empty) {
         await addDoc(drawCollection, draw);
-        console.log('Lotto draw added successfully');
+        console.log('Lotto draw added successfully',draw);
         return 'success';
       } else {
         console.log('Lotto draw with this drawId already exists.');
@@ -58,7 +55,7 @@ export class LottoDrawService {
           console.warn('Both target and ramble are provided. Using only one.');
         }
   
-        await this.addBetDetails(amount, betType, combination, drawId, uid);
+        await this.addBetDetails(amount, betType, combination, drawId, uid, email);
         return 'exists';
       }
     } catch (error: any) {
@@ -71,6 +68,7 @@ export class LottoDrawService {
       return `error: ${error.message || 'unknown error'}`;
     }
   }
+  
   
   // Method to add LottoDetails to an existing draw
   async addLottoDetailsToExistingDraw(drawId: string, newDetail: LottoDetail): Promise<void> {
@@ -95,7 +93,7 @@ export class LottoDrawService {
     }
   }
 
-  async addBetDetails(amount: number,type:string, combination: string, drawId: number,userId:string): Promise<void> {
+  async addBetDetails(amount: number,type:string, combination: string, drawId: number,uid:string | null,email:string | null): Promise<void> {
     // Determine the bet type based on which value (target or ramble) is provided.
     
     const uuidv4 = this.generateUUIDv4();
@@ -113,9 +111,10 @@ export class LottoDrawService {
         isWinner: false,
         createdDt: new Date().toISOString(),
         modifyDt: new Date().toISOString(),
-        createdBy: userId,
-        modifyBy: userId,
-        status:'S'
+        createdBy: email,
+        modifyBy: email,
+        status:'S',
+        userId:uid
     };
 
     try {

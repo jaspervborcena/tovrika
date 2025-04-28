@@ -1,10 +1,12 @@
 import { Component, ViewChild, ElementRef } from '@angular/core';
 import { FormGroup, FormBuilder, FormArray } from '@angular/forms';
 import { ReactiveFormsModule } from '@angular/forms';
+import { CommonModule } from '@angular/common';  // Import CommonModule
 import { formatDate } from '@angular/common';
 import { LottoDrawService } from '../../services/lotto-draw.service';
-import { CommonModule } from '@angular/common';  // Import CommonModule
+import { computed } from '@angular/core';
 import { AuthService } from '../../../core/services/auth.service'; 
+import { Router } from '@angular/router';
 @Component({
   selector: 'app-play',
   templateUrl: './play.component.html',
@@ -24,8 +26,14 @@ export class PlayComponent {
   activeTime: string  = '14:00:00';
   errorMessage: string | null = null;
   successMessage: string | null = null;
+   uuid:string;
+   uid: string | null = null;
+   email: string | null = null;
+  constructor(private fb: FormBuilder, private lottoDraw: LottoDrawService,private auth: AuthService,private route:Router) {
+    this.uuid = this.generateUUIDv4();
+    
   
-  constructor(private fb: FormBuilder, private lottoDraw: LottoDrawService,private auth: AuthService) {}
+  }
 
   ngOnInit(): void {
     this.playForm = this.fb.group({
@@ -41,10 +49,13 @@ export class PlayComponent {
       drawType:  [''],
       details: this.fb.array([]), // LottoDetail[]
     });
-
-
-///
-
+    this.uid=this.auth.userId;
+    this.email=this.auth.userEmail;
+    if (! this.uid) {
+      console.warn("User not authenticated, redirecting...");
+      this.route.navigate(["/signin"]); // Redirect to sign-in page
+    }
+   
   }
 
   get detailsFormArray(): FormArray {
@@ -123,8 +134,6 @@ handleKeyPress(value: string): void {
     this.errorMessage = ''; // Clear any previous error message
     this.successMessage = '';
   
-    const uuid = this.generateUUIDv4();
-    const uid = this.auth.userId;   
 
     const now = new Date();
     const currentDate = formatDate(now, 'yyyy-MM-dd', 'en-US');
@@ -146,17 +155,18 @@ handleKeyPress(value: string): void {
       drawId: drawId,
       drawDate: drawDate,
       drawTime: combinedDateTime,
-      createdDt: [formatDate(new Date(), 'MM/dd/yyyy', 'en-US')],
-      modifyDt: [formatDate(new Date(), 'MM/dd/yyyy', 'en-US')],
-      createdBy: uid,
-      modifyBy: uid,
+      createdDt: [formatDate(new Date(), 'MM/dd/yyyy hh:mm:ss a', 'en-US')],
+      modifyDt: [formatDate(new Date(), 'MM/dd/yyyy hh:mm:ss a', 'en-US')],
+      createdBy: this.email,
+      modifyBy: this.email,
+      userId:this.uid
     });
-  
-    if (!uid) {
+    console.error('User id',this.uid);
+    if (!this.uid) {
       console.error('User not authenticated');
       return;
     }
-  
+  console.log("lottoForm",this.lottoForm)
     // Validation checks
     if (!target && !ramble) {
       console.log('Condition: Either target or ramble is empty.');
@@ -208,17 +218,18 @@ handleKeyPress(value: string): void {
   
     // Create the detail object and add it to the details array
     const detailGroup = this.fb.group({
-      id: uuid,
+      id: this.uuid,
       betCombi: [betCombi],
       betType: [this.betType],
       betAmount: [betAmount],
       wins: [0],
       isWinner: [false],
-      createdDt: [formatDate(new Date(), 'MM/dd/yyyy', 'en-US')],
-      modifyDt: [formatDate(new Date(), 'MM/dd/yyyy', 'en-US')],
-      createdBy: uid,
-      modifyBy: uid,
-      status:'S'
+      createdDt: [formatDate(new Date(), 'MM/dd/yyyy hh:mm:ss a', 'en-US')],
+      modifyDt: [formatDate(new Date(), 'MM/dd/yyyy hh:mm:ss a', 'en-US')],
+      createdBy: this.email,
+      modifyBy: this.email,
+      status:'S',
+      userId:this.uid,
     });
   
     // Add the detail group to the array
@@ -226,7 +237,7 @@ handleKeyPress(value: string): void {
   
     // Submit the full lotto form (not just the details)
     
-this.lottoDraw.addLottoDraw(this.lottoForm.value, this.betType, uid)
+this.lottoDraw.addLottoDraw(this.lottoForm.value, this.betType, this.uid,this.email)
 .then((result) => {
   if (result === 'success') {
     // Show success alert/toast
@@ -242,6 +253,7 @@ this.lottoDraw.addLottoDraw(this.lottoForm.value, this.betType, uid)
   } else if (result === 'exists') {
     // Handle existing draw
     console.warn('Draw already exists. Added bet details instead.');
+    this.completeBet();
   } else if (result === 'permission-denied') {
     // Permission issue
     console.error('You do not have permission to add this lotto draw.');

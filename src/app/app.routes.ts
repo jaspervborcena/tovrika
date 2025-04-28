@@ -6,9 +6,7 @@ import { ContactComponent } from './dashboard/pages/contact/contact.component';
 import { RegisterComponent } from './authentication/register/register.component';
 import { SignInComponent } from './authentication/sign-in/sign-in.component';
 import { LottoDrawComponent } from './dashboard/pages/lotto-draw/lotto-draw.component';
-import { PlayComponent } from './dashboard/components/play/play.component'
 import { authGuard } from './core/guards/auth.guard';
-
 export const routes: Routes = [
   { path: '', component: HomeComponent },
   { path: 'home', component: HomeComponent ,},
@@ -29,8 +27,15 @@ export const routes: Routes = [
     {
       path: 'transaction',
       loadComponent: () =>
-        import('./dashboard/pages/transaction/transaction.component').then(
+        import('./dashboard/components/transaction/transaction.component').then(
           (m) => m.TransactionComponent
+        ),
+    },
+    {
+      path: 'dashboard',
+      loadComponent: () =>
+        import('./dashboard/components/dashboard/dashboard.component').then(
+          (m) => m.DashboardComponent
         ),
     },
     {

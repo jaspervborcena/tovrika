@@ -11,16 +11,24 @@ export class AuthService {
   private auth: Auth = getAuth(this.app);  
   private userSignal = signal<any>(null); // Signal to track the user
   private isAuthenticatedSignal = signal<boolean>(false); // Signal to track authentication state
-
+  private userIdValue: string | null = null;
+  private userEmailValue: string | null = null;
   constructor() {
     // Initialize user state by subscribing to auth state changes
     onAuthStateChanged(this.auth, (user) => {
       if (user) {
         this.userSignal.set(user); // Set user state if authenticated
+        localStorage.setItem("uid", user.uid);
+        localStorage.setItem("email", user.email!);
+        
         this.isAuthenticatedSignal.set(true); // Set isAuthenticated to true
       } else {
         this.userSignal.set(null); // Set user state to null if not authenticated
+       
+        localStorage.removeItem("uid");
+        localStorage.removeItem("email");
         this.isAuthenticatedSignal.set(false); // Set isAuthenticated to false
+        this.signOut(); 
       }
     });
   }
@@ -57,17 +65,20 @@ export class AuthService {
   }
   
   // Get the current user from the signal
-  get user() {
-    return this.userSignal(); // Access the current value of the user signal
-  }
+
 
   // Get the authentication status from the signal
   get isAuthenticated() {
     return this.isAuthenticatedSignal(); // Access the current value of the isAuthenticated signal
   }
-  get userId(): string | null {
-    const user = getAuth().currentUser;
-    return user ? user.uid : null;
+  get user() {
+    return this.userSignal(); // Access the current value of the user signal
   }
-  
+  get userId(): string | null {
+    return localStorage.getItem("uid");// ✅ Returns tracked userId
+  }
+
+  get userEmail(): string | null {
+    return localStorage.getItem("email"); // ✅ Returns tracked userEmail
+  }
 }

@@ -39,8 +39,9 @@ app.use(
 
 /**
  * Handle all other requests by rendering the Angular application.
- */
+//  */
 app.use('/**', (req, res, next) => {
+  req.setTimeout(240000); // Set timeout to 2 minutes (120000 ms)
   angularApp
     .handle(req)
     .then((response) =>
@@ -48,6 +49,11 @@ app.use('/**', (req, res, next) => {
     )
     .catch(next);
 });
+
+// app.use((req, res, next) => {
+//   req.setTimeout(320000); // Increase timeout to 2 minutes
+//   next();
+// });
 
 /**
  * Start the server if this module is the main entry point.

@@ -5,7 +5,7 @@
           <button
             class="option-btn"
             [class.active]="activeSection === 'play'"
-            (click)="navigateTo('draw/play')"
+            (click)="navigateTo('play')"
           >
             Play
           </button>
@@ -14,7 +14,7 @@
           <button
             class="option-btn"
             [class.active]="activeSection === 'transaction'"
-            (click)="navigateTo('draw/transaction')"
+            (click)="navigateTo('transaction')"
           >
             Transactions
           </button>
@@ -22,10 +22,10 @@
         <td>
           <button
             class="option-btn"
-            [class.active]="activeSection === 'cancelled-tickets'"
-            (click)="navigateTo('cancelled-tickets')"
+            [class.active]="activeSection === 'dashboard'"
+            (click)="navigateTo('dashboard')"
           >
-            Cancelled Tickets
+            Dashboard
           </button>
         </td>
         <td>

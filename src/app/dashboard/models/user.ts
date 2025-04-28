@@ -1,8 +1,8 @@
 export interface User {
     uid: string;
     email: string;
-    roleId:number;
+    roleId?:number;
     displayName?: string;
-    createdAt: string;
+    createdAt?: string;
   }
   
