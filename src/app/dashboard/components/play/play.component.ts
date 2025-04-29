@@ -186,9 +186,9 @@ handleKeyPress(value: string): void {
       return;
     }
   
-    if (+betAmount < 10 && betAmount !== '') {
-      console.log('Condition: minimum bet 10');
-      this.errorMessage = 'The minimum bet is 10. Please add bet amount to proceed.';
+    if (+betAmount < 1 && betAmount !== '') {
+      console.log('Condition: minimum bet 1');
+      this.errorMessage = 'The minimum bet is 1. Please add bet amount to proceed.';
       return;
     }
 
@@ -249,7 +249,9 @@ this.lottoDraw.addLottoDraw(this.lottoForm.value, this.betType, this.uid,this.em
     this.playForm.reset(); // Reset the play form
     this.lottoForm.reset(); // Reset the lotto form
     this.betType = ''; // Optional: reset bet type tracking
-
+} else if (result === 'overlimit') {
+  this.errorMessage = 'Betting for this combination is overlimit';
+  return;
   } else if (result === 'exists') {
     // Handle existing draw
     console.warn('Draw already exists. Added bet details instead.');
