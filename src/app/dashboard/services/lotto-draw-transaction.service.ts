@@ -15,23 +15,23 @@ export class LottoDrawTransactionService {
   // ✅ Listen for changes dynamically
   listenToTransactions(drawIds: string[]): void {
     if (!drawIds.length) return; // 🛑 Prevent empty queries
-  
+
     const drawCollection = collection(this.firestore, this.collectionName);
     const drawQuery = query(drawCollection, where("drawId", "in", drawIds.slice(0, 10)));
-  
+
     onSnapshot(drawQuery, (querySnapshot) => {
       const mergedTransactions = new Map<string, LottoDrawTransaction>(); // Map to store merged results
-  
+
       querySnapshot.forEach((doc) => {
         const data = doc.data();
         const details = Array.isArray(data['details']) ? data['details'] : [];
-  
+
         details.forEach((detail: any) => {
-          if (detail.status !== "S") return; // 🔥 Skip irrelevant transactions
-  
+          if (detail.status !== "S") return; // 🔥 ✅ Now only includes status "S"
+
           const ticketId = detail.ticketId || ''; // Get ticketId
           const existingTransaction = mergedTransactions.get(ticketId);
-  
+
           if (existingTransaction) {
             // ✅ Merge ramble & target values if ticketId already exists
             existingTransaction.target += detail.betType === 'T' ? Number(detail.betAmount) || 0 : 0;
@@ -50,19 +50,72 @@ export class LottoDrawTransactionService {
               agent: detail.createdBy || '',
               date: data['drawDate'] || '',
               userId: detail.userId || '',
+              status: detail.status || '', // ✅ Added status for visibility
             });
           }
         });
       });
-  
+
       // ✅ Convert merged results from Map to an array and update the signal
       const transactionsArray = Array.from(mergedTransactions.values());
       this.lottoDrawTransactionsSignal.set(transactionsArray);
-      console.log("Merged transactions by ticketId:", transactionsArray);
+      console.log("Filtered transactions (Only status 'S'):", transactionsArray);
     }, (error) => {
       console.error("Error fetching transactions:", error);
     });
-  }
+}
+listenToCancelled(drawIds: string[]): void {
+  if (!drawIds.length) return; // 🛑 Prevent empty queries
+
+  const drawCollection = collection(this.firestore, this.collectionName);
+  const drawQuery = query(drawCollection, where("drawId", "in", drawIds.slice(0, 10)));
+
+  onSnapshot(drawQuery, (querySnapshot) => {
+    const mergedTransactions = new Map<string, LottoDrawTransaction>(); // Map to store merged results
+
+    querySnapshot.forEach((doc) => {
+      const data = doc.data();
+      const details = Array.isArray(data['details']) ? data['details'] : [];
+
+      details.forEach((detail: any) => {
+        if (detail.status !== "D") return; // 🔥 ✅ Now only includes status "D"
+
+        const ticketId = detail.ticketId || ''; // Get ticketId
+        const existingTransaction = mergedTransactions.get(ticketId);
+
+        if (existingTransaction) {
+          // ✅ Merge ramble & target values if ticketId already exists
+          existingTransaction.target += detail.betType === 'T' ? Number(detail.betAmount) || 0 : 0;
+          existingTransaction.ramble += detail.betType === 'R' ? Number(detail.betAmount) || 0 : 0;
+          existingTransaction.gross += Number(detail.betAmount) || 0; // Update total amount
+        } else {
+          // ✅ Add new transaction entry if ticketId doesn't exist yet
+          mergedTransactions.set(ticketId, {
+            id: detail.id || '',
+            ticketId: ticketId,
+            drawType: data['drawType'] || '',
+            combination: detail.betCombi || '',
+            target: detail.betType === 'T' ? Number(detail.betAmount) || 0 : 0,
+            ramble: detail.betType === 'R' ? Number(detail.betAmount) || 0 : 0,
+            gross: Number(detail.betAmount) || 0,
+            agent: detail.createdBy || '',
+            date: data['drawDate'] || '',
+            userId: detail.userId || '',
+            status: detail.status || '', // ✅ Added status for visibility
+          });
+        }
+      });
+    });
+
+    // ✅ Convert merged results from Map to an array and update the signal
+    const transactionsArray = Array.from(mergedTransactions.values());
+    this.lottoDrawTransactionsSignal.set(transactionsArray);
+    console.log("Filtered transactions (Only status 'D'):", transactionsArray);
+  }, (error) => {
+    console.error("Error fetching transactions:", error);
+  });
+}
+
   async markLottoDrawAsDeleted(drawId: string, ticketId: string): Promise<void> {
     try {
       console.log(`Updating LottoDraw ${drawId} for ticketId ${ticketId}...`);

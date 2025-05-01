@@ -13,6 +13,7 @@ import { PLATFORM_ID, Inject } from '@angular/core';
 import { LottoDrawDashboardService } from '../../services/lotto-draw.dashboard.service';
 import { LottoDrawDashboard } from '../../models/lotto-draw';
 import { formatDate } from '@angular/common'; // To format the date
+import { MatDatepickerInputEvent } from '@angular/material/datepicker';
 
 
 @Component({
@@ -72,6 +73,16 @@ loadDashboard(): void {
   const formattedDate = this.formatDate(this.selectedDate.value || new Date());
   this.drawIds = this.getDrawIds(formattedDate, "ALL");
   this.listenTolistenToDashboard();
+}
+onDateChange(event: MatDatepickerInputEvent<Date>): void {
+  const selectedDate = event.value|| new Date();
+  const formattedDate = this.formatDate(selectedDate);
+  this.drawIds = this.getDrawIds(formattedDate, this.activeTime);
+
+  this.lottoDashboardService.listenToSummaryTransactions(this.drawIds);
+
+  this.lottoDashboardService.lottoDrawSummarySignal();
+  // You can implement further logic here, such as filtering data or updating UI
 }
 
   // ✅ Fetch transactions based on selected date

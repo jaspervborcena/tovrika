@@ -46,6 +46,13 @@ export const routes: Routes = [
         ),
     },
     {
+      path: 'cancelled',
+      loadComponent: () =>
+        import('./dashboard/components/cancelled/cancelled.component').then(
+          (m) => m.CancelledComponent
+        ), 
+    },
+    {
       path: '',
       redirectTo: 'play',
       pathMatch: 'full',
