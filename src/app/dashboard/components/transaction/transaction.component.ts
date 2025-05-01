@@ -136,14 +136,16 @@ export class TransactionComponent implements OnInit,OnDestroy {
     return times.map(hour => `${date}${hour}`);
   }
 
-  deleteBet(date:string, betId: string | undefined): void {
-    if (!betId) return; // ✅ Prevent deletion attempts on undefined ids
+  deleteBet(date:string, ticketId: string | undefined): void {
+    if (!ticketId) return; // ✅ Prevent deletion attempts on undefined ids
     this.updateDrawId();
     //this.bets.update(currentBets => currentBets.filter(b => b.id !== betId));
     console.log("deleteBet",date)
    const drawId=this.formatDateToDrawId(date);
 
-    this.lottoDrawTransactionService.markLottoDrawAsDeleted(drawId,betId);
+    this.lottoDrawTransactionService.markLottoDrawAsDeleted(drawId,ticketId);
+
+    
 }
 
 formatDateToDrawId(timestamp: string): string {

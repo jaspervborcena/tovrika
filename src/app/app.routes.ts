@@ -39,6 +39,13 @@ export const routes: Routes = [
         ),
     },
     {
+      path: 'winners',
+      loadComponent: () =>
+        import('./dashboard/components/winners/winners.component').then(
+          (m) => m.WinnersComponent
+        ),
+    },
+    {
       path: '',
       redirectTo: 'play',
       pathMatch: 'full',

@@ -1,5 +1,6 @@
 export interface LottoDetail {
-  id?: string; 
+  id?: string;
+  ticketId?:string; 
   wins: number;
   isWinner: boolean;
   createdDt: string;
@@ -32,6 +33,7 @@ export interface LottoDraw {
 // src/app/models/lotto-draw-transaction.ts
 export interface LottoDrawTransaction {
   id?: string;               // <-- this is the details.id (UUID)
+  ticketId?:string; 
   drawType: string;          // ex: '2PM', '5PM'
   combination: string;       // ex: '432'
   target: number;            // ex: 778

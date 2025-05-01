@@ -6,7 +6,7 @@ import { formatDate } from '@angular/common';
 import { LottoDrawService } from '../../services/lotto-draw.service';
 import { computed } from '@angular/core';
 import { AuthService } from '../../../core/services/auth.service'; 
-import { Router } from '@angular/router';
+import { Router ,NavigationEnd } from '@angular/router';
 @Component({
   selector: 'app-play',
   templateUrl: './play.component.html',
@@ -29,6 +29,16 @@ export class PlayComponent {
    uuid:string;
    uid: string | null = null;
    email: string | null = null;
+
+   comboId = 1;
+combos: Combo[] = [];
+submittedCombos: Combo[] = [];
+activeTab: 'entry' | 'view' | 'receipt' = 'entry';  // default to Entry Bet
+returnStatus:string=""
+isSubmitting = false;
+currentDateTime:string=Date.now().toString()
+agent:string | null="";
+
   constructor(private fb: FormBuilder, private lottoDraw: LottoDrawService,private auth: AuthService,private route:Router) {
     this.uuid = this.generateUUIDv4();
     
@@ -52,10 +62,13 @@ export class PlayComponent {
     this.uid=this.auth.userId;
     this.email=this.auth.userEmail;
     if (! this.uid) {
-      console.warn("User not authenticated, redirecting...");
       this.route.navigate(["/signin"]); // Redirect to sign-in page
     }
-   
+    this.route.events.subscribe(event => {
+      if (event instanceof NavigationEnd && event.url.includes('/play')) {
+        this.resetState();
+      }
+    });
   }
 
   get detailsFormArray(): FormArray {
@@ -65,7 +78,6 @@ export class PlayComponent {
   selectTime(time: string): void {
     this.activeTime = time;
     this.lottoForm.patchValue({ drawType: time });
-    // console.log("selectTime",this.activeTime);
   }
 
   ngAfterViewInit(): void {
@@ -127,165 +139,235 @@ handleKeyPress(value: string): void {
     });
   }
   
-  addBet(): void {
-    const { target, ramble } = this.playForm.value;
-    const betCombi = this.playForm.get('combination')?.value;
-    const betAmount = target || ramble || ''; // Default to empty string if neither is provided
-    this.errorMessage = ''; // Clear any previous error message
-    this.successMessage = '';
+  removeCombo(id: number) {
+    this.combos = this.combos.filter(c => c.id !== id);
+  }
+  async addBet(): Promise<void> {
+    try {
+      const formValue = this.playForm.value;
+      const combination = formValue.combination?.trim();
+      const target = formValue.target?.trim();
+      const ramble = formValue.ramble?.trim();
+      const betCombi = this.playForm.get('combination')?.value;
   
-
-    const now = new Date();
-    const currentDate = formatDate(now, 'yyyy-MM-dd', 'en-US');
-    const combinedDateTime = `${currentDate}T${this.activeTime}`;
-    const drawDate = formatDate(new Date(combinedDateTime), 'yyyy-MM-ddTHH:mm:ss', 'en-US');
-    const drawIdDt = formatDate(now, 'yyyyMMdd', 'en-US');
-    const hourOnly = this.activeTime.substring(0, 2);
-    const drawId = `${drawIdDt}${hourOnly}`;
+      this.errorMessage = ''; // Clear any previous errors
+      this.successMessage = '';
   
-    let gameType = formatDate(combinedDateTime, 'h a', 'en-US');
-    gameType = gameType.replace(' ', ''); // result: "2PM"
+      const now = new Date();
+      const currentDate = formatDate(now, 'yyyy-MM-dd', 'en-US');
+      const combinedDateTime = `${currentDate}T${this.activeTime}`;
+      const drawDate = formatDate(new Date(combinedDateTime), 'yyyy-MM-ddTHH:mm:ss', 'en-US');
+      const drawIdDt = formatDate(now, 'yyyyMMdd', 'en-US');
+      const hourOnly = this.activeTime.substring(0, 2);
+      const drawId = `${drawIdDt}${hourOnly}`;
   
-    this.detailsFormArray.clear(); // Clear all items in the form array
+      let gameType = formatDate(combinedDateTime, 'h a', 'en-US').replace(' ', '');
+  
+      // 🛑 **Check validation before pushing combos**
+      if (+combination < 1 && (+target + +ramble) < 1) {
+        this.errorMessage = 'Combination and at least one amount is required.';
+        return;
+      }
+      if (!target && !ramble) {
+        this.errorMessage = 'You need to provide either a target or ramble amount.';
+        return;
+      }
+      if ((+target + +ramble) < 1) {
+        this.errorMessage = 'The minimum bet is 1. Please enter a valid amount.';
+        return;
+      }
+      if ((+target + +ramble < 1) && (+betCombi < 1)) {
+        this.errorMessage = 'Combination and amount should be numbers.';
+        return;
+      }
+  
+      const ticketId = this.generateTicketId();
+      const tempCombos: any[] = [];
+  
+      if (target) {
+        tempCombos.push({ id: this.comboId++, ticketId, combination, amount: target, type: 'T' });
+      }
+      if (ramble) {
+        tempCombos.push({ id: this.comboId++, ticketId, combination, amount: ramble, type: 'R' });
+      }
+  
+      // 🛑 **Check bet limit before pushing to `combos`**
+      const { totalAmount } = await this.lottoDraw.getLottoLimit(drawId, combination);
+      const getBetAmount = (+target) + (+totalAmount);
+  
+      if (getBetAmount > 300) {
+        this.returnStatus = "overlimit";
+        this.errorMessage = `Limit exceeded! Combination ${combination} is sold out.`;
+        return; // Stop execution before pushing invalid combos
+      }
+  
+      // ✅ No errors? Now push valid combos
+      this.combos.push(...tempCombos);
+  
+      // ✅ Clear the form after successful addition
+      this.playForm.reset();
+      this.activeTab = 'view';
+  
+    } catch (error: any) {
+      console.error('Error adding lotto draw:', error);
+      if (error.code === 'permission-denied') {
+        this.errorMessage = 'You do not have permission to access this site. Please contact IT support.';
+        return;
+      }
+      this.errorMessage = `Error: ${error.message || 'Unknown error'}`;
+    }
+  }
+  
+generateTicketId(): string {
+  const epochTime = Date.now();
+  const randomNumber = Math.floor(1000 + Math.random() * 9000);
+  return `${epochTime}${randomNumber}`;
+}
 
 
-    // Update the lottoForm with dynamic values
+
+
+
+async submitBet(): Promise<void> {
+  this.isSubmitting = true;
+  this.errorMessage = '';
+  this.successMessage = '';
+
+  const now = new Date();
+  const currentDate = formatDate(now, 'yyyy-MM-dd', 'en-US');
+  const combinedDateTime = `${currentDate}T${this.activeTime}`;
+  const drawDate = formatDate(new Date(combinedDateTime), 'yyyy-MM-ddTHH:mm:ss', 'en-US');
+  const drawIdDt = formatDate(now, 'yyyyMMdd', 'en-US');
+  const hourOnly = this.activeTime.substring(0, 2);
+  const drawId = `${drawIdDt}${hourOnly}`;
+  const timestamp = formatDate(new Date(), 'MM/dd/yyyy hh:mm:ss a', 'en-US');
+  this.currentDateTime=timestamp;
+  this.agent=this.email;
+  try {
+    let gameType = formatDate(combinedDateTime, 'h a', 'en-US').replace(' ', '');
+
     this.lottoForm.patchValue({
       drawType: gameType,
       drawId: drawId,
       drawDate: drawDate,
       drawTime: combinedDateTime,
-      createdDt: [formatDate(new Date(), 'MM/dd/yyyy hh:mm:ss a', 'en-US')],
-      modifyDt: [formatDate(new Date(), 'MM/dd/yyyy hh:mm:ss a', 'en-US')],
+      createdDt: timestamp,
+      modifyDt: timestamp,
       createdBy: this.email,
       modifyBy: this.email,
-      userId:this.uid
+      userId: this.uid
     });
-    console.error('User id',this.uid);
-    if (!this.uid) {
-      console.error('User not authenticated');
-      return;
-    }
-  console.log("lottoForm",this.lottoForm)
-    // Validation checks
-    if (!target && !ramble) {
-      console.log('Condition: Either target or ramble is empty.');
-      this.errorMessage = 'You can add a combination, target, or ramble to proceed.';
-      return;
-    }
-  
-    if (this.playForm.get('target')?.value && this.playForm.get('ramble')?.value) {
-      console.log('Condition: Both target and ramble are filled.');
-      this.errorMessage = 'You cannot fill both Target and Ramble at the same time!';
-      return;
-    }
-  
-    if ((!target || !ramble) && !betCombi) {
-      console.log('Condition: Neither target nor ramble is filled, and no combination is provided.');
-      this.errorMessage = 'You can add a combination, target, or ramble to proceed.';
-      return;
-    }
-  
-    if (+betAmount < 1 && betAmount !== '') {
-      console.log('Condition: minimum bet 1');
-      this.errorMessage = 'The minimum bet is 1. Please add bet amount to proceed.';
-      return;
-    }
 
-    if ((target && isNaN(+target)) || (ramble && isNaN(+ramble)) || (betCombi && isNaN(+betCombi))) {
-      console.log('Condition: Should be numbers');
-      this.errorMessage = 'The combination and amount should be a number.';
+    this.detailsFormArray.clear();
+
+    if (this.combos.length === 0) {
+      this.errorMessage = 'No bet combinations found.';
       return;
     }
-  
-    if (target && +target > 300) {
-      console.log('Condition: Target exceeds 300.');
-      this.errorMessage = 'Combination is sold. Please choose another combination.';
-      return;
-    }
-  
-    if (ramble && +ramble > 300) {
-      console.log('Condition: Ramble exceeds 300.');
-      this.errorMessage = 'Combination is sold. Please choose another combination.';
-      return;
-    }
-  
-    console.log('Condition: No errors, proceeding with bet.');
-    this.errorMessage = null; // Clear error message if condition is no longer true
-  
-    // Set the betType based on target/ramble state
-    this.betType = target && !ramble ? 'T' : ramble && !target ? 'R' : '';
-  
-    // Create the detail object and add it to the details array
-    const detailGroup = this.fb.group({
-      id: this.uuid,
-      betCombi: [betCombi],
-      betType: [this.betType],
-      betAmount: [betAmount],
-      wins: [0],
-      isWinner: [false],
-      createdDt: [formatDate(new Date(), 'MM/dd/yyyy hh:mm:ss a', 'en-US')],
-      modifyDt: [formatDate(new Date(), 'MM/dd/yyyy hh:mm:ss a', 'en-US')],
-      createdBy: this.email,
-      modifyBy: this.email,
-      status:'S',
-      userId:this.uid,
-    });
-  
-    // Add the detail group to the array
-    this.detailsFormArray.push(detailGroup);
-  
-    // Submit the full lotto form (not just the details)
     
-this.lottoDraw.addLottoDraw(this.lottoForm.value, this.betType, this.uid,this.email)
-.then((result) => {
-  if (result === 'success') {
-    // Show success alert/toast
-    console.log('Lotto draw successfully added!');
-    this.completeBet();
-    // console.log('LottoForm:', this.lottoForm.value);
+    const totalCombiMap = new Map<string, number>(); // Stores summed betAmounts for each unique combination
+const detailGroups: any[] = [];
 
-    // ✅ Reset form for next entry
-    this.playForm.reset(); // Reset the play form
-    this.lottoForm.reset(); // Reset the lotto form
-    this.betType = ''; // Optional: reset bet type tracking
+// 🔹 Collecting values first
+for (const combo of this.combos) {
+  const detailGroup = this.fb.group({
+    id: this.uuid,
+    ticketId: combo.ticketId,
+    betCombi: combo.combination,
+    betType: combo.type,
+    betAmount: combo.amount,
+    wins: 0,
+    isWinner: false,
+    createdDt: timestamp,
+    modifyDt: timestamp,
+    createdBy: this.email,
+    modifyBy: this.email,
+    status: 'S',
+    userId: this.uid,
+  });
+
+  detailGroups.push(detailGroup);
+
+  // 🔹 Store in map (Summing up betAmounts per unique combination)
+  if (detailGroup.value.status === "S" && detailGroup.value.betType === "T") {
+    totalCombiMap.set(
+      combo.combination, 
+      (Number(totalCombiMap.get(combo.combination)) || 0) + Number(combo.amount)
+    );
+    
+  }
+}
+
+// 🔍 **Loop through totalCombiMap to check limits**
+for (const [combi, amount] of totalCombiMap.entries()) {
+  const { totalAmount } = await this.lottoDraw.getLottoLimit(drawId, combi);
+
+  // Convert to number safely
+  const numericAmount = Number(amount);
+  const numericTotalAmount = Number(totalAmount);
+
+  const getBetAmount = numericAmount + numericTotalAmount;
+
+  if (getBetAmount > 300) {
+    this.returnStatus = "overlimit";
+    this.errorMessage = `Combination ${combi} is sold out with total bet amount ${getBetAmount}.`;
+    return; // Stop execution if limit exceeded
+  }
+}
+
+// ✅ No issues? Push to detailsFormArray & proceed
+detailGroups.forEach(group => this.detailsFormArray.push(group));
+
+const result = await this.lottoDraw.addLottoDraw(this.lottoForm.value, this.betType, this.uid, this.email);
+this.submittedCombos = this.combos;
+
+if (result === 'success') {
+  this.completeBet();
 } else if (result === 'overlimit') {
   this.errorMessage = 'Betting for this combination is overlimit';
-  return;
-  } else if (result === 'exists') {
-    // Handle existing draw
-    console.warn('Draw already exists. Added bet details instead.');
-    this.completeBet();
-  } else if (result === 'permission-denied') {
-    // Permission issue
-    console.error('You do not have permission to add this lotto draw.');
-    this.errorMessage = 'You do not have permission to add this lotto draw. Please contact your IT admin.';
-    return;
-
-    // alert('Permission denied: You are not allowed to perform this action.');
-  } else if (result.startsWith('error')) {
-    // Other errors
-   // console.error('An error occurred:', result);
-    //alert(`Something went wrong: ${result}`);
-    
-    this.errorMessage = 'You do not have permission to add this lotto draw. Contact your IT admin.';
-    return;
-
-  }
-})
-.catch((err) => {
-  // Catch any unexpected unhandled errors
-  console.error('Unexpected error:', err);
-  alert('Unexpected error: ' + err.message);
-});
-
-
+} else if (result === 'exists') {
+  console.warn('Draw already exists. Added bet details instead.');
+  this.completeBet();
+} else if (result === 'permission-denied') {
+  throw new Error('You do not have permission to add this lotto draw. Contact your IT admin.');
+} else if (result.startsWith('error')) {
+  throw new Error('Error encountered while processing your request.');
+}
+  
+  } catch (err: any) {
+    console.error('Unexpected error:', err);
+    this.errorMessage = err?.message || 'Unexpected error occurred.';
+    this.isSubmitting = false;
   }
   
+}
+resetViewBet(){
+  this.combos = [];
+}
+resetState() {
+  this.successMessage = '';
+  this.errorMessage = '';
+  this.isSubmitting = false;
+ // this.combos = []; // or however you reset this
+}
+goBackToEntry() {
+  this.resetState();
+  this.activeTab = 'entry';
+}
+goDone() {
+  this.resetState();
+  this.combos=[];
+  this.activeTab = 'entry';
+}
+
   completeBet(): void {
+    this.activeTab = 'receipt'; 
     const now = new Date();
     const formattedDate = formatDate(now, 'MM-dd-yyyy HH:mm:ss', 'en-US');
     this.successMessage = `Bet is completed at ${formattedDate}`;
+    this.playForm.reset();
+    this.lottoForm.reset();
+    this.resetViewBet();
   }
   generateUUIDv4(): string {
     return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
@@ -294,4 +376,11 @@ this.lottoDraw.addLottoDraw(this.lottoForm.value, this.betType, this.uid,this.em
       return v.toString(16);
     });
   }
+}
+export interface Combo {
+  id: number;
+  ticketId:string;
+  combination: string;
+  amount: string;
+  type: 'T' | 'R';
 }

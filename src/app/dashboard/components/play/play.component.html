@@ -1,3 +1,11 @@
+<!-- <div class="tab-header" *ngIf="activeTab === 'view'">
+  <i class="fa fa-arrow-left back-arrow"
+     (click)="activeTab = 'entry'"
+     title="Go back to Entry Bet"></i>
+</div> -->
+
+<form *ngIf="activeTab === 'entry'" [formGroup]="playForm" class="form-wrap">
+ 
 <form [formGroup]="playForm" class="form-wrap">
   <!-- Options Section -->
 
@@ -34,9 +42,16 @@
   <div class="container">
     <!-- Combination Input Field -->
     <div class="keypad-wrapper">
-    <div class="combination-area">
-      Combination
-      <input
+      
+      <div class="target-area">
+        <div *ngIf="combos.length > 0">
+          <i class="fa fa-edit"
+             (click)="activeTab = 'view'"
+             title="Go to view"></i>
+        </div>
+        
+        
+        <input
         #combinationInput
         formControlName="combination"
         class="combination-input"
@@ -44,7 +59,7 @@
         maxlength="3"
         type="text"
       />
-      
+      <p>Combination</p>
     </div>
   </div>
     <div class="keypad-wrapper">
@@ -94,5 +109,94 @@
     </div>
   </div>
 
-  <button type="submit" class="add-bet" (click)="addBet()">Add Bet</button>
+  <button type="submit" class="add-bet" (click)="addBet()">Next</button>
+
 </form>
+
+</form>
+<div *ngIf="activeTab === 'view'" class="view-bets">
+  <!-- Back Button -->
+  <div class="tab-header">
+ 
+       <i class="fa fa-arrow-left back-arrow"
+       (click)="goBackToEntry()"
+       title="Go back to Entry Bet"></i>
+ 
+      </div>
+
+  
+
+
+  <!-- Bets Summary -->
+  <h3 class="bets-summary-title">Bets Summary</h3>
+  <div *ngIf="errorMessage" class="error-message">
+    {{ errorMessage }}
+  </div>
+  <div *ngIf="successMessage" class="success-message">
+    {{ successMessage }}
+  </div>
+  <!-- Bets Table -->
+  <table class="combo-table">
+    <thead>
+      <tr>
+        <th>Combination</th>
+        <th>Type</th>
+        <th>Amount</th>
+        <th>Action</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr *ngFor="let combo of combos">
+        <td>{{ combo.combination }}</td>
+        <td>{{ combo.type }}</td>
+        <td>{{ combo.amount }}</td>
+        <td>
+          <button class="remove-btn" (click)="removeCombo(combo.id)" [disabled]="isSubmitting">
+            <i class="fa fa-trash"></i> <!-- Trash Icon -->
+          </button>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+  
+  <!-- Submit Button -->
+  <div class="submit-container">
+    <button class="submit-btn"
+    (click)="submitBet()"
+    [disabled]="isSubmitting">
+Submit Bets
+</button>
+
+  </div>
+
+  
+</div>
+<div *ngIf="activeTab === 'receipt'" class="receipt-section">
+  <div class="receipt-message">
+    <i class="fa fa-check-circle icon-success"></i>
+    <p class="main-message">Bet Confirmed</p>
+    <p class="main-message">at {{ currentDateTime }}</p>
+    <!-- Bets Table -->
+    <table class="combo-table receipt-table">
+      <thead>
+        <tr>
+          <th>Combination|</th>
+          <th>Type|</th>
+          <th>Amount</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let combo of submittedCombos">
+          <td>{{ combo.combination }}</td>
+          <td>{{ combo.type }}</td>
+          <td>{{ combo.amount }}</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <p class="sub-message">🎰 Wishing you a lucky draw!</p>
+    <p class="sub-message">Entered By: {{agent}}</p>
+    <button class="done-btn" (click)="goDone()">Done</button>
+  </div>
+</div>
+

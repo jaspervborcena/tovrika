@@ -14,74 +14,101 @@ export class LottoDrawTransactionService {
 
   // ✅ Listen for changes dynamically
   listenToTransactions(drawIds: string[]): void {
+    if (!drawIds.length) return; // 🛑 Prevent empty queries
+  
     const drawCollection = collection(this.firestore, this.collectionName);
     const drawQuery = query(drawCollection, where("drawId", "in", drawIds.slice(0, 10)));
   
-    // 🔥 Firestore real-time listener (only fetches updates)
     onSnapshot(drawQuery, (querySnapshot) => {
-      const transactions: LottoDrawTransaction[] = [];
+      const mergedTransactions = new Map<string, LottoDrawTransaction>(); // Map to store merged results
   
       querySnapshot.forEach((doc) => {
         const data = doc.data();
-        console.log('details', data);
         const details = Array.isArray(data['details']) ? data['details'] : [];
-        console.log('details2', details);
   
         details.forEach((detail: any) => {
-          if (detail.status === "S") { // ✅ Filter for transactions with status "S"
-            transactions.push({
+          if (detail.status !== "S") return; // 🔥 Skip irrelevant transactions
+  
+          const ticketId = detail.ticketId || ''; // Get ticketId
+          const existingTransaction = mergedTransactions.get(ticketId);
+  
+          if (existingTransaction) {
+            // ✅ Merge ramble & target values if ticketId already exists
+            existingTransaction.target += detail.betType === 'T' ? Number(detail.betAmount) || 0 : 0;
+            existingTransaction.ramble += detail.betType === 'R' ? Number(detail.betAmount) || 0 : 0;
+            existingTransaction.gross += Number(detail.betAmount) || 0; // Update total amount
+          } else {
+            // ✅ Add new transaction entry if ticketId doesn't exist yet
+            mergedTransactions.set(ticketId, {
               id: detail.id || '',
+              ticketId: ticketId,
               drawType: data['drawType'] || '',
               combination: detail.betCombi || '',
-              target: detail.betType === 'T' ? parseInt(detail.betAmount) || 0 : 0,
-              ramble: detail.betType === 'R' ? parseInt(detail.betAmount) || 0 : 0,
-              gross: parseInt(detail.betAmount) || 0,
+              target: detail.betType === 'T' ? Number(detail.betAmount) || 0 : 0,
+              ramble: detail.betType === 'R' ? Number(detail.betAmount) || 0 : 0,
+              gross: Number(detail.betAmount) || 0,
               agent: detail.createdBy || '',
-              date:  data['drawDate'] || '',
+              date: data['drawDate'] || '',
               userId: detail.userId || '',
             });
           }
         });
       });
   
-      // ✅ Update transactions dynamically using signals
-      this.lottoDrawTransactionsSignal.set(transactions);
-      console.log("Filtered transactions (status = 'S'):", transactions);
+      // ✅ Convert merged results from Map to an array and update the signal
+      const transactionsArray = Array.from(mergedTransactions.values());
+      this.lottoDrawTransactionsSignal.set(transactionsArray);
+      console.log("Merged transactions by ticketId:", transactionsArray);
+    }, (error) => {
+      console.error("Error fetching transactions:", error);
     });
   }
-  async markLottoDrawAsDeleted(drawId: string, detailId: string): Promise<void> {
+  async markLottoDrawAsDeleted(drawId: string, ticketId: string): Promise<void> {
     try {
-      console.log(`LottoDraw ${drawId} updated to status and detail id ${detailId} ".`);
+      console.log(`Updating LottoDraw ${drawId} for ticketId ${ticketId}...`);
+      
       const drawCollection = collection(this.firestore, this.collectionName);
       const drawQuery = query(drawCollection, where("drawId", "==", drawId));
-  
       const querySnapshot = await getDocs(drawQuery);
   
-      if (!querySnapshot.empty) {
-        querySnapshot.forEach(async (doc) => {
+      if (querySnapshot.empty) {
+        console.warn("No matching drawId found.");
+        return;
+      }
+  
+      // 🔥 Filter only updated documents before calling updateDoc()
+      const updatePromises = querySnapshot.docs
+        .map(async (doc) => {
           const drawData = doc.data();
-          //const details = Array.isArray(drawData.details) ? drawData.details : [];
-          const details = Array.isArray(drawData['details']) ? drawData['details'] : [];
-          // ✅ Modify only the relevant detail's status
+          const details = Array.isArray(drawData['details']) ? [...drawData['details']] : []; // Deep copy
+  
+          let updated = false;
+  
           details.forEach((detail: any) => {
-            if (detail.id === detailId) {
-              detail.status = "D"; // ✅ Update status to "D"
+            if (detail.ticketId === ticketId) {
+              detail.status = "D"; // ✅ Mark as deleted
+              updated = true;
             }
           });
   
-          // ✅ Push updated details back to Firestore
-          await updateDoc(doc.ref, { details });
+          // ✅ Ensure update happens only if there was a change
+          if (updated) {
+            return updateDoc(doc.ref, { details });
+          }
+        })
+        .filter((promise) => promise !== undefined); // Remove undefined promises
   
-          console.log(`LottoDraw ${detailId} updated to status "D".`);
-        });
-      } else {
-        console.warn("No matching drawId found.");
-      }
+      await Promise.all(updatePromises); // ✅ Ensure all updates finish
+  
+      console.log(`LottoDraw for ticketId ${ticketId} updated to status "D".`);
+  
     } catch (error) {
       console.error("Error updating lotto draw status:", error);
       throw error;
     }
   }
+  
+  
   
   
 }
