@@ -24,7 +24,7 @@ export class PlayComponent {
   lottoForm!: FormGroup;
 
   activeField: 'combination' | 'target' | 'ramble' = 'combination';
-  activeTime: string  = '14:00:00';
+  activeTime = '';
   errorMessage: string | null = null;
   successMessage: string | null = null;
    uuid:string;
@@ -40,6 +40,10 @@ isSubmitting = false;
 currentDateTime:string=Date.now().toString()
 agent:string | null="";
 
+currentTime = new Date();
+  timeOptions = ['14:00:00', '17:00:00', '21:00:00'];
+  disabledTimes: Set<string> = new Set();
+  hasAvailableOptions = true;
   constructor(private fb: FormBuilder, private lottoDraw: LottoDrawService,private auth: AuthService,private route:Router) {
     this.uuid = this.generateUUIDv4();
     
@@ -70,8 +74,29 @@ agent:string | null="";
         this.resetState();
       }
     });
+    setInterval(() => {
+      this.currentTime = new Date();
+      this.updateDisabledTimes(); // Update disabled buttons dynamically
+    }, 1000);
+  }
+  updateDisabledTimes() {
+    this.disabledTimes.clear(); // Reset disabled states
+    const now = new Date();
+
+    this.timeOptions.forEach(time => {
+      const [hours, minutes, seconds] = time.split(':').map(Number);
+      const buttonTime = new Date();
+      buttonTime.setHours(hours, minutes - 10, seconds); // 10 minutes before
+
+      if (now >= buttonTime) {
+        this.disabledTimes.add(time);
+      }
+    });
   }
 
+  isDisabled(time: string): boolean {
+    return this.disabledTimes.has(time);
+  }
   get detailsFormArray(): FormArray {
     return this.lottoForm.get('details') as FormArray;
   }
@@ -141,7 +166,7 @@ handleKeyPress(value: string): void {
   }
   
   removeCombo(id: number) {
-    this.combos = this.combos.filter(c => c.id !== id);
+    this.combos = this.combos.filter(c => c.ticketId !== id);
   }
   async addBet(): Promise<void> {
     try {
@@ -155,6 +180,13 @@ handleKeyPress(value: string): void {
       this.successMessage = '';
   
       const now = new Date();
+
+
+      if (this.activeTime === '') {
+        this.errorMessage = '⚠ You must select a time before proceeding.';
+        return;
+      }
+
       const currentDate = formatDate(now, 'yyyy-MM-dd', 'en-US');
       const combinedDateTime = `${currentDate}T${this.activeTime}`;
       const drawDate = formatDate(new Date(combinedDateTime), 'yyyy-MM-ddTHH:mm:ss', 'en-US');
@@ -163,7 +195,10 @@ handleKeyPress(value: string): void {
       const drawId = `${drawIdDt}${hourOnly}`;
   
       let gameType = formatDate(combinedDateTime, 'h a', 'en-US').replace(' ', '');
-  
+      if (!this.hasAvailableOptions) {
+        this.errorMessage = 'Time is closed! No options available.';
+        return;
+      }
       // 🛑 **Check validation before pushing combos**
       if (+combination < 1 && (+target + +ramble) < 1) {
         this.errorMessage = 'Combination and at least one amount is required.';
@@ -219,21 +254,29 @@ handleKeyPress(value: string): void {
     }
   }
   
-generateTicketId(): string {
-  const epochTime = Date.now();
-  const randomNumber = Math.floor(1000 + Math.random() * 9000);
-  return `${epochTime}${randomNumber}`;
-}
+  generateTicketId(): string {
+    const epochTime = Date.now().toString(); // Convert to string
+    const lastFourDigits = epochTime.slice(-4); // Get last 4 digits of epoch time
+    const randomNumber = Math.floor(1000 + Math.random() * 9000); // Generate 4-digit random number
+    
+    return `${lastFourDigits}${randomNumber}`; // Concatenate for 8-digit ID
+  }
+  
 
 
 
 
-
-async submitBet(): Promise<void> {
+async onSubmit(): Promise<void> {
   this.isSubmitting = true;
   this.errorMessage = '';
   this.successMessage = '';
 
+
+  if (!this.hasAvailableOptions) {
+    this.errorMessage = 'Time is closed! No options available.';
+    this.isSubmitting = false;
+    return;
+  }
   const now = new Date();
   const currentDate = formatDate(now, 'yyyy-MM-dd', 'en-US');
   const combinedDateTime = `${currentDate}T${this.activeTime}`;
@@ -263,6 +306,7 @@ async submitBet(): Promise<void> {
 
     if (this.combos.length === 0) {
       this.errorMessage = 'No bet combinations found.';
+      this.isSubmitting = false;
       return;
     }
     
@@ -312,6 +356,7 @@ for (const [combi, amount] of totalCombiMap.entries()) {
   if (getBetAmount > ENUM_LIMITS.LIMIT_BET) {
     this.returnStatus = "overlimit";
     this.errorMessage = `Combination ${combi} is sold out with total bet amount ${getBetAmount}.`;
+    this.isSubmitting = false;
     return; // Stop execution if limit exceeded
   }
 }
@@ -380,7 +425,7 @@ goDone() {
 }
 export interface Combo {
   id: number;
-  ticketId:string;
+  ticketId:number;
   combination: string;
   amount: string;
   type: 'T' | 'R';

@@ -12,26 +12,26 @@
   <div class="options">
     <button
       class="option-btn"
-      [class.active]="activeTime === '14:00:00'"
-      (click)="selectTime('14:00:00')"
+      [class.active]="activeTime === time"
+      [class.disabled]="isDisabled(time)"
+      [style.backgroundColor]="isDisabled(time) ? 'red' : ''"
+      [disabled]="isDisabled(time)"
+      *ngFor="let time of timeOptions"
+      (click)="selectTime(time)"
     >
-      2PM
-    </button>
-    <button
-      class="option-btn"
-      [class.active]="activeTime === '17:00:00'"
-      (click)="selectTime('17:00:00')"
-    >
-      5PM
-    </button>
-    <button
-      class="option-btn"
-      [class.active]="activeTime === '21:00:00'"
-      (click)="selectTime('21:00:00')"
-    >
-      9PM
+    {{ time === '14:00:00' ? '2PM' : time === '17:00:00' ? '5PM' : time === '21:00:00' ? '9PM' : '' }}
+
     </button>
   </div>
+  
+  <!-- ✅ Show message if no options are available -->
+  <!-- <p *ngIf="!hasAvailableOptions" class="warning">⚠ Time is Closed! No options available.</p> -->
+  
+  <!-- ✅ Disable Next/Submit button if no options exist -->
+  <button [disabled]="!hasAvailableOptions" (click)="onSubmit()">Next</button>
+  
+  
+ 
   <div *ngIf="errorMessage" class="error-message">
     {{ errorMessage }}
   </div>
@@ -113,7 +113,7 @@
     </div>
   </div>
 
-  <button type="submit" class="add-bet" (click)="addBet()">Next</button>
+  <button type="submit" class="add-bet" [disabled]="!hasAvailableOptions" (click)="addBet()">Next</button>
 
 </form>
 
@@ -143,6 +143,7 @@
   <table class="combo-table">
     <thead>
       <tr>
+        <th>Ticket No.</th>
         <th>Combination</th>
         <th>Type</th>
         <th>Amount</th>
@@ -151,11 +152,12 @@
     </thead>
     <tbody>
       <tr *ngFor="let combo of combos">
+        <td>{{ combo.ticketId }}</td>
         <td>{{ combo.combination }}</td>
         <td>{{ combo.type }}</td>
         <td>{{ combo.amount }}</td>
         <td>
-          <button class="remove-btn" (click)="removeCombo(combo.id)" [disabled]="isSubmitting">
+          <button class="remove-btn" (click)="removeCombo(combo.ticketId)" [disabled]="isSubmitting">
             <i class="fa fa-trash"></i> <!-- Trash Icon -->
           </button>
         </td>
@@ -164,16 +166,11 @@
   </table>
   
   <!-- Submit Button -->
-  <div class="submit-container">
-    <button class="submit-btn"
-    (click)="submitBet()"
-    [disabled]="isSubmitting">
+  <button class="submit-btn"
+  (click)="onSubmit()"
+  [disabled]="isSubmitting || !hasAvailableOptions">
 Submit Bets
 </button>
-
-  </div>
-
-  
 </div>
 <div *ngIf="activeTab === 'receipt'" class="receipt-section">
   <div class="receipt-message">
@@ -184,6 +181,7 @@ Submit Bets
     <table class="combo-table receipt-table">
       <thead>
         <tr>
+          <th>Ticket No.</th>
           <th>Combination|</th>
           <th>Type|</th>
           <th>Amount</th>
@@ -191,6 +189,7 @@ Submit Bets
       </thead>
       <tbody>
         <tr *ngFor="let combo of submittedCombos">
+          <td>{{ combo.ticketId }}</td>
           <td>{{ combo.combination }}</td>
           <td>{{ combo.type }}</td>
           <td>{{ combo.amount }}</td>

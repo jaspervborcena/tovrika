@@ -89,7 +89,19 @@ export class TransactionComponent implements OnInit,OnDestroy {
   //   this.updateDrawId();  // Update drawId whenever the date changes
   //   this.loadTransactions();  // Reload transactions based on new drawId
   // }
-
+  isDeleteDisabled(betTime: string): boolean {
+    const currentTime = new Date();
+    const betDateTime = new Date(betTime); // ✅ Convert betTime to Date object
+  
+    // ✅ Calculate 10 minutes before bet time
+    const tenMinutesBeforeBet = new Date(betDateTime);
+    tenMinutesBeforeBet.setMinutes(betDateTime.getMinutes() - 10);
+  
+    // ✅ Disable if current time is before 10 minutes before or past bet time
+    return currentTime <= tenMinutesBeforeBet || currentTime >= betDateTime;
+  }
+  
+  
   onDateChange(event: MatDatepickerInputEvent<Date>): void {
     const selectedDate = event.value|| new Date();
      this.updateDrawId();  // Update drawId whenever the date changes
