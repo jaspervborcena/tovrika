@@ -1,13 +1,13 @@
 import { Injectable, inject, signal} from '@angular/core';
 import { Firestore, collection, query, where, onSnapshot ,updateDoc,getDocs} from '@angular/fire/firestore';
 import { LottoDrawTransaction } from '../models/lotto-draw';
-import { Collection } from '../enum/collection.enum';
+import { ENUM_COLLECTION } from '../enum/collections.enum';
 @Injectable({
   providedIn: 'root',
 })
 export class LottoDrawTransactionService {
   public lottoDrawTransactionsSignal = signal<LottoDrawTransaction[]>([]);
-  private collectionName = Collection.LOTTO_DRAWS;
+  private collectionName = ENUM_COLLECTION.LOTTO_DRAWS;
   private firestore = inject(Firestore);
 
   constructor() {}

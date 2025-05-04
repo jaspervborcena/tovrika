@@ -7,6 +7,7 @@ import { LottoDrawService } from '../../services/lotto-draw.service';
 import { computed } from '@angular/core';
 import { AuthService } from '../../../core/services/auth.service'; 
 import { Router ,NavigationEnd } from '@angular/router';
+import { ENUM_COLLECTION,ENUM_LIMITS } from '../../enum/collections.enum';
 @Component({
   selector: 'app-play',
   templateUrl: './play.component.html',
@@ -195,7 +196,7 @@ handleKeyPress(value: string): void {
       const { totalAmount } = await this.lottoDraw.getLottoLimit(drawId, combination);
       const getBetAmount = (+target) + (+totalAmount);
   
-      if (getBetAmount > 300) {
+      if (getBetAmount > ENUM_LIMITS.LIMIT_BET) {
         this.returnStatus = "overlimit";
         this.errorMessage = `Limit exceeded! Combination ${combination} is sold out.`;
         return; // Stop execution before pushing invalid combos
@@ -308,7 +309,7 @@ for (const [combi, amount] of totalCombiMap.entries()) {
 
   const getBetAmount = numericAmount + numericTotalAmount;
 
-  if (getBetAmount > 300) {
+  if (getBetAmount > ENUM_LIMITS.LIMIT_BET) {
     this.returnStatus = "overlimit";
     this.errorMessage = `Combination ${combi} is sold out with total bet amount ${getBetAmount}.`;
     return; // Stop execution if limit exceeded

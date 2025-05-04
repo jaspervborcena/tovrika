@@ -3,15 +3,16 @@ import { Firestore, collection, getDocs, query, where, addDoc, updateDoc, doc } 
 import { LottoDraw, LottoDetail } from '../models/lotto-draw';
 import { DocumentData } from 'firebase/firestore';
 import { Observable } from 'rxjs';
-import { Collection } from '../enum/collection.enum';
+import { ENUM_COLLECTION } from '../enum/collections.enum';
 import { Console } from 'console';
 @Injectable({
   providedIn: 'root',
 })
 export class LottoDrawService {
   private lottoDrawsSignal = signal<LottoDraw[]>([]);
-  private collectionName = Collection.LOTTO_DRAWS;
+  private collectionName = ENUM_COLLECTION.LOTTO_DRAWS;
   private  returnStatus: string ='';
+  
   constructor(private firestore: Firestore) {}
 
   // Initialize service and load Lotto draws on startup

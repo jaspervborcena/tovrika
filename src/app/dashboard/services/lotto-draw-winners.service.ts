@@ -1,12 +1,12 @@
 import { Injectable, Signal, signal,inject } from '@angular/core';
 import { Firestore, collection, query, where, getDocs, updateDoc } from '@angular/fire/firestore';
-import { Collection } from '../enum/collection.enum';
+import { ENUM_COLLECTION,ENUM_LIMITS } from '../enum/collections.enum';
 import { Winner } from '../models/lotto-winner';
 @Injectable({
   providedIn: 'root'
 })
 export class WinnerService {
-  private collectionName = Collection.LOTTO_DRAWS;
+  private collectionName = ENUM_COLLECTION.LOTTO_DRAWS;
   winnersSignal = signal<any[]>([]);
   private firestore = inject(Firestore);
   constructor() {}
@@ -93,16 +93,22 @@ export class WinnerService {
           let updated = false;
   
           details.forEach((detail: any) => {
-            if (allCombinations.includes(detail.betCombi) && detail.status === 'S') {
-              detail.isWinner = true;
-              
-              // ✅ Extract betAmount from details instead of function parameter
-              const betAmount = detail.betAmount || 0;
-              detail.wins = detail.betType === 'R' ? betAmount * 300 : betAmount * 450;
-  
-              updated = true;
+            // ✅ Only generate permutations if betType === 'R'
+            const validCombinations = detail.betType === 'R' 
+                ? this.generatePermutations(combination) 
+                : [combination]; // Direct match for 'T'
+        
+            if (validCombinations.includes(detail.betCombi) && detail.status === 'S') {
+                detail.isWinner = true;
+        
+                // ✅ Calculate winnings based on betType
+                const betAmount = detail.betAmount || 0;
+                detail.wins = detail.betType === 'R' ? betAmount * ENUM_LIMITS.RAMBLE_WIN : betAmount * ENUM_LIMITS.TARGET_WIN;
+        
+                updated = true;
             }
-          });
+        });
+        
   
           // ✅ Update Firestore only if relevant changes exist
           if (updated) {
