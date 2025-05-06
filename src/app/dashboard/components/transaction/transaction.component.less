@@ -144,3 +144,29 @@
   background-color: #007bff !important; /* ✅ Full coverage */
   color: white !important;
 }
+
+.table-container {
+  width: 100%; /* ✅ Ensure full width */
+  overflow-x: auto; /* ✅ Enable horizontal scrolling */
+  max-height: 400px; /* ✅ Set max height for vertical scrolling */
+  margin-top: 5px;
+}
+
+.table {
+  width: 100%; /* ✅ Ensure table fills container */
+  border-collapse: collapse;
+}
+
+th, td {
+  white-space: nowrap; /* ✅ Prevent text wrapping */
+  padding: 10px;
+  text-align: left;
+}
+
+.sticky-column {
+  position: sticky;
+  left: 0;
+  background: white; /* ✅ Ensure it stays visible */
+  z-index: 2;
+  border-right: 1px solid #ddd; /* ✅ Add separation */
+}

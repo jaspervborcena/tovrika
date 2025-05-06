@@ -28,7 +28,7 @@
   <!-- <p *ngIf="!hasAvailableOptions" class="warning">⚠ Time is Closed! No options available.</p> -->
   
   <!-- ✅ Disable Next/Submit button if no options exist -->
-  <button [disabled]="!hasAvailableOptions" (click)="onSubmit()">Next</button>
+  <!-- <button [disabled]="!hasAvailableOptions" (click)="onSubmit()">Submit</button> -->
   
   
  
@@ -113,7 +113,7 @@
     </div>
   </div>
 
-  <button type="submit" class="add-bet" [disabled]="!hasAvailableOptions" (click)="addBet()">Next</button>
+  <button type="submit" class="add-bet" [disabled]="!hasAvailableOptions" (click)="addBet()">Add Bet</button>
 
 </form>
 
@@ -164,7 +164,9 @@
       </tr>
     </tbody>
   </table>
-  
+  <!-- Total Amount Display -->
+<h3 class="total-amount">Total Amount: {{ getTotalAmount() }}</h3>
+
   <!-- Submit Button -->
   <button class="submit-btn"
   (click)="onSubmit()"

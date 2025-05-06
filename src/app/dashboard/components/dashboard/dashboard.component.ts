@@ -68,6 +68,18 @@ export class DashboardComponent implements OnInit {
         this.loadDashboard();
     }
 }
+getTotalValues(): { bet: number; hits: number; commission: number; kabig: number } {
+  return this.dashboard().reduce(
+    (totals, bet) => {
+      totals.bet += Number(bet.bet) || 0;
+      totals.hits += Number(bet.hits) || 0;
+      totals.commission += Number(bet.commission) || 0;
+      totals.kabig += Number(bet.kabig) || 0;
+      return totals;
+    },
+    { bet: 0, hits: 0, commission: 0, kabig: 0 } // ✅ Initialize totals
+  );
+}
 
 loadDashboard(): void {
   const formattedDate = this.formatDate(this.selectedDate.value || new Date());

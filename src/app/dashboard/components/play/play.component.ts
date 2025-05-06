@@ -51,6 +51,7 @@ currentTime = new Date();
   }
 
   ngOnInit(): void {
+    // this.activeTab = 'view';
     this.playForm = this.fb.group({
       combination: [''],
       target: [''],
@@ -78,6 +79,7 @@ currentTime = new Date();
       this.currentTime = new Date();
       this.updateDisabledTimes(); // Update disabled buttons dynamically
     }, 1000);
+    this.focusCombination(); 
   }
   updateDisabledTimes() {
     this.disabledTimes.clear(); // Reset disabled states
@@ -220,16 +222,21 @@ handleKeyPress(value: string): void {
       const ticketId = this.generateTicketId();
       const tempCombos: any[] = [];
   
+      
       if (target) {
         tempCombos.push({ id: this.comboId++, ticketId, combination, amount: target, type: 'T' });
       }
       if (ramble) {
         tempCombos.push({ id: this.comboId++, ticketId, combination, amount: ramble, type: 'R' });
       }
-  
+
+      const totalCombi = await this.calculateTotalTBet(combination);
+
+      console.log("totalCombi",totalCombi)
+
       // 🛑 **Check bet limit before pushing to `combos`**
       const { totalAmount } = await this.lottoDraw.getLottoLimit(drawId, combination);
-      const getBetAmount = (+target) + (+totalAmount);
+      const getBetAmount = (+target) + (+totalCombi) + (+totalAmount);
   
       if (getBetAmount > ENUM_LIMITS.LIMIT_BET) {
         this.returnStatus = "overlimit";
@@ -242,8 +249,8 @@ handleKeyPress(value: string): void {
   
       // ✅ Clear the form after successful addition
       this.playForm.reset();
-      this.activeTab = 'view';
-  
+      //this.activeTab = 'view';
+      setTimeout(() => this.focusCombination(), 0);
     } catch (error: any) {
       console.error('Error adding lotto draw:', error);
       if (error.code === 'permission-denied') {
@@ -253,7 +260,23 @@ handleKeyPress(value: string): void {
       this.errorMessage = `Error: ${error.message || 'Unknown error'}`;
     }
   }
+  calculateTotalTBet(combination: string): Promise<number> {
+    return Promise.resolve(
+      this.combos
+        .filter(combo => combo.type === "T" && combo.combination === combination) // ✅ Filter by type & combination
+        .reduce((total, combo) => total + Number(combo.amount) || 0, 0) // ✅ Accumulate total
+    );
+  }
   
+  getTotalAmount(): number {
+    return this.combos.reduce((total, combo) => total + Number(combo.amount) || 0, 0);
+  }
+  
+  focusCombination(): void {
+    if (this.combinationInput) {
+      this.combinationInput.nativeElement.focus(); // ✅ Move cursor to input field
+    }
+  }
   generateTicketId(): string {
     const epochTime = Date.now().toString(); // Convert to string
     const lastFourDigits = epochTime.slice(-4); // Get last 4 digits of epoch time

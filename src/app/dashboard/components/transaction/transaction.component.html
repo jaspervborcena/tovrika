@@ -42,12 +42,11 @@
     </button>
   </div>
 
-
-  <div class="transaction-grid">
+  <div class="table-container">
     <table class="table table-bordered">
       <thead class="thead-dark">
         <tr>
-          <th>Draw Type</th>
+          <th class="sticky-column">Draw Type</th>
           <th>Combination</th>
           <th>Target</th>
           <th>Ramble</th>
@@ -59,7 +58,7 @@
       </thead>
       <tbody>
         <tr *ngFor="let bet of paginatedBets">
-          <td>{{ bet.drawType }}</td>
+          <td class="sticky-column">{{ bet.drawType }}</td>
           <td>{{ bet.combination }}</td>
           <td>{{ bet.target }}</td>
           <td>{{ bet.ramble }}</td>
@@ -68,17 +67,16 @@
           <td>{{ bet.date }}</td>
           <td>
             <button 
-            (click)="deleteBet(bet.date, bet.ticketId)" 
-            class=".btn-danger:disabled" 
-            [disabled]="isDeleteDisabled(bet.date)"
-          >
-            Delete
-          </button>
-          
-            
+              (click)="deleteBet(bet.date, bet.ticketId)" 
+              [ngClass]="{ 'btn-danger': !isDeleteDisabled(bet.date), 'btn-secondary': isDeleteDisabled(bet.date) }"
+              [disabled]="isDeleteDisabled(bet.date)"
+            >
+              Delete
+            </button>
           </td>
         </tr>
       </tbody>
     </table>
   </div>
+  
 </form>

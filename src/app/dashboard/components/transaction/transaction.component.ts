@@ -91,15 +91,17 @@ export class TransactionComponent implements OnInit,OnDestroy {
   // }
   isDeleteDisabled(betTime: string): boolean {
     const currentTime = new Date();
-    const betDateTime = new Date(betTime); // ✅ Convert betTime to Date object
+    const betDateTime = new Date(betTime); // ✅ Convert `betTime` to Date object
   
     // ✅ Calculate 10 minutes before bet time
     const tenMinutesBeforeBet = new Date(betDateTime);
     tenMinutesBeforeBet.setMinutes(betDateTime.getMinutes() - 10);
   
-    // ✅ Disable if current time is before 10 minutes before or past bet time
-    return currentTime <= tenMinutesBeforeBet || currentTime >= betDateTime;
+    // ✅ Enable delete when current time is LESS than 10 minutes before bet time
+    return currentTime >= tenMinutesBeforeBet; // 🔥 If current time is past `tenMinutesBeforeBet`, disable
   }
+  
+  
   
   
   onDateChange(event: MatDatepickerInputEvent<Date>): void {
