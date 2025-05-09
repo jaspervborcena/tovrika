@@ -1,9 +1,10 @@
 import { Injectable, signal } from '@angular/core';
-import { Firestore, collection, getDocs, query, where, addDoc, updateDoc, doc } from '@angular/fire/firestore';
-import { LottoDraw, LottoDetail } from '../models/lotto-draw';
+import { Firestore, collection, getDocs, query, where, addDoc,getDoc, updateDoc, doc } from '@angular/fire/firestore';
+
+import { LottoDraw, LottoDetail } from '../../models/lotto/lotto-draw';
 import { DocumentData } from 'firebase/firestore';
 import { Observable } from 'rxjs';
-import { ENUM_COLLECTION } from '../enum/collections.enum';
+import { ENUM_COLLECTION } from '../../enum/collections.enum';
 import { Console } from 'console';
 @Injectable({
   providedIn: 'root',
@@ -11,6 +12,7 @@ import { Console } from 'console';
 export class LottoDrawService {
   private lottoDrawsSignal = signal<LottoDraw[]>([]);
   private collectionName = ENUM_COLLECTION.LOTTO_DRAWS;
+  private collectionRole = ENUM_COLLECTION.LOTTO_DRAWS_ROLES;
   private  returnStatus: string ='';
   
   constructor(private firestore: Firestore) {}
@@ -30,7 +32,29 @@ export class LottoDrawService {
     }
   }
   
-
+  async  getRoleByUid( uid: string): Promise<string | null> {
+    try {
+      // ✅ Reference the document where ID matches `uid`
+      const docRef = doc(this.firestore, "lottoDrawRoles", uid);
+      const docSnap = await getDoc(docRef);
+  
+      if (docSnap.exists()) {
+        // ✅ Use bracket notation to access `roles`
+        const data = docSnap.data();
+        const roleId = data?.["roles"]?.["roleId"]; // ✅ Fix TypeScript index signature issue
+  
+        console.log("Role ID:", roleId);
+        return roleId;
+      } else {
+        console.log("No document found for UID:", uid);
+        return null;
+      }
+    } catch (error) {
+      console.error("Error fetching roleId:", error);
+      return null;
+    }
+  }
+  
   // Trigger lotto draws initialization explicitly from component or service
   get lottoDraws(): LottoDraw[] {
     return this.lottoDrawsSignal();

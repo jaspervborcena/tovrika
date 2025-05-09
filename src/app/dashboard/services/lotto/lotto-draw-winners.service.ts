@@ -1,7 +1,7 @@
 import { Injectable, Signal, signal,inject } from '@angular/core';
 import { Firestore, collection, query, where, getDocs, updateDoc } from '@angular/fire/firestore';
-import { ENUM_COLLECTION,ENUM_LIMITS } from '../enum/collections.enum';
-import { Winner } from '../models/lotto-winner';
+import { ENUM_COLLECTION,ENUM_LIMITS } from '../../enum/collections.enum';
+import { Winner } from '../../models/lotto/lotto-winner';
 @Injectable({
   providedIn: 'root'
 })

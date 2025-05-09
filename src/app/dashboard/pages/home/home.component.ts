@@ -6,7 +6,7 @@ import { isPlatformBrowser } from '@angular/common';
   import { CommonModule } from '@angular/common'; // Import CommonModule for ngFor
   import { ReactiveFormsModule, FormsModule } from '@angular/forms'; // Import for form handling
   declare var Winwheel: any; // Declare Winwheel so it is recognized by TypeScript
-  import { WinnersAlertComponent } from '../../components/winners-alert/winners-alert.component'
+  import { WinnersAlertComponent } from '../../lotto-components/winners-alert/winners-alert.component'
   
 @Component({
   selector: 'app-home',

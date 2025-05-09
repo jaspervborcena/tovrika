@@ -6,13 +6,14 @@ import { MatDatepickerModule } from '@angular/material/datepicker';
 import { MatNativeDateModule } from '@angular/material/core';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
-import { LottoDrawTransactionService } from '../../services/lotto-draw-transaction.service'; // <--- Your service
+import { LottoDrawTransactionService } from '../../services/lotto/lotto-draw-transaction.service'; // <--- Your service
 import { formatDate } from '@angular/common'; // To format the date
-import { LottoDrawTransaction } from '../../models/lotto-draw';
+import { LottoDrawTransaction } from '../../models/lotto/lotto-draw';
 import { isPlatformBrowser } from '@angular/common';
 import { PLATFORM_ID, Inject } from '@angular/core';
+import { MatDatepickerInputEvent } from '@angular/material/datepicker';
 @Component({
-  selector: 'app-cancelled',
+  selector: 'app-transaction',
   standalone: true,
   imports: [
     CommonModule,
@@ -23,17 +24,17 @@ import { PLATFORM_ID, Inject } from '@angular/core';
     MatFormFieldModule,
     MatInputModule,
   ],
-  templateUrl: './cancelled.component.html',
-  styleUrls: ['./cancelled.component.less'],
+  templateUrl: './transaction.component.html',
+  styleUrls: ['./transaction.component.less'],
 })
-export class CancelledComponent implements OnInit,OnDestroy {
+export class TransactionComponent implements OnInit,OnDestroy {
   transactionForm!: FormGroup;
   bets = signal<any[]>([]);
   activeTime: string = 'ALL';
   selectedDate: FormControl = new FormControl(new Date());  // Initialize with current date
   drawId: string = ''; // Will store the dynamic drawId
   currentPage = 1; // Pagination setup
-  itemsPerPage = 20;
+  itemsPerPage = 30;
   totalItems = 100; // Example total items for pagination
   drawIds: string[] = []; 
 
@@ -42,7 +43,7 @@ export class CancelledComponent implements OnInit,OnDestroy {
   // transactions = signal<LottoDrawTransaction[]>([]);
   transactions!: Signal<LottoDrawTransaction[]>;
   private cleanupEffect!: EffectRef;
-
+  
   constructor(
     private fb: FormBuilder,
     private lottoDrawTransactionService: LottoDrawTransactionService ,
@@ -66,7 +67,7 @@ export class CancelledComponent implements OnInit,OnDestroy {
             });
         });
 
-        this.loadCancelledTransactions();
+        this.loadTransactions();
     }
 }
 
@@ -75,18 +76,39 @@ export class CancelledComponent implements OnInit,OnDestroy {
     const formattedDate = this.formatDate(selectedDate);
     this.drawIds = this.getDrawIds(formattedDate, this.activeTime);
   
-    this.lottoDrawTransactionService.listenToCancelled(this.drawIds);
+    this.lottoDrawTransactionService.listenToTransactions(this.drawIds);
   }
 
   selectTime(time: string): void {
     this.activeTime = time;
     this.updateDrawId();  // Update drawId whenever the time is selected
-    this.loadCancelledTransactions();  // Reload transactions based on new drawId
+    this.loadTransactions();  // Reload transactions based on new drawId
   }
 
-  onDateChange(): void {
-    this.updateDrawId();  // Update drawId whenever the date changes
-    this.loadCancelledTransactions();  // Reload transactions based on new drawId
+  // onDateChange(): void {
+  //   this.updateDrawId();  // Update drawId whenever the date changes
+  //   this.loadTransactions();  // Reload transactions based on new drawId
+  // }
+  isDeleteDisabled(betTime: string): boolean {
+    const currentTime = new Date();
+    const betDateTime = new Date(betTime); // ✅ Convert `betTime` to Date object
+  
+    // ✅ Calculate 10 minutes before bet time
+    const tenMinutesBeforeBet = new Date(betDateTime);
+    tenMinutesBeforeBet.setMinutes(betDateTime.getMinutes() - 10);
+  
+    // ✅ Enable delete when current time is LESS than 10 minutes before bet time
+    return currentTime >= tenMinutesBeforeBet; // 🔥 If current time is past `tenMinutesBeforeBet`, disable
+  }
+  
+  
+  
+  
+  onDateChange(event: MatDatepickerInputEvent<Date>): void {
+    const selectedDate = event.value|| new Date();
+     this.updateDrawId();  // Update drawId whenever the date changes
+    this.loadTransactions();  // Reload transactions based on new drawId
+    
   }
   updateDrawId(): void {
     const selectedDate = this.selectedDate.value;
@@ -103,22 +125,30 @@ export class CancelledComponent implements OnInit,OnDestroy {
     // console.log('Updated drawId:', this.drawId);
   }
 
-  loadCancelledTransactions(): void {
+  loadTransactions(): void {
     const formattedDate = this.formatDate(this.selectedDate.value || new Date());
     this.drawIds = this.getDrawIds(formattedDate, this.activeTime);
-    this.lottoDrawTransactionService.listenToCancelled(this.drawIds);
+    this.lottoDrawTransactionService.listenToTransactions(this.drawIds);
+
   }
 
   // Handle pagination
-  get paginatedBets() {
-    const start = (this.currentPage - 1) * this.itemsPerPage;
-    const end = this.currentPage * this.itemsPerPage;
 
-    // Directly access transactions Signal
-    const betsData = this.transactions(); // ✅ No need to reassign this.transactions
+get paginatedBets() {
+  const start = (this.currentPage - 1) * this.itemsPerPage;
+  const end = this.currentPage * this.itemsPerPage;
 
-    return betsData.slice(start, end);
+  // ✅ Sort transactions by `details.createdDt` in descending order
+  const sortedBets = this.transactions()
+    .sort((a, b) => new Date(b.createdDt).getTime() - new Date(a.createdDt).getTime());
+
+  console.log("Sorted Bets:", sortedBets);
+
+  // ✅ Apply pagination (30 items per page)
+  return sortedBets.slice(start, end);
 }
+
+
 
   buildDrawId(date: string, time: string): string {
     // Generate the drawId in the format YYYYMMDD + HH
@@ -136,7 +166,17 @@ export class CancelledComponent implements OnInit,OnDestroy {
     return times.map(hour => `${date}${hour}`);
   }
 
-  
+  deleteBet(date:string, ticketId: string | undefined): void {
+    if (!ticketId) return; // ✅ Prevent deletion attempts on undefined ids
+    this.updateDrawId();
+    //this.bets.update(currentBets => currentBets.filter(b => b.id !== betId));
+    console.log("deleteBet",date)
+   const drawId=this.formatDateToDrawId(date);
+
+    this.lottoDrawTransactionService.markLottoDrawAsDeleted(drawId,ticketId);
+
+    
+}
 
 formatDateToDrawId(timestamp: string): string {
   const date = new Date(timestamp);
@@ -159,11 +199,31 @@ formatDateToDrawId(timestamp: string): string {
   setPage(page: number) {
     this.currentPage = page;
   }
-
-  // Get total pages for pagination
-  get totalPages() {
-    return Math.ceil(this.totalItems / this.itemsPerPage);
+  
+  get totalPages(): number {
+    return Math.ceil(this.transactions().length / this.itemsPerPage);
   }
+  
+  goToFirstPage() {
+    this.currentPage = 1;
+  }
+  
+  goToPreviousPage() {
+    if (this.currentPage > 1) {
+      this.currentPage--;
+    }
+  }
+  
+  goToNextPage() {
+    if (this.currentPage < this.totalPages) {
+      this.currentPage++;
+    }
+  }
+  
+  goToLastPage() {
+    this.currentPage = this.totalPages;
+  }
+
   ngOnDestroy(): void {
     console.log('Component destroyed, cleaning up Signals...');
 

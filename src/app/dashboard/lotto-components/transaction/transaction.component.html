@@ -64,7 +64,7 @@
           <td>{{ bet.ramble }}</td>
           <td>{{ bet.gross }}</td>
           <td>{{ bet.agent }}</td>
-          <td>{{ bet.date }}</td>
+          <td>{{ bet.createdDt }}</td>
           <td>
             <button 
               (click)="deleteBet(bet.date, bet.ticketId)" 
@@ -78,5 +78,12 @@
       </tbody>
     </table>
   </div>
-  
+  <div class="pagination-controls">
+    <button (click)="goToFirstPage()" [disabled]="currentPage === 1">First</button>
+    <button (click)="goToPreviousPage()" [disabled]="currentPage === 1">Previous</button>
+    <span>Page {{ currentPage }} of {{ totalPages }}</span>
+    <button (click)="goToNextPage()" [disabled]="currentPage === totalPages">Next</button>
+    <button (click)="goToLastPage()" [disabled]="currentPage === totalPages">Last</button>
+  </div>
+    
 </form>

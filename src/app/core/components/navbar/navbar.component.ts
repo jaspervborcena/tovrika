@@ -14,10 +14,13 @@ export class NavbarComponent  implements OnInit {
   isLoggedIn = computed(() => this.authService.isAuthenticated); // No '()' here
   user = computed(() => this.authService.user); // No '()' here
   menuActive: boolean = false;
-
+  userEmail: string | null = null; // ✅ Initialize as null
   constructor(private router: Router,private authService:AuthService ) {
     console.log("isLoggedIn",this.isLoggedIn())
-    
+    if (typeof window !== "undefined") {
+      // ✅ Ensure `localStorage` is available before accessing it
+      this.userEmail = localStorage.getItem("email");
+    }
       }
       
   

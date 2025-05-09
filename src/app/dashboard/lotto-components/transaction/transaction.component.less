@@ -170,3 +170,32 @@ th, td {
   z-index: 2;
   border-right: 1px solid #ddd; /* ✅ Add separation */
 }
+.pagination-controls {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.pagination-controls button {
+  background-color: #007bff; /* ✅ Blue background */
+  color: white;
+  border: none;
+  padding: 10px 15px;
+  font-size: 16px;
+  cursor: pointer;
+  border-radius: 5px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.pagination-controls button:disabled {
+  background-color: #ccc; /* ✅ Gray when disabled */
+  cursor: not-allowed;
+}
+
+.pagination-controls button:hover:not(:disabled) {
+  background-color: #0056b3; /* ✅ Darker blue on hover */
+}

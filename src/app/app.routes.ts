@@ -7,6 +7,8 @@ import { RegisterComponent } from './authentication/register/register.component'
 import { SignInComponent } from './authentication/sign-in/sign-in.component';
 import { LottoDrawComponent } from './dashboard/pages/lotto-draw/lotto-draw.component';
 import { authGuard } from './core/guards/auth.guard';
+import { EndingComponent } from './dashboard/pages/ending/ending.component';
+import { CardsListComponent } from './dashboard/ending-components/cards-list/cards-list.component';
 export const routes: Routes = [
   { path: '', component: HomeComponent },
   { path: 'home', component: HomeComponent ,},
@@ -14,41 +16,52 @@ export const routes: Routes = [
   { path: 'contact', component: ContactComponent },
   { path: 'signin', component: SignInComponent },
   { path: 'register', component: RegisterComponent },
+  { path: 'ending', component: EndingComponent,
+    children: [
+      {
+        path: 'cards',
+        loadComponent: () =>
+          import('./dashboard/ending-components/cards-list/cards-list.component').then(
+            (m) => m.CardsListComponent
+          ),
+      },
+    ]
+  },
   {path: 'draw',
   component: LottoDrawComponent,
   children: [
     {
       path: 'play',
       loadComponent: () =>
-        import('./dashboard/components/play/play.component').then(
+        import('./dashboard/lotto-components/play/play.component').then(
           (m) => m.PlayComponent
         ),
     },
     {
       path: 'transaction',
       loadComponent: () =>
-        import('./dashboard/components/transaction/transaction.component').then(
+        import('./dashboard/lotto-components/transaction/transaction.component').then(
           (m) => m.TransactionComponent
         ),
     },
     {
       path: 'dashboard',
       loadComponent: () =>
-        import('./dashboard/components/dashboard/dashboard.component').then(
+        import('./dashboard/lotto-components/dashboard/dashboard.component').then(
           (m) => m.DashboardComponent
         ),
     },
     {
       path: 'winners',
       loadComponent: () =>
-        import('./dashboard/components/winners/winners.component').then(
+        import('./dashboard/lotto-components/winners/winners.component').then(
           (m) => m.WinnersComponent
         ),
     },
     {
       path: 'cancelled',
       loadComponent: () =>
-        import('./dashboard/components/cancelled/cancelled.component').then(
+        import('./dashboard/lotto-components/cancelled/cancelled.component').then(
           (m) => m.CancelledComponent
         ), 
     },

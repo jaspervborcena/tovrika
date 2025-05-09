@@ -1,6 +1,6 @@
 import { Injectable, inject, signal } from '@angular/core';
 import { Firestore, collection, addDoc, doc, updateDoc, collectionData } from '@angular/fire/firestore';
-import { User } from '.././../dashboard/models/user'; // Import User model
+import { User } from '../../dashboard/models/lotto/user'; // Import User model
 
 @Injectable({
   providedIn: 'root',

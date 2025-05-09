@@ -44,6 +44,8 @@ export interface LottoDrawTransaction {
   status?:string;
   modifyBy?: string | null;
   createdBy?: string | null;
+  createdDt: string;
+  modifyDt: string;
   userId?:string | null;
 }
 export interface LottoDrawDashboard {
@@ -52,4 +54,13 @@ export interface LottoDrawDashboard {
   hits: number;      // Total hits (count of wins not equal to 0)
   commission: string; // Commission (15% of total bet)
   kabig: number;      // Gross bet amount minus total wins (can't be negative)
+}
+export interface LottoDrawRole {
+  id: string; // ✅ Document ID (UID)
+  roleId: string; // ✅ Role ID
+  roleDesc: string; // ✅ Role Description
+  status: string; // ✅ Status (Active, Inactive, etc.)
+  uid: string; // ✅ User ID (same as document ID)
+  createTime: string; // ✅ Timestamp when created
+  updateTime: string; // ✅ Timestamp when last updated
 }

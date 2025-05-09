@@ -5,9 +5,9 @@ import { MatDatepickerModule } from '@angular/material/datepicker';
 import { MatNativeDateModule } from '@angular/material/core';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
-import { WinnerService } from '../../services/lotto-draw-winners.service';
+import { WinnerService } from '../../services/lotto/lotto-draw-winners.service';
 import { formatDate } from '@angular/common';
-import { Winner } from '../../models/lotto-winner';
+import { Winner } from '../../models/lotto/lotto-winner';
 import { isPlatformBrowser } from '@angular/common';
 import { PLATFORM_ID, Inject } from '@angular/core';
 
@@ -39,12 +39,24 @@ export class WinnersComponent implements OnInit, OnDestroy {
   winners!: Signal<Winner[]>; // ✅ Correct Signal type
   private cleanupEffect!: EffectRef;
 
+
+  roleId: number;
+  isAgentNotAllowed: boolean;
+  
   constructor(
     private fb: FormBuilder,
     private winnerService: WinnerService,
     private injector: Injector,
     @Inject(PLATFORM_ID) private platformId: Object,
-  ) {}
+  ) {
+    const storedRoleId = localStorage.getItem("roleId");
+
+    // ✅ Check if roleId is missing or invalid
+    this.roleId = storedRoleId && !isNaN(Number(storedRoleId)) ? Number(storedRoleId) : 0;
+    this.isAgentNotAllowed = this.roleId < 9;
+  }
+
+  
 
   ngOnInit(): void {
     this.winnersForm = this.fb.group({

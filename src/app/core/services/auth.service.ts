@@ -2,7 +2,8 @@ import { Injectable, signal } from '@angular/core';
 import { Auth, getAuth, signInWithEmailAndPassword,createUserWithEmailAndPassword, signOut, onAuthStateChanged } from 'firebase/auth';  
 import { environment } from '../../../environments/environment';
 import { initializeApp } from 'firebase/app';  
-
+import { LottoDraw, LottoDrawRole } from '../../dashboard/models/lotto/lotto-draw';
+import { LottoDrawService } from '../../dashboard/services/lotto/lotto-draw.service';
 @Injectable({
   providedIn: 'root',
 })
@@ -13,14 +14,18 @@ export class AuthService {
   private isAuthenticatedSignal = signal<boolean>(false); // Signal to track authentication state
   private userIdValue: string | null = null;
   private userEmailValue: string | null = null;
-  constructor() {
+  constructor(private lottoDrawRoleService:LottoDrawService) {
     // Initialize user state by subscribing to auth state changes
     onAuthStateChanged(this.auth, (user) => {
       if (user) {
         this.userSignal.set(user); // Set user state if authenticated
         localStorage.setItem("uid", user.uid);
         localStorage.setItem("email", user.email!);
-        
+        // const lottoRoleId=this.lottoDrawRoleService.getRoleByUid(user.uid);
+        this.lottoDrawRoleService.getRoleByUid(user.uid).then((lottoRoleId) => {
+          localStorage.setItem("roleId", lottoRoleId!);
+        });
+
         this.isAuthenticatedSignal.set(true); // Set isAuthenticated to true
       } else {
         this.userSignal.set(null); // Set user state to null if not authenticated

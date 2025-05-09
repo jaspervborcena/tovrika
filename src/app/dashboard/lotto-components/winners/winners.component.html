@@ -34,17 +34,17 @@
             9PM
           </button>
         </div>
-      
+         
         <!-- Combination Input -->
-        <mat-form-field appearance="outline">
+        <mat-form-field appearance="outline" [ngClass]="{ 'hidden': isAgentNotAllowed }">
           <mat-label>Enter Combination</mat-label>
           <input matInput type="text" formControlName="combination" placeholder="Enter winning combination">
         </mat-form-field>
-      
-        <!-- Set Winner Button -->
-        <button class="btn btn-primary" (click)="setWinner()">Set Winner</button>
-        <button class="btn btn-danger" (click)="clearWinner()">Clear Winner</button>
         
+        <!-- ✅ Hide buttons when roleId < 9 -->
+        <button class="btn btn-primary" (click)="setWinner()" [ngClass]="{ 'hidden': isAgentNotAllowed }">Set Winner</button>
+        <button class="btn btn-danger" (click)="clearWinner()" [ngClass]="{ 'hidden': isAgentNotAllowed }">Clear Winner</button>
+          
       </div>
       
  

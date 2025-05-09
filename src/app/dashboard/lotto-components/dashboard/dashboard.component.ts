@@ -7,11 +7,11 @@ import { MatDatepickerModule } from '@angular/material/datepicker';
 import { MatNativeDateModule } from '@angular/material/core';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
-import { LottoDrawTransactionService } from '../../services/lotto-draw-transaction.service'; // <--- Your service
+import { LottoDrawTransactionService } from '../../services/lotto/lotto-draw-transaction.service'; // <--- Your service
 import { isPlatformBrowser } from '@angular/common';
 import { PLATFORM_ID, Inject } from '@angular/core';
-import { LottoDrawDashboardService } from '../../services/lotto-draw.dashboard.service';
-import { LottoDrawDashboard } from '../../models/lotto-draw';
+import { LottoDrawDashboardService } from '../../services/lotto/lotto-draw.dashboard.service';
+import { LottoDrawDashboard } from '../../models/lotto/lotto-draw';
 import { formatDate } from '@angular/common'; // To format the date
 import { MatDatepickerInputEvent } from '@angular/material/datepicker';
 

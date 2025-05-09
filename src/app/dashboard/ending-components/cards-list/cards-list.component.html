@@ -1,0 +1,25 @@
+<table class="betting-table">
+  <thead>
+    <tr>
+      <th>Column 1</th>
+      <th>Column 2</th>
+      <th>Column 3</th>
+      <th>Column 4</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr *ngFor="let rowIndex of maxRowsArray">
+      <td *ngFor="let column of availableBets">
+        <div *ngIf="column[rowIndex]">
+          <button
+            class="bet-btn"
+            [class.active]="selectedBet?.combination === column[rowIndex].combination"
+            (click)="openPopup(column[rowIndex])">
+            {{ column[rowIndex].combination }}
+          </button>
+          <span class="bet-name" *ngIf="column[rowIndex].name">{{ column[rowIndex].name }}</span>
+        </div>
+      </td>
+    </tr>
+  </tbody>
+</table>

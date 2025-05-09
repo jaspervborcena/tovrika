@@ -3,7 +3,7 @@ import { FormGroup, FormBuilder, FormArray } from '@angular/forms';
 import { ReactiveFormsModule } from '@angular/forms';
 import { CommonModule } from '@angular/common';  // Import CommonModule
 import { formatDate } from '@angular/common';
-import { LottoDrawService } from '../../services/lotto-draw.service';
+import { LottoDrawService } from '../../services/lotto/lotto-draw.service';
 import { computed } from '@angular/core';
 import { AuthService } from '../../../core/services/auth.service'; 
 import { Router ,NavigationEnd } from '@angular/router';
@@ -19,6 +19,7 @@ export class PlayComponent {
   @ViewChild('combinationInput') combinationInput!: ElementRef;
   @ViewChild('targetInput') targetInput!: ElementRef;
   @ViewChild('rambleInput') rambleInput!: ElementRef;
+
   betType: string = '';
   playForm!: FormGroup;
   lottoForm!: FormGroup;
@@ -44,6 +45,7 @@ currentTime = new Date();
   timeOptions = ['14:00:00', '17:00:00', '21:00:00'];
   disabledTimes: Set<string> = new Set();
   hasAvailableOptions = true;
+  
   constructor(private fb: FormBuilder, private lottoDraw: LottoDrawService,private auth: AuthService,private route:Router) {
     this.uuid = this.generateUUIDv4();
     
@@ -111,46 +113,49 @@ currentTime = new Date();
   ngAfterViewInit(): void {
     //this.targetInput.nativeElement.focus();
   }
-
-handleKeyPress(value: string): void {
-  // Validate that the key is a number or 'C' (clear) or '⌫' (backspace)
-  if (!/^[0-9]$/.test(value) && value !== 'C' && value !== '⌫') {
-    return;
+  handleKeyPress(value: string): void {
+    // ✅ Validate that the key is a number or 'C' (clear) or '⌫' (backspace)
+    if (!/^[0-9]$/.test(value) && value !== 'C' && value !== '⌫') {
+      return;
+    }
+  
+    // ✅ Get the active control based on activeField
+    let activeControl: any;
+    let otherField: any;
+  
+    if (this.activeField === 'target') {
+      activeControl = this.targetInput?.nativeElement;
+      otherField = this.playForm.get('ramble');
+    } else if (this.activeField === 'ramble') {
+      activeControl = this.rambleInput?.nativeElement;
+      otherField = this.playForm.get('target');
+    } else if (this.activeField === 'combination') {
+      activeControl = this.combinationInput?.nativeElement;
+    }
+  
+    if (!activeControl) return;
+  
+    const currentValue = activeControl.value || '';
+    const maxLength = 3;
+  
+    // ✅ Handle 'C' (clear) or '⌫' (backspace) operations
+    if (value === 'C') {
+      activeControl.value = ''; // Clear input field
+    } else if (value === '⌫') {
+      activeControl.value = currentValue.slice(0, -1); // Remove the last character
+    } else if (currentValue.length < maxLength) {
+      activeControl.value = currentValue + value;
+    }
+  
+    // ✅ Update the form control value based on active field
+    this.playForm.get(this.activeField)?.setValue(activeControl.value);
+  
+    // ✅ Move focus to Target input when 3 digits are entered in Combination
+    if (this.activeField === 'combination' && activeControl.value.length === 3) {
+      this.targetInput.nativeElement.focus();
+    }
   }
-
-  // Get the active control based on activeField
-  let activeControl: any;
-  let otherField: any;
-
-  if (this.activeField === 'target') {
-    activeControl = this.targetInput?.nativeElement;
-    otherField = this.playForm.get('ramble');
-  } else if (this.activeField === 'ramble') {
-    activeControl = this.rambleInput?.nativeElement;
-    otherField = this.playForm.get('target');
-  } else if (this.activeField === 'combination') {
-    activeControl = this.combinationInput?.nativeElement;
-  }
-
-  if (!activeControl) return;
-
-  const currentValue = activeControl.value || '';
-  const maxLength = 3;
-
-  // Check if both target and ramble have values
-
-  // Handle 'C' (clear) or '⌫' (backspace) operations
-  if (value === 'C') {
-    activeControl.value = ''; // Clear input field
-  } else if (value === '⌫') {
-    activeControl.value = currentValue.slice(0, -1); // Remove the last character
-  } else if (currentValue.length < maxLength) {
-    activeControl.value = currentValue + value;
-  }
-
-  // Update the form control value based on active field
-  this.playForm.get(this.activeField)?.setValue(activeControl.value);
-}
+  
 
 
   setActiveField(field: 'combination' | 'target' | 'ramble'): void {
@@ -445,6 +450,8 @@ goDone() {
       return v.toString(16);
     });
   }
+  
+  
 }
 export interface Combo {
   id: number;
