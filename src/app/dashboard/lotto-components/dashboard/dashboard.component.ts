@@ -73,7 +73,7 @@ getTotalValues(): { bet: number; hits: number; commission: number; kabig: number
     (totals, bet) => {
       totals.bet += Number(bet.bet) || 0;
       totals.hits += Number(bet.hits) || 0;
-      totals.commission += Number(bet.commission) || 0;
+      totals.commission += Number(bet.com) || 0;
       totals.kabig += Number(bet.kabig) || 0;
       return totals;
     },

@@ -1,7 +1,7 @@
 export enum ENUM_COLLECTION {
-    LOTTO_DRAWS = "lottoDraw",
+    LOTTO_DRAWS = "lottoDrawProd",
     USERS = "User",
-    LOTTO_DRAWS_ROLES = "lottoDrawRoles",
+    LOTTO_DRAWS_ROLES = "lottoDrawRolesProd",
     
   }
   

@@ -10,46 +10,42 @@ export class WinnerService {
   winnersSignal = signal<any[]>([]);
   private firestore = inject(Firestore);
   constructor() {}
+listenToWinners(drawId: string): void {
+  const drawCollection = collection(this.firestore, this.collectionName);
+  const drawIdsArray = drawId.split(',').map(id => id.trim());
 
-  listenToWinners(drawId: string): void {
-    const drawCollection = collection(this.firestore, this.collectionName);
-    const drawIdsArray = drawId.split(',').map(id => id.trim()); 
+  const drawQuery = query(drawCollection, where("dId", "in", drawIdsArray));
 
-    // ✅ Fetch all matching drawIds, removing slice restriction
-    const drawQuery = query(drawCollection, where("drawId", "in", drawIdsArray));
+  getDocs(drawQuery).then(querySnapshot => {
+    const winners: Winner[] = [];
 
-    getDocs(drawQuery).then(querySnapshot => {
-        const winners: Winner[] = []; // ✅ Explicitly typed array
+    querySnapshot.forEach(doc => {
+      const drawData = doc.data();
+      const details = Array.isArray(drawData['details']) ? drawData['details'] : [];
 
-        querySnapshot.forEach(doc => {
-            const drawData = doc.data();
-            const details = Array.isArray(drawData['details']) ? drawData['details'] : [];
+      details.forEach((detail: any) => {
+        if (detail.win) {
+          winners.push({
+            id: detail.id || '',
+            dDt: drawData['dDt'] || '',
+            dTyp: drawData['dTyp'] || '',
+            cmb: detail.cmb || '',
+            amt: Number(detail.amt) || 0,
+            typ: detail.typ || '',
+            st: detail.st || '',
+            w: Number(detail.w) || 0,
+            win: detail.win || false,
+            agt: detail.cBy || '',
+            cDt: detail.cDt || '',
+            cBy: detail.cBy || ''
+          });
+        }
+      });
+    });
 
-            details.forEach((detail: any) => {
-                if (detail.isWinner) {
-                    winners.push({
-                        id: detail.id || '', // ✅ Ensure ID exists
-                        drawDate: drawData['drawDate'] || '',
-                        drawType: drawData['drawType'] || '',
-                        combination: detail.betCombi || '',
-                        amount: Number(detail.betAmount) || 0,
-                        betType: detail.betType || '',
-                        status: detail.status || '', // ✅ Include status
-                        wins: Number(detail.wins) || 0,
-                        isWinner: detail.isWinner || false,
-                        agent: detail.createdBy || '',
-                        createdDt: detail.createdDt || '', // ✅ Include createdDt
-                        createdBy: detail.createdBy || ''
-                    });
-                }
-            });
-        });
-
-        // ✅ Update the winners signal
-        this.winnersSignal.set(winners);
-    }).catch(error => console.error('Error fetching winners:', error));
+    this.winnersSignal.set(winners);
+  }).catch(error => console.error('Error fetching winners:', error));
 }
-
   
 
   generatePermutations(combination: string): string[] {
@@ -70,111 +66,85 @@ export class WinnerService {
     permute(combination.split("")); // Convert input string to array
     return results; // ✅ Ensure return type matches function definition
   }
-  async markAsWinner(drawId: string, combination: string): Promise<void> {
-    try {
-      console.log(`Marking winner for drawId: ${drawId}, combination: ${combination}...`);
-  
-      const drawCollection = collection(this.firestore, this.collectionName);
-      const drawQuery = query(drawCollection, where("drawId", "==", drawId));
-      const querySnapshot = await getDocs(drawQuery);
-  
-      if (querySnapshot.empty) {
-        console.warn("No matching drawId found.");
-        return;
-      }
-  
-      // 🔥 Generate all possible permutations of the combination
-      const allCombinations = this.generatePermutations(combination);
-  
-      const updatePromises = querySnapshot.docs
-        .map(async (doc) => {
-          const drawData = doc.data();
-          const details = Array.isArray(drawData['details']) ? [...drawData['details']] : []; // Deep copy
-          let updated = false;
-  
-          details.forEach((detail: any) => {
-            // ✅ Only generate permutations if betType === 'R'
-            const validCombinations = detail.betType === 'R' 
-                ? this.generatePermutations(combination) 
-                : [combination]; // Direct match for 'T'
-        
-            if (validCombinations.includes(detail.betCombi) && detail.status === 'S') {
-                detail.isWinner = true;
-        
-                // ✅ Calculate winnings based on betType
-                const betAmount = detail.betAmount || 0;
-                detail.wins = detail.betType === 'R' ? betAmount * ENUM_LIMITS.RAMBLE_WIN : betAmount * ENUM_LIMITS.TARGET_WIN;
-        
-                updated = true;
-            }
-        });
-        
-  
-          // ✅ Update Firestore only if relevant changes exist
-          if (updated) {
-            try {
-              await updateDoc(doc.ref, { details });
-              console.log(`Winner updated for drawId ${drawId}, combination ${combination}.`);
-            } catch (error) {
-              console.error("Firestore update error:", error);
-            }
-          }
-        })
-        .filter((promise) => promise !== undefined);
-  
-      await Promise.all(updatePromises); // ✅ Ensure all updates finish
-  
-    } catch (error) {
-      console.error("Error marking winner:", error);
-      throw error;
+async markAsWinner(dId: string, cmb: string): Promise<void> {
+  try {
+    console.log(`Marking winner for dId: ${dId}, cmb: ${cmb}...`);
+
+    const drawCollection = collection(this.firestore, this.collectionName);
+    const drawQuery = query(drawCollection, where("dId", "==", dId));
+    const querySnapshot = await getDocs(drawQuery);
+
+    if (querySnapshot.empty) {
+      console.warn("No matching dId found.");
+      return;
     }
-  }
-  async clearWinner(drawId: string): Promise<void> {
-    try {
-      console.log(`Clearing winners for drawId: ${drawId}...`);
-  
-      const drawCollection = collection(this.firestore, this.collectionName);
-      const drawQuery = query(drawCollection, where("drawId", "==", drawId));
-      const querySnapshot = await getDocs(drawQuery);
-  
-      if (querySnapshot.empty) {
-        console.warn(`No matching drawId found for ${drawId}.`);
-        return;
+
+    // 🔥 Generate all possible permutations **only once**
+    const allCombinations = this.generatePermutations(cmb);
+
+    for (const doc of querySnapshot.docs) {
+      const drawData = doc.data();
+      const details = Array.isArray(drawData['details']) ? [...drawData['details']] : [];
+      let updated = false;
+
+      details.forEach((detail: any) => {
+        const validCombinations = detail.typ === 'R' ? allCombinations : [cmb];
+
+        if (validCombinations.includes(detail.cmb) && detail.st === 'S') {
+          detail.win = true;
+          detail.w = detail.typ === 'R' 
+            ? detail.amt * ENUM_LIMITS.RAMBLE_WIN 
+            : detail.amt * ENUM_LIMITS.TARGET_WIN;
+          updated = true;
+        }
+      });
+
+      if (updated) {
+        await updateDoc(doc.ref, { details });
+        console.log(`Winner updated for dId ${dId}, cmb ${cmb}.`);
       }
-  
-      // 🔥 Reset `isWinner` and `wins` for all details in the matching drawId
-      const updatePromises = querySnapshot.docs
-        .map(async (doc) => {
-          const drawData = doc.data();
-          const details = Array.isArray(drawData['details']) ? [...drawData['details']] : [];
-          let updated = false;
-  
-          details.forEach((detail: any) => {
-            if (detail.isWinner) {
-              detail.isWinner = false;
-              detail.wins = 0; // ✅ Reset winnings
-              updated = true;
-            }
-          });
-  
-          if (updated) {
-            try {
-              await updateDoc(doc.ref, { details });
-              console.log(`All winners cleared for drawId ${drawId}.`);
-            } catch (error) {
-              console.error("Firestore update error:", error);
-            }
-          }
-        })
-        .filter((promise) => promise !== undefined);
-  
-      await Promise.all(updatePromises); // ✅ Ensure all updates finish
-  
-    } catch (error) {
-      console.error("Error clearing winners:", error);
-      throw error;
     }
+  } catch (error) {
+    console.error("Error marking winner:", error);
+    throw error;
   }
+}
+async clearWinner(dId: string): Promise<void> {
+  try {
+    console.log(`Clearing winners for dId: ${dId}...`);
+
+    const drawCollection = collection(this.firestore, this.collectionName);
+    const drawQuery = query(drawCollection, where("dId", "==", dId));
+    const querySnapshot = await getDocs(drawQuery);
+
+    if (querySnapshot.empty) {
+      console.warn(`No matching dId found for ${dId}.`);
+      return;
+    }
+
+    for (const doc of querySnapshot.docs) {
+      const drawData = doc.data();
+      const details = Array.isArray(drawData['details']) ? [...drawData['details']] : [];
+      let updated = false;
+
+      details.forEach((detail: any) => {
+        if (detail.win) {
+          detail.win = false;
+          detail.w = 0; // ✅ Reset winnings
+          updated = true;
+        }
+      });
+
+      if (updated) {
+        await updateDoc(doc.ref, { details });
+        console.log(`All winners cleared for dId ${dId}.`);
+      }
+    }
+  } catch (error) {
+    console.error("Error clearing winners:", error);
+    throw error;
+  }
+}
   
   
 }

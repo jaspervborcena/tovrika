@@ -1,58 +1,53 @@
 <form [formGroup]="winnersForm" class="form-wrap">
+  <div class="winner-selection-box">
+    <!-- Date Picker -->
+    <mat-form-field appearance="outline">
+      <mat-label>Select a date</mat-label>
+      <input matInput [matDatepicker]="picker" [formControl]="selectedDate">
+      <mat-datepicker-toggle matSuffix [for]="picker"></mat-datepicker-toggle>
+      <mat-datepicker #picker></mat-datepicker>
+    </mat-form-field>
 
+    <!-- Time Options -->
+    <div class="options">
+      <button
+        class="option-btn"
+        [class.active]="activeTime === '14:00:00'"
+        (click)="selectTime('14:00:00')"
+      >
+        2PM
+      </button>
+      <button
+        class="option-btn"
+        [class.active]="activeTime === '17:00:00'"
+        (click)="selectTime('17:00:00')"
+      >
+        5PM
+      </button>
+      <button
+        class="option-btn"
+        [class.active]="activeTime === '21:00:00'"
+        (click)="selectTime('21:00:00')"
+      >
+        9PM
+      </button>
+    </div>
 
-    <div class="winner-selection-box">
-        <!-- Date Picker -->
-        <mat-form-field appearance="outline">
-          <mat-label>Select a date</mat-label>
-          <input matInput [matDatepicker]="picker" [formControl]="selectedDate">
-          <mat-datepicker-toggle matSuffix [for]="picker"></mat-datepicker-toggle>
-          <mat-datepicker #picker></mat-datepicker>
-        </mat-form-field>
-      
-        <!-- Time Options -->
-        <div class="options">
-          <button
-            class="option-btn"
-            [class.active]="activeTime === '14:00:00'"
-            (click)="selectTime('14:00:00')"
-          >
-            2PM
-          </button>
-          <button
-            class="option-btn"
-            [class.active]="activeTime === '17:00:00'"
-            (click)="selectTime('17:00:00')"
-          >
-            5PM
-          </button>
-          <button
-            class="option-btn"
-            [class.active]="activeTime === '21:00:00'"
-            (click)="selectTime('21:00:00')"
-          >
-            9PM
-          </button>
-        </div>
-         
-        <!-- Combination Input -->
-        <mat-form-field appearance="outline" [ngClass]="{ 'hidden': isAgentNotAllowed }">
-          <mat-label>Enter Combination</mat-label>
-          <input matInput type="text" formControlName="combination" placeholder="Enter winning combination">
-        </mat-form-field>
-        
-        <!-- ✅ Hide buttons when roleId < 9 -->
-        <button class="btn btn-primary" (click)="setWinner()" [ngClass]="{ 'hidden': isAgentNotAllowed }">Set Winner</button>
-        <button class="btn btn-danger" (click)="clearWinner()" [ngClass]="{ 'hidden': isAgentNotAllowed }">Clear Winner</button>
-          
-      </div>
-      
- 
-      <div class="transaction-grid">
-        <table class="table table-bordered">
-          <thead class="thead-dark">
+    <!-- Combination Input -->
+    <mat-form-field appearance="outline" [ngClass]="{ 'hidden': isAgentNotAllowed }">
+      <mat-label>Enter Combination</mat-label>
+      <input matInput type="text" formControlName="combination" placeholder="Enter winning combination">
+    </mat-form-field>
+
+    <!-- ✅ Hide buttons when roleId < 9 -->
+    <button class="btn btn-primary" (click)="setWinner()" [ngClass]="{ 'hidden': isAgentNotAllowed }">Set Winner</button>
+    <button class="btn btn-danger" (click)="clearWinner()" [ngClass]="{ 'hidden': isAgentNotAllowed }">Clear Winner</button>
+  </div>
+
+  <div class="transaction-grid">
+    <table class="table table-bordered">
+      <thead class="thead-dark">
         <tr>
-          
           <th>Combination</th>
           <th>Amount</th>
           <th>Winner</th>
@@ -65,16 +60,16 @@
       </thead>
       <tbody>
         <tr *ngFor="let winner of paginatedWinners">
-          <td>{{ winner.combination }}</td>
-          <td>{{ winner.amount }}</td>
-          <td>{{ winner.wins }}</td>
-          <td>{{ winner.betType }}</td>
-          <td>{{ winner.agent }}</td>
-          <td>{{ winner.drawDate }}</td>
-          <td>{{ winner.createdDt }}</td>
-          <td>{{ winner.createdBy }}</td>
+          <td>{{ winner.cmb }}</td>
+          <td>{{ winner.amt }}</td>
+          <td>{{ winner.w }}</td>
+          <td>{{ winner.typ }}</td>
+          <td>{{ winner.agt }}</td>
+          <td>{{ winner.dDt }}</td>
+          <td>{{ winner.cDt }}</td>
+          <td>{{ winner.cBy }}</td>
         </tr>
       </tbody>
     </table>
   </div>
-  
+</form>

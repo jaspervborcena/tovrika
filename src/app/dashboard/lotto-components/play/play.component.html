@@ -1,14 +1,4 @@
-<!-- <div class="tab-header" *ngIf="activeTab === 'view'">
-  <i class="fa fa-arrow-left back-arrow"
-     (click)="activeTab = 'entry'"
-     title="Go back to Entry Bet"></i>
-</div> -->
-
 <form *ngIf="activeTab === 'entry'" [formGroup]="playForm" class="form-wrap">
- 
-<form [formGroup]="playForm" class="form-wrap">
-  <!-- Options Section -->
-
   <div class="options">
     <button
       class="option-btn"
@@ -19,51 +9,34 @@
       *ngFor="let time of timeOptions"
       (click)="selectTime(time)"
     >
-    {{ time === '14:00:00' ? '2PM' : time === '17:00:00' ? '5PM' : time === '21:00:00' ? '9PM' : '' }}
-
+      {{ time === '14:00:00' ? '2PM' : time === '17:00:00' ? '5PM' : time === '21:00:00' ? '9PM' : '' }}
     </button>
   </div>
-  
-  <!-- ✅ Show message if no options are available -->
-  <!-- <p *ngIf="!hasAvailableOptions" class="warning">⚠ Time is Closed! No options available.</p> -->
-  
-  <!-- ✅ Disable Next/Submit button if no options exist -->
-  <!-- <button [disabled]="!hasAvailableOptions" (click)="onSubmit()">Submit</button> -->
-  
-  
- 
-  <div *ngIf="errorMessage" class="error-message">
-    {{ errorMessage }}
-  </div>
-  <div *ngIf="successMessage" class="success-message">
-    {{ successMessage }}
-  </div> 
-  <!-- Main Layout -->
+
+  <div *ngIf="errorMessage" class="error-message">{{ errorMessage }}</div>
+  <div *ngIf="successMessage" class="success-message">{{ successMessage }}</div>
+
   <div class="container">
     <!-- Combination Input Field -->
     <div class="keypad-wrapper">
-      
       <div class="target-area">
         <div *ngIf="combos.length > 0">
-          <i class="fa fa-edit"
-             (click)="activeTab = 'view'"
-             title="Go to view"></i>
+          <i class="fa fa-edit" (click)="activeTab = 'view'" title="Go to view"></i>
         </div>
-        
-        
         <input
-        #combinationInput
-        formControlName="combination"
-        class="combination-input"
-        placeholder="3 digts"
-        (focus)="setActiveField('combination')"
-        maxlength="3"
-        readonly
-        type="text"
-      />
-      <p>Combination</p>
+          #combinationInput
+          formControlName="combination"
+          class="combination-input"
+          placeholder="3 digits"
+          (focus)="setActiveField('combination')"
+          maxlength="3"
+          readonly
+          type="text"
+        />
+        <p>Combination</p>
+      </div>
     </div>
-  </div>
+
     <div class="keypad-wrapper">
       <!-- Target Input -->
       <div class="target-area">
@@ -114,32 +87,17 @@
   </div>
 
   <button type="submit" class="add-bet" [disabled]="!hasAvailableOptions" (click)="addBet()">Add Bet</button>
-
 </form>
 
-</form>
 <div *ngIf="activeTab === 'view'" class="view-bets">
-  <!-- Back Button -->
   <div class="tab-header">
- 
-       <i class="fa fa-arrow-left back-arrow"
-       (click)="goBackToEntry()"
-       title="Go back to Entry Bet"></i>
- 
-      </div>
+    <i class="fa fa-arrow-left back-arrow" (click)="goBackToEntry()" title="Go back to Entry Bet"></i>
+  </div>
 
-  
-
-
-  <!-- Bets Summary -->
   <h3 class="bets-summary-title">Bets Summary</h3>
-  <div *ngIf="errorMessage" class="error-message">
-    {{ errorMessage }}
-  </div>
-  <div *ngIf="successMessage" class="success-message">
-    {{ successMessage }}
-  </div>
-  <!-- Bets Table -->
+  <div *ngIf="errorMessage" class="error-message">{{ errorMessage }}</div>
+  <div *ngIf="successMessage" class="success-message">{{ successMessage }}</div>
+
   <table class="combo-table">
     <thead>
       <tr>
@@ -152,56 +110,51 @@
     </thead>
     <tbody>
       <tr *ngFor="let combo of combos">
-        <td>{{ combo.ticketId }}</td>
-        <td>{{ combo.combination }}</td>
-        <td>{{ combo.type }}</td>
-        <td>{{ combo.amount }}</td>
+        <td>{{ combo.tId }}</td>
+        <td>{{ combo.cmb }}</td>
+        <td>{{ combo.typ }}</td>
+        <td>{{ combo.amt }}</td>
         <td>
-          <button class="remove-btn" (click)="removeCombo(combo.ticketId)" [disabled]="isSubmitting">
-            <i class="fa fa-trash"></i> <!-- Trash Icon -->
+          <button class="remove-btn" (click)="removeCombo(combo.tId)" [disabled]="isSubmitting">
+            <i class="fa fa-trash"></i>
           </button>
         </td>
       </tr>
     </tbody>
   </table>
-  <!-- Total Amount Display -->
-<h3 class="total-amount">Total Amount: {{ getTotalAmount() }}</h3>
 
-  <!-- Submit Button -->
-  <button class="submit-btn"
-  (click)="onSubmit()"
-  [disabled]="isSubmitting || !hasAvailableOptions">
-Submit Bets
-</button>
+  <h3 class="total-amount">Total Amount: {{ getTotalAmount() }}</h3>
+
+  <button class="submit-btn" (click)="onSubmit()" [disabled]="isSubmitting || !hasAvailableOptions">Submit Bets</button>
 </div>
+
 <div *ngIf="activeTab === 'receipt'" class="receipt-section">
   <div class="receipt-message">
     <i class="fa fa-check-circle icon-success"></i>
     <p class="main-message">Bet Confirmed</p>
     <p class="main-message">at {{ currentDateTime }}</p>
-    <!-- Bets Table -->
+
     <table class="combo-table receipt-table">
       <thead>
         <tr>
           <th>Ticket No.</th>
-          <th>Combination|</th>
-          <th>Type|</th>
+          <th>Combination</th>
+          <th>Type</th>
           <th>Amount</th>
         </tr>
       </thead>
       <tbody>
         <tr *ngFor="let combo of submittedCombos">
-          <td>{{ combo.ticketId }}</td>
-          <td>{{ combo.combination }}</td>
-          <td>{{ combo.type }}</td>
-          <td>{{ combo.amount }}</td>
+          <td>{{ combo.tId }}</td>
+          <td>{{ combo.cmb }}</td>
+          <td>{{ combo.typ }}</td>
+          <td>{{ combo.amt }}</td>
         </tr>
       </tbody>
     </table>
 
     <p class="sub-message">🎰 Wishing you a lucky draw!</p>
-    <p class="sub-message">Entered By: {{agent}}</p>
+    <p class="sub-message">Entered By: {{ agt }}</p>
     <button class="done-btn" (click)="goDone()">Done</button>
   </div>
 </div>
-

@@ -140,12 +140,12 @@ get paginatedBets() {
 
   // ✅ Sort transactions by `details.createdDt` in descending order
   const sortedBets = this.transactions()
-    .sort((a, b) => new Date(b.createdDt).getTime() - new Date(a.createdDt).getTime());
+    .sort((a, b) => new Date(b.cDt).getTime() - new Date(a.cDt).getTime());
 
-  console.log("Sorted Bets:", sortedBets);
-
+  // console.log("Sorted Bets:", sortedBets);
+// return null;
   // ✅ Apply pagination (30 items per page)
-  return sortedBets.slice(start, end);
+   return sortedBets.slice(start, end);
 }
 
 

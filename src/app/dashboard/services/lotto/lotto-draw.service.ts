@@ -1,4 +1,4 @@
-import { Injectable, signal } from '@angular/core';
+import { Injectable, inject, signal } from '@angular/core';
 import { Firestore, collection, getDocs, query, where, addDoc,getDoc, updateDoc, doc } from '@angular/fire/firestore';
 
 import { LottoDraw, LottoDetail } from '../../models/lotto/lotto-draw';
@@ -14,36 +14,34 @@ export class LottoDrawService {
   private collectionName = ENUM_COLLECTION.LOTTO_DRAWS;
   private collectionRole = ENUM_COLLECTION.LOTTO_DRAWS_ROLES;
   private  returnStatus: string ='';
-  
-  constructor(private firestore: Firestore) {}
+  private firestore = inject(Firestore);
+  constructor() {}
 
   // Initialize service and load Lotto draws on startup
   async initializeLottoDraws(): Promise<void> {
-    try {
-      const drawCollection = collection(this.firestore, this.collectionName);
-      const querySnapshot = await getDocs(drawCollection);
-      const lottoDraws: LottoDraw[] = querySnapshot.docs.map(doc => ({
-        ...(doc.data() as LottoDraw),
-        id: doc.id
-      }));
-      this.lottoDrawsSignal.set(lottoDraws);
-    } catch (error) {
-      console.error('Error fetching lotto draws:', error);
-    }
+  try {
+    const drawCollection = collection(this.firestore, this.collectionName);
+    const querySnapshot = await getDocs(drawCollection);
+    const lottoDraws: LottoDraw[] = querySnapshot.docs.map(doc => ({
+      ...(doc.data() as LottoDraw),
+      id: doc.id
+    }));
+    this.lottoDrawsSignal.set(lottoDraws);
+  } catch (error) {
+    console.error('Error fetching lotto draws:', error);
   }
-  
+}
+
   async  getRoleByUid( uid: string): Promise<string | null> {
     try {
       // ✅ Reference the document where ID matches `uid`
-      const docRef = doc(this.firestore, "lottoDrawRoles", uid);
+      const docRef = doc(this.firestore,this.collectionRole, uid);
       const docSnap = await getDoc(docRef);
   
       if (docSnap.exists()) {
         // ✅ Use bracket notation to access `roles`
         const data = docSnap.data();
         const roleId = data?.["roles"]?.["roleId"]; // ✅ Fix TypeScript index signature issue
-  
-        console.log("Role ID:", roleId);
         return roleId;
       } else {
         console.log("No document found for UID:", uid);
@@ -59,123 +57,96 @@ export class LottoDrawService {
   get lottoDraws(): LottoDraw[] {
     return this.lottoDrawsSignal();
   }
+// Method to add a LottoDraw only if the dId doesn't exist
+async addLottoDraw(draw: LottoDraw): Promise<string> {
+  try {
+    const drawCollection = collection(this.firestore, this.collectionName);
+    const drawQuery = query(drawCollection, where("dId", "==", draw.dId));
+    const querySnapshot = await getDocs(drawQuery);
+    this.returnStatus = "";
 
-  // Method to add a LottoDraw only if the drawId doesn't exist
-  async addLottoDraw(draw: LottoDraw, betType: string, uid: string | null,email:string | null): Promise<string> {
-    try {
-      const drawCollection = collection(this.firestore, this.collectionName);
-      const drawQuery = query(drawCollection, where("drawId", "==", draw.drawId));
-      const querySnapshot = await getDocs(drawQuery);
-      this.returnStatus="";
-      if (querySnapshot.empty) {
-        await addDoc(drawCollection, draw);
-        console.log('Lotto draw added successfully',draw);
-        return 'success';
-      } else {
-        await this.addLottoDetailsToExistingDraw(draw.drawId,draw.details)
-        // console.log('Lotto draw with this drawId already exists.');
-        // const drawId = draw.drawId;
-        // const amount = draw.details[0]?.betAmount;
-        // const combination = draw.details[0].betCombi;
-  
-        // if (amount) {
-        //   console.warn('Both target and ramble are provided. Using only one.');
-        // }
-        // this.returnStatus=""
-        // await this.addBetDetails(amount, betType, combination, drawId, uid, email);
-        // if(this.returnStatus)
-        // {
-        //   return 'overlimit'
-        // }
-        return 'exists';
-      }
-    } catch (error: any) {
-      console.error('Error adding lotto draw:', error);
-  
-      if (error.code === 'permission-denied') {
-        return 'permission-denied';
-      }
-  
-      return `error: ${error.message || 'unknown error'}`;
+    if (querySnapshot.empty) {
+      await addDoc(drawCollection, draw);
+      console.log('Lotto draw added successfully', draw);
+      return 'success';
+    } else {
+      await this.addLottoDetailsToExistingDraw(draw.dId, draw.details);
+      return 'exists';
     }
+  } catch (error: any) {
+    console.error('Error adding lotto draw:', error);
+
+    if (error.code === 'permission-denied') {
+      return 'permission-denied';
+    }
+
+    return `error: ${error.message || 'unknown error'}`;
   }
-  
-  
-  // Method to add LottoDetails to an existing draw
-  async addLottoDetailsToExistingDraw(drawId: number, newDetails: LottoDetail[]): Promise<void> {
-    try {
-      const drawCollection = collection(this.firestore, this.collectionName);
-      const drawQuery = query(drawCollection, where("drawId", "==", drawId));
-      const querySnapshot = await getDocs(drawQuery);
-  
-      if (!querySnapshot.empty) {
-        const drawDoc = querySnapshot.docs[0];
-        const drawRef = doc(this.firestore, `${this.collectionName}/${drawDoc.id}`);
-        const drawData = drawDoc.data() as LottoDraw;
-  
-        // Correct merging of arrays
-        const updatedDetails = [...(drawData.details || []), ...newDetails];
-        
+}
+
+  async addLottoDetailsToExistingDraw(dId: number, newDetails: LottoDetail[]): Promise<void> {
+  try {
+    const drawCollection = collection(this.firestore, this.collectionName);
+    const drawQuery = query(drawCollection, where("dId", "==", dId));
+    const querySnapshot = await getDocs(drawQuery);
+
+    if (!querySnapshot.empty) {
+      const drawDoc = querySnapshot.docs[0];
+      const drawRef = doc(this.firestore, `${this.collectionName}/${drawDoc.id}`);
+      const drawData = drawDoc.data() as LottoDraw;
+
+      const updatedDetails = [...(drawData.details || []), ...newDetails];
+      await updateDoc(drawRef, { details: updatedDetails });
+      console.log('Lotto detail(s) added to existing draw:', dId);
+    } else {
+      console.error('Lotto draw not found for ID:', dId);
+    }
+  } catch (error) {
+    console.error('Error adding lotto detail(s):', error);
+  }
+}
+async addBetDetails(amt: number, typ: string, cmb: string, dId: number, uId: string | null, email: string | null): Promise<void> {
+  const uuidv4 = this.generateUUID6();
+  console.log("betType", typ);
+
+  const newDetail: LottoDetail = {
+    id: uuidv4,
+    cmb,
+    typ,
+    amt,
+    w: 0,
+    win: false,
+    cDt: Date.now(),
+    mDt: Date.now(),
+    cBy: email,
+    mBy: email,
+    st: 'S',
+    uId
+  };
+
+  try {
+    const drawCollection = collection(this.firestore, this.collectionName);
+    const drawQuery = query(drawCollection, where("dId", "==", dId));
+    const querySnapshot = await getDocs(drawQuery);
+
+    if (!querySnapshot.empty) {
+      const drawDoc = querySnapshot.docs[0];
+      const drawRef = doc(this.firestore, `${this.collectionName}/${drawDoc.id}`);
+      const drawData = drawDoc.data() as LottoDraw;
+
+      if (cmb) {
+        const updatedDetails = [...(drawData.details || []), newDetail];
         await updateDoc(drawRef, { details: updatedDetails });
-        console.log('Lotto detail(s) added to existing draw:', drawId);
+        console.log('Lotto detail added to existing draw:', dId);
       } else {
-        console.error('Lotto draw not found for ID:', drawId);
+        console.error('Invalid combination.');
       }
-    } catch (error) {
-      console.error('Error adding lotto detail(s):', error);
+    } else {
+      console.error('Lotto draw not found for ID:', dId);
     }
+  } catch (error) {
+    console.error('Error adding lotto detail:', error);
   }
-  
-
-  async addBetDetails(amount: number,type:string, combination: string, drawId: number,uid:string | null,email:string | null): Promise<void> {
-    // Determine the bet type based on which value (target or ramble) is provided.
-    
-    const uuidv4 = this.generateUUIDv4();
-    // Parse the combination value into an integer or default to 100
-    console.log("betType",type)
-    let betCombi=combination;
-    // Create the new LottoDetail object
-    const newDetail: LottoDetail = {
-        id:uuidv4,
-        betCombi,
-        betType:type,
-        betAmount:amount,
-        wins: 0,
-        isWinner: false,
-        createdDt: new Date().toISOString(),
-        modifyDt: new Date().toISOString(),
-        createdBy: email,
-        modifyBy: email,
-        status:'S',
-        userId:uid
-    };
-
-    try {
-        const drawCollection = collection(this.firestore, this.collectionName);
-        const drawQuery = query(drawCollection, where("drawId", "==", drawId));
-        const querySnapshot = await getDocs(drawQuery);
-
-        if (!querySnapshot.empty) {
-            const drawDoc = querySnapshot.docs[0];
-            const drawRef = doc(this.firestore, `${this.collectionName}/${drawDoc.id}`);
-            const drawData = drawDoc.data() as LottoDraw;
-
-            // Check if betCombi is set (non-empty) and is either 'target' or 'ramble', and add only one LottoDetail
-            if (betCombi) {
-                const updatedDetails = [...(drawData.details || []), newDetail];
-                
-                // Update only the 'details' field of the existing Lotto draw document
-                await updateDoc(drawRef, { details: updatedDetails });
-                console.log('Lotto detail added to existing draw:', drawId);
-            } else {
-                console.error('Neither target nor ramble has a valid value.');
-            }
-        } else {
-            console.error('Lotto draw not found for ID:', drawId);
-        }
-    } catch (error) {
-        console.error('Error adding lotto detail:', error);
-    }
 }
 
 async getLottoLimit(drawId: string, searchCombination: string): Promise<{ totalAmount: number, matchingRambles: { combination: string, amount: number }[] }> {
@@ -257,11 +228,7 @@ generatePermutations(combination: string): string[] {
   return results;
 }
 
-generateUUIDv4(): string {
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
-    const r = (Math.random() * 16) | 0;
-    const v = c === 'x' ? r : (r & 0x3) | 0x8;
-    return v.toString(16);
-  });
+ generateUUID6(): string {
+  return Math.random().toString(36).substring(2, 8).toUpperCase();
 }
 }
