@@ -1,0 +1,51 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+
+# Use Modern Material Syntax
+
+## Modern Material Styling
+
+- For Angular Material v19+, use the new sass mixin `mat.theme` to initialize the components styling. An example is below. Never use the old material mixins for v19+ versions.
+
+```scss
+@use '@angular/material' as mat;
+
+html {
+  color-scheme: light dark;
+  @include mat.theme((
+    color: mat.$violet-palette,
+    typography: Roboto,
+    density: 0
+  ));
+}
+```
+
+## Individual components styling
+
+- For individual components styling changes, use the new mixins for overriding specific design tokens for the components.
+
+An example for the material button is follows:
+
+```scss
+@use '@angular/material' as mat;
+
+// Customize the entire app. Change :root to your selector if you want to scope the styles.
+:root {
+  @include mat.button-overrides((
+    filled-container-color: orange,
+    filled-label-text-color: red,
+  ));
+}
+```
+
+The full list of design tokens can be found on the link of each components documentation in the Styling tab. For example of the button:
+
+https://material.angular.io/components/button/styling
+
+- For buttons and other material components, the `color` is property is deprecated so don't use that anymore. Instead for a primary button, use the `mat-flat-button` and for less prominent buttons use `mat-raised-button` or just `mat-button`
+
+
+

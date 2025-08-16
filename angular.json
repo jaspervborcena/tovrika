@@ -1,13 +1,37 @@
 {
   "$schema": "./node_modules/@angular/cli/lib/config/schema.json",
   "version": 1,
-  "newProjectRoot": "gameoffortunes",
+  "newProjectRoot": "projects",
   "projects": {
-    "gameoffortunes": {
+    "forms-designer": {
       "projectType": "application",
       "schematics": {
         "@schematics/angular:component": {
-          "style": "less"
+          "inlineTemplate": true,
+          "inlineStyle": true,
+          "style": "scss",
+          "skipTests": true
+        },
+        "@schematics/angular:class": {
+          "skipTests": true
+        },
+        "@schematics/angular:directive": {
+          "skipTests": true
+        },
+        "@schematics/angular:guard": {
+          "skipTests": true
+        },
+        "@schematics/angular:interceptor": {
+          "skipTests": true
+        },
+        "@schematics/angular:pipe": {
+          "skipTests": true
+        },
+        "@schematics/angular:resolver": {
+          "skipTests": true
+        },
+        "@schematics/angular:service": {
+          "skipTests": true
         }
       },
       "root": "",
@@ -17,19 +41,15 @@
         "build": {
           "builder": "@angular-devkit/build-angular:application",
           "options": {
-            "allowedCommonJsDependencies": [
-              "@grpc/grpc-js",
-              "@grpc/proto-loader"
-            ],
-            "outputPath": "dist/gameoffortunes",
+            "outputPath": "dist/forms-designer",
             "index": "src/index.html",
             "browser": "src/main.ts",
             "polyfills": [
               "zone.js"
             ],
             "tsConfig": "tsconfig.app.json",
-            "inlineStyleLanguage": "less",
-            "assets": [
+            "inlineStyleLanguage": "scss",
+             "assets": [
               {
                 "input": "src/assets",
                 "output": "assets",
@@ -37,24 +57,17 @@
               }
             ],
             "styles": [
-              "@angular/material/prebuilt-themes/cyan-orange.css",
-              "src/styles.less",
-              "node_modules/bootstrap/dist/css/bootstrap.min.css"
+              "src/styles.scss"
             ],
-            "scripts": [],
-            "server": "src/main.server.ts",
-            "outputMode": "server",
-            "ssr": {
-              "entry": "src/server.ts"
-            }
+            "scripts": []
           },
           "configurations": {
             "production": {
               "budgets": [
                 {
                   "type": "initial",
-                  "maximumWarning": "2MB",
-                  "maximumError": "2MB"
+                 "maximumWarning": "1mb",
+                  "maximumError": "2mb"
                 },
                 {
                   "type": "anyComponentStyle",
@@ -76,10 +89,10 @@
           "builder": "@angular-devkit/build-angular:dev-server",
           "configurations": {
             "production": {
-              "buildTarget": "gameoffortunes:build:production"
+              "buildTarget": "forms-designer:build:production"
             },
             "development": {
-              "buildTarget": "gameoffortunes:build:development"
+              "buildTarget": "forms-designer:build:development"
             }
           },
           "defaultConfiguration": "development"
@@ -95,7 +108,7 @@
               "zone.js/testing"
             ],
             "tsConfig": "tsconfig.spec.json",
-            "inlineStyleLanguage": "less",
+            "inlineStyleLanguage": "scss",
             "assets": [
               {
                 "glob": "**/*",
@@ -103,8 +116,7 @@
               }
             ],
             "styles": [
-              "@angular/material/prebuilt-themes/cyan-orange.css",
-              "src/styles.less"
+              "src/styles.scss"
             ],
             "scripts": []
           }
@@ -113,6 +125,6 @@
     }
   },
   "cli": {
-    "analytics": "412096be-8c4c-4609-90aa-abd919d9bc57"
+    "analytics": false
   }
 }

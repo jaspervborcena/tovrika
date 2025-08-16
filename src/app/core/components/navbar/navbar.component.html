@@ -1,6 +1,6 @@
 <nav>
   <div class="logo-container" (click)="navigateHome()">
-    <img src="/assets/images/gameoffortunes.png" alt="gameoffortunes Logo" class="logo">
+    <img src="/assets/images/tovrika_official.png" alt="gameoffortunes Logo" class="logo">
     <span class="tooltip">gameoffortunes</span>
   </div>
 
@@ -17,28 +17,30 @@
         <span class="tooltip">{{ isLoggedIn() ? 'Sign Out' : 'Sign In' }}</span>
       </a>
     </li>
+     <li class="icon-container" *ngIf="isLoggedIn() && currentUser?.hasStore">
+      <a href="/dashboard">
+        <i class="fas fa-tachometer-alt"></i>
+        <span class="tooltip">Dashboard</span>
+      </a>
+    </li>
     <li class="icon-container" *ngIf="isLoggedIn()">
-      <a href="/draw">
-        <i class="fa-regular fa-snowflake"></i>
-        <span class="tooltip">Draw</span>
+      <a href="/create-store">
+        <i class="fas fa-plus-circle"></i>
+        <span class="tooltip">Create Store</span>
       </a>
     </li>
-    <!-- Gift -->
+     
     <li class="icon-container">
-      <a href="#">
-        <i class="fa-solid fa-dharmachakra"></i>
-        <span class="tooltip">Spin Wheel</span>
+      <a href="/get-started">
+        <i class="fas fa-question-circle"></i>
+        <span class="tooltip">Help / Tutorial</span>
       </a>
     </li>
-    
      <li class="icon-container">
-      <a href="/ending">
-        <i class="fa-solid fa-basketball"></i>
-        <span class="tooltip">Basketball Ending</span>
+      <a href="/notifications">
+        <i class="fas fa-bell"></i>
+        <span class="tooltip">Notifications</span>
       </a>
-    </li> 
-
-    <!-- Draw -->
-  
+    </li>
   </ul>
 </nav>

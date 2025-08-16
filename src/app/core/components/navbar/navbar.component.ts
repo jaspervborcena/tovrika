@@ -2,7 +2,7 @@ import { Component, computed, inject,effect,runInInjectionContext, OnInit,HostLi
 import { CommonModule } from '@angular/common';
 import { AuthService } from '../../services/auth.service';
 import { Router } from '@angular/router';
-
+import { UserService } from '../../services/user.service';
 @Component({
   selector: 'app-navbar',
   standalone: true,
@@ -13,16 +13,23 @@ import { Router } from '@angular/router';
 export class NavbarComponent  implements OnInit {
   isLoggedIn = computed(() => this.authService.isAuthenticated); // No '()' here
   user = computed(() => this.authService.user); // No '()' here
+
+  userInfo = computed(() => this.userService.users); // No '()' here
   menuActive: boolean = false;
   userEmail: string | null = null; // ✅ Initialize as null
-  constructor(private router: Router,private authService:AuthService ) {
+  hasStore = false;
+   currentUser: any = null;
+  constructor(private router: Router,private authService:AuthService, private userService:UserService) {
+    console.log("isLoggedIn",this.isLoggedIn())
     if (typeof window !== "undefined") {
       // ✅ Ensure `localStorage` is available before accessing it
       this.userEmail = localStorage.getItem("email");
     }
-      }
+     this.currentUser = JSON.parse(localStorage.getItem('currentUser') || 'null');
+     
+  }
       
-  
+
   
   isDropdownOpen = false;
 

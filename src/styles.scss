@@ -1,0 +1,60 @@
+@use "./tailwind.css";
+
+// For more information: https://material.angular.io/guide/theming
+@use "@angular/material" as mat;
+
+@use "./app/themes/blue-theme.css";
+
+// html {
+//   @include mat.theme(
+//     (
+//       color: mat.$azure-palette,
+//       typography: Roboto,
+//       density: 0,
+//     )
+//   );
+// }
+
+html,
+body {
+  height: 100%;
+}
+body {
+  margin: 0;
+  font-family: Roboto, "Helvetica Neue", sans-serif;
+}
+
+.cdk-drop-list-dragging:not(.elements-menu) {
+  border: 2px solid var(--mat-sys-primary-container) !important;
+  background-color: var(--mat-sys-background) !important;
+}
+
+::view-transition-old(.field-transition),
+::view-transition-new(.field-transition) {
+  height: 100%;
+}
+
+mat-form-field {
+  @include mat.theme(
+    (
+      density: -3,
+    )
+  );
+}
+
+.compact {
+  @include mat.theme(
+    (
+      density: -5,
+    )
+  );
+}
+
+.compact-button {
+  @include mat.button-overrides(
+    (
+      filled-container-height: 36px,
+      filled-container-shape: 5px,
+    )
+  );
+}

@@ -1,0 +1,119 @@
+    :root{
+      --bg: #0b0f17;      /* page background */
+      --panel: #121826;   /* card background */
+      --muted: #8aa0b6;   /* secondary text */
+      --text: #eaf2ff;    /* primary text */
+      --brand: #6ae3ff;   /* accent */
+      --brand-2:#7c4dff;  /* secondary accent */
+      --ring: rgba(122, 199, 255, .35);
+    }
+    *{box-sizing:border-box}
+    html,body{margin:0; padding:0; background:var(--bg); color:var(--text); font:16px/1.6 system-ui, -apple-system, Segoe UI, Roboto, Inter, "Helvetica Neue", Arial, "Apple Color Emoji", "Segoe UI Emoji"}
+    a{color:inherit; text-decoration:none}
+    .container{max-width:1100px; margin-inline:auto; padding:32px 20px}
+
+    /* Header */
+    .hero{padding:72px 0 32px; text-align:center;}
+    .badge{display:inline-flex; gap:8px; align-items:center; color:#05202a; background:linear-gradient(90deg, var(--brand), #b7f4ff); border-radius:999px; padding:6px 12px; font-weight:600; box-shadow:0 0 0 6px rgba(106, 227, 255, .08)}
+    .title{font-size:clamp(28px, 4vw, 46px); line-height:1.1; margin:20px 0 12px}
+    .subtitle{color:var(--muted); font-size:clamp(14px, 2vw, 18px)}
+    .cta {
+  margin-top: 22px;
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  align-items: center;
+  flex-wrap: nowrap;
+  max-width: 500px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.btn {
+  border: 1px solid transparent;
+  background: var(--brand-2);
+  color: #fff;
+  padding: 10px 20px;
+  min-width: 140px;
+  max-width: 200px;
+  border-radius: 10px;
+  font-weight: 600;
+  font-size: 14px;
+  letter-spacing: .2px;
+  cursor: pointer;
+  transition: .2s transform, .2s box-shadow;
+  text-align: center;
+  flex: 1;
+}
+
+.btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 30px rgba(124,77,255,.28);
+}
+
+.btn.alt {
+  background: #0c1220;
+  border-color: #263449;
+}
+
+.btn.ghost {
+  color: var(--text);
+  border: 1px solid currentColor;
+  background: transparent;
+}
+
+@media (max-width: 640px) {
+  .cta {
+    flex-direction: column;
+    width: 100%;
+    max-width: 300px;
+  }
+  
+  .btn {
+    width: 100%;
+    max-width: none;
+  }
+}
+
+
+    /* Sections */
+    section{padding:30px 0}
+    h2{font-size:clamp(22px, 3vw, 30px); margin:0 0 12px}
+    p.lead{color:var(--muted); margin:0 0 18px}
+
+    /* Feature grid */
+    .grid{display:grid; grid-template-columns:repeat(1, minmax(0,1fr)); gap:16px}
+    @media (min-width:700px){.grid{grid-template-columns:repeat(2, minmax(0,1fr))}}
+    @media (min-width:1000px){.grid{grid-template-columns:repeat(3, minmax(0,1fr))}}
+
+    .card{background:var(--panel); border:1px solid #1b2436; border-radius:18px; padding:18px; box-shadow:0 10px 30px rgba(0,0,0,.25)}
+    .card h3{margin:0 0 6px; font-size:18px}
+    .muted{color:var(--muted)}
+
+    /* Use-cases table */
+    .table{width:100%; border-collapse:separate; border-spacing:0 10px;}
+    .table th,.table td{padding:14px 16px; text-align:left; vertical-align:top}
+    .table thead th{color:#a9bbd1; font-weight:700; font-size:14px}
+    .row{background:var(--panel); border:1px solid #1b2436; border-radius:14px}
+
+    /* Checklist */
+    ul.check{list-style:none; padding:0; margin:0}
+    ul.check li{display:flex; gap:10px; align-items:start; padding:8px 0}
+    .tick{display:inline-flex; width:22px; height:22px; border-radius:6px; align-items:center; justify-content:center; background:#0b1a2b; border:1px solid #233145; box-shadow:inset 0 0 0 1px rgba(255,255,255,.02)}
+
+    /* Plans */
+    .plans{display:grid; grid-template-columns:1fr; gap:16px}
+    @media (min-width:900px){.plans{grid-template-columns:repeat(3, 1fr)}}
+    .plan{background:var(--panel); border:1px solid #1b2436; border-radius:18px; padding:18px}
+    .plan h3{margin:0 0 8px}
+    .badge-pill{display:inline-block; padding:4px 10px; border-radius:999px; background:#0e1a2d; border:1px solid #2a3a54; color:#c3d3e7; font-size:12px}
+
+    /* Footer */
+    footer{padding:40px 0 60px; color:#9bb0c6}
+    .hr{height:1px; background:linear-gradient(90deg, transparent, #233145, transparent); margin:26px 0}
+
+    /* Little icon */
+    .spark{width:18px; height:18px; display:inline-block; background:conic-gradient(from 0deg, var(--brand), #c9a8ff, #8ee9ff, var(--brand)); border-radius:4px; box-shadow:0 0 0 4px rgba(106,227,255,.1)}
+
+    /* Focus ring for keyboard users */
+    :focus-visible{outline:2px solid var(--brand); outline-offset:2px}

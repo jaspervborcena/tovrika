@@ -1,12 +1,12 @@
 export const environment = {
     firebaseConfig: {
-        apiKey: "AIzaSyAn2IMl2FRUTIFl4GYj_iQsLzhexRenG8k",
-        authDomain: "sulit-market.firebaseapp.com",
-        projectId: "sulit-market",
-        storageBucket: "sulit-market.firebasestorage.app", // ✅ Corrected value
-        messagingSenderId: "1080339296095",
-        appId: "1:1080339296095:web:05bfc6b26a00ff78e910ea",
-        measurementId: "G-5C8X2ENL6L"
+        apiKey: "AIzaSyDNIYovvzNKVj40h99kxOHu5yfEUzx7OYA",
+  authDomain: "jasperpos-1dfd5.firebaseapp.com",
+  projectId: "jasperpos-1dfd5",
+  storageBucket: "jasperpos-1dfd5.firebasestorage.app",
+  messagingSenderId: "251258556341",
+  appId: "1:251258556341:web:28cdcafbdb4ad89675d3fc",
+  measurementId: "G-MG8T2RZ051"
       }
     };
-    
+   
