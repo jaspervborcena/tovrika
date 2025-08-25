@@ -2,6 +2,9 @@
 /* To learn more about Angular compiler options: https://angular.dev/reference/configs/angular-compiler-options. */
 {
   "compileOnSave": false,
+  "include": [
+    "src/**/*"
+  ],
   "compilerOptions": {
     "outDir": "./dist/out-tsc",
     "baseUrl": "./src",
