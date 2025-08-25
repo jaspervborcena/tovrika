@@ -1,0 +1,91 @@
+<ui-modal
+  [isOpen]="isOpen"
+  [title]="company ? 'Edit Company' : 'Create Company'"
+  [saveLabel]="company ? 'Update' : 'Create'"
+  [loading]="isLoading"
+  (onClose)="close.emit()"
+  (onSave)="saveCompany()"
+>
+  <form [formGroup]="companyForm" class="space-y-4">
+    <!-- Company Details -->
+    <div>
+      <label for="name" class="block text-sm font-medium text-gray-700">Company Name</label>
+      <input type="text" id="name" formControlName="name" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm py-2 px-3">
+    </div>
+    <div>
+      <label for="address" class="block text-sm font-medium text-gray-700">Address</label>
+      <input type="text" id="address" formControlName="address" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm py-2 px-3">
+    </div>
+
+    <div>
+      <label for="plan" class="block text-sm font-medium text-gray-700">Plan</label>
+      <select id="plan" formControlName="plan" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm py-2 px-3">
+        <option value="basic">Basic</option>
+        <option value="pro">Pro</option>
+        <option value="enterprise">Enterprise</option>
+      </select>
+    </div>
+
+    <!-- Stores Section -->
+    <div formArrayName="stores" class="mt-6">
+      <div class="flex justify-between items-center mb-4">
+        <h3 class="text-lg font-medium text-gray-900">Stores</h3>
+        <button type="button" (click)="addStore()" class="text-blue-600 hover:text-blue-700">
+          Add Store
+        </button>
+      </div>
+
+      <ng-container *ngFor="let store of storeFormArray.controls; let i=index">
+        <div [formGroupName]="i" class="border rounded-md p-4 mb-4">
+          <div class="flex justify-between items-start mb-4">
+            <div class="flex-grow">
+              <label [for]="'store-name-' + i" class="block text-sm font-medium text-gray-700">Store Name</label>
+              <input [id]="'store-name-' + i" type="text" formControlName="storeName" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm py-2 px-3">
+            </div>
+            <button type="button" 
+                    (click)="removeStore(i)"
+                    [disabled]="storeFormArray.length === 1"
+                    [class.opacity-50]="storeFormArray.length === 1"
+                    class="ml-4 text-red-600 hover:text-red-700">
+              Remove Store
+            </button>
+          </div>
+
+          <!-- Branches Section -->
+          <div formArrayName="branches" class="mt-4">
+            <div class="flex justify-between items-center mb-2">
+              <h4 class="text-md font-medium text-gray-700">Branches</h4>
+              <button type="button" (click)="addBranch(i)" class="text-blue-600 hover:text-blue-700">
+                Add Branch
+              </button>
+            </div>
+
+            <ng-container *ngFor="let branch of getBranchControls(i); let j=index">
+              <div [formGroupName]="j" class="ml-4 border-l pl-4 mb-4">
+                <div class="flex items-start space-x-4">
+                  <div class="flex-grow space-y-2">
+                    <div>
+                      <label [for]="'branch-name-' + i + '-' + j" class="block text-sm font-medium text-gray-700">Branch Name</label>
+                      <input [id]="'branch-name-' + i + '-' + j" type="text" formControlName="branchName" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm py-2 px-3">
+                    </div>
+                    <div>
+                      <label [for]="'branch-address-' + i + '-' + j" class="block text-sm font-medium text-gray-700">Branch Address</label>
+                      <input [id]="'branch-address-' + i + '-' + j" type="text" formControlName="address" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm py-2 px-3">
+                    </div>
+                  </div>
+                  <button type="button" 
+                          (click)="removeBranch(i, j)"
+                          [disabled]="getBranchControls(i).length === 1"
+                          [class.opacity-50]="getBranchControls(i).length === 1"
+                          class="text-red-600 hover:text-red-700">
+                    Remove Branch
+                  </button>
+                </div>
+              </div>
+            </ng-container>
+          </div>
+        </div>
+      </ng-container>
+    </div>
+  </form>
+</ui-modal>
