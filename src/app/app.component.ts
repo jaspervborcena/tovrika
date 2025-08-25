@@ -1,18 +1,17 @@
 import { Component } from '@angular/core';
 import { RouterOutlet } from '@angular/router';
-import { RouterModule } from '@angular/router';
-
-import { NavbarComponent } from '../app/core/components/navbar/navbar.component';
 
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [
-    RouterOutlet,
-    RouterModule,
-    NavbarComponent,
-  ],
-  templateUrl: './app.component.html',
-  styleUrls: ['./app.component.css'],
+  imports: [RouterOutlet],
+  template: `
+    <main class="min-h-screen bg-gray-100">
+      <router-outlet></router-outlet>
+    </main>
+  `,
+  styles: []
 })
-export class AppComponent {}
+export class AppComponent {
+  title = 'POS System';
+}

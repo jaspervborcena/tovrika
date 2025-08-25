@@ -1,0 +1,132 @@
+import { Injectable, computed, signal } from '@angular/core';
+import { 
+  Firestore, 
+  collection, 
+  doc, 
+  setDoc, 
+  updateDoc, 
+  deleteDoc, 
+  query, 
+  where, 
+  getDocs 
+} from '@angular/fire/firestore';
+
+export interface Company {
+  id?: string;
+  name: string;
+  address: string;
+  logoUrl?: string;
+  settings: {
+    currency: string;
+    timezone: string;
+  };
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+@Injectable({
+  providedIn: 'root'
+})
+export class CompanySetupService {
+  private readonly companiesSignal = signal<Company[]>([]);
+  
+  // Public signals
+  readonly companies = computed(() => this.companiesSignal());
+  
+  // Computed properties
+  public readonly totalCompanies = computed(() => this.companiesSignal().length);
+  public readonly activeCompanies = computed(() => 
+    this.companiesSignal().filter(company => company.settings?.currency)
+  );
+
+  constructor(private firestore: Firestore) {
+    this.loadCompanies();
+  }
+
+  private async loadCompanies() {
+    try {
+      const companiesRef = collection(this.firestore, 'companies');
+      const querySnapshot = await getDocs(companiesRef);
+      const companies = querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      } as Company));
+      
+      this.companiesSignal.set(companies);
+    } catch (error) {
+      console.error('Error loading companies:', error);
+      // Here you might want to implement proper error handling
+    }
+  }
+
+  async createCompany(company: Omit<Company, 'id' | 'createdAt' | 'updatedAt'>) {
+    try {
+      const companiesRef = collection(this.firestore, 'companies');
+      const newCompany: Company = {
+        ...company,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
+
+      const docRef = doc(companiesRef);
+      await setDoc(docRef, newCompany);
+
+      // Update the signal with the new company
+      this.companiesSignal.update(companies => [...companies, { ...newCompany, id: docRef.id }]);
+      
+      return docRef.id;
+    } catch (error) {
+      console.error('Error creating company:', error);
+      throw error;
+    }
+  }
+
+  async updateCompany(companyId: string, updates: Partial<Company>) {
+    try {
+      const companyRef = doc(this.firestore, `companies/${companyId}`);
+      const updateData = {
+        ...updates,
+        updatedAt: new Date()
+      };
+      
+      await updateDoc(companyRef, updateData);
+
+      // Update the signal
+      this.companiesSignal.update(companies =>
+        companies.map(company =>
+          company.id === companyId
+            ? { ...company, ...updateData }
+            : company
+        )
+      );
+    } catch (error) {
+      console.error('Error updating company:', error);
+      throw error;
+    }
+  }
+
+  async deleteCompany(companyId: string) {
+    try {
+      const companyRef = doc(this.firestore, `companies/${companyId}`);
+      await deleteDoc(companyRef);
+
+      // Update the signal
+      this.companiesSignal.update(companies =>
+        companies.filter(company => company.id !== companyId)
+      );
+    } catch (error) {
+      console.error('Error deleting company:', error);
+      throw error;
+    }
+  }
+
+  // Getter for companies signal value
+  getCompanies() {
+    return this.companies();
+  }
+
+  // Get a specific company
+  getCompany(companyId: string) {
+    return this.companies().find(company => company.id === companyId);
+  }
+}
