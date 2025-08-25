@@ -1,7 +1,7 @@
 import { Injectable, inject, signal } from '@angular/core';
 import { Firestore, collection, addDoc, doc,getDoc, updateDoc, collectionData } from '@angular/fire/firestore';
 import { User } from '../../models/auth/user'; // Import User model
-import { ENUM_COLLECTION } from 'dashboard/enum/collections.enum';
+import { ENUM_COLLECTION } from '../../../dashboard/enum/collections.enum';
 @Injectable({
   providedIn: 'root',
 })
