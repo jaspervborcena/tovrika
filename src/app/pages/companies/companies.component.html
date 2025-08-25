@@ -1,0 +1,54 @@
+ <div class="py-6">
+  <div class="flex justify-between items-center">
+    <h1 class="text-2xl font-semibold text-gray-900">Companies</h1>
+    <ui-button (click)="openCreateModal()">Add Company</ui-button>
+  </div>
+
+  <!-- Companies Grid -->
+  <div class="mt-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+    <div *ngFor="let company of companies()" class="bg-white rounded-lg shadow-md overflow-hidden">
+      <div class="p-4">
+        <div class="flex justify-between items-start">
+          <div>
+            <h3 class="text-lg font-medium text-gray-900">{{company.name}}</h3>
+            <p class="text-sm text-gray-500">{{company.plan || 'Basic Plan'}}</p>
+          </div>
+          <div class="flex space-x-2">
+            <button (click)="openEditModal(company)" class="text-blue-600 hover:text-blue-800">
+              <i class="fas fa-edit"></i>
+            </button>
+            <button (click)="confirmDelete(company)" class="text-red-600 hover:text-red-800">
+              <i class="fas fa-trash"></i>
+            </button>
+          </div>
+        </div>
+        
+        <div class="mt-4">
+          <div class="flex items-center text-gray-600">
+            <i class="fas fa-store mr-2"></i>
+            <span>{{company.stores?.length || 0}} Stores</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<app-new-companies
+  [isOpen]="isModalOpen()"
+  [company]="editingCompany()"
+  (close)="closeModal()"
+  (save)="onCompanySave($event)"
+></app-new-companies>
+
+<!-- Delete Confirmation Modal -->
+<ui-modal
+  [isOpen]="isDeleteModalOpen()"
+  title="Delete Company"
+  saveLabel="Delete"
+  [loading]="isLoading()"
+  (onClose)="closeDeleteModal()"
+  (onSave)="deleteCompany()"
+>
+  <p>Are you sure you want to delete {{companyToDelete()?.name}}? This action cannot be undone.</p>
+</ui-modal>
