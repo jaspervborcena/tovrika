@@ -245,7 +245,7 @@ export class ProductsComponent implements OnInit {
 
   private setupUser() {
     const user = this.authService.currentUser();
-    this.isAdmin = user?.role === 'admin';
+    this.isAdmin = (user?.roleId || user?.role) === 'admin';
     this.userCompanyId = user?.companyId || null;
   }
 
