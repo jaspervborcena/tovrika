@@ -10,6 +10,7 @@ import {
   where, 
   getDocs 
 } from '@angular/fire/firestore';
+import { AuthService } from './auth.service';
 
 export interface Company {
   id?: string;
@@ -39,7 +40,7 @@ export class CompanySetupService {
     this.companiesSignal().filter(company => company.settings?.currency)
   );
 
-  constructor(private firestore: Firestore) {
+  constructor(private firestore: Firestore, private authService: AuthService) {
     this.loadCompanies();
   }
 
@@ -73,6 +74,18 @@ export class CompanySetupService {
 
       // Update the signal with the new company
       this.companiesSignal.update(companies => [...companies, { ...newCompany, id: docRef.id }]);
+      
+      // Update the current user's companyId
+      try {
+        await this.authService.updateUserData({ 
+          companyId: docRef.id,
+          role: 'admin' // User who creates company becomes admin
+        });
+        console.log('User companyId updated successfully');
+      } catch (userUpdateError) {
+        console.error('Error updating user companyId:', userUpdateError);
+        // Company is created, but user update failed - this is not critical
+      }
       
       return docRef.id;
     } catch (error) {

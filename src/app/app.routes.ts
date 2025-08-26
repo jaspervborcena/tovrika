@@ -69,7 +69,7 @@ export const routes: Routes = [
       },
       {
         path: 'stores',
-        loadComponent: () => import('./pages/dashboard/stores/stores.component').then(m => m.StoresComponent),
+        loadComponent: () => import('./pages/dashboard/stores-management/stores-management.component').then(m => m.StoresManagementComponent),
         canActivate: [onboardingGuard]
       },
       {
@@ -80,6 +80,10 @@ export const routes: Routes = [
       {
         path: 'access',
         loadComponent: () => import('./pages/dashboard/access/access.component').then(m => m.AccessComponent)
+      },
+      {
+        path: 'user-roles',
+        loadComponent: () => import('./pages/dashboard/user-roles/user-roles.component').then(m => m.UserRolesComponent)
       },
       {
         path: 'products',
@@ -115,12 +119,6 @@ export const routes: Routes = [
   {
     path: 'dashboard',
     loadComponent: () => import('./pages/dashboard/dashboard.component').then(m => m.DashboardComponent),
-    canActivate: [authGuard],
-    data: { roles: ['admin', 'manager'] }
-  },
-  {
-    path: 'stores',
-    loadComponent: () => import('./pages/stores/stores.component').then(m => m.StoresComponent),
     canActivate: [authGuard],
     data: { roles: ['admin', 'manager'] }
   },

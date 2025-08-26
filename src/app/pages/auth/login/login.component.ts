@@ -38,9 +38,9 @@ export class LoginComponent {
         }
         
         // Navigate based on user role
-        if (user.role === 'admin') {
+        if ((user.roleId || user.role) === 'admin') {
           this.router.navigate(['/dashboard']);
-        } else if (user.role === 'manager') {
+        } else if ((user.roleId || user.role) === 'manager') {
           this.router.navigate(['/dashboard']);
         } else {
           this.router.navigate(['/pos']);

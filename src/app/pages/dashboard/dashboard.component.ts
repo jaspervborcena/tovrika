@@ -87,13 +87,13 @@ export class DashboardComponent implements OnInit {
 
       if (user.companyId) {
         // Load company-specific data
-        await this.storeService.loadStores(user.companyId);
+        await this.storeService.loadStores();
         await this.productService.loadProducts(user.companyId);
         
         this.stores.set(this.storeService.getStores());
-        this.totalStores.set(this.storeService.totalStores());
+        this.totalStores.set(this.stores().length);
         this.totalProducts.set(this.productService.totalProducts());
-      } else if (user.role === 'admin') {
+      } else if ((user.roleId || user.role) === 'admin') {
         // Load all data for admin
         this.totalCompanies.set(this.companyService.totalCompanies());
         

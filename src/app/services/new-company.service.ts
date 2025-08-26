@@ -41,7 +41,7 @@ export class NewCompanyService {
       const companiesRef = collection(this.firestore, this.companiesCollection);
       let companiesQuery = query(companiesRef);
 
-      if (user.role !== 'admin') {
+      if ((user.roleId || user.role) !== 'admin') {
         companiesQuery = query(companiesRef, where('ownerUid', '==', user.uid));
       }
 

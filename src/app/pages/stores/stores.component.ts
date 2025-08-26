@@ -184,7 +184,7 @@ export class StoresComponent implements OnInit {
 
   private setupUser() {
     const user = this.authService.currentUser();
-    this.isAdmin = user?.role === 'admin';
+    this.isAdmin = (user?.roleId || user?.role) === 'admin';
     this.userCompanyId = user?.companyId || null;
   }
 
@@ -243,13 +243,31 @@ export class StoresComponent implements OnInit {
         };
 
         if (this.editingStore) {
+          // Convert to new Store interface format for update
+          const updateData = {
+            storeName: storeData.name,
+            address: `${storeData.address.street}, ${storeData.address.city}, ${storeData.address.state} ${storeData.address.zipCode}`,
+            phoneNumber: storeData.phone || '',
+            status: storeData.status
+          };
           await this.storeService.updateStore(
-            storeData.companyId,
             this.editingStore.id,
-            storeData
+            updateData
           );
         } else {
-          await this.storeService.createStore(storeData);
+          // Convert to new Store interface format
+          const newStoreData = {
+            companyId: storeData.companyId,
+            storeName: storeData.name,
+            storeCode: 'AUTO-' + Date.now(), // Auto-generated
+            storeType: 'General', // Default
+            address: `${storeData.address.street}, ${storeData.address.city}, ${storeData.address.state} ${storeData.address.zipCode}`,
+            phoneNumber: storeData.phone || '',
+            email: '',
+            managerName: '',
+            status: storeData.status
+          };
+          await this.storeService.createStore(newStoreData);
         }
 
         this.closeModal();
