@@ -3,14 +3,17 @@ import {
   Firestore, 
   collection, 
   doc, 
+  addDoc,
   setDoc, 
   updateDoc, 
   deleteDoc, 
   query, 
   where, 
-  getDocs 
+  getDocs,
+  Timestamp 
 } from '@angular/fire/firestore';
-import { Product } from '../interfaces/product.interface';
+import { Product, ProductInventory } from '../interfaces/product.interface';
+import { AuthService } from './auth.service';
 
 @Injectable({
   providedIn: 'root'
@@ -20,6 +23,12 @@ export class ProductService {
   
   // Computed properties
   readonly totalProducts = computed(() => this.products().length);
+  readonly activeProducts = computed(() => 
+    this.products().filter(product => product.status === 'active')
+  );
+  readonly lowStockProducts = computed(() => 
+    this.products().filter(product => product.totalStock <= 10)
+  );
   readonly productsByCategory = computed(() => {
     const categoryMap = new Map<string, Product[]>();
     this.products().forEach(product => {
@@ -30,53 +39,90 @@ export class ProductService {
     return categoryMap;
   });
 
-  constructor(private firestore: Firestore) {}
+  constructor(
+    private firestore: Firestore,
+    private authService: AuthService
+  ) {}
 
   private transformFirestoreDoc(doc: any): Product {
     const data = doc.data();
     return {
       id: doc.id,
+      productName: data['productName'] || '',
+      skuId: data['skuId'] || '',
+      category: data['category'] || '',
+      totalStock: data['totalStock'] || 0,
+      sellingPrice: data['sellingPrice'] || 0,
       companyId: data['companyId'] || '',
-      storeId: data['storeId'],
-      branchId: data['branchId'],
-      name: data['name'],
-      description: data['description'],
-      price: data['price'],
-      category: data['category'],
-      sku: data['sku'],
-      barcode: data['barcode'],
-      imageUrl: data['imageUrl'],
-      status: data['status'] as 'active' | 'inactive' || 'active',
-      productType: data['productType'] || 'product',
-      inventorySettings: {
-        trackInventory: data['trackInventory'] ?? true,
-        stockQuantity: data['stockQuantity'] || 0,
-        lowStockAlert: data['lowStockAlert'],
-        unit: data['unit'] || 'pieces',
-        cost: data['cost']
-      },
-      businessTypeSettings: {
-        taxable: data['taxable'] ?? true,
-        taxRate: data['taxRate'],
-        ingredients: data['ingredients'] || [],
-        isComboMeal: data['isComboMeal'],
-        comboItems: data['comboItems'],
-        duration: data['duration'],
-        requiresEquipment: data['requiresEquipment']
-      },
+      storeId: data['storeId'] || '',
+      isMultipleInventory: data['isMultipleInventory'] || false,
+      barcodeId: data['barcodeId'] || '',
+      qrCode: data['qrCode'] || '',
+      imageUrl: data['imageUrl'] || '',
+      inventory: this.transformInventoryArray(data['inventory'] || []),
+      status: data['status'] || 'active',
       createdAt: data['createdAt']?.toDate() || new Date(),
       updatedAt: data['updatedAt']?.toDate() || new Date()
     };
   }
 
-  async loadProducts(companyId: string) {
+  private transformInventoryArray(inventoryData: any[]): ProductInventory[] {
+    return inventoryData.map(item => ({
+      batchId: item.batchId || '',
+      quantity: item.quantity || 0,
+      unitPrice: item.unitPrice || 0,
+      receivedAt: item.receivedAt?.toDate() || new Date(),
+      status: item.status || 'active'
+    }));
+  }
+
+  private async waitForAuth(): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const currentUser = this.authService.getCurrentUser();
+      if (currentUser?.companyId) {
+        resolve(currentUser.companyId);
+        return;
+      }
+
+      // Use effect to watch for auth changes
+      let attempts = 0;
+      const checkAuth = () => {
+        const user = this.authService.getCurrentUser();
+        if (user?.companyId) {
+          resolve(user.companyId);
+          return;
+        }
+        
+        attempts++;
+        if (attempts >= 50) { // 5 seconds with 100ms intervals
+          reject(new Error('Authentication timeout'));
+          return;
+        }
+        
+        setTimeout(checkAuth, 100);
+      };
+      
+      checkAuth();
+    });
+  }
+
+  async loadProducts(storeId?: string): Promise<void> {
     try {
-      const productsRef = collection(
-        this.firestore,
-        `companies/${companyId}/products`
-      );
-      const querySnapshot = await getDocs(productsRef);
-      const products = querySnapshot.docs.map(this.transformFirestoreDoc);
+      const companyId = await this.waitForAuth();
+      const productsRef = collection(this.firestore, 'products');
+      
+      let q;
+      if (storeId) {
+        q = query(productsRef, 
+          where('companyId', '==', companyId),
+          where('storeId', '==', storeId)
+        );
+      } else {
+        q = query(productsRef, where('companyId', '==', companyId));
+      }
+      
+      const querySnapshot = await getDocs(q);
+      const products = querySnapshot.docs.map(doc => this.transformFirestoreDoc(doc));
       
       this.products.set(products);
     } catch (error) {
@@ -85,24 +131,29 @@ export class ProductService {
     }
   }
 
-  async createProduct(productData: Omit<Product, 'id' | 'createdAt' | 'updatedAt'>) {
+  async createProduct(productData: Omit<Product, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> {
     try {
+      const companyId = await this.waitForAuth();
       const productsRef = collection(this.firestore, 'products');
       
-      const newProduct: Omit<Product, 'id'> = {
+      const newProduct = {
         ...productData,
+        companyId,
         status: productData.status || 'active',
-        createdAt: new Date(),
-        updatedAt: new Date()
+        inventory: productData.inventory.map(inv => ({
+          ...inv,
+          receivedAt: Timestamp.fromDate(inv.receivedAt)
+        })),
+        createdAt: Timestamp.fromDate(new Date()),
+        updatedAt: Timestamp.fromDate(new Date())
       };
 
-      const docRef = doc(productsRef);
-      await setDoc(docRef, newProduct);
+      const docRef = await addDoc(productsRef, newProduct);
 
       // Update the signal
       this.products.update(products => [
         ...products, 
-        { ...newProduct, id: docRef.id }
+        { ...productData, id: docRef.id, companyId, createdAt: new Date(), updatedAt: new Date() }
       ]);
       
       return docRef.id;
@@ -112,17 +163,22 @@ export class ProductService {
     }
   }
 
-  async updateProduct(companyId: string, productId: string, updates: Partial<Product>) {
+  async updateProduct(productId: string, updates: Partial<Product>): Promise<void> {
     try {
-      const productRef = doc(
-        this.firestore,
-        `companies/${companyId}/products/${productId}`
-      );
+      const productRef = doc(this.firestore, 'products', productId);
       
-      const updateData = {
+      const updateData: any = {
         ...updates,
-        updatedAt: new Date()
+        updatedAt: Timestamp.fromDate(new Date())
       };
+
+      // Handle inventory array updates
+      if (updates.inventory) {
+        updateData.inventory = updates.inventory.map(inv => ({
+          ...inv,
+          receivedAt: Timestamp.fromDate(inv.receivedAt)
+        }));
+      }
       
       await updateDoc(productRef, updateData);
 
@@ -130,7 +186,7 @@ export class ProductService {
       this.products.update(products =>
         products.map(product =>
           product.id === productId
-            ? { ...product, ...updateData }
+            ? { ...product, ...updates, updatedAt: new Date() }
             : product
         )
       );
@@ -140,12 +196,9 @@ export class ProductService {
     }
   }
 
-  async deleteProduct(companyId: string, productId: string) {
+  async deleteProduct(productId: string): Promise<void> {
     try {
-      const productRef = doc(
-        this.firestore,
-        `companies/${companyId}/products/${productId}`
-      );
+      const productRef = doc(this.firestore, 'products', productId);
       await deleteDoc(productRef);
 
       // Update the signal
@@ -158,27 +211,68 @@ export class ProductService {
     }
   }
 
-  // Get all products
-  getProducts() {
+  // Inventory management methods
+  async updateProductStock(productId: string, newStock: number): Promise<void> {
+    await this.updateProduct(productId, { totalStock: newStock });
+  }
+
+  async addInventoryBatch(productId: string, batch: ProductInventory): Promise<void> {
+    const product = this.getProduct(productId);
+    if (product) {
+      const updatedInventory = [...product.inventory, batch];
+      const totalStock = updatedInventory.reduce((sum, inv) => sum + inv.quantity, 0);
+      await this.updateProduct(productId, { 
+        inventory: updatedInventory,
+        totalStock 
+      });
+    }
+  }
+
+  async removeInventoryBatch(productId: string, batchId: string): Promise<void> {
+    const product = this.getProduct(productId);
+    if (product) {
+      const updatedInventory = product.inventory.filter(inv => inv.batchId !== batchId);
+      const totalStock = updatedInventory.reduce((sum, inv) => sum + inv.quantity, 0);
+      await this.updateProduct(productId, { 
+        inventory: updatedInventory,
+        totalStock 
+      });
+    }
+  }
+
+  // Getter methods
+  getProducts(): Product[] {
     return this.products();
   }
 
-  // Get products by category
-  getProductsByCategory(category: string) {
+  getProductsByCategory(category: string): Product[] {
     return this.products().filter(product => product.category === category);
   }
 
-  // Get a specific product
-  getProduct(productId: string) {
+  getProduct(productId: string): Product | undefined {
     return this.products().find(product => product.id === productId);
   }
 
-  // Get products below minimum stock level
-  getLowStockProducts(minStock: number) {
-    return computed(() => 
-      this.products().filter(product => 
-        product.inventorySettings.stockQuantity < minStock
-      )
+  getProductBySku(sku: string): Product | undefined {
+    return this.products().find(product => product.skuId === sku);
+  }
+
+  getProductByBarcode(barcode: string): Product | undefined {
+    return this.products().find(product => product.barcodeId === barcode);
+  }
+
+  searchProducts(searchTerm: string): Product[] {
+    const term = searchTerm.toLowerCase();
+    return this.products().filter(product => 
+      product.productName.toLowerCase().includes(term) ||
+      product.skuId.toLowerCase().includes(term) ||
+      product.category.toLowerCase().includes(term) ||
+      product.barcodeId?.toLowerCase().includes(term)
     );
+  }
+
+  getCategories(): string[] {
+    const categories = new Set(this.products().map(p => p.category));
+    return Array.from(categories).sort();
   }
 }

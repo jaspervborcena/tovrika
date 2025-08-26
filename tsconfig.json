@@ -9,7 +9,6 @@
     "outDir": "./dist/out-tsc",
     "baseUrl": "./src",
     "paths": {
-      "@form-designer/*": ["designer/components/*"],
       "@shared/*": ["shared/*"],
       "@utils/*": ["utils/*"],
       "@app/*": ["app/*"]
