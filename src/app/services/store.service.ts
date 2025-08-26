@@ -9,36 +9,24 @@ import {
   query, 
   where, 
   getDocs,
+  addDoc,
   collectionGroup
 } from '@angular/fire/firestore';
 import { AuthService } from './auth.service';
 
 export interface Store {
-  id: string;
-  name: string;
-  address: {
-    street: string;
-    city: string;
-    state: string;
-    zipCode: string;
-    country: string;
-  };
-  phone?: string;
-  email?: string;
+  id?: string;
   companyId: string;
+  storeName: string;
+  storeCode: string;
+  storeType: string;
+  address: string;
+  phoneNumber?: string;
+  email?: string;
+  managerName?: string;
   status: 'active' | 'inactive';
-  taxRate?: number;
   createdAt: Date;
-  updatedAt: Date;
-  settings?: {
-    currency: string;
-    timezone: string;
-    printerSettings?: {
-      receiptHeader?: string;
-      receiptFooter?: string;
-      printerName?: string;
-    };
-  };
+  updatedAt?: Date;
 }
 
 @Injectable({
@@ -78,22 +66,14 @@ export class StoreService {
         return {
           id: doc.id,
           companyId: data.companyId || '',
-          name: data.name || '',
-          address: data.address || {
-            street: '',
-            city: '',
-            state: '',
-            zipCode: '',
-            country: ''
-          },
-          phone: data.phone || '',
+          storeName: data.storeName || '',
+          storeCode: data.storeCode || '',
+          storeType: data.storeType || '',
+          address: data.address || '',
+          phoneNumber: data.phoneNumber || '',
           email: data.email || '',
+          managerName: data.managerName || '',
           status: data.status || 'inactive',
-          taxRate: data.taxRate || 0,
-          settings: data.settings || {
-            currency: 'USD',
-            timezone: 'UTC'
-          },
           createdAt: data.createdAt?.toDate() || new Date(),
           updatedAt: data.updatedAt?.toDate() || new Date()
         } as Store;
@@ -108,23 +88,39 @@ export class StoreService {
 
   async createStore(store: Omit<Store, 'id' | 'createdAt' | 'updatedAt'>) {
     try {
-      const storesRef = collection(
-        this.firestore, 
-        `companies/${store.companyId}/stores`
-      );
+      const storesRef = collection(this.firestore, 'stores');
       
-      const docRef = doc(storesRef);
-      const newStore: Store = {
-        id: docRef.id,
+      const newStore: Omit<Store, 'id'> = {
         ...store,
         createdAt: new Date(),
         updatedAt: new Date()
       };
 
-      await setDoc(doc(storesRef, newStore.id), newStore);
+      const docRef = await addDoc(storesRef, newStore);
+      const createdStore: Store = {
+        id: docRef.id,
+        ...newStore
+      };
 
       // Update the signal
-      this.storesSignal.update(stores => [...stores, newStore]);
+      this.storesSignal.update(stores => [...stores, createdStore]);
+      
+      // Update the current user's storeIds array
+      try {
+        const currentUser = this.authService.getCurrentUser();
+        if (currentUser) {
+          const currentStoreIds = (currentUser as any).storeIds || [];
+          const updatedStoreIds = [...currentStoreIds, docRef.id];
+          
+          await this.authService.updateUserData({ 
+            storeIds: updatedStoreIds
+          } as any);
+          console.log('User storeIds updated successfully');
+        }
+      } catch (userUpdateError) {
+        console.error('Error updating user storeIds:', userUpdateError);
+        // Store is created, but user update failed - this is not critical
+      }
       
       return docRef.id;
     } catch (error) {
@@ -133,12 +129,9 @@ export class StoreService {
     }
   }
 
-  async updateStore(companyId: string, storeId: string, updates: Partial<Store>) {
+  async updateStore(storeId: string, updates: Partial<Store>) {
     try {
-      const storeRef = doc(
-        this.firestore, 
-        `companies/${companyId}/stores/${storeId}`
-      );
+      const storeRef = doc(this.firestore, 'stores', storeId);
       
       const updateData = {
         ...updates,

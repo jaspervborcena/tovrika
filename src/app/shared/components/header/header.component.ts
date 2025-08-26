@@ -92,7 +92,7 @@ export class HeaderComponent implements OnInit {
         this.stores.set(this.storeService.getStores());
         this.totalStores.set(this.storeService.totalStores());
         this.totalProducts.set(this.productService.totalProducts());
-      } else if (user.role === 'admin') {
+      } else if ((user.roleId || user.role) === 'admin') {
         // Load all data for admin
         this.totalCompanies.set(this.companyService.totalCompanies());
         

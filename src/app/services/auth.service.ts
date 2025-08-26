@@ -19,13 +19,17 @@ export interface User {
   uid: string;
   email: string;
   displayName: string;
-  role: 'admin' | 'manager' | 'cashier';
-  companyId?: string;
-  storeId?: string;
-  branchId?: string;
+  roleId: string; // Primary role field matching your structure
+  companyId: string;
+  storeIds: string[]; // Array of store IDs user has access to
+  status: 'active' | 'inactive';
   permissions: string[];
   createdAt: Date;
   updatedAt: Date;
+  // Legacy fields for backward compatibility
+  role?: 'admin' | 'manager' | 'cashier';
+  storeId?: string;
+  branchId?: string;
 }
 
 @Injectable({
@@ -37,7 +41,7 @@ export class AuthService {
 
   // Computed properties
   readonly isAuthenticated = computed(() => !!this.currentUserSignal());
-  readonly userRole = computed(() => this.currentUserSignal()?.role);
+  readonly userRole = computed(() => this.currentUserSignal()?.roleId || this.currentUserSignal()?.role);
   readonly hasCompanyAccess = computed(() => !!this.currentUserSignal()?.companyId);
   readonly currentUser = computed(() => this.currentUserSignal());
 
@@ -181,6 +185,20 @@ export class AuthService {
   // Getter for current user
   getCurrentUser(): User | null {
     return this.currentUser();
+  }
+
+  // Wait for authentication to complete
+  async waitForAuth(): Promise<User | null> {
+    return new Promise((resolve) => {
+      const checkAuth = () => {
+        if (!this.isLoading()) {
+          resolve(this.currentUser());
+        } else {
+          setTimeout(checkAuth, 100);
+        }
+      };
+      checkAuth();
+    });
   }
 
   // Check if user has specific permission
