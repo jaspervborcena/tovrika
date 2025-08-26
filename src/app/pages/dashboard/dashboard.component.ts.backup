@@ -1,0 +1,262 @@
+import { Component, OnInit, computed, inject, signal, HostListener } from '@angular/core';
+import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
+import { RouterLink, RouterOutlet } from '@angular/router';
+import { StoreService, Store } from '../../services/store.service';
+import { ProductService } from '../../services/product.service';
+import { AuthService } from '../../services/auth.service';
+import { CompanySetupService } from '../../services/companySetup.service';
+
+@Component({
+  selector: 'app-dashboard',
+  standalone: true,
+  imports: [
+    CommonModule, 
+    RouterLink,
+    RouterOutlet,
+    FormsModule
+  ],
+  templateUrl: './dashboard.component.html',
+  styleUrls: ['./dashboard.component.css']
+})
+    <div class="min-h-screen bg-gray-100">
+      <!-- Header/Navigation -->
+      <header class="bg-white shadow-lg fixed w-full z-50 border-b border-gray-200">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+          <div class="flex justify-between items-center">
+            <div class="flex items-center">
+              <div class="flex items-center">
+                <div class="h-8 w-8 bg-primary-600 rounded-lg flex items-center justify-center mr-3">
+                  <svg class="icon text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <h1 class="text-2xl font-bold text-gray-900">
+                  <a routerLink="/" class="hover:text-primary-600 transition-colors">Tovrika</a>
+                </h1>
+              </div>
+              <span class="ml-4 px-2 py-1 bg-blue-100 text-blue-800 text-xs font-medium rounded-full">Dashboard</span>
+            </div>
+            
+            <div class="flex items-center space-x-2">
+              <!-- Home Icon -->
+              <a routerLink="/" 
+                 class="p-2 text-gray-500 hover:text-primary-600 hover:bg-gray-100 rounded-lg transition-colors duration-200 flex items-center"
+                 title="Home">
+                <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l7-7 7 7m-9 4h.01M13 16h-1v4a1 1 0 01-1 1H6a1 1 0 01-1-1v-4H3l9-9 9 9h-2v4a1 1 0 01-1 1h-5a1 1 0 01-1-1v-4z"/>
+                </svg>
+              </a>
+              
+              <!-- Help Icon -->
+              <a routerLink="/help" 
+                 class="p-2 text-gray-500 hover:text-primary-600 hover:bg-gray-100 rounded-lg transition-colors duration-200"
+                 title="Help & Support">
+                <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </a>
+              
+              <!-- Notifications Icon -->
+              <a routerLink="/notifications" 
+                 class="p-2 text-gray-500 hover:text-primary-600 hover:bg-gray-100 rounded-lg transition-colors duration-200 relative"
+                 title="Notifications">
+                <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                </svg>
+                <span class="absolute -top-1 -right-1 h-3 w-3 bg-red-500 rounded-full"></span>
+              </a>
+              
+              <!-- User Menu -->
+              <div class="relative ml-2" data-user-menu>
+                <button
+                  (click)="toggleUserMenu()"
+                  class="flex items-center text-sm rounded-full focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+                >
+                  <span class="sr-only">Open user menu</span>
+                  <div class="h-8 w-8 rounded-full bg-primary-500 text-white flex items-center justify-center">
+                    {{ userInitials() }}
+                  </div>
+                </button>
+                <div
+                  *ngIf="isUserMenuOpen()"
+                  class="origin-top-right absolute right-0 mt-2 w-48 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 focus:outline-none"
+                  role="menu"
+                >
+                  <div class="py-1" role="none">
+                    <a
+                      routerLink="company-profile"
+                      class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center"
+                      role="menuitem"
+                    >
+                      <svg class="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                      </svg>
+                      Company Profile
+                    </a>
+                    <a
+                      routerLink="overview"
+                      class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center"
+                      role="menuitem"
+                    >
+                      <svg class="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                      </svg>
+                      Dashboard Overview
+                    </a>
+                    <hr class="my-1">
+                    <button
+                      (click)="logout()"
+                      class="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center"
+                      role="menuitem"
+                    >
+                      <svg class="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                      </svg>
+                      Sign out
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <!-- Dashboard Layout -->
+      <div class="flex pt-16 h-screen bg-gray-100">
+        <!-- Sidebar -->
+        <div class="w-64 bg-white shadow-lg">
+          <nav class="mt-5 px-2">
+            <a routerLink="company-profile" class="group flex items-center px-2 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900">
+              Company Profile
+            </a>
+            <a routerLink="stores" class="group flex items-center px-2 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900">
+              Stores
+            </a>
+            <a routerLink="access" class="group flex items-center px-2 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900">
+              Access Management
+            </a>
+            <a routerLink="products" class="group flex items-center px-2 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900">
+              Products
+            </a>
+            <a routerLink="inventory" class="group flex items-center px-2 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900">
+              Inventory
+            </a>
+            <a routerLink="pos" class="group flex items-center px-2 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900">
+              POS
+            </a>
+          </nav>
+        </div>
+
+        <!-- Main Content -->
+        <div class="flex-1 overflow-auto">
+          <div class="py-6 px-8">
+            <!-- Store Selection -->
+            @if (stores().length > 0) {
+              <div class="mb-6">
+              <select 
+                [ngModel]="selectedStoreId()" 
+                (ngModelChange)="selectedStoreId.set($event)"
+                class="block w-64 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                <option value="">Select a Store</option>
+                @for (store of stores(); track store.id) {
+                  <option [value]="store.id">{{ store.name }}</option>
+                }
+              </select>
+            </div>
+          }
+
+          <!-- Router Outlet for Child Routes -->
+          <router-outlet></router-outlet>
+        </div>
+      </div>
+    </div>
+    </div>
+  `
+})
+export class DashboardComponent implements OnInit {
+  private storeService = inject(StoreService);
+  private productService = inject(ProductService);
+  private authService = inject(AuthService);
+  private companyService = inject(CompanySetupService);
+
+  // Signals
+  protected stores = signal<Store[]>([]);
+  protected selectedStoreId = signal<string>('');
+  protected selectedStore = computed(() => 
+    this.stores().find(store => store.id === this.selectedStoreId())
+  );
+  protected totalCompanies = signal<number>(0);
+  protected totalStores = signal<number>(0);
+  protected totalProducts = signal<number>(0);
+  protected recentCompanies = signal<any[]>([]);
+  protected isUserMenuOpen = signal<boolean>(false);
+
+  // User menu functionality
+  protected userInitials = computed(() => {
+    const user = this.authService.getCurrentUser();
+    if (user?.displayName) {
+      return user.displayName.split(' ').map(n => n[0]).join('').toUpperCase();
+    }
+    return user?.email?.[0]?.toUpperCase() || 'U';
+  });
+
+  protected toggleUserMenu() {
+    this.isUserMenuOpen.set(!this.isUserMenuOpen());
+  }
+
+  protected closeUserMenu() {
+    this.isUserMenuOpen.set(false);
+  }
+
+  protected async logout() {
+    try {
+      await this.authService.logout();
+    } catch (error) {
+      console.error('Error signing out:', error);
+    }
+  }
+
+  @HostListener('document:click', ['$event'])
+  onDocumentClick(event: Event) {
+    // Close user menu when clicking outside
+    const target = event.target as HTMLElement;
+    if (!target.closest('[data-user-menu]')) {
+      this.isUserMenuOpen.set(false);
+    }
+  }
+
+  ngOnInit() {
+    this.loadDashboardData();
+  }
+
+  private async loadDashboardData() {
+    try {
+      const user = this.authService.getCurrentUser();
+      if (!user) return;
+
+      if (user.companyId) {
+        // Load company-specific data
+        await this.storeService.loadStores(user.companyId);
+        await this.productService.loadProducts(user.companyId);
+        
+        this.stores.set(this.storeService.getStores());
+        this.totalStores.set(this.storeService.totalStores());
+        this.totalProducts.set(this.productService.totalProducts());
+      } else if (user.role === 'admin') {
+        // Load all data for admin
+        this.totalCompanies.set(this.companyService.totalCompanies());
+        
+        const companies = this.companyService.getCompanies();
+        this.recentCompanies.set(
+          companies
+            .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+            .slice(0, 5)
+        );
+      }
+    } catch (error) {
+      console.error('Error loading dashboard data:', error);
+    }
+  }
+}

@@ -69,6 +69,12 @@ svg, svg * {
   height: auto !important;
 }
 
+/* Exception: Allow dropdown items to override auto sizing */
+.dropdown-item svg {
+  width: 0.5rem !important;
+  height: 0.5rem !important;
+}
+
 /* Specific icon size variants */
 .icon-xs svg, .icon-xs svg * {
   width: 12px !important;

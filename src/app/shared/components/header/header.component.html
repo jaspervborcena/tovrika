@@ -1,0 +1,83 @@
+  <!-- Professional Header -->
+  <header class="dashboard-header">
+    <div class="header-content">
+      <div class="header-left">
+        <div class="logo-section">
+          <div class="logo-icon">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </div>
+          <h1 class="logo-text">
+            <a routerLink="/" class="logo-link">Tovrika</a>
+          </h1>
+        </div>
+        <!-- <div class="breadcrumb">
+          <span class="breadcrumb-item">Dashboard</span>
+        </div> -->
+      </div>
+      
+      <div class="header-right">
+        <div class="header-actions">
+          <!-- Notifications -->
+          <button class="header-btn" title="Notifications">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+            </svg>
+            <span class="notification-badge">3</span>
+          </button>
+          
+          <!-- Home Link -->
+          <a routerLink="/" class="header-btn" title="Home">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2-2m0 0l7-7 7 7m-9 10v-8a1 1 0 011-1h2a1 1 0 011 1v8m0 0v1a1 1 0 001 1h4a1 1 0 001-1v-1m0 0V9a1 1 0 00-1-1h-2a1 1 0 00-1-1z" />
+            </svg>
+          </a>
+          
+          <!-- Help Link -->
+          <a routerLink="/help" class="header-btn" title="Help">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </a>
+        </div>
+        
+        <!-- User Menu -->
+        <div class="user-menu" data-user-menu>
+          <button 
+            (click)="toggleUserMenu()" 
+            class="user-avatar"
+            [class.active]="isUserMenuOpen()"
+          >
+            <span class="avatar-text">{{ userInitial() }}</span>
+            <svg class="dropdown-arrow" [class.rotate]="isUserMenuOpen()" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+          
+          <div *ngIf="isUserMenuOpen()" class="user-dropdown">
+            <div class="user-info">
+              <div class="user-name">{{ currentUser()?.displayName || currentUser()?.email }}</div>
+              <div class="user-email">{{ currentUser()?.email }}</div>
+            </div>
+            <hr class="dropdown-divider">
+            <a routerLink="/dashboard/overview" 
+               (click)="closeUserMenu()" 
+               class="dropdown-item">
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+              </svg>
+              Dashboard Overview
+            </a>
+            
+            <button (click)="logout()" class="dropdown-item logout">
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+              </svg>
+              Sign out
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </header>
