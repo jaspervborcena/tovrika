@@ -92,16 +92,16 @@ import { Product } from '../../../interfaces/product.interface';
                   <li class="px-6 py-4">
                     <div class="flex items-center space-x-4">
                       <div class="flex-1 min-w-0">
-                        <p class="text-sm font-medium text-gray-900 truncate">{{ product.name }}</p>
+                        <p class="text-sm font-medium text-gray-900 truncate">{{ product.productName }}</p>
                         <p class="text-sm text-gray-500">Added to {{ product.storeId }}</p>
                       </div>
                       <div>
                         <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium"
-                              [class.bg-green-100]="product.inventorySettings.stockQuantity > (product.inventorySettings.lowStockAlert || 0)"
-                              [class.text-green-800]="product.inventorySettings.stockQuantity > (product.inventorySettings.lowStockAlert || 0)"
-                              [class.bg-yellow-100]="product.inventorySettings.stockQuantity <= (product.inventorySettings.lowStockAlert || 0)"
-                              [class.text-yellow-800]="product.inventorySettings.stockQuantity <= (product.inventorySettings.lowStockAlert || 0)">
-                          Stock: {{ product.inventorySettings.stockQuantity }}
+                              [class.bg-green-100]="product.totalStock > 10"
+                              [class.text-green-800]="product.totalStock > 10"
+                              [class.bg-yellow-100]="product.totalStock <= 10"
+                              [class.text-yellow-800]="product.totalStock <= 10">
+                          Stock: {{ product.totalStock }}
                         </span>
                       </div>
                     </div>
@@ -131,11 +131,11 @@ export class OverviewComponent {
   protected totalStores = computed(() => this.stores().length);
   protected totalProducts = computed(() => this.products().length);
   protected lowStockCount = computed(() => 
-    this.products().filter(p => p.inventorySettings.stockQuantity <= (p.inventorySettings.lowStockAlert || 0)).length
+    this.products().filter(p => p.totalStock <= 10).length
   );
   protected recentProducts = computed(() => 
     [...this.products()]
-      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+      .sort((a, b) => (b.createdAt?.getTime() || 0) - (a.createdAt?.getTime() || 0))
       .slice(0, 5)
   );
 
