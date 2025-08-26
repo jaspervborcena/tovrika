@@ -36,6 +36,9 @@ export class ProductService {
     const data = doc.data();
     return {
       id: doc.id,
+      companyId: data['companyId'] || '',
+      storeId: data['storeId'] || '',
+      branchId: data['branchId'],
       name: data['name'],
       description: data['description'],
       price: data['price'],
@@ -44,9 +47,23 @@ export class ProductService {
       barcode: data['barcode'],
       imageUrl: data['imageUrl'],
       status: data['status'] as 'active' | 'inactive' || 'active',
-      stockQuantity: data['stockQuantity'] || 0,
-      lowStockAlert: data['lowStockAlert'],
-      storeId: data['storeId'],
+      productType: data['productType'] || 'simple',
+      inventorySettings: {
+        trackInventory: data['trackInventory'] || true,
+        stockQuantity: data['stockQuantity'] || 0,
+        lowStockAlert: data['lowStockAlert'] || 10,
+        unit: data['unit'] || 'pieces',
+        cost: data['cost']
+      },
+      businessTypeSettings: {
+        taxable: data['taxable'] || true,
+        taxRate: data['taxRate'],
+        ingredients: data['ingredients'] || [],
+        isComboMeal: data['isComboMeal'] || false,
+        comboItems: data['comboItems'] || [],
+        duration: data['duration'],
+        requiresEquipment: data['requiresEquipment'] || false
+      },
       createdAt: data['createdAt']?.toDate() || new Date(),
       updatedAt: data['updatedAt']?.toDate() || new Date()
     };
@@ -91,7 +108,15 @@ export class ProductService {
       const newProduct: Omit<Product, 'id'> = {
         ...productData,
         status: productData.status || 'active',
-        stockQuantity: productData.stockQuantity || 0,
+        inventorySettings: {
+          ...productData.inventorySettings,
+          trackInventory: productData.inventorySettings?.trackInventory ?? true,
+          stockQuantity: productData.inventorySettings?.stockQuantity || 0
+        },
+        businessTypeSettings: {
+          ...productData.businessTypeSettings,
+          taxable: productData.businessTypeSettings?.taxable ?? true
+        },
         createdAt: new Date(),
         updatedAt: new Date()
       };

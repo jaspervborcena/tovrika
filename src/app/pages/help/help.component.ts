@@ -18,7 +18,7 @@ import { MainLayoutComponent } from '../../layouts/main-layout/main-layout.compo
               <div class="mt-6">
                 <h3 class="text-md font-medium text-gray-900">Getting Started</h3>
                 <div class="mt-2 text-sm text-gray-500">
-                  <p>Learn how to use JasperPOS with our comprehensive guides:</p>
+                  <p>Learn how to use Tovrika with our comprehensive guides:</p>
                   <ul class="list-disc pl-5 mt-2 space-y-1">
                     <li>Setting up your store</li>
                     <li>Managing inventory</li>
@@ -37,8 +37,8 @@ import { MainLayoutComponent } from '../../layouts/main-layout/main-layout.compo
                     <p class="mt-1 text-sm text-gray-500">Navigate to Products, click "Add Product", and fill in the required details.</p>
                   </div>
                   <div>
-                    <h4 class="text-sm font-medium text-gray-900">Can I use JasperPOS offline?</h4>
-                    <p class="mt-1 text-sm text-gray-500">Yes, JasperPOS works offline and will sync data when internet connection is restored.</p>
+                    <h4 class="text-sm font-medium text-gray-900">Can I use Tovrika offline?</h4>
+                    <p class="mt-1 text-sm text-gray-500">Yes, Tovrika works offline and will sync data when internet connection is restored.</p>
                   </div>
                 </div>
               </div>
@@ -49,7 +49,7 @@ import { MainLayoutComponent } from '../../layouts/main-layout/main-layout.compo
                 <div class="mt-2 text-sm text-gray-500">
                   <p>Need help? Contact our support team:</p>
                   <div class="mt-2">
-                    <p>Email: support&#64;jasperpos.com</p>
+                    <p>Email: support&#64;tovrika.com</p>
                     <p>Phone: 1-800-JASPER1</p>
                   </div>
                 </div>
