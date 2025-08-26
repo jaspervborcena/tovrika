@@ -1,7 +1,7 @@
 import { Component, OnInit, computed, inject, signal, HostListener } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { RouterLink, RouterOutlet } from '@angular/router';
+import { RouterLink } from '@angular/router';
 import { StoreService, Store } from '../../../services/store.service';
 import { ProductService } from '../../../services/product.service';
 import { AuthService } from '../../../services/auth.service';
@@ -13,7 +13,6 @@ import { CompanySetupService } from '../../../services/companySetup.service';
   imports: [
     CommonModule, 
     RouterLink,
-    RouterOutlet,
     FormsModule
   ],
   templateUrl: './header.component.html',
