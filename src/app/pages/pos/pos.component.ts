@@ -15,7 +15,7 @@ import { CartItem } from '../../interfaces/cart.interface';
 interface PaymentMethod {
   id: string;
   name: string;
-  icon: string;
+  svgIcon: string;
 }
 
 @Component({
@@ -79,7 +79,7 @@ interface PaymentMethod {
                   (click)="removeFromCart(i)"
                   class="text-red-600 hover:text-red-800"
                 >
-                  <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
                   </svg>
                 </button>
@@ -138,7 +138,7 @@ interface PaymentMethod {
               [class.ring-2]="selectedPaymentMethod?.id === method.id"
               class="relative rounded-lg border bg-white p-4 flex flex-col items-center cursor-pointer hover:border-primary-500"
             >
-              <span [class]="method.icon"></span>
+              <svg class="h-4 w-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" [innerHTML]="method.svgIcon"></svg>
               <span class="mt-2 text-sm font-medium text-gray-900">{{ method.name }}</span>
             </div>
           </div>
@@ -204,10 +204,26 @@ export class PosComponent implements OnInit {
   selectedPaymentMethod: PaymentMethod | null = null;
 
   paymentMethods: PaymentMethod[] = [
-    { id: 'cash', name: 'Cash', icon: 'text-2xl fas fa-money-bill-wave' },
-    { id: 'card', name: 'Card', icon: 'text-2xl fas fa-credit-card' },
-    { id: 'mobile', name: 'Mobile Payment', icon: 'text-2xl fas fa-mobile-alt' },
-    { id: 'other', name: 'Other', icon: 'text-2xl fas fa-ellipsis-h' }
+    { 
+      id: 'cash', 
+      name: 'Cash', 
+      svgIcon: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />' 
+    },
+    { 
+      id: 'card', 
+      name: 'Card', 
+      svgIcon: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />' 
+    },
+    { 
+      id: 'mobile', 
+      name: 'Mobile Payment', 
+      svgIcon: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />' 
+    },
+    { 
+      id: 'other', 
+      name: 'Other', 
+      svgIcon: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h.01M12 12h.01M19 12h.01M6 12a1 1 0 11-2 0 1 1 0 012 0zm7 0a1 1 0 11-2 0 1 1 0 012 0zm7 0a1 1 0 11-2 0 1 1 0 012 0z" />' 
+    }
   ];
 
   ngOnInit() {

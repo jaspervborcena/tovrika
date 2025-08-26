@@ -21,6 +21,31 @@ export const routes: Routes = [
     path: 'register',
     loadComponent: () => import('./pages/auth/register/register.component').then(m => m.RegisterComponent)
   },
+  // Feature Detail Routes
+  {
+    path: 'features/pos',
+    loadComponent: () => import('./pages/features/pos/feature-pos.component').then(m => m.FeaturePosComponent)
+  },
+  {
+    path: 'features/inventory',
+    loadComponent: () => import('./pages/features/inventory/feature-inventory.component').then(m => m.FeatureInventoryComponent)
+  },
+  {
+    path: 'features/reports',
+    loadComponent: () => import('./pages/features/reports/feature-reports.component').then(m => m.FeatureReportsComponent)
+  },
+  {
+    path: 'features/multistore',
+    loadComponent: () => import('./pages/features/multistore/feature-multistore.component').then(m => m.FeatureMultistoreComponent)
+  },
+  {
+    path: 'features/offline',
+    loadComponent: () => import('./pages/features/offline/feature-offline.component').then(m => m.FeatureOfflineComponent)
+  },
+  {
+    path: 'features/cloudsync',
+    loadComponent: () => import('./pages/features/cloudsync/feature-cloudsync.component').then(m => m.FeatureCloudSyncComponent)
+  },
   // Main Dashboard Routes
   {
     path: 'dashboard',

@@ -1,18 +1,167 @@
+/* Professional font imports - must come first */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Poppins:wght@300;400;500;600;700;800&display=swap');
+
+/* Tailwind CSS base imports */
 @tailwind base;
-@tailwind components;
+@tailwind components; 
 @tailwind utilities;
 
-/* Custom styles */
-@layer components {
-  .form-input {
-    @apply mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm;
-  }
+/* Global font styling for professional appearance */
+* {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
 }
 
-.form-label {
-  @apply block text-sm font-medium text-gray-700;
+/* Heading fonts using Poppins for modern look */
+h1, h2, h3, h4, h5, h6, .heading-font {
+  font-family: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-weight: 600;
+  letter-spacing: -0.025em;
 }
 
-.error-message {
-  @apply text-red-500 text-sm mt-1;
+/* Icon styling with backgrounds and improved appearance */
+/* Default SVG icon size for UI elements */
+svg, svg * {
+  width: 20px !important;
+  height: 20px !important;
+}
+
+/* Feature icons with beautiful backgrounds */
+.feature svg, .feature-icon svg, .hero svg, .landing svg,
+[class*="feature"] svg, [class*="hero"] svg {
+  width: 24px !important;
+  height: 24px !important;
+}
+
+/* Icon backgrounds for landing page features */
+.feature-icon-container, .hero-icon-container,
+.bg-primary-100 {
+  background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 50%, #93c5fd 100%) !important;
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+/* Professional button styling with icons */
+.btn svg, button svg {
+  width: 16px !important;
+  height: 16px !important;
+  margin-right: 8px;
+}
+
+/* Sign in button with icon */
+.sign-in-btn {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+}
+
+.sign-in-btn svg {
+  width: 16px !important;
+  height: 16px !important;
+}
+
+/* Special handling for container elements that shouldn't be forced to standard sizes */
+.icon-container svg,
+.logo svg,
+.avatar svg,
+[class*="logo"] svg,
+[class*="avatar"] svg {
+  width: auto !important;
+  height: auto !important;
+}
+
+/* Specific icon size variants */
+.icon-xs svg, .icon-xs svg * {
+  width: 12px !important;
+  height: 12px !important;
+}
+
+.icon-sm svg, .icon-sm svg * {
+  width: 16px !important;
+  height: 16px !important;
+}
+
+.icon-md svg, .icon-md svg * {
+  width: 20px !important;
+  height: 20px !important;
+}
+
+.icon-lg svg, .icon-lg svg * {
+  width: 32px !important;
+  height: 32px !important;
+}
+
+.icon-xl svg, .icon-xl svg * {
+  width: 48px !important;
+  height: 48px !important;
+}
+
+.icon-2xl svg, .icon-2xl svg * {
+  width: 64px !important;
+  height: 64px !important;
+}
+
+/* Button icon consistency - compact for UI */
+button svg, .btn svg {
+  width: 16px !important;
+  height: 16px !important;
+}
+
+/* Navigation icon consistency - compact for navigation */
+nav svg, .nav svg, .menu svg, .navbar svg {
+  width: 16px !important;
+  height: 16px !important;
+}
+
+/* Dashboard and sidebar icons - slightly larger for better UX */
+.sidebar svg, .dashboard svg, aside svg {
+  width: 18px !important;
+  height: 18px !important;
+}
+
+/* Social media icons with hover effects */
+footer svg, .social-icon svg {
+  width: 20px !important;
+  height: 20px !important;
+  transition: all 0.2s ease-in-out;
+}
+
+footer a:hover svg, .social-icon:hover svg {
+  transform: scale(1.1);
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
+}
+
+/* Professional card styling for feature sections */
+.feature-card, .bg-white.rounded-lg.shadow-md {
+  background: linear-gradient(145deg, #ffffff 0%, #f8fafc 100%);
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  transition: all 0.3s ease-in-out;
+}
+
+.feature-card:hover, .bg-white.rounded-lg.shadow-md:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+}
+
+/* Tailwind size class overrides to prevent CSS conflicts */
+.h-4, .h-5, .h-6, .h-8, .h-12 {
+  height: auto;
+}
+
+.w-4, .w-5, .w-6, .w-8, .w-12 {
+  width: auto;
+}
+
+/* Default sizing for Tailwind size classes - reasonable for most contexts */
+.h-4 svg, .h-5 svg, .h-6 svg, .h-8 svg, .h-12 svg,
+.w-4 svg, .w-5 svg, .w-6 svg, .w-8 svg, .w-12 svg {
+  width: 20px !important;
+  height: 20px !important;
+}
+
+/* Larger Tailwind classes for feature/landing content */
+.h-16 svg, .h-20 svg, .h-24 svg,
+.w-16 svg, .w-20 svg, .w-24 svg {
+  width: 48px !important;
+  height: 48px !important;
 }

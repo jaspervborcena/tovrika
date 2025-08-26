@@ -19,33 +19,54 @@ import { CompanySetupService } from '../../services/companySetup.service';
   template: `
     <div class="min-h-screen bg-gray-100">
       <!-- Header/Navigation -->
-      <header class="bg-white shadow-sm fixed w-full z-50">
+      <header class="bg-white shadow-lg fixed w-full z-50 border-b border-gray-200">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div class="flex justify-between items-center">
             <div class="flex items-center">
-              <h1 class="text-2xl font-bold text-primary-600">
-                <a routerLink="/" class="hover:text-primary-500">JasperPOS</a>
-              </h1>
-              <span class="ml-4 text-sm text-gray-500">Dashboard</span>
+              <div class="flex items-center">
+                <div class="h-8 w-8 bg-primary-600 rounded-lg flex items-center justify-center mr-3">
+                  <svg class="icon text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <h1 class="text-2xl font-bold text-gray-900">
+                  <a routerLink="/" class="hover:text-primary-600 transition-colors">Tovrika</a>
+                </h1>
+              </div>
+              <span class="ml-4 px-2 py-1 bg-blue-100 text-blue-800 text-xs font-medium rounded-full">Dashboard</span>
             </div>
-            <div class="flex items-center space-x-4">
-              <a routerLink="/" class="text-gray-600 hover:text-gray-900 flex items-center">
-                <svg class="h-5 w-5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m0-11l7-7 7 7m-9 4h.01M8 21v-5a2 2 0 012-2h4a2 2 0 012 2v5" />
+            
+            <div class="flex items-center space-x-2">
+              <!-- Home Icon -->
+              <a routerLink="/" 
+                 class="p-2 text-gray-500 hover:text-primary-600 hover:bg-gray-100 rounded-lg transition-colors duration-200 flex items-center"
+                 title="Home">
+                <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l7-7 7 7m-9 4h.01M13 16h-1v4a1 1 0 01-1 1H6a1 1 0 01-1-1v-4H3l9-9 9 9h-2v4a1 1 0 01-1 1h-5a1 1 0 01-1-1v-4z"/>
                 </svg>
-                Home
               </a>
-              <a routerLink="/help" class="text-gray-600 hover:text-gray-900">
-                <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              
+              <!-- Help Icon -->
+              <a routerLink="/help" 
+                 class="p-2 text-gray-500 hover:text-primary-600 hover:bg-gray-100 rounded-lg transition-colors duration-200"
+                 title="Help & Support">
+                <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
               </a>
-              <a routerLink="/notifications" class="text-gray-600 hover:text-gray-900">
-                <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              
+              <!-- Notifications Icon -->
+              <a routerLink="/notifications" 
+                 class="p-2 text-gray-500 hover:text-primary-600 hover:bg-gray-100 rounded-lg transition-colors duration-200 relative"
+                 title="Notifications">
+                <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
                 </svg>
+                <span class="absolute -top-1 -right-1 h-3 w-3 bg-red-500 rounded-full"></span>
               </a>
-              <div class="relative" data-user-menu>
+              
+              <!-- User Menu -->
+              <div class="relative ml-2" data-user-menu>
                 <button
                   (click)="toggleUserMenu()"
                   class="flex items-center text-sm rounded-full focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
@@ -181,6 +202,10 @@ export class DashboardComponent implements OnInit {
 
   protected toggleUserMenu() {
     this.isUserMenuOpen.set(!this.isUserMenuOpen());
+  }
+
+  protected closeUserMenu() {
+    this.isUserMenuOpen.set(false);
   }
 
   protected async logout() {

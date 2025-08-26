@@ -2,6 +2,9 @@
 /* To learn more about Angular compiler options: https://angular.dev/reference/configs/angular-compiler-options. */
 {
   "compileOnSave": false,
+  "include": [
+    "src/**/*"
+  ],
   "compilerOptions": {
     "outDir": "./dist/out-tsc",
     "baseUrl": "./src",
@@ -23,7 +26,9 @@
     "moduleResolution": "bundler",
     "importHelpers": true,
     "target": "ES2022",
-    "module": "ES2022"
+    "module": "ES2022",
+    "lib": ["ES2022", "dom", "dom.iterable"],
+    "types": ["jasmine"]
   },
   "angularCompilerOptions": {
     "enableI18nLegacyMessageIdFormat": false,
