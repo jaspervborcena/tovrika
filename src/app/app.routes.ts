@@ -87,7 +87,7 @@ export const routes: Routes = [
       },
       {
         path: 'products',
-        loadComponent: () => import('./pages/dashboard/products/products.component').then(m => m.ProductsComponent)
+        loadComponent: () => import('./pages/dashboard/products/product-management.component').then(m => m.ProductManagementComponent)
       },
       {
         path: 'inventory',
@@ -124,7 +124,7 @@ export const routes: Routes = [
   },
   {
     path: 'products',
-    loadComponent: () => import('./pages/products/products.component').then(m => m.ProductsComponent),
+    loadComponent: () => import('./pages/dashboard/products/product-management.component').then(m => m.ProductManagementComponent),
     canActivate: [authGuard],
     data: { roles: ['admin', 'manager'] }
   },

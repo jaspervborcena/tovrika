@@ -49,9 +49,9 @@ interface PaymentMethod {
             (click)="addToCart(product)"
             class="border rounded-lg p-4 cursor-pointer hover:shadow-lg transition-shadow"
           >
-            <h3 class="font-medium text-gray-900">{{ product.name }}</h3>
-            <p class="text-gray-500">{{ product.sku }}</p>
-            <p class="text-lg font-bold text-primary-600">{{ product.price | currency }}</p>
+            <h3 class="font-medium text-gray-900">{{ product.productName }}</h3>
+            <p class="text-gray-500">{{ product.skuId }}</p>
+            <p class="text-lg font-bold text-primary-600">{{ product.sellingPrice | currency }}</p>
           </div>
         </div>
       </div>
@@ -179,8 +179,8 @@ export class PosComponent implements OnInit {
   filteredProducts = computed(() => {
     const query = this.searchQuery().toLowerCase();
     return this.products().filter(product =>
-      product.name.toLowerCase().includes(query) ||
-      product.sku.toLowerCase().includes(query)
+      product.productName.toLowerCase().includes(query) ||
+      product.skuId.toLowerCase().includes(query)
     );
   });
 
@@ -260,10 +260,10 @@ export class PosComponent implements OnInit {
     } else {
       const newItem: CartItem = {
         productId: product.id,
-        name: product.name,
-        price: product.price,
+        name: product.productName,
+        price: product.sellingPrice,
         quantity: 1,
-        subtotal: product.price
+        subtotal: product.sellingPrice
       };
       this.cart.update(items => [...items, newItem]);
     }

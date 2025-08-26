@@ -1,25 +1,33 @@
 import { BusinessType } from './company.interface';
 
 export interface Product {
-  id: string;
+  id?: string;
+  productName: string;
+  skuId: string;
+  category: string;
+  totalStock: number;
+  sellingPrice: number;
   companyId: string;
   storeId: string;
-  branchId?: string; // Optional - if null, available to all branches
-  name: string;
-  description?: string;
-  price: number;
-  category: string;
-  sku: string;
-  barcode?: string;
+  isMultipleInventory: boolean;
+  barcodeId?: string;
+  qrCode?: string;
   imageUrl?: string;
-  status: 'active' | 'inactive';
-  productType: ProductType;
-  inventorySettings: InventorySettings;
-  businessTypeSettings: BusinessTypeSettings;
-  createdAt: Date;
-  updatedAt: Date;
+  inventory: ProductInventory[];
+  status?: 'active' | 'inactive';
+  createdAt?: Date;
+  updatedAt?: Date;
 }
 
+export interface ProductInventory {
+  batchId: string;
+  quantity: number;
+  unitPrice: number;
+  receivedAt: Date;
+  status: 'active' | 'inactive' | 'expired';
+}
+
+// Legacy interfaces for backward compatibility
 export interface InventorySettings {
   trackInventory: boolean;
   stockQuantity: number;
