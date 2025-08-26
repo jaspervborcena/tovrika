@@ -2,13 +2,13 @@ import { Component, OnInit, computed, inject, signal, HostListener } from '@angu
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink, RouterOutlet } from '@angular/router';
-import { StoreService, Store } from '../../services/store.service';
-import { ProductService } from '../../services/product.service';
-import { AuthService } from '../../services/auth.service';
-import { CompanySetupService } from '../../services/companySetup.service';
+import { StoreService, Store } from '../../../services/store.service';
+import { ProductService } from '../../../services/product.service';
+import { AuthService } from '../../../services/auth.service';
+import { CompanySetupService } from '../../../services/companySetup.service';
 
 @Component({
-  selector: 'app-dashboard',
+  selector: 'app-header',
   standalone: true,
   imports: [
     CommonModule, 
@@ -16,10 +16,10 @@ import { CompanySetupService } from '../../services/companySetup.service';
     RouterOutlet,
     FormsModule
   ],
-  templateUrl: './dashboard.component.html',
-  styleUrls: ['./dashboard.component.css']
+  templateUrl: './header.component.html',
+  styleUrls: ['./header.component.css']
 })
-export class DashboardComponent implements OnInit {
+export class HeaderComponent implements OnInit {
   private storeService = inject(StoreService);
   private productService = inject(ProductService);
   private authService = inject(AuthService);
