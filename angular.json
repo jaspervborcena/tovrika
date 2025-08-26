@@ -3,7 +3,7 @@
   "version": 1,
   "newProjectRoot": "projects",
   "projects": {
-    "forms-designer": {
+    "pos-system": {
       "projectType": "application",
       "schematics": {
         "@schematics/angular:component": {
@@ -41,7 +41,7 @@
         "build": {
           "builder": "@angular-devkit/build-angular:application",
           "options": {
-            "outputPath": "dist/forms-designer",
+            "outputPath": "dist/pos-system",
             "index": "src/index.html",
             "browser": "src/main.ts",
             "polyfills": [
@@ -57,7 +57,7 @@
               }
             ],
             "styles": [
-              "src/styles.scss"
+              "src/styles.css"
             ],
             "scripts": []
           },
@@ -89,10 +89,10 @@
           "builder": "@angular-devkit/build-angular:dev-server",
           "configurations": {
             "production": {
-              "buildTarget": "forms-designer:build:production"
+              "buildTarget": "pos-system:build:production"
             },
             "development": {
-              "buildTarget": "forms-designer:build:development"
+              "buildTarget": "pos-system:build:development"
             }
           },
           "defaultConfiguration": "development"
@@ -116,7 +116,7 @@
               }
             ],
             "styles": [
-              "src/styles.scss"
+              "src/styles.css"
             ],
             "scripts": []
           }

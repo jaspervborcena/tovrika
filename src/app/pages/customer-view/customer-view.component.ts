@@ -33,8 +33,8 @@ import { CustomerViewSession, LiveCartItem, CartTotals } from '../../interfaces/
       <div class="max-w-4xl mx-auto p-6">
         @if (cartItems().length === 0) {
           <div class="text-center py-20">
-            <div class="w-24 h-24 mx-auto mb-6 bg-white bg-opacity-10 rounded-full flex items-center justify-center">
-              <svg class="w-12 h-12 text-blue-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div class="w-16 h-16 mx-auto mb-6 bg-white bg-opacity-10 rounded-full flex items-center justify-center">
+              <svg class="w-8 h-8 text-blue-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
                       d="M3 3h2l.4 2M7 13h10l4-8H5.4m0 0L7 13m0 0l-1.5 6M7 13l1.5-6M17 13v6a2 2 0 01-2 2H9a2 2 0 01-2-2v-6"></path>
               </svg>
@@ -122,7 +122,7 @@ import { CustomerViewSession, LiveCartItem, CartTotals } from '../../interfaces/
         <div class="text-center mt-8 text-blue-200">
           @if (sessionStatus() === 'processing') {
             <div class="animate-pulse">
-              <svg class="w-8 h-8 mx-auto mb-2 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg class="w-6 h-6 mx-auto mb-2 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
                       d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
               </svg>

@@ -4,10 +4,12 @@
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "outDir": "./out-tsc/app",
-    "types": []
+    "types": ["jasmine", "node"]
   },
   "files": [
-    "src/main.ts"
+    "src/main.ts",
+    "src/environments/environment.ts",
+    "src/environments/environment.prod.ts"
   ],
   "include": [
     "src/**/*.d.ts",
