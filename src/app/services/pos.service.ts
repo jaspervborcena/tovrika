@@ -1,158 +1,317 @@
-import { Injectable, computed, inject, signal } from '@angular/core';
-import { Firestore, collection, addDoc, query, where, orderBy, getDocs } from '@angular/fire/firestore';
-import { Cart, CartItem, Receipt } from '../interfaces/cart.interface';
+import { Injectable, signal, computed, inject } from '@angular/core';
+import {
+  Firestore,
+  collection,
+  addDoc,
+  doc,
+  updateDoc,
+  query,
+  where,
+  getDocs,
+  orderBy,
+  limit
+} from '@angular/fire/firestore';
+import { AuthService } from './auth.service';
+import { CompanyService } from './company.service';
+import { ProductService } from './product.service';
+import { Order, OrderDetail, OrderItem, CartItem, ReceiptData } from '../interfaces/pos.interface';
+import { Product } from '../interfaces/product.interface';
 
 @Injectable({
   providedIn: 'root'
 })
 export class PosService {
-  private firestore = inject(Firestore);
-  
-  // Signals
-  private _cart = signal<Cart>({
-    items: [],
-    subtotal: 0,
-    tax: 0,
-    total: 0,
-    storeId: ''
-  });
-
-  private _viewMode = signal<'tile' | 'list'>('tile');
-  private _selectedCategory = signal<string>('all');
+  private readonly cartItemsSignal = signal<CartItem[]>([]);
+  private readonly selectedStoreIdSignal = signal<string>('');
+  private readonly isProcessingSignal = signal<boolean>(false);
 
   // Computed values
-  cart = computed(() => this._cart());
-  viewMode = computed(() => this._viewMode());
-  selectedCategory = computed(() => this._selectedCategory());
+  readonly cartItems = computed(() => this.cartItemsSignal());
+  readonly selectedStoreId = computed(() => this.selectedStoreIdSignal());
+  readonly isProcessing = computed(() => this.isProcessingSignal());
 
-  // Methods for cart management
-  addToCart(product: any, quantity: number = 1) {
-    const currentCart = this._cart();
-    const existingItem = currentCart.items.find(item => item.productId === product.id);
+  readonly cartSummary = computed(() => {
+    const items = this.cartItems();
+    const grossAmount = items.reduce((sum, item) => sum + item.total, 0);
+    const vatAmount = items.reduce((sum, item) => 
+      item.isVatExempt ? sum : sum + item.vatAmount, 0);
+    const vatExemptAmount = items.reduce((sum, item) => 
+      item.isVatExempt ? sum + item.total : sum, 0);
+    const discountAmount = items.reduce((sum, item) => sum + item.discountAmount, 0);
+    const netAmount = grossAmount - discountAmount;
 
-    if (existingItem) {
+    return {
+      itemCount: items.length,
+      totalQuantity: items.reduce((sum, item) => sum + item.quantity, 0),
+      grossAmount,
+      vatAmount,
+      vatExemptAmount,
+      discountAmount,
+      netAmount
+    };
+  });
+
+  constructor(
+    private firestore: Firestore,
+    private authService: AuthService,
+    private companyService: CompanyService,
+    private productService: ProductService
+  ) {}
+
+  // Cart Management
+  addToCart(product: Product, quantity: number = 1): void {
+    const existingItemIndex = this.cartItems().findIndex(item => item.productId === product.id);
+    
+    if (existingItemIndex >= 0) {
       // Update existing item
-      const updatedItems = currentCart.items.map(item =>
-        item.productId === product.id
-          ? { ...item, quantity: item.quantity + quantity, subtotal: (item.quantity + quantity) * item.price }
-          : item
-      );
-      this.updateCart({ ...currentCart, items: updatedItems });
+      this.updateCartItemQuantity(product.id!, this.cartItems()[existingItemIndex].quantity + quantity);
     } else {
       // Add new item
-      const newItem: CartItem = {
-        productId: product.id,
-        name: product.name,
-        price: product.price,
-        quantity,
-        subtotal: quantity * product.price
-      };
-      this.updateCart({ ...currentCart, items: [...currentCart.items, newItem] });
+      const cartItem: CartItem = this.createCartItem(product, quantity);
+      this.cartItemsSignal.update(items => [...items, cartItem]);
     }
   }
 
-  removeFromCart(productId: string) {
-    const currentCart = this._cart();
-    const updatedItems = currentCart.items.filter(item => item.productId !== productId);
-    this.updateCart({ ...currentCart, items: updatedItems });
+  removeFromCart(productId: string): void {
+    this.cartItemsSignal.update(items => items.filter(item => item.productId !== productId));
   }
 
-  updateItemQuantity(productId: string, quantity: number) {
-    const currentCart = this._cart();
-    const updatedItems = currentCart.items.map(item =>
-      item.productId === productId
-        ? { ...item, quantity, subtotal: quantity * item.price }
-        : item
+  updateCartItemQuantity(productId: string, quantity: number): void {
+    if (quantity <= 0) {
+      this.removeFromCart(productId);
+      return;
+    }
+
+    this.cartItemsSignal.update(items => 
+      items.map(item => {
+        if (item.productId === productId) {
+          const updatedItem = { ...item, quantity };
+          return this.recalculateCartItem(updatedItem);
+        }
+        return item;
+      })
     );
-    this.updateCart({ ...currentCart, items: updatedItems });
   }
 
-  private updateCart(cart: Cart) {
-    // Calculate totals
-    const subtotal = cart.items.reduce((sum, item) => sum + item.subtotal, 0);
-    const tax = subtotal * 0.12; // 12% tax
-    const total = subtotal + tax;
-
-    this._cart.set({
-      ...cart,
-      subtotal,
-      tax,
-      total
-    });
+  toggleVatExemption(productId: string): void {
+    this.cartItemsSignal.update(items =>
+      items.map(item => {
+        if (item.productId === productId) {
+          const updatedItem = { ...item, isVatExempt: !item.isVatExempt };
+          return this.recalculateCartItem(updatedItem);
+        }
+        return item;
+      })
+    );
   }
 
-  // Methods for receipt management
-  async createReceipt(paymentMethod: 'cash' | 'card' | 'other', cashierId: string): Promise<string> {
-    const currentCart = this._cart();
-    
-    const receipt: Omit<Receipt, 'id'> = {
-      ...currentCart,
-      orderNumber: this.generateOrderNumber(),
-      createdAt: new Date(),
-      updatedAt: new Date(),
-      status: 'completed',
-      cashierId,
-      paymentMethod
+  clearCart(): void {
+    this.cartItemsSignal.set([]);
+  }
+
+  // Store Management
+  setSelectedStore(storeId: string): void {
+    this.selectedStoreIdSignal.set(storeId);
+    this.clearCart(); // Clear cart when switching stores
+  }
+
+  // Order Processing
+  async processOrder(paymentMethod: string = 'cash'): Promise<string | null> {
+    try {
+      this.isProcessingSignal.set(true);
+      
+      const user = this.authService.getCurrentUser();
+      const company = await this.companyService.getActiveCompany();
+      
+      if (!user || !company) {
+        throw new Error('User or company not found');
+      }
+
+      const storeId = this.selectedStoreId();
+      if (!storeId) {
+        throw new Error('No store selected');
+      }
+
+      const cartItems = this.cartItems();
+      if (cartItems.length === 0) {
+        throw new Error('Cart is empty');
+      }
+
+      const summary = this.cartSummary();
+
+      // Create order
+      const order: Omit<Order, 'id'> = {
+        companyId: company.id!,
+        storeId: storeId,
+        assignedCashierId: user.uid,
+        status: 'paid',
+        totalAmount: summary.netAmount,
+        vatAmount: summary.vatAmount,
+        vatExemptAmount: summary.vatExemptAmount,
+        discountAmount: summary.discountAmount,
+        grossAmount: summary.grossAmount,
+        netAmount: summary.netAmount,
+        createdAt: new Date(),
+        message: 'Thank you! See you again!'
+      };
+
+      const orderRef = await addDoc(collection(this.firestore, 'orders'), order);
+
+      // Create order details
+      const orderItems: OrderItem[] = cartItems.map(item => ({
+        productId: item.productId,
+        productName: item.productName,
+        quantity: item.quantity,
+        price: item.sellingPrice,
+        total: item.total,
+        vat: item.vatAmount,
+        discount: item.discountAmount,
+        isVatExempt: item.isVatExempt
+      }));
+
+      const orderDetail: Omit<OrderDetail, 'id'> = {
+        companyId: company.id!,
+        storeId: storeId,
+        orderId: orderRef.id,
+        items: orderItems,
+        createdAt: new Date()
+      };
+
+      await addDoc(collection(this.firestore, 'orderDetails'), orderDetail);
+
+      // Update product inventory
+      await this.updateProductInventory(cartItems);
+
+      this.clearCart();
+      return orderRef.id;
+
+    } catch (error) {
+      console.error('Error processing order:', error);
+      throw error;
+    } finally {
+      this.isProcessingSignal.set(false);
+    }
+  }
+
+  // Receipt Generation
+  async generateReceiptData(orderId?: string): Promise<ReceiptData> {
+    const user = this.authService.getCurrentUser();
+    const company = await this.companyService.getActiveCompany();
+    const stores = this.companyService.companies()[0]?.stores || [];
+    const currentStore = stores.find(s => s.id === this.selectedStoreId());
+
+    if (!user || !company || !currentStore) {
+      throw new Error('Required data not found');
+    }
+
+    const summary = this.cartSummary();
+
+    return {
+      companyName: company.name,
+      storeName: currentStore.storeName,
+      storeAddress: currentStore.address,
+      companyPhone: company.phone || '',
+      companyEmail: company.email || '',
+      date: new Date(),
+      orderId: orderId || 'TEMP',
+      items: this.cartItems(),
+      vatAmount: summary.vatAmount,
+      vatExemptAmount: summary.vatExemptAmount,
+      discountAmount: summary.discountAmount,
+      grossAmount: summary.grossAmount,
+      netAmount: summary.netAmount,
+      message: 'Thank you! See you again!'
     };
-
-    const receiptRef = collection(this.firestore, `stores/${currentCart.storeId}/receipts`);
-    const docRef = await addDoc(receiptRef, receipt);
-
-    // Clear cart after successful receipt creation
-    this.clearCart();
-
-    return docRef.id;
   }
 
-  clearCart() {
-    this._cart.set({
-      items: [],
-      subtotal: 0,
-      tax: 0,
-      total: 0,
-      storeId: this._cart().storeId
-    });
+  // Helper Methods
+  private createCartItem(product: Product, quantity: number): CartItem {
+    const baseTotal = product.sellingPrice * quantity;
+    let discountAmount = 0;
+    
+    if (product.hasDiscount) {
+      if (product.discountType === 'percentage') {
+        discountAmount = (baseTotal * product.discountValue) / 100;
+      } else {
+        discountAmount = product.discountValue * quantity;
+      }
+    }
+
+    const discountedTotal = baseTotal - discountAmount;
+    let vatAmount = 0;
+    
+    if (product.isVatApplicable) {
+      vatAmount = (discountedTotal * product.vatRate) / 100;
+    }
+
+    return {
+      productId: product.id!,
+      productName: product.productName,
+      skuId: product.skuId,
+      quantity,
+      sellingPrice: product.sellingPrice,
+      total: discountedTotal + vatAmount,
+      isVatApplicable: product.isVatApplicable,
+      vatRate: product.vatRate,
+      vatAmount,
+      hasDiscount: product.hasDiscount,
+      discountType: product.discountType,
+      discountValue: product.discountValue,
+      discountAmount,
+      isVatExempt: false,
+      imageUrl: product.imageUrl
+    };
   }
 
-  setViewMode(mode: 'tile' | 'list') {
-    this._viewMode.set(mode);
+  private recalculateCartItem(item: CartItem): CartItem {
+    const baseTotal = item.sellingPrice * item.quantity;
+    let discountAmount = 0;
+    
+    if (item.hasDiscount) {
+      if (item.discountType === 'percentage') {
+        discountAmount = (baseTotal * item.discountValue) / 100;
+      } else {
+        discountAmount = item.discountValue * item.quantity;
+      }
+    }
+
+    const discountedTotal = baseTotal - discountAmount;
+    let vatAmount = 0;
+    
+    if (item.isVatApplicable && !item.isVatExempt) {
+      vatAmount = (discountedTotal * item.vatRate) / 100;
+    }
+
+    return {
+      ...item,
+      total: discountedTotal + vatAmount,
+      vatAmount,
+      discountAmount
+    };
   }
 
-  setSelectedCategory(category: string) {
-    this._selectedCategory.set(category);
+  private async updateProductInventory(cartItems: CartItem[]): Promise<void> {
+    // This would typically update the product inventory
+    // For now, we'll just log it
+    console.log('Updating inventory for items:', cartItems);
+    
+    // TODO: Implement actual inventory updates
+    // This would involve updating the product quantities in Firestore
   }
 
-  private generateOrderNumber(): string {
-    const date = new Date();
-    const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
-    return `${date.getFullYear()}${(date.getMonth() + 1).toString().padStart(2, '0')}${date.getDate().toString().padStart(2, '0')}-${random}`;
-  }
+  // Analytics Methods
+  async getBestSellerProducts(limit: number = 10): Promise<Product[]> {
+    try {
+      const user = this.authService.getCurrentUser();
+      if (!user?.companyId) return [];
 
-  async getFavoriteProducts(storeId: string): Promise<string[]> {
-    const receiptRef = collection(this.firestore, `stores/${storeId}/receipts`);
-    const q = query(
-      receiptRef,
-      where('status', '==', 'completed'),
-      orderBy('createdAt', 'desc')
-    );
-
-    const snapshot = await getDocs(q);
-    const productCounts = new Map<string, number>();
-
-    snapshot.docs.forEach(doc => {
-      const receipt = doc.data() as Receipt;
-      receipt.items.forEach(item => {
-        const count = productCounts.get(item.productId) || 0;
-        productCounts.set(item.productId, count + item.quantity);
-      });
-    });
-
-    // Sort products by frequency and return top 10 product IDs
-    const sortedProducts = Array.from(productCounts.entries())
-      .sort(([, a], [, b]) => b - a)
-      .slice(0, 10)
-      .map(([productId]) => productId);
-
-    return sortedProducts;
+      // This would typically aggregate order data to find best sellers
+      // For now, return products sorted by some criteria
+      const products = this.productService.getProducts();
+      return products.slice(0, limit);
+    } catch (error) {
+      console.error('Error getting best sellers:', error);
+      return [];
+    }
   }
 }

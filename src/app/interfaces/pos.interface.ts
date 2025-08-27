@@ -1,5 +1,82 @@
 import { Product } from './product.interface';
 
+export interface Order {
+  id?: string;
+  companyId: string;
+  storeId: string;
+  branchId?: string;
+  terminalId?: string;
+  assignedCashierId: string;
+  status: 'pending' | 'paid' | 'cancelled' | 'refunded';
+  totalAmount: number;
+  vatAmount: number;
+  vatExemptAmount: number;
+  discountAmount: number;
+  grossAmount: number;
+  netAmount: number;
+  createdAt: Date;
+  message: string;
+}
+
+export interface OrderDetail {
+  id?: string;
+  companyId: string;
+  storeId: string;
+  branchId?: string;
+  orderId: string;
+  items: OrderItem[];
+  createdAt: Date;
+}
+
+export interface OrderItem {
+  productId: string;
+  productName?: string;
+  quantity: number;
+  price: number;
+  total: number;
+  vat: number;
+  discount: number;
+  isVatExempt: boolean;
+}
+
+export interface CartItem {
+  productId: string;
+  productName: string;
+  skuId: string;
+  quantity: number;
+  sellingPrice: number;
+  total: number;
+  isVatApplicable: boolean;
+  vatRate: number;
+  vatAmount: number;
+  hasDiscount: boolean;
+  discountType: 'percentage' | 'fixed';
+  discountValue: number;
+  discountAmount: number;
+  isVatExempt: boolean;
+  imageUrl?: string;
+}
+
+export type ProductViewType = 'list' | 'grid' | 'custom' | 'bestsellers';
+
+export interface ReceiptData {
+  companyName: string;
+  storeName: string;
+  storeAddress: string;
+  companyPhone: string;
+  companyEmail: string;
+  date: Date;
+  orderId: string;
+  items: CartItem[];
+  vatAmount: number;
+  vatExemptAmount: number;
+  discountAmount: number;
+  grossAmount: number;
+  netAmount: number;
+  message: string;
+}
+
+// Legacy interfaces for backward compatibility
 export interface PosFeatures {
   viewMode: 'tile' | 'list';
   selectedCategory: string;
@@ -13,14 +90,6 @@ export interface PosFeatures {
     tax: number;
     total: number;
   };
-}
-
-export interface CartItem {
-  productId: string;
-  name: string;
-  price: number;
-  quantity: number;
-  subtotal: number;
 }
 
 export interface Receipt {

@@ -10,6 +10,8 @@ import {
   where,
   getDocs,
   addDoc,
+  getDoc,
+  Timestamp,
   DocumentReference
 } from '@angular/fire/firestore';
 import { Company, Store, Branch } from '../interfaces/company.interface';
@@ -30,9 +32,26 @@ export class CompanyService {
     private authService: AuthService
   ) {}
 
+  // Helper function to convert Firestore Timestamp to Date
+  private toDate(timestamp: any): Date {
+    if (timestamp instanceof Timestamp) {
+      return timestamp.toDate();
+    }
+    if (timestamp instanceof Date) {
+      return timestamp;
+    }
+    if (timestamp && typeof timestamp.toDate === 'function') {
+      return timestamp.toDate();
+    }
+    return new Date();
+  }
+
   async getActiveCompany() {
     const user = this.authService.getCurrentUser();
     if (!user) return null;
+
+    // If user doesn't have companyId, return null (they need to create a company)
+    if (!user.companyId) return null;
 
     const companies = this.companies();
     if (companies.length === 0) {
@@ -45,66 +64,69 @@ export class CompanyService {
   async loadCompanies() {
     try {
       const user = this.authService.getCurrentUser();
-      if (!user) return;
-
-      const companiesRef = collection(this.firestore, 'companies');
-      let companiesQuery = query(companiesRef);
-
-      if ((user.roleId || user.role) !== 'admin') {
-        companiesQuery = query(companiesRef, where('ownerUid', '==', user.uid));
+      if (!user) {
+        this.companiesSignal.set([]);
+        return;
       }
 
-      const querySnapshot = await getDocs(companiesQuery);
       const companies: Company[] = [];
+      console.log("user companyId:", user.companyId);
+      
+      // If user has a companyId, load only that company
+      if (user.companyId) {
+        const companyDocRef = doc(this.firestore, 'companies', user.companyId);
+        const companyDoc = await getDoc(companyDocRef);
 
-      for (const doc of querySnapshot.docs) {
-        const companyData = doc.data() as Omit<Company, 'id'>;
-        const company: Company = {
-          ...companyData,
-          id: doc.id,
-          createdAt: companyData['createdAt'] as Date,
-          stores: []
-        };
-
-        // Load stores for this company
-        const storesRef = collection(this.firestore, 'stores');
-        const storesQuery = query(storesRef, where('companyId', '==', company.id));
-        const storesSnapshot = await getDocs(storesQuery);
-        const stores: Store[] = [];
-
-        for (const storeDoc of storesSnapshot.docs) {
-          const storeData = storeDoc.data() as Omit<Store, 'id' | 'branches'>;
-          const store: Store = {
-            ...storeData,
-            id: storeDoc.id,
-            branches: []
+        if (companyDoc.exists()) {
+          const companyData = companyDoc.data() as Omit<Company, 'id'>;
+          const company: Company = {
+            ...companyData,
+            id: companyDoc.id,
+            createdAt: this.toDate(companyData['createdAt']),
+            stores: []
           };
 
-          // Load branches for this store
-          const branchesRef = collection(this.firestore, 'branches');
-          const branchesQuery = query(branchesRef, where('storeId', '==', store.id));
-          const branchesSnapshot = await getDocs(branchesQuery);
-          store.branches = branchesSnapshot.docs.map(branchDoc => ({
-            ...branchDoc.data(),
-            id: branchDoc.id
-          } as Branch));
+          // Load stores for this company
+          const storesRef = collection(this.firestore, 'stores');
+          const storesQuery = query(storesRef, where('companyId', '==', company.id));
+          const storesSnapshot = await getDocs(storesQuery);
+          const stores: Store[] = [];
 
-          stores.push(store);
+          for (const storeDoc of storesSnapshot.docs) {
+            const storeData = storeDoc.data() as Omit<Store, 'id' | 'branches'>;
+            const store: Store = {
+              ...storeData,
+              id: storeDoc.id,
+              createdAt: this.toDate(storeData['createdAt']),
+              updatedAt: storeData['updatedAt'] ? this.toDate(storeData['updatedAt']) : undefined,
+              branches: []
+            };
+
+            stores.push(store);
+          }
+
+          company.stores = stores;
+          companies.push(company);
         }
-
-        company.stores = stores;
-        companies.push(company);
       }
+      // If user has no companyId, set empty array (they need to create a company)
 
       this.companiesSignal.set(companies);
     } catch (error) {
       console.error('Error loading companies:', error);
+      this.companiesSignal.set([]);
       throw error;
     }
   }
 
+
   async createCompany(companyInput: Omit<Company, 'id' | 'createdAt' | 'updatedAt'>) {
     try {
+      const user = this.authService.getCurrentUser();
+      if (!user) {
+        throw new Error('No authenticated user found');
+      }
+
       const companiesRef = collection(this.firestore, 'companies');
       
       // Ensure we have a valid company object
@@ -120,14 +142,23 @@ export class CompanyService {
           .filter(([_, value]) => value !== undefined)
       );
       
-      // Create the new company object
+      // Create the new company object with required fields
       const newCompany = {
         ...companyData,
+        ownerUid: user.uid, // Set the current user as owner
+        slug: companyData['slug'] || (typeof companyData['name'] === 'string' ? companyData['name'].toLowerCase().replace(/[^a-z0-9]/g, '-') : 'company'),
+        plan: companyData['plan'] || 'basic',
+        onboardingStatus: companyData['onboardingStatus'] || 'pending',
         createdAt: new Date(),
         updatedAt: new Date()
       };
 
       const docRef = await addDoc(companiesRef, newCompany);
+      
+      // Update user's companyId
+      await this.authService.updateUserData({
+        companyId: docRef.id
+      });
       
       // Add stores if we have any
       if (stores.length > 0) {
@@ -207,5 +238,18 @@ export class CompanyService {
       console.error('Error deleting company:', error);
       throw error;
     }
+  }
+
+  // Helper method to check if user needs to create a company
+  userNeedsToCreateCompany(): boolean {
+    const user = this.authService.getCurrentUser();
+    return !user?.companyId;
+  }
+
+  // Helper method to get current company or null if user needs to create one
+  async getCurrentCompanyOrNull(): Promise<Company | null> {
+    const user = this.authService.getCurrentUser();
+    if (!user?.companyId) return null;
+    return this.getActiveCompany();
   }
 }

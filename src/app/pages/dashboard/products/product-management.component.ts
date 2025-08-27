@@ -1114,6 +1114,14 @@ export class ProductManagementComponent implements OnInit {
           imageUrl: formValue.imageUrl,
           inventory: [initialInventory],
           totalStock: initialInventory.quantity,
+          
+          // Tax and Discount Fields with defaults
+          isVatApplicable: false,
+          vatRate: 0,
+          hasDiscount: false,
+          discountType: 'percentage',
+          discountValue: 0,
+          
           status: 'active'
         };
 
