@@ -23,10 +23,6 @@ export const routes: Routes = [
   },
   // Feature Detail Routes
   {
-    path: 'features/pos',
-    loadComponent: () => import('./pages/features/pos/feature-pos.component').then(m => m.FeaturePosComponent)
-  },
-  {
     path: 'features/inventory',
     loadComponent: () => import('./pages/features/inventory/feature-inventory.component').then(m => m.FeatureInventoryComponent)
   },
@@ -95,7 +91,7 @@ export const routes: Routes = [
       },
       {
         path: 'pos',
-        loadComponent: () => import('./pages/pos/pos.component').then(m => m.PosComponent)
+        loadComponent: () => import('./pages/dashboard/pos/pos.component').then(m => m.PosComponent)
       }
     ]
   },
@@ -136,7 +132,7 @@ export const routes: Routes = [
   },
   {
     path: 'pos',
-    loadComponent: () => import('./pages/pos/pos.component').then(m => m.PosComponent),
+    loadComponent: () => import('./pages/dashboard/pos/pos.component').then(m => m.PosComponent),
     canActivate: [authGuard],
     data: { roles: ['admin', 'manager', 'cashier'] }
   }

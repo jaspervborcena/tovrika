@@ -138,7 +138,30 @@ export class ProductService {
       throw error;
     }
   }
+async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promise<void> {
+    try {
+      const productsRef = collection(this.firestore, 'products');
+      
+      let q;
+      if (storeId) {
+        q = query(productsRef, 
+          where('companyId', '==', companyId),
+          where('storeId', '==', storeId)
+        );
+      } else {
+        q = query(productsRef, where('companyId', '==', companyId));
+      }
+      
+      const querySnapshot = await getDocs(q);
 
+      const products = querySnapshot.docs.map(doc => this.transformFirestoreDoc(doc));
+      console.log("loadProductsByCompanyAndStore",products)
+      this.products.set(products);
+    } catch (error) {
+      console.error('Error loading products:', error);
+      throw error;
+    }
+  }
   async createProduct(productData: Omit<Product, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> {
     try {
       const companyId = await this.waitForAuth();
@@ -227,8 +250,14 @@ export class ProductService {
   async addInventoryBatch(productId: string, batch: ProductInventory): Promise<void> {
     const product = this.getProduct(productId);
     if (product) {
-      const updatedInventory = [...product.inventory, batch];
-      const totalStock = updatedInventory.reduce((sum, inv) => sum + inv.quantity, 0);
+      // Insert new batch at the top
+      let updatedInventory: ProductInventory[] = [batch, ...product.inventory];
+      // If the new batch is active, mark other batches inactive so only one active exists
+      if (batch.status === 'active') {
+        updatedInventory = updatedInventory.map((inv, idx) => idx === 0 ? inv : { ...inv, status: 'inactive' });
+      }
+      // totalStock should be calculated from active batches only
+      const totalStock = updatedInventory.reduce((sum, inv) => sum + ((inv.status === 'active') ? inv.quantity : 0), 0);
       await this.updateProduct(productId, { 
         inventory: updatedInventory,
         totalStock 
@@ -239,8 +268,9 @@ export class ProductService {
   async removeInventoryBatch(productId: string, batchId: string): Promise<void> {
     const product = this.getProduct(productId);
     if (product) {
-      const updatedInventory = product.inventory.filter(inv => inv.batchId !== batchId);
-      const totalStock = updatedInventory.reduce((sum, inv) => sum + inv.quantity, 0);
+  const updatedInventory = product.inventory.filter(inv => inv.batchId !== batchId);
+  // totalStock from active batches only
+  const totalStock = updatedInventory.reduce((sum, inv) => sum + ((inv.status === 'active') ? inv.quantity : 0), 0);
       await this.updateProduct(productId, { 
         inventory: updatedInventory,
         totalStock 
