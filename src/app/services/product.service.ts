@@ -60,6 +60,14 @@ export class ProductService {
       qrCode: data['qrCode'] || '',
       imageUrl: data['imageUrl'] || '',
       inventory: this.transformInventoryArray(data['inventory'] || []),
+      
+      // Tax and Discount Fields with defaults
+      isVatApplicable: data['isVatApplicable'] || false,
+      vatRate: data['vatRate'] || 0,
+      hasDiscount: data['hasDiscount'] || false,
+      discountType: data['discountType'] || 'percentage',
+      discountValue: data['discountValue'] || 0,
+      
       status: data['status'] || 'active',
       createdAt: data['createdAt']?.toDate() || new Date(),
       updatedAt: data['updatedAt']?.toDate() || new Date()

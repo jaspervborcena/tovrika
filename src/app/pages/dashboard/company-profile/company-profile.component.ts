@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
 import { CompanyService } from '../../../services/company.service';
+import { AuthService } from '../../../services/auth.service';
 import { Company } from '../../../interfaces/company.interface';
 
 @Component({
@@ -55,8 +56,8 @@ import { Company } from '../../../interfaces/company.interface';
       <div class="form-container">
         <div class="form-card">
           <div class="form-header">
-            <h2 class="form-title">Company Information</h2>
-            <p class="form-subtitle">Enter your company details and business information</p>
+            <h2 class="form-title">{{ isCreatingCompany() ? 'Create Company Profile' : 'Company Information' }}</h2>
+            <p class="form-subtitle">{{ isCreatingCompany() ? 'Set up your company profile to get started' : 'Update your company details and business information' }}</p>
           </div>
 
           <form [formGroup]="profileForm" (ngSubmit)="onSubmit()" class="company-form">
@@ -78,7 +79,7 @@ import { Company } from '../../../interfaces/company.interface';
 
             <!-- Email -->
             <div class="form-group">
-              <label for="email" class="form-label">Company Email</label>
+              <label for="email" class="form-label">Company Email *</label>
               <input 
                 id="email"
                 type="email" 
@@ -166,7 +167,7 @@ import { Company } from '../../../interfaces/company.interface';
                 [disabled]="loading() || profileForm.invalid"
                 class="btn btn-primary">
                 <span *ngIf="loading()" class="loading-spinner"></span>
-                {{ loading() ? 'Saving Changes...' : 'Save Company Profile' }}
+                {{ loading() ? 'Saving Changes...' : (isCreatingCompany() ? 'Create Company Profile' : 'Save Company Profile') }}
               </button>
             </div>
           </form>
@@ -446,6 +447,7 @@ import { Company } from '../../../interfaces/company.interface';
 export class CompanyProfileComponent {
   private fb = inject(FormBuilder);
   private companyService = inject(CompanyService);
+  private authService = inject(AuthService);
   private router = inject(Router);
 
   protected profileForm: FormGroup;
@@ -453,8 +455,10 @@ export class CompanyProfileComponent {
   protected error = signal<string | null>(null);
   protected showSuccessMessage = signal(false);
 
-  // Computed value for the current company
+  // Computed values
   protected currentCompany = computed(() => this.companyService.companies()[0]);
+  protected isCreatingCompany = computed(() => !this.authService.getCurrentUser()?.companyId);
+  protected currentUser = computed(() => this.authService.getCurrentUser());
 
   constructor() {
     this.profileForm = this.fb.group({
@@ -473,15 +477,29 @@ export class CompanyProfileComponent {
     // Update form when company changes
     effect(() => {
       const company = this.currentCompany();
+      const user = this.currentUser();
+      
       if (company) {
+        // Existing company - populate form
         this.profileForm.patchValue({
-          name: company.name,
-          logoUrl: company.logoUrl,
-          phone: company.phone,
-          address: company.address,
-          email: company.email,
-          taxId: company.taxId,
-          website: company.website
+          name: company.name || '',
+          logoUrl: company.logoUrl || '',
+          phone: company.phone || '',
+          address: company.address || '',
+          email: company.email || '',
+          taxId: company.taxId || '',
+          website: company.website || ''
+        });
+      } else if (user && !user.companyId) {
+        // New company creation - pre-populate with user email if available
+        this.profileForm.patchValue({
+          name: '',
+          logoUrl: '',
+          phone: '',
+          address: '',
+          email: user.email || '',
+          taxId: '',
+          website: ''
         });
       }
     });
@@ -494,36 +512,76 @@ export class CompanyProfileComponent {
         this.error.set(null);
         this.showSuccessMessage.set(false);
         
-        const company = this.currentCompany();
-        if (company) {
-          // Prepare the update data to match Company interface
-          const updateData: Partial<Company> = {
-            name: this.profileForm.value.name,
-            logoUrl: this.profileForm.value.logoUrl,
-            email: this.profileForm.value.email,
-            phone: this.profileForm.value.phone,
-            address: this.profileForm.value.address,
-            taxId: this.profileForm.value.taxId,
-            website: this.profileForm.value.website,
-            updatedAt: new Date()
+        const formData = this.profileForm.value;
+        const isCreating = this.isCreatingCompany();
+        
+        if (isCreating) {
+          // Create new company
+          const companyData: Omit<Company, 'id' | 'createdAt' | 'updatedAt'> = {
+            name: formData.name,
+            slug: formData.name.toLowerCase().replace(/[^a-z0-9]/g, '-'),
+            ownerUid: this.currentUser()?.uid || '',
+            plan: 'basic' as const,
+            onboardingStatus: {
+              profileCompleted: true,
+              storesCreated: false,
+              productsAdded: false,
+              firstSaleCompleted: false,
+              currentStep: 'store_creation'
+            },
+            logoUrl: formData.logoUrl || '',
+            email: formData.email,
+            phone: formData.phone || '',
+            address: formData.address || '',
+            taxId: formData.taxId || '',
+            website: formData.website || '',
+            settings: {
+              currency: 'USD',
+              timezone: 'America/New_York',
+              enableMultiStore: false,
+              defaultBusinessType: 'retail'
+            }
           };
 
-          await this.companyService.updateCompany(company.id!, updateData);
-          
-          // Show success message
+          await this.companyService.createCompany(companyData);
           this.showSuccessMessage.set(true);
           
-          // Hide success message after 3 seconds
+          // Show success message and redirect to dashboard after delay
           setTimeout(() => {
             this.showSuccessMessage.set(false);
-          }, 3000);
+            this.router.navigate(['/dashboard/overview']);
+          }, 2000);
           
-          // Reload companies to refresh the view
-          await this.companyService.loadCompanies();
+        } else {
+          // Update existing company
+          const company = this.currentCompany();
+          if (company) {
+            const updateData: Partial<Company> = {
+              name: formData.name,
+              logoUrl: formData.logoUrl,
+              email: formData.email,
+              phone: formData.phone,
+              address: formData.address,
+              taxId: formData.taxId,
+              website: formData.website,
+              updatedAt: new Date()
+            };
+
+            await this.companyService.updateCompany(company.id!, updateData);
+            this.showSuccessMessage.set(true);
+            
+            // Hide success message after 3 seconds
+            setTimeout(() => {
+              this.showSuccessMessage.set(false);
+            }, 3000);
+            
+            // Reload companies to refresh the view
+            await this.companyService.loadCompanies();
+          }
         }
       } catch (error) {
-        this.error.set('Failed to update company profile');
-        console.error('Error updating company profile:', error);
+        this.error.set(this.isCreatingCompany() ? 'Failed to create company profile' : 'Failed to update company profile');
+        console.error('Error with company profile:', error);
       } finally {
         this.loading.set(false);
       }
@@ -532,15 +590,29 @@ export class CompanyProfileComponent {
 
   protected resetForm() {
     const company = this.currentCompany();
+    const user = this.currentUser();
+    
     if (company) {
+      // Reset to existing company data
       this.profileForm.patchValue({
-        name: company.name,
-        logoUrl: company.logoUrl,
-        phone: company.phone,
-        address: company.address,
-        email: company.email,
-        taxId: company.taxId,
-        website: company.website
+        name: company.name || '',
+        logoUrl: company.logoUrl || '',
+        phone: company.phone || '',
+        address: company.address || '',
+        email: company.email || '',
+        taxId: company.taxId || '',
+        website: company.website || ''
+      });
+    } else if (user) {
+      // Reset to initial state for new company
+      this.profileForm.patchValue({
+        name: '',
+        logoUrl: '',
+        phone: '',
+        address: '',
+        email: user.email || '',
+        taxId: '',
+        website: ''
       });
     }
   }
