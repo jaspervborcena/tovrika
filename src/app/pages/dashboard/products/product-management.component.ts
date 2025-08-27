@@ -550,7 +550,7 @@ import { AuthService } from '../../../services/auth.service';
           </button>
         </div>
 
-        <div class="table-wrapper" *ngIf="filteredProducts().length > 0">
+      <div class="table-wrapper" *ngIf="filteredProducts().length > 0">
           <table class="products-table">
             <thead>
               <tr>
@@ -587,20 +587,21 @@ import { AuthService } from '../../../services/auth.service';
                     {{ product.totalStock }}
                   </span>
                 </td>
-                <td class="product-price-cell">\${{ product.sellingPrice.toFixed(2) }}</td>
+                <td class="product-price-cell">\${{ displayPrice(product).toFixed(2) }}</td>
                 <td class="product-store-cell">{{ getStoreName(product.storeId) }}</td>
                 <td class="status-cell">
                   <span class="status-badge" [class]="'status-' + (product.status || 'active')">
                     {{ (product.status || 'active') | titlecase }}
                   </span>
                 </td>
-                <td class="actions-cell">
+                  <td class="actions-cell">
                   <button 
                     class="btn btn-sm btn-secondary"
                     (click)="openEditModal(product)">
                     Edit
                   </button>
                   <button 
+                    *ngIf="product.isMultipleInventory"
                     class="btn btn-sm btn-secondary"
                     (click)="openInventoryModal(product)">
                     Inventory
@@ -639,10 +640,9 @@ import { AuthService } from '../../../services/auth.service';
     </div>
 
     <!-- Add/Edit Product Modal -->
-    <div class="modal-overlay" 
-         *ngIf="showModal" 
-         (click)="closeModal()"
-         style="position: fixed !important; z-index: 9999 !important; background: rgba(0, 0, 0, 0.8) !important;">
+  <div class="modal-overlay" 
+     *ngIf="showModal" 
+     style="position: fixed !important; z-index: 9999 !important; background: rgba(0, 0, 0, 0.8) !important;">
       <div class="modal" (click)="$event.stopPropagation()">
         <div class="modal-header">
           <h3>{{ isEditMode ? 'Edit Product' : 'Add New Product' }}</h3>
@@ -690,6 +690,17 @@ import { AuthService } from '../../../services/auth.service';
             </div>
 
             <div class="form-group">
+              <label for="totalStock">Total Stock</label>
+              <input
+                type="number"
+                id="totalStock"
+                formControlName="totalStock"
+                class="form-input"
+                placeholder="0"
+                [readonly]="productForm.get('totalStock')?.disabled">
+            </div>
+
+            <div class="form-group">
               <label for="sellingPrice">Selling Price *</label>
               <input
                 type="number"
@@ -697,7 +708,8 @@ import { AuthService } from '../../../services/auth.service';
                 step="0.01"
                 formControlName="sellingPrice"
                 class="form-input"
-                placeholder="0.00">
+                placeholder="0.00"
+                [readonly]="productForm.get('sellingPrice')?.disabled">
               <div class="error-message" *ngIf="productForm.get('sellingPrice')?.invalid && productForm.get('sellingPrice')?.touched">
                 Selling price is required
               </div>
@@ -739,12 +751,20 @@ import { AuthService } from '../../../services/auth.service';
 
             <div class="form-group">
               <label for="imageUrl">Image URL</label>
-              <input
-                type="url"
-                id="imageUrl"
-                formControlName="imageUrl"
-                class="form-input"
-                placeholder="Enter image URL">
+              <div style="display:flex; gap:0.5rem; align-items:center;">
+                <input
+                  type="url"
+                  id="imageUrl"
+                  formControlName="imageUrl"
+                  class="form-input"
+                  placeholder="Enter image URL">
+                <button type="button" class="btn btn-sm btn-secondary" (click)="triggerImageUpload()">
+                  <svg style="width:16px;height:16px;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7h4l3-3h4l3 3h4v11a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"></path></svg>
+                  <span *ngIf="!productForm.get('imageUrl')?.value"> Upload Image</span>
+                  <span *ngIf="productForm.get('imageUrl')?.value"> Replace Image</span>
+                </button>
+                <input id="hiddenImageFile" type="file" accept="image/*" style="display:none" (change)="onImageFileChange($event)" />
+              </div>
             </div>
 
             <div class="form-group">
@@ -757,45 +777,94 @@ import { AuthService } from '../../../services/auth.service';
               </label>
             </div>
 
-            <!-- Initial Inventory (only for new products) -->
-            <div *ngIf="!isEditMode" class="inventory-section">
-              <h4>Initial Inventory</h4>
-              <div class="form-group">
-                <label for="initialBatchId">Batch ID</label>
-                <input
-                  type="text"
-                  id="initialBatchId"
-                  formControlName="initialBatchId"
-                  class="form-input"
-                  placeholder="Enter batch ID">
-              </div>
-              <div class="form-group">
-                <label for="initialQuantity">Quantity</label>
-                <input
-                  type="number"
-                  id="initialQuantity"
-                  formControlName="initialQuantity"
-                  class="form-input"
-                  placeholder="0">
-              </div>
-              <div class="form-group">
-                <label for="initialUnitPrice">Unit Price</label>
-                <input
-                  type="number"
-                  id="initialUnitPrice"
-                  step="0.01"
-                  formControlName="initialUnitPrice"
-                  class="form-input"
-                  placeholder="0.00">
-              </div>
-              <div class="form-group">
-                <label for="initialReceivedAt">Received Date</label>
-                <input
-                  type="date"
-                  id="initialReceivedAt"
-                  formControlName="initialReceivedAt"
-                  class="form-input">
-              </div>
+            <!-- Inventory section: only visible when isMultipleInventory is checked -->
+            <div *ngIf="productForm.get('isMultipleInventory')?.value" class="inventory-section">
+              <h4 *ngIf="!isEditMode">Initial Inventory</h4>
+              <ng-container *ngIf="!isEditMode">
+                <div class="form-group">
+                  <label for="initialBatchId">Batch ID</label>
+                  <input
+                    type="text"
+                    id="initialBatchId"
+                    formControlName="initialBatchId"
+                    class="form-input"
+                    placeholder="Enter batch ID">
+                </div>
+                <div class="form-group">
+                  <label for="initialQuantity">Quantity</label>
+                  <input
+                    type="number"
+                    id="initialQuantity"
+                    formControlName="initialQuantity"
+                    class="form-input"
+                    placeholder="0">
+                </div>
+                <div class="form-group">
+                  <label for="initialUnitPrice">Unit Price</label>
+                  <input
+                    type="number"
+                    id="initialUnitPrice"
+                    step="0.01"
+                    formControlName="initialUnitPrice"
+                    class="form-input"
+                    placeholder="0.00">
+                </div>
+                <div class="form-group">
+                  <label for="initialReceivedAt">Received Date</label>
+                  <input
+                    type="date"
+                    id="initialReceivedAt"
+                    formControlName="initialReceivedAt"
+                    class="form-input">
+                </div>
+              </ng-container>
+
+              <ng-container *ngIf="isEditMode">
+                <h4 style="margin:0 0 1rem 0;">Current Inventory</h4>
+                <div style="display:flex; gap:0.5rem; align-items:center; margin-bottom:0.75rem;">
+                  <div style="flex:1">
+                    <small style="color:#6b7280;">Add a new batch below — new batches are added on top and only one batch can be active.</small>
+                  </div>
+                  <button class="btn btn-sm btn-primary" (click)="showAddBatchFromInventory()">＋ Add Batch</button>
+                </div>
+
+                <!-- Inline add batch form -->
+                <form [formGroup]="inventoryForm" (ngSubmit)="addInventoryBatch()" style="display:flex; gap:0.5rem; margin-bottom:1rem; align-items:center;">
+                  <input id="batchId" type="text" formControlName="batchId" class="form-input" placeholder="Batch ID" style="flex:1" />
+                  <input type="number" formControlName="quantity" class="form-input" placeholder="Quantity" style="width:100px" />
+                  <input type="number" formControlName="unitPrice" step="0.01" class="form-input" placeholder="Unit Price" style="width:120px" />
+                  <input type="date" formControlName="receivedAt" class="form-input" style="width:160px" />
+                  <button type="submit" class="btn btn-primary" [disabled]="inventoryForm.invalid">Add</button>
+                </form>
+
+                <!-- Current batches table (same as inventory modal) -->
+                <div style="border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden;" *ngIf="selectedProduct?.inventory?.length">
+                  <table style="width:100%; border-collapse:collapse;">
+                    <thead style="background:#f8fafc;"><tr>
+                      <th style="padding:0.5rem">Batch ID</th>
+                      <th style="padding:0.5rem">Quantity</th>
+                      <th style="padding:0.5rem">Unit Price</th>
+                      <th style="padding:0.5rem">Received</th>
+                      <th style="padding:0.5rem">Active</th>
+                      <th style="padding:0.5rem">Actions</th>
+                    </tr></thead>
+                    <tbody>
+                      <tr *ngFor="let b of selectedProduct?.inventory">
+                        <td style="padding:0.5rem">{{ b.batchId }}</td>
+                        <td style="padding:0.5rem">{{ b.quantity }}</td>
+                        <td style="padding:0.5rem">\${{ b.unitPrice.toFixed(2) }}</td>
+                        <td style="padding:0.5rem">{{ b.receivedAt | date }}</td>
+                        <td style="padding:0.5rem">
+                          <input type="checkbox" [checked]="b.status === 'active'" [disabled]="(b.quantity || 0) <= 0" (change)="setActiveBatch(b.batchId, $any($event.target).checked)" />
+                        </td>
+                        <td style="padding:0.5rem"><button class="btn btn-sm btn-danger" (click)="removeInventoryBatch(b.batchId)">Remove</button></td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <div *ngIf="!selectedProduct?.inventory?.length" style="padding:1rem; color:#6b7280;">No inventory batches found for this product.</div>
+              </ng-container>
             </div>
           </form>
         </div>
@@ -812,10 +881,9 @@ import { AuthService } from '../../../services/auth.service';
     </div>
 
     <!-- Inventory Modal -->
-    <div class="modal-overlay" 
-         *ngIf="showInventoryModal" 
-         (click)="closeInventoryModal()"
-         style="position: fixed !important; z-index: 9999 !important; background: rgba(0, 0, 0, 0.8) !important;">
+  <div class="modal-overlay" 
+     *ngIf="showInventoryModal" 
+     style="position: fixed !important; z-index: 9999 !important; background: rgba(0, 0, 0, 0.8) !important;">
       <div class="modal" (click)="$event.stopPropagation()" style="max-width: 800px;">
         <div class="modal-header">
           <div>
@@ -887,8 +955,12 @@ import { AuthService } from '../../../services/auth.service';
           </div>
 
           <!-- Inventory Batches Table -->
-          <div style="margin-top: 1.5rem;">
+          <div style="margin-top: 1.5rem;" *ngIf="selectedProduct?.isMultipleInventory">
             <h4 style="margin: 0 0 1rem 0; font-size: 1.125rem; font-weight: 600;">Current Inventory Batches</h4>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem;">
+              <h4 style="margin:0; font-size:1rem; font-weight:600;">Current Inventory Batches</h4>
+              <button class="btn btn-sm btn-primary" (click)="showAddBatchFromInventory()">＋ Add Batch</button>
+            </div>
             <div style="border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden;" *ngIf="selectedProduct?.inventory?.length">
               <table style="width: 100%; border-collapse: collapse;">
                 <thead style="background: #f8fafc;">
@@ -908,9 +980,10 @@ import { AuthService } from '../../../services/auth.service';
                     <td style="padding: 0.875rem 1rem; font-size: 0.875rem; color: #1f2937;">\${{ batch.unitPrice.toFixed(2) }}</td>
                     <td style="padding: 0.875rem 1rem; font-size: 0.875rem; color: #1f2937;">{{ batch.receivedAt | date }}</td>
                     <td style="padding: 0.875rem 1rem; font-size: 0.875rem; color: #1f2937;">
-                      <span class="status-badge" [class]="'status-' + batch.status">
-                        {{ batch.status | titlecase }}
-                      </span>
+                      <label style="display:flex; align-items:center; gap:0.5rem;">
+                        <input type="checkbox" [checked]="batch.status === 'active'" [disabled]="(batch.quantity || 0) <= 0" (change)="setActiveBatch(batch.batchId, $any($event.target).checked)" />
+                        <span>{{ batch.status | titlecase }}</span>
+                      </label>
                     </td>
                     <td style="padding: 0.875rem 1rem; font-size: 0.875rem; color: #1f2937;">
                       <button
@@ -965,6 +1038,11 @@ export class ProductManagementComponent implements OnInit {
   ) {
     this.productForm = this.createProductForm();
     this.inventoryForm = this.createInventoryForm();
+    // subscribe once to isMultipleInventory changes to toggle related controls
+    const isMultiCtrl = this.productForm.get('isMultipleInventory');
+    if (isMultiCtrl) {
+      isMultiCtrl.valueChanges.subscribe(v => this.toggleControlsForInventory(v));
+    }
   }
 
   async ngOnInit(): Promise<void> {
@@ -982,7 +1060,8 @@ export class ProductManagementComponent implements OnInit {
       productName: ['', Validators.required],
       skuId: ['', Validators.required],
       category: ['', Validators.required],
-      sellingPrice: [0, [Validators.required, Validators.min(0)]],
+  totalStock: [0, [Validators.min(0)]],
+  sellingPrice: [0, [Validators.required, Validators.min(0)]],
       storeId: ['', Validators.required],
       barcodeId: [''],
       qrCode: [''],
@@ -1034,8 +1113,17 @@ export class ProductManagementComponent implements OnInit {
     this.isEditMode = false;
     this.selectedProduct = null;
     this.productForm.reset({
-      initialReceivedAt: new Date().toISOString().split('T')[0]
+  initialReceivedAt: new Date().toISOString().split('T')[0],
+  isMultipleInventory: false,
+  initialBatchId: '',
+  initialQuantity: 0,
+  initialUnitPrice: 0
     });
+    // set totalStock from initial fields if provided
+    const initialQty = this.productForm.get('initialQuantity')?.value || 0;
+    this.productForm.get('totalStock')?.setValue(initialQty);
+    // apply control enabling/disabling based on isMultipleInventory
+    this.toggleControlsForInventory(this.productForm.get('isMultipleInventory')?.value);
     this.showModal = true;
     console.log('showModal set to:', this.showModal);
     this.cdr.detectChanges();
@@ -1045,7 +1133,26 @@ export class ProductManagementComponent implements OnInit {
     this.isEditMode = true;
     this.selectedProduct = product;
     this.productForm.patchValue(product);
+    // compute totalStock from product.inventory active batches
+    const total = (product.inventory || []).reduce((s, b) => s + ((b.status === 'active') ? (b.quantity || 0) : 0), 0);
+    this.productForm.get('totalStock')?.setValue(total);
+    // set sellingPrice to active batch unitPrice if multiple inventory
+    if (product.isMultipleInventory) {
+      const active = (product.inventory || []).find(b => b.status === 'active');
+      if (active) this.productForm.get('sellingPrice')?.setValue(active.unitPrice || 0);
+    }
+    this.toggleControlsForInventory(product.isMultipleInventory);
     this.showModal = true;
+  }
+
+  toggleControlsForInventory(isMultiple: boolean) {
+    if (isMultiple) {
+      this.productForm.get('totalStock')?.disable({ emitEvent: false });
+      this.productForm.get('sellingPrice')?.disable({ emitEvent: false });
+    } else {
+      this.productForm.get('totalStock')?.enable({ emitEvent: false });
+      this.productForm.get('sellingPrice')?.enable({ emitEvent: false });
+    }
   }
 
   openInventoryModal(product: Product): void {
@@ -1075,45 +1182,66 @@ export class ProductManagementComponent implements OnInit {
     this.loading = true;
     try {
       const formValue = this.productForm.value;
-      
+      // normalize sellingPrice to avoid undefined being written to Firestore
+      const computedSellingPrice = formValue.isMultipleInventory
+        ? (formValue.initialUnitPrice || (this.selectedProduct ? (this.selectedProduct.inventory || []).find((b: any) => b.status === 'active')?.unitPrice : 0) || 0)
+        : (formValue.sellingPrice ?? 0);
+
       if (this.isEditMode && this.selectedProduct) {
         // Update existing product
         const updates: Partial<Product> = {
           productName: formValue.productName,
           skuId: formValue.skuId,
           category: formValue.category,
-          sellingPrice: formValue.sellingPrice,
+          sellingPrice: computedSellingPrice,
           storeId: formValue.storeId,
           barcodeId: formValue.barcodeId,
           qrCode: formValue.qrCode,
           imageUrl: formValue.imageUrl,
           isMultipleInventory: formValue.isMultipleInventory
         };
-        
+
+        // compute totalStock for multiple inventory from active batches
+        if (formValue.isMultipleInventory && this.selectedProduct?.inventory) {
+          const total = this.selectedProduct.inventory.reduce((s, b) => s + ((b.status === 'active') ? (b.quantity || 0) : 0), 0);
+          updates.totalStock = total;
+        } else {
+          updates.totalStock = formValue.totalStock || 0;
+        }
+
         await this.productService.updateProduct(this.selectedProduct.id!, updates);
-      } else {
+        } else {
         // Create new product
-        const initialInventory: ProductInventory = {
-          batchId: formValue.initialBatchId || `BATCH-${Date.now()}`,
-          quantity: formValue.initialQuantity || 0,
-          unitPrice: formValue.initialUnitPrice || 0,
-          receivedAt: new Date(formValue.initialReceivedAt),
-          status: 'active'
-        };
+        let inventory: ProductInventory[] = [];
+        let totalStock = 0;
+        if (formValue.isMultipleInventory) {
+          const initialInventory: ProductInventory = {
+            batchId: formValue.initialBatchId || `BATCH-${Date.now()}`,
+            quantity: formValue.initialQuantity || 0,
+            unitPrice: formValue.initialUnitPrice || 0,
+            receivedAt: new Date(formValue.initialReceivedAt),
+            status: 'active'
+          };
+          inventory = [initialInventory];
+          totalStock = initialInventory.quantity;
+        } else {
+          // single inventory: use totalStock from form
+          totalStock = formValue.totalStock || 0;
+        }
 
         const newProduct: Omit<Product, 'id' | 'createdAt' | 'updatedAt'> = {
           productName: formValue.productName,
           skuId: formValue.skuId,
           category: formValue.category,
-          sellingPrice: formValue.sellingPrice,
+          sellingPrice: computedSellingPrice,
           companyId: '', // Will be set by service
           storeId: formValue.storeId,
           isMultipleInventory: formValue.isMultipleInventory,
           barcodeId: formValue.barcodeId,
           qrCode: formValue.qrCode,
           imageUrl: formValue.imageUrl,
-          inventory: [initialInventory],
-          totalStock: initialInventory.quantity,
+          inventory,
+          totalStock,
           
           // Tax and Discount Fields with defaults
           isVatApplicable: false,
@@ -1178,6 +1306,113 @@ export class ProductManagementComponent implements OnInit {
     }
   }
 
+  showAddBatchFromInventory(): void {
+    // open the inventory add section by focusing the batch form — we reuse inventoryForm
+    // scroll into view or focus the first input (best-effort)
+    setTimeout(() => {
+      const el = document.getElementById('batchId');
+      el?.focus();
+    }, 100);
+  }
+
+  async setActiveBatch(batchId: string, active: boolean): Promise<void> {
+    if (!this.selectedProduct) return;
+    try {
+      const product = this.productService.getProduct(this.selectedProduct.id!);
+      if (!product) return;
+
+      const updatedInventory = product.inventory.map(inv => ({
+        ...inv,
+        status: inv.batchId === batchId ? (active ? 'active' : 'inactive') : (active ? 'inactive' : inv.status)
+      }));
+
+      // Enforce only one active batch: if active=true set others inactive
+      if (active) {
+        for (const inv of updatedInventory) {
+          if (inv.batchId !== batchId) inv.status = 'inactive';
+        }
+      }
+
+      // compute totalStock from active batches only
+      const totalStock = updatedInventory.reduce((s, b) => s + ((b.status === 'active') ? (b.quantity || 0) : 0), 0);
+
+      await this.productService.updateProduct(product.id!, { inventory: updatedInventory, totalStock });
+      // refresh selectedProduct
+      this.selectedProduct = this.productService.getProduct(product.id!) || null;
+    } catch (err) {
+      console.error(err);
+      alert('Failed to set active batch');
+    }
+  }
+
+  triggerImageUpload(): void {
+    const el = document.getElementById('hiddenImageFile') as HTMLInputElement | null;
+    el?.click();
+  }
+
+  async onImageFileChange(ev: Event): Promise<void> {
+    const input = ev.target as HTMLInputElement;
+    if (!input.files || input.files.length === 0) return;
+    const file = input.files[0];
+    try {
+      const compressed = await this.compressImage(file, 1024 * 1024);
+      const url = await this.uploadFileToStorage(compressed);
+      this.productForm.get('imageUrl')?.setValue(url);
+    } catch (err) {
+      console.error(err);
+      alert('Image compression or upload failed. Please upload a smaller image.');
+    }
+  }
+
+  async compressImage(file: File, maxBytes: number): Promise<File> {
+    const img = await this.loadImage(URL.createObjectURL(file));
+    const targetInches = 2;
+    const dpi = 96;
+    const targetPx = Math.round(targetInches * dpi);
+
+    const canvas = document.createElement('canvas');
+    canvas.width = targetPx;
+    canvas.height = targetPx;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('Canvas not supported');
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+    for (let q = 0.9; q >= 0.4; q -= 0.1) {
+      const blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, 'image/jpeg', q));
+      if (!blob) continue;
+      if (blob.size <= maxBytes) return new File([blob], file.name, { type: 'image/jpeg' });
+    }
+
+    canvas.width = Math.round(targetPx / 1.5);
+    canvas.height = Math.round(targetPx / 1.5);
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    const blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, 'image/jpeg', 0.7));
+    if (!blob) throw new Error('Compression failed');
+    if (blob.size > maxBytes) throw new Error('Too large');
+    return new File([blob], file.name, { type: 'image/jpeg' });
+  }
+
+  loadImage(src: string): Promise<HTMLImageElement> {
+    return new Promise((res, rej) => {
+      const img = new Image();
+      img.onload = () => res(img);
+      img.onerror = rej;
+      img.src = src;
+    });
+  }
+
+  async uploadFileToStorage(file: File): Promise<string> {
+    // use firebase storage via firebase.config (getStorage/app already available in other components)
+    // dynamic import to avoid top-level SDK usage here
+    const { getStorage, ref, uploadBytes, getDownloadURL } = await import('firebase/storage');
+  const { app } = await import('../../../firebase.config');
+    const storage = getStorage(app);
+    const storageRef = ref(storage, `products/${Date.now()}_${file.name}`);
+    const snap = await uploadBytes(storageRef, file);
+    const url = await getDownloadURL(snap.ref);
+    return url;
+  }
+
   async deleteProduct(product: Product): Promise<void> {
     if (!confirm(`Are you sure you want to delete "${product.productName}"?`)) return;
 
@@ -1232,5 +1467,13 @@ export class ProductManagementComponent implements OnInit {
       default:
         return 'px-2 py-1 text-xs rounded-full bg-gray-100 text-gray-800';
     }
+  }
+
+  displayPrice(product: Product): number {
+    if (product.isMultipleInventory && product.inventory && product.inventory.length) {
+      const active = product.inventory.find(b => b.status === 'active');
+      if (active) return active.unitPrice || product.sellingPrice;
+    }
+    return product.sellingPrice;
   }
 }
