@@ -14,6 +14,14 @@ export interface Product {
   qrCode?: string;
   imageUrl?: string;
   inventory: ProductInventory[];
+  
+  // Tax and Discount Fields
+  isVatApplicable: boolean;
+  vatRate: number; // percentage
+  hasDiscount: boolean;
+  discountType: 'percentage' | 'fixed';
+  discountValue: number;
+  
   status?: 'active' | 'inactive';
   createdAt?: Date;
   updatedAt?: Date;
