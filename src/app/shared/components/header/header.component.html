@@ -11,6 +11,36 @@
           <h1 class="logo-text">
             <a routerLink="/" class="logo-link">Tovrika</a>
           </h1>
+          
+          <!-- Device Toggle beside Tovrika -->
+          @if (isPosPage()) {
+            @if (isMobilePosPage()) {
+              <button 
+                class="device-toggle-btn desktop-toggle logo-toggle"
+                (click)="switchToDesktop()"
+                title="Switch to Desktop View"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="2" y="4" width="20" height="12" rx="2"/>
+                  <path d="M2 16h20"/>
+                  <circle cx="12" cy="20" r="1"/>
+                </svg>
+                Desktop
+              </button>
+            } @else {
+              <button 
+                class="device-toggle-btn mobile-toggle logo-toggle"
+                (click)="switchToMobile()"
+                title="Switch to Mobile View"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="5" y="2" width="14" height="20" rx="2" ry="2"/>
+                  <line x1="12" y1="18" x2="12.01" y2="18"/>
+                </svg>
+                Mobile
+              </button>
+            }
+          }
         </div>
         <!-- <div class="breadcrumb">
           <span class="breadcrumb-item">Dashboard</span>
@@ -19,6 +49,7 @@
       
       <div class="header-right">
         <div class="header-actions">
+
           <!-- Notifications -->
           <button class="header-btn" title="Notifications">
             <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">

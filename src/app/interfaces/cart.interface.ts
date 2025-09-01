@@ -6,6 +6,9 @@ export interface CartItem {
   subtotal: number;
   discount?: number;
   discountType?: 'percentage' | 'fixed';
+  isVatApplicable?: boolean;
+  isVatExempt?: boolean;
+  vatAmount?: number;
 }
 
 export interface Cart {

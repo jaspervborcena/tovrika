@@ -40,6 +40,13 @@
   gap: 0.75rem;
 }
 
+.logo-toggle {
+  margin-left: 1rem;
+  padding: 0.5rem 0.75rem !important;
+  font-size: 0.8rem !important;
+  border-radius: 6px !important;
+}
+
 .logo-icon {
   width: 2.5rem;
   height: 2.5rem;
@@ -129,6 +136,59 @@
 .header-btn svg {
   width: 1.25rem;
   height: 1.25rem;
+}
+
+/* Device Toggle Button Styles */
+.device-toggle-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: rgba(255, 255, 255, 0.15);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 12px;
+  color: white;
+  cursor: pointer;
+  font-size: 0.875rem;
+  font-weight: 500;
+  transition: all 0.3s ease;
+  min-width: auto;
+  height: 2.5rem;
+}
+
+.device-toggle-btn:hover {
+  background: rgba(255, 255, 255, 0.25);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+}
+
+.device-toggle-btn:active {
+  transform: translateY(0);
+}
+
+.device-toggle-btn svg {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
+.mobile-toggle {
+  background: rgba(59, 130, 246, 0.2);
+  border-color: rgba(59, 130, 246, 0.3);
+}
+
+.mobile-toggle:hover {
+  background: rgba(59, 130, 246, 0.3);
+}
+
+.desktop-toggle {
+  background: rgba(16, 185, 129, 0.2);
+  border-color: rgba(16, 185, 129, 0.3);
+}
+
+.desktop-toggle:hover {
+  background: rgba(16, 185, 129, 0.3);
 }
 
 .notification-badge {

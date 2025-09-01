@@ -116,7 +116,7 @@ export class PosService {
   }
 
   // Order Processing
-  async processOrder(paymentMethod: string = 'cash'): Promise<string | null> {
+  async processOrder(paymentMethod: string = 'cash', customerInfo?: any): Promise<string | null> {
     try {
       this.isProcessingSignal.set(true);
       
@@ -139,18 +139,40 @@ export class PosService {
 
       const summary = this.cartSummary();
 
-      // Create order
+      // Create order with enhanced BIR-compliant fields
       const order: Omit<Order, 'id'> = {
         companyId: company.id!,
         storeId: storeId,
         assignedCashierId: user.uid,
         status: 'paid',
-        totalAmount: summary.netAmount,
+        
+        // Customer Information - Use provided data or defaults
+        cashSale: true,
+        soldTo: customerInfo?.soldTo || 'Walk-in Customer',
+        tin: customerInfo?.tin || '',
+        businessAddress: customerInfo?.businessAddress || '',
+        
+        // Invoice Information
+        invoiceNumber: customerInfo?.invoiceNumber || `INV-${new Date().getFullYear()}-${String(Date.now()).slice(-6)}`,
+        date: customerInfo?.date || new Date(),
+        logoUrl: company.logoUrl || '',
+        
+        // Financial Calculations
+        vatableSales: summary.grossAmount - summary.vatExemptAmount,
         vatAmount: summary.vatAmount,
+        zeroRatedSales: 0.00,
         vatExemptAmount: summary.vatExemptAmount,
         discountAmount: summary.discountAmount,
         grossAmount: summary.grossAmount,
         netAmount: summary.netAmount,
+        totalAmount: summary.netAmount,
+        
+        // BIR Required Fields - Use company settings if available, otherwise hardcoded defaults
+        atpOrOcn: company.atpOrOcn || 'OCN-2025-001234',
+        birPermitNo: company.birPermitNo || 'BIR-PERMIT-2025-56789',
+        inclusiveSerialNumber: company.inclusiveSerialNumber || '000001-000999',
+        
+        // System Fields
         createdAt: new Date(),
         message: 'Thank you! See you again!'
       };

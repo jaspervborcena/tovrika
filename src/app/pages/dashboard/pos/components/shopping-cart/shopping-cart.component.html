@@ -1,0 +1,131 @@
+<div class="cart-panel">
+  <h3 class="cart-title">Shopping Cart</h3>
+
+  <!-- Cart Items -->
+  <div class="cart-items" *ngIf="cartItems.length > 0; else emptyCart">
+    <div *ngFor="let item of cartItems" class="cart-item">
+      <div class="item-info">
+        <h4 class="item-name">{{ item.productName }}</h4>
+        <p class="item-sku">{{ item.skuId }}</p>
+        <div class="item-controls">
+          <label class="vat-toggle">
+            <input type="checkbox" 
+                   [checked]="!item.isVatExempt"
+                   (change)="onToggleVat(item.productId)">
+            <span>VAT</span>
+          </label>
+        </div>
+      </div>
+
+      <div class="item-quantity">
+        <button class="qty-btn" 
+                (click)="onQuantityChange(item.productId, item.quantity - 1)"
+                [disabled]="item.quantity <= 1">
+          -
+        </button>
+        <input type="number" 
+               class="qty-input"
+               [value]="item.quantity"
+               (change)="onQuantityChange(item.productId, +$any($event.target).value)"
+               min="1">
+        <button class="qty-btn" 
+                (click)="onQuantityChange(item.productId, item.quantity + 1)">
+          +
+        </button>
+      </div>
+
+      <div class="item-price">
+        <div class="unit-price">₱{{ item.sellingPrice | number:'1.2-2' }}</div>
+        <div class="total-price">₱{{ item.total | number:'1.2-2' }}</div>
+      </div>
+
+      <button class="remove-btn" 
+              (click)="onRemoveItem(item.productId)"
+              title="Remove item">
+        ×
+      </button>
+    </div>
+  </div>
+
+  <ng-template #emptyCart>
+    <div class="empty-cart">
+      <div class="empty-icon">🛒</div>
+      <p>Your cart is empty</p>
+      <span class="empty-subtitle">Add products to get started</span>
+    </div>
+  </ng-template>
+
+  <!-- Cart Summary -->
+  <div class="cart-summary" *ngIf="cartItems.length > 0">
+    <div class="summary-row">
+      <span>Items ({{ cartSummary.itemCount }})</span>
+      <span>₱{{ cartSummary.grossAmount | number:'1.2-2' }}</span>
+    </div>
+    <div class="summary-row" *ngIf="cartSummary.discountAmount > 0">
+      <span>Discount</span>
+      <span class="discount">-₱{{ cartSummary.discountAmount | number:'1.2-2' }}</span>
+    </div>
+    <div class="summary-row" *ngIf="cartSummary.vatAmount > 0">
+      <span>VAT</span>
+      <span>₱{{ cartSummary.vatAmount | number:'1.2-2' }}</span>
+    </div>
+    <div class="summary-row" *ngIf="cartSummary.vatExemptAmount > 0">
+      <span>VAT Exempt</span>
+      <span>₱{{ cartSummary.vatExemptAmount | number:'1.2-2' }}</span>
+    </div>
+    <div class="summary-row total">
+      <span>Total</span>
+      <span>₱{{ cartSummary.netAmount | number:'1.2-2' }}</span>
+    </div>
+  </div>
+
+  <!-- Payment Section -->
+  <div class="payment-section" *ngIf="cartItems.length > 0">
+    <h4>Payment</h4>
+    
+    <!-- Payment Method -->
+    <div class="payment-methods">
+      <label *ngFor="let method of paymentMethods" class="payment-method">
+        <input type="radio" 
+               [value]="method.value"
+               [checked]="paymentMethod === method.value"
+               (change)="onPaymentMethodChange(method.value)">
+        <span>{{ method.label }}</span>
+      </label>
+    </div>
+
+    <!-- Cash Amount Input -->
+    <div class="payment-amount" *ngIf="paymentMethod === 'cash'">
+      <label for="cashAmount">Cash Amount:</label>
+      <input type="number" 
+             id="cashAmount"
+             class="amount-input"
+             [value]="paymentAmount"
+             (input)="onPaymentAmountChange(+$any($event.target).value)"
+             [min]="cartSummary.netAmount"
+             step="0.01"
+             placeholder="Enter amount">
+      
+      <div class="change-info" *ngIf="paymentAmount >= cartSummary.netAmount">
+        <div class="change-row">
+          <span>Change:</span>
+          <span class="change-amount">₱{{ changeAmount | number:'1.2-2' }}</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Checkout Button -->
+  <div class="checkout-section" *ngIf="cartItems.length > 0">
+    <button class="checkout-btn" 
+            [disabled]="!canCheckout || isProcessing"
+            (click)="onCheckout()">
+      <span *ngIf="!isProcessing">
+        Process Payment (₱{{ cartSummary.netAmount | number:'1.2-2' }})
+      </span>
+      <span *ngIf="isProcessing">
+        Processing...
+      </span>
+    </button>
+  </div>
+</div>

@@ -1,0 +1,1416 @@
+    .pos-container {
+      /* account for fixed header height (80px) so the POS content sits below it */
+      margin-top: 80px;
+      height: calc(100vh - 80px);
+      display: flex;
+      flex-direction: column;
+      background: #f8fafc;
+    }
+
+    .store-tabs {
+      background: white;
+      border-bottom: 1px solid #e2e8f0;
+      padding: 1rem 2rem;
+    }
+
+    .tabs-header {
+      display: flex;
+      gap: 0.5rem;
+    }
+
+    .store-tab {
+      padding: 0.75rem 1.5rem;
+      border: 1px solid #d1d5db;
+      background: white;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .store-tab.active {
+      background: #3b82f6;
+      color: white;
+      border-color: #3b82f6;
+    }
+
+    /* Invoice Controls at Store Level */
+    .invoice-controls-top {
+      display: flex;
+      gap: 1rem;
+      align-items: center;
+    }
+
+    .invoice-controls-top .control-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+
+    .invoice-controls-top .control-group label {
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: #374151;
+      white-space: nowrap;
+    }
+
+    .invoice-controls-top input {
+      width: 180px;
+      padding: 0.4rem;
+      border: 1px solid #d1d5db;
+      border-radius: 4px;
+      font-size: 0.8rem;
+      background: white;
+      transition: border-color 0.2s;
+    }
+
+    .invoice-controls-top input:focus {
+      outline: none;
+      border-color: #3b82f6;
+      box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+    }
+
+    .pos-layout {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    /* small horizontal padding so content doesn't start too far from left on responsive widths */
+    @media (max-width: 1250px) {
+      .pos-container {
+        padding-left: 12px;
+        padding-right: 12px;
+      }
+      .pos-layout {
+        padding-left: 0;
+        padding-right: 0;
+      }
+    }
+
+    .left-panel {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      background: white;
+      border-right: 1px solid #e2e8f0;
+    }
+
+    .categories-panel {
+      padding: 1rem;
+      border-bottom: 1px solid #e2e8f0;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+
+    .categories-panel h3 {
+      margin: 0 0 1rem 0;
+      font-size: 1.125rem;
+      font-weight: 600;
+      color: #1f2937;
+    }
+
+    .category-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+
+    .category-btn {
+      padding: 0.5rem 1rem;
+      border: 1px solid #d1d5db;
+      background: white;
+      border-radius: 20px;
+      cursor: pointer;
+      font-size: 0.875rem;
+      transition: all 0.2s;
+    }
+
+    .category-btn:hover,
+    .category-btn.active {
+      background: #3b82f6;
+      color: white;
+      border-color: #3b82f6;
+    }
+
+    /* Customer Information Form Styles */
+    .customer-info-panel {
+      padding: 1rem;
+      border-bottom: 1px solid #e2e8f0;
+      background: #f8fafc;
+    }
+
+    .customer-info-panel h3 {
+      margin: 0 0 1rem 0;
+      font-size: 1.125rem;
+      font-weight: 600;
+      color: #1f2937;
+    }
+
+    .customer-form {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+
+    .form-group label {
+      font-size: 0.875rem;
+      font-weight: 500;
+      color: #374151;
+    }
+
+    .form-group input {
+      padding: 0.5rem;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      font-size: 0.875rem;
+      background: white;
+      transition: border-color 0.2s;
+    }
+
+    .form-group input:focus {
+      outline: none;
+      border-color: #3b82f6;
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    }
+
+    .form-group input:invalid {
+      border-color: #ef4444;
+    }
+
+    .form-row {
+      display: flex;
+      gap: 0.75rem;
+    }
+
+    .form-row .form-group {
+      flex: 1;
+    }
+
+    /* Collapsible Sold To Panel */
+    .sold-to-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      cursor: pointer;
+      padding: 0.5rem;
+      border-radius: 6px;
+      transition: background-color 0.2s ease;
+    }
+
+    .sold-to-header:hover {
+      background: rgba(59, 130, 246, 0.05);
+    }
+
+    .sold-to-header h3 {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin: 0;
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: #374151;
+    }
+
+    .sold-to-header svg {
+      width: 16px;
+      height: 16px;
+      transition: transform 0.2s ease;
+      color: #6b7280;
+    }
+
+    .sold-to-preview {
+      font-size: 0.75rem;
+      color: #6b7280;
+      max-width: 120px;
+      text-overflow: ellipsis;
+      overflow: hidden;
+      white-space: nowrap;
+    }
+
+    .search-section {
+      padding: 1rem;
+      border-bottom: 1px solid #e2e8f0;
+    }
+
+    .search-bar {
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+
+    .search-icon {
+      position: absolute;
+      left: 1rem;
+      width: 1.25rem;
+      height: 1.25rem;
+      color: #6b7280;
+      z-index: 1;
+    }
+
+    .search-input {
+      width: 100%;
+      padding: 0.75rem 1rem 0.75rem 3rem;
+      border: 1px solid #d1d5db;
+      border-radius: 8px;
+      font-size: 0.875rem;
+      background: white;
+    }
+
+    .search-input:focus {
+      outline: none;
+      border-color: #3b82f6;
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    }
+
+    .clear-btn {
+      position: absolute;
+      right: 1rem;
+      background: none;
+      border: none;
+      font-size: 1.25rem;
+      color: #6b7280;
+      cursor: pointer;
+    }
+
+    .product-tabs {
+      display: flex;
+      border-bottom: 1px solid #e2e8f0;
+    }
+
+    /* Access tabs (horizontal row above search) */
+    .access-tabs {
+      padding: 0.5rem 0;
+      margin-bottom: 0.5rem;
+      border-bottom: 1px solid #e2e8f0;
+    }
+
+    .access-tab-list {
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+      overflow-x: auto;
+      padding: 0.25rem 0.25rem;
+      -webkit-overflow-scrolling: touch;
+      white-space: nowrap;
+    }
+
+    .tab-header {
+      padding: 0.5rem 1rem;
+      border: 1px solid #d1d5db;
+      background: white;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.875rem;
+      font-weight: 500;
+      color: #374151;
+      transition: all 0.2s;
+      white-space: nowrap;
+      min-width: auto;
+    }
+
+    .tab-header:hover {
+      background: #f3f4f6;
+      border-color: #9ca3af;
+    }
+
+    .tab-header.active {
+      background: #3b82f6;
+      color: white;
+      border-color: #3b82f6;
+    }
+
+    .tab-content {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .tab-label {
+      font-weight: inherit;
+    }
+
+    .tab-btn.small {
+      padding: 0.5rem 0.75rem;
+      font-size: 0.875rem;
+      min-width: auto;
+      border: 1px solid transparent;
+      background: #ffffff;
+      border-radius: 9999px;
+      cursor: pointer;
+    }
+
+    .tab-btn.small.active,
+    .tab-btn.small:hover {
+      background: #3b82f6;
+      color: white;
+      border-color: #3b82f6;
+    }
+
+    .tab-btn {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      padding: 1rem;
+      border: none;
+      background: white;
+      cursor: pointer;
+      font-size: 0.875rem;
+      font-weight: 500;
+      color: #6b7280;
+      transition: all 0.2s;
+    }
+
+    .tab-btn svg {
+      width: 1.25rem;
+      height: 1.25rem;
+    }
+
+    .tab-btn:hover,
+    .tab-btn.active {
+      color: #3b82f6;
+      background: #f8fafc;
+    }
+
+    /* Reuse Access component's square tab header styles for consistency */
+    .tab-header {
+      background: white;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      padding: 0.75rem 1rem;
+      cursor: pointer;
+      transition: all 0.2s;
+      min-width: 120px;
+      text-align: left;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .tab-header:hover {
+      border-color: #667eea;
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    }
+
+    .tab-header.active {
+      border-color: #667eea;
+      background: #667eea;
+      color: white;
+    }
+
+    .tab-content {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+
+    .tab-label {
+      font-weight: 600;
+      font-size: 0.95rem;
+    }
+
+    .products-display {
+      flex: 1;
+      overflow-y: auto;
+      padding: 1rem;
+    }
+
+    .products-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .product-list-item {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      padding: 1rem;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.2s;
+      background: white;
+    }
+
+    .product-list-item:hover {
+      border-color: #3b82f6;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+
+    .product-list-item.bestseller {
+      position: relative;
+    }
+
+    .rank-badge {
+      position: absolute;
+      top: -8px;
+      left: -8px;
+      background: #f59e0b;
+      color: white;
+      border-radius: 50%;
+      width: 24px;
+      height: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.75rem;
+      font-weight: bold;
+    }
+
+    .product-image-small {
+      width: 60px;
+      height: 60px;
+      object-fit: cover;
+      border-radius: 6px;
+      background: #f3f4f6;
+    }
+
+    .product-info {
+      flex: 1;
+    }
+
+    .product-info h4 {
+      margin: 0 0 0.25rem 0;
+      font-size: 1rem;
+      font-weight: 600;
+      color: #1f2937;
+    }
+
+    .product-sku,
+    .product-stock {
+      margin: 0;
+      font-size: 0.75rem;
+      color: #6b7280;
+    }
+
+    .product-price {
+      text-align: right;
+      font-weight: 600;
+      color: #1f2937;
+    }
+
+    .discount-badge {
+      display: block;
+      font-size: 0.75rem;
+      color: #dc2626;
+      font-weight: 500;
+      margin-top: 0.25rem;
+    }
+
+    .products-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 1rem;
+    }
+
+    .product-grid-item {
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      padding: 1rem;
+      cursor: pointer;
+      transition: all 0.2s;
+      background: white;
+      position: relative;
+    }
+
+    .product-grid-item:hover {
+      border-color: #3b82f6;
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    }
+
+    .product-grid-item.promo {
+      border-color: #f59e0b;
+    }
+
+    .promo-badge {
+      position: absolute;
+      top: -8px;
+      right: -8px;
+      background: #f59e0b;
+      color: white;
+      padding: 0.25rem 0.5rem;
+      border-radius: 12px;
+      font-size: 0.75rem;
+      font-weight: bold;
+    }
+
+    .product-image {
+      width: 100%;
+      height: 120px;
+      object-fit: cover;
+      border-radius: 6px;
+      background: #f3f4f6;
+      margin-bottom: 1rem;
+    }
+
+    .product-details h4 {
+      margin: 0 0 0.5rem 0;
+      font-size: 1rem;
+      font-weight: 600;
+      color: #1f2937;
+    }
+
+    .product-description {
+      margin: 0 0 0.5rem 0;
+      font-size: 0.875rem;
+      color: #6b7280;
+    }
+
+    .product-pricing {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .price {
+      font-weight: 600;
+      color: #1f2937;
+    }
+
+    .discount {
+      font-size: 0.75rem;
+      color: #dc2626;
+      font-weight: 500;
+    }
+
+    .right-panel {
+      width: 480px; /* Increased from 400px for better receipt width */
+      background: white;
+      border-left: 1px solid #e2e8f0;
+    }
+
+    .receipt-panel {
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      /* add ~10px more internal padding for breathing room */
+      padding: calc(1rem + 0.1px);
+      min-height: 0; /* allow flex children to shrink so footer stays visible */
+    }
+
+    .receipt-header {
+      border-bottom: 1px solid #e2e8f0;
+      padding-bottom: 1rem;
+      margin-bottom: 1rem;
+    }
+
+    /* Invoice Controls at Top of Receipt */
+    .invoice-controls {
+      background: #f1f5f9;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      padding: 1rem;
+      margin-bottom: 1rem;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+    }
+
+    .control-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+
+    .control-group label {
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: #374151;
+    }
+
+    .invoice-input,
+    .date-input {
+      padding: 0.5rem;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      font-size: 0.875rem;
+      background: white;
+      transition: border-color 0.2s;
+    }
+
+    .invoice-input:focus,
+    .date-input:focus {
+      outline: none;
+      border-color: #3b82f6;
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    }
+
+    /* Invoice Display (Read-only) */
+    .invoice-display {
+      background: #fef3c7;
+      border: 1px solid #fbbf24;
+      border-radius: 6px;
+      padding: 0.75rem;
+      margin-bottom: 1rem;
+      font-size: 0.875rem;
+      color: #92400e;
+      line-height: 1.5;
+    }
+
+    .invoice-info {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: #f8fafc;
+      padding: 0.75rem;
+      border-radius: 6px;
+      margin-bottom: 1rem;
+      border: 1px solid #e2e8f0;
+    }
+
+    .invoice-number,
+    .invoice-date {
+      font-size: 0.875rem;
+      color: #374151;
+    }
+
+    .invoice-number strong,
+    .invoice-date strong {
+      color: #1f2937;
+      font-weight: 600;
+    }
+
+    .store-info-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+      margin-top: 1rem;
+    }
+
+    .store-column {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .company-info h2 {
+      margin: 0 0 0.5rem 0;
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: #1f2937;
+    }
+
+    .company-info p {
+      margin: 0.25rem 0;
+      font-size: 0.875rem;
+      color: #6b7280;
+    }
+
+    .company-logo {
+      text-align: center;
+      margin-bottom: 1rem;
+    }
+
+    .logo-image {
+      max-width: 120px;
+      max-height: 80px;
+      height: auto;
+      width: auto;
+      object-fit: contain;
+      border-radius: 4px;
+    }
+
+    .receipt-date {
+      margin-top: 0.5rem !important;
+      font-weight: 500 !important;
+      color: #374151 !important;
+    }
+
+    .cart-items {
+      flex: 1 1 auto;
+      overflow-y: auto;
+      min-height: 0; /* allow the cart to shrink inside the receipt panel */
+      /* keep a reasonable max so the footer (summary/actions) remains visible */
+      max-height: calc(100% - 200px);
+    }
+
+    .cart-header {
+      display: grid;
+      grid-template-columns: 2fr 1fr 1fr 1fr;
+      gap: 0.5rem;
+      padding: 0.5rem;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: #6b7280;
+      text-transform: uppercase;
+      border-bottom: 1px solid #e2e8f0;
+      margin-bottom: 0.5rem;
+    }
+
+    .empty-cart {
+      text-align: center;
+      padding: 2rem;
+      color: #6b7280;
+    }
+
+    .cart-item {
+      border-bottom: 1px solid #f3f4f6;
+      padding: 0.75rem;
+      margin-bottom: 0.5rem;
+      display: grid;
+      grid-template-columns: 2fr 1fr 1fr 1fr;
+      gap: 0.75rem;
+      align-items: center;
+      min-height: 64px; /* give each cart row more vertical space */
+    }
+
+    .cart-item:last-child {
+      border-bottom: none;
+    }
+
+    .item-details {
+      display: flex !important;
+      flex-direction: column !important;
+      align-items: flex-start !important;
+    }
+
+    .item-name {
+      font-weight: 500;
+      color: #1f2937;
+      font-size: 0.875rem;
+    }
+
+    .item-sku {
+      font-size: 0.75rem;
+      color: #6b7280;
+    }
+
+    .quantity-controls {
+      display: flex !important;
+      align-items: center;
+     
+    }
+
+    .qty-btn {
+      width: 24px;
+      height: 24px;
+      border: 1px solid #d1d5db;
+      background: white;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.875rem;
+    }
+
+    .qty-btn:hover {
+      background: #f3f4f6;
+    }
+
+    .quantity {
+      font-weight: 500;
+      min-width: 20px;
+      text-align: center;
+    }
+
+    .item-price,
+    .item-total {
+      font-weight: 500;
+      color: #1f2937;
+      text-align: right;
+    }
+
+    .item-total {
+      display: flex !important;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .remove-btn {
+      background: #ef4444;
+      color: white;
+      border: none;
+      border-radius: 50%;
+      width: 22px;
+      height: 22px;
+      cursor: pointer;
+      font-size: 0.75rem;
+      margin-left: 0.5rem;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .item-controls {
+      grid-column: 1 / -1; /* span all grid columns */
+      padding-top: 0.5rem;
+    }
+
+    .vat-exempt-toggle {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.75rem;
+      color: #6b7280;
+      cursor: pointer;
+    }
+
+    .receipt-summary {
+      border-top: 1px solid #e2e8f0;
+      padding-top: 1rem;
+      margin-top: 1rem;
+    }
+
+    .summary-line {
+      display: flex;
+      justify-content: space-between;
+      padding: 0.25rem 0;
+      font-size: 0.875rem;
+    }
+
+    .summary-line.gross {
+      border-top: 1px solid #e2e8f0;
+      padding-top: 0.5rem;
+      margin-top: 0.5rem;
+      font-weight: 600;
+    }
+
+    .summary-line.total {
+      border-top: 2px solid #1f2937;
+      padding-top: 0.5rem;
+      margin-top: 0.5rem;
+      font-weight: 700;
+      font-size: 1.125rem;
+      color: #1f2937;
+    }
+
+    .action-buttons {
+      display: flex;
+      gap: 0.5rem;
+      margin-top: 1rem;
+    }
+
+    .btn {
+      flex: 1;
+      padding: 0.75rem 1rem;
+      border: none;
+      border-radius: 8px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .btn-secondary {
+      background: #f3f4f6;
+      color: #374151;
+      border: 1px solid #d1d5db;
+    }
+
+    .btn-secondary:hover:not(:disabled) {
+      background: #e5e7eb;
+    }
+
+    .btn-primary {
+      background: #3b82f6;
+      color: white;
+    }
+
+    .btn-primary:hover:not(:disabled) {
+      background: #2563eb;
+    }
+
+    .receipt-footer {
+      border-top: 1px solid #e2e8f0;
+      padding-top: 1rem;
+      margin-top: 1rem;
+      text-align: center;
+    }
+
+    .receipt-footer p {
+      margin: 0;
+      font-size: 0.875rem;
+      color: #6b7280;
+      font-style: italic;
+    }
+
+    @media (max-width: 1200px) {
+      .right-panel {
+        width: 420px; /* Slightly smaller on larger tablets */
+      }
+    }
+
+    @media (max-width: 1024px) {
+      .right-panel {
+        width: 380px; /* Medium tablets */
+      }
+      
+      .products-grid {
+        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+      }
+      /* Slightly move down the receipt panel on tablet for better spacing */
+      .receipt-panel {
+        margin-top: 8px;
+        padding: calc(1rem + 8px);
+      }
+    }
+
+    @media (max-width: 768px) {
+      /* Mobile pos-container - no vertical scrollbar, natural flow */
+      .pos-container {
+        margin-top: 60px;
+        height: auto !important; /* Natural height - no restrictions */
+        min-height: 100vh; /* Ensure full screen coverage */
+        overflow-y: visible !important; /* No vertical scrollbar */
+        background: #f8fafc;
+        padding-bottom: 2rem; /* Add bottom spacing */
+      }
+
+      .pos-layout {
+        flex-direction: column;
+        gap: 0.5rem;
+        height: auto !important; /* Natural height */
+        overflow: visible !important; /* Allow natural content flow */
+      }
+
+      .left-panel {
+        height: auto !important; /* Natural height */
+        width: 100%;
+        overflow: visible !important; /* No restrictions */
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+      }
+
+      /* Hide receipt panel on mobile - will show in preview before printing */
+      .right-panel {
+        display: none !important;
+      }
+    }
+
+    /* Desktop styles - ensure stores and receipt are visible */
+    @media (min-width: 769px) {
+      .right-panel {
+        display: flex !important; /* Show receipt on desktop */
+      }
+      
+      .store-selector {
+        display: block !important; /* Ensure stores are visible on desktop */
+      }
+    }
+
+    /* Mobile responsive for store selector with invoice controls */
+    @media (max-width: 768px) {
+      .store-selector > div {
+        flex-direction: column !important;
+        gap: 1rem !important;
+        align-items: stretch !important;
+      }
+
+      .invoice-controls-top {
+        flex-direction: column !important;
+        gap: 0.75rem !important;
+        align-items: stretch !important;
+      }
+
+      .invoice-controls-top input {
+        width: 100% !important;
+      }
+
+      /* Customer info section - natural expansion without scrollbars */
+      .customer-info-section {
+        width: 100% !important;
+        margin-bottom: 1rem !important;
+        padding: 1rem !important;
+        flex: none !important;
+        /* Remove height restrictions - let it grow naturally */
+        height: auto !important;
+        max-height: none !important;
+        overflow: visible !important; /* No internal scrolling */
+        background: #f8f9fa;
+        border-radius: 8px;
+      }
+
+      .sold-to-header {
+        padding: 0.5rem 0 !important;
+      }
+
+      .customer-additional-fields {
+        gap: 0.75rem !important;
+        /* Remove height restrictions */
+        height: auto !important;
+        max-height: none !important;
+        overflow: visible !important; /* Show all fields naturally */
+      }
+
+      /* Categories panel - one row, horizontal scroll */
+      .categories-panel {
+        max-height: none !important;
+        overflow-x: auto !important;
+        overflow-y: hidden !important;
+        padding: 0.75rem !important;
+        white-space: nowrap;
+      }
+
+      .categories-tabs {
+        display: flex !important;
+        flex-wrap: nowrap !important;
+        gap: 0.5rem !important;
+        min-width: max-content;
+      }
+
+      .category-btn {
+        flex-shrink: 0 !important;
+        white-space: nowrap !important;
+        min-width: max-content !important;
+      }
+
+      /* Product tabs (New, Orders, Cancelled) - one row, horizontal scroll */
+      .product-tabs {
+        overflow-x: auto !important;
+        overflow-y: hidden !important;
+        white-space: nowrap;
+        padding: 0.5rem 1rem;
+      }
+
+      .tab-header {
+        display: flex !important;
+        flex-wrap: nowrap !important;
+        gap: 0.5rem !important;
+        min-width: max-content;
+      }
+
+      .tab-btn {
+        flex-shrink: 0 !important;
+        white-space: nowrap !important;
+        min-width: max-content !important;
+        padding: 0.75rem 1rem !important;
+      }
+
+      /* Search section - one row */
+      .search-section {
+        padding: 0.75rem 1rem !important;
+        border-bottom: 1px solid #e2e8f0;
+      }
+
+      /* Products display - only this section needs scrolling */
+      .products-display {
+        overflow-y: auto !important;
+        height: auto !important; /* Natural height */
+        min-height: 400px !important; /* Ensure adequate viewing space */
+        max-height: 70vh !important; /* Reasonable limit to prevent excessive scroll */
+        padding: 0.5rem !important;
+        -webkit-overflow-scrolling: touch;
+        border: 1px solid #e2e8f0; /* Visual boundary */
+        border-radius: 8px;
+        background: white;
+        margin: 0.5rem 0;
+      }
+
+      .products-grid {
+        grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)) !important;
+        gap: 0.75rem !important;
+        padding: 0.5rem !important;
+      }
+
+      .product-card {
+        padding: 0.75rem !important;
+      }
+
+      /* Orders results - scrollable */
+      .products-display[style*="Orders"] {
+        max-height: 50vh !important;
+        overflow-y: auto !important;
+      }
+
+      /* Invoice controls adjustments */
+      .invoice-controls {
+        grid-template-columns: 1fr;
+        gap: 0.75rem;
+        padding: 0.75rem;
+      }
+
+      .invoice-info {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.5rem;
+      }
+
+      .store-info-grid {
+        grid-template-columns: 1fr;
+        gap: 0.5rem;
+      }
+
+      .product-tabs {
+        font-size: 0.75rem;
+      }
+
+      .tab-btn {
+        padding: 0.75rem 0.5rem;
+      }
+
+      /* Action buttons - if any remain */
+      .action-buttons {
+        flex-direction: column;
+        gap: 0.75rem;
+      }
+
+      .btn {
+        padding: 1rem;
+        font-size: 1rem;
+        font-weight: 600;
+        min-height: 44px; /* Touch-friendly */
+      }
+    }
+
+    /* Desktop styles - ensure stores and receipt are visible */
+    @media (min-width: 769px) {
+      .right-panel {
+        display: flex !important; /* Show receipt on desktop */
+      }
+      
+      .store-selector {
+        display: block !important; /* Ensure stores are visible on desktop */
+      }
+    }
+
+    /* For very small mobile screens (480px and below) */
+    @media (max-width: 480px) {
+      .pos-container {
+        margin-top: 50px; /* Reduce header margin further */
+        height: auto !important; /* Natural height */
+        min-height: 100vh; /* Ensure full coverage */
+        overflow-y: visible !important; /* No container scrollbar */
+        padding: 0.25rem;
+        padding-bottom: 3rem; /* Extra bottom space */
+      }
+
+      /* Mobile-optimized store tabs */
+      .store-tabs {
+        padding: 0.75rem 1rem;
+        overflow-x: auto; /* Enable horizontal scrolling for store tabs */
+      }
+
+      .tabs-header {
+        flex-wrap: nowrap;
+        min-width: max-content;
+      }
+
+      .store-tab {
+        white-space: nowrap;
+        min-width: max-content;
+      }
+
+      /* Invoice controls at store level - mobile stack */
+      .store-selector > div {
+        flex-direction: column !important;
+        gap: 0.75rem !important;
+      }
+
+      .invoice-controls-top {
+        flex-direction: column !important;
+        gap: 0.5rem !important;
+      }
+
+      .invoice-controls-top .control-group {
+        width: 100%;
+      }
+
+      .invoice-controls-top input {
+        width: 100% !important;
+        font-size: 0.85rem;
+      }
+
+      /* Customer info - natural expansion on small screens */
+      .customer-info-section {
+        padding: 0.5rem !important;
+        margin-bottom: 0.5rem !important;
+        height: auto !important; /* Natural height */
+        max-height: none !important; /* Remove restrictions */
+        overflow: visible !important; /* No scrollbars */
+      }
+
+      .sold-to-header h3 {
+        font-size: 0.85rem !important;
+      }
+
+      .customer-info-section input {
+        padding: 0.4rem !important;
+        font-size: 0.8rem !important;
+      }
+
+      .customer-additional-fields {
+        gap: 0.5rem !important;
+        height: auto !important; /* Natural height */
+        max-height: none !important; /* Remove restrictions */
+        overflow: visible !important; /* Show all fields */
+      }
+
+      .customer-additional-fields .form-group label {
+        font-size: 0.7rem !important;
+        margin-bottom: 0.2rem !important;
+      }
+
+      /* Left panel mobile optimizations */
+      .left-panel {
+        min-height: 55vh !important;
+        max-height: 60vh !important;
+        overflow-y: auto !important;
+      }
+
+      .categories-panel {
+        max-height: 100px !important;
+        padding: 0.75rem !important;
+      }
+
+      .categories-tabs {
+        gap: 0.5rem !important;
+      }
+
+      .category-btn {
+        padding: 0.5rem 0.75rem !important;
+        font-size: 0.75rem !important;
+        min-height: 40px !important;
+      }
+
+      /* Products display mobile */
+      .products-display {
+        padding: 0.5rem !important;
+        overflow-y: auto !important;
+        max-height: 45vh !important;
+      }
+
+      .products-grid {
+        grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)) !important;
+        gap: 0.5rem !important;
+      }
+
+      .product-card {
+        padding: 0.5rem !important;
+        min-height: 120px !important;
+      }
+
+      .product-image {
+        width: 40px !important;
+        height: 40px !important;
+      }
+
+      .product-details h4 {
+        font-size: 0.75rem !important;
+        line-height: 1.2 !important;
+      }
+
+      .product-pricing .price {
+        font-size: 0.8rem !important;
+      }
+
+      /* Receipt panel mobile */
+      .receipt-panel {
+        padding: 1rem;
+        margin: 0.25rem;
+        max-height: none !important; /* Allow full height */
+      }
+
+      .company-info h2 {
+        font-size: 1.125rem;
+      }
+
+      .summary-line.total {
+        font-size: 1.25rem;
+      }
+
+      /* Cart items mobile scrolling */
+      .cart-items {
+        max-height: 35vh !important;
+        overflow-y: auto !important;
+        -webkit-overflow-scrolling: touch; /* Smooth scrolling on iOS */
+      }
+
+      /* Action buttons mobile */
+      .action-buttons {
+        flex-direction: column !important;
+        gap: 0.5rem !important;
+        margin-top: 1rem;
+      }
+
+      .btn {
+        padding: 0.75rem !important;
+        font-size: 0.9rem !important;
+        min-height: 44px !important; /* Touch-friendly */
+      }
+
+      /* Ensure touch targets are big enough */
+      .category-btn, 
+      .tab-header,
+      .tab-btn {
+        min-height: 44px;
+        padding: 0.75rem 1rem;
+      }
+
+      /* Mobile scrolling improvements */
+      .pos-layout {
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+      }
+
+      /* Modal mobile responsiveness */
+      .modal {
+        width: 95vw !important;
+        max-width: 95vw !important;
+        margin: 1rem !important;
+        padding: 1rem !important;
+        max-height: 85vh !important;
+        overflow-y: auto !important;
+        -webkit-overflow-scrolling: touch !important;
+      }
+    }
+
+    /* Landscape mobile optimization */
+    @media (max-width: 768px) and (orientation: landscape) {
+      .pos-layout {
+        flex-direction: row !important;
+        height: calc(100vh - 140px);
+      }
+
+      .left-panel {
+        min-height: auto !important;
+        max-height: none !important;
+        flex: 1;
+        overflow-y: auto;
+      }
+
+      /* Keep receipt hidden even in landscape */
+      .right-panel {
+        display: none !important;
+      }
+
+      .products-display {
+        max-height: calc(100vh - 280px) !important;
+      }
+
+      /* Adjust categories and customer info for landscape */
+      .categories-customer-panel {
+        flex-direction: row !important;
+        gap: 1rem !important;
+      }
+
+      .categories-section {
+        flex: 0.6 !important;
+      }
+
+      .customer-info-section {
+        flex: 0.4 !important;
+      }
+
+      /* Reduce vertical spacing in landscape */
+      .categories-panel {
+        padding: 0.5rem !important;
+      }
+
+      .access-tabs,
+      .product-tabs,
+      .search-section {
+        padding: 0.25rem 1rem !important;
+      }
+    }

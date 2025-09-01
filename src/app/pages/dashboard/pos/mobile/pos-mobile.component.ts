@@ -2,29 +2,31 @@ import { Component, OnInit, computed, signal, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterModule } from '@angular/router';
-import { HeaderComponent } from '../../../shared/components/header/header.component';
-import { ProductService } from '../../../services/product.service';
-import { PosService } from '../../../services/pos.service';
-import { AuthService } from '../../../services/auth.service';
-import { CompanyService } from '../../../services/company.service';
-import { OrderService } from '../../../services/order.service';
-import { StoreService, Store } from '../../../services/store.service';
-import { CurrencyService } from '../../../services/currency.service';
-import { Product } from '../../../interfaces/product.interface';
-import { CartItem, ProductViewType, ReceiptData } from '../../../interfaces/pos.interface';
-import { Currency, CurrencySymbol, CURRENCY_CONFIGS } from '../../../interfaces/currency.interface';
+import { HeaderComponent } from '../../../../shared/components/header/header.component';
+import { ProductService } from '../../../../services/product.service';
+import { PosService } from '../../../../services/pos.service';
+import { PosSharedService } from '../../../../services/pos-shared.service';
+import { AuthService } from '../../../../services/auth.service';
+import { CompanyService } from '../../../../services/company.service';
+import { OrderService } from '../../../../services/order.service';
+import { StoreService, Store } from '../../../../services/store.service';
+import { CurrencyService } from '../../../../services/currency.service';
+import { Product } from '../../../../interfaces/product.interface';
+import { CartItem, ProductViewType, ReceiptData } from '../../../../interfaces/pos.interface';
+import { Currency, CurrencySymbol, CURRENCY_CONFIGS } from '../../../../interfaces/currency.interface';
 
 @Component({
-  selector: 'app-pos',
+  selector: 'app-pos-mobile',
   standalone: true,
   imports: [CommonModule, FormsModule, RouterModule, HeaderComponent],
-  templateUrl: './pos.component.html',
-  styleUrls: ['./pos.component.css']
+  templateUrl: './pos-mobile.component.html',
+  styleUrls: ['./pos-mobile.component.css']
 })
-export class PosComponent implements OnInit {
+export class PosMobileComponent implements OnInit {
   // Services
   private productService = inject(ProductService);
   private posService = inject(PosService);
+  private posSharedService = inject(PosSharedService);
   private authService = inject(AuthService);
   private companyService = inject(CompanyService);
   private storeService = inject(StoreService);

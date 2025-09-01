@@ -1,7 +1,7 @@
 import { Component, OnInit, computed, inject, signal, HostListener } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
+import { RouterLink, Router } from '@angular/router';
 import { StoreService, Store } from '../../../services/store.service';
 import { ProductService } from '../../../services/product.service';
 import { AuthService } from '../../../services/auth.service';
@@ -23,6 +23,7 @@ export class HeaderComponent implements OnInit {
   private productService = inject(ProductService);
   private authService = inject(AuthService);
   private companyService = inject(CompanySetupService);
+  private router = inject(Router);
 
   // Signals
   protected stores = signal<Store[]>([]);
@@ -38,6 +39,17 @@ export class HeaderComponent implements OnInit {
   // User-related signals
   protected currentUser = computed(() => this.authService.getCurrentUser());
   protected isUserMenuOpen = signal<boolean>(false);
+  
+  // Device toggle for POS pages
+  protected isPosPage = computed(() => {
+    const url = this.router.url;
+    return url.includes('/pos');
+  });
+  
+  protected isMobilePosPage = computed(() => {
+    const url = this.router.url;
+    return url.includes('/pos/mobile');
+  });
   
   // Computed properties
   protected userInitial = computed(() => {
@@ -106,5 +118,14 @@ export class HeaderComponent implements OnInit {
     } catch (error) {
       console.error('Error loading dashboard data:', error);
     }
+  }
+
+  // Device toggle methods for POS pages
+  switchToMobile(): void {
+    this.router.navigate(['/pos/mobile']);
+  }
+
+  switchToDesktop(): void {
+    this.router.navigate(['/pos']);
   }
 }

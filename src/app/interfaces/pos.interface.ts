@@ -8,14 +8,38 @@ export interface Order {
   terminalId?: string;
   assignedCashierId: string;
   status: 'pending' | 'paid' | 'cancelled' | 'refunded';
-  totalAmount: number;
+  
+  // Customer Information
+  cashSale?: boolean;
+  soldTo?: string;
+  tin?: string;
+  businessAddress?: string;
+  
+  // Invoice Information
+  invoiceNumber?: string;
+  logoUrl?: string;
+  date?: Date;
+  
+  // Financial Calculations
+  vatableSales?: number;
   vatAmount: number;
+  zeroRatedSales?: number;
   vatExemptAmount: number;
   discountAmount: number;
   grossAmount: number;
   netAmount: number;
+  totalAmount: number;
+  
+  // BIR and Legal Requirements
+  exemptionId?: string;
+  signature?: string;
+  atpOrOcn: string; // Authority to Print or Official Control Number - Required
+  birPermitNo: string; // BIR Permit Number - Required
+  inclusiveSerialNumber: string; // Inclusive Serial Number Range - Required
+  
+  // System Fields
   createdAt: Date;
-  message: string;
+  message: string; // Receipt message - Required
 }
 
 export interface OrderDetail {
