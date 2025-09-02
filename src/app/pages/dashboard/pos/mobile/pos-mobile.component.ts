@@ -10,6 +10,7 @@ import { AuthService } from '../../../../services/auth.service';
 import { CompanyService } from '../../../../services/company.service';
 import { OrderService } from '../../../../services/order.service';
 import { StoreService, Store } from '../../../../services/store.service';
+import { UserRoleService } from '../../../../services/user-role.service';
 import { CurrencyService } from '../../../../services/currency.service';
 import { Product } from '../../../../interfaces/product.interface';
 import { CartItem, ProductViewType, ReceiptData } from '../../../../interfaces/pos.interface';
@@ -31,6 +32,7 @@ export class PosMobileComponent implements OnInit {
   private companyService = inject(CompanyService);
   private storeService = inject(StoreService);
   private orderService = inject(OrderService);
+  private userRoleService = inject(UserRoleService);
   public currencyService = inject(CurrencyService);
 
   // Signals
@@ -43,35 +45,20 @@ export class PosMobileComponent implements OnInit {
   readonly selectedCategory = computed(() => this.selectedCategorySignal());
   readonly currentView = computed(() => this.currentViewSignal());
   
-  // Show all stores temporarily (for debugging)
+  // Show stores loaded from user roles (already filtered by role-based access)
   readonly availableStores = computed(() => {
-    const all = this.storeService.getStores();
-    console.log('🏪 availableStores computed - All stores from service:', all.length, 'stores');
+    const stores = this.storeService.getStores();
+    console.log('🏪 Mobile availableStores computed - Stores from userRoles:', stores.length, 'stores');
     
-    if (all.length === 0) {
-      console.warn('⚠️ No stores available from StoreService');
+    if (stores.length === 0) {
+      console.warn('⚠️ No stores available from role-based loading');
     } else {
-      console.log('🏪 Store details:', all.map(s => ({ id: s.id, name: s.storeName, companyId: s.companyId })));
+      console.log('🏪 Mobile store details:', stores.map(s => ({ id: s.id, name: s.storeName, companyId: s.companyId })));
     }
     
-    try {
-      const user = this.authService.getCurrentUser();
-      console.log('👤 Current user:', user ? { companyId: user.companyId, storeIds: user.storeIds } : 'null');
-      
-      const storeIds: string[] = user?.storeIds || [];
-      console.log('🔑 User storeIds:', storeIds);
-      
-      // TEMPORARY: Show all stores while debugging store disappearing issue
-      console.log('🚨 TEMPORARY: Showing all stores for debugging');
-      return all;
-      
-    } catch (e) {
-      console.error('❌ Error in availableStores:', e);
-      return all;
-    }
+    return stores;
   });
   
-  readonly currentCompanyId = computed(() => this.authService.getCurrentUser()?.companyId || '');
   readonly selectedStoreId = computed(() => this.posService.selectedStoreId());
   readonly cartItems = computed(() => this.posService.cartItems());
   readonly cartSummary = computed(() => this.posService.cartSummary());
@@ -80,10 +67,6 @@ export class PosMobileComponent implements OnInit {
   readonly products = computed(() => this.productService.getProducts());
   readonly categories = computed(() => this.productService.getCategories());
   
-  readonly companyInfo = computed(() => {
-    const companies = this.companyService.companies();
-    return companies.length > 0 ? companies[0] : null;
-  });
   readonly currentStoreInfo = computed(() => 
     this.availableStores().find(s => s.id === this.selectedStoreId())
   );
@@ -91,14 +74,13 @@ export class PosMobileComponent implements OnInit {
   readonly filteredProducts = computed(() => {
     let filtered = this.products();
 
-    // Filter by company
-    const companyId = this.currentCompanyId();
-    if (companyId) {
-      filtered = filtered.filter(p => p.companyId === companyId);
+    // Filter by store only (no company filtering needed since products are already loaded by store)
+    const storeId = this.selectedStoreId();
+    if (storeId) {
+      filtered = filtered.filter(p => p.storeId === storeId);
     }
 
     // Determine active store ids: if a store is selected use that, otherwise use visible stores
-    const storeId = this.selectedStoreId();
     const activeStoreIds = storeId ? [storeId] : this.availableStores().map(s => s.id).filter(Boolean) as string[];
     if (activeStoreIds && activeStoreIds.length) {
       // Include products that belong to the active stores OR have no storeId (global products)
@@ -196,8 +178,8 @@ export class PosMobileComponent implements OnInit {
   async loadRecentOrders(): Promise<void> {
     try {
       this.isLoadingOrdersSignal.set(true);
-      const user = this.authService.getCurrentUser();
-      const companyId = user?.companyId || this.currentCompanyId();
+      const storeInfo = this.currentStoreInfo();
+      const companyId = storeInfo?.companyId;
       const storeId = this.selectedStoreId();
       
       if (!companyId) {
@@ -223,8 +205,8 @@ export class PosMobileComponent implements OnInit {
   async searchOrders(): Promise<void> {
     try {
       this.isLoadingOrdersSignal.set(true);
-      const user = this.authService.getCurrentUser();
-      const companyId = user?.companyId || this.currentCompanyId();
+      const storeInfo = this.currentStoreInfo();
+      const companyId = storeInfo?.companyId;
       const storeId = this.selectedStoreId();
       const q = this.orderSearchQuery().trim();
       
@@ -307,44 +289,55 @@ export class PosMobileComponent implements OnInit {
   private async loadData(): Promise<void> {
     console.log('🔄 Starting loadData...');
     
-    // Try to scope loads by companyId when available (improves performance & correctness)
+    // Load user roles to get store access permissions
     const user = this.authService.getCurrentUser();
-    console.log('👤 User in loadData:', user ? { companyId: user.companyId, storeIds: user.storeIds } : 'null');
+    console.log('👤 User in loadData:', user ? { uid: user.uid } : 'null');
     
-    const companyId = user?.companyId;
-    console.log('🏢 CompanyId:', companyId);
-    
-    if (companyId) {
+    if (user?.uid) {
       try {
-        // Load companies first
-        console.log('📊 Loading companies...');
-        await this.companyService.loadCompanies();
-        console.log('✅ Companies loaded');
+        // Load user roles first to get store access permissions
+        await this.userRoleService.loadUserRoles();
         
-        // Load stores for the company
-        console.log('🏪 Loading stores for company:', companyId);
-        await this.storeService.loadStores(companyId);
-        console.log('✅ Stores loaded, available stores count:', this.availableStores().length);
+        // Get the current user's role by userId
+        const userRole = this.userRoleService.getUserRoleByUserId(user.uid);
         
-        // Wait a bit for signals to update
-        await new Promise(resolve => setTimeout(resolve, 100));
+        // Debug logging as requested
+        console.log('userRoles in mobile pos:', userRole);
+        console.log('user.uid:', user.uid);
         
-        // Initialize selected store now that stores are loaded
-        console.log('🎯 Initializing store selection...');
-        this.initializeStore();
-        
-        // Load products for the company and current selected store (if any)
-        const selectedStore = this.selectedStoreId();
-        console.log('📦 Loading products for company:', companyId, 'store:', selectedStore);
-        await this.productService.loadProductsByCompanyAndStore(companyId, selectedStore);
-        
-        console.log('✅ LoadData completed successfully');
-        
-        // Final check - log stores one more time
-        setTimeout(() => {
-          console.log('🔍 Final stores check after 1s:', this.availableStores().length, 'stores');
-          console.log('🔍 Store service stores:', this.storeService.getStores().length, 'stores');
-        }, 1000);
+        if (userRole && userRole.storeId) {
+          // Load companies first
+          console.log('📊 Loading companies...');
+          await this.companyService.loadCompanies();
+          console.log('✅ Companies loaded');
+          
+          // Load stores based on user's assigned store
+          console.log('🏪 Loading store for user role:', userRole.storeId);
+          await this.storeService.loadStores([userRole.storeId]);
+          console.log('✅ Stores loaded, available stores count:', this.availableStores().length);
+          
+          // Wait a bit for signals to update
+          await new Promise(resolve => setTimeout(resolve, 100));
+          
+          // Initialize selected store now that stores are loaded
+          console.log('🎯 Initializing store selection...');
+          this.initializeStore();
+          
+          // Load products for the user's company and current selected store (if any)
+          const selectedStore = this.selectedStoreId();
+          console.log('📦 Loading products for company:', userRole.companyId, 'store:', selectedStore);
+          await this.productService.loadProductsByCompanyAndStore(userRole.companyId, selectedStore);
+          
+          console.log('✅ LoadData completed successfully');
+          
+          // Final check - log stores one more time
+          setTimeout(() => {
+            console.log('🔍 Final stores check after 1s:', this.availableStores().length, 'stores');
+            console.log('🔍 Store service stores:', this.storeService.getStores().length, 'stores');
+          }, 1000);
+        } else {
+          console.warn('No user role found or no store assigned to user');
+        }
         
       } catch (error) {
         console.error('❌ Error during data loading:', error);
@@ -376,7 +369,10 @@ export class PosMobileComponent implements OnInit {
   // Event handlers
   async selectStore(storeId: string): Promise<void> {
     this.posService.setSelectedStore(storeId);
-    await this.productService.loadProductsByCompanyAndStore(this.currentCompanyId(), storeId);
+    const storeInfo = this.availableStores().find(s => s.id === storeId);
+    if (storeInfo?.companyId) {
+      await this.productService.loadProductsByCompanyAndStore(storeInfo.companyId, storeId);
+    }
   }
 
   setSelectedCategory(category: string): void {

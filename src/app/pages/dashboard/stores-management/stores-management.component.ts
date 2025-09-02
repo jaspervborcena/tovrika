@@ -665,7 +665,7 @@ export class StoresManagementComponent implements OnInit {
     try {
       const currentUser = await this.authService.waitForAuth();
       if (currentUser?.companyId) {
-        await this.storeService.loadStores(currentUser.companyId);
+        await this.storeService.loadStoresByCompany(currentUser.companyId);
         this.stores = this.storeService.getStoresByCompany(currentUser.companyId);
         this.filteredStores = [...this.stores];
       }

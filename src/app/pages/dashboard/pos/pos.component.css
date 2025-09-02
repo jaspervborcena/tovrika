@@ -590,11 +590,12 @@
     }
 
     .receipt-panel {
-      height: 100%;
+      height: 150%;
       display: flex;
       flex-direction: column;
       /* add ~10px more internal padding for breathing room */
       padding: calc(1rem + 0.1px);
+      overflow-y: auto; /* Add scrolling to the entire receipt panel */
       min-height: 0; /* allow flex children to shrink so footer stays visible */
     }
 
@@ -726,11 +727,11 @@
     }
 
     .cart-items {
-      flex: 1 1 auto;
-      overflow-y: auto;
-      min-height: 0; /* allow the cart to shrink inside the receipt panel */
-      /* keep a reasonable max so the footer (summary/actions) remains visible */
-      max-height: calc(100% - 200px);
+      flex: 0 0 auto; /* Changed to prevent shrinking and allow natural growth */
+      overflow-y: visible; /* Remove scrolling to allow natural expansion */
+      height: 50%;
+      /*min-height: 820px; /* allow the cart to shrink inside the receipt panel */
+      /* Removed max-height to let cart items push summary down naturally */
     }
 
     .cart-header {
@@ -760,7 +761,7 @@
       grid-template-columns: 2fr 1fr 1fr 1fr;
       gap: 0.75rem;
       align-items: center;
-      min-height: 64px; /* give each cart row more vertical space */
+      min-height: 25px; /* give each cart row more vertical space */
     }
 
     .cart-item:last-child {
@@ -853,9 +854,13 @@
     }
 
     .receipt-summary {
+      flex: 0 0 auto; /* Prevent shrinking and maintain position */
       border-top: 1px solid #e2e8f0;
       padding-top: 1rem;
       margin-top: 1rem;
+      background: white; /* Ensure it doesn't overlap */
+      position: relative; /* Ensure proper stacking */
+      z-index: 1; /* Stay above other content */
     }
 
     .summary-line {
@@ -882,9 +887,13 @@
     }
 
     .action-buttons {
+      flex: 0 0 auto; /* Keep at bottom, don't grow */
       display: flex;
       gap: 0.5rem;
       margin-top: 1rem;
+      background: white; /* Ensure visibility */
+      position: relative; /* Proper stacking */
+      z-index: 1; /* Stay on top */
     }
 
     .btn {

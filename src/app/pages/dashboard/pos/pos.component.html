@@ -349,8 +349,7 @@
         <div class="right-panel">
           <div class="receipt-panel">
             <!-- Receipt Header -->
-            <div class="receipt-header">
-              <!-- Invoice Info Display (Read-only) -->
+            <!-- <div class="receipt-header">
               <div class="invoice-display">
                 <strong>Invoice Number:</strong> {{ customerInfo.invoiceNumber || 'Auto-generated' }}
                 <br>
@@ -358,25 +357,23 @@
               </div>
 
               <div class="company-info">
-                <!-- Company Logo -->
-                <div class="company-logo" *ngIf="companyInfo()?.logoUrl">
-                  <img [src]="companyInfo()?.logoUrl" [alt]="companyInfo()?.name + ' Logo'" class="logo-image">
+                <div class="company-logo" *ngIf="currentStoreInfo()?.logoUrl">
+                  <img [src]="currentStoreInfo()?.logoUrl" [alt]="currentStoreInfo()?.storeName + ' Logo'" class="logo-image">
                 </div>
                 
-                <!-- Store Information in Two Columns -->
                 <div class="store-info-grid">
                   <div class="store-column">
-                    <h2>{{ (companyInfo()?.name) || 'Company Name' }}</h2>
-                    <p>{{ currentStoreInfo()?.storeName || 'Store Name' }}</p>
+                    <h2>{{ currentStoreInfo()?.storeName || 'Store Name' }}</h2>
+                    <p>{{ currentStoreInfo()?.branchName || currentStoreInfo()?.storeName || 'Store Name' }}</p>
                     <p>{{ currentStoreInfo()?.address || 'Store Address' }}</p>
                   </div>
                   <div class="store-column">
-                    <p>{{ (companyInfo()?.phone) || 'Contact Number' }}</p>
-                    <p>{{ (companyInfo()?.email) || 'Email Address' }}</p>
+                    <p>{{ currentStoreInfo()?.phoneNumber || 'Contact Number' }}</p>
+                    <p>{{ currentStoreInfo()?.email || 'Email Address' }}</p>
                   </div>
                 </div>
               </div>
-            </div>
+            </div> -->
 
             <!-- Cart Items -->
             <div class="cart-items">

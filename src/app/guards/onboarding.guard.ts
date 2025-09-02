@@ -36,7 +36,7 @@ export const onboardingGuard: CanActivateFn = async (route, state) => {
     }
 
     // Check if company has stores
-    await storeService.loadStores(user.companyId);
+    await storeService.loadStoresByCompany(user.companyId);
     const stores = storeService.getStoresByCompany(user.companyId);
     
     if (stores.length === 0 && !state.url.includes('stores')) {

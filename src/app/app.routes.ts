@@ -131,12 +131,7 @@ export const routes: Routes = [
     canActivate: [authGuard]
   },
   
-  // Debug routes (temporary)
-  {
-    path: 'debug/stores',
-    loadComponent: () => import('./pages/debug/store-debug/store-debug.component').then(m => m.StoreDebugComponent),
-    canActivate: [authGuard]
-  },
+  
   
   // Standalone POS Route (originally existed)
   {

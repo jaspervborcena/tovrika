@@ -503,6 +503,17 @@
   flex-direction: column;
   gap: 12px;
   margin-bottom: 15px;
+  /* No scrollbars until 10 items - each item roughly 80px */
+  max-height: 800px; /* 10 items * ~80px per item */
+  overflow-y: auto;
+}
+
+/* Cart & Receipt Row - Make the entire receipt panel scrollable */
+.pos-row.cart-row {
+  max-height: 600px; /* Limit the height of the entire receipt panel */
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
 }
 
 .cart-item-mobile {

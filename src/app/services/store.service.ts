@@ -10,7 +10,8 @@ import {
   where, 
   getDocs,
   addDoc,
-  collectionGroup
+  collectionGroup,
+  documentId
 } from '@angular/fire/firestore';
 import { AuthService } from './auth.service';
 
@@ -20,6 +21,7 @@ export interface Store {
   storeName: string;
   storeCode: string;
   storeType: string;
+  branchName?: string;
   address: string;
   phoneNumber?: string;
   email?: string;
@@ -27,6 +29,17 @@ export interface Store {
   status: 'active' | 'inactive';
   createdAt: Date;
   updatedAt?: Date;
+  taxId?: string;
+  tinNumber?: string;
+  invoiceNumber?: string;
+  invoiceType?: string;
+  logoUrl?: string;
+  atpOrOcn?: string;
+  birPermitNo?: string;
+  inclusiveSerialNumber?: string;
+  serialNumber?: string;
+  minNumber?: string;
+  message?: string;
 }
 
 @Injectable({
@@ -64,7 +77,7 @@ export class StoreService {
     private authService: AuthService
   ) {}
 
-  async loadStores(companyId?: string) {
+  async loadStores(storeIds: string[]) {
     if (this.isLoading) {
       console.log('⏳ Store loading already in progress, skipping...');
       return;
@@ -72,12 +85,16 @@ export class StoreService {
     
     try {
       this.isLoading = true;
-      console.log('🏪 StoreService.loadStores called with companyId:', companyId);
+      console.log('🏪 StoreService.loadStores called with storeIds:', storeIds);
       
+      if (!storeIds || storeIds.length === 0) {
+        console.log('📋 No store IDs provided, clearing stores');
+        this.storesSignal.set([]);
+        return;
+      }
+
       const storesRef = collection(this.firestore, 'stores');
-      const storesQuery = companyId 
-        ? query(storesRef, where('companyId', '==', companyId))
-        : query(storesRef);
+      const storesQuery = query(storesRef, where(documentId(), 'in', storeIds));
 
       console.log('🔍 Executing Firestore query for stores...');
       const querySnapshot = await getDocs(storesQuery);
@@ -91,13 +108,25 @@ export class StoreService {
           storeName: data.storeName || '',
           storeCode: data.storeCode || '',
           storeType: data.storeType || '',
+          branchName: data.branchName || '',
           address: data.address || '',
           phoneNumber: data.phoneNumber || '',
           email: data.email || '',
           managerName: data.managerName || '',
           status: data.status || 'inactive',
           createdAt: data.createdAt?.toDate() || new Date(),
-          updatedAt: data.updatedAt?.toDate() || new Date()
+          updatedAt: data.updatedAt?.toDate() || new Date(),
+          taxId: data.taxId || '',
+          tinNumber: data.tinNumber || '',
+          invoiceNumber: data.invoiceNumber || '',
+          invoiceType: data.invoiceType || '',
+          logoUrl: data.logoUrl || '',
+          atpOrOcn: data.atpOrOcn || '',
+          birPermitNo: data.birPermitNo || '',
+          inclusiveSerialNumber: data.inclusiveSerialNumber || '',
+          serialNumber: data.serialNumber || '',
+          minNumber: data.minNumber || '',
+          message: data.message || ''
         } as Store;
         
         console.log('🏪 Mapped store:', store.storeName, 'ID:', store.id, 'CompanyId:', store.companyId);
@@ -120,6 +149,69 @@ export class StoreService {
       
     } catch (error) {
       console.error('❌ Error loading stores:', error);
+      throw error;
+    } finally {
+      this.isLoading = false;
+    }
+  }
+
+  async loadStoresByCompany(companyId: string) {
+    if (this.isLoading) {
+      console.log('⏳ Store loading already in progress, skipping...');
+      return;
+    }
+    
+    try {
+      this.isLoading = true;
+      console.log('🏪 StoreService.loadStoresByCompany called with companyId:', companyId);
+      
+      const storesRef = collection(this.firestore, 'stores');
+      const storesQuery = query(storesRef, where('companyId', '==', companyId));
+
+      console.log('🔍 Executing Firestore query for stores by company...');
+      const querySnapshot = await getDocs(storesQuery);
+      console.log('📊 Firestore query returned', querySnapshot.docs.length, 'documents');
+      
+      const stores = querySnapshot.docs.map(doc => {
+        const data = doc.data() as any;
+        const store = {
+          id: doc.id,
+          companyId: data.companyId || '',
+          storeName: data.storeName || '',
+          storeCode: data.storeCode || '',
+          storeType: data.storeType || '',
+          branchName: data.branchName || '',
+          address: data.address || '',
+          phoneNumber: data.phoneNumber || '',
+          email: data.email || '',
+          managerName: data.managerName || '',
+          status: data.status || 'inactive',
+          createdAt: data.createdAt?.toDate() || new Date(),
+          updatedAt: data.updatedAt?.toDate() || new Date(),
+          taxId: data.taxId || '',
+          tinNumber: data.tinNumber || '',
+          invoiceNumber: data.invoiceNumber || '',
+          invoiceType: data.invoiceType || '',
+          logoUrl: data.logoUrl || '',
+          atpOrOcn: data.atpOrOcn || '',
+          birPermitNo: data.birPermitNo || '',
+          inclusiveSerialNumber: data.inclusiveSerialNumber || '',
+          serialNumber: data.serialNumber || '',
+          minNumber: data.minNumber || '',
+          message: data.message || ''
+        } as Store;
+        
+        console.log('🏪 Mapped store:', store.storeName, 'ID:', store.id, 'CompanyId:', store.companyId);
+        return store;
+      });
+      
+      console.log('💾 Setting stores signal with', stores.length, 'stores');
+      this.storesSignal.set(stores);
+      this.loadTimestamp = Date.now();
+      console.log('✅ Stores loaded and signal updated. Current stores:', this.getStores().length);
+      
+    } catch (error) {
+      console.error('❌ Error loading stores by company:', error);
       throw error;
     } finally {
       this.isLoading = false;

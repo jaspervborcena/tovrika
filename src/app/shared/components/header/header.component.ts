@@ -98,7 +98,7 @@ export class HeaderComponent implements OnInit {
 
       if (user.companyId) {
         // Load company-specific data
-        await this.storeService.loadStores(user.companyId);
+        await this.storeService.loadStoresByCompany(user.companyId);
         await this.productService.loadProducts(user.companyId);
         
         this.stores.set(this.storeService.getStores());

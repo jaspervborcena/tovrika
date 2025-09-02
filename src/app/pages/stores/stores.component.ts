@@ -193,7 +193,7 @@ export class StoresComponent implements OnInit {
       this.companies = this.companyService.companies();
     }
     if (this.userCompanyId) {
-      await this.storeService.loadStores(this.userCompanyId);
+      await this.storeService.loadStoresByCompany(this.userCompanyId);
       this.stores = this.storeService.stores();
     }
   }

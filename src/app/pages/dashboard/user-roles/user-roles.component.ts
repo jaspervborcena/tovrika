@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { UserRoleService } from '../../../services/user-role.service';
 import { RoleDefinitionService, RoleDefinition } from '../../../services/role-definition.service';
 import { StoreService, Store } from '../../../services/store.service';
+import { AuthService } from '../../../services/auth.service';
 import { UserRole } from '../../../interfaces/user-role.interface';
 
 @Component({
@@ -608,7 +609,8 @@ export class UserRolesComponent implements OnInit {
   constructor(
     private userRoleService: UserRoleService,
     private roleDefinitionService: RoleDefinitionService,
-    private storeService: StoreService
+    private storeService: StoreService,
+    private authService: AuthService
   ) {}
 
   async ngOnInit() {
@@ -628,8 +630,11 @@ export class UserRolesComponent implements OnInit {
       await this.roleDefinitionService.loadRoleDefinitions();
       this.availableRoles = this.roleDefinitionService.getCompanyRoleDefinitions();
 
-      // Load available stores
-      await this.storeService.loadStores();
+      // Load available stores for the company
+      const user = this.authService.getCurrentUser();
+      if (user?.companyId) {
+        await this.storeService.loadStoresByCompany(user.companyId);
+      }
       this.availableStores = this.storeService.getStores();
       
     } catch (error) {

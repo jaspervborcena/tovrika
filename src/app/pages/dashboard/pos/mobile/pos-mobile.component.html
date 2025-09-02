@@ -252,15 +252,15 @@
   <div class="pos-row cart-row">
     <div class="row-header">🛒 Cart & Receipt ({{ cartItems().length }} items)</div>
     
-    <!-- Company Header for Receipt -->
-    <div class="receipt-company-header" *ngIf="companyInfo()">
+    <!-- Store Header for Receipt -->
+    <div class="receipt-company-header" *ngIf="currentStoreInfo()">
       <div class="company-logo-area">
-        <img *ngIf="companyInfo()?.logoUrl" [src]="companyInfo()?.logoUrl" class="company-logo">
+        <img *ngIf="currentStoreInfo()?.logoUrl" [src]="currentStoreInfo()?.logoUrl" [alt]="currentStoreInfo()?.storeName + ' Logo'" class="company-logo">
         <div class="company-details">
-          <div class="company-name">{{ companyInfo()?.name || 'Company Name' }}</div>
-          <div class="store-name">{{ currentStoreInfo()?.storeName || 'Store Name' }}</div>
+          <div class="company-name">{{ currentStoreInfo()?.storeName || 'Store Name' }}</div>
+          <div class="store-name">{{ currentStoreInfo()?.branchName || currentStoreInfo()?.storeName || 'Store Name' }}</div>
           <div class="store-address">{{ currentStoreInfo()?.address || 'Store Address' }}</div>
-          <div class="contact-info">{{ companyInfo()?.phone || 'Phone' }} | {{ companyInfo()?.email || 'Email' }}</div>
+          <div class="contact-info">{{ currentStoreInfo()?.phoneNumber || 'Phone' }} | {{ currentStoreInfo()?.email || 'Email' }}</div>
         </div>
       </div>
       <div class="invoice-details">
