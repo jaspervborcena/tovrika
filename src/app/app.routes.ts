@@ -108,18 +108,6 @@ export const routes: Routes = [
         loadComponent: () => import('./pages/dashboard/inventory/inventory.component').then(m => m.InventoryComponent),
         canActivate: [onboardingGuard],
         data: { roles: ['admin', 'manager'] }
-      },
-      {
-        path: 'pos',
-        loadComponent: () => import('./pages/dashboard/pos/pos.component').then(m => m.PosComponent)
-        // Temporarily removed guards for testing: canActivate: [onboardingGuard],
-        // data: { roles: ['admin', 'manager', 'cashier'] }
-      },
-      {
-        path: 'pos/mobile',
-        loadComponent: () => import('./pages/dashboard/pos/mobile/pos-mobile.component').then(m => m.PosMobileComponent)
-        // Temporarily removed guards for testing: canActivate: [onboardingGuard],
-        // data: { roles: ['admin', 'manager', 'cashier'] }
       }
     ]
   },
@@ -131,23 +119,19 @@ export const routes: Routes = [
     canActivate: [authGuard]
   },
   
-  
-  
-  // Standalone POS Route (originally existed)
+  // Standalone POS Routes
   {
     path: 'pos',
-    loadComponent: () => import('./pages/dashboard/pos/pos.component').then(m => m.PosComponent)
-    // Temporarily removed guards: canActivate: [authGuard],
-    // data: { roles: ['admin', 'manager', 'cashier'] }
+    loadComponent: () => import('./pages/dashboard/pos/pos.component').then(m => m.PosComponent),
+    canActivate: [authGuard]
   },
-  
-  // Mobile POS Route
   {
     path: 'pos/mobile',
-    loadComponent: () => import('./pages/dashboard/pos/mobile/pos-mobile.component').then(m => m.PosMobileComponent)
-    // Temporarily removed guards: canActivate: [authGuard],
-    // data: { roles: ['admin', 'manager', 'cashier'] }
+    loadComponent: () => import('./pages/dashboard/pos/mobile/pos-mobile.component').then(m => m.PosMobileComponent),
+    canActivate: [authGuard]
   },
+  
+  
   
   // Fallback route
   {

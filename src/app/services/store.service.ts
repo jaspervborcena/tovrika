@@ -315,15 +315,4 @@ export class StoreService {
   getStore(storeId: string) {
     return this.stores().find(store => store.id === storeId);
   }
-  
-  // Debug method to check store status
-  debugStoreStatus() {
-    const stores = this.getStores();
-    console.log('🔍 StoreService Debug Status:');
-    console.log('  - Total stores:', stores.length);
-    console.log('  - Last load time:', this.loadTimestamp ? new Date(this.loadTimestamp).toLocaleTimeString() : 'Never');
-    console.log('  - Is loading:', this.isLoading);
-    console.log('  - Stores:', stores.map(s => ({ id: s.id, name: s.storeName, companyId: s.companyId })));
-    return { stores, count: stores.length, lastLoad: this.loadTimestamp, isLoading: this.isLoading };
-  }
 }

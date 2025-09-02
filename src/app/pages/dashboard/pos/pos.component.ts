@@ -11,7 +11,7 @@ import { OrderService } from '../../../services/order.service';
 import { StoreService } from '../../../services/store.service';
 import { UserRoleService } from '../../../services/user-role.service';
 import { Product } from '../../../interfaces/product.interface';
-import { CartItem, ProductViewType, ReceiptData } from '../../../interfaces/pos.interface';
+import { CartItem, ProductViewType } from '../../../interfaces/pos.interface';
 import { Store } from '../../../interfaces/store.interface';
 
 @Component({

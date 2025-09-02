@@ -5,7 +5,6 @@ import { RouterModule } from '@angular/router';
 import { HeaderComponent } from '../../../../shared/components/header/header.component';
 import { ProductService } from '../../../../services/product.service';
 import { PosService } from '../../../../services/pos.service';
-import { PosSharedService } from '../../../../services/pos-shared.service';
 import { AuthService } from '../../../../services/auth.service';
 import { CompanyService } from '../../../../services/company.service';
 import { OrderService } from '../../../../services/order.service';
@@ -13,8 +12,7 @@ import { StoreService, Store } from '../../../../services/store.service';
 import { UserRoleService } from '../../../../services/user-role.service';
 import { CurrencyService } from '../../../../services/currency.service';
 import { Product } from '../../../../interfaces/product.interface';
-import { CartItem, ProductViewType, ReceiptData } from '../../../../interfaces/pos.interface';
-import { Currency, CurrencySymbol, CURRENCY_CONFIGS } from '../../../../interfaces/currency.interface';
+import { CartItem, ProductViewType } from '../../../../interfaces/pos.interface';
 
 @Component({
   selector: 'app-pos-mobile',
@@ -27,7 +25,6 @@ export class PosMobileComponent implements OnInit {
   // Services
   private productService = inject(ProductService);
   private posService = inject(PosService);
-  private posSharedService = inject(PosSharedService);
   private authService = inject(AuthService);
   private companyService = inject(CompanyService);
   private storeService = inject(StoreService);

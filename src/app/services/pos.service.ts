@@ -320,20 +320,4 @@ export class PosService {
     // TODO: Implement actual inventory updates
     // This would involve updating the product quantities in Firestore
   }
-
-  // Analytics Methods
-  async getBestSellerProducts(limit: number = 10): Promise<Product[]> {
-    try {
-      const user = this.authService.getCurrentUser();
-      if (!user?.companyId) return [];
-
-      // This would typically aggregate order data to find best sellers
-      // For now, return products sorted by some criteria
-      const products = this.productService.getProducts();
-      return products.slice(0, limit);
-    } catch (error) {
-      console.error('Error getting best sellers:', error);
-      return [];
-    }
-  }
 }
