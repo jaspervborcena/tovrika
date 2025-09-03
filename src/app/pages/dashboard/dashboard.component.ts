@@ -87,7 +87,7 @@ export class DashboardComponent implements OnInit {
 
       if (user.companyId) {
         // Load company-specific data
-        await this.storeService.loadStores();
+        await this.storeService.loadStoresByCompany(user.companyId);
         await this.productService.loadProducts(user.companyId);
         
         this.stores.set(this.storeService.getStores());

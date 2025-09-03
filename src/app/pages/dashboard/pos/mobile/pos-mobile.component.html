@@ -1,0 +1,412 @@
+<!-- MOBILE POS - BUILT FROM SCRATCH WITH ROW LAYOUT -->
+<app-header></app-header>
+
+<div class="mobile-pos-wrapper">
+  
+  <!-- ROW 1: STORES SELECTION -->
+  <div class="pos-row stores-row">
+    <div class="row-header">🏪 Stores</div>
+    <div class="stores-tabs-container">
+      <button 
+        *ngFor="let store of availableStores()" 
+        class="mobile-tab"
+        [class.active]="selectedStoreId() === store.id"
+        (click)="selectStore(store.id!)">
+        {{ store.storeName }}
+      </button>
+    </div>
+  </div>
+
+  <!-- ROW 2: INVOICE SETTINGS -->
+  <div class="pos-row invoice-row">
+    <div class="row-header">📄 Invoice</div>
+    <div class="invoice-fields">
+      <div class="mobile-field-group">
+        <label>Invoice Number:</label>
+        <div class="input-action-pair">
+          <input type="text" [(ngModel)]="customerInfo.invoiceNumber" placeholder="Auto-generated">
+          <button (click)="generateNewInvoiceNumber()" class="action-btn">New</button>
+        </div>
+      </div>
+      <div class="mobile-field-group">
+        <label>Date & Time:</label>
+        <input type="datetime-local" [(ngModel)]="customerInfo.datetime">
+      </div>
+    </div>
+  </div>
+
+  <!-- ROW 3: CATEGORIES TABS -->
+  <div class="pos-row categories-row">
+    <div class="row-header">📂 Categories</div>
+    <div class="categories-tabs-container">
+      <button 
+        class="mobile-tab"
+        [class.active]="selectedCategory() === 'all'"
+        (click)="setSelectedCategory('all')">
+        All Products
+      </button>
+      <button 
+        *ngFor="let category of categories()"
+        class="mobile-tab"
+        [class.active]="selectedCategory() === category"
+        (click)="setSelectedCategory(category)">
+        {{ category }}
+      </button>
+    </div>
+  </div>
+
+  <!-- ROW 4: CUSTOMER INFORMATION -->
+  <div class="pos-row customer-row">
+    <div class="row-header" (click)="toggleSoldToPanel()">
+      👤 Customer
+      <span class="expand-arrow" [class.expanded]="!isSoldToCollapsed()">▼</span>
+    </div>
+    
+    <!-- Always visible customer name -->
+    <div class="mobile-field-group">
+      <input 
+        type="text" 
+        [(ngModel)]="customerInfo.soldTo"
+        placeholder="Customer Name (Optional)"
+        class="customer-name-field">
+    </div>
+    
+    <!-- Expandable customer details -->
+    <div class="customer-details" [class.hidden]="isSoldToCollapsed()">
+      <div class="mobile-field-group">
+        <label>TIN:</label>
+        <input type="text" [(ngModel)]="customerInfo.tin" placeholder="123-456-789-000">
+      </div>
+      <div class="mobile-field-group">
+        <label>Business Address:</label>
+        <input type="text" [(ngModel)]="customerInfo.businessAddress" placeholder="Full Address">
+      </div>
+    </div>
+  </div>
+
+  <!-- ROW 5: ACCESS TABS -->
+  <div class="pos-row access-row">
+    <div class="row-header">⚡ Access</div>
+    <div class="access-tabs-container">
+      <button 
+        *ngFor="let tab of accessTabs" 
+        class="mobile-tab"
+        [class.active]="accessTab() === tab"
+        (click)="setAccessTab(tab)">
+        {{ tab }}
+      </button>
+    </div>
+  </div>
+
+  <!-- ROW 6: SEARCH & VIEW OPTIONS -->
+  <div class="pos-row search-row">
+    <div class="row-header">🔍 Search</div>
+    <div class="search-container">
+      <div class="search-input-container">
+        <input 
+          type="text"
+          [ngModel]="searchQuery()"
+          (ngModelChange)="setSearchQuery($event)"
+          (input)="onSearch()"
+          [placeholder]="accessTab() === 'Orders' ? 'Search Orders...' : 'Search Products...'"
+          class="mobile-search">
+        <button *ngIf="searchQuery()" (click)="clearSearch()" class="clear-btn">×</button>
+      </div>
+      
+      <!-- View Options for Products -->
+      <div class="view-options" *ngIf="accessTab() === 'New'">
+        <button 
+          [class.active]="currentView() === 'list'"
+          (click)="setCurrentView('list')"
+          class="view-btn">List</button>
+        <button 
+          [class.active]="currentView() === 'grid'"
+          (click)="setCurrentView('grid')"
+          class="view-btn">Grid</button>
+        <button 
+          [class.active]="currentView() === 'custom'"
+          (click)="setCurrentView('custom')"
+          class="view-btn">Promos</button>
+        <button 
+          [class.active]="currentView() === 'bestsellers'"
+          (click)="setCurrentView('bestsellers')"
+          class="view-btn">Top</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ROW 7: MAIN CONTENT (Products or Orders) -->
+  <div class="pos-row content-row">
+    
+    <!-- PRODUCTS SECTION -->
+    <div *ngIf="accessTab() === 'New'">
+      <div class="row-header">📦 Products</div>
+      
+      <!-- List View Products -->
+      <div *ngIf="currentView() === 'list'" class="products-list-mobile">
+        <div 
+          *ngFor="let product of filteredProducts()"
+          (click)="addToCart(product)"
+          class="product-row">
+          <img [src]="product.imageUrl || '/assets/placeholder.png'" class="product-thumb">
+          <div class="product-details">
+            <div class="product-name">{{ product.productName }}</div>
+            <div class="product-sku">SKU: {{ product.skuId }}</div>
+            <div class="product-stock">Stock: {{ product.totalStock }}</div>
+          </div>
+          <div class="product-pricing">
+            <div class="product-price">₱{{ (product.sellingPrice || 0).toFixed(2) }}</div>
+            <div *ngIf="product.hasDiscount" class="discount-tag">{{ product.discountValue }}% OFF</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Grid View Products -->
+      <div *ngIf="currentView() === 'grid'" class="products-grid-mobile">
+        <div 
+          *ngFor="let product of filteredProducts()"
+          (click)="addToCart(product)"
+          class="product-card">
+          <img [src]="product.imageUrl || '/assets/placeholder.png'" class="product-image">
+          <div class="product-card-info">
+            <div class="product-name">{{ product.productName }}</div>
+            <div class="product-price">₱{{ (product.sellingPrice || 0).toFixed(2) }}</div>
+            <div class="product-stock">Stock: {{ product.totalStock }}</div>
+            <div *ngIf="product.hasDiscount" class="promo-badge">PROMO</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Promotional Products -->
+      <div *ngIf="currentView() === 'custom'" class="promo-products-mobile">
+        <div class="sub-header">🏷️ Promotional Items</div>
+        <div class="products-grid-mobile">
+          <div 
+            *ngFor="let product of promoProducts()"
+            (click)="addToCart(product)"
+            class="product-card promo-card">
+            <div class="promo-flag">PROMO</div>
+            <img [src]="product.imageUrl || '/assets/placeholder.png'" class="product-image">
+            <div class="product-card-info">
+              <div class="product-name">{{ product.productName }}</div>
+              <div class="product-price">₱{{ (product.sellingPrice || 0).toFixed(2) }}</div>
+              <div class="discount-info">{{ product.discountValue }}% OFF</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Best Sellers -->
+      <div *ngIf="currentView() === 'bestsellers'" class="bestsellers-mobile">
+        <div class="sub-header">🏆 Best Selling Products</div>
+        <div class="products-list-mobile">
+          <div 
+            *ngFor="let product of bestSellerProducts(); let i = index"
+            (click)="addToCart(product)"
+            class="product-row bestseller-row">
+            <div class="rank-badge">{{ i + 1 }}</div>
+            <img [src]="product.imageUrl || '/assets/placeholder.png'" class="product-thumb">
+            <div class="product-details">
+              <div class="product-name">{{ product.productName }}</div>
+              <div class="product-sku">SKU: {{ product.skuId }}</div>
+            </div>
+            <div class="product-pricing">
+              <div class="product-price">₱{{ (product.sellingPrice || 0).toFixed(2) }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ORDERS SECTION -->
+    <div *ngIf="accessTab() === 'Orders'">
+      <div class="row-header">📋 Order History</div>
+      
+      <div *ngIf="isLoadingOrders()" class="loading-state">Loading orders...</div>
+      
+      <div *ngIf="!isLoadingOrders() && orders().length === 0" class="empty-state">No orders found</div>
+      
+      <div class="orders-list-mobile">
+        <div 
+          *ngFor="let order of orders()"
+          (dblclick)="openOrder(order)"
+          class="order-row">
+          <div class="order-info">
+            <div class="order-number">{{ order.invoiceNumber || order.orderNumber || order.id }}</div>
+            <div class="order-meta">
+              {{ order.date?.toDate ? (order.date.toDate() | date:'short') : (order.createdAt?.toDate ? (order.createdAt.toDate() | date:'short') : '') }}
+              <br>
+              {{ order.soldTo || order.customerName || 'Walk-in Customer' }}
+            </div>
+          </div>
+          <div class="order-summary">
+            <div class="order-total">₱{{ order.totalAmount | number:'1.2-2' }}</div>
+            <div class="order-status">{{ order.status }}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ROW 8: CART & RECEIPT AREA -->
+  <div class="pos-row cart-row">
+    <div class="row-header">🛒 Cart & Receipt ({{ cartItems().length }} items)</div>
+    
+    <!-- Store Header for Receipt -->
+    <div class="receipt-company-header" *ngIf="currentStoreInfo()">
+      <div class="company-logo-area">
+        <img *ngIf="currentStoreInfo()?.logoUrl" [src]="currentStoreInfo()?.logoUrl" [alt]="currentStoreInfo()?.storeName + ' Logo'" class="company-logo">
+        <div class="company-details">
+          <div class="company-name">{{ currentStoreInfo()?.storeName || 'Store Name' }}</div>
+          <div class="store-name">{{ currentStoreInfo()?.branchName || currentStoreInfo()?.storeName || 'Store Name' }}</div>
+          <div class="store-address">{{ currentStoreInfo()?.address || 'Store Address' }}</div>
+          <div class="contact-info">{{ currentStoreInfo()?.phoneNumber || 'Phone' }} | {{ currentStoreInfo()?.email || 'Email' }}</div>
+        </div>
+      </div>
+      <div class="invoice-details">
+        <div><strong>Invoice:</strong> {{ customerInfo.invoiceNumber || 'Auto-generated' }}</div>
+        <div><strong>Date:</strong> {{ (customerInfo.datetime ? (customerInfo.datetime | date:'short') : (currentDate | date:'short')) }}</div>
+      </div>
+    </div>
+    
+    <!-- Empty Cart Message -->
+    <div *ngIf="cartItems().length === 0" class="empty-cart-mobile">
+      <div class="empty-icon">🛒</div>
+      <div class="empty-message">Cart is empty</div>
+      <div class="empty-hint">Tap on products to add them</div>
+    </div>
+
+    <!-- Cart Items List -->
+    <div *ngIf="cartItems().length > 0" class="cart-items-mobile">
+      <div 
+        *ngFor="let item of cartItems()" 
+        class="cart-item-mobile">
+        
+        <!-- Item Header Row -->
+        <div class="item-header-row">
+          <div class="item-info">
+            <div class="item-name">{{ item.productName }}</div>
+            <div class="item-sku">{{ item.skuId }} - {{ item.sellingPrice.toFixed(2) }} each</div>
+          </div>
+          <button (click)="removeFromCart(item.productId)" class="remove-item-btn">×</button>
+        </div>
+        
+        <!-- Item Controls Row -->
+        <div class="item-controls-row">
+          <div class="quantity-control">
+            <button (click)="updateQuantity(item.productId, item.quantity - 1)" class="qty-btn">-</button>
+            <span class="qty-display">{{ item.quantity }}</span>
+            <button (click)="updateQuantity(item.productId, item.quantity + 1)" class="qty-btn">+</button>
+          </div>
+          <div class="item-total-price">{{ item.total.toFixed(2) }}</div>
+        </div>
+        
+        <!-- VAT Control Row -->
+        <div class="vat-control-row" *ngIf="item.isVatApplicable">
+          <label class="vat-exempt-label">
+            <input 
+              type="checkbox" 
+              [checked]="item.isVatExempt"
+              (change)="toggleVatExemption(item.productId)">
+            <span>VAT Exempt</span>
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <!-- Cart Summary Section -->
+    <div *ngIf="cartItems().length > 0" class="cart-summary-mobile">
+      <div class="summary-row">
+        <span class="summary-label">VAT Deduction:</span>
+        <span class="summary-value">₱{{ cartSummary().vatAmount.toFixed(2) }}</span>
+      </div>
+      <div class="summary-row">
+        <span class="summary-label">VAT Exempt:</span>
+        <span class="summary-value">₱{{ cartSummary().vatExemptAmount.toFixed(2) }}</span>
+      </div>
+      <div class="summary-row">
+        <span class="summary-label">Discount:</span>
+        <span class="summary-value">₱{{ cartSummary().discountAmount.toFixed(2) }}</span>
+      </div>
+      <div class="summary-row gross-row">
+        <span class="summary-label">Gross Amount:</span>
+        <span class="summary-value">₱{{ cartSummary().grossAmount.toFixed(2) }}</span>
+      </div>
+      <div class="summary-row total-row">
+        <span class="summary-label">NET AMOUNT:</span>
+        <span class="summary-value total-amount">₱{{ cartSummary().netAmount.toFixed(2) }}</span>
+      </div>
+    </div>
+
+    <!-- Action Buttons -->
+    <div *ngIf="cartItems().length > 0" class="cart-actions-mobile">
+      <button (click)="clearCart()" class="mobile-btn secondary-btn">Clear Cart</button>
+      <button 
+        (click)="processOrder()" 
+        [disabled]="isProcessing()"
+        class="mobile-btn primary-btn">
+        {{ isProcessing() ? 'Processing...' : 'Complete Order' }}
+      </button>
+    </div>
+
+    <!-- Receipt Footer -->
+    <div *ngIf="cartItems().length > 0" class="receipt-footer-mobile">
+      <div class="thank-you-message">Thank you! See you again! 😊</div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ORDER DETAIL MODAL -->
+<div *ngIf="selectedOrder()" class="modal-overlay" (click)="closeOrder()">
+  <div class="order-modal" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h3>Order Details</h3>
+      <button (click)="closeOrder()" class="modal-close-btn">×</button>
+    </div>
+    
+    <div class="modal-body">
+      <div class="order-info-section">
+        <div class="info-row">
+          <strong>Invoice Number:</strong> {{ selectedOrder()?.invoiceNumber || 'N/A' }}
+        </div>
+        <div class="info-row">
+          <strong>Date:</strong> {{ selectedOrder()?.date?.toDate ? (selectedOrder()?.date.toDate() | date:'full') : '' }}
+        </div>
+        <div class="info-row">
+          <strong>Customer:</strong> {{ selectedOrder()?.soldTo || 'Walk-in' }}
+        </div>
+        <div class="info-row">
+          <strong>Status:</strong> {{ selectedOrder()?.status }}
+        </div>
+        <div class="info-row">
+          <strong>Total Amount:</strong> ₱{{ selectedOrder()?.totalAmount | number:'1.2-2' }}
+        </div>
+      </div>
+      
+      <!-- BIR Information Section -->
+      <div class="bir-section">
+        <h4>BIR Information</h4>
+        <div class="info-row">
+          <strong>ATP/OCN:</strong> {{ selectedOrder()?.atpOrOcn }}
+        </div>
+        <div class="info-row">
+          <strong>BIR Permit:</strong> {{ selectedOrder()?.birPermitNo }}
+        </div>
+        <div class="info-row">
+          <strong>Serial Range:</strong> {{ selectedOrder()?.inclusiveSerialNumber }}
+        </div>
+      </div>
+      
+      <div class="modal-actions">
+        <button (click)="closeOrder()" class="mobile-btn secondary-btn">Close</button>
+        <button *ngIf="selectedOrder()?.status !== 'Cancelled'" 
+                (click)="updateOrderStatus(selectedOrder()?.id, 'Cancelled')" 
+                class="mobile-btn warning-btn">Cancel Order</button>
+        <button *ngIf="selectedOrder()?.status !== 'Refunded'" 
+                (click)="updateOrderStatus(selectedOrder()?.id, 'Refunded')" 
+                class="mobile-btn primary-btn">Process Refund</button>
+      </div>
+    </div>
+  </div>
+</div>

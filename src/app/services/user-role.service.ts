@@ -164,6 +164,17 @@ export class UserRoleService {
     );
   }
 
+  getUserRoleByUserId(userId: string): UserRole | undefined {
+    const currentUser = this.authService.currentUser();
+    if (!currentUser || !currentUser.companyId) {
+      return undefined;
+    }
+    
+    return this.userRolesSignal().find(userRole => 
+      userRole.userId === userId && userRole.companyId === currentUser.companyId
+    );
+  }
+
   // Get all user roles for the current user's company
   getCompanyUserRoles(): UserRole[] {
     const currentUser = this.authService.currentUser();

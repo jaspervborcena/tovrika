@@ -1047,8 +1047,14 @@ export class ProductManagementComponent implements OnInit {
 
   async ngOnInit(): Promise<void> {
     try {
-      await this.storeService.loadStores();
-      await this.productService.loadProducts();
+      const user = this.authService.getCurrentUser();
+      if (user?.companyId) {
+        await this.storeService.loadStoresByCompany(user.companyId);
+        await this.productService.loadProducts(user.companyId);
+      } else {
+        await this.storeService.loadStoresByCompany(''); // This might need better handling
+        await this.productService.loadProducts();
+      }
       this.filterProducts();
     } catch (error) {
       console.error('Error loading data:', error);

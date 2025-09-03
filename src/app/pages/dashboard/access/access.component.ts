@@ -769,7 +769,7 @@ export class AccessComponent implements OnInit {
       
       // Also check user stores from store service
       if (currentUser?.companyId) {
-        await this.storeService.loadStores(currentUser.companyId);
+        await this.storeService.loadStoresByCompany(currentUser.companyId);
         const userStores = this.storeService.getStoresByCompany(currentUser.companyId);
         console.log('User stores for company:', userStores);
       }
@@ -807,8 +807,8 @@ export class AccessComponent implements OnInit {
       else if (currentUser.storeIds && currentUser.storeIds.length > 0) {
         console.log('User storeIds found:', currentUser.storeIds);
         
-        // Load all stores to get company information
-        await this.storeService.loadStores();
+        // Load stores by specific IDs to get company information
+        await this.storeService.loadStores(currentUser.storeIds);
         const allStores = this.storeService.getStores();
         console.log('All loaded stores:', allStores);
         
