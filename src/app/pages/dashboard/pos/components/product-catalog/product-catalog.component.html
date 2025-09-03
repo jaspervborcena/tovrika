@@ -1,0 +1,123 @@
+<!-- Categories Panel -->
+<div class="categories-panel">
+  <h3>Categories</h3>
+  <div class="category-list">
+    <button 
+      [class.active]="selectedCategory === 'all'"
+      (click)="onCategoryClick('all')"
+      class="category-btn">
+      All Products
+    </button>
+    <button 
+      *ngFor="let category of categories"
+      [class.active]="selectedCategory === category"
+      (click)="onCategoryClick(category)"
+      class="category-btn">
+      {{ category }}
+    </button>
+  </div>
+</div>
+
+<!-- Access Tabs -->
+<div class="access-tabs" style="padding: 0 1rem;">
+  <div class="access-tab-list">
+    <div *ngFor="let t of accessTabs" 
+         class="access-tab"
+         [class.active]="accessTab === t"
+         (click)="onAccessTabChange(t)">
+      <div class="tab-header">
+        <div class="tab-content">
+          <span class="tab-label">{{ t }}</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Search Section -->
+<div class="search-section">
+  <div class="search-bar">
+    <svg class="search-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+            d="M21 21l-4.35-4.35m0 0A7.5 7.5 0 1 0 5.25 5.25a7.5 7.5 0 0 0 11.4 11.4z">
+      </path>
+    </svg>
+    <input 
+      type="text" 
+      placeholder="Search products..." 
+      [(ngModel)]="searchInputValue"
+      (input)="onSearchInput($event)"
+      class="search-input">
+    <button *ngIf="searchQuery" (click)="onClearSearch()" class="clear-btn">×</button>
+  </div>
+</div>
+
+<!-- Product View Tabs -->
+<div class="product-tabs" *ngIf="accessTab === 'New'">
+  <button
+    [class.active]="currentView === 'list'"
+    (click)="onViewChange('list')"
+    class="tab-btn">
+    <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+      <path d="M2.5 12a.5.5 0 0 1 .5-.5h10a.5.5 0 0 1 0 1H3a.5.5 0 0 1-.5-.5zm0-4a.5.5 0 0 1 .5-.5h10a.5.5 0 0 1 0 1H3a.5.5 0 0 1-.5-.5zm0-4a.5.5 0 0 1 .5-.5h10a.5.5 0 0 1 0 1H3a.5.5 0 0 1-.5-.5z"/>
+    </svg>
+    List
+  </button>
+  <button
+    [class.active]="currentView === 'grid'"
+    (click)="onViewChange('grid')"
+    class="tab-btn">
+    <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+      <path d="M1 2.5A1.5 1.5 0 0 1 2.5 1h3A1.5 1.5 0 0 1 7 2.5v3A1.5 1.5 0 0 1 5.5 7h-3A1.5 1.5 0 0 1 1 5.5v-3zM2.5 2a.5.5 0 0 0-.5.5v3a.5.5 0 0 0 .5.5h3a.5.5 0 0 0 .5-.5v-3a.5.5 0 0 0-.5-.5h-3zm6.5.5A1.5 1.5 0 0 1 10.5 1h3A1.5 1.5 0 0 1 15 2.5v3A1.5 1.5 0 0 1 13.5 7h-3A1.5 1.5 0 0 1 9 5.5v-3zm1.5-.5a.5.5 0 0 0-.5.5v3a.5.5 0 0 0 .5.5h3a.5.5 0 0 0 .5-.5v-3a.5.5 0 0 0-.5-.5h-3zM1 10.5A1.5 1.5 0 0 1 2.5 9h3A1.5 1.5 0 0 1 7 10.5v3A1.5 1.5 0 0 1 5.5 15h-3A1.5 1.5 0 0 1 1 13.5v-3zm1.5-.5a.5.5 0 0 0-.5.5v3a.5.5 0 0 0 .5.5h3a.5.5 0 0 0 .5-.5v-3a.5.5 0 0 0-.5-.5h-3zm6.5.5A1.5 1.5 0 0 1 10.5 9h3a1.5 1.5 0 0 1 1.5 1.5v3a1.5 1.5 0 0 1-1.5 1.5h-3A1.5 1.5 0 0 1 9 13.5v-3zm1.5-.5a.5.5 0 0 0-.5.5v3a.5.5 0 0 0 .5.5h3a.5.5 0 0 0 .5-.5v-3a.5.5 0 0 0-.5-.5h-3z"/>
+    </svg>
+    Grid
+  </button>
+</div>
+
+<!-- Products Display -->
+<div class="products-panel">
+  <!-- Grid View -->
+  <div *ngIf="currentView === 'grid'" class="products-grid">
+    <div *ngFor="let product of products" 
+         class="product-card"
+         (click)="onProductClick(product)">
+      <div class="product-image">
+        <img [src]="product.imageUrl || '/assets/placeholder-product.png'" 
+             [alt]="product.productName"
+             onerror="this.src='/assets/placeholder-product.png'">
+      </div>
+      <div class="product-info">
+        <h4>{{ product.productName }}</h4>
+        <p class="product-price">₱{{ product.sellingPrice | number:'1.2-2' }}</p>
+        <p class="product-stock">Stock: {{ product.totalStock }}</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- List View -->
+  <div *ngIf="currentView === 'list'" class="products-list">
+    <div *ngFor="let product of products" 
+         class="product-list-item"
+         (click)="onProductClick(product)">
+      <div class="product-image-small">
+        <img [src]="product.imageUrl || '/assets/placeholder-product.png'" 
+             [alt]="product.productName"
+             onerror="this.src='/assets/placeholder-product.png'">
+      </div>
+      <div class="product-details">
+        <div class="product-name">{{ product.productName }}</div>
+        <div class="product-sku">SKU: {{ product.skuId }}</div>
+      </div>
+      <div class="product-price">₱{{ product.sellingPrice | number:'1.2-2' }}</div>
+      <div class="product-stock">{{ product.totalStock }}</div>
+    </div>
+  </div>
+
+  <!-- Empty State -->
+  <div *ngIf="products.length === 0" class="empty-state">
+    <div class="empty-icon">📦</div>
+    <h3>No products found</h3>
+    <p *ngIf="searchQuery">Try adjusting your search terms</p>
+    <p *ngIf="!searchQuery && selectedCategory !== 'all'">No products in this category</p>
+  </div>
+</div>

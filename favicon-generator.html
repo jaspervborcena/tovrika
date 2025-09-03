@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Favicon Generator</title>
+</head>
+<body>
+    <canvas id="canvas" width="32" height="32" style="border: 1px solid #ccc;"></canvas>
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Clear canvas with transparent background
+        ctx.clearRect(0, 0, 32, 32);
+        
+        // Draw yellow refresh icon
+        ctx.strokeStyle = '#F59E0B';
+        ctx.fillStyle = '#FCD34D';
+        ctx.lineWidth = 2;
+        
+        // Draw refresh arrows (simplified for favicon size)
+        ctx.beginPath();
+        // Top arrow
+        ctx.moveTo(8, 8);
+        ctx.lineTo(8, 12);
+        ctx.lineTo(12, 12);
+        ctx.moveTo(10, 10);
+        ctx.lineTo(8, 8);
+        ctx.lineTo(6, 10);
+        
+        // Bottom arrow
+        ctx.moveTo(24, 24);
+        ctx.lineTo(24, 20);
+        ctx.lineTo(20, 20);
+        ctx.moveTo(22, 22);
+        ctx.lineTo(24, 24);
+        ctx.lineTo(26, 22);
+        
+        ctx.stroke();
+        
+        // Draw center circle
+        ctx.beginPath();
+        ctx.arc(16, 16, 6, 0, 2 * Math.PI);
+        ctx.fill();
+        ctx.stroke();
+        
+        console.log('Favicon generated on canvas');
+    </script>
+</body>
+</html>

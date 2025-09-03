@@ -36,6 +36,13 @@ export interface Company {
   phone?: string;
   taxId?: string;
   website?: string;
+  
+  // BIR Compliance Fields (for Philippines)
+  atpOrOcn?: string; // Authority to Print or Official Control Number
+  birPermitNo?: string; // BIR Permit Number
+  inclusiveSerialNumber?: string; // Inclusive Serial Number Range
+  tin?: string; // Tax Identification Number
+  
   onboardingStatus: OnboardingStatus;
   settings?: CompanySettings;
   createdAt: Date;
