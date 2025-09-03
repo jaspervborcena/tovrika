@@ -286,7 +286,7 @@
         <div class="item-header-row">
           <div class="item-info">
             <div class="item-name">{{ item.productName }}</div>
-            <div class="item-sku">{{ item.skuId }} - ₱{{ item.sellingPrice.toFixed(2) }} each</div>
+            <div class="item-sku">{{ item.skuId }} - {{ item.sellingPrice.toFixed(2) }} each</div>
           </div>
           <button (click)="removeFromCart(item.productId)" class="remove-item-btn">×</button>
         </div>
@@ -298,7 +298,7 @@
             <span class="qty-display">{{ item.quantity }}</span>
             <button (click)="updateQuantity(item.productId, item.quantity + 1)" class="qty-btn">+</button>
           </div>
-          <div class="item-total-price">₱{{ item.total.toFixed(2) }}</div>
+          <div class="item-total-price">{{ item.total.toFixed(2) }}</div>
         </div>
         
         <!-- VAT Control Row -->
