@@ -245,6 +245,34 @@ npm run e2e        # Run e2e tests
 
 This project is proprietary software. All rights reserved.
 
+## 📋 Changelog
+
+### Latest Updates (September 2025)
+
+#### 🔧 Bug Fixes & Improvements
+- **Authentication Persistence** - Fixed authentication state not being reflected on home page after login
+- **Component Stability** - Reverted POS component to stable working state to resolve loading issues
+- **UI Consistency** - Updated company profile styling to match products page header design
+- **Navigation Enhancement** - Added dashboard icon to POS header for improved navigation flow
+
+#### 🎨 UI/UX Enhancements
+- **Home Component** - Enhanced with authentication-aware interface and dynamic content
+- **Company Profile** - Updated with gradient header and conditional "Add Company" button
+- **Header Component** - Added dashboard navigation icon for POS interfaces
+- **Responsive Design** - Improved mobile and desktop layout consistency
+
+#### 🛠️ Technical Improvements
+- **Angular Signals** - Implemented reactive state management for authentication
+- **Code Quality** - Improved TypeScript interfaces and component structure
+- **Error Handling** - Enhanced error handling and user feedback
+- **Performance** - Optimized component rendering and state updates
+
+#### 🏪 POS System
+- **Cart Management** - Stable cart functionality with VAT calculations
+- **Product Display** - Multiple view modes (list, grid, promos, bestsellers)
+- **Order Processing** - Reliable order completion and tracking
+- **Mobile Support** - Dedicated mobile POS interface maintained
+
 ## 🆘 Support
 
 For support and questions:

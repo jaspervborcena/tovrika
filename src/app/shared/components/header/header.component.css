@@ -138,6 +138,38 @@
   height: 1.25rem;
 }
 
+/* Dashboard Button */
+.dashboard-btn {
+  position: relative;
+  width: 2.5rem;
+  height: 2.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.15);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 12px;
+  color: white;
+  text-decoration: none;
+  transition: all 0.3s ease;
+  cursor: pointer;
+  margin-right: 0.5rem;
+}
+
+.dashboard-btn:hover {
+  background: rgba(255, 255, 255, 0.25);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+  text-decoration: none;
+  color: white;
+}
+
+.dashboard-btn svg {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
 /* Device Toggle Button Styles */
 .device-toggle-btn {
   display: flex;

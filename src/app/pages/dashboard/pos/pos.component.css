@@ -62,8 +62,91 @@
     .categories-panel {
       padding: 1rem;
       border-bottom: 1px solid #e2e8f0;
-      max-height: 200px;
+      max-height: 300px;
       overflow-y: auto;
+    }
+
+    /* Invoice Info Section */
+    .invoice-info-section {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      padding: 1rem;
+      border-radius: 8px;
+      margin-bottom: 1rem;
+      color: white;
+    }
+
+    .invoice-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    .invoice-date,
+    .invoice-number {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+
+    .invoice-date {
+      flex: 1;
+    }
+
+    .invoice-number {
+      flex: 2;
+    }
+
+    .invoice-date label,
+    .invoice-number label {
+      font-size: 0.75rem;
+      font-weight: 600;
+      opacity: 0.9;
+      margin: 0;
+    }
+
+    .invoice-date span {
+      font-weight: 600;
+      font-size: 0.875rem;
+    }
+
+    .invoice-input {
+      padding: 0.5rem 0.75rem;
+      border: 1px solid rgba(255, 255, 255, 0.3);
+      border-radius: 6px;
+      background: rgba(255, 255, 255, 0.15);
+      backdrop-filter: blur(10px);
+      color: white;
+      font-size: 0.875rem;
+      font-weight: 500;
+      transition: all 0.2s ease;
+    }
+
+    .invoice-input::placeholder {
+      color: rgba(255, 255, 255, 0.7);
+    }
+
+    .invoice-input:focus {
+      outline: none;
+      border-color: rgba(255, 255, 255, 0.5);
+      background: rgba(255, 255, 255, 0.2);
+      box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.1);
+    }
+
+    /* Categories Section */
+    .categories-section {
+      margin-bottom: 1rem;
+    }
+
+    .categories-section:last-child {
+      margin-bottom: 0;
+    }
+
+    .categories-section h3 {
+      margin: 0 0 0.5rem 0;
+      font-size: 1rem;
+      font-weight: 600;
+      color: #1f2937;
     }
 
     .categories-panel h3 {
