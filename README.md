@@ -1,59 +1,282 @@
-# POS System
+# 🏪 Modern POS System
 
-This project was generated using [Angular CLI](https://github.com/angular/angular-cli) version 19.1.4.
+A comprehensive Point of Sale (POS) system built with Angular 19 and Firebase, designed for multi-store retail operations with advanced features and mobile-responsive design.
 
-## Development server
+## 🚀 Features
 
-To start a local development server, run:
+### Core Functionality
+- ✅ **Multi-Store Management** - Manage multiple stores and branches
+- ✅ **Product Catalog** - Comprehensive product management with inventory tracking
+- ✅ **Cart & Checkout** - Intuitive shopping cart with VAT calculations
+- ✅ **Receipt Generation** - BIR-compliant receipt printing
+- ✅ **User Management** - Role-based access control (Admin, Manager, Cashier)
+- ✅ **Order Management** - Order processing and tracking
+- ✅ **Responsive Design** - Desktop and mobile-optimized interface
 
-```bash
-ng serve
+### Advanced Features
+- 🔐 **Authentication & Authorization** - Firebase-powered secure login
+- 💾 **Cloud Sync** - Real-time data synchronization
+- 📱 **Mobile POS** - Dedicated mobile interface for cashiers
+- 🧾 **VAT Management** - Automated VAT calculations and exemptions
+- 📊 **Analytics Ready** - Built-in analytics infrastructure
+- 🎯 **Customer View** - Customer-facing display capabilities
+- 🔄 **Offline Support** - Service worker implementation for offline operation
+
+### Business Compliance
+- 🇵🇭 **BIR Compliance** - Philippine tax requirements
+- 📋 **Store Settings** - Configurable store parameters
+- 🏢 **Company Management** - Multi-company support
+- 📄 **Receipt Customization** - Branded receipts with company details
+
+## 🛠️ Technology Stack
+
+### Frontend
+- **Angular 19** - Latest Angular framework with standalone components
+- **TypeScript** - Type-safe development
+- **Tailwind CSS** - Utility-first CSS framework
+- **Angular Material** - Material Design components
+- **RxJS** - Reactive programming
+
+### Backend & Services
+- **Firebase** - Backend-as-a-Service
+  - Firestore - NoSQL database
+  - Authentication - User management
+  - Hosting - Application deployment
+- **Angular Fire** - Firebase integration
+
+### Development Tools
+- **Angular CLI** - Development tooling
+- **PostCSS** - CSS processing
+- **Jasmine & Karma** - Testing framework
+
+## 📁 Project Structure
+
+```
+src/
+├── app/
+│   ├── core/                    # Core services and utilities
+│   │   └── services/
+│   ├── guards/                  # Route guards (auth, onboarding)
+│   ├── interfaces/              # TypeScript interfaces
+│   │   ├── product.interface.ts
+│   │   ├── cart.interface.ts
+│   │   ├── pos.interface.ts
+│   │   └── ...
+│   ├── layouts/                 # Layout components
+│   │   ├── dashboard/
+│   │   └── main-layout/
+│   ├── pages/                   # Page components
+│   │   ├── auth/               # Authentication pages
+│   │   ├── dashboard/          # Main dashboard
+│   │   │   ├── pos/           # POS system
+│   │   │   ├── inventory/     # Inventory management
+│   │   │   ├── stores/        # Store management
+│   │   │   └── ...
+│   │   └── features/          # Feature modules
+│   ├── services/              # Business logic services
+│   │   ├── auth.service.ts
+│   │   ├── pos.service.ts
+│   │   ├── product.service.ts
+│   │   └── ...
+│   └── shared/               # Shared components and utilities
+│       ├── components/
+│       └── ui/
+└── environments/             # Environment configurations
 ```
 
-Once the server is running, open your browser and navigate to `http://localhost:4200/`. The application will automatically reload whenever you modify any of the source files.
+## 🚦 Getting Started
 
-## Code scaffolding
+### Prerequisites
+- Node.js (v18 or higher)
+- npm or yarn
+- Firebase project setup
 
-Angular CLI includes powerful code scaffolding tools. To generate a new component, run:
+### Installation
 
+1. **Clone the repository**
+   ```bash
+   git clone <repository-url>
+   cd POS
+   ```
+
+2. **Install dependencies**
+   ```bash
+   npm install
+   ```
+
+3. **Configure Firebase**
+   - Create a Firebase project
+   - Enable Firestore and Authentication
+   - Update `src/environments/environment.ts` with your Firebase config
+
+4. **Start development server**
+   ```bash
+   npm start
+   # or
+   ng serve
+   ```
+
+5. **Access the application**
+   - Open http://localhost:4200 in your browser
+
+### Build for Production
 ```bash
-ng generate component component-name
+npm run build
+# Output will be in the dist/ directory
 ```
 
-For a complete list of available schematics (such as `components`, `directives`, or `pipes`), run:
+## 🔧 Configuration
 
-```bash
-ng generate --help
+### Firebase Setup
+```typescript
+// src/environments/environment.ts
+export const environment = {
+  production: false,
+  firebase: {
+    apiKey: "your-api-key",
+    authDomain: "your-auth-domain",
+    projectId: "your-project-id",
+    storageBucket: "your-storage-bucket",
+    messagingSenderId: "your-sender-id",
+    appId: "your-app-id"
+  }
+};
 ```
 
-## Building
+### Environment Variables
+- `environment.ts` - Development configuration
+- `environment.prod.ts` - Production configuration
 
-To build the project run:
+## 📱 Mobile Support
+
+The POS system includes dedicated mobile components for optimal touch interaction:
+- **Mobile POS Interface** - Optimized for tablets and phones
+- **Touch-friendly UI** - Large buttons and gestures
+- **Responsive Cart** - Flexible layout for different screen sizes
+- **Custom Scrollbars** - Native mobile scrolling experience
+
+## 🏗️ Architecture
+
+### Service Layer
+- **AuthService** - User authentication and authorization
+- **PosService** - Core POS functionality and cart management
+- **ProductService** - Product catalog operations
+- **StoreService** - Multi-store management
+- **OrderService** - Order processing and history
+
+### State Management
+- Angular Signals for reactive state management
+- Computed properties for derived state
+- Service-based state sharing between components
+
+### Data Models
+- TypeScript interfaces for type safety
+- Firestore document models
+- BIR-compliant data structures
+
+## 🧪 Testing
 
 ```bash
-ng build
+# Run unit tests
+npm test
+
+# Run tests with coverage
+npm run test:coverage
+
+# Run e2e tests
+npm run e2e
 ```
 
-This will compile your project and store the build artifacts in the `dist/` directory. By default, the production build optimizes your application for performance and speed.
+## 📈 Performance
 
-## Running unit tests
+### Optimization Features
+- Lazy loading for route modules
+- OnPush change detection strategy
+- Image optimization
+- Service worker for caching
+- Tree-shaking for smaller bundles
 
-To execute unit tests with the [Karma](https://karma-runner.github.io) test runner, use the following command:
+### Mobile Performance
+- Touch optimizations
+- Efficient scrolling
+- Minimal bundle size
+- Fast startup time
+
+## 🔒 Security
+
+### Authentication
+- Firebase Authentication integration
+- JWT token management
+- Role-based access control
+- Session management
+
+### Authorization
+- Route guards
+- Component-level permissions
+- Service-level security
+
+## 🌐 Browser Support
+
+- Chrome (recommended)
+- Firefox
+- Safari
+- Edge
+- Mobile browsers (iOS Safari, Chrome Mobile)
+
+## 📋 Available Scripts
 
 ```bash
-ng test
+npm start          # Start development server
+npm run build      # Build for production
+npm run test       # Run unit tests
+npm run lint       # Lint code
+npm run e2e        # Run e2e tests
 ```
 
-## Running end-to-end tests
+## 🤝 Contributing
 
-For end-to-end (e2e) testing, run:
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
-```bash
-ng e2e
-```
+## 📝 License
 
-Angular CLI does not come with an end-to-end testing framework by default. You can choose one that suits your needs.
+This project is proprietary software. All rights reserved.
 
-## Additional Resources
+## 🆘 Support
 
-For more information on using the Angular CLI, including detailed command references, visit the [Angular CLI Overview and Command Reference](https://angular.dev/tools/cli) page.
+For support and questions:
+- Create an issue in the repository
+- Contact the development team
+- Check the documentation
+
+## 🚧 Roadmap
+
+### Completed ✅
+- Multi-store POS system
+- Mobile responsive design
+- Firebase integration
+- User authentication
+- Product management
+- Order processing
+- BIR compliance
+
+### In Progress 🔄
+- Inventory management
+- Advanced reporting
+- Customer management
+- Payment integrations
+
+### Planned 📋
+- Barcode scanning
+- Receipt printer integration
+- Advanced analytics
+- Multi-language support
+- API integrations
+- Cloud backups
+
+---
+
+**Built with ❤️ using Angular & Firebase**
