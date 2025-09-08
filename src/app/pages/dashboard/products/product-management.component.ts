@@ -1,7 +1,7 @@
 import { Component, OnInit, computed, signal, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, Validators, FormArray } from '@angular/forms';
-import { Product, ProductInventory } from '../../../interfaces/product.interface';
+import { Product, ProductInventory, UNIT_TYPES, UnitType } from '../../../interfaces/product.interface';
 import { ProductService } from '../../../services/product.service';
 import { StoreService } from '../../../services/store.service';
 import { Store } from '../../../interfaces/store.interface';
@@ -404,6 +404,54 @@ import { AuthService } from '../../../services/auth.service';
       color: #1f2937;
     }
 
+    /* Tax & Discount Section Styles */
+    .form-section {
+      box-sizing: border-box;
+      overflow: hidden;
+    }
+
+    .form-section .form-group {
+      margin-bottom: 1rem;
+    }
+
+    .form-section .form-group:last-child {
+      margin-bottom: 0;
+    }
+
+    .form-section .form-input,
+    .form-section .form-select {
+      box-sizing: border-box;
+      min-width: 0; /* Prevents input overflow */
+    }
+
+    /* Grid layout for discount fields */
+    .form-section [style*="grid-template-columns"] {
+      box-sizing: border-box;
+    }
+
+    .form-section [style*="grid-template-columns"] > * {
+      min-width: 0; /* Prevents grid items from overflowing */
+    }
+
+    /* Responsive adjustments */
+    @media (max-width: 768px) {
+      .form-section [style*="grid-template-columns"] {
+        grid-template-columns: 1fr !important;
+        gap: 0.5rem !important;
+      }
+      
+      /* Mobile inventory form adjustments */
+      form[style*="grid-template-columns"] {
+        grid-template-columns: 1fr 1fr !important;
+      }
+    }
+
+    @media (max-width: 480px) {
+      form[style*="grid-template-columns"] {
+        grid-template-columns: 1fr !important;
+      }
+    }
+
     .error-message {
       margin-top: 0.5rem;
       font-size: 0.875rem;
@@ -557,6 +605,7 @@ import { AuthService } from '../../../services/auth.service';
                 <th>Product Name</th>
                 <th>SKU ID</th>
                 <th>Category</th>
+                <th>Unit Type</th>
                 <th>Stock</th>
                 <th>Price</th>
                 <th>Store</th>
@@ -582,6 +631,7 @@ import { AuthService } from '../../../services/auth.service';
                 </td>
                 <td class="product-sku-cell">{{ product.skuId }}</td>
                 <td class="product-category-cell">{{ product.category }}</td>
+                <td class="product-unit-cell">{{ product.unitType || 'pieces' }}</td>
                 <td class="product-stock-cell">
                   <span class="stock-badge" [class]="getStockBadgeClass(product.totalStock)">
                     {{ product.totalStock }}
@@ -651,15 +701,15 @@ import { AuthService } from '../../../services/auth.service';
         <div class="modal-body">
           <form [formGroup]="productForm" (ngSubmit)="submitProduct()">
             <div class="form-group">
-              <label for="productName">Product Name *</label>
+              <label for="category">Category *</label>
               <input
                 type="text"
-                id="productName"
-                formControlName="productName"
+                id="category"
+                formControlName="category"
                 class="form-input"
-                placeholder="Enter product name">
-              <div class="error-message" *ngIf="productForm.get('productName')?.invalid && productForm.get('productName')?.touched">
-                Product name is required
+                placeholder="Enter category">
+              <div class="error-message" *ngIf="productForm.get('category')?.invalid && productForm.get('category')?.touched">
+                Category is required
               </div>
             </div>
 
@@ -677,15 +727,51 @@ import { AuthService } from '../../../services/auth.service';
             </div>
 
             <div class="form-group">
-              <label for="category">Category *</label>
+              <label for="barcodeId">Barcode ID</label>
               <input
                 type="text"
-                id="category"
-                formControlName="category"
+                id="barcodeId"
+                formControlName="barcodeId"
                 class="form-input"
-                placeholder="Enter category">
-              <div class="error-message" *ngIf="productForm.get('category')?.invalid && productForm.get('category')?.touched">
-                Category is required
+                placeholder="Enter barcode">
+            </div>
+
+            <div class="form-group">
+              <label for="productName">Product Name *</label>
+              <input
+                type="text"
+                id="productName"
+                formControlName="productName"
+                class="form-input"
+                placeholder="Enter product name">
+              <div class="error-message" *ngIf="productForm.get('productName')?.invalid && productForm.get('productName')?.touched">
+                Product name is required
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label for="description">Description</label>
+              <textarea
+                id="description"
+                formControlName="description"
+                class="form-input"
+                rows="3"
+                placeholder="Enter product description (optional)"
+                maxlength="500"></textarea>
+            </div>
+
+            <div class="form-group">
+              <label for="unitType">Unit Type *</label>
+              <select
+                id="unitType"
+                formControlName="unitType"
+                class="form-input">
+                <option *ngFor="let unit of unitTypes" [value]="unit.value">
+                  {{unit.label}}
+                </option>
+              </select>
+              <div class="error-message" *ngIf="productForm.get('unitType')?.invalid && productForm.get('unitType')?.touched">
+                Unit type is required
               </div>
             </div>
 
@@ -730,16 +816,6 @@ import { AuthService } from '../../../services/auth.service';
             </div>
 
             <div class="form-group">
-              <label for="barcodeId">Barcode ID</label>
-              <input
-                type="text"
-                id="barcodeId"
-                formControlName="barcodeId"
-                class="form-input"
-                placeholder="Enter barcode ID">
-            </div>
-
-            <div class="form-group">
               <label for="qrCode">QR Code</label>
               <input
                 type="text"
@@ -764,6 +840,78 @@ import { AuthService } from '../../../services/auth.service';
                   <span *ngIf="productForm.get('imageUrl')?.value"> Replace Image</span>
                 </button>
                 <input id="hiddenImageFile" type="file" accept="image/*" style="display:none" (change)="onImageFileChange($event)" />
+              </div>
+            </div>
+
+            <!-- Tax and Discount Section -->
+            <div class="form-section" style="border: 1px solid #e5e7eb; border-radius: 8px; padding: 1rem; margin-bottom: 1rem; background-color: #f9fafb;">
+              <h4 style="margin: 0 0 1rem 0; color: #374151; font-size: 14px; font-weight: 600;">Tax & Discount Settings</h4>
+              
+              <div class="form-group">
+                <label class="checkbox-label">
+                  <input
+                    type="checkbox"
+                    formControlName="isVatApplicable"
+                    class="checkbox-input">
+                  <span class="checkbox-text">VAT Applicable</span>
+                </label>
+              </div>
+
+              <div class="form-group" *ngIf="productForm.get('isVatApplicable')?.value">
+                <label for="vatRate">VAT Rate (%)</label>
+                <input
+                  type="number"
+                  id="vatRate"
+                  formControlName="vatRate"
+                  class="form-input"
+                  style="width: 100%; max-width: 200px;"
+                  step="0.1"
+                  min="0"
+                  max="100"
+                  placeholder="12.0">
+                <div class="error-message" *ngIf="productForm.get('vatRate')?.invalid && productForm.get('vatRate')?.touched">
+                  VAT rate must be between 0 and 100
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label class="checkbox-label">
+                  <input
+                    type="checkbox"
+                    formControlName="hasDiscount"
+                    class="checkbox-input">
+                  <span class="checkbox-text">Has Discount</span>
+                </label>
+              </div>
+
+              <div *ngIf="productForm.get('hasDiscount')?.value" style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                <div class="form-group" style="margin-bottom: 0;">
+                  <label for="discountType">Discount Type</label>
+                  <select
+                    id="discountType"
+                    formControlName="discountType"
+                    class="form-input"
+                    style="width: 100%;">
+                    <option value="percentage">Percentage (%)</option>
+                    <option value="fixed">Fixed Amount</option>
+                  </select>
+                </div>
+                
+                <div class="form-group" style="margin-bottom: 0;">
+                  <label for="discountValue">Discount Value</label>
+                  <input
+                    type="number"
+                    id="discountValue"
+                    formControlName="discountValue"
+                    class="form-input"
+                    style="width: 100%;"
+                    step="0.01"
+                    min="0"
+                    [placeholder]="productForm.get('discountType')?.value === 'percentage' ? '10.0' : '50.00'">
+                  <div class="error-message" *ngIf="productForm.get('discountValue')?.invalid && productForm.get('discountValue')?.touched">
+                    Discount value must be greater than 0
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -810,6 +958,33 @@ import { AuthService } from '../../../services/auth.service';
                     placeholder="0.00">
                 </div>
                 <div class="form-group">
+                  <label for="initialCostPrice">Cost Price</label>
+                  <input
+                    type="number"
+                    id="initialCostPrice"
+                    step="0.01"
+                    formControlName="initialCostPrice"
+                    class="form-input"
+                    placeholder="0.00">
+                </div>
+                <div class="form-group">
+                  <label for="initialExpiryDate">Expiry Date (Optional)</label>
+                  <input
+                    type="date"
+                    id="initialExpiryDate"
+                    formControlName="initialExpiryDate"
+                    class="form-input">
+                </div>
+                <div class="form-group">
+                  <label for="initialSupplier">Supplier (Optional)</label>
+                  <input
+                    type="text"
+                    id="initialSupplier"
+                    formControlName="initialSupplier"
+                    class="form-input"
+                    placeholder="Enter supplier name">
+                </div>
+                <div class="form-group">
                   <label for="initialReceivedAt">Received Date</label>
                   <input
                     type="date"
@@ -829,12 +1004,31 @@ import { AuthService } from '../../../services/auth.service';
                 </div>
 
                 <!-- Inline add batch form -->
-                <form [formGroup]="inventoryForm" (ngSubmit)="addInventoryBatch()" style="display:flex; gap:0.5rem; margin-bottom:1rem; align-items:center;">
-                  <input id="batchId" type="text" formControlName="batchId" class="form-input" placeholder="Batch ID" style="flex:1" />
-                  <input type="number" formControlName="quantity" class="form-input" placeholder="Quantity" style="width:100px" />
-                  <input type="number" formControlName="unitPrice" step="0.01" class="form-input" placeholder="Unit Price" style="width:120px" />
-                  <input type="date" formControlName="receivedAt" class="form-input" style="width:160px" />
-                  <button type="submit" class="btn btn-primary" [disabled]="inventoryForm.invalid">Add</button>
+                <form [formGroup]="inventoryForm" (ngSubmit)="addInventoryBatch()" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap:0.5rem; margin-bottom:1rem; align-items:end;">
+                  <div>
+                    <input id="batchId" type="text" formControlName="batchId" class="form-input" placeholder="Batch ID" style="width:100%;" />
+                  </div>
+                  <div>
+                    <input type="number" formControlName="quantity" class="form-input" placeholder="Quantity" style="width:100%;" />
+                  </div>
+                  <div>
+                    <input type="number" formControlName="unitPrice" step="0.01" class="form-input" placeholder="Unit Price" style="width:100%;" />
+                  </div>
+                  <div>
+                    <input type="number" formControlName="costPrice" step="0.01" class="form-input" placeholder="Cost Price" style="width:100%;" />
+                  </div>
+                  <div>
+                    <input type="date" formControlName="receivedAt" class="form-input" style="width:100%;" />
+                  </div>
+                  <div>
+                    <input type="date" formControlName="expiryDate" class="form-input" placeholder="Expiry Date" style="width:100%;" />
+                  </div>
+                  <div>
+                    <input type="text" formControlName="supplier" class="form-input" placeholder="Supplier" style="width:100%;" />
+                  </div>
+                  <div>
+                    <button type="submit" class="btn btn-primary" [disabled]="inventoryForm.invalid" style="width:100%;">Add</button>
+                  </div>
                 </form>
 
                 <!-- Current batches table (same as inventory modal) -->
@@ -844,6 +1038,9 @@ import { AuthService } from '../../../services/auth.service';
                       <th style="padding:0.5rem">Batch ID</th>
                       <th style="padding:0.5rem">Quantity</th>
                       <th style="padding:0.5rem">Unit Price</th>
+                      <th style="padding:0.5rem">Cost Price</th>
+                      <th style="padding:0.5rem">Supplier</th>
+                      <th style="padding:0.5rem">Expiry</th>
                       <th style="padding:0.5rem">Received</th>
                       <th style="padding:0.5rem">Active</th>
                       <th style="padding:0.5rem">Actions</th>
@@ -853,6 +1050,9 @@ import { AuthService } from '../../../services/auth.service';
                         <td style="padding:0.5rem">{{ b.batchId }}</td>
                         <td style="padding:0.5rem">{{ b.quantity }}</td>
                         <td style="padding:0.5rem">\${{ b.unitPrice.toFixed(2) }}</td>
+                        <td style="padding:0.5rem">\${{ b.costPrice.toFixed(2) }}</td>
+                        <td style="padding:0.5rem">{{ b.supplier || '-' }}</td>
+                        <td style="padding:0.5rem">{{ b.expiryDate ? (b.expiryDate | date:'shortDate') : '-' }}</td>
                         <td style="padding:0.5rem">{{ b.receivedAt | date }}</td>
                         <td style="padding:0.5rem">
                           <input type="checkbox" [checked]="b.status === 'active'" [disabled]="(b.quantity || 0) <= 0" (change)="setActiveBatch(b.batchId, $any($event.target).checked)" />
@@ -1028,6 +1228,9 @@ export class ProductManagementComponent implements OnInit {
   // Forms
   productForm: FormGroup;
   inventoryForm: FormGroup;
+  
+  // Unit types for dropdown
+  unitTypes = UNIT_TYPES;
 
   constructor(
     public productService: ProductService,
@@ -1042,6 +1245,17 @@ export class ProductManagementComponent implements OnInit {
     const isMultiCtrl = this.productForm.get('isMultipleInventory');
     if (isMultiCtrl) {
       isMultiCtrl.valueChanges.subscribe(v => this.toggleControlsForInventory(v));
+    }
+    
+    // Subscribe to initial quantity changes to update total stock for new products
+    const initialQuantityCtrl = this.productForm.get('initialQuantity');
+    if (initialQuantityCtrl) {
+      initialQuantityCtrl.valueChanges.subscribe(quantity => {
+        if (this.productForm.get('isMultipleInventory')?.value && !this.selectedProduct) {
+          // For new products with multiple inventory, update total stock
+          this.productForm.get('totalStock')?.setValue(quantity || 0, { emitEvent: false });
+        }
+      });
     }
   }
 
@@ -1064,20 +1278,31 @@ export class ProductManagementComponent implements OnInit {
   private createProductForm(): FormGroup {
     return this.fb.group({
       productName: ['', Validators.required],
+      description: [''],
       skuId: ['', Validators.required],
+      unitType: ['pieces', Validators.required],
       category: ['', Validators.required],
-  totalStock: [0, [Validators.min(0)]],
-  sellingPrice: [0, [Validators.required, Validators.min(0)]],
+      totalStock: [0, [Validators.min(0)]],
+      sellingPrice: [0, [Validators.required, Validators.min(0)]],
       storeId: ['', Validators.required],
       barcodeId: [''],
       qrCode: [''],
       imageUrl: [''],
+      // Tax and Discount Fields
+      isVatApplicable: [true],
+      vatRate: [12.0, [Validators.min(0), Validators.max(100)]],
+      hasDiscount: [true],
+      discountType: ['percentage'],
+      discountValue: [10.0, [Validators.min(0)]],
       isMultipleInventory: [false],
       // Initial inventory fields (for new products)
       initialBatchId: [''],
       initialQuantity: [0, Validators.min(0)],
       initialUnitPrice: [0, Validators.min(0)],
-      initialReceivedAt: [new Date().toISOString().split('T')[0]]
+      initialCostPrice: [0, Validators.min(0)],
+      initialReceivedAt: [new Date().toISOString().split('T')[0]],
+      initialExpiryDate: [''],
+      initialSupplier: ['']
     });
   }
 
@@ -1086,7 +1311,10 @@ export class ProductManagementComponent implements OnInit {
       batchId: ['', Validators.required],
       quantity: [0, [Validators.required, Validators.min(1)]],
       unitPrice: [0, [Validators.required, Validators.min(0)]],
-      receivedAt: [new Date().toISOString().split('T')[0], Validators.required]
+      costPrice: [0, [Validators.required, Validators.min(0)]],
+      receivedAt: [new Date().toISOString().split('T')[0], Validators.required],
+      expiryDate: [''],
+      supplier: ['']
     });
   }
 
@@ -1139,14 +1367,20 @@ export class ProductManagementComponent implements OnInit {
     this.isEditMode = true;
     this.selectedProduct = product;
     this.productForm.patchValue(product);
-    // compute totalStock from product.inventory active batches
-    const total = (product.inventory || []).reduce((s, b) => s + ((b.status === 'active') ? (b.quantity || 0) : 0), 0);
-    this.productForm.get('totalStock')?.setValue(total);
-    // set sellingPrice to active batch unitPrice if multiple inventory
+    
+    // Set total stock based on inventory mode
     if (product.isMultipleInventory) {
+      // For multiple inventory, calculate from active batches
+      const total = (product.inventory || []).reduce((s, b) => s + ((b.status === 'active') ? (b.quantity || 0) : 0), 0);
+      this.productForm.get('totalStock')?.setValue(total);
+      // set sellingPrice to active batch unitPrice if multiple inventory
       const active = (product.inventory || []).find(b => b.status === 'active');
       if (active) this.productForm.get('sellingPrice')?.setValue(active.unitPrice || 0);
+    } else {
+      // For single inventory, use the stored totalStock value
+      this.productForm.get('totalStock')?.setValue(product.totalStock || 0);
     }
+    
     this.toggleControlsForInventory(product.isMultipleInventory);
     this.showModal = true;
   }
@@ -1155,9 +1389,23 @@ export class ProductManagementComponent implements OnInit {
     if (isMultiple) {
       this.productForm.get('totalStock')?.disable({ emitEvent: false });
       this.productForm.get('sellingPrice')?.disable({ emitEvent: false });
+      // Calculate total stock from inventory when switching to multiple inventory mode
+      this.updateTotalStockFromInventory();
     } else {
       this.productForm.get('totalStock')?.enable({ emitEvent: false });
       this.productForm.get('sellingPrice')?.enable({ emitEvent: false });
+    }
+  }
+
+  updateTotalStockFromInventory() {
+    if (this.selectedProduct?.inventory) {
+      // For existing product, calculate from current inventory
+      const total = this.selectedProduct.inventory.reduce((s, b) => s + ((b.status === 'active') ? (b.quantity || 0) : 0), 0);
+      this.productForm.get('totalStock')?.setValue(total, { emitEvent: false });
+    } else {
+      // For new product, use initial inventory values
+      const initialQuantity = this.productForm.get('initialQuantity')?.value || 0;
+      this.productForm.get('totalStock')?.setValue(initialQuantity, { emitEvent: false });
     }
   }
 
@@ -1197,14 +1445,22 @@ export class ProductManagementComponent implements OnInit {
         // Update existing product
         const updates: Partial<Product> = {
           productName: formValue.productName,
+          description: formValue.description,
           skuId: formValue.skuId,
+          unitType: formValue.unitType,
           category: formValue.category,
           sellingPrice: computedSellingPrice,
           storeId: formValue.storeId,
           barcodeId: formValue.barcodeId,
           qrCode: formValue.qrCode,
           imageUrl: formValue.imageUrl,
-          isMultipleInventory: formValue.isMultipleInventory
+          isMultipleInventory: formValue.isMultipleInventory,
+          // Tax and Discount Fields
+          isVatApplicable: formValue.isVatApplicable || false,
+          vatRate: formValue.vatRate || 0,
+          hasDiscount: formValue.hasDiscount || false,
+          discountType: formValue.discountType || 'percentage',
+          discountValue: formValue.discountValue || 0
         };
 
         // compute totalStock for multiple inventory from active batches
@@ -1225,7 +1481,10 @@ export class ProductManagementComponent implements OnInit {
             batchId: formValue.initialBatchId || `BATCH-${Date.now()}`,
             quantity: formValue.initialQuantity || 0,
             unitPrice: formValue.initialUnitPrice || 0,
+            costPrice: formValue.initialCostPrice || 0,
             receivedAt: new Date(formValue.initialReceivedAt),
+            expiryDate: formValue.initialExpiryDate ? new Date(formValue.initialExpiryDate) : undefined,
+            supplier: formValue.initialSupplier || undefined,
             status: 'active'
           };
           inventory = [initialInventory];
@@ -1237,7 +1496,9 @@ export class ProductManagementComponent implements OnInit {
 
         const newProduct: Omit<Product, 'id' | 'createdAt' | 'updatedAt'> = {
           productName: formValue.productName,
+          description: formValue.description,
           skuId: formValue.skuId,
+          unitType: formValue.unitType,
           category: formValue.category,
           sellingPrice: computedSellingPrice,
           companyId: '', // Will be set by service
@@ -1249,12 +1510,12 @@ export class ProductManagementComponent implements OnInit {
           inventory,
           totalStock,
           
-          // Tax and Discount Fields with defaults
-          isVatApplicable: false,
-          vatRate: 0,
-          hasDiscount: false,
-          discountType: 'percentage',
-          discountValue: 0,
+          // Tax and Discount Fields from form
+          isVatApplicable: formValue.isVatApplicable || false,
+          vatRate: formValue.vatRate || 0,
+          hasDiscount: formValue.hasDiscount || false,
+          discountType: formValue.discountType || 'percentage',
+          discountValue: formValue.discountValue || 0,
           
           status: 'active'
         };
@@ -1281,7 +1542,10 @@ export class ProductManagementComponent implements OnInit {
         batchId: formValue.batchId,
         quantity: formValue.quantity,
         unitPrice: formValue.unitPrice,
+        costPrice: formValue.costPrice,
         receivedAt: new Date(formValue.receivedAt),
+        expiryDate: formValue.expiryDate ? new Date(formValue.expiryDate) : undefined,
+        supplier: formValue.supplier || undefined,
         status: 'active'
       };
 
@@ -1293,6 +1557,11 @@ export class ProductManagementComponent implements OnInit {
       
       // Refresh the selected product
       this.selectedProduct = this.productService.getProduct(this.selectedProduct.id!) || null;
+      
+      // Update total stock from inventory if product uses multiple inventory
+      if (this.selectedProduct?.isMultipleInventory) {
+        this.updateTotalStockFromInventory();
+      }
     } catch (error) {
       console.error('Error adding inventory batch:', error);
       alert('Error adding inventory batch. Please try again.');
@@ -1306,6 +1575,11 @@ export class ProductManagementComponent implements OnInit {
       await this.productService.removeInventoryBatch(this.selectedProduct.id!, batchId);
       // Refresh the selected product
       this.selectedProduct = this.productService.getProduct(this.selectedProduct.id!) || null;
+      
+      // Update total stock from inventory if product uses multiple inventory
+      if (this.selectedProduct?.isMultipleInventory) {
+        this.updateTotalStockFromInventory();
+      }
     } catch (error) {
       console.error('Error removing inventory batch:', error);
       alert('Error removing inventory batch. Please try again.');
