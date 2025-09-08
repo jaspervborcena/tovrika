@@ -542,7 +542,7 @@
     .products-display {
       flex: 1;
       padding: 1rem;
-      min-height: 400px; /* Increased minimum height to ensure complete rows are visible */
+      min-height: 350px; /* Increased minimum height to ensure complete rows are visible */
     }
 
     .products-list {
@@ -812,8 +812,8 @@
 
     .cart-header {
       display: grid;
-      grid-template-columns: 2fr 1fr 1fr 1fr;
-      gap: 0.5rem;
+      grid-template-columns: 2fr 0.8fr 0.8fr 1.2fr; /* Reduced price column, increased total column for better balance */
+      gap: 1rem; /* Increased gap from 0.5rem to 1rem for better spacing between columns */
       padding: 0.5rem;
       font-size: 0.75rem;
       font-weight: 600;
@@ -821,6 +821,7 @@
       text-transform: uppercase;
       border-bottom: 1px solid #e2e8f0;
       margin-bottom: 0.5rem;
+       margin-top: 0.5rem;
     }
 
     .empty-cart {
@@ -834,8 +835,8 @@
       /* padding: 0.75rem; */
       /* margin-bottom: 0.5rem; */
       display: grid;
-      grid-template-columns: 2fr 1fr 1fr 1fr;
-      /* gap: 0.75rem; */
+      grid-template-columns: 2fr 0.8fr 0.8fr 1.2fr; /* Match cart-header proportions */
+      gap: 1rem; /* Increased gap to match cart-header for consistent spacing */
       align-items: center;
       min-height: 32px; /* Reduced from 40px for more compact display */
       padding: 0.25rem 0; /* Add minimal padding for better spacing */
