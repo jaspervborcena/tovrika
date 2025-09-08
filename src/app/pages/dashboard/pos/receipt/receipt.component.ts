@@ -42,4 +42,42 @@ export class ReceiptComponent implements OnInit {
   onModalContentClick(event: Event) {
     event.stopPropagation();
   }
+
+  // Helper method to format quantity with unit type
+  formatQuantityWithUnit(quantity: number, unitType?: string): string {
+    if (!unitType || unitType === 'N/A') {
+      return quantity.toString();
+    }
+    
+    const unitDisplay = unitType === 'pieces' ? 'pc(s)' : unitType;
+    return `${quantity} ${unitDisplay}`;
+  }
+
+  // Get customer display name with fallback to discount customer name
+  getCustomerDisplayName(): string {
+    // First check if we have a customer name from sold-to
+    if (this.receiptData?.customerName && 
+        this.receiptData.customerName !== 'N/A' && 
+        this.receiptData.customerName !== 'Walk-in Customer') {
+      return this.receiptData.customerName;
+    }
+    
+    // Fallback to discount customer name if available
+    if (this.receiptData?.orderDiscount?.customerName) {
+      return this.receiptData.orderDiscount.customerName;
+    }
+    
+    // Default fallback
+    return 'N/A';
+  }
+
+  // Check if we have customer details to show (address/TIN)
+  hasCustomerDetails(): boolean {
+    const customerName = this.getCustomerDisplayName();
+    
+    // Only show details if we have a real customer name (not N/A) and either address or TIN
+    return customerName !== 'N/A' && 
+           ((this.receiptData?.customerAddress && this.receiptData.customerAddress !== 'N/A') ||
+            (this.receiptData?.customerTin && this.receiptData.customerTin !== 'N/A'));
+  }
 }

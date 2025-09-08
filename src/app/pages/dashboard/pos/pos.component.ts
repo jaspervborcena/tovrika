@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { RouterModule } from '@angular/router';
 import { HeaderComponent } from '../../../shared/components/header/header.component';
 import { ReceiptComponent } from './receipt/receipt.component';
+import { DiscountModalComponent } from '../../../shared/components/discount-modal/discount-modal.component';
 import { ProductService } from '../../../services/product.service';
 import { PosService } from '../../../services/pos.service';
 import { PosSharedService } from '../../../services/pos-shared.service';
@@ -15,13 +16,13 @@ import { OrderService } from '../../../services/order.service';
 import { StoreService } from '../../../services/store.service';
 import { UserRoleService } from '../../../services/user-role.service';
 import { Product } from '../../../interfaces/product.interface';
-import { CartItem, ProductViewType, ReceiptData } from '../../../interfaces/pos.interface';
+import { CartItem, ProductViewType, ReceiptData, OrderDiscount } from '../../../interfaces/pos.interface';
 import { Store } from '../../../interfaces/store.interface';
 
 @Component({
   selector: 'app-pos',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterModule, HeaderComponent, ReceiptComponent],
+  imports: [CommonModule, FormsModule, RouterModule, HeaderComponent, ReceiptComponent, DiscountModalComponent],
   templateUrl: './pos.component.html',
   styleUrls: ['./pos.component.css']
 })
@@ -163,6 +164,11 @@ export class PosComponent implements OnInit {
   
   private receiptDataSignal = signal<any>(null);
   readonly receiptData = computed(() => this.receiptDataSignal());
+
+  // Discount modal state
+  private isDiscountModalVisibleSignal = signal<boolean>(false);
+  readonly isDiscountModalVisible = computed(() => this.isDiscountModalVisibleSignal());
+  readonly orderDiscount = computed(() => this.posService.orderDiscount());
 
   setAccessTab(tab: string): void {
     this.accessTabSignal.set(tab);
@@ -354,10 +360,6 @@ export class PosComponent implements OnInit {
     this.posService.updateCartItemQuantity(productId, quantity);
   }
 
-  toggleVatExemption(productId: string): void {
-    this.posService.toggleVatExemption(productId);
-  }
-
   clearCart(): void {
     if (confirm('Are you sure you want to clear the cart?')) {
       this.posService.clearCart();
@@ -366,19 +368,18 @@ export class PosComponent implements OnInit {
 
   async processOrder(): Promise<void> {
     try {
-      // Save the order data instantly
-      const orderId = await this.posService.processOrder();
-      if (orderId) {
-        // Prepare receipt data
-        const receiptData = this.prepareReceiptData(orderId);
-        
-        // Set receipt data and show modal
-        this.receiptDataSignal.set(receiptData);
-        this.isReceiptModalVisibleSignal.set(true);
-      }
+      // Generate temporary order ID for receipt display (will be replaced when actually saved)
+      const tempOrderId = 'temp-' + Date.now();
+      
+      // Prepare receipt data without saving the order yet
+      const receiptData = this.prepareReceiptData(tempOrderId);
+      
+      // Set receipt data and show modal
+      this.receiptDataSignal.set(receiptData);
+      this.isReceiptModalVisibleSignal.set(true);
     } catch (error) {
-      console.error('Error processing order:', error);
-      alert('Failed to process order. Please try again.');
+      console.error('Error preparing order:', error);
+      alert('Failed to prepare order. Please try again.');
     }
   }
 
@@ -422,15 +423,20 @@ export class PosComponent implements OnInit {
         productName: item.productName,
         skuId: item.skuId,
         quantity: item.quantity,
+        unitType: item.unitType,
         sellingPrice: item.sellingPrice,
-        total: item.total
+        total: item.total,
+        vatAmount: item.vatAmount,
+        discountAmount: item.discountAmount,
+        quantityWithUnit: `${item.quantity} ${this.getUnitTypeDisplay(item.unitType)}`
       })),
       subtotal: cartSummary.grossAmount,
       vatAmount: cartSummary.vatAmount,
-      vatExempt: cartSummary.vatExemptAmount,
-      discount: cartSummary.discountAmount,
+      vatExempt: cartSummary.vatExemptSales,
+      discount: cartSummary.productDiscountAmount + cartSummary.orderDiscountAmount,
       totalAmount: cartSummary.netAmount,
-      vatRate: 12 // Standard VAT rate
+      vatRate: 12, // Standard VAT rate
+      orderDiscount: this.orderDiscount() // Include order discount information
     };
   }
 
@@ -439,8 +445,26 @@ export class PosComponent implements OnInit {
     this.isReceiptModalVisibleSignal.set(false);
     this.receiptDataSignal.set(null);
     
-    // Clear cart after receipt modal is closed
-    this.posService.clearCart();
+    // Don't clear cart automatically - let user decide when to start new order
+  }
+
+  // New Order - clears everything for a fresh start
+  startNewOrder(): void {
+    if (confirm('Start a new order? This will clear the current cart and all customer information.')) {
+      // Clear cart and all order-related data
+      this.posService.clearCart();
+      
+      // Reset customer information
+      this.customerInfo = {
+        soldTo: '',
+        tin: '',
+        businessAddress: '',
+        invoiceNumber: `INV-${new Date().getFullYear()}-${String(Date.now()).slice(-6)}`,
+        datetime: new Date().toISOString().slice(0, 16)
+      };
+      
+      console.log('New order started - all data cleared');
+    }
   }
 
   async printReceipt(printerType?: string): Promise<void> {
@@ -456,28 +480,33 @@ export class PosComponent implements OnInit {
       : 'thermal';
 
     try {
-      // First, save the transaction to the database
+      // First, save the order to get a real order ID
+      console.log('Saving order to database...');
+      const orderId = await this.posService.processOrder();
+      
+      if (!orderId) {
+        throw new Error('Failed to save order');
+      }
+
+      // Update receipt data with real order ID
+      const updatedReceiptData = { ...receiptData, orderId };
+      this.receiptDataSignal.set(updatedReceiptData);
+
+      // Then save the transaction to the database
       console.log('Saving transaction before printing...');
-      const savedTransaction = await this.saveTransaction(receiptData);
+      const savedTransaction = await this.saveTransaction(updatedReceiptData);
       console.log('Transaction saved successfully:', savedTransaction.transactionNumber);
 
       // Then print the receipt
-      await this.printService.printReceipt(receiptData, validPrinterType);
-      console.log(`Receipt sent to ${validPrinterType} printer for order:`, receiptData.orderId);
+      await this.printService.printReceipt(updatedReceiptData, validPrinterType);
+      console.log(`Receipt sent to ${validPrinterType} printer for order:`, orderId);
       
       // Close the modal after successful save and print
       this.closeReceiptModal();
       
     } catch (error) {
-      console.error('Error during print process:', error);
-      // Still try to print even if save fails
-      try {
-        await this.printService.printReceipt(receiptData, validPrinterType);
-        console.log('Receipt printed despite save error');
-        this.closeReceiptModal();
-      } catch (printError) {
-        console.error('Print error:', printError);
-      }
+      console.error('Error during save and print process:', error);
+      alert('Failed to save order and print receipt. Please try again.');
     }
   }
 
@@ -514,5 +543,49 @@ export class PosComponent implements OnInit {
 
     // Save transaction using the transaction service
     return await this.transactionService.createTransaction(transactionData);
+  }
+
+  // Discount modal methods
+  showDiscountModal(): void {
+    this.isDiscountModalVisibleSignal.set(true);
+  }
+
+  closeDiscountModal(): void {
+    this.isDiscountModalVisibleSignal.set(false);
+  }
+
+  applyOrderDiscount(discount: OrderDiscount): void {
+    this.posService.setOrderDiscount(discount);
+    this.closeDiscountModal();
+  }
+
+  removeOrderDiscount(): void {
+    this.posService.removeOrderDiscount();
+  }
+
+  // Helper method to get unit type display
+  getUnitTypeDisplay(unitType?: string): string {
+    if (!unitType || unitType === 'N/A') return '';
+    return unitType === 'pieces' ? 'pc(s)' : unitType;
+  }
+
+  // Helper method to get discount display name
+  getDiscountDisplayName(): string {
+    const discount = this.orderDiscount();
+    if (!discount) return '';
+    
+    let discountMethod = '';
+    if (discount.percentage) {
+      discountMethod = ` (${discount.percentage}%)`;
+    } else if (discount.fixedAmount) {
+      discountMethod = ` (₱${discount.fixedAmount.toFixed(2)})`;
+    }
+    
+    if (discount.type === 'PWD') return `PWD Discount${discountMethod}`;
+    if (discount.type === 'SENIOR') return `Senior Citizen Discount${discountMethod}`;
+    if (discount.type === 'CUSTOM' && discount.customType) {
+      return `${discount.customType} Discount${discountMethod}`;
+    }
+    return `Custom Discount${discountMethod}`;
   }
 }

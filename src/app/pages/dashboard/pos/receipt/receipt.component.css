@@ -223,6 +223,25 @@
   background-color: transparent;
 }
 
+/* SKU and Product Name Styling */
+.sku-product-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.sku-value {
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: #374151;
+}
+
+.product-name {
+  font-size: 0.8rem;
+  color: #6b7280;
+  line-height: 1.2;
+}
+
 /* Totals Section */
 .totals-section {
   margin-bottom: 1.5rem;
@@ -416,4 +435,85 @@
   .products-table td {
     padding: 0.5rem 0.25rem;
   }
+}
+
+/* Discount Information Section */
+.discount-info-section {
+  margin: 1.5rem 0;
+  text-align: center;
+}
+
+.discount-details h4 {
+  margin: 0 0 1rem 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #111827;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.discount-grid {
+  display: block;
+  max-width: 400px;
+  margin: 0 auto;
+}
+
+.discount-line {
+  display: block;
+  text-align: center;
+  padding: 0.1rem 0;
+  font-size: 0.875rem;
+  line-height: 1.3;
+}
+
+.discount-line:last-child {
+  font-weight: 600;
+  margin-top: 0.5rem;
+}
+
+.discount-line span:first-child {
+  font-weight: 500;
+  color: #374151;
+}
+
+.discount-line span:last-child {
+  font-weight: 600;
+  color: #111827;
+}
+
+/* Signature Section */
+.signature-section {
+  margin-top: 2rem;
+  text-align: center;
+}
+
+.signature-box {
+  margin-top: 1.5rem;
+  max-width: 300px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.signature-label {
+  font-weight: 500;
+  color: #374151;
+  margin-bottom: 1rem;
+  font-size: 0.9rem;
+}
+
+.signature-line {
+  border-bottom: 1px solid #000;
+  height: 2.5rem;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding-bottom: 0.25rem;
+  margin-bottom: 0.5rem;
+  width: 100%;
+}
+
+.signature-line span {
+  font-weight: 500;
+  color: #111827;
+  font-size: 0.9rem;
 }

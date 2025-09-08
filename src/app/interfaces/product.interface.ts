@@ -87,6 +87,7 @@ export interface ProductCategory {
 
 // Unit type constants for products
 export const UNIT_TYPES = [
+  { value: 'N/A', label: 'N/A' },
   { value: 'pieces', label: 'Pieces' },
   { value: 'kg', label: 'Kilograms' },
   { value: 'grams', label: 'Grams' },

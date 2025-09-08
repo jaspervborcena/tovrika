@@ -300,16 +300,20 @@
     <!-- Cart Summary Section -->
     <div *ngIf="cartItems().length > 0" class="cart-summary-mobile">
       <div class="summary-row">
-        <span class="summary-label">VAT Deduction:</span>
+        <span class="summary-label">Vatable:</span>
+        <span class="summary-value">₱{{ cartSummary().vatableSales.toFixed(2) }}</span>
+      </div>
+      <div class="summary-row">
+        <span class="summary-label">Non-Vatable:</span>
+        <span class="summary-value">₱{{ cartSummary().vatExemptSales.toFixed(2) }}</span>
+      </div>
+      <div class="summary-row">
+        <span class="summary-label">VAT Amount:</span>
         <span class="summary-value">₱{{ cartSummary().vatAmount.toFixed(2) }}</span>
       </div>
       <div class="summary-row">
-        <span class="summary-label">VAT Exempt:</span>
-        <span class="summary-value">₱{{ cartSummary().vatExemptAmount.toFixed(2) }}</span>
-      </div>
-      <div class="summary-row">
         <span class="summary-label">Discount:</span>
-        <span class="summary-value">₱{{ cartSummary().discountAmount.toFixed(2) }}</span>
+        <span class="summary-value">₱{{ (cartSummary().productDiscountAmount + cartSummary().orderDiscountAmount).toFixed(2) }}</span>
       </div>
       <div class="summary-row gross-row">
         <span class="summary-label">Gross Amount:</span>

@@ -361,38 +361,51 @@
                   {{ item.total.toFixed(2) }}
                   <button (click)="removeFromCart(item.productId)" class="remove-btn">×</button>
                 </div>
-                
-                <!-- VAT Exemption Toggle -->
-                <div class="item-controls" *ngIf="item.isVatApplicable">
-                  <label class="vat-exempt-toggle">
-                    <input 
-                      type="checkbox" 
-                      [checked]="item.isVatExempt"
-                      (change)="toggleVatExemption(item.productId)">
-                    VAT Exempt
-                  </label>
-                </div>
               </div>
             </div>
 
             <!-- Receipt Summary -->
             <div class="receipt-summary">
               <div class="summary-line">
-                <span>VAT Deduction:</span>
+                <span>Vatable:</span>
+                <span>₱{{ cartSummary().vatableSales.toFixed(2) }}</span>
+              </div>
+              <div class="summary-line">
+                <span>Non-Vatable:</span>
+                <span>₱{{ cartSummary().vatExemptSales.toFixed(2) }}</span>
+              </div>
+              <div class="summary-line">
+                <span>VAT Amount:</span>
                 <span>₱{{ cartSummary().vatAmount.toFixed(2) }}</span>
               </div>
-              <div class="summary-line">
-                <span>VAT Exempt Amount:</span>
-                <span>₱{{ cartSummary().vatExemptAmount.toFixed(2) }}</span>
+              <div class="summary-line" *ngIf="cartSummary().zeroRatedSales > 0">
+                <span>Zero-Rated Sales:</span>
+                <span>₱{{ cartSummary().zeroRatedSales.toFixed(2) }}</span>
+              </div>
+              <div class="summary-line" *ngIf="cartSummary().productDiscountAmount > 0">
+                <span>Product Discounts:</span>
+                <span>-₱{{ cartSummary().productDiscountAmount.toFixed(2) }}</span>
               </div>
               <div class="summary-line">
-                <span>Discount:</span>
-                <span>₱{{ cartSummary().discountAmount.toFixed(2) }}</span>
-              </div>
-              <div class="summary-line gross">
                 <span>Gross Amount:</span>
                 <span>₱{{ cartSummary().grossAmount.toFixed(2) }}</span>
               </div>
+              
+              <!-- Order Discount Section -->
+              <div class="order-discount-section" *ngIf="orderDiscount() || cartItems().length > 0">
+                <div class="summary-line" *ngIf="orderDiscount()">
+                  <span>{{ getDiscountDisplayName() }}:</span>
+                  <span>-₱{{ cartSummary().orderDiscountAmount.toFixed(2) }}</span>
+                  <button (click)="removeOrderDiscount()" class="remove-discount-btn">×</button>
+                </div>
+                <button 
+                  *ngIf="!orderDiscount() && cartItems().length > 0" 
+                  (click)="showDiscountModal()" 
+                  class="btn btn-discount">
+                  Add Discount
+                </button>
+              </div>
+              
               <div class="summary-line total">
                 <span>Net Amount:</span>
                 <span>₱{{ cartSummary().netAmount.toFixed(2) }}</span>
@@ -415,6 +428,15 @@
               </button>
             </div>
 
+            <!-- New Order Button (shown when cart has items or order is completed) -->
+            <div class="new-order-section" *ngIf="cartItems().length > 0">
+              <button 
+                (click)="startNewOrder()" 
+                class="btn btn-new-order">
+                New Order
+              </button>
+            </div>
+
             <!-- Receipt Footer -->
             <div class="receipt-footer">
               <p>Thank you! See you again!</p>
@@ -431,3 +453,10 @@
       (closeModal)="closeReceiptModal()"
       (printReceipt)="printReceipt($event)">
     </app-receipt>
+
+    <!-- Discount Modal -->
+    <app-discount-modal 
+      *ngIf="isDiscountModalVisible()"
+      (discountApplied)="applyOrderDiscount($event)"
+      (modalClosed)="closeDiscountModal()">
+    </app-discount-modal>

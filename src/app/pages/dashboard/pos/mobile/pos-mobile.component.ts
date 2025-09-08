@@ -533,8 +533,8 @@ export class PosMobileComponent implements OnInit {
       })),
       subtotal: cartSummary.grossAmount,
       vatAmount: cartSummary.vatAmount,
-      vatExempt: cartSummary.vatExemptAmount,
-      discount: cartSummary.discountAmount,
+      vatExempt: cartSummary.vatExemptSales,
+      discount: cartSummary.productDiscountAmount + cartSummary.orderDiscountAmount,
       totalAmount: cartSummary.netAmount,
       vatRate: 12 // Standard VAT rate
     };
