@@ -1,0 +1,162 @@
+<!-- Receipt Modal -->
+<div 
+  *ngIf="isVisible" 
+  class="receipt-modal-overlay">
+  
+  <div 
+    class="receipt-modal-content"
+    (click)="onModalContentClick($event)">
+    
+    <!-- Modal Header with Close Button -->
+    <div class="modal-header">
+      <h2>Sales Invoice Preview</h2>
+      <button 
+        class="close-btn"
+        (click)="onCloseModal()"
+        type="button">
+        ×
+      </button>
+    </div>
+
+    <!-- Receipt Content -->
+    <div class="receipt-container">
+      
+      <!-- Store Information Header -->
+      <div class="store-header">
+        <div class="company-info">
+          <h1 class="company-name">{{ receiptData?.storeInfo?.storeName || 'Store Name' }}</h1>
+          <p class="company-address">{{ receiptData?.storeInfo?.address || 'Store Address' }}</p>
+          <p class="company-contact">
+            Tel: {{ receiptData?.storeInfo?.phone || 'N/A' }} | 
+            Email: {{ receiptData?.storeInfo?.email || 'N/A' }}
+          </p>
+          <p class="tin-number">TIN: {{ receiptData?.storeInfo?.tin || 'N/A' }}</p>
+          
+          <!-- BIR Information -->
+          <div class="bir-info">
+            <p *ngIf="receiptData?.storeInfo?.birPermitNo" class="bir-permit">
+              <strong>BIR Permit No:</strong> {{ receiptData.storeInfo.birPermitNo }}
+            </p>
+            <p *ngIf="receiptData?.storeInfo?.inclusiveSerialNumber" class="inclusive-serial">
+              <strong>Serial Number:</strong> {{ receiptData.storeInfo.inclusiveSerialNumber }}
+            </p>
+            <p *ngIf="receiptData?.storeInfo?.minNumber" class="min-number">
+              <strong>MIN:</strong> {{ receiptData.storeInfo.minNumber }}
+            </p>
+          </div>
+          
+          <!-- Invoice Number -->
+          <p class="invoice-number"><strong>Invoice #: {{ receiptData?.invoiceNumber || 'Auto-generated' }}</strong></p>
+          
+          <!-- Dynamic Invoice Type Label -->
+          <p class="sales-invoice-label">{{ receiptData?.storeInfo?.invoiceType || 'SALES INVOICE' }}</p>
+        </div>
+      </div>
+
+      <!-- Sold To Section -->
+      <div class="sold-to-section">
+        <h3 class="sold-to-header">SOLD TO:</h3>
+        <div class="customer-info">
+          <p><strong>Customer Name:</strong> {{ receiptData?.customerName || 'N/A' }}</p>
+          <div *ngIf="receiptData?.customerName && receiptData?.customerName !== 'Walk-in Customer'">
+            <p><strong>Address:</strong> {{ receiptData?.customerAddress || 'N/A' }}</p>
+            <p><strong>TIN:</strong> {{ receiptData?.customerTin || 'N/A' }}</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Cashier and Date Section -->
+      <div class="cashier-date-section">
+        <div class="cashier-date-layout">
+          <p class="cashier-info"><strong>Cashier:</strong> {{ receiptData?.cashier || 'N/A' }}</p>
+          <p class="date-info"><strong>Date:</strong> {{ receiptData?.receiptDate | date:'medium' }}</p>
+        </div>
+      </div>
+
+      <!-- Products Table -->
+      <div class="products-section">
+        <table class="products-table">
+          <thead>
+            <tr>
+              <th>Product Name</th>
+              <th>SKU</th>
+              <th>Qty</th>
+              <th>Amount</th>
+              <th>Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let item of receiptData?.items || []">
+              <td>{{ item.productName }}</td>
+              <td>{{ item.skuId }}</td>
+              <td>{{ item.quantity }}</td>
+              <td>₱{{ item.sellingPrice?.toFixed(2) }}</td>
+              <td>₱{{ item.total?.toFixed(2) }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Totals Section -->
+      <div class="totals-section">
+        <div class="totals-grid">
+          <div class="total-line">
+            <span>Subtotal:</span>
+            <span>₱{{ receiptData?.subtotal?.toFixed(2) || '0.00' }}</span>
+          </div>
+          <div class="total-line">
+            <span>VAT ({{ receiptData?.vatRate || 12 }}%):</span>
+            <span>₱{{ receiptData?.vatAmount?.toFixed(2) || '0.00' }}</span>
+          </div>
+          <div class="total-line">
+            <span>VAT Exempt:</span>
+            <span>₱{{ receiptData?.vatExempt?.toFixed(2) || '0.00' }}</span>
+          </div>
+          <div class="total-line">
+            <span>Discount:</span>
+            <span>₱{{ receiptData?.discount?.toFixed(2) || '0.00' }}</span>
+          </div>
+          <div class="total-line grand-total">
+            <span><strong>Total Amount:</strong></span>
+            <span><strong>₱{{ receiptData?.totalAmount?.toFixed(2) || '0.00' }}</strong></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Footer -->
+      <div class="receipt-footer">
+        <p class="thank-you">Thank you for your business!</p>
+        <p class="footer-note">This serves as your official receipt.</p>
+        <p class="date-printed">Printed on: {{ receiptData?.receiptDate | date:'medium' }}</p>
+      </div>
+
+    </div>
+
+    <!-- Print Options -->
+    <div class="print-options">
+      <label for="printerType">Printer Type:</label>
+      <select id="printerType" [(ngModel)]="selectedPrinterType" class="printer-select">
+        <option value="thermal">Thermal Printer (USB)</option>
+        <option value="network">Network Printer (IP)</option>
+        <option value="browser">Browser Print</option>
+      </select>
+    </div>
+
+    <!-- Modal Actions -->
+    <div class="modal-actions">
+      <button 
+        class="btn-secondary"
+        (click)="onCloseModal()">
+        Close
+      </button>
+      <button 
+        class="btn-primary"
+        (click)="onPrintReceipt()"
+        [disabled]="isPrinting">
+        <span *ngIf="!isPrinting">Print Receipt</span>
+        <span *ngIf="isPrinting">Saving & Printing...</span>
+      </button>
+    </div>
+
+  </div>
+</div>

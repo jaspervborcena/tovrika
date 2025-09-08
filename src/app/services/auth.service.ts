@@ -57,15 +57,24 @@ export class AuthService {
     onAuthStateChanged(this.auth, async (firebaseUser) => {
       this.isLoading.set(true);
       if (firebaseUser) {
-        const userData = await this.getUserData(firebaseUser.uid);
-        this.currentUserSignal.set(userData);
-        
-        // Check remember me preference
-        if (!localStorage.getItem('rememberMe')) {
-          // If not remembering, clear auth state when tab/window closes
-          window.addEventListener('beforeunload', () => {
-            sessionStorage.clear();
-          });
+        try {
+          const userData = await this.getUserData(firebaseUser.uid);
+          this.currentUserSignal.set(userData);
+          
+          // Check remember me preference
+          const rememberMe = localStorage.getItem('rememberMe') === 'true';
+          if (!rememberMe) {
+            // If not remembering, set up session-only persistence
+            // Firebase will still maintain auth state until explicit logout
+            console.log('Session-only authentication active');
+          } else {
+            console.log('Persistent authentication active');
+          }
+        } catch (error) {
+          console.error('Error loading user data:', error);
+          // If we can't load user data, sign them out
+          await signOut(this.auth);
+          this.currentUserSignal.set(null);
         }
       } else {
         this.currentUserSignal.set(null);
@@ -81,13 +90,13 @@ export class AuthService {
         localStorage.setItem('rememberMe', 'true');
       } else {
         localStorage.removeItem('rememberMe');
-        // Clear any existing auth data when not remembering
-        sessionStorage.clear();
       }
       
       const credential = await signInWithEmailAndPassword(this.auth, email, password);
       const userData = await this.getUserData(credential.user.uid);
       this.currentUserSignal.set(userData);
+      
+      console.log('Login successful:', userData?.email);
       return userData;
     } catch (error) {
       console.error('Login error:', error);

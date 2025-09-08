@@ -12,8 +12,8 @@ import { Company } from '../../../interfaces/company.interface';
   imports: [CommonModule, ReactiveFormsModule],
   template: `
     <div class="company-profile-container">
-      <!-- Page Header -->
-      <div class="page-header">
+      <!-- Header with Products style -->
+      <div class="header">
         <div class="header-content">
           <div class="header-left">
             <button 
@@ -29,11 +29,26 @@ import { Company } from '../../../interfaces/company.interface';
               <p class="page-subtitle">Configure your company information and settings</p>
             </div>
           </div>
+          <div class="header-actions">
+            <button 
+              class="btn btn-primary" 
+              (click)="createNewCompany()"
+              [disabled]="!isCreatingCompany() || loading()"
+              [class.disabled]="!isCreatingCompany()">
+              <svg *ngIf="isCreatingCompany()" fill="none" stroke="currentColor" viewBox="0 0 24 24" class="btn-icon">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+              </svg>
+              <svg *ngIf="!isCreatingCompany()" fill="none" stroke="currentColor" viewBox="0 0 24 24" class="btn-icon">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              {{ isCreatingCompany() ? 'Add Company' : 'Company Created' }}
+            </button>
+          </div>
         </div>
       </div>
 
       <!-- Error Message -->
-      <div class="form-container" *ngIf="error()">
+      <div class="content-container" *ngIf="error()">
         <div class="error-alert">
           <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -43,7 +58,7 @@ import { Company } from '../../../interfaces/company.interface';
       </div>
 
       <!-- Success Message -->
-      <div class="form-container" *ngIf="showSuccessMessage()">
+      <div class="content-container" *ngIf="showSuccessMessage()">
         <div class="success-alert">
           <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -53,7 +68,7 @@ import { Company } from '../../../interfaces/company.interface';
       </div>
 
       <!-- Company Form -->
-      <div class="form-container">
+      <div class="content-container">
         <div class="form-card">
           <div class="form-header">
             <h2 class="form-title">{{ isCreatingCompany() ? 'Create Company Profile' : 'Company Information' }}</h2>
@@ -181,16 +196,23 @@ import { Company } from '../../../interfaces/company.interface';
       background: #f8fafc;
     }
 
-    .page-header {
-      background: white;
-      border-bottom: 1px solid #e2e8f0;
+    /* Header Styles - Matching Products Header */
+    .header {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
       padding: 2rem 0;
+      box-shadow: 0 4px 20px rgba(102, 126, 234, 0.15);
     }
 
     .header-content {
       max-width: 1200px;
       margin: 0 auto;
-      padding: 0 2rem;
+      padding: 0 1rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 1rem;
     }
 
     .header-left {
@@ -204,19 +226,20 @@ import { Company } from '../../../interfaces/company.interface';
       align-items: center;
       gap: 0.5rem;
       padding: 0.75rem 1rem;
-      background: #f1f5f9;
-      border: 1px solid #e2e8f0;
+      background: rgba(255, 255, 255, 0.15);
+      border: 1px solid rgba(255, 255, 255, 0.2);
       border-radius: 8px;
-      color: #64748b;
+      color: white;
       font-size: 0.875rem;
       font-weight: 500;
       cursor: pointer;
       transition: all 0.2s ease;
+      backdrop-filter: blur(10px);
     }
 
     .back-btn:hover {
-      background: #e2e8f0;
-      color: #475569;
+      background: rgba(255, 255, 255, 0.25);
+      transform: translateY(-1px);
     }
 
     .back-btn svg {
@@ -229,19 +252,69 @@ import { Company } from '../../../interfaces/company.interface';
     }
 
     .page-title {
-      font-size: 1.875rem;
+      font-size: 2.5rem;
       font-weight: 700;
-      color: #1e293b;
       margin: 0 0 0.5rem 0;
+      color: white;
     }
 
     .page-subtitle {
-      color: #64748b;
-      font-size: 1rem;
+      font-size: 1.1rem;
+      opacity: 0.9;
       margin: 0;
+      color: rgba(255, 255, 255, 0.9);
     }
 
-    .form-container {
+    .header-actions {
+      display: flex;
+      gap: 0.75rem;
+    }
+
+    .btn {
+      border: none;
+      border-radius: 8px;
+      padding: 0.75rem 1.5rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      text-decoration: none;
+      font-size: 0.875rem;
+    }
+
+    .btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .btn-primary {
+      background: #059669;
+      color: white;
+      box-shadow: 0 2px 8px rgba(5, 150, 105, 0.3);
+    }
+
+    .btn-primary:hover:not(:disabled) {
+      background: #047857;
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(5, 150, 105, 0.4);
+    }
+
+    .btn-primary.disabled {
+      background: #6b7280;
+      color: #d1d5db;
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
+
+    .btn-icon {
+      width: 1rem;
+      height: 1rem;
+    }
+
+    .content-container {
       max-width: 800px;
       margin: 0 auto;
       padding: 2rem;
@@ -619,5 +692,18 @@ export class CompanyProfileComponent {
 
   protected goBack(): void {
     this.router.navigate(['/dashboard/overview']);
+  }
+
+  protected createNewCompany(): void {
+    // This method is used for the button action
+    // When there's no company data, it allows creation
+    // When there's existing company data, this button is disabled
+    if (this.isCreatingCompany()) {
+      // Scroll to the form
+      document.querySelector('.form-card')?.scrollIntoView({ 
+        behavior: 'smooth',
+        block: 'start'
+      });
+    }
   }
 }

@@ -17,6 +17,7 @@
       </div>
       
       <div class="header-right">
+        <!-- Authentication-aware header actions -->
         <div class="header-actions">
           <!-- Help Link -->
           <a routerLink="/help" class="header-btn" title="Help & Support">
@@ -25,21 +26,43 @@
             </svg>
           </a>
           
-          <!-- Notifications -->
-          <a routerLink="/notifications" class="header-btn" title="Notifications">
+          <!-- Notifications (show only when authenticated) -->
+          <a *ngIf="isAuthenticated()" routerLink="/notifications" class="header-btn" title="Notifications">
             <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
             </svg>
           </a>
         </div>
         
-        <!-- Sign In Button -->
-        <a routerLink="/login" class="signin-btn">
-          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" class="signin-icon">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-          </svg>
-          Sign In
-        </a>
+        <!-- User menu when authenticated -->
+        <div *ngIf="isAuthenticated(); else guestMenu" class="user-menu">
+          <div class="user-info">
+            <span class="user-name">{{ currentUser()?.displayName || currentUser()?.email }}</span>
+            <span class="user-role">{{ userRole() }}</span>
+          </div>
+          <button (click)="navigateToDashboard()" class="dashboard-btn">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" class="btn-icon">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+            </svg>
+            Dashboard
+          </button>
+          <button (click)="logout()" class="logout-btn">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" class="btn-icon">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 0v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
+            </svg>
+            Sign Out
+          </button>
+        </div>
+        
+        <!-- Guest menu template -->
+        <ng-template #guestMenu>
+          <a routerLink="/login" class="signin-btn">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" class="signin-icon">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+            </svg>
+            Sign In
+          </a>
+        </ng-template>
       </div>
     </div>
   </header>
@@ -50,21 +73,49 @@
     <section class="hero-section">
       <div class="hero-container">
         <div class="hero-content">
-          <h2 class="hero-title">
-            <span class="block">Modern Point of Sale</span>
-            <span class="block">for Modern Businesses</span>
-          </h2>
-          <p class="hero-subtitle">
-            Everything you need to manage your business, from anywhere. Professional, reliable, and built for growth.
-          </p>
-          <div class="hero-actions">
-            <a routerLink="/register" class="cta-button primary">
-              Get Started Free
-            </a>
-            <a routerLink="/login" class="cta-button secondary">
-              Sign In
-            </a>
+          <!-- Content for authenticated users -->
+          <div *ngIf="isAuthenticated(); else guestHero">
+            <h2 class="hero-title">
+              <span class="block">Welcome back,</span>
+              <span class="block">{{ currentUser()?.displayName || 'User' }}!</span>
+            </h2>
+            <p class="hero-subtitle">
+              Ready to manage your business? Access your dashboard to continue where you left off.
+            </p>
+            <div class="hero-actions">
+              <button (click)="navigateToDashboard()" class="cta-button primary">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" class="btn-icon">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+                </svg>
+                Go to Dashboard
+              </button>
+              <a routerLink="/dashboard/pos" class="cta-button secondary">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" class="btn-icon">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                </svg>
+                Open POS
+              </a>
+            </div>
           </div>
+
+          <!-- Guest hero template -->
+          <ng-template #guestHero>
+            <h2 class="hero-title">
+              <span class="block">Modern Point of Sale</span>
+              <span class="block">for Modern Businesses</span>
+            </h2>
+            <p class="hero-subtitle">
+              Everything you need to manage your business, from anywhere. Professional, reliable, and built for growth.
+            </p>
+            <div class="hero-actions">
+              <a routerLink="/register" class="cta-button primary">
+                Get Started Free
+              </a>
+              <a routerLink="/login" class="cta-button secondary">
+                Sign In
+              </a>
+            </div>
+          </ng-template>
         </div>
       </div>
     </section>
