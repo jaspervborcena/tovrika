@@ -55,12 +55,13 @@
 
       <!-- Sold To Section -->
       <div class="sold-to-section">
-        <h3 class="sold-to-header">SOLD TO:</h3>
-        <div class="customer-info">
-          <p><strong>Customer Name:</strong> {{ receiptData?.customerName || 'N/A' }}</p>
-          <div *ngIf="receiptData?.customerName && receiptData?.customerName !== 'Walk-in Customer'">
-            <p><strong>Address:</strong> {{ receiptData?.customerAddress || 'N/A' }}</p>
-            <p><strong>TIN:</strong> {{ receiptData?.customerTin || 'N/A' }}</p>
+        <h3 class="sold-to-header">SOLD TO: {{ getCustomerDisplayName() }}</h3>
+        <div class="customer-info" *ngIf="hasCustomerDetails()">
+          <div *ngIf="receiptData?.customerAddress && receiptData?.customerAddress !== 'N/A'">
+            <p><strong>Address:</strong> {{ receiptData.customerAddress }}</p>
+          </div>
+          <div *ngIf="receiptData?.customerTin && receiptData?.customerTin !== 'N/A'">
+            <p><strong>TIN:</strong> {{ receiptData.customerTin }}</p>
           </div>
         </div>
       </div>
@@ -78,7 +79,6 @@
         <table class="products-table">
           <thead>
             <tr>
-              <th>Product Name</th>
               <th>SKU</th>
               <th>Qty</th>
               <th>Amount</th>
@@ -87,9 +87,13 @@
           </thead>
           <tbody>
             <tr *ngFor="let item of receiptData?.items || []">
-              <td>{{ item.productName }}</td>
-              <td>{{ item.skuId }}</td>
-              <td>{{ item.quantity }}</td>
+              <td>
+                <div class="sku-product-info">
+                  <div class="sku-value">{{ item.skuId }}</div>
+                  <div class="product-name">{{ item.productName }}</div>
+                </div>
+              </td>
+              <td>{{ formatQuantityWithUnit(item.quantity, item.unitType) }}</td>
               <td>₱{{ item.sellingPrice?.toFixed(2) }}</td>
               <td>₱{{ item.total?.toFixed(2) }}</td>
             </tr>
@@ -119,6 +123,42 @@
           <div class="total-line grand-total">
             <span><strong>Total Amount:</strong></span>
             <span><strong>₱{{ receiptData?.totalAmount?.toFixed(2) || '0.00' }}</strong></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Discount Information Section (for PWD/Senior/Special Discounts) -->
+      <div class="discount-info-section" *ngIf="receiptData?.orderDiscount">
+        <div class="discount-details">
+          <h4>Discount Information</h4>
+          <div class="discount-grid">
+            <div class="discount-line">
+              {{ receiptData.orderDiscount.type }} 
+              <ng-container *ngIf="receiptData.orderDiscount.customType">
+                ({{ receiptData.orderDiscount.customType }})
+              </ng-container>
+              Discount
+            </div>
+            <div class="discount-line" *ngIf="receiptData.orderDiscount.exemptionId">
+              ID: {{ receiptData.orderDiscount.exemptionId }}
+            </div>
+            <div class="discount-line" *ngIf="receiptData.orderDiscount.customerName">
+              {{ receiptData.orderDiscount.customerName }}
+            </div>
+            <div class="discount-line">
+              Discount Amount: ₱{{ receiptData?.discount?.toFixed(2) || '0.00' }}
+            </div>
+          </div>
+          
+          <!-- Signature Section -->
+          <div class="signature-section" *ngIf="receiptData.orderDiscount.type === 'PWD' || receiptData.orderDiscount.type === 'SENIOR'">
+            <div class="signature-box">
+              <p class="signature-label">Customer Signature:</p>
+              <div class="signature-line">
+                <span *ngIf="receiptData.orderDiscount.signature">{{ receiptData.orderDiscount.signature }}</span>
+                <span *ngIf="!receiptData.orderDiscount.signature">_________________________</span>
+              </div>
+            </div>
           </div>
         </div>
       </div>

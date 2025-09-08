@@ -1,9 +1,11 @@
-import { Component, OnInit, computed, signal, inject } from '@angular/core';
+import { Component, OnInit, computed, signal, inject, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterModule } from '@angular/router';
 import { HeaderComponent } from '../../../../shared/components/header/header.component';
 import { ReceiptComponent } from '../receipt/receipt.component';
+import { CartFabComponent } from '../../../../shared/components/cart-fab/cart-fab.component';
+import { MobileCartModalComponent } from '../../../../shared/components/mobile-cart-modal/mobile-cart-modal.component';
 import { ProductService } from '../../../../services/product.service';
 import { PosService } from '../../../../services/pos.service';
 import { PosSharedService } from '../../../../services/pos-shared.service';
@@ -22,7 +24,7 @@ import { Currency, CurrencySymbol, CURRENCY_CONFIGS } from '../../../../interfac
 @Component({
   selector: 'app-pos-mobile',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterModule, HeaderComponent, ReceiptComponent],
+  imports: [CommonModule, FormsModule, RouterModule, HeaderComponent, ReceiptComponent, CartFabComponent, MobileCartModalComponent],
   templateUrl: './pos-mobile.component.html',
   styleUrls: ['./pos-mobile.component.css']
 })
@@ -143,6 +145,10 @@ export class PosMobileComponent implements OnInit {
   private isSoldToCollapsedSignal = signal<boolean>(true);
   readonly isSoldToCollapsed = computed(() => this.isSoldToCollapsedSignal());
   
+  // Navigation collapse state
+  private isNavigationCollapsedSignal = signal<boolean>(false);
+  readonly isNavigationCollapsed = computed(() => this.isNavigationCollapsedSignal());
+  
   // Access tabs for POS management
   readonly accessTabs = ['New', 'Orders', 'Cancelled', 'Refunds & Returns', 'Split Payments', 'Discounts & Promotions'] as const;
   private accessTabSignal = signal<string>('New');
@@ -167,6 +173,9 @@ export class PosMobileComponent implements OnInit {
   private receiptDataSignal = signal<any>(null);
   readonly isReceiptModalVisible = computed(() => this.isReceiptModalVisibleSignal());
   readonly receiptData = computed(() => this.receiptDataSignal());
+
+  // Cart modal reference
+  @ViewChild('cartModal') cartModal!: MobileCartModalComponent;
 
   setAccessTab(tab: string): void {
     this.accessTabSignal.set(tab);
@@ -442,6 +451,15 @@ export class PosMobileComponent implements OnInit {
     }
   }
 
+  // Cart modal methods
+  showCartModal(): void {
+    this.cartModal.show();
+  }
+
+  hideCartModal(): void {
+    // Modal will handle its own closing
+  }
+
   generateNewInvoiceNumber(): void {
     this.customerInfo.invoiceNumber = `INV-${new Date().getFullYear()}-${String(Date.now()).slice(-6)}`;
   }
@@ -485,6 +503,10 @@ export class PosMobileComponent implements OnInit {
 
   toggleSoldToPanel(): void {
     this.isSoldToCollapsedSignal.set(!this.isSoldToCollapsedSignal());
+  }
+
+  toggleNavigationPanel(): void {
+    this.isNavigationCollapsedSignal.set(!this.isNavigationCollapsedSignal());
   }
 
   // Receipt modal methods
@@ -533,8 +555,8 @@ export class PosMobileComponent implements OnInit {
       })),
       subtotal: cartSummary.grossAmount,
       vatAmount: cartSummary.vatAmount,
-      vatExempt: cartSummary.vatExemptAmount,
-      discount: cartSummary.discountAmount,
+      vatExempt: cartSummary.vatExemptSales,
+      discount: cartSummary.productDiscountAmount + cartSummary.orderDiscountAmount,
       totalAmount: cartSummary.netAmount,
       vatRate: 12 // Standard VAT rate
     };

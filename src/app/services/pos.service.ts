@@ -14,7 +14,7 @@ import {
 import { AuthService } from './auth.service';
 import { CompanyService } from './company.service';
 import { ProductService } from './product.service';
-import { Order, OrderDetail, OrderItem, CartItem, ReceiptData } from '../interfaces/pos.interface';
+import { Order, OrderDetail, OrderItem, CartItem, ReceiptData, OrderDiscount, CartSummary } from '../interfaces/pos.interface';
 import { Product } from '../interfaces/product.interface';
 
 @Injectable({
@@ -24,29 +24,57 @@ export class PosService {
   private readonly cartItemsSignal = signal<CartItem[]>([]);
   private readonly selectedStoreIdSignal = signal<string>('');
   private readonly isProcessingSignal = signal<boolean>(false);
+  private readonly orderDiscountSignal = signal<OrderDiscount | null>(null);
 
   // Computed values
   readonly cartItems = computed(() => this.cartItemsSignal());
   readonly selectedStoreId = computed(() => this.selectedStoreIdSignal());
   readonly isProcessing = computed(() => this.isProcessingSignal());
+  readonly orderDiscount = computed(() => this.orderDiscountSignal());
 
-  readonly cartSummary = computed(() => {
+  readonly cartSummary = computed((): CartSummary => {
     const items = this.cartItems();
-    const grossAmount = items.reduce((sum, item) => sum + item.total, 0);
-    const vatAmount = items.reduce((sum, item) => 
-      item.isVatExempt ? sum : sum + item.vatAmount, 0);
-    const vatExemptAmount = items.reduce((sum, item) => 
-      item.isVatExempt ? sum + item.total : sum, 0);
-    const discountAmount = items.reduce((sum, item) => sum + item.discountAmount, 0);
-    const netAmount = grossAmount - discountAmount;
+    const orderDiscount = this.orderDiscount();
+    
+    // Calculate base amounts
+    const grossAmount = items.reduce((sum, item) => sum + (item.sellingPrice * item.quantity), 0);
+    const productDiscountAmount = items.reduce((sum, item) => sum + item.discountAmount, 0);
+    const subtotalAfterProductDiscounts = grossAmount - productDiscountAmount;
+    
+    // Calculate VAT amounts
+    const vatableItems = items.filter(item => item.isVatApplicable && !item.isVatExempt);
+    const vatExemptItems = items.filter(item => item.isVatExempt || !item.isVatApplicable);
+    
+    const vatableSales = vatableItems.reduce((sum, item) => 
+      sum + ((item.sellingPrice * item.quantity) - item.discountAmount), 0);
+    const vatExemptSales = vatExemptItems.reduce((sum, item) => 
+      sum + ((item.sellingPrice * item.quantity) - item.discountAmount), 0);
+    const zeroRatedSales = 0; // Can be added later for specific business needs
+    
+    const vatAmount = vatableItems.reduce((sum, item) => sum + item.vatAmount, 0);
+    
+    // Calculate order-level discount
+    let orderDiscountAmount = 0;
+    if (orderDiscount) {
+      if (orderDiscount.percentage) {
+        orderDiscountAmount = (subtotalAfterProductDiscounts * orderDiscount.percentage) / 100;
+      } else if (orderDiscount.fixedAmount) {
+        orderDiscountAmount = orderDiscount.fixedAmount;
+      }
+    }
+    
+    const netAmount = subtotalAfterProductDiscounts - orderDiscountAmount;
 
     return {
       itemCount: items.length,
       totalQuantity: items.reduce((sum, item) => sum + item.quantity, 0),
-      grossAmount,
+      vatableSales,
       vatAmount,
-      vatExemptAmount,
-      discountAmount,
+      zeroRatedSales,
+      vatExemptSales,
+      productDiscountAmount,
+      orderDiscountAmount,
+      grossAmount,
       netAmount
     };
   });
@@ -107,6 +135,16 @@ export class PosService {
 
   clearCart(): void {
     this.cartItemsSignal.set([]);
+    this.orderDiscountSignal.set(null); // Clear order discount when clearing cart
+  }
+
+  // Order Discount Management
+  setOrderDiscount(discount: OrderDiscount): void {
+    this.orderDiscountSignal.set(discount);
+  }
+
+  removeOrderDiscount(): void {
+    this.orderDiscountSignal.set(null);
   }
 
   // Store Management
@@ -158,11 +196,11 @@ export class PosService {
         logoUrl: company.logoUrl || '',
         
         // Financial Calculations
-        vatableSales: summary.grossAmount - summary.vatExemptAmount,
+        vatableSales: summary.vatableSales,
         vatAmount: summary.vatAmount,
-        zeroRatedSales: 0.00,
-        vatExemptAmount: summary.vatExemptAmount,
-        discountAmount: summary.discountAmount,
+        zeroRatedSales: summary.zeroRatedSales,
+        vatExemptAmount: summary.vatExemptSales,
+        discountAmount: summary.productDiscountAmount + summary.orderDiscountAmount,
         grossAmount: summary.grossAmount,
         netAmount: summary.netAmount,
         totalAmount: summary.netAmount,
@@ -239,8 +277,8 @@ export class PosService {
       orderId: orderId || 'TEMP',
       items: this.cartItems(),
       vatAmount: summary.vatAmount,
-      vatExemptAmount: summary.vatExemptAmount,
-      discountAmount: summary.discountAmount,
+      vatExemptAmount: summary.vatExemptSales,
+      discountAmount: summary.productDiscountAmount + summary.orderDiscountAmount,
       grossAmount: summary.grossAmount,
       netAmount: summary.netAmount,
       message: 'Thank you! See you again!'
@@ -271,6 +309,7 @@ export class PosService {
       productId: product.id!,
       productName: product.productName,
       skuId: product.skuId,
+      unitType: product.unitType,
       quantity,
       sellingPrice: product.sellingPrice,
       total: discountedTotal + vatAmount,
