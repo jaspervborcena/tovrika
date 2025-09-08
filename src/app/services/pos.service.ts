@@ -204,7 +204,8 @@ export class PosService {
       // Update product inventory
       await this.updateProductInventory(cartItems);
 
-      this.clearCart();
+      // Don't clear cart here - let receipt component handle it
+      // this.clearCart();
       return orderRef.id;
 
     } catch (error) {

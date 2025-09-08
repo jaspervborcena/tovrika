@@ -3,9 +3,12 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterModule } from '@angular/router';
 import { HeaderComponent } from '../../../../shared/components/header/header.component';
+import { ReceiptComponent } from '../receipt/receipt.component';
 import { ProductService } from '../../../../services/product.service';
 import { PosService } from '../../../../services/pos.service';
 import { PosSharedService } from '../../../../services/pos-shared.service';
+import { PrintService } from '../../../../services/print.service';
+import { TransactionService } from '../../../../services/transaction.service';
 import { AuthService } from '../../../../services/auth.service';
 import { CompanyService } from '../../../../services/company.service';
 import { OrderService } from '../../../../services/order.service';
@@ -19,7 +22,7 @@ import { Currency, CurrencySymbol, CURRENCY_CONFIGS } from '../../../../interfac
 @Component({
   selector: 'app-pos-mobile',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterModule, HeaderComponent],
+  imports: [CommonModule, FormsModule, RouterModule, HeaderComponent, ReceiptComponent],
   templateUrl: './pos-mobile.component.html',
   styleUrls: ['./pos-mobile.component.css']
 })
@@ -28,6 +31,8 @@ export class PosMobileComponent implements OnInit {
   private productService = inject(ProductService);
   private posService = inject(PosService);
   private posSharedService = inject(PosSharedService);
+  private printService = inject(PrintService);
+  private transactionService = inject(TransactionService);
   private authService = inject(AuthService);
   private companyService = inject(CompanyService);
   private storeService = inject(StoreService);
@@ -156,6 +161,12 @@ export class PosMobileComponent implements OnInit {
   // Order detail modal
   private selectedOrderSignal = signal<any | null>(null);
   readonly selectedOrder = computed(() => this.selectedOrderSignal());
+
+  // Receipt modal state
+  private isReceiptModalVisibleSignal = signal<boolean>(false);
+  private receiptDataSignal = signal<any>(null);
+  readonly isReceiptModalVisible = computed(() => this.isReceiptModalVisibleSignal());
+  readonly receiptData = computed(() => this.receiptDataSignal());
 
   setAccessTab(tab: string): void {
     this.accessTabSignal.set(tab);
@@ -447,10 +458,13 @@ export class PosMobileComponent implements OnInit {
       
       const orderId = await this.posService.processOrder('cash', customerData);
       if (orderId) {
-        alert(`Order completed successfully! Order ID: ${orderId}`);
-        // Reset form for next customer
-        this.resetCustomerForm();
-        // TODO: Print receipt or show receipt modal
+        // Prepare receipt data and show receipt modal
+        const receiptData = this.prepareReceiptData(orderId);
+        this.receiptDataSignal.set(receiptData);
+        this.isReceiptModalVisibleSignal.set(true);
+        
+        // Don't clear cart yet - wait until receipt modal is closed
+        console.log(`Order completed successfully! Order ID: ${orderId}`);
       }
     } catch (error) {
       console.error('Error processing order:', error);
@@ -471,5 +485,140 @@ export class PosMobileComponent implements OnInit {
 
   toggleSoldToPanel(): void {
     this.isSoldToCollapsedSignal.set(!this.isSoldToCollapsedSignal());
+  }
+
+  // Receipt modal methods
+  private prepareReceiptData(orderId: string): any {
+    const cartItems = this.cartItems();
+    const cartSummary = this.cartSummary();
+    const storeInfo = this.currentStoreInfo();
+    const customerInfo = this.customerInfo;
+    const currentUser = this.authService.currentUser();
+    
+    // Get date and invoice number from shared service (receipt panel data)
+    const receiptDate = this.posSharedService.orderDate();
+    const invoiceNumber = this.posSharedService.invoiceNumber();
+
+    // Determine customer name - if soldTo is empty or default, treat as N/A
+    const customerName = customerInfo.soldTo && customerInfo.soldTo.trim() && customerInfo.soldTo !== 'Walk-in Customer' 
+      ? customerInfo.soldTo.trim() 
+      : null;
+
+    return {
+      orderId,
+      invoiceNumber: invoiceNumber || customerInfo.invoiceNumber,
+      receiptDate: receiptDate, // Date from shared service
+      storeInfo: {
+        storeName: (storeInfo as any)?.storeName || 'Unknown Store',
+        address: (storeInfo as any)?.address || 'Store Address',
+        phone: (storeInfo as any)?.phone || 'N/A',
+        email: storeInfo?.email || 'N/A',
+        tin: (storeInfo as any)?.tinNumber || 'N/A',
+        invoiceType: (storeInfo as any)?.invoiceType || 'SALES INVOICE',
+        birPermitNo: (storeInfo as any)?.birPermitNo || null,
+        minNumber: (storeInfo as any)?.minNumber || null,
+        serialNumber: (storeInfo as any)?.serialNumber || null,
+        inclusiveSerialNumber: (storeInfo as any)?.inclusiveSerialNumber || null
+      },
+      customerName: customerName,
+      customerAddress: customerName ? (customerInfo.businessAddress || 'N/A') : null,
+      customerTin: customerName ? (customerInfo.tin || 'N/A') : null,
+      cashier: currentUser?.displayName || currentUser?.email || 'Unknown Cashier',
+      items: cartItems.map(item => ({
+        productName: item.productName,
+        skuId: item.skuId,
+        quantity: item.quantity,
+        sellingPrice: item.sellingPrice,
+        total: item.total
+      })),
+      subtotal: cartSummary.grossAmount,
+      vatAmount: cartSummary.vatAmount,
+      vatExempt: cartSummary.vatExemptAmount,
+      discount: cartSummary.discountAmount,
+      totalAmount: cartSummary.netAmount,
+      vatRate: 12 // Standard VAT rate
+    };
+  }
+
+  closeReceiptModal(): void {
+    this.isReceiptModalVisibleSignal.set(false);
+    this.receiptDataSignal.set(null);
+    
+    // Clear cart and reset form after receipt modal is closed
+    this.posService.clearCart();
+    this.resetCustomerForm();
+  }
+
+  async printReceipt(printerType?: string): Promise<void> {
+    const receiptData = this.receiptData();
+    if (!receiptData) {
+      console.error('No receipt data available for printing');
+      return;
+    }
+
+    // Type guard for printer type
+    const validPrinterType = ['thermal', 'network', 'browser'].includes(printerType || '') 
+      ? printerType as 'thermal' | 'network' | 'browser'
+      : 'thermal';
+
+    try {
+      // First, save the transaction to the database
+      console.log('Saving transaction before printing...');
+      const savedTransaction = await this.saveTransaction(receiptData);
+      console.log('Transaction saved successfully:', savedTransaction.transactionNumber);
+
+      // Then print the receipt
+      await this.printService.printReceipt(receiptData, validPrinterType);
+      console.log(`Receipt sent to ${validPrinterType} printer for order:`, receiptData.orderId);
+      
+      // Close the modal after successful save and print
+      this.closeReceiptModal();
+      
+    } catch (error) {
+      console.error('Error during print process:', error);
+      // Still try to print even if save fails
+      try {
+        await this.printService.printReceipt(receiptData, validPrinterType);
+        console.log('Receipt printed despite save error');
+        this.closeReceiptModal();
+      } catch (printError) {
+        console.error('Print error:', printError);
+      }
+    }
+  }
+
+  private async saveTransaction(receiptData: any): Promise<any> {
+    const currentUser = this.authService.currentUser();
+    if (!currentUser) {
+      throw new Error('No authenticated user found');
+    }
+
+    const cartSummary = this.cartSummary();
+    const storeInfo = this.currentStoreInfo();
+
+    // Prepare transaction data matching the Transaction interface
+    const transactionData = {
+      companyId: currentUser.companyId || '',
+      storeId: storeInfo?.id || '',
+      branchId: currentUser.branchId || 'main-branch', // Use user's branch or default
+      cashierId: currentUser.uid || '',
+      items: receiptData.items.map((item: any) => ({
+        productId: item.skuId || item.productId || '',
+        name: item.productName,
+        quantity: item.quantity,
+        price: item.sellingPrice,
+        tax: item.vatAmount || 0
+      })),
+      subtotal: cartSummary.grossAmount || receiptData.subtotal,
+      tax: cartSummary.vatAmount || receiptData.vatAmount,
+      total: cartSummary.netAmount || receiptData.totalAmount,
+      paymentMethod: 'cash', // Default to cash, could be configurable
+      amountTendered: cartSummary.netAmount || receiptData.totalAmount, // Assume exact payment for now
+      change: 0, // No change for exact payment
+      status: 'completed' as const
+    };
+
+    // Save transaction using the transaction service
+    return await this.transactionService.createTransaction(transactionData);
   }
 }

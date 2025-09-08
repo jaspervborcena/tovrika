@@ -423,3 +423,11 @@
         </div>
       </div>
     </div>
+
+    <!-- Receipt Modal -->
+    <app-receipt 
+      [isVisible]="isReceiptModalVisible()"
+      [receiptData]="receiptData()"
+      (closeModal)="closeReceiptModal()"
+      (printReceipt)="printReceipt($event)">
+    </app-receipt>
