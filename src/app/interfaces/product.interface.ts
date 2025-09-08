@@ -3,7 +3,9 @@ import { BusinessType } from './company.interface';
 export interface Product {
   id?: string;
   productName: string;
+  description?: string;
   skuId: string;
+  unitType: string;
   category: string;
   totalStock: number;
   sellingPrice: number;
@@ -31,7 +33,10 @@ export interface ProductInventory {
   batchId: string;
   quantity: number;
   unitPrice: number;
+  costPrice: number;
   receivedAt: Date;
+  expiryDate?: Date;
+  supplier?: string;
   status: 'active' | 'inactive' | 'expired';
 }
 
@@ -79,3 +84,22 @@ export interface ProductCategory {
   color?: string;
   sortOrder: number;
 }
+
+// Unit type constants for products
+export const UNIT_TYPES = [
+  { value: 'N/A', label: 'N/A' },
+  { value: 'pieces', label: 'Pieces' },
+  { value: 'kg', label: 'Kilograms' },
+  { value: 'grams', label: 'Grams' },
+  { value: 'liters', label: 'Liters' },
+  { value: 'ml', label: 'Milliliters' },
+  { value: 'meters', label: 'Meters' },
+  { value: 'cm', label: 'Centimeters' },
+  { value: 'boxes', label: 'Boxes' },
+  { value: 'packs', label: 'Packs' },
+  { value: 'bottles', label: 'Bottles' },
+  { value: 'cans', label: 'Cans' },
+  { value: 'units', label: 'Units' }
+] as const;
+
+export type UnitType = typeof UNIT_TYPES[number]['value'];

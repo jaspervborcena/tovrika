@@ -32,11 +32,104 @@ input, textarea {
   overflow-x: hidden;
   box-sizing: border-box;
   position: relative;
+  margin-top: 80px; /* Account for fixed header height */
+  padding-top: 20px;
 }
 
 /* Prevent zoom on double tap */
 .mobile-pos-wrapper * {
   touch-action: manipulation;
+}
+
+/* NAVIGATION TOGGLE BUTTON */
+.navigation-toggle-row {
+  background: linear-gradient(135deg, #007bff, #0056b3);
+  border-radius: 12px;
+  padding: 0;
+  box-shadow: 0 2px 8px rgba(0, 123, 255, 0.3);
+  border: none;
+  width: 100%;
+  box-sizing: border-box;
+  margin-bottom: 8px;
+  position: relative;
+  z-index: 10;
+}
+
+.navigation-toggle-btn {
+  width: 100%;
+  background: none;
+  border: none;
+  padding: 16px 20px;
+  color: white;
+  font-size: 16px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  border-radius: 12px;
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.navigation-toggle-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  transform: translateY(-1px);
+}
+
+.navigation-toggle-btn:active {
+  transform: translateY(0);
+}
+
+.toggle-icon {
+  font-size: 18px;
+  transition: transform 0.3s ease;
+  margin-right: 12px;
+}
+
+.toggle-icon.expanded {
+  transform: rotate(180deg);
+}
+
+.toggle-text {
+  flex: 1;
+  text-align: left;
+  font-weight: 700;
+}
+
+.controls-hint {
+  font-size: 12px;
+  opacity: 0.8;
+  font-weight: 400;
+  text-align: right;
+  line-height: 1.2;
+}
+
+/* COLLAPSIBLE NAVIGATION SECTION */
+.navigation-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: hidden;
+  transform-origin: top;
+  position: relative;
+  z-index: 10;
+}
+
+.navigation-section.collapsed {
+  max-height: 0;
+  opacity: 0;
+  transform: scaleY(0);
+  margin-bottom: -12px;
+  gap: 0;
+}
+
+.navigation-section:not(.collapsed) {
+  max-height: 2000px;
+  opacity: 1;
+  transform: scaleY(1);
 }
 
 /* ROW STYLING */
@@ -48,6 +141,8 @@ input, textarea {
   border: 1px solid #e9ecef;
   width: 100%;
   box-sizing: border-box;
+  position: relative;
+  z-index: 5;
 }
 
 .row-header {
@@ -113,14 +208,20 @@ input, textarea {
 /* INVOICE ROW */
 .invoice-fields {
   display: flex;
-  flex-direction: column;
+  flex-wrap: nowrap;
   gap: 12px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 8px;
+  -webkit-overflow-scrolling: touch;
 }
 
 .mobile-field-group {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  flex-shrink: 0;
+  min-width: 180px;
 }
 
 .mobile-field-group label {
@@ -180,18 +281,25 @@ input, textarea {
 /* CATEGORIES ROW */
 .categories-tabs-container {
   display: flex;
-  flex-direction: column;
+  flex-wrap: nowrap;
   gap: 8px;
-  max-height: 200px;
-  overflow-y: auto;
-  overflow-x: hidden;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 8px;
+  padding-right: 5px;
   scrollbar-width: thin;
   scrollbar-color: #cbd5e0 #f7fafc;
-  padding-right: 5px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.categories-tabs-container .mobile-tab {
+  flex-shrink: 0;
+  min-width: fit-content;
+  width: auto;
 }
 
 .categories-tabs-container::-webkit-scrollbar {
-  width: 6px;
+  height: 6px;
 }
 
 .categories-tabs-container::-webkit-scrollbar-track {
@@ -238,18 +346,25 @@ input, textarea {
 /* ACCESS ROW */
 .access-tabs-container {
   display: flex;
-  flex-direction: column;
+  flex-wrap: nowrap;
   gap: 8px;
-  max-height: 150px;
-  overflow-y: auto;
-  overflow-x: hidden;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 8px;
+  padding-right: 5px;
   scrollbar-width: thin;
   scrollbar-color: #cbd5e0 #f7fafc;
-  padding-right: 5px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.access-tabs-container .mobile-tab {
+  flex-shrink: 0;
+  min-width: fit-content;
+  width: auto;
 }
 
 .access-tabs-container::-webkit-scrollbar {
-  width: 6px;
+  height: 6px;
 }
 
 .access-tabs-container::-webkit-scrollbar-track {

@@ -1,53 +1,33 @@
  <div class="pos-container">
       <app-header></app-header>
-      <!-- Store selector as pill-tabs with invoice info -->
-      <div class="store-selector">
-        <div class="store-selector-layout">
-          <!-- Left: Store Selection (takes same space as left-panel) -->
-          <div class="store-selection-column">
-            <div class="category-list" style="padding:0.75rem 1rem; gap:0.5rem;">
-              <button
-                *ngFor="let store of availableStores()"
-                [class.active]="selectedStoreId() === store.id"
-                (click)="selectStore(store.id!)"
-                class="category-btn"
-                title="{{ store.storeName }}">
-                {{ store.storeName }}
-              </button>
-              <!-- Fallback if no stores -->
-              <div *ngIf="availableStores().length === 0" class="no-stores-message">
-                No stores available
-              </div>
-            </div>
-          </div>
-          
-          <!-- Right: Invoice Info (aligned with receipt panel) -->
-          <div class="store-invoice-column">
-            <div class="invoice-info-section">
-              <div class="invoice-horizontal-layout">
-                <div class="invoice-field">
-                  <label>Invoice Number:</label>
-                  <input type="text" [(ngModel)]="customerInfo.invoiceNumber" placeholder="Auto-generated">
-                </div>
-                <div class="invoice-field">
-                  <label>Date & Time:</label>
-                  <input type="datetime-local" [(ngModel)]="customerInfo.datetime">
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
+      
       <!-- Main POS Layout -->
       <div class="pos-layout">
         <!-- Left Panel: Categories & Products -->
         <div class="left-panel">
           <!-- Compact Categories & Customer Panel -->
           <div class="categories-panel compact-layout">
-            <!-- Left Column: Categories -->
+            <!-- Left Column: Categories & Store Selection -->
             <div class="categories-column">
-              <h3>Categories</h3>
+              <h3>Store & Categories</h3>
+              
+              <!-- Store Selection -->
+              <div class="store-buttons-inline">
+                <button
+                  *ngFor="let store of availableStores()"
+                  [class.active]="selectedStoreId() === store.id"
+                  (click)="selectStore(store.id!)"
+                  class="store-btn-inline"
+                  title="{{ store.storeName }}">
+                  {{ store.storeName }}
+                </button>
+                <!-- Fallback if no stores -->
+                <div *ngIf="availableStores().length === 0" class="no-stores-message">
+                  No stores available
+                </div>
+              </div>
+              
+              <!-- Categories -->
               <div class="category-list two-columns">
                 <button 
                   [class.active]="selectedCategory() === 'all'"
@@ -67,6 +47,28 @@
 
             <!-- Right Column: Customer Information -->
             <div class="customer-column">
+              <!-- Sales Type Checkboxes -->
+              <div class="sales-type-section">
+                <div class="sales-type-checkboxes">
+                  <label class="sales-type-option">
+                    <input 
+                      type="checkbox" 
+                      [checked]="isCashSale()"
+                      (change)="toggleCashSale()"
+                      class="sales-type-checkbox">
+                    <span class="checkbox-label">💵 Cash Payment</span>
+                  </label>
+                  <label class="sales-type-option">
+                    <input 
+                      type="checkbox" 
+                      [checked]="isChargeSale()"
+                      (change)="toggleChargeSale()"
+                      class="sales-type-checkbox">
+                    <span class="checkbox-label">💳 Card Payment</span>
+                  </label>
+                </div>
+              </div>
+              
               <!-- Customer Header -->
               <div class="customer-header" (click)="toggleSoldToPanel()">
                 <h3>👤 Customer</h3>
@@ -331,8 +333,23 @@
               </div>
             </div> -->
 
-            <!-- Cart Items -->
+            <!-- Cart Items with Invoice Info -->
             <div class="cart-items">
+              <!-- Invoice Info integrated into cart -->
+              <div class="cart-invoice-info">
+                <h4 class="invoice-header">📄 Invoice Information</h4>
+                <div class="invoice-compact-layout">
+                  <div class="invoice-field-compact">
+                    <label>Invoice #:</label>
+                    <input type="text" [(ngModel)]="customerInfo.invoiceNumber" placeholder="Auto-generated">
+                  </div>
+                  <div class="invoice-field-compact">
+                    <label>Date & Time:</label>
+                    <input type="datetime-local" [(ngModel)]="customerInfo.datetime">
+                  </div>
+                </div>
+              </div>
+              
               <div class="cart-header">
                 <span>Item</span>
                 <span>Qty</span>
@@ -361,38 +378,51 @@
                   {{ item.total.toFixed(2) }}
                   <button (click)="removeFromCart(item.productId)" class="remove-btn">×</button>
                 </div>
-                
-                <!-- VAT Exemption Toggle -->
-                <div class="item-controls" *ngIf="item.isVatApplicable">
-                  <label class="vat-exempt-toggle">
-                    <input 
-                      type="checkbox" 
-                      [checked]="item.isVatExempt"
-                      (change)="toggleVatExemption(item.productId)">
-                    VAT Exempt
-                  </label>
-                </div>
               </div>
             </div>
 
             <!-- Receipt Summary -->
             <div class="receipt-summary">
               <div class="summary-line">
-                <span>VAT Deduction:</span>
+                <span>Vatable:</span>
+                <span>₱{{ cartSummary().vatableSales.toFixed(2) }}</span>
+              </div>
+              <div class="summary-line">
+                <span>Non-Vatable:</span>
+                <span>₱{{ cartSummary().vatExemptSales.toFixed(2) }}</span>
+              </div>
+              <div class="summary-line">
+                <span>VAT Amount:</span>
                 <span>₱{{ cartSummary().vatAmount.toFixed(2) }}</span>
               </div>
-              <div class="summary-line">
-                <span>VAT Exempt Amount:</span>
-                <span>₱{{ cartSummary().vatExemptAmount.toFixed(2) }}</span>
+              <div class="summary-line" *ngIf="cartSummary().zeroRatedSales > 0">
+                <span>Zero-Rated Sales:</span>
+                <span>₱{{ cartSummary().zeroRatedSales.toFixed(2) }}</span>
+              </div>
+              <div class="summary-line" *ngIf="cartSummary().productDiscountAmount > 0">
+                <span>Product Discounts:</span>
+                <span>-₱{{ cartSummary().productDiscountAmount.toFixed(2) }}</span>
               </div>
               <div class="summary-line">
-                <span>Discount:</span>
-                <span>₱{{ cartSummary().discountAmount.toFixed(2) }}</span>
-              </div>
-              <div class="summary-line gross">
                 <span>Gross Amount:</span>
                 <span>₱{{ cartSummary().grossAmount.toFixed(2) }}</span>
               </div>
+              
+              <!-- Order Discount Section -->
+              <div class="order-discount-section" *ngIf="orderDiscount() || cartItems().length > 0">
+                <div class="summary-line" *ngIf="orderDiscount()">
+                  <span>{{ getDiscountDisplayName() }}:</span>
+                  <span>-₱{{ cartSummary().orderDiscountAmount.toFixed(2) }}</span>
+                  <button (click)="removeOrderDiscount()" class="remove-discount-btn">×</button>
+                </div>
+                <button 
+                  *ngIf="!orderDiscount() && cartItems().length > 0" 
+                  (click)="showDiscountModal()" 
+                  class="btn btn-discount">
+                  Add Discount
+                </button>
+              </div>
+              
               <div class="summary-line total">
                 <span>Net Amount:</span>
                 <span>₱{{ cartSummary().netAmount.toFixed(2) }}</span>
@@ -415,6 +445,15 @@
               </button>
             </div>
 
+            <!-- New Order Button (shown when cart has items or order is completed) -->
+            <div class="new-order-section" *ngIf="cartItems().length > 0">
+              <button 
+                (click)="startNewOrder()" 
+                class="btn btn-new-order">
+                New Order
+              </button>
+            </div>
+
             <!-- Receipt Footer -->
             <div class="receipt-footer">
               <p>Thank you! See you again!</p>
@@ -431,3 +470,10 @@
       (closeModal)="closeReceiptModal()"
       (printReceipt)="printReceipt($event)">
     </app-receipt>
+
+    <!-- Discount Modal -->
+    <app-discount-modal 
+      *ngIf="isDiscountModalVisible()"
+      (discountApplied)="applyOrderDiscount($event)"
+      (modalClosed)="closeDiscountModal()">
+    </app-discount-modal>

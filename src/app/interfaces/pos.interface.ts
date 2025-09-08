@@ -67,6 +67,7 @@ export interface CartItem {
   productId: string;
   productName: string;
   skuId: string;
+  unitType?: string; // Added for display like "1 pc(s)", "2 boxes"
   quantity: number;
   sellingPrice: number;
   total: number;
@@ -79,6 +80,29 @@ export interface CartItem {
   discountAmount: number;
   isVatExempt: boolean;
   imageUrl?: string;
+}
+
+export interface OrderDiscount {
+  type: 'PWD' | 'SENIOR' | 'CUSTOM';
+  percentage?: number;
+  fixedAmount?: number;
+  exemptionId: string; // PWD-ID or Senior-ID or Custom ID
+  customerName: string;
+  signature?: string;
+  customType?: string; // For custom discount types like "Owner", "Friend", etc.
+}
+
+export interface CartSummary {
+  itemCount: number;
+  totalQuantity: number;
+  vatableSales: number;
+  vatAmount: number;
+  zeroRatedSales: number;
+  vatExemptSales: number;
+  productDiscountAmount: number;
+  orderDiscountAmount: number;
+  grossAmount: number;
+  netAmount: number;
 }
 
 export type ProductViewType = 'list' | 'grid' | 'custom' | 'bestsellers';
@@ -98,6 +122,17 @@ export interface ReceiptData {
   grossAmount: number;
   netAmount: number;
   message: string;
+  orderDiscount?: OrderDiscount; // Added order discount information
+  customerName?: string; // Added customer name
+  customerAddress?: string; // Added customer address
+  customerTin?: string; // Added customer TIN
+  cashier?: string; // Added cashier name
+  receiptDate?: Date; // Added receipt date
+  subtotal?: number; // Added subtotal
+  totalAmount?: number; // Added total amount
+  vatRate?: number; // Added VAT rate
+  vatExempt?: number; // Added VAT exempt amount
+  discount?: number; // Added discount amount
 }
 
 // Legacy interfaces for backward compatibility

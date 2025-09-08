@@ -49,7 +49,9 @@ export class ProductService {
     return {
       id: doc.id,
       productName: data['productName'] || '',
+      description: data['description'] || undefined,
       skuId: data['skuId'] || '',
+      unitType: data['unitType'] || 'pieces',
       category: data['category'] || '',
       totalStock: data['totalStock'] || 0,
       sellingPrice: data['sellingPrice'] || 0,
@@ -79,7 +81,10 @@ export class ProductService {
       batchId: item.batchId || '',
       quantity: item.quantity || 0,
       unitPrice: item.unitPrice || 0,
+      costPrice: item.costPrice || 0,
       receivedAt: item.receivedAt?.toDate() || new Date(),
+      expiryDate: item.expiryDate?.toDate() || undefined,
+      supplier: item.supplier || undefined,
       status: item.status || 'active'
     }));
   }
