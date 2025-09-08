@@ -3,8 +3,12 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterModule } from '@angular/router';
 import { HeaderComponent } from '../../../shared/components/header/header.component';
+import { ReceiptComponent } from './receipt/receipt.component';
 import { ProductService } from '../../../services/product.service';
 import { PosService } from '../../../services/pos.service';
+import { PosSharedService } from '../../../services/pos-shared.service';
+import { PrintService } from '../../../services/print.service';
+import { TransactionService } from '../../../services/transaction.service';
 import { AuthService } from '../../../services/auth.service';
 import { CompanyService } from '../../../services/company.service';
 import { OrderService } from '../../../services/order.service';
@@ -17,7 +21,7 @@ import { Store } from '../../../interfaces/store.interface';
 @Component({
   selector: 'app-pos',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterModule, HeaderComponent],
+  imports: [CommonModule, FormsModule, RouterModule, HeaderComponent, ReceiptComponent],
   templateUrl: './pos.component.html',
   styleUrls: ['./pos.component.css']
 })
@@ -25,21 +29,19 @@ export class PosComponent implements OnInit {
   // Services
   private productService = inject(ProductService);
   private posService = inject(PosService);
+  private posSharedService = inject(PosSharedService);
+  private printService = inject(PrintService);
+  private transactionService = inject(TransactionService);
   private authService = inject(AuthService);
   private companyService = inject(CompanyService);
   private storeService = inject(StoreService);
   private orderService = inject(OrderService);
   private userRoleService = inject(UserRoleService);
 
-  // Signals
-  private searchQuerySignal = signal<string>('');
-  private selectedCategorySignal = signal<string>('all');
-  private currentViewSignal = signal<ProductViewType>('grid');
-
-  // Computed properties
-  readonly searchQuery = computed(() => this.searchQuerySignal());
-  readonly selectedCategory = computed(() => this.selectedCategorySignal());
-  readonly currentView = computed(() => this.currentViewSignal());
+  // Use shared UI state for synchronization with mobile
+  readonly searchQuery = computed(() => this.posSharedService.searchQuery());
+  readonly selectedCategory = computed(() => this.posSharedService.selectedCategory());
+  readonly currentView = computed(() => this.posSharedService.currentView());
   
   // Show stores loaded from user roles (already filtered by role-based access)
   readonly availableStores = computed(() => {
@@ -124,6 +126,20 @@ export class PosComponent implements OnInit {
 
   // Template properties
   currentDate = new Date();
+  
+  // Customer information for order (like mobile version)
+  customerInfo = {
+    soldTo: '',
+    tin: '',
+    businessAddress: '',
+    invoiceNumber: `INV-${new Date().getFullYear()}-${String(Date.now()).slice(-6)}`,
+    datetime: new Date().toISOString().slice(0, 16) // Format for datetime-local input
+  };
+
+  // UI State for collapsible customer panel
+  private isSoldToCollapsedSignal = signal<boolean>(true);
+  readonly isSoldToCollapsed = computed(() => this.isSoldToCollapsedSignal());
+  
   // Access tabs for POS management
   readonly accessTabs = ['New', 'Orders', 'Cancelled', 'Refunds & Returns', 'Split Payments', 'Discounts & Promotions'] as const;
   private accessTabSignal = signal<string>('New');
@@ -140,6 +156,13 @@ export class PosComponent implements OnInit {
   // Order detail modal
   private selectedOrderSignal = signal<any | null>(null);
   readonly selectedOrder = computed(() => this.selectedOrderSignal());
+
+  // Receipt modal state
+  private isReceiptModalVisibleSignal = signal<boolean>(false);
+  readonly isReceiptModalVisible = computed(() => this.isReceiptModalVisibleSignal());
+  
+  private receiptDataSignal = signal<any>(null);
+  readonly receiptData = computed(() => this.receiptDataSignal());
 
   setAccessTab(tab: string): void {
     this.accessTabSignal.set(tab);
@@ -186,6 +209,8 @@ export class PosComponent implements OnInit {
   async ngOnInit(): Promise<void> {
     try {
       await this.loadData();
+      // Set current date and time
+      this.updateCurrentDateTime();
       // Auto-select store after data is loaded
       this.initializeStore();
       
@@ -243,7 +268,12 @@ export class PosComponent implements OnInit {
     // Auto-select store if none is currently selected
     if (!currentlySelected && stores.length > 0) {
       const storeToSelect = stores[0]; // Always select the first store
-      console.log('🏪 Auto-selecting store:', storeToSelect.storeName, '(ID:', storeToSelect.id, ')');
+      
+      if (stores.length === 1) {
+        console.log('🏪 Single store detected, auto-selecting:', storeToSelect.storeName, '(ID:', storeToSelect.id, ')');
+      } else {
+        console.log('🏪 Multiple stores available, auto-selecting first:', storeToSelect.storeName, '(ID:', storeToSelect.id, ')');
+      }
       
       if (storeToSelect.id) {
         await this.selectStore(storeToSelect.id);
@@ -266,11 +296,11 @@ export class PosComponent implements OnInit {
   }
 
   setSelectedCategory(category: string): void {
-    this.selectedCategorySignal.set(category);
+    this.posSharedService.updateSelectedCategory(category);
   }
 
   setCurrentView(view: ProductViewType): void {
-    this.currentViewSignal.set(view);
+    this.posSharedService.updateCurrentView(view);
   }
 
   onSearch(): void {
@@ -288,11 +318,24 @@ export class PosComponent implements OnInit {
 
   // Public setter used by the template's ngModelChange
   setSearchQuery(value: string): void {
-    this.searchQuerySignal.set(value);
+    this.posSharedService.updateSearchQuery(value);
   }
 
   clearSearch(): void {
-    this.searchQuerySignal.set('');
+    this.posSharedService.updateSearchQuery('');
+  }
+
+  // Customer panel methods
+  toggleSoldToPanel(): void {
+    this.isSoldToCollapsedSignal.set(!this.isSoldToCollapsedSignal());
+  }
+
+  updateCurrentDateTime(): void {
+    this.customerInfo.datetime = new Date().toISOString().slice(0, 16);
+  }
+
+  generateNewInvoiceNumber(): void {
+    this.customerInfo.invoiceNumber = `INV-${new Date().getFullYear()}-${String(Date.now()).slice(-6)}`;
   }
 
   addToCart(product: Product): void {
@@ -323,14 +366,153 @@ export class PosComponent implements OnInit {
 
   async processOrder(): Promise<void> {
     try {
+      // Save the order data instantly
       const orderId = await this.posService.processOrder();
       if (orderId) {
-        alert(`Order completed successfully! Order ID: ${orderId}`);
-        // TODO: Print receipt or show receipt modal
+        // Prepare receipt data
+        const receiptData = this.prepareReceiptData(orderId);
+        
+        // Set receipt data and show modal
+        this.receiptDataSignal.set(receiptData);
+        this.isReceiptModalVisibleSignal.set(true);
       }
     } catch (error) {
       console.error('Error processing order:', error);
       alert('Failed to process order. Please try again.');
     }
+  }
+
+  private prepareReceiptData(orderId: string): any {
+    const cartItems = this.cartItems();
+    const cartSummary = this.cartSummary();
+    const storeInfo = this.currentStoreInfo();
+    const customerInfo = this.customerInfo;
+    const currentUser = this.authService.currentUser();
+    
+    // Get date and invoice number from shared service (receipt panel data)
+    const receiptDate = this.posSharedService.orderDate();
+    const invoiceNumber = this.posSharedService.invoiceNumber();
+
+    // Determine customer name - if soldTo is empty or default, treat as N/A
+    const customerName = customerInfo.soldTo && customerInfo.soldTo.trim() && customerInfo.soldTo !== 'Walk-in Customer' 
+      ? customerInfo.soldTo.trim() 
+      : null;
+
+    return {
+      orderId,
+      invoiceNumber: invoiceNumber || customerInfo.invoiceNumber,
+      receiptDate: receiptDate, // Date from shared service
+      storeInfo: {
+        storeName: (storeInfo as any)?.storeName || 'Unknown Store',
+        address: (storeInfo as any)?.address || 'Store Address',
+        phone: (storeInfo as any)?.phone || 'N/A',
+        email: storeInfo?.email || 'N/A',
+        tin: (storeInfo as any)?.tinNumber || 'N/A',
+        invoiceType: (storeInfo as any)?.invoiceType || 'SALES INVOICE',
+        birPermitNo: (storeInfo as any)?.birPermitNo || null,
+        minNumber: (storeInfo as any)?.minNumber || null,
+        serialNumber: (storeInfo as any)?.serialNumber || null,
+        inclusiveSerialNumber: (storeInfo as any)?.inclusiveSerialNumber || null
+      },
+      customerName: customerName,
+      customerAddress: customerName ? (customerInfo.businessAddress || 'N/A') : null,
+      customerTin: customerName ? (customerInfo.tin || 'N/A') : null,
+      cashier: currentUser?.displayName || currentUser?.email || 'Unknown Cashier',
+      items: cartItems.map(item => ({
+        productName: item.productName,
+        skuId: item.skuId,
+        quantity: item.quantity,
+        sellingPrice: item.sellingPrice,
+        total: item.total
+      })),
+      subtotal: cartSummary.grossAmount,
+      vatAmount: cartSummary.vatAmount,
+      vatExempt: cartSummary.vatExemptAmount,
+      discount: cartSummary.discountAmount,
+      totalAmount: cartSummary.netAmount,
+      vatRate: 12 // Standard VAT rate
+    };
+  }
+
+  // Receipt modal methods
+  closeReceiptModal(): void {
+    this.isReceiptModalVisibleSignal.set(false);
+    this.receiptDataSignal.set(null);
+    
+    // Clear cart after receipt modal is closed
+    this.posService.clearCart();
+  }
+
+  async printReceipt(printerType?: string): Promise<void> {
+    const receiptData = this.receiptData();
+    if (!receiptData) {
+      console.error('No receipt data available for printing');
+      return;
+    }
+
+    // Type guard for printer type
+    const validPrinterType = ['thermal', 'network', 'browser'].includes(printerType || '') 
+      ? printerType as 'thermal' | 'network' | 'browser'
+      : 'thermal';
+
+    try {
+      // First, save the transaction to the database
+      console.log('Saving transaction before printing...');
+      const savedTransaction = await this.saveTransaction(receiptData);
+      console.log('Transaction saved successfully:', savedTransaction.transactionNumber);
+
+      // Then print the receipt
+      await this.printService.printReceipt(receiptData, validPrinterType);
+      console.log(`Receipt sent to ${validPrinterType} printer for order:`, receiptData.orderId);
+      
+      // Close the modal after successful save and print
+      this.closeReceiptModal();
+      
+    } catch (error) {
+      console.error('Error during print process:', error);
+      // Still try to print even if save fails
+      try {
+        await this.printService.printReceipt(receiptData, validPrinterType);
+        console.log('Receipt printed despite save error');
+        this.closeReceiptModal();
+      } catch (printError) {
+        console.error('Print error:', printError);
+      }
+    }
+  }
+
+  private async saveTransaction(receiptData: any): Promise<any> {
+    const currentUser = this.authService.currentUser();
+    if (!currentUser) {
+      throw new Error('No authenticated user found');
+    }
+
+    const cartSummary = this.cartSummary();
+    const storeInfo = this.currentStoreInfo();
+
+    // Prepare transaction data matching the Transaction interface
+    const transactionData = {
+      companyId: currentUser.companyId || '',
+      storeId: storeInfo?.id || '',
+      branchId: currentUser.branchId || 'main-branch', // Use user's branch or default
+      cashierId: currentUser.uid || '',
+      items: receiptData.items.map((item: any) => ({
+        productId: item.skuId || item.productId || '',
+        name: item.productName,
+        quantity: item.quantity,
+        price: item.sellingPrice,
+        tax: item.vatAmount || 0
+      })),
+      subtotal: cartSummary.grossAmount || receiptData.subtotal,
+      tax: cartSummary.vatAmount || receiptData.vatAmount,
+      total: cartSummary.netAmount || receiptData.totalAmount,
+      paymentMethod: 'cash', // Default to cash, could be configurable
+      amountTendered: cartSummary.netAmount || receiptData.totalAmount, // Assume exact payment for now
+      change: 0, // No change for exact payment
+      status: 'completed' as const
+    };
+
+    // Save transaction using the transaction service
+    return await this.transactionService.createTransaction(transactionData);
   }
 }

@@ -1,7 +1,7 @@
 import { ApplicationConfig } from '@angular/core';
 import { provideFirebaseApp, initializeApp } from '@angular/fire/app';
 import { provideFirestore, getFirestore } from '@angular/fire/firestore';
-import { provideAuth, getAuth } from '@angular/fire/auth';
+import { provideAuth, getAuth, connectAuthEmulator } from '@angular/fire/auth';
 import { environment } from '../environments/environment';
 import { provideRouter } from '@angular/router';
 import { provideAnimations } from '@angular/platform-browser/animations';
@@ -12,7 +12,12 @@ export const appConfig: ApplicationConfig = {
     provideRouter(routes),
     provideAnimations(),
     provideFirebaseApp(() => initializeApp(environment.firebase)),
-    provideAuth(() => getAuth()),
+    provideAuth(() => {
+      const auth = getAuth();
+      // Firebase Auth automatically uses IndexedDB for persistence on web
+      // This ensures user sessions persist across browser tabs and page refreshes
+      return auth;
+    }),
     provideFirestore(() => getFirestore())
   ]
 };

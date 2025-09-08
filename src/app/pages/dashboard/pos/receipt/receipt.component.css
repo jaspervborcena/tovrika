@@ -1,0 +1,419 @@
+/* Modal Overlay */
+.receipt-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+/* Modal Content */
+.receipt-modal-content {
+  background: white;
+  border-radius: 12px;
+  width: 90%;
+  max-width: 600px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+}
+
+/* Modal Header */
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.5rem;
+  border-bottom: 1px solid #e5e7eb;
+  background: #f9fafb;
+  border-radius: 12px 12px 0 0;
+}
+
+.modal-header h2 {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #111827;
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  font-size: 2rem;
+  cursor: pointer;
+  color: #6b7280;
+  padding: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  transition: all 0.2s;
+}
+
+.close-btn:hover {
+  background-color: #f3f4f6;
+  color: #374151;
+}
+
+/* Receipt Container */
+.receipt-container {
+  padding: 2rem;
+  background: white;
+  font-family: 'Courier New', monospace;
+  line-height: 1.5;
+}
+
+/* Store Header */
+.store-header {
+  text-align: center;
+  margin-bottom: 2rem;
+  border-bottom: 1px solid #000;
+  padding-bottom: 1rem;
+}
+
+.company-name {
+  font-size: 1.8rem;
+  font-weight: bold;
+  margin: 0 0 0.5rem 0;
+  color: #111827;
+  text-transform: uppercase;
+}
+
+.company-info p {
+  margin: 0;
+  font-size: 0.875rem;
+  color: #374151;
+  line-height: 1.2;
+}
+
+.tin-number {
+  font-weight: 400;
+  margin: 0;
+  font-size: 0.875rem;
+  color: #374151;
+  line-height: 1.2;
+}
+
+.invoice-number {
+  font-weight: 400;
+  font-size: 0.875rem;
+  margin: 0;
+  color: #374151;
+  line-height: 1.2;
+}
+
+.sales-invoice-label {
+  font-weight: 700;
+  font-size: 1.3rem;
+  margin-top: 0.5rem;
+  margin-bottom: 0.5rem;
+  color: #111827;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  text-align: center;
+}
+
+/* BIR Information */
+.bir-info {
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+
+.bir-info p {
+  margin: 0;
+  font-size: 0.875rem;
+  color: #374151;
+  line-height: 1.2;
+  font-weight: 400;
+}
+
+.bir-permit,
+.min-number,
+.serial-number,
+.inclusive-serial {
+  font-weight: 400;
+}
+
+/* Sold To Section */
+.sold-to-section {
+  margin-bottom: 1.5rem;
+  padding: 0;
+  background-color: transparent;
+  border-radius: 0;
+}
+
+.sold-to-header {
+  margin: 0 0 0.75rem 0;
+  font-size: 1.2rem;
+  font-weight: bold;
+  color: #111827;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.customer-info p {
+  margin: 0.25rem 0;
+  font-size: 0.9rem;
+}
+
+/* Cashier and Date Section */
+.cashier-date-section {
+  margin-bottom: 1.5rem;
+  padding: 0;
+  background-color: transparent;
+  border-radius: 0;
+}
+
+.cashier-date-layout {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.cashier-info, .date-info {
+  margin: 0;
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.cashier-info {
+  color: #374151;
+}
+
+.date-info {
+  color: #374151;
+}
+
+/* Products Table */
+.products-section {
+  margin-bottom: 1.5rem;
+}
+
+.products-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.products-table th {
+  background-color: transparent;
+  padding: 0.75rem 0.5rem;
+  text-align: left;
+  font-weight: 600;
+  border: none;
+  color: #374151;
+  border-bottom: 1px solid #000;
+}
+
+.products-table td {
+  padding: 0.75rem 0.5rem;
+  border: none;
+  vertical-align: top;
+}
+
+.products-table tbody tr:nth-child(even) {
+  background-color: transparent;
+}
+
+/* Totals Section */
+.totals-section {
+  margin-bottom: 1.5rem;
+  padding: 0;
+  background-color: transparent;
+  border-radius: 0;
+}
+
+.totals-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.total-line {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.9rem;
+}
+
+.grand-total {
+  border-top: 2px solid #374151;
+  padding-top: 0.5rem;
+  margin-top: 0.5rem;
+  font-size: 1.1rem;
+}
+
+/* Receipt Footer */
+.receipt-footer {
+  text-align: center;
+  margin-top: 2rem;
+  padding-top: 1rem;
+  border-top: 1px solid #e5e7eb;
+}
+
+.thank-you {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin: 0.5rem 0;
+  color: #111827;
+}
+
+.footer-note, .date-printed {
+  font-size: 0.8rem;
+  color: #6b7280;
+  margin: 0.25rem 0;
+}
+
+/* Print Options */
+.print-options {
+  margin: 0;
+  padding: 1.5rem;
+  border-top: 1px solid #e5e7eb;
+  background: #f8fafc;
+}
+
+.print-options label {
+  display: block;
+  margin-bottom: 0.75rem;
+  font-weight: 600;
+  color: #1f2937;
+  font-size: 0.9rem;
+}
+
+.printer-select {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  border: 1px solid #d1d5db;
+  border-radius: 0.5rem;
+  font-size: 0.9rem;
+  background-color: white;
+  color: #374151;
+  appearance: none;
+  background-image: url('data:image/svg+xml;charset=US-ASCII,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 4 5"><path fill="%23666" d="M2 0L0 2h4zm0 5L0 3h4z"/></svg>');
+  background-repeat: no-repeat;
+  background-position: right 0.75rem center;
+  background-size: 0.75rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.printer-select:hover {
+  border-color: #9ca3af;
+}
+
+.printer-select:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+/* Modal Actions */
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 1rem;
+  padding: 1.5rem;
+  border-top: 1px solid #e5e7eb;
+  background: #f9fafb;
+  border-radius: 0 0 12px 12px;
+}
+
+.btn-primary, .btn-secondary {
+  padding: 0.75rem 1.5rem;
+  border-radius: 6px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: none;
+  font-size: 0.9rem;
+}
+
+.btn-primary {
+  background-color: #3b82f6;
+  color: white;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background-color: #2563eb;
+}
+
+.btn-primary:disabled {
+  background-color: #9ca3af;
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.btn-secondary {
+  background-color: #e5e7eb;
+  color: #374151;
+}
+
+.btn-secondary:hover {
+  background-color: #d1d5db;
+}
+
+/* Print Styles */
+@media print {
+  .receipt-modal-overlay {
+    position: static;
+    background: none;
+  }
+  
+  .receipt-modal-content {
+    width: 100%;
+    max-width: none;
+    max-height: none;
+    box-shadow: none;
+    border-radius: 0;
+  }
+  
+  .modal-header,
+  .modal-actions {
+    display: none;
+  }
+  
+  .receipt-container {
+    padding: 0;
+  }
+  
+  .company-name {
+    font-size: 1.5rem;
+  }
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .receipt-modal-content {
+    width: 95%;
+    margin: 1rem;
+  }
+  
+  .receipt-container {
+    padding: 1rem;
+  }
+  
+  .modal-header {
+    padding: 1rem;
+  }
+  
+  .modal-actions {
+    padding: 1rem;
+    flex-direction: column;
+  }
+  
+  .products-table {
+    font-size: 0.75rem;
+  }
+  
+  .products-table th,
+  .products-table td {
+    padding: 0.5rem 0.25rem;
+  }
+}

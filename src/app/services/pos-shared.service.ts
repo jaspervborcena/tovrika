@@ -1,5 +1,6 @@
 import { Injectable, signal, computed } from '@angular/core';
 import { CartItem } from '../interfaces/cart.interface';
+import { ProductViewType } from '../interfaces/pos.interface';
 
 export interface SharedPosData {
   customerName: string;
@@ -9,6 +10,9 @@ export interface SharedPosData {
   orderDate: string;
   cartItems: CartItem[];
   selectedStoreId: string;
+  searchQuery: string;
+  selectedCategory: string;
+  currentView: ProductViewType;
 }
 
 @Injectable({
@@ -23,6 +27,11 @@ export class PosSharedService {
   private orderDateSignal = signal<string>(new Date().toISOString().slice(0, 16));
   private cartItemsSignal = signal<CartItem[]>([]);
   private selectedStoreIdSignal = signal<string>('');
+  
+  // UI state signals for synchronization
+  private searchQuerySignal = signal<string>('');
+  private selectedCategorySignal = signal<string>('all');
+  private currentViewSignal = signal<ProductViewType>('grid');
 
   // Read-only computed properties
   readonly customerName = computed(() => this.customerNameSignal());
@@ -32,6 +41,11 @@ export class PosSharedService {
   readonly orderDate = computed(() => this.orderDateSignal());
   readonly cartItems = computed(() => this.cartItemsSignal());
   readonly selectedStoreId = computed(() => this.selectedStoreIdSignal());
+  
+  // UI state computed properties
+  readonly searchQuery = computed(() => this.searchQuerySignal());
+  readonly selectedCategory = computed(() => this.selectedCategorySignal());
+  readonly currentView = computed(() => this.currentViewSignal());
 
   // Cart summary computed
   readonly cartSummary = computed(() => {
@@ -87,6 +101,19 @@ export class PosSharedService {
 
   updateSelectedStoreId(storeId: string) {
     this.selectedStoreIdSignal.set(storeId);
+  }
+
+  // UI state update methods
+  updateSearchQuery(query: string) {
+    this.searchQuerySignal.set(query);
+  }
+
+  updateSelectedCategory(category: string) {
+    this.selectedCategorySignal.set(category);
+  }
+
+  updateCurrentView(view: ProductViewType) {
+    this.currentViewSignal.set(view);
   }
 
   updateCartItems(items: CartItem[]) {
@@ -155,7 +182,10 @@ export class PosSharedService {
       invoiceNumber: this.invoiceNumber(),
       orderDate: this.orderDate(),
       cartItems: this.cartItems(),
-      selectedStoreId: this.selectedStoreId()
+      selectedStoreId: this.selectedStoreId(),
+      searchQuery: this.searchQuery(),
+      selectedCategory: this.selectedCategory(),
+      currentView: this.currentView()
     };
   }
 
@@ -168,5 +198,8 @@ export class PosSharedService {
     if (data.orderDate !== undefined) this.updateOrderDate(data.orderDate);
     if (data.cartItems !== undefined) this.updateCartItems(data.cartItems);
     if (data.selectedStoreId !== undefined) this.updateSelectedStoreId(data.selectedStoreId);
+    if (data.searchQuery !== undefined) this.updateSearchQuery(data.searchQuery);
+    if (data.selectedCategory !== undefined) this.updateSelectedCategory(data.selectedCategory);
+    if (data.currentView !== undefined) this.updateCurrentView(data.currentView);
   }
 }

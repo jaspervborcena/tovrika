@@ -43,7 +43,7 @@ export class HeaderComponent implements OnInit {
   // Device toggle for POS pages
   protected isPosPage = computed(() => {
     const url = this.router.url;
-    return url.includes('/pos');
+    return url.includes('/pos') || url.includes('/dashboard/pos');
   });
   
   protected isMobilePosPage = computed(() => {
