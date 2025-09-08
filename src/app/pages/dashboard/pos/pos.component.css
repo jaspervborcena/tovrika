@@ -1,4 +1,4 @@
- .pos-container {
+    .pos-container {
       /* account for fixed header height (80px) so the POS content sits below it */
       margin-top: 80px;
       height: calc(100vh - 80px);
@@ -7,7 +7,39 @@
       background: #f8fafc;
     }
 
-    .store-tabs {
+    /* Store Selector with 2-column layout */
+    .store-selector {
+      background: white;
+      border-bottom: 1px solid #e2e8f0;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+
+    .store-selector-layout {
+      display: flex;
+      align-items: center;
+      min-height: 80px; /* Match receipt panel height */
+    }
+
+    .store-selection-column {
+      flex: 1; /* Same as left-panel */
+      border-right: 1px solid #e2e8f0; /* Match left-panel border */
+    }
+
+    .store-invoice-column {
+      width: 400px; /* Same as right-panel */
+      /* padding: 0.75rem 1rem; */
+      border-left: 1px solid #e2e8f0; /* Match right-panel border */
+    }
+
+    .store-invoice-column .invoice-info-section {
+      margin-bottom: 0; /* Remove bottom margin in this context */
+    }
+
+    .no-stores-message {
+      padding: 0.5rem 1rem;
+      color: #6b7280;
+      font-style: italic;
+    }    .store-tabs {
       background: white;
       border-bottom: 1px solid #e2e8f0;
       padding: 1rem 2rem;
@@ -64,6 +96,186 @@
       border-bottom: 1px solid #e2e8f0;
       max-height: 300px;
       overflow-y: auto;
+    }
+
+    /* Compact Layout for Categories and Customer */
+    .categories-panel.compact-layout {
+      display: flex;
+      gap: 1.5rem;
+      max-height: none;
+      border-bottom: 1px solid #e2e8f0;
+      padding: 1rem;
+    }
+
+    .categories-column {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .customer-column {
+      flex: 1;
+      min-width: 0;
+    }
+
+    /* Invoice Info Section - Always visible at top */
+    .invoice-info-section {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 6px;
+      padding: 0.75rem;
+      margin-bottom: 1rem;
+    }
+
+    .invoice-horizontal-layout {
+      display: flex;
+      gap: 1rem;
+    }
+
+    .invoice-field {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .invoice-field:first-child {
+      flex: 2; /* Give more space to invoice number */
+    }
+
+    .invoice-field:last-child {
+      flex: 1; /* Date field takes only needed space */
+      min-width: 180px; /* Minimum width for datetime input */
+    }
+
+    .invoice-field label {
+      font-size: 0.75rem;
+      font-weight: 500;
+      color: #374151;
+      margin-bottom: 0.25rem;
+    }
+
+    .invoice-field input {
+      width: 100%;
+      padding: 0.5rem;
+      border: 1px solid #d1d5db;
+      border-radius: 4px;
+      font-size: 0.875rem;
+      box-sizing: border-box;
+    }
+
+    .invoice-field .input-action-pair {
+      display: flex;
+      gap: 0.5rem;
+    }
+
+    .invoice-field .input-action-pair input {
+      flex: 1;
+    }
+
+    .categories-column h3,
+    .customer-column h3 {
+      margin: 0 0 1rem 0;
+      font-size: 1rem;
+      font-weight: 600;
+      color: #374151;
+    }
+
+    /* Customer Panel Specific Styles */
+    .customer-panel {
+      max-height: none;
+    }
+
+    .customer-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      cursor: pointer;
+      user-select: none;
+      margin-bottom: 1rem;
+    }
+
+    .customer-header h3 {
+      margin: 0;
+      font-size: 1.125rem;
+      font-weight: 600;
+      color: #1f2937;
+    }
+
+    .expand-arrow {
+      transition: transform 0.2s ease;
+      font-size: 12px;
+      color: #6b7280;
+    }
+
+    .expand-arrow.expanded {
+      transform: rotate(180deg);
+    }
+
+    .customer-field-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      margin-bottom: 0.75rem;
+    }
+
+    .customer-field-group label {
+      font-size: 0.875rem;
+      font-weight: 500;
+      color: #374151;
+    }
+
+    .customer-field-group input {
+      width: 100%;
+      padding: 0.5rem 0.75rem;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      font-size: 0.875rem;
+      box-sizing: border-box;
+    }
+
+    .customer-field-group input:focus {
+      outline: none;
+      border-color: #3b82f6;
+      box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+    }
+
+    .customer-name-input {
+      font-weight: 500;
+    }
+
+    .customer-details {
+      overflow: hidden;
+      transition: all 0.3s ease;
+    }
+
+    .customer-details.hidden {
+      max-height: 0;
+      opacity: 0;
+      margin-top: 0;
+    }
+
+    .input-action-pair {
+      display: flex;
+      gap: 0.5rem;
+      align-items: stretch;
+    }
+
+    .input-action-pair input {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .action-btn {
+      padding: 0.5rem 0.75rem;
+      background: #3b82f6;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      font-size: 0.75rem;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    .action-btn:hover {
+      background: #2563eb;
     }
 
     /* Invoice Info Section */

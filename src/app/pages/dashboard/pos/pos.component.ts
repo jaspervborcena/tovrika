@@ -5,6 +5,7 @@ import { RouterModule } from '@angular/router';
 import { HeaderComponent } from '../../../shared/components/header/header.component';
 import { ProductService } from '../../../services/product.service';
 import { PosService } from '../../../services/pos.service';
+import { PosSharedService } from '../../../services/pos-shared.service';
 import { AuthService } from '../../../services/auth.service';
 import { CompanyService } from '../../../services/company.service';
 import { OrderService } from '../../../services/order.service';
@@ -25,21 +26,17 @@ export class PosComponent implements OnInit {
   // Services
   private productService = inject(ProductService);
   private posService = inject(PosService);
+  private posSharedService = inject(PosSharedService);
   private authService = inject(AuthService);
   private companyService = inject(CompanyService);
   private storeService = inject(StoreService);
   private orderService = inject(OrderService);
   private userRoleService = inject(UserRoleService);
 
-  // Signals
-  private searchQuerySignal = signal<string>('');
-  private selectedCategorySignal = signal<string>('all');
-  private currentViewSignal = signal<ProductViewType>('grid');
-
-  // Computed properties
-  readonly searchQuery = computed(() => this.searchQuerySignal());
-  readonly selectedCategory = computed(() => this.selectedCategorySignal());
-  readonly currentView = computed(() => this.currentViewSignal());
+  // Use shared UI state for synchronization with mobile
+  readonly searchQuery = computed(() => this.posSharedService.searchQuery());
+  readonly selectedCategory = computed(() => this.posSharedService.selectedCategory());
+  readonly currentView = computed(() => this.posSharedService.currentView());
   
   // Show stores loaded from user roles (already filtered by role-based access)
   readonly availableStores = computed(() => {
@@ -124,6 +121,20 @@ export class PosComponent implements OnInit {
 
   // Template properties
   currentDate = new Date();
+  
+  // Customer information for order (like mobile version)
+  customerInfo = {
+    soldTo: '',
+    tin: '',
+    businessAddress: '',
+    invoiceNumber: `INV-${new Date().getFullYear()}-${String(Date.now()).slice(-6)}`,
+    datetime: new Date().toISOString().slice(0, 16) // Format for datetime-local input
+  };
+
+  // UI State for collapsible customer panel
+  private isSoldToCollapsedSignal = signal<boolean>(true);
+  readonly isSoldToCollapsed = computed(() => this.isSoldToCollapsedSignal());
+  
   // Access tabs for POS management
   readonly accessTabs = ['New', 'Orders', 'Cancelled', 'Refunds & Returns', 'Split Payments', 'Discounts & Promotions'] as const;
   private accessTabSignal = signal<string>('New');
@@ -186,6 +197,8 @@ export class PosComponent implements OnInit {
   async ngOnInit(): Promise<void> {
     try {
       await this.loadData();
+      // Set current date and time
+      this.updateCurrentDateTime();
       // Auto-select store after data is loaded
       this.initializeStore();
       
@@ -243,7 +256,12 @@ export class PosComponent implements OnInit {
     // Auto-select store if none is currently selected
     if (!currentlySelected && stores.length > 0) {
       const storeToSelect = stores[0]; // Always select the first store
-      console.log('🏪 Auto-selecting store:', storeToSelect.storeName, '(ID:', storeToSelect.id, ')');
+      
+      if (stores.length === 1) {
+        console.log('🏪 Single store detected, auto-selecting:', storeToSelect.storeName, '(ID:', storeToSelect.id, ')');
+      } else {
+        console.log('🏪 Multiple stores available, auto-selecting first:', storeToSelect.storeName, '(ID:', storeToSelect.id, ')');
+      }
       
       if (storeToSelect.id) {
         await this.selectStore(storeToSelect.id);
@@ -266,11 +284,11 @@ export class PosComponent implements OnInit {
   }
 
   setSelectedCategory(category: string): void {
-    this.selectedCategorySignal.set(category);
+    this.posSharedService.updateSelectedCategory(category);
   }
 
   setCurrentView(view: ProductViewType): void {
-    this.currentViewSignal.set(view);
+    this.posSharedService.updateCurrentView(view);
   }
 
   onSearch(): void {
@@ -288,11 +306,24 @@ export class PosComponent implements OnInit {
 
   // Public setter used by the template's ngModelChange
   setSearchQuery(value: string): void {
-    this.searchQuerySignal.set(value);
+    this.posSharedService.updateSearchQuery(value);
   }
 
   clearSearch(): void {
-    this.searchQuerySignal.set('');
+    this.posSharedService.updateSearchQuery('');
+  }
+
+  // Customer panel methods
+  toggleSoldToPanel(): void {
+    this.isSoldToCollapsedSignal.set(!this.isSoldToCollapsedSignal());
+  }
+
+  updateCurrentDateTime(): void {
+    this.customerInfo.datetime = new Date().toISOString().slice(0, 16);
+  }
+
+  generateNewInvoiceNumber(): void {
+    this.customerInfo.invoiceNumber = `INV-${new Date().getFullYear()}-${String(Date.now()).slice(-6)}`;
   }
 
   addToCart(product: Product): void {

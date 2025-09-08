@@ -252,23 +252,6 @@
   <div class="pos-row cart-row">
     <div class="row-header">🛒 Cart & Receipt ({{ cartItems().length }} items)</div>
     
-    <!-- Store Header for Receipt -->
-    <div class="receipt-company-header" *ngIf="currentStoreInfo()">
-      <div class="company-logo-area">
-        <img *ngIf="currentStoreInfo()?.logoUrl" [src]="currentStoreInfo()?.logoUrl" [alt]="currentStoreInfo()?.storeName + ' Logo'" class="company-logo">
-        <div class="company-details">
-          <div class="company-name">{{ currentStoreInfo()?.storeName || 'Store Name' }}</div>
-          <div class="store-name">{{ currentStoreInfo()?.branchName || currentStoreInfo()?.storeName || 'Store Name' }}</div>
-          <div class="store-address">{{ currentStoreInfo()?.address || 'Store Address' }}</div>
-          <div class="contact-info">{{ currentStoreInfo()?.phoneNumber || 'Phone' }} | {{ currentStoreInfo()?.email || 'Email' }}</div>
-        </div>
-      </div>
-      <div class="invoice-details">
-        <div><strong>Invoice:</strong> {{ customerInfo.invoiceNumber || 'Auto-generated' }}</div>
-        <div><strong>Date:</strong> {{ (customerInfo.datetime ? (customerInfo.datetime | date:'short') : (currentDate | date:'short')) }}</div>
-      </div>
-    </div>
-    
     <!-- Empty Cart Message -->
     <div *ngIf="cartItems().length === 0" class="empty-cart-mobile">
       <div class="empty-icon">🛒</div>

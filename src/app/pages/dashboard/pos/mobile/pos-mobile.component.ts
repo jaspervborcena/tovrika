@@ -35,15 +35,10 @@ export class PosMobileComponent implements OnInit {
   private userRoleService = inject(UserRoleService);
   public currencyService = inject(CurrencyService);
 
-  // Signals
-  private searchQuerySignal = signal<string>('');
-  private selectedCategorySignal = signal<string>('all');
-  private currentViewSignal = signal<ProductViewType>('grid');
-
-  // Computed properties
-  readonly searchQuery = computed(() => this.searchQuerySignal());
-  readonly selectedCategory = computed(() => this.selectedCategorySignal());
-  readonly currentView = computed(() => this.currentViewSignal());
+  // Use shared UI state for synchronization with desktop
+  readonly searchQuery = computed(() => this.posSharedService.searchQuery());
+  readonly selectedCategory = computed(() => this.posSharedService.selectedCategory());
+  readonly currentView = computed(() => this.posSharedService.currentView());
   
   // Show stores loaded from user roles (already filtered by role-based access)
   readonly availableStores = computed(() => {
@@ -376,11 +371,11 @@ export class PosMobileComponent implements OnInit {
   }
 
   setSelectedCategory(category: string): void {
-    this.selectedCategorySignal.set(category);
+    this.posSharedService.updateSelectedCategory(category);
   }
 
   setCurrentView(view: ProductViewType): void {
-    this.currentViewSignal.set(view);
+    this.posSharedService.updateCurrentView(view);
   }
 
   onSearch(): void {
@@ -398,11 +393,11 @@ export class PosMobileComponent implements OnInit {
 
   // Public setter used by the template's ngModelChange
   setSearchQuery(value: string): void {
-    this.searchQuerySignal.set(value);
+    this.posSharedService.updateSearchQuery(value);
   }
 
   clearSearch(): void {
-    this.searchQuerySignal.set('');
+    this.posSharedService.updateSearchQuery('');
     // If on Orders tab, also clear orders and load recent ones
     if (this.accessTab() === 'Orders') {
       this.setOrderSearchQuery('');

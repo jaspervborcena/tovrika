@@ -67,13 +67,38 @@
   color: #495057;
 }
 
+.mobile-field-group input {
+  width: 100%;
+  max-width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #ced4da;
+  border-radius: 6px;
+  font-size: 14px;
+  background: white;
+  box-sizing: border-box;
+}
+
+.mobile-field-group input:focus {
+  outline: none;
+  border-color: #007bff;
+  box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+}
+
+.mobile-field-group input[type="datetime-local"] {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
 .input-action-pair {
   display: flex;
   gap: 8px;
+  align-items: stretch;
 }
 
 .input-action-pair input {
   flex: 1;
+  min-width: 0; /* Allows flex item to shrink below content size */
 }
 
 .action-btn {

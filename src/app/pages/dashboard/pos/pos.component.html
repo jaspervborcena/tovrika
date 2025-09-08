@@ -1,16 +1,41 @@
  <div class="pos-container">
       <app-header></app-header>
-      <!-- Store selector as pill-tabs (reuse category button styles) -->
-      <div class="store-selector" *ngIf="availableStores().length">
-        <div class="category-list" style="padding:0.75rem 1rem; gap:0.5rem;">
-          <button
-            *ngFor="let store of availableStores()"
-            [class.active]="selectedStoreId() === store.id"
-            (click)="selectStore(store.id!)"
-            class="category-btn"
-            title="{{ store.storeName }}">
-            {{ store.storeName }}
-          </button>
+      <!-- Store selector as pill-tabs with invoice info -->
+      <div class="store-selector">
+        <div class="store-selector-layout">
+          <!-- Left: Store Selection (takes same space as left-panel) -->
+          <div class="store-selection-column">
+            <div class="category-list" style="padding:0.75rem 1rem; gap:0.5rem;">
+              <button
+                *ngFor="let store of availableStores()"
+                [class.active]="selectedStoreId() === store.id"
+                (click)="selectStore(store.id!)"
+                class="category-btn"
+                title="{{ store.storeName }}">
+                {{ store.storeName }}
+              </button>
+              <!-- Fallback if no stores -->
+              <div *ngIf="availableStores().length === 0" class="no-stores-message">
+                No stores available
+              </div>
+            </div>
+          </div>
+          
+          <!-- Right: Invoice Info (aligned with receipt panel) -->
+          <div class="store-invoice-column">
+            <div class="invoice-info-section">
+              <div class="invoice-horizontal-layout">
+                <div class="invoice-field">
+                  <label>Invoice Number:</label>
+                  <input type="text" [(ngModel)]="customerInfo.invoiceNumber" placeholder="Auto-generated">
+                </div>
+                <div class="invoice-field">
+                  <label>Date & Time:</label>
+                  <input type="datetime-local" [(ngModel)]="customerInfo.datetime">
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -18,23 +43,56 @@
       <div class="pos-layout">
         <!-- Left Panel: Categories & Products -->
         <div class="left-panel">
-          <!-- Categories Panel -->
-          <div class="categories-panel">
-            <h3>Categories</h3>
-            <div class="category-list">
-              <button 
-                [class.active]="selectedCategory() === 'all'"
-                (click)="setSelectedCategory('all')"
-                class="category-btn">
-                All Products
-              </button>
-              <button 
-                *ngFor="let category of categories()"
-                [class.active]="selectedCategory() === category"
-                (click)="setSelectedCategory(category)"
-                class="category-btn">
-                {{ category }}
-              </button>
+          <!-- Compact Categories & Customer Panel -->
+          <div class="categories-panel compact-layout">
+            <!-- Left Column: Categories -->
+            <div class="categories-column">
+              <h3>Categories</h3>
+              <div class="category-list two-columns">
+                <button 
+                  [class.active]="selectedCategory() === 'all'"
+                  (click)="setSelectedCategory('all')"
+                  class="category-btn">
+                  All Products
+                </button>
+                <button 
+                  *ngFor="let category of categories()"
+                  [class.active]="selectedCategory() === category"
+                  (click)="setSelectedCategory(category)"
+                  class="category-btn">
+                  {{ category }}
+                </button>
+              </div>
+            </div>
+
+            <!-- Right Column: Customer Information -->
+            <div class="customer-column">
+              <!-- Customer Header -->
+              <div class="customer-header" (click)="toggleSoldToPanel()">
+                <h3>👤 Customer</h3>
+                <span class="expand-arrow" [class.expanded]="!isSoldToCollapsed()">▼</span>
+              </div>
+              
+              <!-- Always visible customer name -->
+              <div class="customer-field-group">
+                <input 
+                  type="text" 
+                  [(ngModel)]="customerInfo.soldTo"
+                  placeholder="Customer Name (Optional)"
+                  class="customer-name-input">
+              </div>
+              
+              <!-- Expandable customer details -->
+              <div class="customer-details" [class.hidden]="isSoldToCollapsed()">
+                <div class="customer-field-group">
+                  <label>TIN:</label>
+                  <input type="text" [(ngModel)]="customerInfo.tin" placeholder="123-456-789-000">
+                </div>
+                <div class="customer-field-group">
+                  <label>Business Address:</label>
+                  <input type="text" [(ngModel)]="customerInfo.businessAddress" placeholder="Full Address">
+                </div>
+              </div>
             </div>
           </div>
 
