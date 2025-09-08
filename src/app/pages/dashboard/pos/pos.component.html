@@ -204,15 +204,17 @@
                   [alt]="product.productName"
                   class="product-image">
                 <div class="product-details">
-                  <h4>{{ product.productName }}</h4>
-                  <p class="product-description">{{ product.category }}</p>
-                  <div class="product-pricing">
+                  <div class="product-name-price">
+                    <h4>{{ product.productName }}</h4>
                     <span class="price">₱{{ (product.sellingPrice || 0).toFixed(2) }}</span>
-                    <span *ngIf="product.hasDiscount" class="discount">
-                      {{ product.discountType === 'percentage' ? product.discountValue + '% OFF' : '$' + product.discountValue + ' OFF' }}
-                    </span>
                   </div>
-                  <div class="product-stock">Stock: {{ product.totalStock }}</div>
+                  <div class="product-category-stock">
+                    <p class="product-description">{{ product.category }}</p>
+                    <span class="product-stock">Stock: {{ product.totalStock }}</span>
+                  </div>
+                  <div *ngIf="product.hasDiscount" class="discount">
+                    {{ product.discountType === 'percentage' ? product.discountValue + '% OFF' : '$' + product.discountValue + ' OFF' }}
+                  </div>
                 </div>
               </div>
             </div>
