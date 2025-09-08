@@ -57,6 +57,28 @@
 
   <!-- ROW 4: CUSTOMER INFORMATION -->
   <div class="pos-row customer-row">
+    <!-- Sales Type Section -->
+    <div class="sales-type-section">
+      <div class="sales-type-checkboxes">
+        <label class="sales-type-option">
+          <input 
+            type="checkbox"
+            [checked]="isCashSale()"
+            (change)="toggleCashSale()"
+            class="sales-type-checkbox">
+          <span class="checkbox-label">💵 Cash Payment</span>
+        </label>
+        <label class="sales-type-option">
+          <input 
+            type="checkbox"
+            [checked]="isChargeSale()"
+            (change)="toggleChargeSale()"
+            class="sales-type-checkbox">
+          <span class="checkbox-label">💳 Card Payment</span>
+        </label>
+      </div>
+    </div>
+    
     <div class="row-header" (click)="toggleSoldToPanel()">
       👤 Customer
       <span class="expand-arrow" [class.expanded]="!isSoldToCollapsed()">▼</span>
@@ -300,25 +322,45 @@
     <!-- Cart Summary Section -->
     <div *ngIf="cartItems().length > 0" class="cart-summary-mobile">
       <div class="summary-row">
-        <span class="summary-label">Vatable:</span>
+        <span class="summary-label">Vatable Sales:</span>
         <span class="summary-value">₱{{ cartSummary().vatableSales.toFixed(2) }}</span>
       </div>
       <div class="summary-row">
-        <span class="summary-label">Non-Vatable:</span>
+        <span class="summary-label">VAT-Exempt Sales:</span>
         <span class="summary-value">₱{{ cartSummary().vatExemptSales.toFixed(2) }}</span>
+      </div>
+      <div class="summary-row">
+        <span class="summary-label">Zero-rated Sales:</span>
+        <span class="summary-value">₱{{ cartSummary().zeroRatedSales.toFixed(2) }}</span>
+      </div>
+      <div class="summary-row" *ngIf="cartSummary().productDiscountAmount > 0">
+        <span class="summary-label">Product Discounts:</span>
+        <span class="summary-value">-₱{{ cartSummary().productDiscountAmount.toFixed(2) }}</span>
       </div>
       <div class="summary-row">
         <span class="summary-label">VAT Amount:</span>
         <span class="summary-value">₱{{ cartSummary().vatAmount.toFixed(2) }}</span>
       </div>
-      <div class="summary-row">
-        <span class="summary-label">Discount:</span>
-        <span class="summary-value">₱{{ (cartSummary().productDiscountAmount + cartSummary().orderDiscountAmount).toFixed(2) }}</span>
-      </div>
       <div class="summary-row gross-row">
         <span class="summary-label">Gross Amount:</span>
         <span class="summary-value">₱{{ cartSummary().grossAmount.toFixed(2) }}</span>
       </div>
+      
+      <!-- Order Discount Section -->
+      <div class="order-discount-section" *ngIf="orderDiscount() || cartItems().length > 0">
+        <div class="summary-row" *ngIf="orderDiscount()">
+          <span class="summary-label">{{ getDiscountDisplayName() }}:</span>
+          <span class="summary-value">-₱{{ cartSummary().orderDiscountAmount.toFixed(2) }}</span>
+          <button (click)="removeOrderDiscount()" class="remove-discount-btn">×</button>
+        </div>
+        <button 
+          *ngIf="!orderDiscount() && cartItems().length > 0" 
+          (click)="showDiscountModal()" 
+          class="btn-discount-mobile">
+          Add Discount
+        </button>
+      </div>
+      
       <div class="summary-row total-row">
         <span class="summary-label">NET AMOUNT:</span>
         <span class="summary-value total-amount">₱{{ cartSummary().netAmount.toFixed(2) }}</span>
@@ -333,6 +375,15 @@
         [disabled]="isProcessing()"
         class="mobile-btn primary-btn">
         {{ isProcessing() ? 'Processing...' : 'Complete Order' }}
+      </button>
+    </div>
+
+    <!-- New Order Button (shown when cart has items) -->
+    <div class="new-order-section-mobile" *ngIf="cartItems().length > 0">
+      <button 
+        (click)="startNewOrder()" 
+        class="mobile-btn new-order-btn">
+        🔄 New Order
       </button>
     </div>
 
@@ -405,3 +456,10 @@
   (closeModal)="closeReceiptModal()"
   (printReceipt)="printReceipt($event)">
 </app-receipt>
+
+<!-- Discount Modal -->
+<app-discount-modal 
+  *ngIf="isDiscountModalVisible()"
+  (discountApplied)="applyOrderDiscount($event)"
+  (modalClosed)="closeDiscountModal()">
+</app-discount-modal>

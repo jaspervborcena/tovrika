@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { RouterModule } from '@angular/router';
 import { HeaderComponent } from '../../../../shared/components/header/header.component';
 import { ReceiptComponent } from '../receipt/receipt.component';
+import { DiscountModalComponent } from '../../../../shared/components/discount-modal/discount-modal.component';
 import { ProductService } from '../../../../services/product.service';
 import { PosService } from '../../../../services/pos.service';
 import { PosSharedService } from '../../../../services/pos-shared.service';
@@ -15,14 +16,16 @@ import { OrderService } from '../../../../services/order.service';
 import { StoreService, Store } from '../../../../services/store.service';
 import { UserRoleService } from '../../../../services/user-role.service';
 import { CurrencyService } from '../../../../services/currency.service';
+import { CustomerService } from '../../../../services/customer.service';
 import { Product } from '../../../../interfaces/product.interface';
-import { CartItem, ProductViewType, ReceiptData } from '../../../../interfaces/pos.interface';
+import { CartItem, ProductViewType, ReceiptData, OrderDiscount } from '../../../../interfaces/pos.interface';
 import { Currency, CurrencySymbol, CURRENCY_CONFIGS } from '../../../../interfaces/currency.interface';
+import { Customer, CustomerFormData } from '../../../../interfaces/customer.interface';
 
 @Component({
   selector: 'app-pos-mobile',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterModule, HeaderComponent, ReceiptComponent],
+  imports: [CommonModule, FormsModule, RouterModule, HeaderComponent, ReceiptComponent, DiscountModalComponent],
   templateUrl: './pos-mobile.component.html',
   styleUrls: ['./pos-mobile.component.css']
 })
@@ -39,6 +42,7 @@ export class PosMobileComponent implements OnInit {
   private orderService = inject(OrderService);
   private userRoleService = inject(UserRoleService);
   public currencyService = inject(CurrencyService);
+  private customerService = inject(CustomerService);
 
   // Use shared UI state for synchronization with desktop
   readonly searchQuery = computed(() => this.posSharedService.searchQuery());
@@ -168,6 +172,18 @@ export class PosMobileComponent implements OnInit {
   readonly isReceiptModalVisible = computed(() => this.isReceiptModalVisibleSignal());
   readonly receiptData = computed(() => this.receiptDataSignal());
 
+  // Sales type state - now supports both cash and charge
+  private salesTypeCashSignal = signal<boolean>(true);  // Default to cash enabled
+  private salesTypeChargeSignal = signal<boolean>(false); // Default to charge disabled
+  readonly isCashSale = computed(() => this.salesTypeCashSignal());
+  readonly isChargeSale = computed(() => this.salesTypeChargeSignal());
+
+  // Discount modal state
+  private isDiscountModalVisibleSignal = signal<boolean>(false);
+  private orderDiscountSignal = signal<OrderDiscount | null>(null);
+  readonly isDiscountModalVisible = computed(() => this.isDiscountModalVisibleSignal());
+  readonly orderDiscount = computed(() => this.orderDiscountSignal());
+
   setAccessTab(tab: string): void {
     this.accessTabSignal.set(tab);
     
@@ -179,6 +195,53 @@ export class PosMobileComponent implements OnInit {
 
   setOrderSearchQuery(value: string): void {
     this.orderSearchSignal.set(value);
+  }
+
+  toggleCashSale(): void {
+    this.salesTypeCashSignal.update(value => !value);
+  }
+
+  toggleChargeSale(): void {
+    this.salesTypeChargeSignal.update(value => !value);
+  }
+
+  // Discount modal methods
+  showDiscountModal(): void {
+    this.isDiscountModalVisibleSignal.set(true);
+  }
+
+  closeDiscountModal(): void {
+    this.isDiscountModalVisibleSignal.set(false);
+  }
+
+  applyOrderDiscount(discount: OrderDiscount): void {
+    this.orderDiscountSignal.set(discount);
+    this.posService.setOrderDiscount(discount);
+    this.closeDiscountModal();
+  }
+
+  removeOrderDiscount(): void {
+    this.orderDiscountSignal.set(null);
+    this.posService.removeOrderDiscount();
+  }
+
+  getDiscountDisplayName(): string {
+    const discount = this.orderDiscount();
+    if (!discount) return '';
+    
+    let discountMethod = '';
+    if (discount.percentage) {
+      discountMethod = ` (${discount.percentage}%)`;
+    } else if (discount.fixedAmount) {
+      discountMethod = ` (₱${discount.fixedAmount.toFixed(2)})`;
+    }
+    
+    if (discount.type === 'PWD') return `PWD Discount${discountMethod}`;
+    if (discount.type === 'SENIOR') return `Senior Citizen Discount${discountMethod}`;
+    if (discount.type === 'CUSTOM' && discount.customType) {
+      return `${discount.customType} Discount${discountMethod}`;
+    }
+    return `Custom Discount${discountMethod}`;
   }
 
   async loadRecentOrders(): Promise<void> {
@@ -442,6 +505,24 @@ export class PosMobileComponent implements OnInit {
     }
   }
 
+  startNewOrder(): void {
+    // Reset cart and customer info for a new order
+    this.posService.clearCart();
+    this.removeOrderDiscount();
+    
+    // Reset customer information
+    this.customerInfo = {
+      soldTo: '',
+      tin: '',
+      businessAddress: '',
+      invoiceNumber: '',
+      datetime: new Date().toISOString().slice(0, 16)
+    };
+    
+    // Generate new invoice number
+    this.generateNewInvoiceNumber();
+  }
+
   generateNewInvoiceNumber(): void {
     this.customerInfo.invoiceNumber = `INV-${new Date().getFullYear()}-${String(Date.now()).slice(-6)}`;
   }
@@ -562,7 +643,14 @@ export class PosMobileComponent implements OnInit {
       : 'thermal';
 
     try {
-      // First, save the transaction to the database
+      // Save customer information if available
+      console.log('Saving customer information...');
+      const savedCustomer = await this.saveCustomerData();
+      if (savedCustomer) {
+        console.log('Customer saved successfully:', savedCustomer.customerId);
+      }
+
+      // Then save the transaction to the database
       console.log('Saving transaction before printing...');
       const savedTransaction = await this.saveTransaction(receiptData);
       console.log('Transaction saved successfully:', savedTransaction.transactionNumber);
@@ -584,6 +672,46 @@ export class PosMobileComponent implements OnInit {
       } catch (printError) {
         console.error('Print error:', printError);
       }
+    }
+  }
+
+  private async saveCustomerData(): Promise<Customer | null> {
+    try {
+      const currentUser = this.authService.currentUser();
+      if (!currentUser) {
+        console.log('No authenticated user found, skipping customer save');
+        return null;
+      }
+
+      const storeInfo = this.currentStoreInfo();
+      const selectedStore = this.selectedStoreId();
+      
+      if (!storeInfo?.companyId || !selectedStore) {
+        console.log('Missing company or store info, skipping customer save');
+        return null;
+      }
+
+      // Prepare customer form data
+      const customerFormData: CustomerFormData = {
+        soldTo: this.customerInfo.soldTo,
+        tin: this.customerInfo.tin,
+        businessAddress: this.customerInfo.businessAddress,
+        // Note: Mobile version doesn't have discount modal, so these will be false by default
+        isSeniorCitizen: false,
+        isPWD: false
+      };
+
+      // Save customer using the customer service
+      const savedCustomer = await this.customerService.saveCustomerFromPOS(
+        customerFormData,
+        storeInfo.companyId,
+        selectedStore
+      );
+
+      return savedCustomer;
+    } catch (error) {
+      console.error('Error saving customer data:', error);
+      return null;
     }
   }
 

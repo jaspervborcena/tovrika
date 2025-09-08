@@ -39,7 +39,40 @@
       padding: 0.5rem 1rem;
       color: #6b7280;
       font-style: italic;
-    }    .store-tabs {
+    }
+
+    /* Store Selection Inline (inside categories) */
+    .store-buttons-inline {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-bottom: 1rem;
+      padding-bottom: 0.75rem;
+      border-bottom: 1px solid #e5e7eb;
+    }
+
+    .store-btn-inline {
+      padding: 0.4rem 0.8rem;
+      border: 1px solid #d1d5db;
+      background: #f9fafb;
+      border-radius: 16px;
+      cursor: pointer;
+      font-size: 0.8rem;
+      transition: all 0.2s;
+      color: #374151;
+      font-weight: 500;
+    }
+
+    .store-btn-inline:hover,
+    .store-btn-inline.active {
+      background: #059669;
+      color: white;
+      border-color: #059669;
+      transform: translateY(-1px);
+      box-shadow: 0 2px 4px rgba(5, 150, 105, 0.2);
+    }
+
+    .store-tabs {
       background: white;
       border-bottom: 1px solid #e2e8f0;
       padding: 1rem 2rem;
@@ -126,6 +159,19 @@
       margin-bottom: 1rem;
     }
 
+    /* Invoice Info Section when in receipt panel */
+    .receipt-panel .invoice-info-section {
+      background: #f9fafb;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      padding: 1rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .receipt-panel .invoice-info-section .invoice-horizontal-layout {
+      gap: 1.5rem;
+    }
+
     .invoice-horizontal-layout {
       display: flex;
       gap: 1rem;
@@ -197,6 +243,66 @@
       font-size: 1.125rem;
       font-weight: 600;
       color: #1f2937;
+    }
+
+    /* Sales Type Section */
+    .sales-type-section {
+      margin-bottom: 1rem;
+    }
+
+    .sales-type-checkboxes {
+      display: flex;
+      gap: 1rem;
+      padding: 0.75rem;
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 6px;
+    }
+
+    .sales-type-option {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      cursor: pointer;
+      font-size: 0.875rem;
+      font-weight: 500;
+      color: #374151;
+      transition: all 0.2s ease;
+    }
+
+    .sales-type-option:hover {
+      color: #059669;
+    }
+
+    .sales-type-checkbox {
+      appearance: none;
+      width: 16px;
+      height: 16px;
+      border: 2px solid #d1d5db;
+      border-radius: 3px;
+      position: relative;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .sales-type-checkbox:checked {
+      border-color: #059669;
+      background: #059669;
+    }
+
+    .sales-type-checkbox:checked::after {
+      content: '✓';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      color: white;
+      font-size: 10px;
+      font-weight: bold;
+    }
+
+    .checkbox-label {
+      user-select: none;
     }
 
     .expand-arrow {
@@ -808,6 +914,52 @@
       min-height: 0; /* allow the cart to shrink inside the receipt panel */
       /* keep a reasonable max so the footer (summary/actions) remains visible */
       max-height: calc(100% - 200px);
+    }
+
+    /* Invoice Info integrated into cart */
+    .cart-invoice-info {
+      background: #e0f2fe;
+      border: 1px solid #0284c7;
+      border-radius: 6px;
+      padding: 0.75rem;
+      margin-bottom: 1rem;
+    }
+
+    .invoice-header {
+      margin: 0 0 0.5rem 0;
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: #0369a1;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .invoice-compact-layout {
+      display: flex;
+      gap: 1rem;
+    }
+
+    .invoice-field-compact {
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+    }
+
+    .invoice-field-compact label {
+      font-size: 0.7rem;
+      font-weight: 600;
+      color: #374151;
+      margin-bottom: 0.25rem;
+    }
+
+    .invoice-field-compact input {
+      width: 100%;
+      padding: 0.4rem;
+      border: 1px solid #d1d5db;
+      border-radius: 4px;
+      font-size: 0.8rem;
+      box-sizing: border-box;
     }
 
     .cart-header {

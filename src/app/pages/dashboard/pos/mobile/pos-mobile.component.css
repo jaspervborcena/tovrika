@@ -217,6 +217,67 @@ input, textarea {
   font-size: 14px;
 }
 
+/* Sales Type Section */
+.sales-type-section {
+  margin-bottom: 1rem;
+}
+
+.sales-type-checkboxes {
+  display: flex;
+  gap: 1rem;
+  padding: 0.75rem;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  justify-content: center;
+}
+
+.sales-type-option {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #374151;
+  transition: all 0.2s ease;
+}
+
+.sales-type-option:hover {
+  color: #059669;
+}
+
+.sales-type-checkbox {
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border: 2px solid #d1d5db;
+  border-radius: 3px;
+  position: relative;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.sales-type-checkbox:checked {
+  border-color: #059669;
+  background: #059669;
+}
+
+.sales-type-checkbox:checked::after {
+  content: '✓';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: white;
+  font-size: 10px;
+  font-weight: bold;
+}
+
+.checkbox-label {
+  user-select: none;
+}
+
 .customer-details {
   margin-top: 12px;
   padding-top: 12px;
@@ -233,6 +294,69 @@ input, textarea {
   margin-top: 0;
   padding-top: 0;
   border-top: none;
+}
+
+/* SALES TYPE SECTION */
+.sales-type-section {
+  margin-bottom: 15px;
+}
+
+.sales-type-checkboxes {
+  display: flex;
+  gap: 15px;
+  padding: 12px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+}
+
+.sales-type-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  color: #374151;
+  transition: all 0.2s ease;
+  flex: 1;
+  justify-content: center;
+}
+
+.sales-type-option:hover {
+  color: #059669;
+}
+
+.sales-type-checkbox {
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border: 2px solid #d1d5db;
+  border-radius: 3px;
+  position: relative;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.sales-type-checkbox:checked {
+  border-color: #059669;
+  background: #059669;
+}
+
+.sales-type-checkbox:checked::after {
+  content: '✓';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: white;
+  font-size: 12px;
+  font-weight: bold;
+}
+
+.checkbox-label {
+  user-select: none;
 }
 
 /* ACCESS ROW */
