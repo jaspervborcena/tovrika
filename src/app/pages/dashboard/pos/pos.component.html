@@ -5,13 +5,22 @@
       <div class="pos-layout">
         <!-- Left Panel: Categories & Products -->
         <div class="left-panel">
-          <!-- Compact Categories & Customer Panel -->
-          <div class="categories-panel compact-layout">
-            <!-- Left Column: Categories & Store Selection -->
-            <div class="categories-column">
-              <h3>Store & Categories</h3>
-              
-              <!-- Store Selection -->
+          
+          <!-- NAVIGATION TOGGLE BUTTON -->
+          <div class="navigation-toggle-row">
+            <button class="navigation-toggle-btn" (click)="toggleNavigationPanel()">
+              <span class="toggle-icon" [class.expanded]="!isNavigationCollapsed()">▼</span>
+              <span class="toggle-text">{{ isNavigationCollapsed() ? 'Show Controls' : 'Hide Controls' }}</span>
+              <span class="controls-hint">Store • Categories • Customer • Access Tabs</span>
+            </button>
+          </div>
+
+          <!-- COLLAPSIBLE NAVIGATION SECTION -->
+          <div class="navigation-section" [class.collapsed]="isNavigationCollapsed()">
+            
+            <!-- Store Selection -->
+            <div class="store-selection-section">
+              <h3>🏪 Store Selection</h3>
               <div class="store-buttons-inline">
                 <button
                   *ngFor="let store of availableStores()"
@@ -26,6 +35,13 @@
                   No stores available
                 </div>
               </div>
+            </div>
+            
+            <!-- Compact Categories & Customer Panel -->
+            <div class="categories-panel compact-layout">
+            <!-- Left Column: Categories -->
+            <div class="categories-column">
+              <h3>📂 Categories</h3>
               
               <!-- Categories -->
               <div class="category-list two-columns">
@@ -113,6 +129,8 @@
             </div>
           </div>
 
+          </div> <!-- End of COLLAPSIBLE NAVIGATION SECTION -->
+
           <div class="search-section">
             <div class="search-bar">
               <svg class="search-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -123,7 +141,7 @@
                 [ngModel]="searchQuery()"
                 (ngModelChange)="setSearchQuery($event)"
                 (input)="onSearch()"
-                [placeholder]="accessTab() === 'Orders' ? 'Search Orders (OrderId / Invoice / YYYYMMDD)' : 'Search by barcode, QR code, SKU, or name...'"
+                [placeholder]="accessTab() === 'Orders' ? 'Search Orders (OrderId / Invoice / YYYYMMDD)' : 'Search by barcode, SKU, or name...'"
                 class="search-input">
               <button *ngIf="searchQuery()" (click)="clearSearch()" class="clear-btn">×</button>
             </div>
@@ -477,3 +495,11 @@
       (discountApplied)="applyOrderDiscount($event)"
       (modalClosed)="closeDiscountModal()">
     </app-discount-modal>
+
+    <!-- Confirmation Dialog -->
+    <app-confirmation-dialog 
+      *ngIf="isConfirmationDialogVisible() && confirmationDialogData()"
+      [dialogData]="confirmationDialogData()!"
+      (confirmed)="onConfirmationConfirmed()"
+      (cancelled)="onConfirmationCancelled()">
+    </app-confirmation-dialog>

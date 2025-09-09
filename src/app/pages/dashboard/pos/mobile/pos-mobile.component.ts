@@ -101,8 +101,7 @@ export class PosMobileComponent implements OnInit {
       filtered = filtered.filter(p =>
         p.productName.toLowerCase().includes(query) ||
         p.skuId.toLowerCase().includes(query) ||
-        p.barcodeId?.toLowerCase().includes(query) ||
-        p.qrCode?.toLowerCase().includes(query)
+        p.barcodeId?.toLowerCase().includes(query)
       );
     }
 
@@ -238,7 +237,7 @@ export class PosMobileComponent implements OnInit {
 
       console.log('🔍 Searching orders with query:', q);
       
-      // Enhanced search - can search by invoice number, QR code, or order ID
+      // Enhanced search - can search by invoice number or order ID
       const results = await this.orderService.searchOrdersEnhanced(companyId, q, storeId || undefined);
       this.ordersSignal.set(results);
       
