@@ -1,10 +1,11 @@
-import { Component, OnInit, computed, signal, inject } from '@angular/core';
+import { Component, OnInit, AfterViewInit, computed, signal, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterModule } from '@angular/router';
 import { HeaderComponent } from '../../../shared/components/header/header.component';
 import { ReceiptComponent } from './receipt/receipt.component';
 import { DiscountModalComponent } from '../../../shared/components/discount-modal/discount-modal.component';
+import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../shared/components/confirmation-dialog/confirmation-dialog.component';
 import { ProductService } from '../../../services/product.service';
 import { PosService } from '../../../services/pos.service';
 import { PosSharedService } from '../../../services/pos-shared.service';
@@ -24,11 +25,11 @@ import { Customer, CustomerFormData } from '../../../interfaces/customer.interfa
 @Component({
   selector: 'app-pos',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterModule, HeaderComponent, ReceiptComponent, DiscountModalComponent],
+  imports: [CommonModule, FormsModule, RouterModule, HeaderComponent, ReceiptComponent, DiscountModalComponent, ConfirmationDialogComponent],
   templateUrl: './pos.component.html',
   styleUrls: ['./pos.component.css']
 })
-export class PosComponent implements OnInit {
+export class PosComponent implements OnInit, AfterViewInit {
   // Services
   private productService = inject(ProductService);
   private posService = inject(PosService);
@@ -100,8 +101,7 @@ export class PosComponent implements OnInit {
       filtered = filtered.filter(p =>
         p.productName.toLowerCase().includes(query) ||
         p.skuId.toLowerCase().includes(query) ||
-        p.barcodeId?.toLowerCase().includes(query) ||
-        p.qrCode?.toLowerCase().includes(query)
+        p.barcodeId?.toLowerCase().includes(query)
       );
     }
 
@@ -144,6 +144,10 @@ export class PosComponent implements OnInit {
   private isSoldToCollapsedSignal = signal<boolean>(true);
   readonly isSoldToCollapsed = computed(() => this.isSoldToCollapsedSignal());
   
+  // Navigation collapse state for desktop POS
+  private isNavigationCollapsedSignal = signal<boolean>(false);
+  readonly isNavigationCollapsed = computed(() => this.isNavigationCollapsedSignal());
+  
   // Access tabs for POS management
   readonly accessTabs = ['New', 'Orders', 'Cancelled', 'Refunds & Returns', 'Split Payments', 'Discounts & Promotions'] as const;
   private accessTabSignal = signal<string>('New');
@@ -172,6 +176,13 @@ export class PosComponent implements OnInit {
   private isDiscountModalVisibleSignal = signal<boolean>(false);
   readonly isDiscountModalVisible = computed(() => this.isDiscountModalVisibleSignal());
   readonly orderDiscount = computed(() => this.posService.orderDiscount());
+
+  // Confirmation dialog state
+  private isConfirmationDialogVisibleSignal = signal<boolean>(false);
+  readonly isConfirmationDialogVisible = computed(() => this.isConfirmationDialogVisibleSignal());
+  
+  private confirmationDialogDataSignal = signal<ConfirmationDialogData | null>(null);
+  readonly confirmationDialogData = computed(() => this.confirmationDialogDataSignal());
 
   // Sales type state - now supports both cash and charge
   private salesTypeCashSignal = signal<boolean>(true);  // Default to cash enabled
@@ -234,16 +245,35 @@ export class PosComponent implements OnInit {
       await this.loadData();
       // Set current date and time
       this.updateCurrentDateTime();
-      // Auto-select store after data is loaded
-      this.initializeStore();
       
       // Debug: log current user and stores to ensure user.storeIds and stores list are correct
       console.log('POS init - currentUser:', this.authService.getCurrentUser());
       console.log('POS init - all stores:', this.storeService.getStores());
-      console.log('POS init - availableStores:', this.availableStores());
-      console.log('POS init - selectedStoreId after auto-selection:', this.selectedStoreId());
     } catch (error) {
       console.error('Error initializing POS:', error);
+    }
+  }
+
+  async ngAfterViewInit(): Promise<void> {
+    // Auto-select store after DOM is fully initialized and data is loaded
+    try {
+      await this.initializeStore();
+      console.log('POS AfterViewInit - availableStores:', this.availableStores());
+      console.log('POS AfterViewInit - selectedStoreId after auto-selection:', this.selectedStoreId());
+      
+      // Multiple fallback attempts to ensure store selection works
+      const fallbackIntervals = [500, 1000, 2000]; // Try after 0.5s, 1s, and 2s
+      
+      fallbackIntervals.forEach((delay, index) => {
+        setTimeout(async () => {
+          if (!this.selectedStoreId() && this.availableStores().length > 0) {
+            console.log(`🔄 Fallback auto-selection triggered (attempt ${index + 1})`);
+            await this.initializeStore();
+          }
+        }, delay);
+      });
+    } catch (error) {
+      console.error('Error in auto-store selection:', error);
     }
   }
 
@@ -251,61 +281,136 @@ export class PosComponent implements OnInit {
     // Load user roles to get store access permissions
     const user = this.authService.getCurrentUser();
     if (user?.uid) {
-      // Load user roles first
-      await this.userRoleService.loadUserRoles();
-      
-      // Get the current user's role by userId
-      const userRole = this.userRoleService.getUserRoleByUserId(user.uid);
-      
-      // Debug logging as requested
-      console.log('userRoles in pos:', userRole);
-      console.log('user.uid:', user.uid);
-      
-      if (userRole && userRole.storeId) {
-        // Load companies and stores based on user's assigned store
-        await this.storeService.loadStores([userRole.storeId]);
+      try {
+        // Load user roles first
+        console.log('📋 Loading user roles...');
+        await this.userRoleService.loadUserRoles();
         
-        // Load products for the user's company and selected store
-        // Note: initializeStore() will be called after this method completes
-        await this.productService.loadProductsByCompanyAndStore(userRole.companyId, userRole.storeId);
-      } else if (userRole && userRole.companyId) {
-        // If user has company access but no specific store, load all company stores
-        console.log('🏪 User has company access but no specific store, loading all company stores');
-        await this.storeService.loadStoresByCompany(userRole.companyId);
+        // Get the current user's role by userId
+        const userRole = this.userRoleService.getUserRoleByUserId(user.uid);
         
-        // Load products for the company (products will be filtered by store after auto-selection)
-        await this.productService.loadProductsByCompanyAndStore(userRole.companyId);
-      } else {
-        console.warn('No user role found or no store/company assigned to user');
+        // Debug logging as requested
+        console.log('userRoles in pos:', userRole);
+        console.log('user.uid:', user.uid);
+        
+        if (userRole && userRole.storeId) {
+          // Load companies and stores based on user's assigned store
+          console.log('🏪 User has specific store access, loading store:', userRole.storeId);
+          await this.storeService.loadStores([userRole.storeId]);
+          console.log('🏪 Store loading completed, checking stores...');
+          
+          const loadedStores = this.storeService.getStores();
+          console.log('🏪 Loaded stores count:', loadedStores.length);
+          console.log('🏪 Loaded stores details:', loadedStores.map(s => ({ id: s.id, name: s.storeName })));
+          
+          // Load products for the user's company and selected store
+          // Note: initializeStore() will be called after this method completes
+          console.log('📦 Loading products for company and store...');
+          await this.productService.loadProductsByCompanyAndStore(userRole.companyId, userRole.storeId);
+          console.log('📦 Product loading completed');
+        } else if (userRole && userRole.companyId) {
+          // If user has company access but no specific store, load all company stores
+          console.log('🏪 User has company access but no specific store, loading all company stores');
+          await this.storeService.loadStoresByCompany(userRole.companyId);
+          console.log('🏪 Company stores loading completed, checking stores...');
+          
+          const loadedStores = this.storeService.getStores();
+          console.log('🏪 Loaded company stores count:', loadedStores.length);
+          console.log('🏪 Loaded company stores details:', loadedStores.map(s => ({ id: s.id, name: s.storeName })));
+          
+          // Load products for the company (products will be filtered by store after auto-selection)
+          console.log('📦 Loading products for company...');
+          await this.productService.loadProductsByCompanyAndStore(userRole.companyId);
+          console.log('📦 Company product loading completed');
+        } else {
+          console.warn('No user role found or no store/company assigned to user');
+          console.log('Available user role data:', userRole);
+        }
+      } catch (error) {
+        console.error('Error in loadData method:', error);
+        throw error; // Re-throw to be caught by ngOnInit
       }
-    } 
+    } else {
+      console.warn('No authenticated user found');
+    }
   }
 
   private async initializeStore(): Promise<void> {
-    const stores = this.availableStores();
-    const currentlySelected = this.selectedStoreId();
+    // Wait for stores to be available with retries
+    let retryCount = 0;
+    const maxRetries = 10;
+    const retryDelay = 500; // 500ms between retries
     
-    console.log('🏪 Initializing store selection - Available stores:', stores.length);
-    console.log('🏪 Currently selected store:', currentlySelected);
-    
-    // Auto-select store if none is currently selected
-    if (!currentlySelected && stores.length > 0) {
-      const storeToSelect = stores[0]; // Always select the first store
+    while (retryCount < maxRetries) {
+      const stores = this.availableStores();
+      const currentlySelected = this.selectedStoreId();
       
-      if (stores.length === 1) {
-        console.log('🏪 Single store detected, auto-selecting:', storeToSelect.storeName, '(ID:', storeToSelect.id, ')');
+      console.log(`🏪 Store initialization attempt ${retryCount + 1}/${maxRetries} - Available stores:`, stores.length);
+      
+      if (stores.length > 0) {
+        console.log('🏪 Stores found, proceeding with auto-selection');
+        console.log('🏪 Currently selected store:', currentlySelected);
+        
+        // Check if currently selected store is valid in available stores
+        const selectedStore = stores.find(store => store.id === currentlySelected);
+        
+        if (currentlySelected && selectedStore) {
+          console.log('✅ Valid store already selected from persistent state:', selectedStore.storeName);
+          
+          // Load products for the already selected store
+          if (selectedStore.companyId) {
+            await this.productService.loadProductsByCompanyAndStore(selectedStore.companyId, currentlySelected);
+          }
+          return; // Success, exit the function
+        } else if (currentlySelected && !selectedStore) {
+          console.warn('⚠️ Persisted store selection is invalid, clearing and selecting new store');
+          // Clear invalid selection
+          this.posService.setSelectedStore('');
+        }
+        
+        // Auto-select store if none is currently selected or selection was invalid
+        if (!currentlySelected || !selectedStore) {
+          const storeToSelect = stores[0]; // Always select the first store
+          
+          if (stores.length === 1) {
+            console.log('🏪 Single store detected, auto-selecting:', storeToSelect.storeName, '(ID:', storeToSelect.id, ')');
+          } else {
+            console.log('🏪 Multiple stores available, auto-selecting first:', storeToSelect.storeName, '(ID:', storeToSelect.id, ')');
+          }
+          
+          if (storeToSelect.id) {
+            await this.selectStore(storeToSelect.id);
+            console.log('✅ Auto-selection completed for store:', storeToSelect.storeName);
+            
+            // Verify the selection worked
+            const afterSelection = this.selectedStoreId();
+            if (afterSelection === storeToSelect.id) {
+              console.log('✅ Store auto-selection verified successful');
+              return; // Success, exit the function
+            } else {
+              console.warn('⚠️ Store auto-selection may have failed - expected:', storeToSelect.id, 'actual:', afterSelection);
+            }
+          }
+        }
+        
+        // If we reach here, something went wrong but we have stores
+        break;
       } else {
-        console.log('🏪 Multiple stores available, auto-selecting first:', storeToSelect.storeName, '(ID:', storeToSelect.id, ')');
+        console.log(`⏳ No stores available yet, waiting... (attempt ${retryCount + 1}/${maxRetries})`);
+        retryCount++;
+        
+        if (retryCount < maxRetries) {
+          await new Promise(resolve => setTimeout(resolve, retryDelay));
+        }
       }
-      
-      if (storeToSelect.id) {
-        await this.selectStore(storeToSelect.id);
-        console.log('✅ Auto-selection completed for store:', storeToSelect.storeName);
-      }
-    } else if (currentlySelected) {
-      console.log('✅ Store already selected:', currentlySelected);
+    }
+    
+    // Final check after all retries
+    const finalStores = this.availableStores();
+    if (finalStores.length === 0) {
+      console.error('❌ No stores available after all retry attempts. Check user permissions and store loading.');
     } else {
-      console.warn('⚠️ No stores available for auto-selection');
+      console.warn('⚠️ Stores are available but auto-selection failed after retries');
     }
   }
 
@@ -353,6 +458,10 @@ export class PosComponent implements OnInit {
     this.isSoldToCollapsedSignal.set(!this.isSoldToCollapsedSignal());
   }
 
+  toggleNavigationPanel(): void {
+    this.isNavigationCollapsedSignal.set(!this.isNavigationCollapsedSignal());
+  }
+
   updateCurrentDateTime(): void {
     this.customerInfo.datetime = new Date().toISOString().slice(0, 16);
   }
@@ -377,8 +486,16 @@ export class PosComponent implements OnInit {
     this.posService.updateCartItemQuantity(productId, quantity);
   }
 
-  clearCart(): void {
-    if (confirm('Are you sure you want to clear the cart?')) {
+  async clearCart(): Promise<void> {
+    const confirmed = await this.showConfirmationDialog({
+      title: 'Clear Cart',
+      message: 'Are you sure you want to clear the cart? All items will be removed.',
+      confirmText: 'Clear Cart',
+      cancelText: 'Cancel',
+      type: 'warning'
+    });
+
+    if (confirmed) {
       this.posService.clearCart();
     }
   }
@@ -466,8 +583,16 @@ export class PosComponent implements OnInit {
   }
 
   // New Order - clears everything for a fresh start
-  startNewOrder(): void {
-    if (confirm('Start a new order? This will clear the current cart and all customer information.')) {
+  async startNewOrder(): Promise<void> {
+    const confirmed = await this.showConfirmationDialog({
+      title: 'Start New Order',
+      message: 'Start a new order? This will clear the current cart and all customer information.',
+      confirmText: 'Start New Order',
+      cancelText: 'Cancel',
+      type: 'warning'
+    });
+
+    if (confirmed) {
       // Clear cart and all order-related data
       this.posService.clearCart();
       
@@ -630,6 +755,39 @@ export class PosComponent implements OnInit {
 
   removeOrderDiscount(): void {
     this.posService.removeOrderDiscount();
+  }
+
+  // Confirmation dialog methods
+  showConfirmationDialog(data: ConfirmationDialogData): Promise<boolean> {
+    return new Promise((resolve) => {
+      this.confirmationDialogDataSignal.set(data);
+      this.isConfirmationDialogVisibleSignal.set(true);
+      
+      // Store the resolve function for use in dialog action handlers
+      (this as any)._confirmationResolve = resolve;
+    });
+  }
+
+  onConfirmationConfirmed(): void {
+    this.isConfirmationDialogVisibleSignal.set(false);
+    this.confirmationDialogDataSignal.set(null);
+    
+    // Resolve with true (confirmed)
+    if ((this as any)._confirmationResolve) {
+      (this as any)._confirmationResolve(true);
+      (this as any)._confirmationResolve = null;
+    }
+  }
+
+  onConfirmationCancelled(): void {
+    this.isConfirmationDialogVisibleSignal.set(false);
+    this.confirmationDialogDataSignal.set(null);
+    
+    // Resolve with false (cancelled)
+    if ((this as any)._confirmationResolve) {
+      (this as any)._confirmationResolve(false);
+      (this as any)._confirmationResolve = null;
+    }
   }
 
   // Helper method to get unit type display
