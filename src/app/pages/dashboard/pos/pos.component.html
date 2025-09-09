@@ -141,7 +141,7 @@
                 [ngModel]="searchQuery()"
                 (ngModelChange)="setSearchQuery($event)"
                 (input)="onSearch()"
-                [placeholder]="accessTab() === 'Orders' ? 'Search Orders (OrderId / Invoice / YYYYMMDD)' : 'Search by barcode, SKU, or name...'"
+                [placeholder]="accessTab() === 'Orders' ? 'Search Orders (Invoice #, Customer Name, Address, Date YYYYMMDD)' : 'Search by barcode, SKU, or name...'"
                 class="search-input">
               <button *ngIf="searchQuery()" (click)="clearSearch()" class="clear-btn">×</button>
             </div>
@@ -292,16 +292,90 @@
 
           <!-- Orders results use the same display area when Orders tab is active -->
           <div class="products-display" *ngIf="accessTab() === 'Orders'" style="padding:1rem;">
-            <div *ngIf="orders().length === 0" class="muted">No orders found</div>
-            <div *ngFor="let order of orders()" class="order-row" (dblclick)="openOrder(order)" style="padding:0.5rem; border-bottom:1px solid #f1f5f9; display:flex; justify-content:space-between; align-items:center;">
-              <div>
-                <div style="font-weight:600">{{ order.orderNumber || order.id }}</div>
-                <div style="font-size:0.85rem; color:#6b7280">{{ order.createdAt?.toDate ? (order.createdAt.toDate() | date:'short') : '' }} — {{ order.customerName || 'Walk-in' }}</div>
+            <!-- Control buttons for Orders tab -->
+            <div style="margin-bottom: 1rem;">
+              <!-- Refresh button -->
+              <button 
+                (click)="refreshOrders()" 
+                [disabled]="isLoadingOrders()"
+                style="background: #059669; color: white; border: none; padding: 0.5rem 1rem; border-radius: 4px; cursor: pointer; display: flex; align-items: center; gap: 0.5rem;"
+                [style.opacity]="isLoadingOrders() ? '0.6' : '1'"
+                [style.cursor]="isLoadingOrders() ? 'not-allowed' : 'pointer'">
+                <span *ngIf="!isLoadingOrders()">🔄</span>
+                <span *ngIf="isLoadingOrders()">⏳</span>
+                {{ isLoadingOrders() ? 'Refreshing...' : 'Refresh Orders' }}
+              </button>
+            </div>
+            
+            <div *ngIf="isLoadingOrders()" class="muted" style="text-align: center; padding: 2rem;">
+              <div style="margin-bottom: 1rem;">🔄 Loading orders...</div>
+              <div style="font-size: 0.8rem; color: #6b7280;">Fetching recent orders from database</div>
+            </div>
+            
+            <div *ngIf="!isLoadingOrders() && orders().length === 0 && orderSearchQuery()" class="muted">
+              No orders found for "{{ orderSearchQuery() }}"
+            </div>
+            <div *ngIf="!isLoadingOrders() && orders().length === 0 && !orderSearchQuery()" class="muted">
+              No recent orders available. Orders will appear here once you start processing transactions.
+            </div>
+            
+            <!-- Enhanced Order List Display -->
+            <div class="orders-list" *ngIf="!isLoadingOrders() && orders().length > 0">
+              <div class="orders-header" style="display: grid; grid-template-columns: 2fr 1fr 2fr 1fr; gap: 1rem; padding: 0.75rem; background: #f8fafc; border-radius: 6px; font-weight: 600; color: #374151; margin-bottom: 0.5rem;">
+                <div>Invoice Number</div>
+                <div>Date</div>
+                <div>Customer Name</div>
+                <div style="text-align: right;">Amount</div>
               </div>
-              <div style="text-align:right">
-                <div style="font-weight:700">{{ order.totalAmount | currency }}</div>
-                <div style="font-size:0.85rem; color:#6b7280">Status: {{ order.status }}</div>
+              
+              <div *ngFor="let order of orders()" 
+                   class="order-list-item" 
+                   (dblclick)="openOrder(order)" 
+                   style="display: grid; grid-template-columns: 2fr 1fr 2fr 1fr; gap: 1rem; padding: 0.75rem; border-bottom: 1px solid #f1f5f9; cursor: pointer; transition: background-color 0.2s;"
+                   onmouseover="this.style.backgroundColor='#f8fafc'"
+                   onmouseout="this.style.backgroundColor='transparent'">
+                
+                <!-- Invoice Number -->
+                <div class="order-invoice" style="font-weight: 600; color: #1f2937;">
+                  {{ order.invoiceNumber || order.id || 'N/A' }}
+                  <div *ngIf="order.businessAddress" style="font-size: 0.8rem; color: #6b7280; font-weight: 400; margin-top: 2px;">
+                    📍 {{ order.businessAddress }}
+                  </div>
+                </div>
+                
+                <!-- Date -->
+                <div class="order-date" style="color: #6b7280; font-size: 0.9rem;">
+                  {{ order.date ? (order.date | date:'MMM d, y') : (order.createdAt | date:'MMM d, y') }}
+                  <div style="font-size: 0.8rem; color: #9ca3af;">
+                    {{ order.date ? (order.date | date:'shortTime') : (order.createdAt | date:'shortTime') }}
+                  </div>
+                </div>
+                
+                <!-- Customer Name -->
+                <div class="order-customer" style="color: #374151;">
+                  <div style="font-weight: 500;">
+                    {{ order.soldTo || 'Walk-in Customer' }}
+                  </div>
+                  <div style="font-size: 0.8rem; color: #6b7280; margin-top: 2px;">
+                    Status: <span [style.color]="getOrderStatusColor(order.status)">{{ order.status | titlecase }}</span>
+                  </div>
+                </div>
+                
+                <!-- Amount -->
+                <div class="order-amount" style="text-align: right;">
+                  <div style="font-weight: 700; color: #059669; font-size: 1.1rem;">
+                    {{ order.totalAmount | currency:'PHP':'symbol':'1.2-2' }}
+                  </div>
+                  <div style="font-size: 0.8rem; color: #6b7280;">
+                    {{ order.cashSale ? 'Cash' : 'Charge' }}
+                  </div>
+                </div>
               </div>
+            </div>
+            
+            <!-- Search Results Summary -->
+            <div *ngIf="!isLoadingOrders() && orders().length > 0" class="search-summary" style="margin-top: 1rem; padding: 0.5rem; background: #ecfdf5; border-left: 4px solid #10b981; color: #065f46; font-size: 0.9rem;">
+              {{ orderSearchQuery() ? 'Found ' + orders().length + ' order(s) for "' + orderSearchQuery() + '"' : 'Showing ' + orders().length + ' recent order(s)' }}
             </div>
           </div>
         </div>
@@ -310,28 +384,106 @@
 
         <!-- Order detail modal -->
         <div *ngIf="selectedOrder()" class="modal-backdrop" style="position:fixed; inset:0; display:flex; align-items:center; justify-content:center; background:rgba(0,0,0,0.4); z-index:40;">
-          <div class="modal" style="background:white; padding:1rem; width:520px; border-radius:8px;">
-            <h3>Order {{ selectedOrder()?.orderNumber || selectedOrder()?.id }}</h3>
-            <div style="display:flex; gap:1rem; margin-bottom:0.5rem;">
-              <div style="flex:1">
-                <div><strong>Created:</strong> {{ selectedOrder()?.createdAt?.toDate ? (selectedOrder()?.createdAt.toDate() | date:'full') : '' }}</div>
-                <div><strong>Store:</strong> {{ selectedOrder()?.storeId || 'Global' }}</div>
-                <div><strong>Status:</strong> {{ selectedOrder()?.status }}</div>
+          <div class="modal" style="background:white; padding:1.5rem; width:600px; max-width:90vw; border-radius:8px; max-height:80vh; overflow-y:auto;">
+            <h3 style="margin-bottom: 1rem; color: #1f2937;">Order Details</h3>
+            
+            <!-- Order Header Information -->
+            <div class="order-header-info" style="background: #f8fafc; padding: 1rem; border-radius: 6px; margin-bottom: 1rem;">
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                <div>
+                  <div style="font-weight: 600; color: #374151;">Invoice Number</div>
+                  <div style="color: #6b7280;">{{ selectedOrder()?.invoiceNumber || selectedOrder()?.id || 'N/A' }}</div>
+                </div>
+                <div>
+                  <div style="font-weight: 600; color: #374151;">Date</div>
+                  <div style="color: #6b7280;">{{ selectedOrder()?.date ? (selectedOrder()?.date | date:'full') : (selectedOrder()?.createdAt | date:'full') }}</div>
+                </div>
+                <div>
+                  <div style="font-weight: 600; color: #374151;">Customer</div>
+                  <div style="color: #6b7280;">{{ selectedOrder()?.soldTo || 'Walk-in Customer' }}</div>
+                </div>
+                <div>
+                  <div style="font-weight: 600; color: #374151;">Status</div>
+                  <div [style.color]="getOrderStatusColor(selectedOrder()?.status)" style="font-weight: 500;">{{ selectedOrder()?.status | titlecase }}</div>
+                </div>
               </div>
-              <div style="width:160px; text-align:right">
-                <div style="font-weight:700; font-size:1.25rem">{{ selectedOrder()?.totalAmount | currency }}</div>
+              
+              <!-- Customer Address if available -->
+              <div *ngIf="selectedOrder()?.businessAddress" style="margin-top: 0.75rem;">
+                <div style="font-weight: 600; color: #374151;">Business Address</div>
+                <div style="color: #6b7280;">{{ selectedOrder()?.businessAddress }}</div>
+              </div>
+              
+              <!-- Store and Total Amount -->
+              <div style="display: grid; grid-template-columns: 1fr auto; gap: 1rem; margin-top: 0.75rem; align-items: center;">
+                <div>
+                  <div style="font-weight: 600; color: #374151;">Store</div>
+                  <div style="color: #6b7280;">{{ selectedOrder()?.storeId || 'Global' }}</div>
+                </div>
+                <div style="text-align: right;">
+                  <div style="font-weight: 600; color: #374151;">Total Amount</div>
+                  <div style="font-weight: 700; font-size: 1.25rem; color: #059669;">{{ selectedOrder()?.totalAmount | currency:'PHP':'symbol':'1.2-2' }}</div>
+                </div>
               </div>
             </div>
-            <div style="max-height:220px; overflow:auto; border-top:1px solid #eef2f7; padding-top:0.5rem; margin-bottom:0.5rem;">
-              <div *ngFor="let it of selectedOrder()?.items" style="display:flex; justify-content:space-between; padding:0.25rem 0;">
-                <div>{{ it.name }} x{{ it.quantity }}</div>
-                <div>{{ it.price | currency }}</div>
+            
+            <!-- Order Items -->
+            <div style="margin-bottom: 1rem;">
+              <h4 style="margin-bottom: 0.5rem; color: #374151;">Order Items</h4>
+              <div style="max-height: 300px; overflow-y: auto; border: 1px solid #e5e7eb; border-radius: 6px;">
+                <div *ngFor="let item of selectedOrder()?.items; let i = index; let last = last" 
+                     style="padding: 0.75rem; border-bottom: 1px solid #f3f4f6;"
+                     [style.border-bottom]="last ? 'none' : '1px solid #f3f4f6'">
+                  
+                  <!-- Item Info Row -->
+                  <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
+                    <div>
+                      <div style="font-weight: 500;">{{ item.name || item.productName }}</div>
+                      <div style="font-size: 0.85rem; color: #6b7280;">
+                        Quantity: {{ item.quantity }} | Unit Price: {{ item.price | currency:'PHP':'symbol':'1.2-2' }}
+                      </div>
+                    </div>
+                    <div style="text-align: right;">
+                      <div style="font-weight: 600;">{{ (item.price * item.quantity) | currency:'PHP':'symbol':'1.2-2' }}</div>
+                      <div style="font-size: 0.85rem; color: #6b7280;">Total</div>
+                    </div>
+                  </div>
+                  
+                  <!-- Item Action Buttons -->
+                  <div style="display: flex; gap: 0.25rem; flex-wrap: wrap;">
+                    <button class="item-action-btn return-btn" 
+                            (click)="processItemAction(selectedOrder()?.id, i, 'return', item)"
+                            title="Return Item">
+                      ↩️ Return
+                    </button>
+                    <button class="item-action-btn damage-btn" 
+                            (click)="processItemAction(selectedOrder()?.id, i, 'damage', item)"
+                            title="Mark as Damaged">
+                      💥 Damage
+                    </button>
+                    <button class="item-action-btn refund-btn" 
+                            (click)="processItemAction(selectedOrder()?.id, i, 'refund', item)"
+                            title="Refund Item">
+                      💰 Refund
+                    </button>
+                    <button class="item-action-btn cancel-btn" 
+                            (click)="processItemAction(selectedOrder()?.id, i, 'cancel', item)"
+                            title="Cancel Item">
+                      ❌ Cancel
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
-            <div style="display:flex; gap:0.5rem; justify-content:flex-end;">
+            
+            <!-- Action Buttons -->
+            <div style="display: flex; gap: 0.5rem; justify-content: flex-end; flex-wrap: wrap;">
               <button class="btn btn-secondary" (click)="closeOrder()">Close</button>
-              <button *ngIf="selectedOrder()?.status !== 'Cancelled'" class="btn" style="background:#f97316; color:white;" (click)="updateOrderStatus(selectedOrder()?.id, 'Cancelled')">Cancel</button>
-              <button *ngIf="selectedOrder()?.status !== 'Refunded'" class="btn btn-primary" (click)="updateOrderStatus(selectedOrder()?.id, 'Refunded')">Refund</button>
+              <button class="btn" style="background: #059669; color: white;" (click)="openOrderReceipt(selectedOrder())">
+                📄 Open Receipt
+              </button>
+              <button *ngIf="selectedOrder()?.status !== 'cancelled'" class="btn" style="background: #f97316; color: white;" (click)="updateOrderStatus(selectedOrder()?.id, 'cancelled')">Cancel Order</button>
+              <button *ngIf="selectedOrder()?.status !== 'refunded'" class="btn btn-primary" (click)="updateOrderStatus(selectedOrder()?.id, 'refunded')">Process Refund</button>
             </div>
           </div>
         </div>

@@ -1,4 +1,4 @@
-import { Component, signal, output } from '@angular/core';
+import { Component, signal, output, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { OrderDiscount } from '../../../interfaces/pos.interface';
@@ -18,41 +18,108 @@ import { OrderDiscount } from '../../../interfaces/pos.interface';
         <div class="modal-body">
           <div class="form-group">
             <label>Discount Type</label>
-            <select [(ngModel)]="discountType" class="form-control">
+            <select [ngModel]="discountTypeValue()" (ngModelChange)="setDiscountTypeValue($event)" class="form-control">
               <option value="">Select Discount Type</option>
               <option value="PWD">PWD (Person with Disability)</option>
               <option value="SENIOR">Senior Citizen</option>
+              <option value="CUSTOM">Others (Custom Discount)</option>
             </select>
           </div>
           
-          <div class="form-group" *ngIf="discountType">
-            <label>Discount Percentage</label>
+          <!-- Custom discount type field -->
+          <div class="form-group" *ngIf="discountTypeValue() === 'CUSTOM'">
+            <label>Custom Discount Name</label>
             <input 
-              type="number" 
-              [(ngModel)]="percentage" 
+              type="text" 
+              [ngModel]="customTypeValue()" 
+              (ngModelChange)="setCustomTypeValue($event)" 
               class="form-control"
-              min="0"
-              max="100"
-              [placeholder]="getDefaultPercentage() + '%'"
+              placeholder="e.g., Owner, Employee, VIP, Promotion"
+              required
             >
           </div>
           
-          <div class="form-group" *ngIf="discountType">
+          <!-- Discount method selection -->
+          <div class="form-group" *ngIf="discountTypeValue()">
+            <label>Discount Method</label>
+            <div class="radio-group">
+              <label class="radio-option">
+                <input 
+                  type="radio" 
+                  [ngModel]="discountMethod()" 
+                  (ngModelChange)="setDiscountMethod($event)"
+                  value="percentage"
+                  name="discountMethod"
+                >
+                <span>Percentage (%)</span>
+              </label>
+              <label class="radio-option">
+                <input 
+                  type="radio" 
+                  [ngModel]="discountMethod()" 
+                  (ngModelChange)="setDiscountMethod($event)"
+                  value="fixed"
+                  name="discountMethod"
+                >
+                <span>Fixed Amount (₱)</span>
+              </label>
+            </div>
+          </div>
+          
+          <!-- Percentage input -->
+          <div class="form-group" *ngIf="discountTypeValue() && discountMethod() === 'percentage'">
+            <label>Discount Percentage</label>
+            <div class="input-with-unit">
+              <input 
+                type="number" 
+                [ngModel]="percentageValue()" 
+                (ngModelChange)="setPercentageValue($event)" 
+                class="form-control"
+                min="0"
+                max="100"
+                step="0.01"
+                [placeholder]="getDefaultPercentage().toString()"
+              >
+              <span class="input-unit">%</span>
+            </div>
+            <small class="form-hint">Default: {{ getDefaultPercentage() }}% for {{ getDiscountTypeDisplay() }}</small>
+          </div>
+          
+          <!-- Fixed amount input -->
+          <div class="form-group" *ngIf="discountTypeValue() && discountMethod() === 'fixed'">
+            <label>Discount Amount</label>
+            <div class="input-with-unit">
+              <span class="input-unit-prefix">₱</span>
+              <input 
+                type="number" 
+                [ngModel]="fixedAmountValue()" 
+                (ngModelChange)="setFixedAmountValue($event)" 
+                class="form-control"
+                min="0"
+                step="0.01"
+                placeholder="0.00"
+              >
+            </div>
+          </div>
+          
+          <div class="form-group" *ngIf="discountTypeValue()">
             <label>{{ getIdLabel() }}</label>
             <input 
               type="text" 
-              [(ngModel)]="exemptionId" 
+              [ngModel]="exemptionIdValue()" 
+              (ngModelChange)="setExemptionIdValue($event)" 
               class="form-control"
               [placeholder]="getIdPlaceholder()"
               required
             >
           </div>
           
-          <div class="form-group" *ngIf="discountType">
+          <div class="form-group" *ngIf="discountTypeValue()">
             <label>Customer Name</label>
             <input 
               type="text" 
-              [(ngModel)]="customerName" 
+              [ngModel]="customerNameValue()" 
+              (ngModelChange)="setCustomerNameValue($event)" 
               class="form-control"
               placeholder="Enter customer name"
               required
@@ -193,9 +260,84 @@ import { OrderDiscount } from '../../../interfaces/pos.interface';
       color: #9ca3af;
       cursor: not-allowed;
     }
+    
+    .radio-group {
+      display: flex;
+      gap: 1rem;
+      margin-top: 0.25rem;
+    }
+    
+    .radio-option {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      cursor: pointer;
+      font-weight: normal;
+    }
+    
+    .radio-option input[type="radio"] {
+      margin: 0;
+    }
+    
+    .input-with-unit {
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+    
+    .input-unit {
+      position: absolute;
+      right: 0.75rem;
+      color: #6b7280;
+      font-weight: 500;
+      pointer-events: none;
+    }
+    
+    .input-unit-prefix {
+      position: absolute;
+      left: 0.75rem;
+      color: #6b7280;
+      font-weight: 500;
+      pointer-events: none;
+      z-index: 1;
+    }
+    
+    .input-with-unit .form-control {
+      padding-right: 2rem;
+    }
+    
+    .input-with-unit .form-control:has(+ .input-unit-prefix) {
+      padding-left: 2rem;
+    }
+    
+    .form-hint {
+      color: #6b7280;
+      font-size: 0.75rem;
+      margin-top: 0.25rem;
+      display: block;
+    }
   `]
 })
 export class DiscountModalComponent {
+  // Form state signals
+  private discountTypeSignal = signal<string>('');
+  private customTypeSignal = signal<string>('');
+  private discountMethodSignal = signal<'percentage' | 'fixed'>('percentage');
+  private percentageSignal = signal<number>(0);
+  private fixedAmountSignal = signal<number>(0);
+  private exemptionIdSignal = signal<string>('');
+  private customerNameSignal = signal<string>('');
+
+  // Computed properties for template access
+  readonly discountTypeValue = computed(() => this.discountTypeSignal());
+  readonly customTypeValue = computed(() => this.customTypeSignal());
+  readonly discountMethod = computed(() => this.discountMethodSignal());
+  readonly percentageValue = computed(() => this.percentageSignal());
+  readonly fixedAmountValue = computed(() => this.fixedAmountSignal());
+  readonly exemptionIdValue = computed(() => this.exemptionIdSignal());
+  readonly customerNameValue = computed(() => this.customerNameSignal());
+
+  // Legacy signals for backward compatibility (will be removed)
   discountType = signal<string>('');
   percentage = signal<number>(0);
   exemptionId = signal<string>('');
@@ -205,46 +347,123 @@ export class DiscountModalComponent {
   discountApplied = output<OrderDiscount>();
   modalClosed = output<void>();
 
+  // Setters for template two-way binding
+  setDiscountTypeValue(value: string): void {
+    this.discountTypeSignal.set(value);
+    this.onDiscountTypeChange(value);
+  }
+
+  setCustomTypeValue(value: string): void {
+    this.customTypeSignal.set(value);
+  }
+
+  setDiscountMethod(value: 'percentage' | 'fixed'): void {
+    this.discountMethodSignal.set(value);
+  }
+
+  setPercentageValue(value: number): void {
+    this.percentageSignal.set(value);
+  }
+
+  setFixedAmountValue(value: number): void {
+    this.fixedAmountSignal.set(value);
+  }
+
+  setExemptionIdValue(value: string): void {
+    this.exemptionIdSignal.set(value);
+  }
+
+  setCustomerNameValue(value: string): void {
+    this.customerNameSignal.set(value);
+  }
+
+  onDiscountTypeChange(value: string): void {
+    this.discountTypeSignal.set(value);
+    
+    // Reset method to percentage when changing discount type
+    this.discountMethodSignal.set('percentage');
+    
+    // Set default percentage for PWD/SENIOR
+    if (value === 'PWD' || value === 'SENIOR') {
+      this.percentageSignal.set(this.getDefaultPercentage());
+    } else {
+      this.percentageSignal.set(0);
+    }
+    
+    // Clear custom type when not custom
+    if (value !== 'CUSTOM') {
+      this.customTypeSignal.set('');
+    }
+  }
+
   getDefaultPercentage(): number {
-    const type = this.discountType();
+    const type = this.discountTypeValue();
     if (type === 'PWD') return 20; // 20% PWD discount
     if (type === 'SENIOR') return 20; // 20% Senior discount
     return 0;
   }
 
+  getDiscountTypeDisplay(): string {
+    const type = this.discountTypeValue();
+    if (type === 'PWD') return 'PWD';
+    if (type === 'SENIOR') return 'Senior Citizen';
+    if (type === 'CUSTOM') return this.customTypeValue() || 'Custom';
+    return '';
+  }
+
   getIdLabel(): string {
-    const type = this.discountType();
+    const type = this.discountTypeValue();
     if (type === 'PWD') return 'PWD ID Number';
     if (type === 'SENIOR') return 'Senior Citizen ID Number';
+    if (type === 'CUSTOM') return 'Reference ID/Number';
     return 'ID Number';
   }
 
   getIdPlaceholder(): string {
-    const type = this.discountType();
+    const type = this.discountTypeValue();
     const year = new Date().getFullYear();
     if (type === 'PWD') return `PWD-ID-${year}-XXXXXX`;
     if (type === 'SENIOR') return `SENIOR-ID-${year}-XXXXXX`;
+    if (type === 'CUSTOM') return 'Enter reference ID or number';
     return 'Enter ID number';
   }
 
   isValid(): boolean {
-    return !!(
-      this.discountType() &&
-      this.exemptionId().trim() &&
-      this.customerName().trim() &&
-      (this.percentage() > 0 || this.getDefaultPercentage() > 0)
-    );
+    const hasDiscountType = !!this.discountTypeValue();
+    const hasExemptionId = !!this.exemptionIdValue().trim();
+    const hasCustomerName = !!this.customerNameValue().trim();
+    const hasCustomType = this.discountTypeValue() !== 'CUSTOM' || !!this.customTypeValue().trim();
+    
+    let hasValidDiscount = false;
+    if (this.discountMethod() === 'percentage') {
+      hasValidDiscount = this.percentageValue() > 0 || this.getDefaultPercentage() > 0;
+    } else if (this.discountMethod() === 'fixed') {
+      hasValidDiscount = this.fixedAmountValue() > 0;
+    }
+    
+    return hasDiscountType && hasExemptionId && hasCustomerName && hasCustomType && hasValidDiscount;
   }
 
   onApply(): void {
     if (!this.isValid()) return;
 
     const discount: OrderDiscount = {
-      type: this.discountType() as 'PWD' | 'SENIOR',
-      percentage: this.percentage() || this.getDefaultPercentage(),
-      exemptionId: this.exemptionId(),
-      customerName: this.customerName()
+      type: this.discountTypeValue() as 'PWD' | 'SENIOR' | 'CUSTOM',
+      exemptionId: this.exemptionIdValue(),
+      customerName: this.customerNameValue()
     };
+
+    // Add percentage or fixed amount based on method
+    if (this.discountMethod() === 'percentage') {
+      discount.percentage = this.percentageValue() || this.getDefaultPercentage();
+    } else {
+      discount.fixedAmount = this.fixedAmountValue();
+    }
+
+    // Add custom type for CUSTOM discounts
+    if (this.discountTypeValue() === 'CUSTOM') {
+      discount.customType = this.customTypeValue();
+    }
 
     this.discountApplied.emit(discount);
   }
