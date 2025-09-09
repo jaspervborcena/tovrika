@@ -430,25 +430,58 @@
             <!-- Order Items -->
             <div style="margin-bottom: 1rem;">
               <h4 style="margin-bottom: 0.5rem; color: #374151;">Order Items</h4>
-              <div style="max-height: 200px; overflow-y: auto; border: 1px solid #e5e7eb; border-radius: 6px;">
-                <div *ngFor="let item of selectedOrder()?.items; let last = last" 
-                     style="display: flex; justify-content: space-between; padding: 0.75rem;"
-                     [style.border-bottom]="last ? 'none' : '1px solid #f3f4f6'">>>
-                  <div>
-                    <div style="font-weight: 500;">{{ item.name || item.productName }}</div>
-                    <div style="font-size: 0.85rem; color: #6b7280;">Quantity: {{ item.quantity }}</div>
+              <div style="max-height: 300px; overflow-y: auto; border: 1px solid #e5e7eb; border-radius: 6px;">
+                <div *ngFor="let item of selectedOrder()?.items; let i = index; let last = last" 
+                     style="padding: 0.75rem; border-bottom: 1px solid #f3f4f6;"
+                     [style.border-bottom]="last ? 'none' : '1px solid #f3f4f6'">
+                  
+                  <!-- Item Info Row -->
+                  <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
+                    <div>
+                      <div style="font-weight: 500;">{{ item.name || item.productName }}</div>
+                      <div style="font-size: 0.85rem; color: #6b7280;">
+                        Quantity: {{ item.quantity }} | Unit Price: {{ item.price | currency:'PHP':'symbol':'1.2-2' }}
+                      </div>
+                    </div>
+                    <div style="text-align: right;">
+                      <div style="font-weight: 600;">{{ (item.price * item.quantity) | currency:'PHP':'symbol':'1.2-2' }}</div>
+                      <div style="font-size: 0.85rem; color: #6b7280;">Total</div>
+                    </div>
                   </div>
-                  <div style="text-align: right;">
-                    <div style="font-weight: 600;">{{ item.price | currency:'PHP':'symbol':'1.2-2' }}</div>
-                    <div style="font-size: 0.85rem; color: #6b7280;">Total: {{ (item.price * item.quantity) | currency:'PHP':'symbol':'1.2-2' }}</div>
+                  
+                  <!-- Item Action Buttons -->
+                  <div style="display: flex; gap: 0.25rem; flex-wrap: wrap;">
+                    <button class="item-action-btn return-btn" 
+                            (click)="processItemAction(selectedOrder()?.id, i, 'return', item)"
+                            title="Return Item">
+                      ↩️ Return
+                    </button>
+                    <button class="item-action-btn damage-btn" 
+                            (click)="processItemAction(selectedOrder()?.id, i, 'damage', item)"
+                            title="Mark as Damaged">
+                      💥 Damage
+                    </button>
+                    <button class="item-action-btn refund-btn" 
+                            (click)="processItemAction(selectedOrder()?.id, i, 'refund', item)"
+                            title="Refund Item">
+                      💰 Refund
+                    </button>
+                    <button class="item-action-btn cancel-btn" 
+                            (click)="processItemAction(selectedOrder()?.id, i, 'cancel', item)"
+                            title="Cancel Item">
+                      ❌ Cancel
+                    </button>
                   </div>
                 </div>
               </div>
             </div>
             
             <!-- Action Buttons -->
-            <div style="display: flex; gap: 0.5rem; justify-content: flex-end;">
+            <div style="display: flex; gap: 0.5rem; justify-content: flex-end; flex-wrap: wrap;">
               <button class="btn btn-secondary" (click)="closeOrder()">Close</button>
+              <button class="btn" style="background: #059669; color: white;" (click)="openOrderReceipt(selectedOrder())">
+                📄 Open Receipt
+              </button>
               <button *ngIf="selectedOrder()?.status !== 'cancelled'" class="btn" style="background: #f97316; color: white;" (click)="updateOrderStatus(selectedOrder()?.id, 'cancelled')">Cancel Order</button>
               <button *ngIf="selectedOrder()?.status !== 'refunded'" class="btn btn-primary" (click)="updateOrderStatus(selectedOrder()?.id, 'refunded')">Process Refund</button>
             </div>

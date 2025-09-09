@@ -362,6 +362,124 @@ export class PosComponent implements OnInit, AfterViewInit {
     }
   }
 
+  // Process individual item actions (return, damage, refund, cancel)
+  async processItemAction(orderId: string, itemIndex: number, action: string, item: any): Promise<void> {
+    try {
+      console.log(`Processing ${action} for item:`, { orderId, itemIndex, action, item });
+      
+      const confirmed = await this.showConfirmationDialog({
+        title: `${action.charAt(0).toUpperCase() + action.slice(1)} Item`,
+        message: `Are you sure you want to ${action} "${item.name || item.productName}"?`,
+        confirmText: `Yes, ${action.charAt(0).toUpperCase() + action.slice(1)}`,
+        cancelText: 'Cancel',
+        type: action === 'cancel' || action === 'damage' ? 'warning' : 'info'
+      });
+
+      if (confirmed) {
+        // Here you can implement the specific logic for each action
+        switch (action) {
+          case 'return':
+            console.log('Processing return for item:', item);
+            // TODO: Implement return logic
+            break;
+          case 'damage':
+            console.log('Processing damage for item:', item);
+            // TODO: Implement damage reporting logic
+            break;
+          case 'refund':
+            console.log('Processing refund for item:', item);
+            // TODO: Implement refund logic
+            break;
+          case 'cancel':
+            console.log('Processing cancellation for item:', item);
+            // TODO: Implement item cancellation logic
+            break;
+        }
+        
+        // Show success message
+        await this.showConfirmationDialog({
+          title: 'Success',
+          message: `Item ${action} has been processed successfully.`,
+          confirmText: 'OK',
+          cancelText: '',
+          type: 'info'
+        });
+        
+        // Refresh the orders list
+        await this.refreshOrders();
+      }
+    } catch (error) {
+      console.error(`Error processing ${action} for item:`, error);
+      await this.showConfirmationDialog({
+        title: 'Error',
+        message: `Failed to process ${action}. Please try again.`,
+        confirmText: 'OK',
+        cancelText: '',
+        type: 'danger'
+      });
+    }
+  }
+
+  // Open order receipt for viewing/printing
+  openOrderReceipt(order: any): void {
+    try {
+      console.log('Opening receipt for order:', order);
+      
+      // Convert order data to receipt format
+      const receiptData = this.convertOrderToReceiptData(order);
+      
+      // Set receipt data and show modal
+      this.receiptDataSignal.set(receiptData);
+      this.isReceiptModalVisibleSignal.set(true);
+      
+      // Close the order details modal
+      this.closeOrder();
+    } catch (error) {
+      console.error('Error opening order receipt:', error);
+    }
+  }
+
+  // Convert order data to receipt format
+  private convertOrderToReceiptData(order: any): any {
+    const storeInfo = this.currentStoreInfo();
+    
+    return {
+      orderId: order.id,
+      invoiceNumber: order.invoiceNumber,
+      receiptDate: order.date || order.createdAt,
+      storeInfo: {
+        storeName: storeInfo?.storeName || 'Unknown Store',
+        address: storeInfo?.address || 'Store Address',
+        phone: (storeInfo as any)?.phone || 'N/A',
+        email: storeInfo?.email || 'N/A',
+        tin: (storeInfo as any)?.tinNumber || 'N/A',
+        invoiceType: (storeInfo as any)?.invoiceType || 'SALES INVOICE',
+        birPermitNo: (storeInfo as any)?.birPermitNo || null,
+        minNumber: (storeInfo as any)?.minNumber || null,
+        serialNumber: (storeInfo as any)?.serialNumber || null,
+        inclusiveSerialNumber: (storeInfo as any)?.inclusiveSerialNumber || null
+      },
+      customerName: order.soldTo && order.soldTo !== 'Walk-in Customer' ? order.soldTo : null,
+      customerAddress: order.businessAddress || null,
+      customerTin: order.tin || null,
+      cashier: order.assignedCashierId || 'Unknown Cashier',
+      paymentMethod: order.cashSale ? 'Cash' : 'Charge', // Determine from order data
+      isCashSale: order.cashSale || true,
+      isChargeSale: !order.cashSale || false,
+      items: order.items || [],
+      subtotal: order.grossAmount || order.totalAmount,
+      vatAmount: order.vatAmount || 0,
+      vatExempt: order.vatExemptAmount || 0,
+      discount: order.discountAmount || 0,
+      totalAmount: order.totalAmount,
+      vatRate: 12,
+      orderDiscount: order.exemptionId ? {
+        type: 'CUSTOM',
+        exemptionId: order.exemptionId
+      } : null
+    };
+  }
+
   async ngOnInit(): Promise<void> {
     try {
       await this.loadData();
@@ -675,6 +793,9 @@ export class PosComponent implements OnInit, AfterViewInit {
       ? customerInfo.soldTo.trim() 
       : null;
 
+    // Determine payment method based on cash/charge selection
+    const paymentMethod = this.getPaymentMethodText();
+
     return {
       orderId,
       invoiceNumber: invoiceNumber || customerInfo.invoiceNumber,
@@ -695,6 +816,9 @@ export class PosComponent implements OnInit, AfterViewInit {
       customerAddress: customerName ? (customerInfo.businessAddress || 'N/A') : null,
       customerTin: customerName ? (customerInfo.tin || 'N/A') : null,
       cashier: currentUser?.displayName || currentUser?.email || 'Unknown Cashier',
+      paymentMethod: paymentMethod, // Add payment method
+      isCashSale: this.isCashSale(),
+      isChargeSale: this.isChargeSale(),
       items: cartItems.map(item => ({
         productName: item.productName,
         skuId: item.skuId,
@@ -879,7 +1003,7 @@ export class PosComponent implements OnInit, AfterViewInit {
       subtotal: cartSummary.grossAmount || receiptData.subtotal,
       tax: cartSummary.vatAmount || receiptData.vatAmount,
       total: cartSummary.netAmount || receiptData.totalAmount,
-      paymentMethod: 'cash', // Default to cash, could be configurable
+      paymentMethod: receiptData.paymentMethod?.toLowerCase() || 'cash', // Use actual payment method from receipt
       amountTendered: cartSummary.netAmount || receiptData.totalAmount, // Assume exact payment for now
       change: 0, // No change for exact payment
       status: 'completed' as const
@@ -944,6 +1068,22 @@ export class PosComponent implements OnInit, AfterViewInit {
   getUnitTypeDisplay(unitType?: string): string {
     if (!unitType || unitType === 'N/A') return '';
     return unitType === 'pieces' ? 'pc(s)' : unitType;
+  }
+
+  // Helper method to get payment method text
+  getPaymentMethodText(): string {
+    const isCash = this.isCashSale();
+    const isCharge = this.isChargeSale();
+    
+    if (isCash && isCharge) {
+      return 'Cash & Charge';
+    } else if (isCash) {
+      return 'Cash';
+    } else if (isCharge) {
+      return 'Charge';
+    } else {
+      return 'Cash'; // Default to cash if neither is selected
+    }
   }
 
   // Helper method to get order status color
