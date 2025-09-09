@@ -53,6 +53,20 @@
         </div>
       </div>
 
+      <!-- Payment Method Indicators -->
+      <div class="payment-indicators-section">
+        <div class="payment-circles">
+          <div class="payment-option">
+            <span>Cash</span>
+            <div class="circle" [class.filled]="receiptData?.isCashSale"></div>
+          </div>
+          <div class="payment-option">
+            <span>Charge</span>
+            <div class="circle" [class.filled]="receiptData?.isChargeSale"></div>
+          </div>
+        </div>
+      </div>
+
       <!-- Sold To Section -->
       <div class="sold-to-section">
         <h3 class="sold-to-header">SOLD TO: {{ getCustomerDisplayName() }}</h3>

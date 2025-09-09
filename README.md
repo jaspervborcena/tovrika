@@ -8,11 +8,12 @@ A comprehensive Point of Sale (POS) system built with Angular 19 and Firebase, d
 - ✅ **Multi-Store Management** - Manage multiple stores and branches
 - ✅ **Product Catalog** - Comprehensive product management with inventory tracking
 - ✅ **Cart & Checkout** - Intuitive shopping cart with VAT calculations
-- ✅ **Professional Receipt System** - BIR-compliant receipt printing with thermal printer support
+- ✅ **Professional Receipt System** - BIR-compliant receipt printing with thermal printer support and payment method indicators
 - ✅ **Multi-Printer Support** - USB thermal printers, network printers, and browser printing
 - ✅ **Transaction Management** - Automatic transaction saving with audit trail
 - ✅ **User Management** - Role-based access control (Admin, Manager, Cashier)
-- ✅ **Order Management** - Order processing and tracking
+- ✅ **Advanced Order Management** - Automatic order display, refresh functionality, and item-level actions (return, damage, refund, cancel)
+- ✅ **Receipt Enhancement** - Payment method indicators (Cash/Charge circles) and direct receipt access from orders
 - ✅ **Responsive Design** - Desktop and mobile-optimized interface
 
 ### Advanced Features
@@ -200,7 +201,7 @@ The POS system includes dedicated mobile components optimized for mobile browser
 - **PosService** - Core POS functionality and cart management
 - **ProductService** - Product catalog operations
 - **StoreService** - Multi-store management
-- **OrderService** - Order processing and history
+- **OrderService** - Order processing, history, and advanced management with automatic loading and refresh capabilities
 - **PrintService** - Receipt printing and thermal printer integration
 - **TransactionService** - Transaction persistence and audit trail
 - **PosSharedService** - Shared state management between POS components
@@ -290,7 +291,19 @@ This project is proprietary software. All rights reserved.
 
 ### Latest Updates (September 2025)
 
-#### 🚀 Mobile POS Advanced UX Update (September 9, 2025)
+#### � Advanced Order Management System (September 10, 2025)
+- **Automatic Order Display** - Orders tab now automatically displays top 20 most recent orders on load
+- **Order Refresh Functionality** - Added manual refresh button to reload order list with real-time debugging
+- **Enhanced Receipt System** - Integrated payment method indicators (Cash/Charge) with professional circle design
+- **Item-Level Order Actions** - Added individual item action buttons for returns, damage reports, refunds, and cancellations
+- **Receipt Opening from Orders** - Direct access to formatted receipts from order details modal
+- **Advanced Order Details Modal** - Comprehensive order information with item-by-item action capabilities
+- **Confirmation Dialogs** - User-friendly confirmation prompts for all item actions to prevent accidental operations
+- **Visual Payment Indicators** - Professional Cash/Charge circles positioned above customer information in receipts
+- **Color-Coded Action Buttons** - Intuitive button styling for different actions (green for returns, red for damage, etc.)
+- **Enhanced Debugging System** - Comprehensive console logging for order loading diagnostics and troubleshooting
+
+#### �🚀 Mobile POS Advanced UX Update (September 9, 2025)
 - **Collapsible Navigation System** - Added smart navigation toggle to hide/show store, invoice, categories, customer, and access controls
 - **Floating Action Button (FAB) Cart** - Implemented floating cart button with pulse animations and item counter for better mobile UX
 - **Mobile Cart Modal Component** - Created dedicated full-screen cart modal with comprehensive cart management features
@@ -367,7 +380,11 @@ For support and questions:
 - User authentication and role-based access
 - Product management and inventory tracking
 - Order processing and transaction persistence
+- Advanced order management with automatic display and refresh functionality
+- Item-level order actions (return, damage, refund, cancel) with confirmation dialogs
 - BIR compliance with professional receipt system
+- Payment method indicators in receipts (Cash/Charge circles)
+- Enhanced order details modal with receipt opening capabilities
 - Thermal printer integration (USB, Network, Browser)
 - Receipt modal with print preview
 - Advanced mobile POS interface with focused search experience
