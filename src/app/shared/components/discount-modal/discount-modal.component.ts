@@ -22,30 +22,10 @@ import { OrderDiscount } from '../../../interfaces/pos.interface';
               <option value="">Select Discount Type</option>
               <option value="PWD">PWD (Person with Disability)</option>
               <option value="SENIOR">Senior Citizen</option>
-              <option value="OTHERS">Others</option>
             </select>
           </div>
           
-          <div class="form-group" *ngIf="discountType() === 'OTHERS'">
-            <label>Custom Discount Type</label>
-            <input 
-              type="text" 
-              [(ngModel)]="customDiscountType" 
-              class="form-control"
-              placeholder="e.g., Owner, Friend, Employee, etc."
-              required
-            >
-          </div>
-          
-          <div class="form-group" *ngIf="discountType()">
-            <label>Discount Method</label>
-            <select [(ngModel)]="discountMethod" class="form-control">
-              <option value="percentage">Percentage (%)</option>
-              <option value="fixed">Fixed Amount (₱)</option>
-            </select>
-          </div>
-          
-          <div class="form-group" *ngIf="discountType() && discountMethod() === 'percentage'">
+          <div class="form-group" *ngIf="discountType">
             <label>Discount Percentage</label>
             <input 
               type="number" 
@@ -57,19 +37,7 @@ import { OrderDiscount } from '../../../interfaces/pos.interface';
             >
           </div>
           
-          <div class="form-group" *ngIf="discountType() && discountMethod() === 'fixed'">
-            <label>Fixed Discount Amount</label>
-            <input 
-              type="number" 
-              [(ngModel)]="fixedAmount" 
-              class="form-control"
-              min="0"
-              step="0.01"
-              placeholder="Enter amount in ₱"
-            >
-          </div>
-          
-          <div class="form-group" *ngIf="discountType() && discountType() !== 'OTHERS'">
+          <div class="form-group" *ngIf="discountType">
             <label>{{ getIdLabel() }}</label>
             <input 
               type="text" 
@@ -80,13 +48,13 @@ import { OrderDiscount } from '../../../interfaces/pos.interface';
             >
           </div>
           
-          <div class="form-group" *ngIf="discountType()">
-            <label>{{ getCustomerNameLabel() }}</label>
+          <div class="form-group" *ngIf="discountType">
+            <label>Customer Name</label>
             <input 
               type="text" 
               [(ngModel)]="customerName" 
               class="form-control"
-              [placeholder]="getCustomerNamePlaceholder()"
+              placeholder="Enter customer name"
               required
             >
           </div>
@@ -229,12 +197,9 @@ import { OrderDiscount } from '../../../interfaces/pos.interface';
 })
 export class DiscountModalComponent {
   discountType = signal<string>('');
-  discountMethod = signal<string>('percentage');
   percentage = signal<number>(0);
-  fixedAmount = signal<number>(0);
   exemptionId = signal<string>('');
   customerName = signal<string>('');
-  customDiscountType = signal<string>('');
 
   // Outputs
   discountApplied = output<OrderDiscount>();
@@ -244,7 +209,6 @@ export class DiscountModalComponent {
     const type = this.discountType();
     if (type === 'PWD') return 20; // 20% PWD discount
     if (type === 'SENIOR') return 20; // 20% Senior discount
-    if (type === 'OTHERS') return 10; // 10% Others discount (customizable)
     return 0;
   }
 
@@ -263,48 +227,23 @@ export class DiscountModalComponent {
     return 'Enter ID number';
   }
 
-  getCustomerNameLabel(): string {
-    const type = this.discountType();
-    if (type === 'OTHERS') return 'Customer/Person Name';
-    return 'Customer Name';
-  }
-
-  getCustomerNamePlaceholder(): string {
-    const type = this.discountType();
-    if (type === 'OTHERS') return 'Enter customer or person name';
-    return 'Enter customer name';
-  }
-
   isValid(): boolean {
-    const type = this.discountType();
-    const method = this.discountMethod();
-    const hasValidType = !!type;
-    const hasValidAmount = method === 'percentage' 
-      ? (this.percentage() > 0 || this.getDefaultPercentage() > 0)
-      : this.fixedAmount() > 0;
-    const hasValidCustomerName = !!this.customerName().trim();
-    
-    if (type === 'OTHERS') {
-      const hasValidCustomDiscountType = !!this.customDiscountType().trim();
-      return hasValidType && hasValidAmount && hasValidCustomerName && hasValidCustomDiscountType;
-    } else {
-      const hasValidExemptionId = !!this.exemptionId().trim();
-      return hasValidType && hasValidAmount && hasValidCustomerName && hasValidExemptionId;
-    }
+    return !!(
+      this.discountType() &&
+      this.exemptionId().trim() &&
+      this.customerName().trim() &&
+      (this.percentage() > 0 || this.getDefaultPercentage() > 0)
+    );
   }
 
   onApply(): void {
     if (!this.isValid()) return;
 
-    const type = this.discountType();
-    const method = this.discountMethod();
     const discount: OrderDiscount = {
-      type: type as 'PWD' | 'SENIOR' | 'CUSTOM',
-      percentage: method === 'percentage' ? (this.percentage() || this.getDefaultPercentage()) : undefined,
-      fixedAmount: method === 'fixed' ? this.fixedAmount() : undefined,
-      exemptionId: type === 'OTHERS' ? `CUSTOM-${Date.now()}` : this.exemptionId(),
-      customerName: this.customerName(),
-      customType: type === 'OTHERS' ? this.customDiscountType() : undefined
+      type: this.discountType() as 'PWD' | 'SENIOR',
+      percentage: this.percentage() || this.getDefaultPercentage(),
+      exemptionId: this.exemptionId(),
+      customerName: this.customerName()
     };
 
     this.discountApplied.emit(discount);

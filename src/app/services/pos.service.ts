@@ -84,7 +84,10 @@ export class PosService {
     private authService: AuthService,
     private companyService: CompanyService,
     private productService: ProductService
-  ) {}
+  ) {
+    // Load persisted store selection on service initialization
+    this.loadPersistedStoreSelection();
+  }
 
   // Cart Management
   addToCart(product: Product, quantity: number = 1): void {
@@ -150,7 +153,24 @@ export class PosService {
   // Store Management
   setSelectedStore(storeId: string): void {
     this.selectedStoreIdSignal.set(storeId);
+    
+    // Save to localStorage for persistence
+    if (storeId) {
+      localStorage.setItem('pos_selected_store_id', storeId);
+    } else {
+      localStorage.removeItem('pos_selected_store_id');
+    }
+    
     this.clearCart(); // Clear cart when switching stores
+  }
+
+  // Load selected store from localStorage on service initialization
+  private loadPersistedStoreSelection(): void {
+    const savedStoreId = localStorage.getItem('pos_selected_store_id');
+    if (savedStoreId) {
+      this.selectedStoreIdSignal.set(savedStoreId);
+      console.log('🏪 Restored store selection from localStorage:', savedStoreId);
+    }
   }
 
   // Order Processing
