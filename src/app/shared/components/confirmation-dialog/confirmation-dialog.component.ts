@@ -39,8 +39,12 @@ export interface ConfirmationDialogData {
         
         <!-- Action Buttons -->
         <div class="confirmation-footer">
-          <button type="button" class="btn btn-secondary" (click)="onCancel()">
-            {{ dialogData().cancelText || 'Cancel' }}
+          <button 
+            *ngIf="dialogData().cancelText" 
+            type="button" 
+            class="btn btn-secondary" 
+            (click)="onCancel()">
+            {{ dialogData().cancelText }}
           </button>
           <button 
             type="button" 
@@ -152,6 +156,10 @@ export interface ConfirmationDialogData {
       gap: 0.75rem;
       background: #f9fafb;
       border-top: 1px solid #e5e7eb;
+    }
+    
+    .confirmation-footer:has(.btn:only-child) {
+      justify-content: center;
     }
     
     .btn {

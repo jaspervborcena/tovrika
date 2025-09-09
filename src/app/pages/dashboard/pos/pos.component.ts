@@ -160,6 +160,9 @@ export class PosComponent implements OnInit, AfterViewInit {
   // Orders state
   private ordersSignal = signal<any[]>([]);
   readonly orders = computed(() => this.ordersSignal());
+  
+  private isLoadingOrdersSignal = signal<boolean>(false);
+  readonly isLoadingOrders = computed(() => this.isLoadingOrdersSignal());
 
   // Order detail modal
   private selectedOrderSignal = signal<any | null>(null);
@@ -191,7 +194,28 @@ export class PosComponent implements OnInit, AfterViewInit {
   readonly isChargeSale = computed(() => this.salesTypeChargeSignal());
 
   setAccessTab(tab: string): void {
+    console.log('🎯 Setting access tab to:', tab);
+    console.log('🕐 Current time:', new Date().toLocaleString());
+    console.log('📊 Previous tab was:', this.accessTabSignal());
+    
     this.accessTabSignal.set(tab);
+    
+    // When Orders tab is activated, always load recent orders
+    if (tab === 'Orders') {
+      console.log('📋 Orders tab activated, loading recent orders...');
+      console.log('🔄 About to call loadRecentOrders()...');
+      
+      // Clear search query and load recent orders
+      this.setOrderSearchQuery('');
+      this.loadRecentOrders();
+      
+      console.log('✅ loadRecentOrders() called');
+    } else if (tab !== 'Orders') {
+      // Clear orders when switching away from Orders tab
+      console.log('🧹 Clearing orders for tab:', tab);
+      this.ordersSignal.set([]);
+      this.setOrderSearchQuery('');
+    }
   }
 
   setOrderSearchQuery(value: string): void {
@@ -208,16 +232,114 @@ export class PosComponent implements OnInit, AfterViewInit {
 
   async searchOrders(): Promise<void> {
     try {
+      this.isLoadingOrdersSignal.set(true);
       const storeInfo = this.currentStoreInfo();
       const companyId = storeInfo?.companyId;
       const storeId = this.selectedStoreId();
       const q = this.orderSearchQuery().trim();
-      if (!companyId || !q) return;
+      if (!companyId) return;
+      
       const results = await this.orderService.searchOrders(companyId, storeId || undefined, q);
       this.ordersSignal.set(results);
     } catch (error) {
       console.error('Error searching orders:', error);
       this.ordersSignal.set([]);
+    } finally {
+      this.isLoadingOrdersSignal.set(false);
+    }
+  }
+
+  async loadRecentOrders(): Promise<void> {
+    try {
+      console.log('🔄 Starting loadRecentOrders...');
+      this.isLoadingOrdersSignal.set(true);
+      const storeInfo = this.currentStoreInfo();
+      const companyId = storeInfo?.companyId;
+      const storeId = this.selectedStoreId();
+      
+      console.log('🏪 Store info:', { storeInfo, companyId, storeId });
+      
+      if (!companyId) {
+        console.warn('❌ No company ID available for loading recent orders');
+        return;
+      }
+      
+      console.log('📡 Calling orderService.getRecentOrders...');
+      const results = await this.orderService.getRecentOrders(companyId, storeId || undefined, 20);
+      console.log('✅ Received results:', results.length, 'orders');
+      console.log('📋 Orders data:', results);
+      
+      this.ordersSignal.set(results);
+    } catch (error) {
+      console.error('❌ Error loading recent orders:', error);
+      this.ordersSignal.set([]);
+    } finally {
+      this.isLoadingOrdersSignal.set(false);
+    }
+  }
+
+  // Refresh orders - manually triggered by user
+  async refreshOrders(): Promise<void> {
+    try {
+      console.log('🔄 Manual refresh triggered...');
+      
+      // Clear current orders first to show loading state
+      this.ordersSignal.set([]);
+      
+      // If there's a search query, search again, otherwise load recent orders
+      const searchQuery = this.orderSearchQuery().trim();
+      if (searchQuery) {
+        console.log('🔍 Refreshing search results for query:', searchQuery);
+        await this.searchOrders();
+      } else {
+        console.log('📋 Refreshing recent orders...');
+        await this.loadRecentOrders();
+      }
+      
+      console.log('✅ Manual refresh completed');
+    } catch (error) {
+      console.error('❌ Error during manual refresh:', error);
+    }
+  }
+
+  // Debug method to create test orders
+  async createTestOrder(): Promise<void> {
+    try {
+      console.log('🎯 Debug button clicked - creating test order...');
+      
+      // Check authentication first
+      const currentUser = this.authService.getCurrentUser();
+      console.log('👤 Current user:', currentUser);
+      
+      const storeInfo = this.currentStoreInfo();
+      const companyId = storeInfo?.companyId;
+      const storeId = this.selectedStoreId();
+      
+      console.log('🏪 Debug - Store info check:', { 
+        storeInfo, 
+        companyId, 
+        storeId,
+        availableStores: this.availableStores(),
+        selectedStoreId: this.selectedStoreId()
+      });
+      
+      if (!companyId || !storeId) {
+        console.error('❌ Missing company or store info for test order creation');
+        console.error('CompanyId:', companyId, 'StoreId:', storeId);
+        
+        // Show detailed error info
+        alert(`Debug Info:\nCompany ID: ${companyId || 'MISSING'}\nStore ID: ${storeId || 'MISSING'}\nStore Info: ${JSON.stringify(storeInfo, null, 2)}`);
+        return;
+      }
+      
+      console.log('🧪 Creating test order with valid IDs...');
+      await this.orderService.createTestOrder(companyId, storeId);
+      
+      console.log('🔄 Refreshing orders after test order creation...');
+      // Refresh orders after creating test order
+      await this.loadRecentOrders();
+    } catch (error) {
+      console.error('❌ Error in createTestOrder component method:', error);
     }
   }
 
@@ -436,8 +558,14 @@ export class PosComponent implements OnInit, AfterViewInit {
     if (this.accessTab() === 'Orders') {
       const q = this.searchQuery().trim();
       this.setOrderSearchQuery(q);
-      // call searchOrders when user types (debounce could be added later)
-      void this.searchOrders();
+      
+      if (q) {
+        // Search for orders with the query
+        void this.searchOrders();
+      } else {
+        // Load recent orders when no search query
+        void this.loadRecentOrders();
+      }
       return;
     }
 
@@ -470,9 +598,15 @@ export class PosComponent implements OnInit, AfterViewInit {
     this.customerInfo.invoiceNumber = `INV-${new Date().getFullYear()}-${String(Date.now()).slice(-6)}`;
   }
 
-  addToCart(product: Product): void {
+  async addToCart(product: Product): Promise<void> {
     if (product.totalStock <= 0) {
-      alert('Product is out of stock');
+      await this.showConfirmationDialog({
+        title: 'Out of Stock',
+        message: 'Product is out of stock',
+        confirmText: 'OK',
+        cancelText: '',
+        type: 'warning'
+      });
       return;
     }
     this.posService.addToCart(product);
@@ -513,7 +647,15 @@ export class PosComponent implements OnInit, AfterViewInit {
       this.isReceiptModalVisibleSignal.set(true);
     } catch (error) {
       console.error('Error preparing order:', error);
-      alert('Failed to prepare order. Please try again.');
+      
+      // Show error in a modal dialog instead of browser alert
+      await this.showConfirmationDialog({
+        title: 'Order Preparation Failed',
+        message: 'Failed to prepare order. Please try again.',
+        confirmText: 'OK',
+        cancelText: '',
+        type: 'danger'
+      });
     }
   }
 
@@ -655,7 +797,15 @@ export class PosComponent implements OnInit, AfterViewInit {
       
     } catch (error) {
       console.error('Error during save and print process:', error);
-      alert('Failed to save order and print receipt. Please try again.');
+      
+      // Show error in a modal dialog instead of browser alert
+      await this.showConfirmationDialog({
+        title: 'Print Receipt Failed',
+        message: 'Failed to save order and print receipt. Please try again.',
+        confirmText: 'OK',
+        cancelText: '',
+        type: 'danger'
+      });
     }
   }
 
@@ -794,6 +944,23 @@ export class PosComponent implements OnInit, AfterViewInit {
   getUnitTypeDisplay(unitType?: string): string {
     if (!unitType || unitType === 'N/A') return '';
     return unitType === 'pieces' ? 'pc(s)' : unitType;
+  }
+
+  // Helper method to get order status color
+  getOrderStatusColor(status: string): string {
+    switch (status?.toLowerCase()) {
+      case 'paid':
+      case 'completed':
+        return '#059669'; // Green
+      case 'pending':
+        return '#d97706'; // Orange
+      case 'cancelled':
+        return '#dc2626'; // Red
+      case 'refunded':
+        return '#7c3aed'; // Purple
+      default:
+        return '#6b7280'; // Gray
+    }
   }
 
   // Helper method to get discount display name
