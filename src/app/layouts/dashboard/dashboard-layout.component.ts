@@ -22,7 +22,12 @@ import { AuthService } from '../../services/auth.service';
           <!-- Header -->
           <div class="flex-shrink-0 px-4 py-4 border-b border-gray-200">
             <div class="flex items-center justify-between">
-              <h1 class="text-xl font-bold text-primary-600">Tovrika</h1>
+              <span class="logo-icon">
+                <svg fill="#FCD34D" stroke="#F59E0B" viewBox="0 0 24 24" width="28" height="28">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  <circle cx="12" cy="12" r="3" fill="#FCD34D" stroke="#F59E0B" stroke-width="1.5" />
+                </svg>
+              </span>
               <button
                 (click)="toggleSidebar()"
                 class="lg:hidden p-1 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-500"

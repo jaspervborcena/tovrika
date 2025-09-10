@@ -256,12 +256,28 @@ import { AuthService } from '../../../services/auth.service';
             <p style="font-size: 0.9rem; color: #666; margin-top: 1rem;">
               Debug: Check the browser console for detailed information about user authentication and company data.
             </p>
-            <button class="btn btn-primary" (click)="addNewRole()">
-              Create First Role
-            </button>
-            <button class="btn btn-secondary" (click)="loadRoles()" style="margin-left: 0.5rem;">
-              Refresh Roles
-            </button>
+            <div style="margin-top: 1.5rem;">
+              <button class="btn btn-primary" (click)="addNewRole()">
+                Create First Role
+              </button>
+              <button class="btn btn-secondary" (click)="loadRoles()" style="margin-left: 0.5rem;">
+                Refresh Roles
+              </button>
+            </div>
+            
+            <!-- Debug Information -->
+            <div class="debug-info" style="margin-top: 2rem; padding: 1rem; background: #f8f9fa; border-radius: 6px; border: 1px solid #dee2e6;">
+              <details>
+                <summary style="cursor: pointer; font-weight: 500; margin-bottom: 0.5rem;">Debug Information</summary>
+                <div style="font-size: 0.875rem; color: #6c757d; text-align: left;">
+                  <p><strong>Authentication Status:</strong> {{ authService.isAuthenticated() ? 'Authenticated' : 'Not Authenticated' }}</p>
+                  <p><strong>Current User:</strong> {{ authService.currentUser()?.email || 'None' }}</p>
+                  <p><strong>Company ID:</strong> {{ authService.currentUser()?.companyId || 'None' }}</p>
+                  <p><strong>Store IDs:</strong> {{ authService.currentUser()?.storeIds?.join(', ') || 'None' }}</p>
+                  <p><strong>Loading State:</strong> {{ isLoading ? 'Loading...' : 'Idle' }}</p>
+                </div>
+              </details>
+            </div>
           </div>
         </div>
 
@@ -752,12 +768,65 @@ export class AccessComponent implements OnInit {
     private roleDefinitionService: RoleDefinitionService,
     private router: Router,
     private storeService: StoreService,
-    private authService: AuthService
+    public authService: AuthService
   ) {}
 
   ngOnInit() {
-    this.loadRoles();
-    this.debugCurrentUser();
+    console.log('AccessComponent: ngOnInit called');
+    
+    // Add immediate debug information
+    console.log('AccessComponent: Checking authentication state...');
+    console.log('AccessComponent: isAuthenticated:', this.authService.isAuthenticated());
+    console.log('AccessComponent: currentUser:', this.authService.currentUser());
+    console.log('AccessComponent: userRole:', this.authService.userRole());
+    
+    // Check if we can access the page at all
+    if (!this.authService.isAuthenticated()) {
+      console.error('AccessComponent: User not authenticated');
+      return;
+    }
+    
+    // Show a loading state immediately
+    this.isLoading = true;
+    
+    // Initialize with a small delay to ensure auth is fully loaded
+    setTimeout(() => {
+      this.initializeComponent();
+    }, 100);
+  }
+
+  async initializeComponent() {
+    try {
+      console.log('AccessComponent: Starting initialization...');
+      
+      // Show that we're working
+      this.isLoading = true;
+      
+      // Wait for authentication to complete
+      console.log('AccessComponent: Waiting for auth...');
+      const user = await this.authService.waitForAuth();
+      
+      if (!user) {
+        console.error('AccessComponent: No user after wait');
+        this.displayError('Authentication required. Please log in again.');
+        this.isLoading = false;
+        return;
+      }
+      
+      console.log('AccessComponent: User loaded:', user);
+      
+      // Debug current user state
+      await this.debugCurrentUser();
+      
+      // Load roles with better error handling
+      await this.loadRoles();
+      
+      console.log('AccessComponent: Initialization complete');
+    } catch (error) {
+      console.error('AccessComponent: Initialization failed:', error);
+      this.displayError('Failed to initialize access management. Please try refreshing the page.');
+      this.isLoading = false;
+    }
   }
 
   async debugCurrentUser() {
@@ -779,20 +848,20 @@ export class AccessComponent implements OnInit {
   }
 
   async loadRoles() {
+    console.log('AccessComponent: loadRoles() called');
     this.isLoading = true;
     
     try {
-      console.log('Loading roles for current company...');
+      console.log('AccessComponent: Loading roles for current company...');
       
       // Get current user with company and store information
       const currentUser = await this.authService.waitForAuth();
-      console.log('Current user in loadRoles:', currentUser);
+      console.log('AccessComponent: Current user in loadRoles:', currentUser);
       
       if (!currentUser) {
-        console.error('No authenticated user found');
-        this.roles = [];
-        this.activeRole = null;
-        this.activeTabIndex = -1;
+        console.error('AccessComponent: No authenticated user found');
+        this.displayError('No authenticated user found. Please log in again.');
+        this.resetRoleState();
         return;
       }
       
@@ -801,43 +870,56 @@ export class AccessComponent implements OnInit {
       // Method 1: Get companyId directly from user object
       if (currentUser.companyId) {
         companyId = currentUser.companyId;
-        console.log('Using companyId from user object:', companyId);
+        console.log('AccessComponent: Using companyId from user object:', companyId);
       }
       // Method 2: Get companyId from user's stores
       else if (currentUser.storeIds && currentUser.storeIds.length > 0) {
-        console.log('User storeIds found:', currentUser.storeIds);
+        console.log('AccessComponent: User storeIds found:', currentUser.storeIds);
         
-        // Load stores by specific IDs to get company information
-        await this.storeService.loadStores(currentUser.storeIds);
-        const allStores = this.storeService.getStores();
-        console.log('All loaded stores:', allStores);
-        
-        // Find the first store that belongs to this user
-        const userStore = allStores.find(store => store.id && currentUser.storeIds.includes(store.id));
-        if (userStore) {
-          companyId = userStore.companyId;
-          console.log('Using companyId from user store:', companyId, 'Store:', userStore.storeName);
+        try {
+          // Load stores by specific IDs to get company information
+          await this.storeService.loadStores(currentUser.storeIds);
+          const allStores = this.storeService.getStores();
+          console.log('AccessComponent: All loaded stores:', allStores);
+          
+          // Find the first store that belongs to this user
+          const userStore = allStores.find(store => store.id && currentUser.storeIds.includes(store.id));
+          if (userStore) {
+            companyId = userStore.companyId;
+            console.log('AccessComponent: Using companyId from user store:', companyId, 'Store:', userStore.storeName);
+          } else {
+            console.warn('AccessComponent: No matching stores found for user store IDs');
+          }
+        } catch (storeError) {
+          console.error('AccessComponent: Error loading stores:', storeError);
         }
       }
       
       if (!companyId) {
-        console.error('No company ID found for user');
-        this.roles = [];
-        this.activeRole = null;
-        this.activeTabIndex = -1;
+        console.error('AccessComponent: No company ID found for user');
+        this.displayError('No company found for your account. Please contact your administrator.');
+        this.resetRoleState();
         return;
       }
       
-      console.log('Loading role definitions with company ID:', companyId);
+      console.log('AccessComponent: Loading role definitions with company ID:', companyId);
       
       // Load role definitions from Firestore
-      await this.roleDefinitionService.loadRoleDefinitions();
+      try {
+        await this.roleDefinitionService.loadRoleDefinitions();
+        console.log('AccessComponent: Role definitions loaded from service');
+      } catch (roleLoadError) {
+        console.error('AccessComponent: Error loading role definitions:', roleLoadError);
+        this.displayError('Failed to load role definitions from database.');
+        this.resetRoleState();
+        return;
+      }
       
       // Get the filtered roles for display (filtered by company ID)
       this.roles = this.roleDefinitionService.getCompanyRoleDefinitions();
       
-      console.log('Loaded roles:', this.roles);
-      console.log('Number of roles found:', this.roles.length);
+      console.log('AccessComponent: Loaded roles:', this.roles);
+      console.log('AccessComponent: Number of roles found:', this.roles.length);
       
       if (this.roles.length > 0) {
         // Set the first role as active if current index is out of bounds
@@ -845,20 +927,31 @@ export class AccessComponent implements OnInit {
           this.activeTabIndex = 0;
         }
         this.activeRole = this.roles[this.activeTabIndex];
-        console.log('Active role set to:', this.activeRole?.roleId);
+        console.log('AccessComponent: Active role set to:', this.activeRole?.roleId);
       } else {
         this.activeRole = null;
         this.activeTabIndex = -1;
-        console.log('No roles found for company ID:', companyId);
+        console.log('AccessComponent: No roles found for company ID:', companyId);
       }
     } catch (error) {
-      console.error('Error loading roles:', error);
-      this.roles = [];
-      this.activeRole = null;
-      this.activeTabIndex = -1;
+      console.error('AccessComponent: Error loading roles:', error);
+      this.displayError('An unexpected error occurred while loading roles.');
+      this.resetRoleState();
     } finally {
       this.isLoading = false;
     }
+  }
+
+  private resetRoleState() {
+    this.roles = [];
+    this.activeRole = null;
+    this.activeTabIndex = -1;
+  }
+
+  private displayError(message: string) {
+    // You can replace this with a proper toast/notification service
+    console.error('AccessComponent Error:', message);
+    // For now, we'll just log it, but you could show a user-friendly error message
   }
 
   getPermissionCount(permissions: RolePermissions): number {

@@ -89,7 +89,7 @@ export const routes: Routes = [
         path: 'access',
         loadComponent: () => import('./pages/dashboard/access/access.component').then(m => m.AccessComponent),
         canActivate: [onboardingGuard],
-        data: { roles: ['admin'] }
+        data: { roles: ['admin', 'manager'] }
       },
       {
         path: 'user-roles',

@@ -1,6 +1,5 @@
 import { Component, OnInit, computed, inject, signal, HostListener } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { FormsModule } from '@angular/forms';
 import { RouterLink, RouterOutlet } from '@angular/router';
 import { StoreService, Store } from '../../services/store.service';
 import { ProductService } from '../../services/product.service';
@@ -13,8 +12,7 @@ import { CompanySetupService } from '../../services/companySetup.service';
   imports: [
     CommonModule, 
     RouterLink,
-    RouterOutlet,
-    FormsModule
+    RouterOutlet
   ],
   templateUrl: './dashboard.component.html',
   styleUrls: ['./dashboard.component.css']
@@ -78,6 +76,11 @@ export class DashboardComponent implements OnInit {
 
   ngOnInit() {
     this.loadDashboardData();
+  }
+
+  protected onStoreChange(event: Event) {
+    const target = event.target as HTMLSelectElement;
+    this.selectedStoreId.set(target.value);
   }
 
   private async loadDashboardData() {
