@@ -30,6 +30,24 @@ import { Customer, CustomerFormData } from '../../../interfaces/customer.interfa
   styleUrls: ['./pos.component.css']
 })
 export class PosComponent implements OnInit, AfterViewInit {
+  // Bluetooth pairing state
+  public pairedPrinter: any = null;
+  public pairingError: string | null = null;
+
+  async pairThermalPrinter() {
+    this.pairingError = null;
+    try {
+      const device = await (navigator as any).bluetooth.requestDevice({
+        filters: [{ services: ['printer'] }],
+        optionalServices: ['battery_service']
+      });
+      this.pairedPrinter = device;
+      alert('Printer paired: ' + device.name);
+    } catch (err: any) {
+      this.pairingError = err.message || 'Bluetooth pairing failed.';
+      alert('Bluetooth pairing failed: ' + this.pairingError);
+    }
+  }
   // Services
   private productService = inject(ProductService);
   private posService = inject(PosService);

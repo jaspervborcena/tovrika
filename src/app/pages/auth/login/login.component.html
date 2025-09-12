@@ -20,7 +20,7 @@
       </div>
       
       <!-- Login Form -->
-      <form [formGroup]="loginForm" (ngSubmit)="onSubmit()">
+      <form [formGroup]="loginForm" (ngSubmit)="onSubmit($event)">
         <!-- Email Field -->
         <div class="form-group">
           <label for="email-address" class="form-label">Email Address</label>

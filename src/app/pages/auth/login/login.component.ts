@@ -25,11 +25,11 @@ export class LoginComponent {
   isLoading = false;
   error = '';
 
-  async onSubmit() {
+  async onSubmit(event: Event) {
     if (this.loginForm.valid) {
       this.isLoading = true;
       this.error = '';
-
+      event.preventDefault();
       try {
         const { email, password, rememberMe } = this.loginForm.value;
         const user = await this.authService.login(email!, password!, rememberMe!);
