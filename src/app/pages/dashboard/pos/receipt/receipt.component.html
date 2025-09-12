@@ -193,11 +193,20 @@
         <option value="thermal">Thermal Printer (USB)</option>
         <option value="network">Network Printer (IP)</option>
         <option value="browser">Browser Print</option>
+        <option value="bluetooth">Bluetooth Thermal Printer</option>
       </select>
     </div>
 
     <!-- Modal Actions -->
     <div class="modal-actions">
+      <label style="margin-right: 12px;">
+        <select [(ngModel)]="selectedPrinterType" style="padding: 6px 12px;">
+          <option value="thermal">Thermal Printer (USB)</option>
+          <option value="network">Network Printer</option>
+          <option value="browser">Browser Print</option>
+          <option value="bluetooth">Bluetooth Thermal Printer</option>
+        </select>
+      </label>
       <button 
         class="btn-secondary"
         (click)="onCloseModal()">

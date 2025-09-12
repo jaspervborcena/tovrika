@@ -52,6 +52,16 @@ export class DashboardComponent implements OnInit {
   protected toggleUserMenu() {
     this.isUserMenuOpen.set(!this.isUserMenuOpen());
   }
+  public screenWidth = 0;
+  public isMobile = window.innerWidth < 1024;
+
+  constructor() {}
+
+  @HostListener('window:resize')
+  onResize() {
+    this.screenWidth = window.innerWidth;
+    this.isMobile = this.screenWidth < 1024;
+  }
 
   protected closeUserMenu() {
     this.isUserMenuOpen.set(false);
@@ -75,7 +85,9 @@ export class DashboardComponent implements OnInit {
   }
 
   ngOnInit() {
-    this.loadDashboardData();
+  this.screenWidth = window.innerWidth;
+  this.isMobile = this.screenWidth < 1024;
+  this.loadDashboardData();
   }
 
   protected onStoreChange(event: Event) {

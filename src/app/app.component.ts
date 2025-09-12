@@ -6,9 +6,10 @@ import { RouterOutlet } from '@angular/router';
   standalone: true,
   imports: [RouterOutlet],
   template: `
+  <!-- Removed Toggle Sidebar (Global Test) button -->
     <main class="min-h-screen bg-gray-100">
       <router-outlet></router-outlet>
-    </main>
+    </main> 
   `,
   styles: []
 })
