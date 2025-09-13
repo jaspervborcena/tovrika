@@ -546,3 +546,7 @@
     min-height: calc(100vh - 70px);
   }
 }
+nav svg, .nav svg, .menu svg, .navbar svg {
+    width: 40px !important;
+    height: 16px !important;
+}

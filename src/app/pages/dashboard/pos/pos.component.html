@@ -1,14 +1,7 @@
 <div class="pos-container">
       <app-header></app-header>
       
-      <!-- Add Bluetooth Pairing Button -->
-      <div style="padding: 16px; background: #fff; border-bottom: 1px solid #eee;">
-        <button (click)="pairThermalPrinter()" style="padding: 10px 20px; font-size: 16px; background: #2563eb; color: #fff; border: none; border-radius: 6px;">
-          Pair Thermal Printer (Bluetooth)
-        </button>
-        <span *ngIf="pairedPrinter">Paired: {{ pairedPrinter.name }}</span>
-        <span *ngIf="pairingError" style="color: red; margin-left: 12px;">Error: {{ pairingError }}</span>
-      </div>
+      
 
       <!-- Main POS Layout -->
       <div class="pos-layout">
