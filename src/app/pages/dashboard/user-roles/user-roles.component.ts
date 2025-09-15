@@ -123,30 +123,30 @@ import { UserRole } from '../../../interfaces/user-role.interface';
           <div class="modal-body">
             <div class="form-group">
               <label for="email">Email Address</label>
-              <input 
-                type="email" 
-                id="email"
-                [(ngModel)]="userRoleForm.email"
-                placeholder="user@example.com"
-                class="form-input"
-                [disabled]="!!editingUserRole">
+              <div style="display: flex; gap: 0.5rem; align-items: center;">
+                <input 
+                  type="email" 
+                  id="email"
+                  [(ngModel)]="searchUserEmail"
+                  placeholder="user@example.com"
+                  class="form-input"
+                  [disabled]="!!editingUserRole">
+                <button class="btn btn-secondary" (click)="findUserByEmail()" [disabled]="!searchUserEmail || !!editingUserRole">Find</button>
+              </div>
+              <div *ngIf="findUserError" style="color: #e53e3e; margin-top: 0.5rem; font-weight: 500;">{{ findUserError }}</div>
               <p class="form-help" *ngIf="!editingUserRole">
-                The email address of the user to assign a role to
+                Enter the user's email and click Find. The user's name and email will be auto-filled if found.
               </p>
+              <div *ngIf="foundUser">
+                <div><strong>Name:</strong> {{ foundUser.displayName }}</div>
+                <div><strong>Email:</strong> {{ foundUser.email }}</div>
+                <input type="hidden" [(ngModel)]="userRoleForm.userId" [value]="foundUser.uid">
+                <input type="hidden" [(ngModel)]="userRoleForm.email" [value]="foundUser.email">
+              </div>
             </div>
 
             <div class="form-group">
-              <label for="userId">User ID</label>
-              <input 
-                type="text" 
-                id="userId"
-                [(ngModel)]="userRoleForm.userId"
-                placeholder="User identifier"
-                class="form-input"
-                [disabled]="!!editingUserRole">
-              <p class="form-help" *ngIf="!editingUserRole">
-                The unique identifier for this user
-              </p>
+              <!-- User ID is now hidden and auto-filled after finding user by email -->
             </div>
 
             <div class="form-group">
@@ -589,6 +589,39 @@ import { UserRole } from '../../../interfaces/user-role.interface';
   `]
 })
 export class UserRolesComponent implements OnInit {
+  findUserError: string = '';
+  searchUserEmail: string = '';
+  foundUser: any = null;
+  async findUserByEmail() {
+    if (!this.searchUserEmail) return;
+    try {
+      // Firestore query for user by email
+      const { getFirestore, collection, query, where, getDocs } = await import('firebase/firestore');
+      const firestore = getFirestore();
+      const usersRef = collection(firestore, 'users');
+      const q = query(usersRef, where('email', '==', this.searchUserEmail));
+      const querySnapshot = await getDocs(q);
+      if (!querySnapshot.empty) {
+        const userDoc = querySnapshot.docs[0];
+        const data = userDoc.data();
+        this.foundUser = {
+          uid: userDoc.id,
+          email: data['email'],
+          displayName: data['displayName'] || '',
+        };
+        this.userRoleForm.userId = this.foundUser.uid;
+        this.userRoleForm.email = this.foundUser.email;
+        this.findUserError = '';
+      } else {
+        this.foundUser = null;
+  this.findUserError = 'Unable to find a user for this email.';
+      }
+    } catch (error) {
+      this.foundUser = null;
+      alert('Error searching for user.');
+      console.error(error);
+    }
+  }
   userRoles: UserRole[] = [];
   filteredUserRoles: UserRole[] = [];
   availableRoles: RoleDefinition[] = [];
@@ -665,6 +698,8 @@ export class UserRolesComponent implements OnInit {
       roleId: '',
       storeId: ''
     };
+    this.searchUserEmail = '';
+    this.foundUser = null;
     this.showUserRoleModal = true;
   }
 
