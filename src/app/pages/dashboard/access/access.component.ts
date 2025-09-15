@@ -35,6 +35,9 @@ import { AuthService } from '../../../services/auth.service';
               <span class="tab-label">{{ role.roleId | titlecase }}</span>
               <div class="tab-details">
                 {{ getPermissionCount(role.permissions) }} permissions
+                <span *ngIf="role.storeId">
+                  | Store: {{ getStoreNameById(role.storeId) }}
+                </span>
               </div>
             </div>
           </button>
@@ -291,37 +294,55 @@ import { AuthService } from '../../../services/auth.service';
       </div>
 
       <!-- Add Role Modal -->
-      <div class="modal-overlay" *ngIf="showAddRoleModal" (click)="cancelAddRole()">
-        <div class="modal" (click)="$event.stopPropagation()">
-          <div class="modal-header">
-            <h3>Add New Role</h3>
-            <button class="close-btn" (click)="cancelAddRole()">×</button>
-          </div>
-          <div class="modal-body">
-            <div class="form-group">
-              <label for="roleName">Role Name</label>
-              <input 
-                type="text" 
-                id="roleName"
-                [(ngModel)]="newRoleId"
-                placeholder="Enter role name..."
-                class="form-input">
-            </div>
-            <p class="form-help">
-              Role names will be converted to lowercase with underscores (e.g., "Store Manager" becomes "store_manager")
-            </p>
-          </div>
-          <div class="modal-footer">
-            <button class="btn btn-secondary" (click)="cancelAddRole()">Cancel</button>
-            <button 
-              class="btn btn-primary" 
-              (click)="createNewRole()"
-              [disabled]="!newRoleId.trim() || isLoading">
-              {{ isLoading ? 'Creating...' : 'Create Role' }}
-            </button>
-          </div>
-        </div>
+      <!-- Add Role Modal -->
+<div class="modal-overlay" *ngIf="showAddRoleModal" (click)="cancelAddRole()">
+  <div class="modal" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h3>Add New Role</h3>
+      <button class="close-btn" (click)="cancelAddRole()">×</button>
+    </div>
+
+    <div class="modal-body">
+      <div class="form-group">
+        <label for="roleName">Role Name</label>
+        <input 
+          type="text" 
+          id="roleName"
+          [(ngModel)]="newRoleId"
+          placeholder="Enter role name..."
+          class="form-input">
       </div>
+
+      <div class="form-group">
+        <label for="storeSelect">Store</label>
+        <select 
+          id="storeSelect"
+          [(ngModel)]="selectedStoreId"
+          class="form-input">
+          <option value="">Select Store</option>
+          <option *ngFor="let store of storeService.stores()" [value]="store.id">
+            {{ store.storeName }}
+          </option>
+        </select>
+      </div>
+
+      <p class="form-help">
+        Role names will be converted to lowercase with underscores (e.g., "Store Manager" becomes "store_manager")
+      </p>
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn btn-secondary" (click)="cancelAddRole()">Cancel</button>
+      <button 
+        class="btn btn-primary" 
+        (click)="createNewRole()"
+        [disabled]="!newRoleId.trim() || !selectedStoreId || isLoading">
+        {{ isLoading ? 'Creating...' : 'Create Role' }}
+      </button>
+    </div>
+  </div>
+</div>
+
     </div>
   `,
   styles: [`
@@ -763,11 +784,22 @@ export class AccessComponent implements OnInit {
   isLoading: boolean = false;
   showAddRoleModal: boolean = false;
   newRoleId: string = '';
+  selectedStoreId: string = '';
+
+  /**
+   * Returns the store name for a given storeId, or the storeId if not found.
+   */
+  getStoreNameById(storeId: string | undefined | null): string {
+    if (!storeId) return '';
+    const stores = this.storeService.stores();
+    const store = stores.find(s => s.id === storeId);
+    return store ? store.storeName : storeId;
+  }
 
   constructor(
     private roleDefinitionService: RoleDefinitionService,
     private router: Router,
-    private storeService: StoreService,
+    public storeService: StoreService,
     public authService: AuthService
   ) {}
 
@@ -965,6 +997,7 @@ export class AccessComponent implements OnInit {
 
   addNewRole() {
     this.newRoleId = '';
+    this.selectedStoreId = '';
     this.showAddRoleModal = true;
   }
 
@@ -995,7 +1028,8 @@ export class AccessComponent implements OnInit {
         canRemoveUsers: false,
         canAddUser: false,
         canMakePOS: false
-      }
+      },
+      storeId: this.selectedStoreId
     };
 
     this.roleDefinitionService.createRoleDefinition(newRole).then(async () => {

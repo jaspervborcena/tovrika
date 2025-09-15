@@ -5,6 +5,8 @@ import { StoreService, Store } from '../../services/store.service';
 import { ProductService } from '../../services/product.service';
 import { AuthService } from '../../services/auth.service';
 import { CompanySetupService } from '../../services/companySetup.service';
+import { AccessService, Permissions } from '../../core/services/access.service';
+import { Firestore, collection, query, where, getDocs } from '@angular/fire/firestore';
 
 @Component({
   selector: 'app-dashboard',
@@ -22,6 +24,8 @@ export class DashboardComponent implements OnInit {
   private productService = inject(ProductService);
   private authService = inject(AuthService);
   private companyService = inject(CompanySetupService);
+  private accessService = inject(AccessService);
+  private firestore = inject(Firestore);
 
   // Signals
   protected stores = signal<Store[]>([]);
@@ -84,10 +88,47 @@ export class DashboardComponent implements OnInit {
     }
   }
 
-  ngOnInit() {
-  this.screenWidth = window.innerWidth;
-  this.isMobile = this.screenWidth < 1024;
-  this.loadDashboardData();
+  async ngOnInit() {
+    this.screenWidth = window.innerWidth;
+    this.isMobile = this.screenWidth < 1024;
+    this.loadDashboardData();
+    // Step 1: Get userRoles for current user
+    const user = this.currentUser();
+    console.log('User:', user);
+    if (user && user.companyId && user.uid && user.storeId) {
+      const userRolesRef = collection(this.firestore, 'userRoles');
+      const userRolesQuery = query(
+        userRolesRef,
+        where('companyId', '==', user.companyId),
+        where('userId', '==', user.uid),
+        where('storeId', '==', user.storeId)
+      );
+      const userRolesSnap = await getDocs(userRolesQuery);
+      if (!userRolesSnap.empty) {
+        const userRoleData = userRolesSnap.docs[0].data();
+        console.log('UserRoles:', userRoleData);
+        const roleId = userRoleData['roleId'];
+        console.log('roleId from userRoles:', roleId);
+        // Step 2: Get permissions from roledefinition
+        if (roleId) {
+          const roleDefRef = collection(this.firestore, 'roledefinition');
+          const roleDefQuery = query(
+            roleDefRef,
+            where('companyId', '==', user.companyId),
+            where('roleId', '==', roleId)
+          );
+          const roleDefSnap = await getDocs(roleDefQuery);
+          if (!roleDefSnap.empty) {
+            const roleDefData = roleDefSnap.docs[0].data();
+            console.log('RoleDefinition:', roleDefData);
+            console.log('roleId from roleDefinition:', roleDefData['roleId']);
+            if (roleDefData['permissions']) {
+              this.accessService.setPermissions(roleDefData['permissions']);
+            }
+          }
+        }
+      }
+    }
   }
 
   protected onStoreChange(event: Event) {
@@ -108,19 +149,13 @@ export class DashboardComponent implements OnInit {
         this.stores.set(this.storeService.getStores());
         this.totalStores.set(this.stores().length);
         this.totalProducts.set(this.productService.totalProducts());
-      } else if ((user.roleId || user.role) === 'admin') {
-        // Load all data for admin
-        this.totalCompanies.set(this.companyService.totalCompanies());
-        
-        const companies = this.companyService.getCompanies();
-        this.recentCompanies.set(
-          companies
-            .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-            .slice(0, 5)
-        );
       }
     } catch (error) {
       console.error('Error loading dashboard data:', error);
     }
+  }
+
+  get permissions() {
+    return this.accessService.permissions || {};
   }
 }

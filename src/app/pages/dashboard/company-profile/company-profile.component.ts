@@ -5,6 +5,7 @@ import { Router } from '@angular/router';
 import { CompanyService } from '../../../services/company.service';
 import { AuthService } from '../../../services/auth.service';
 import { Company } from '../../../interfaces/company.interface';
+import { AccessService } from '../../../core/services/access.service';
 
 @Component({
   selector: 'app-company-profile',
@@ -173,13 +174,13 @@ import { Company } from '../../../interfaces/company.interface';
               <button 
                 type="button" 
                 (click)="resetForm()" 
-                [disabled]="loading()"
+                [disabled]="loading() || !canEditOrAddCompanyProfile()"
                 class="btn btn-secondary">
                 Reset Form
               </button>
               <button 
                 type="submit" 
-                [disabled]="loading() || profileForm.invalid"
+                [disabled]="loading() || profileForm.invalid || !canEditOrAddCompanyProfile()"
                 class="btn btn-primary">
                 <span *ngIf="loading()" class="loading-spinner"></span>
                 {{ loading() ? 'Saving Changes...' : (isCreatingCompany() ? 'Create Company Profile' : 'Save Company Profile') }}
@@ -522,6 +523,7 @@ export class CompanyProfileComponent {
   private companyService = inject(CompanyService);
   private authService = inject(AuthService);
   private router = inject(Router);
+  private accessService = inject(AccessService);
 
   protected profileForm: FormGroup;
   protected loading = signal(false);
@@ -532,6 +534,8 @@ export class CompanyProfileComponent {
   protected currentCompany = computed(() => this.companyService.companies()[0]);
   protected isCreatingCompany = computed(() => !this.authService.getCurrentUser()?.companyId);
   protected currentUser = computed(() => this.authService.getCurrentUser());
+  protected permissions = computed(() => this.accessService.permissions);
+  protected canEditOrAddCompanyProfile = computed(() => this.permissions().canEditCompanyProfile || this.permissions().canAddCompanyProfile);
 
   constructor() {
     this.profileForm = this.fb.group({

@@ -79,7 +79,6 @@ export class CompanySetupService {
       try {
         await this.authService.updateUserData({ 
           companyId: docRef.id,
-          role: 'admin' // User who creates company becomes admin
         });
         console.log('User companyId updated successfully');
       } catch (userUpdateError) {

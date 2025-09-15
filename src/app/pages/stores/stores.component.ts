@@ -177,15 +177,31 @@ export class StoresComponent implements OnInit {
     manager: ['']
   });
 
-  ngOnInit() {
-    this.setupUser();
+  async ngOnInit() {
+    await this.setupUser();
     this.loadData();
   }
 
-  private setupUser() {
+  private async setupUser() {
     const user = this.authService.currentUser();
-    this.isAdmin = (user?.roleId || user?.role) === 'admin';
+    this.isAdmin = false;
     this.userCompanyId = user?.companyId || null;
+    if (user?.companyId && user?.uid && user?.storeId) {
+      const { getFirestore, collection, query, where, getDocs } = await import('firebase/firestore');
+      const firestore = getFirestore();
+      const userRolesRef = collection(firestore, 'userRoles');
+      const userRolesQuery = query(
+        userRolesRef,
+        where('companyId', '==', user.companyId),
+        where('userId', '==', user.uid),
+        where('storeId', '==', user.storeId)
+      );
+      const userRolesSnap = await getDocs(userRolesQuery);
+      if (!userRolesSnap.empty) {
+        const userRoleData = userRolesSnap.docs[0].data();
+        this.isAdmin = userRoleData['roleId'] === 'admin';
+      }
+    }
   }
 
   private async loadData() {

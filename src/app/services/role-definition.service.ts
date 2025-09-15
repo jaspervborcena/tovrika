@@ -29,6 +29,7 @@ export interface RoleDefinition {
   id?: string;
   roleId: string;
   companyId: string;
+  storeId?: string | null;
   permissions: RolePermissions;
   createdAt?: Date;
   updatedAt?: Date;
@@ -100,10 +101,10 @@ export class RoleDefinitionService {
       const docData = {
         ...roleData,
         companyId: currentUser.companyId,
+        storeId: roleData.storeId || null,
         createdAt: new Date(),
         updatedAt: new Date()
       };
-      
       await addDoc(roleDefsRef, docData);
       await this.loadRoleDefinitions(); // Refresh the data
     } catch (error) {

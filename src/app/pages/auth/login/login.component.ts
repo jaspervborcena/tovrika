@@ -37,10 +37,27 @@ export class LoginComponent {
           throw new Error('Failed to get user data after login');
         }
         
-        // Navigate based on user role
-        if ((user.roleId || user.role) === 'admin') {
+        // Fetch roleId from userRoles collection and navigate accordingly
+        let roleId: string | undefined;
+        if (user.companyId && user.uid && user.storeId) {
+          const { getFirestore, collection, query, where, getDocs } = await import('firebase/firestore');
+          const firestore = getFirestore();
+          const userRolesRef = collection(firestore, 'userRoles');
+          const userRolesQuery = query(
+            userRolesRef,
+            where('companyId', '==', user.companyId),
+            where('userId', '==', user.uid),
+            where('storeId', '==', user.storeId)
+          );
+          const userRolesSnap = await getDocs(userRolesQuery);
+          if (!userRolesSnap.empty) {
+            const userRoleData = userRolesSnap.docs[0].data();
+            roleId = userRoleData['roleId'];
+          }
+        }
+        if (roleId === 'admin') {
           this.router.navigate(['/dashboard']);
-        } else if ((user.roleId || user.role) === 'manager') {
+        } else if (roleId === 'manager') {
           this.router.navigate(['/dashboard']);
         } else {
           this.router.navigate(['/pos']);

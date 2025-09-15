@@ -1,3 +1,4 @@
+import { AccessService } from '../core/services/access.service';
 import { inject } from '@angular/core';
 import { CanActivateFn, Router } from '@angular/router';
 import { AuthService } from '../services/auth.service';
@@ -69,25 +70,21 @@ export const onboardingGuard: CanActivateFn = async (route, state) => {
 
 export const companyProfileGuard: CanActivateFn = (route, state) => {
   const authService = inject(AuthService);
+  const accessService = inject(AccessService);
   const router = inject(Router);
 
   const user = authService.currentUser();
-  
   if (!user) {
     console.warn('CompanyProfileGuard: No authenticated user');
     router.navigate(['/login']);
     return false;
   }
 
-  // Allow admin, manager roles to access company profile (temporarily relaxed for testing)
-  const userRole = authService.userRole();
-  console.log(`CompanyProfileGuard: User role check - User: ${userRole}, URL: ${state.url}`);
-  
-  if (userRole !== 'admin' && userRole !== 'manager') {
-    console.warn(`CompanyProfileGuard: Insufficient access: ${userRole}`);
+  // Use permission-based access control
+  if (!accessService.canView('canViewCompanyProfile')) {
+    console.warn('CompanyProfileGuard: Insufficient permission for company profile');
     router.navigate(['/dashboard/overview']);
     return false;
   }
-  
   return true;
 };

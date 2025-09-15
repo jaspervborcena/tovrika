@@ -19,15 +19,15 @@ export interface User {
   uid: string;
   email: string;
   displayName: string;
-  roleId: string; // Primary role field matching your structure
+  // roleId: string; // Primary role field matching your structure
   companyId: string;
   storeIds: string[]; // Array of store IDs user has access to
   status: 'active' | 'inactive';
-  permissions: string[];
+  // permissions: string[];
   createdAt: Date;
   updatedAt: Date;
   // Legacy fields for backward compatibility
-  role?: 'admin' | 'manager' | 'cashier';
+  // role?: 'admin' | 'manager' | 'cashier';
   storeId?: string;
   branchId?: string;
 }
@@ -41,7 +41,14 @@ export class AuthService {
 
   // Computed properties
   readonly isAuthenticated = computed(() => !!this.currentUserSignal());
-  readonly userRole = computed(() => this.currentUserSignal()?.roleId || this.currentUserSignal()?.role);
+  readonly userRole = computed(() => {
+    const user = this.currentUserSignal();
+    if (!user || !user.companyId || !user.uid || !user.storeId) return undefined;
+    // This is a synchronous computed, so we cannot await Firestore calls here.
+    // Instead, you should use an async method to get the user's roleId from userRoles collection when needed.
+    // For template use, consider storing the roleId in a signal after fetching it asynchronously elsewhere in your app.
+    return undefined;
+  });
   readonly hasCompanyAccess = computed(() => !!this.currentUserSignal()?.companyId);
   readonly currentUser = computed(() => this.currentUserSignal());
 
@@ -211,7 +218,37 @@ export class AuthService {
   }
 
   // Check if user has specific permission
-  hasPermission(permission: string): boolean {
-    return this.currentUser()?.permissions.includes(permission) ?? false;
+  async hasPermission(permission: string): Promise<boolean> {
+    const user = this.getCurrentUser();
+    if (!user || !user.companyId || !user.uid || !user.storeId) return false;
+
+    // Fetch userRoles for current user
+    const { getFirestore, collection, query, where, getDocs } = await import('firebase/firestore');
+    const firestore = getFirestore();
+    const userRolesRef = collection(firestore, 'userRoles');
+    const userRolesQuery = query(
+      userRolesRef,
+      where('companyId', '==', user.companyId),
+      where('userId', '==', user.uid),
+      where('storeId', '==', user.storeId)
+    );
+    const userRolesSnap = await getDocs(userRolesQuery);
+    if (userRolesSnap.empty) return false;
+    const userRoleData = userRolesSnap.docs[0].data();
+    const roleId = userRoleData['roleId'];
+    if (!roleId) return false;
+
+    // Fetch roleDefinition for this roleId
+    const roleDefRef = collection(firestore, 'roledefinition');
+    const roleDefQuery = query(
+      roleDefRef,
+      where('companyId', '==', user.companyId),
+      where('roleId', '==', roleId)
+    );
+    const roleDefSnap = await getDocs(roleDefQuery);
+    if (roleDefSnap.empty) return false;
+    const roleDefData = roleDefSnap.docs[0].data();
+    const permissions = roleDefData['permissions'] || [];
+    return permissions.includes(permission);
   }
 }

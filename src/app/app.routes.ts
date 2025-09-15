@@ -86,16 +86,12 @@ export const routes: Routes = [
         data: { roles: ['admin', 'manager'] }
       },
       {
-        path: 'access',
-        loadComponent: () => import('./pages/dashboard/access/access.component').then(m => m.AccessComponent),
-        canActivate: [onboardingGuard],
-        data: { roles: ['admin', 'manager'] }
+  path: 'access',
+  loadComponent: () => import('./pages/dashboard/access/access.component').then(m => m.AccessComponent)
       },
       {
-        path: 'user-roles',
-        loadComponent: () => import('./pages/dashboard/user-roles/user-roles.component').then(m => m.UserRolesComponent),
-        canActivate: [onboardingGuard],
-        data: { roles: ['admin', 'manager'] }
+  path: 'user-roles',
+  loadComponent: () => import('./pages/dashboard/user-roles/user-roles.component').then(m => m.UserRolesComponent)
       },
       {
         path: 'products',

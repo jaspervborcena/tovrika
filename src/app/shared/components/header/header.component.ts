@@ -96,6 +96,26 @@ export class HeaderComponent implements OnInit {
       const user = this.authService.getCurrentUser();
       if (!user) return;
 
+      // Fetch roleId from userRoles collection
+      let roleId: string | undefined;
+      if (user.companyId && user.uid && user.storeId) {
+        const { getFirestore, collection, query, where, getDocs } = await import('firebase/firestore');
+        const firestore = getFirestore();
+        const userRolesRef = collection(firestore, 'userRoles');
+        const userRolesQuery = query(
+          userRolesRef,
+          where('companyId', '==', user.companyId),
+          where('userId', '==', user.uid),
+          where('storeId', '==', user.storeId)
+        );
+        const userRolesSnap = await getDocs(userRolesQuery);
+        if (!userRolesSnap.empty) {
+          const userRoleData = userRolesSnap.docs[0].data();
+          roleId = userRoleData['roleId'];
+          console.log('Header UserRoles:', userRoleData);
+        }
+      }
+
       if (user.companyId) {
         // Load company-specific data
         await this.storeService.loadStoresByCompany(user.companyId);
@@ -104,7 +124,7 @@ export class HeaderComponent implements OnInit {
         this.stores.set(this.storeService.getStores());
         this.totalStores.set(this.storeService.totalStores());
         this.totalProducts.set(this.productService.totalProducts());
-      } else if ((user.roleId || user.role) === 'admin') {
+  } else if (roleId === 'admin') {
         // Load all data for admin
         this.totalCompanies.set(this.companyService.totalCompanies());
         
