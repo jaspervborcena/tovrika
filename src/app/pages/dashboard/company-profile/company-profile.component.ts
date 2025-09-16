@@ -6,6 +6,9 @@ import { CompanyService } from '../../../services/company.service';
 import { AuthService } from '../../../services/auth.service';
 import { Company } from '../../../interfaces/company.interface';
 import { AccessService } from '../../../core/services/access.service';
+import { UserRoleService } from '../../../services/user-role.service';
+import { RoleDefinitionService, RoleDefinition } from '../../../services/role-definition.service';
+import { UserRole } from '../../../interfaces/user-role.interface';
 
 @Component({
   selector: 'app-company-profile',
@@ -524,6 +527,8 @@ export class CompanyProfileComponent {
   private authService = inject(AuthService);
   private router = inject(Router);
   private accessService = inject(AccessService);
+  private userRoleService = inject(UserRoleService);
+  private roleDefinitionService = inject(RoleDefinitionService);
 
   protected profileForm: FormGroup;
   protected loading = signal(false);
@@ -535,7 +540,10 @@ export class CompanyProfileComponent {
   protected isCreatingCompany = computed(() => !this.authService.getCurrentUser()?.companyId);
   protected currentUser = computed(() => this.authService.getCurrentUser());
   protected permissions = computed(() => this.accessService.permissions);
-  protected canEditOrAddCompanyProfile = computed(() => this.permissions().canEditCompanyProfile || this.permissions().canAddCompanyProfile);
+  protected canEditOrAddCompanyProfile = computed(() => {
+    const perms = this.permissions();
+    return perms.canViewCompanyProfile && (perms.canEditCompanyProfile || perms.canAddCompanyProfile);
+  });
 
   constructor() {
     this.profileForm = this.fb.group({
@@ -550,7 +558,28 @@ export class CompanyProfileComponent {
 
     // Load companies and set up form subscription
     this.companyService.loadCompanies();
-    
+
+    // Set permissions based on user role
+    effect(() => {
+      const user = this.authService.getCurrentUser();
+      if (user?.uid) {
+        console.log('CompanyProfile: user?.uid', user?.uid);
+        const userRole = this.userRoleService.getUserRoleByUserId(user.uid) as UserRole | undefined;
+        console.log('CompanyProfile: userRole', userRole);
+        const roleId = userRole?.roleId;
+        if (roleId) {
+           console.log('CompanyProfile: roleId', roleId);
+          const roleDef = this.roleDefinitionService.getRoleDefinitionByRoleId(roleId) as RoleDefinition | undefined;
+          console.log('CompanyProfile: roleDefinition', roleDef);
+          const permissions = roleDef?.permissions;
+          console.log('CompanyProfile: permissions', permissions);
+          if (permissions) {
+            this.accessService.setPermissions(permissions);
+          }
+        }
+      }
+    });
+
     // Update form when company changes
     effect(() => {
       const company = this.currentCompany();

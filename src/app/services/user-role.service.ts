@@ -32,8 +32,6 @@ export class UserRoleService {
   async loadUserRoles() {
     try {
       const currentUser = await this.authService.waitForAuth();
-      console.log('loadUserRoles - Current user:', currentUser);
-      console.log('loadUserRoles - User company ID:', currentUser?.companyId);
       
       if (!currentUser || !currentUser.companyId) {
         console.warn('No current user or companyId found');
@@ -43,14 +41,11 @@ export class UserRoleService {
 
       const userRolesRef = collection(this.firestore, 'userRoles');
       const q = query(userRolesRef, where('companyId', '==', currentUser.companyId));
-      console.log('loadUserRoles - Querying with companyId:', currentUser.companyId);
       
       const querySnapshot = await getDocs(q);
-      console.log('loadUserRoles - Query result count:', querySnapshot.docs.length);
       
       const userRoles = querySnapshot.docs.map(doc => {
         const data = doc.data();
-        console.log('loadUserRoles - Document data:', { id: doc.id, ...data });
         return {
           id: doc.id,
           userId: data['userId'] || '',
@@ -63,7 +58,6 @@ export class UserRoleService {
         } as UserRole;
       });
       
-      console.log('loadUserRoles - Final user roles:', userRoles);
       this.userRolesSignal.set(userRoles);
     } catch (error) {
       console.error('Error loading user roles:', error);
@@ -178,24 +172,18 @@ export class UserRoleService {
   // Get all user roles for the current user's company
   getCompanyUserRoles(): UserRole[] {
     const currentUser = this.authService.currentUser();
-    console.log('getCompanyUserRoles - Current user:', currentUser);
-    console.log('getCompanyUserRoles - User company ID:', currentUser?.companyId);
     
     if (!currentUser || !currentUser.companyId) {
-      console.log('getCompanyUserRoles - No current user or company ID, returning empty array');
       return [];
     }
     
     const allUserRoles = this.userRolesSignal();
-    console.log('getCompanyUserRoles - All user roles in signal:', allUserRoles);
     
     const filteredUserRoles = allUserRoles.filter(userRole => {
       const matches = userRole.companyId === currentUser.companyId;
-      console.log(`User role ${userRole.email} (companyId: ${userRole.companyId}) matches user company (${currentUser.companyId}):`, matches);
       return matches;
     });
     
-    console.log('getCompanyUserRoles - Filtered user roles for company:', filteredUserRoles);
     return filteredUserRoles;
   }
 

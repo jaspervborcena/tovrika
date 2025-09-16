@@ -200,6 +200,51 @@ import { AuthService } from '../../../services/auth.service';
               </div>
 
               <!-- User Management -->
+              <!-- Company Profile Management -->
+              <div class="permission-group">
+                <h4 class="group-title">Company Profile</h4>
+                <div class="permission-items">
+                  <div class="permission-item">
+                    <label class="permission-label">
+                      <input 
+                        type="checkbox" 
+                        [(ngModel)]="activeRole.permissions.canViewCompanyProfile"
+                        (change)="updateRole(activeRole)">
+                      <span class="checkmark"></span>
+                      <div class="permission-text">
+                        <span class="permission-name">View Company Profile</span>
+                        <span class="permission-desc">Access company profile information</span>
+                      </div>
+                    </label>
+                  </div>
+                  <div class="permission-item">
+                    <label class="permission-label">
+                      <input 
+                        type="checkbox" 
+                        [(ngModel)]="activeRole.permissions.canEditCompanyProfile"
+                        (change)="updateRole(activeRole)">
+                      <span class="checkmark"></span>
+                      <div class="permission-text">
+                        <span class="permission-name">Edit Company Profile</span>
+                        <span class="permission-desc">Edit company profile details</span>
+                      </div>
+                    </label>
+                  </div>
+                  <div class="permission-item">
+                    <label class="permission-label">
+                      <input 
+                        type="checkbox" 
+                        [(ngModel)]="activeRole.permissions.canAddCompanyProfile"
+                        (change)="updateRole(activeRole)">
+                      <span class="checkmark"></span>
+                      <div class="permission-text">
+                        <span class="permission-name">Add Company Profile</span>
+                        <span class="permission-desc">Create a new company profile</span>
+                      </div>
+                    </label>
+                  </div>
+                </div>
+              </div>
               <div class="permission-group">
                 <h4 class="group-title">User Management</h4>
                 <div class="permission-items">
@@ -1027,7 +1072,10 @@ export class AccessComponent implements OnInit {
         canViewInventory: false,
         canRemoveUsers: false,
         canAddUser: false,
-        canMakePOS: false
+        canMakePOS: false,
+        canViewCompanyProfile: false,
+        canEditCompanyProfile: false,
+        canAddCompanyProfile: false
       },
       storeId: this.selectedStoreId
     };

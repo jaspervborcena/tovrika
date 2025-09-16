@@ -23,6 +23,9 @@ export interface RolePermissions {
   canRemoveUsers: boolean;
   canAddUser: boolean;
   canMakePOS: boolean;
+  canViewCompanyProfile: boolean;
+  canEditCompanyProfile: boolean;
+  canAddCompanyProfile: boolean;
 }
 
 export interface RoleDefinition {
@@ -55,8 +58,6 @@ export class RoleDefinitionService {
   public async loadRoleDefinitions() {
     try {
       const currentUser = await this.authService.waitForAuth();
-      console.log('loadRoleDefinitions - Current user:', currentUser);
-      console.log('loadRoleDefinitions - User company ID:', currentUser?.companyId);
       
       if (!currentUser || !currentUser.companyId) {
         console.warn('No current user or companyId found');
@@ -66,14 +67,11 @@ export class RoleDefinitionService {
 
       const roleDefsRef = collection(this.firestore, 'roleDefinition');
       const q = query(roleDefsRef, where('companyId', '==', currentUser.companyId));
-      console.log('loadRoleDefinitions - Querying with companyId:', currentUser.companyId);
       
       const querySnapshot = await getDocs(q);
-      console.log('loadRoleDefinitions - Query result count:', querySnapshot.docs.length);
-      
+       console.log('roleDefinitionsSignal querySnapshot',querySnapshot);
       const roleDefs = querySnapshot.docs.map(doc => {
         const data = doc.data();
-        console.log('loadRoleDefinitions - Document data:', { id: doc.id, ...data });
         return {
           id: doc.id,
           ...data,
@@ -82,7 +80,6 @@ export class RoleDefinitionService {
         };
       }) as RoleDefinition[];
       
-      console.log('loadRoleDefinitions - Final role definitions:', roleDefs);
       this.roleDefinitionsSignal.set(roleDefs);
     } catch (error) {
       console.error('Error loading role definitions:', error);
@@ -186,24 +183,18 @@ export class RoleDefinitionService {
   // Get all role definitions for the current user's company
   getCompanyRoleDefinitions(): RoleDefinition[] {
     const currentUser = this.authService.currentUser();
-    console.log('getCompanyRoleDefinitions - Current user:', currentUser);
-    console.log('getCompanyRoleDefinitions - User company ID:', currentUser?.companyId);
     
     if (!currentUser || !currentUser.companyId) {
-      console.log('getCompanyRoleDefinitions - No current user or company ID, returning empty array');
       return [];
     }
     
     const allRoles = this.roleDefinitionsSignal();
-    console.log('getCompanyRoleDefinitions - All roles in signal:', allRoles);
     
     const filteredRoles = allRoles.filter(role => {
       const matches = role.companyId === currentUser.companyId;
-      console.log(`Role ${role.roleId} (companyId: ${role.companyId}) matches user company (${currentUser.companyId}):`, matches);
       return matches;
     });
     
-    console.log('getCompanyRoleDefinitions - Filtered roles for company:', filteredRoles);
     return filteredRoles;
   }
 }
