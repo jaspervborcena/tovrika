@@ -78,7 +78,7 @@ export class CompanySetupService {
       // Update the current user's companyId
       try {
         await this.authService.updateUserData({ 
-          companyId: docRef.id,
+          permission: { companyId: docRef.id },
         });
         console.log('User companyId updated successfully');
       } catch (userUpdateError) {

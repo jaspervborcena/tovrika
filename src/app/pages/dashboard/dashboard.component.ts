@@ -20,6 +20,15 @@ import { Firestore, collection, query, where, getDocs } from '@angular/fire/fire
   styleUrls: ['./dashboard.component.css']
 })
 export class DashboardComponent implements OnInit {
+  // Closes the user menu dropdown
+  protected closeUserMenu() {
+    this.isUserMenuOpen.set(false);
+  }
+
+  // Logs out the current user
+  protected async logout() {
+    await this.authService.logout();
+  }
   private storeService = inject(StoreService);
   private productService = inject(ProductService);
   private authService = inject(AuthService);
@@ -65,44 +74,66 @@ export class DashboardComponent implements OnInit {
     this.screenWidth = window.innerWidth;
     this.isMobile = this.screenWidth < 1024;
     this.loadDashboardData();
-    // Step 1: Get userRoles for current user
     const user = this.currentUser();
-    console.log('User:', user);
-    if (user && user.companyId && user.uid && user.storeId) {
-      const userRolesRef = collection(this.firestore, 'userRoles');
-      const userRolesQuery = query(
-        userRolesRef,
-        where('companyId', '==', user.companyId),
-        where('userId', '==', user.uid),
-        where('storeId', '==', user.storeId)
-      );
-      const userRolesSnap = await getDocs(userRolesQuery);
-      if (!userRolesSnap.empty) {
-        const userRoleData = userRolesSnap.docs[0].data();
-        console.log('UserRoles:', userRoleData);
-        const roleId = userRoleData['roleId'];
-        console.log('roleId from userRoles:', roleId);
-        // Step 2: Get permissions from roledefinition
-        if (roleId) {
-          const roleDefRef = collection(this.firestore, 'roledefinition');
-          const roleDefQuery = query(
-            roleDefRef,
-            where('companyId', '==', user.companyId),
-            where('roleId', '==', roleId)
-          );
-          const roleDefSnap = await getDocs(roleDefQuery);
-          if (!roleDefSnap.empty) {
-            const roleDefData = roleDefSnap.docs[0].data();
-            console.log('RoleDefinition:', roleDefData);
-            console.log('roleId from roleDefinition:', roleDefData['roleId']);
-            if (roleDefData['permissions']) {
-              this.accessService.setPermissions(roleDefData['permissions']);
-            }
-          }
+    if (!user) return;
+
+    // If no companyId or storeId, treat as creator
+    if (!user.permission?.companyId || !user.permission?.storeId) {
+      this.accessService.setPermissions({}, 'creator');
+      return;
+    }
+
+    // Try to get roleId from userRoles collection
+    const userRolesRef = collection(this.firestore, 'userRoles');
+    const userRolesQuery = query(
+      userRolesRef,
+      where('companyId', '==', user.permission.companyId),
+      where('userId', '==', user.uid),
+      where('storeId', '==', user.permission.storeId)
+    );
+    const userRolesSnap = await getDocs(userRolesQuery);
+    let roleId: string | undefined;
+    if (!userRolesSnap.empty) {
+      const userRoleData = userRolesSnap.docs[0].data();
+      roleId = userRoleData['roleId'];
+    } else {
+      // Fallback: get user doc from Firestore and check permission field
+      const userDocRef = collection(this.firestore, 'users');
+      const userDocSnap = await getDocs(query(userDocRef, where('uid', '==', user.uid)));
+      if (!userDocSnap.empty) {
+        const userDoc = userDocSnap.docs[0].data();
+        if (userDoc['permission'] && userDoc['permission']['roleId']) {
+          roleId = userDoc['permission']['roleId'];
         }
       }
     }
-    // If no userRole found, keep default permissions (see everything)
+
+    if (!roleId) {
+      // If no roleId found, treat as creator
+      this.accessService.setPermissions({}, 'creator');
+      return;
+    }
+
+    if (roleId === 'cashier') {
+      this.accessService.setPermissions({}, 'cashier');
+    } else if (roleId === 'store_manager') {
+      this.accessService.setPermissions({}, 'store_manager');
+    } else {
+      // For other roles, use roledefinition permissions
+      const roleDefRef = collection(this.firestore, 'roledefinition');
+      const roleDefQuery = query(
+        roleDefRef,
+        where('companyId', '==', user.permission.companyId),
+        where('roleId', '==', roleId)
+      );
+      const roleDefSnap = await getDocs(roleDefQuery);
+      if (!roleDefSnap.empty) {
+        const roleDefData = roleDefSnap.docs[0].data();
+        if (roleDefData['permissions']) {
+          this.accessService.setPermissions(roleDefData['permissions'], roleId);
+        }
+      }
+    }
   }
 
   protected onStoreChange(event: Event) {

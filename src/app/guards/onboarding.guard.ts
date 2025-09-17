@@ -18,8 +18,83 @@ export const onboardingGuard: CanActivateFn = async (route, state) => {
     return false;
   }
 
-  if (!user.companyId) {
+  // Step 1: Check company profile
+  if (!user.permission?.companyId) {
     router.navigate(['/dashboard/company-profile']);
+    return false;
+  }
+
+  await companyService.loadCompanies();
+  const company = await companyService.getActiveCompany();
+  if (!company) {
+    router.navigate(['/dashboard/company-profile']);
+    return false;
+  }
+
+  // Step 2: Check stores
+  await storeService.loadStoresByCompany(user.permission?.companyId);
+  const stores = storeService.getStoresByCompany(user.permission?.companyId);
+
+  // Role-based access control (move up so userRole is always defined)
+  let userRole: string | undefined;
+  try {
+    const { getFirestore, collection, query, where, getDocs } = await import('firebase/firestore');
+    const firestore = getFirestore();
+    const userRolesRef = collection(firestore, 'userRoles');
+    let foundUserRole = false;
+    if (stores && stores.length === 1) {
+      const storeId = stores[0].id;
+      const userRolesQuery = query(
+        userRolesRef,
+  where('companyId', '==', user.permission?.companyId),
+        where('userId', '==', user.uid),
+        where('storeId', '==', storeId)
+      );
+      const userRolesSnap = await getDocs(userRolesQuery);
+      if (!userRolesSnap.empty) {
+        const userRoleData = userRolesSnap.docs[0].data();
+        userRole = userRoleData['roleId'];
+        foundUserRole = true;
+      }
+    } else if (stores) {
+      for (const store of stores) {
+        const storeId = store.id;
+        const userRolesQuery = query(
+          userRolesRef,
+          where('companyId', '==', user.permission?.companyId),
+          where('userId', '==', user.uid),
+          where('storeId', '==', storeId)
+        );
+        const userRolesSnap = await getDocs(userRolesQuery);
+        if (!userRolesSnap.empty) {
+          const userRoleData = userRolesSnap.docs[0].data();
+          userRole = userRoleData['roleId'];
+          foundUserRole = true;
+          break;
+        }
+      }
+    }
+    if (!foundUserRole && user.permission && user.permission.roleId) {
+      userRole = user.permission.roleId;
+    }
+  } catch (roleError) {
+    if (user.permission && user.permission.roleId) {
+      userRole = user.permission.roleId;
+    }
+  }
+
+  // If cashier, always allow POS route
+  if (userRole === 'cashier' && state.url.includes('pos')) {
+    return true;
+  }
+
+  if (!stores || stores.length === 0) {
+    // Only allow onboarding routes if no stores exist
+    if (state.url.includes('stores') || state.url.includes('products')) {
+      return true;
+    }
+    // Restrict other routes, redirect to stores management
+    router.navigate(['/dashboard/stores']);
     return false;
   }
 
@@ -33,13 +108,68 @@ export const onboardingGuard: CanActivateFn = async (route, state) => {
     }
 
     // Load stores for the company
-    await storeService.loadStoresByCompany(user.companyId);
-    const stores = storeService.getStoresByCompany(user.companyId);
+  await storeService.loadStoresByCompany(user.permission?.companyId);
+  const stores = storeService.getStoresByCompany(user.permission?.companyId);
+
+    // Role-based access control (move up so userRole is always defined)
+    let userRole: string | undefined;
+    try {
+      const { getFirestore, collection, query, where, getDocs } = await import('firebase/firestore');
+      const firestore = getFirestore();
+      const userRolesRef = collection(firestore, 'userRoles');
+      let foundUserRole = false;
+      if (stores.length === 1) {
+        const storeId = stores[0].id;
+        const userRolesQuery = query(
+          userRolesRef,
+          where('companyId', '==', user.permission?.companyId),
+          where('userId', '==', user.uid),
+          where('storeId', '==', storeId)
+        );
+        const userRolesSnap = await getDocs(userRolesQuery);
+        if (!userRolesSnap.empty) {
+          const userRoleData = userRolesSnap.docs[0].data();
+          userRole = userRoleData['roleId'];
+          foundUserRole = true;
+        }
+      } else {
+        for (const store of stores) {
+          const storeId = store.id;
+          const userRolesQuery = query(
+            userRolesRef,
+            where('companyId', '==', user.permission?.companyId),
+            where('userId', '==', user.uid),
+            where('storeId', '==', storeId)
+          );
+          const userRolesSnap = await getDocs(userRolesQuery);
+          if (!userRolesSnap.empty) {
+            const userRoleData = userRolesSnap.docs[0].data();
+            userRole = userRoleData['roleId'];
+            foundUserRole = true;
+            break;
+          }
+        }
+      }
+      if (!foundUserRole && user.permission && user.permission.roleId) {
+        userRole = user.permission.roleId;
+      }
+    } catch (roleError) {
+      if (user.permission && user.permission.roleId) {
+        userRole = user.permission.roleId;
+      }
+    }
 
     // Check if user has access to any valid store
-    const hasValidStore = user.storeIds?.some(storeId =>
-      stores.some(store => store.id === storeId)
-    );
+  // If user has a single storeId, check if it matches any store
+  let hasValidStore = false;
+  if (user.permission?.storeId) {
+    hasValidStore = stores.some(store => store.id === user.permission?.storeId);
+  }
+
+    // If cashier, always allow POS route
+    if (userRole === 'cashier' && state.url.includes('pos')) {
+      return true;
+    }
 
     if (!hasValidStore && !state.url.includes('stores')) {
       router.navigate(['/dashboard/stores']);
@@ -57,12 +187,13 @@ export const onboardingGuard: CanActivateFn = async (route, state) => {
         const userRolesRef = collection(firestore, 'userRoles');
 
         // Use stores from storeService for role lookup
+        let foundUserRole = false;
         if (stores.length === 1) {
           // Only one store, no need to loop
           const storeId = stores[0].id;
           const userRolesQuery = query(
             userRolesRef,
-            where('companyId', '==', user.companyId),
+            where('companyId', '==', user.permission?.companyId),
             where('userId', '==', user.uid),
             where('storeId', '==', storeId)
           );
@@ -70,6 +201,7 @@ export const onboardingGuard: CanActivateFn = async (route, state) => {
           if (!userRolesSnap.empty) {
             const userRoleData = userRolesSnap.docs[0].data();
             userRole = userRoleData['roleId'];
+            foundUserRole = true;
             console.log(`[OnboardingGuard] Single store - Role: ${userRole}, Store: ${storeId}`);
           }
         } else {
@@ -78,7 +210,7 @@ export const onboardingGuard: CanActivateFn = async (route, state) => {
             const storeId = store.id;
             const userRolesQuery = query(
               userRolesRef,
-              where('companyId', '==', user.companyId),
+              where('companyId', '==', user.permission?.companyId),
               where('userId', '==', user.uid),
               where('storeId', '==', storeId)
             );
@@ -86,16 +218,31 @@ export const onboardingGuard: CanActivateFn = async (route, state) => {
             if (!userRolesSnap.empty) {
               const userRoleData = userRolesSnap.docs[0].data();
               userRole = userRoleData['roleId'];
+              foundUserRole = true;
               console.log(`[OnboardingGuard] Multi-store - Role: ${userRole}, Store: ${storeId}`);
               break;
             }
           }
         }
+        // Fallback to user.permission.roleId if no userRoles found
+        if (!foundUserRole && user.permission && user.permission.roleId) {
+          userRole = user.permission.roleId;
+          console.log('[OnboardingGuard] Fallback to user.permission.roleId:', userRole);
+        }
       } catch (roleError) {
         console.error('[OnboardingGuard] Error fetching userRoles:', roleError);
+        // Fallback to user.permission.roleId if error
+        if (user.permission && user.permission.roleId) {
+          userRole = user.permission.roleId;
+          console.log('[OnboardingGuard] Fallback to user.permission.roleId (error):', userRole);
+        }
       }
 
-      if (!userRole || !requiredRoles.includes(userRole)) {
+      // If no userRole found, treat as 'creator' for first login
+      if (!userRole) {
+        userRole = 'creator';
+      }
+      if (!requiredRoles.includes(userRole)) {
         router.navigate(['/dashboard/overview']);
         return false;
       }

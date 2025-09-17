@@ -385,7 +385,7 @@ export class PosService {
   async getBestSellerProducts(limit: number = 10): Promise<Product[]> {
     try {
       const user = this.authService.getCurrentUser();
-      if (!user?.companyId) return [];
+  if (!user?.permission?.companyId) return [];
 
       // This would typically aggregate order data to find best sellers
       // For now, return products sorted by some criteria

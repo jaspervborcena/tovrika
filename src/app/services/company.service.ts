@@ -51,7 +51,7 @@ export class CompanyService {
     if (!user) return null;
 
     // If user doesn't have companyId, return null (they need to create a company)
-    if (!user.companyId) return null;
+  if (!user.permission?.companyId) return null;
 
     const companies = this.companies();
     if (companies.length === 0) {
@@ -70,11 +70,11 @@ export class CompanyService {
       }
 
       const companies: Company[] = [];
-      console.log("user companyId:", user.companyId);
+    console.log("user companyId:", user.permission?.companyId);
       
       // If user has a companyId, load only that company
-      if (user.companyId) {
-        const companyDocRef = doc(this.firestore, 'companies', user.companyId);
+      if (user.permission?.companyId) {
+        const companyDocRef = doc(this.firestore, 'companies', user.permission.companyId);
         const companyDoc = await getDoc(companyDocRef);
 
         if (companyDoc.exists()) {
@@ -157,7 +157,7 @@ export class CompanyService {
       
       // Update user's companyId
       await this.authService.updateUserData({
-        companyId: docRef.id
+      permission: { companyId: docRef.id }
       });
       
       // Add stores if we have any
@@ -243,13 +243,13 @@ export class CompanyService {
   // Helper method to check if user needs to create a company
   userNeedsToCreateCompany(): boolean {
     const user = this.authService.getCurrentUser();
-    return !user?.companyId;
+  return !user?.permission?.companyId;
   }
 
   // Helper method to get current company or null if user needs to create one
   async getCurrentCompanyOrNull(): Promise<Company | null> {
     const user = this.authService.getCurrentUser();
-    if (!user?.companyId) return null;
+  if (!user?.permission?.companyId) return null;
     return this.getActiveCompany();
   }
 }

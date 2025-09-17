@@ -714,8 +714,8 @@ export class UserRolesComponent implements OnInit {
 
       // Load available stores for the company
       const user = this.authService.getCurrentUser();
-      if (user?.companyId) {
-        await this.storeService.loadStoresByCompany(user.companyId);
+      if (user?.permission?.companyId) {
+        await this.storeService.loadStoresByCompany(user.permission.companyId);
       }
       this.availableStores = this.storeService.getStores();
       

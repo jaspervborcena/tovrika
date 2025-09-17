@@ -1262,12 +1262,15 @@ export class ProductManagementComponent implements OnInit {
   async ngOnInit(): Promise<void> {
     try {
       const user = this.authService.getCurrentUser();
-      if (user?.companyId) {
-        await this.storeService.loadStoresByCompany(user.companyId);
-        await this.productService.loadProducts(user.companyId);
+        if (user?.permission?.companyId) {
+          await this.storeService.loadStoresByCompany(user.permission.companyId);
+          await this.productService.loadProducts(user.permission.companyId);
       } else {
-        await this.storeService.loadStoresByCompany(''); // This might need better handling
-        await this.productService.loadProducts();
+        // Creator account, no companyId or stores yet, allow empty arrays for onboarding
+        this.storeService['storesSignal']?.set([]); // Use bracket notation to bypass private
+        if (this.productService['products'] && typeof this.productService['products'].set === 'function') {
+          this.productService['products'].set([]);
+        }
       }
       this.filterProducts();
     } catch (error) {

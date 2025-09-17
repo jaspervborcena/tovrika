@@ -132,17 +132,17 @@ export const routes: Routes = [
   // Standalone POS Route (originally existed)
   {
     path: 'pos',
-    loadComponent: () => import('./pages/dashboard/pos/pos.component').then(m => m.PosComponent)
-    // Temporarily removed guards: canActivate: [authGuard],
-    // data: { roles: ['admin', 'manager', 'cashier'] }
+    loadComponent: () => import('./pages/dashboard/pos/pos.component').then(m => m.PosComponent),
+    canActivate: [onboardingGuard],
+    data: { roles: ['creator', 'store_manager', 'cashier'] }
   },
-  
+
   // Mobile POS Route
   {
     path: 'pos/mobile',
-    loadComponent: () => import('./pages/dashboard/pos/mobile/pos-mobile.component').then(m => m.PosMobileComponent)
-    // Temporarily removed guards: canActivate: [authGuard],
-    // data: { roles: ['admin', 'manager', 'cashier'] }
+    loadComponent: () => import('./pages/dashboard/pos/mobile/pos-mobile.component').then(m => m.PosMobileComponent),
+    canActivate: [onboardingGuard],
+    data: { roles: ['creator', 'store_manager', 'cashier'] }
   },
   
   // Fallback route

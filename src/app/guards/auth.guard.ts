@@ -17,25 +17,29 @@ export const authGuard: CanActivateFn = (route, state) => {
 
   const currentUser = authService.currentUser();
 
-  // Verify user has required company access
-  if (!currentUser?.companyId) {
+  // Allow access to company-profile if user has no companyId (onboarding)
+  if (!currentUser?.permission?.companyId) {
+    if (state.url.includes('/dashboard/company-profile')) {
+      // Treat as creator for onboarding
+      return true;
+    }
     console.warn(`AuthGuard: User missing company access for ${state.url}`);
-    router.navigate(['/login']);
+    router.navigate(['/dashboard/company-profile']);
     return false;
   }
 
   // Async role check
   const checkRole = async () => {
     let userRole: string = '';
-    if (currentUser?.companyId && currentUser?.uid && currentUser?.storeId) {
+  if (currentUser?.permission?.companyId && currentUser?.uid && currentUser?.permission?.storeId) {
       const { getFirestore, collection, query, where, getDocs } = await import('firebase/firestore');
       const firestore = getFirestore();
       const userRolesRef = collection(firestore, 'userRoles');
       const userRolesQuery = query(
         userRolesRef,
-        where('companyId', '==', currentUser.companyId),
+  where('companyId', '==', currentUser.permission?.companyId),
         where('userId', '==', currentUser.uid),
-        where('storeId', '==', currentUser.storeId)
+  where('storeId', '==', currentUser.permission?.storeId)
       );
       const userRolesSnap = await getDocs(userRolesQuery);
       if (!userRolesSnap.empty) {

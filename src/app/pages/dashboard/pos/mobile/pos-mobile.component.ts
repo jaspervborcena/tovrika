@@ -619,7 +619,7 @@ export class PosMobileComponent implements OnInit {
 
     // Prepare transaction data matching the Transaction interface
     const transactionData = {
-      companyId: currentUser.companyId || '',
+  companyId: currentUser.permission?.companyId || '',
       storeId: storeInfo?.id || '',
       branchId: currentUser.branchId || 'main-branch', // Use user's branch or default
       cashierId: currentUser.uid || '',

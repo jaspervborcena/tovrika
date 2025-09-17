@@ -98,15 +98,15 @@ export class HeaderComponent implements OnInit {
 
       // Fetch roleId from userRoles collection
       let roleId: string | undefined;
-      if (user.companyId && user.uid && user.storeId) {
+      if (user.permission?.companyId && user.uid && user.permission?.companyId) {
         const { getFirestore, collection, query, where, getDocs } = await import('firebase/firestore');
         const firestore = getFirestore();
         const userRolesRef = collection(firestore, 'userRoles');
         const userRolesQuery = query(
           userRolesRef,
-          where('companyId', '==', user.companyId),
+          where('companyId', '==', user.permission?.companyId),
           where('userId', '==', user.uid),
-          where('storeId', '==', user.storeId)
+          where('storeId', '==', user.permission?.storeId)
         );
         const userRolesSnap = await getDocs(userRolesQuery);
         if (!userRolesSnap.empty) {
@@ -116,10 +116,10 @@ export class HeaderComponent implements OnInit {
         }
       }
 
-      if (user.companyId) {
+      if (user.permission?.companyId) {
         // Load company-specific data
-        await this.storeService.loadStoresByCompany(user.companyId);
-        await this.productService.loadProducts(user.companyId);
+        await this.storeService.loadStoresByCompany(user.permission?.companyId);
+        await this.productService.loadProducts(user.permission?.companyId);
         
         this.stores.set(this.storeService.getStores());
         this.totalStores.set(this.storeService.totalStores());

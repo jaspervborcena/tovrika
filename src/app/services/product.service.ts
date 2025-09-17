@@ -92,18 +92,18 @@ export class ProductService {
   private async waitForAuth(): Promise<string> {
     return new Promise((resolve, reject) => {
       const currentUser = this.authService.getCurrentUser();
-      if (currentUser?.companyId) {
-        resolve(currentUser.companyId);
-        return;
+        if (currentUser?.permission?.companyId) {
+          resolve(currentUser.permission.companyId);
+          return;
       }
 
       // Use effect to watch for auth changes
       let attempts = 0;
       const checkAuth = () => {
-        const user = this.authService.getCurrentUser();
-        if (user?.companyId) {
-          resolve(user.companyId);
-          return;
+          const user = this.authService.getCurrentUser();
+          if (user?.permission?.companyId) {
+            resolve(user.permission.companyId);
+            return;
         }
         
         attempts++;

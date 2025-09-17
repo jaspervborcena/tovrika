@@ -664,10 +664,14 @@ export class StoresManagementComponent implements OnInit {
     
     try {
       const currentUser = await this.authService.waitForAuth();
-      if (currentUser?.companyId) {
-        await this.storeService.loadStoresByCompany(currentUser.companyId);
-        this.stores = this.storeService.getStoresByCompany(currentUser.companyId);
+      if (currentUser?.permission?.companyId) {
+        await this.storeService.loadStoresByCompany(currentUser.permission.companyId);
+        this.stores = this.storeService.getStoresByCompany(currentUser.permission.companyId);
         this.filteredStores = [...this.stores];
+      } else {
+        // Creator account, no companyId yet, allow empty stores array for onboarding
+        this.stores = [];
+        this.filteredStores = [];
       }
     } catch (error) {
       console.error('Error loading stores:', error);
@@ -677,17 +681,12 @@ export class StoresManagementComponent implements OnInit {
   }
 
   onSearchChange() {
-    if (!this.searchTerm.trim()) {
-      this.filteredStores = [...this.stores];
-      return;
-    }
-
-    const term = this.searchTerm.toLowerCase();
-    this.filteredStores = this.stores.filter(store => 
-      store.storeName.toLowerCase().includes(term) ||
-      store.storeCode.toLowerCase().includes(term) ||
-      store.storeType.toLowerCase().includes(term) ||
-      store.address.toLowerCase().includes(term)
+    const term = this.searchTerm?.toLowerCase() || '';
+    this.filteredStores = (this.stores || []).filter(store => 
+      store.storeName?.toLowerCase().includes(term) ||
+      store.storeCode?.toLowerCase().includes(term) ||
+      store.storeType?.toLowerCase().includes(term) ||
+      store.address?.toLowerCase().includes(term)
     );
   }
 
@@ -742,14 +741,14 @@ export class StoresManagementComponent implements OnInit {
 
     try {
       const currentUser = await this.authService.waitForAuth();
-      if (!currentUser?.companyId) {
+        if (!currentUser?.permission?.companyId) {
         throw new Error('No company ID found');
       }
 
       const formData = this.storeForm.value;
       const storeData: Omit<Store, 'id' | 'createdAt' | 'updatedAt'> = {
         ...formData,
-        companyId: currentUser.companyId
+          companyId: currentUser.permission?.companyId
       };
 
       if (this.editingStore) {

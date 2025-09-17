@@ -1,3 +1,13 @@
+// Enum for authentication error messages
+export enum AuthError {
+  EmailAlreadyInUse = 'This email is already registered.',
+  InvalidEmail = 'The email address is invalid.',
+  WeakPassword = 'The password is too weak.',
+  UserNotFound = 'No user found with this email.',
+  WrongPassword = 'Incorrect password.',
+  TooManyRequests = 'Too many requests. Please try again later.',
+  Default = 'An unexpected error occurred. Please try again.'
+}
 import { Injectable, computed, signal, inject } from '@angular/core';
 import { 
   Auth, 
@@ -19,17 +29,15 @@ export interface User {
   uid: string;
   email: string;
   displayName: string;
-  // roleId: string; // Primary role field matching your structure
-  companyId: string;
-  storeIds: string[]; // Array of store IDs user has access to
   status: 'active' | 'inactive';
-  // permissions: string[];
   createdAt: Date;
   updatedAt: Date;
-  // Legacy fields for backward compatibility
-  // role?: 'admin' | 'manager' | 'cashier';
-  storeId?: string;
   branchId?: string;
+  permission?: {
+    companyId?: string;
+    storeId?: string;
+    roleId?: string;
+  };
 }
 
 @Injectable({
@@ -43,7 +51,7 @@ export class AuthService {
   // Computed properties
   readonly isAuthenticated = computed(() => !!this.currentUserSignal());
   readonly userRole = computed(() => this.currentUserRoleIdSignal());
-  readonly hasCompanyAccess = computed(() => !!this.currentUserSignal()?.companyId);
+  readonly hasCompanyAccess = computed(() => !!(this.currentUserSignal()?.permission?.companyId));
   readonly currentUser = computed(() => this.currentUserSignal());
 
   constructor() {
@@ -107,8 +115,13 @@ export class AuthService {
   }
   // Fetch and set the current user's roleId from userRoles collection
   private async fetchAndSetUserRoleId(user: User | null) {
-    if (!user || !user.companyId || !user.uid || !user.storeId) {
-      this.currentUserRoleIdSignal.set(undefined);
+    if (!user || !user.permission?.companyId || !user.uid || !user.permission?.storeId) {
+      // Fallback to permission field in user document
+      if (user && user.permission && user.permission.roleId) {
+        this.currentUserRoleIdSignal.set(user.permission.roleId);
+      } else {
+        this.currentUserRoleIdSignal.set(undefined);
+      }
       return;
     }
     try {
@@ -117,15 +130,19 @@ export class AuthService {
       const userRolesRef = collection(firestore, 'userRoles');
       const userRolesQuery = query(
         userRolesRef,
-        where('companyId', '==', user.companyId),
+        where('companyId', '==', user.permission.companyId),
         where('userId', '==', user.uid),
-        where('storeId', '==', user.storeId)
+        where('storeId', '==', user.permission.storeId)
       );
       const userRolesSnap = await getDocs(userRolesQuery);
       console.log('[AuthService] userRolesSnap:', userRolesSnap.docs.map(doc => doc.data()));
       if (userRolesSnap.empty) {
-        console.log('[AuthService] No userRoles found for user:', user.uid, 'company:', user.companyId, 'store:', user.storeId);
-        this.currentUserRoleIdSignal.set(undefined);
+        // Fallback to permission field in user document
+        if (user && user.permission && user.permission.roleId) {
+          this.currentUserRoleIdSignal.set(user.permission.roleId);
+        } else {
+          this.currentUserRoleIdSignal.set(undefined);
+        }
         return;
       }
       const userRoleData = userRolesSnap.docs[0].data();
@@ -134,7 +151,12 @@ export class AuthService {
       this.currentUserRoleIdSignal.set(roleId);
     } catch (error) {
       console.error('Error fetching user roleId:', error);
-      this.currentUserRoleIdSignal.set(undefined);
+      // Fallback to permission field in user document
+      if (user && user.permission && user.permission.roleId) {
+        this.currentUserRoleIdSignal.set(user.permission.roleId);
+      } else {
+        this.currentUserRoleIdSignal.set(undefined);
+      }
     }
   }
 
@@ -145,9 +167,22 @@ export class AuthService {
   ) {
     try {
       const credential = await createUserWithEmailAndPassword(this.auth, email, password);
+      // Set permission field if not provided, and avoid undefined values
+      let permission = userData.permission || {};
+  if (typeof userData.permission?.companyId !== 'undefined') permission.companyId = userData.permission.companyId;
+  if (typeof userData.permission?.storeId !== 'undefined') permission.storeId = userData.permission.storeId;
+  // If no companyId and no storeId, set roleId to 'creator' by default
+  if (!userData.permission?.companyId && !userData.permission?.storeId) {
+        permission.roleId = 'creator';
+      }
+      // Remove undefined values explicitly
+      if (typeof permission.companyId === 'undefined') delete permission.companyId;
+      if (typeof permission.storeId === 'undefined') delete permission.storeId;
+      if (typeof permission.roleId === 'undefined') delete permission.roleId;
       const user: User = {
         uid: credential.user.uid,
         ...userData,
+        permission,
         createdAt: new Date(),
         updatedAt: new Date()
       };
@@ -155,9 +190,24 @@ export class AuthService {
       await this.setUserData(user);
       this.currentUserSignal.set(user);
       return user;
-    } catch (error) {
+    } catch (error: any) {
       console.error('Registration error:', error);
-      throw error;
+      // Map Firebase error codes to AuthError enum
+      if (error.code === 'auth/email-already-in-use') {
+        throw new Error(AuthError.EmailAlreadyInUse);
+      } else if (error.code === 'auth/invalid-email') {
+        throw new Error(AuthError.InvalidEmail);
+      } else if (error.code === 'auth/weak-password') {
+        throw new Error(AuthError.WeakPassword);
+      } else if (error.code === 'auth/user-not-found') {
+        throw new Error(AuthError.UserNotFound);
+      } else if (error.code === 'auth/wrong-password') {
+        throw new Error(AuthError.WrongPassword);
+      } else if (error.code === 'auth/too-many-requests') {
+        throw new Error(AuthError.TooManyRequests);
+      } else {
+        throw new Error(AuthError.Default);
+      }
     }
   }
 
@@ -247,7 +297,7 @@ export class AuthService {
   // Check if user has specific permission
   async hasPermission(permission: string): Promise<boolean> {
     const user = this.getCurrentUser();
-    if (!user || !user.companyId || !user.uid || !user.storeId) return false;
+    if (!user || !user.permission?.companyId || !user.uid || !user.permission?.storeId) return false;
 
     // Fetch userRoles for current user
     const { getFirestore, collection, query, where, getDocs } = await import('firebase/firestore');
@@ -255,9 +305,9 @@ export class AuthService {
     const userRolesRef = collection(firestore, 'userRoles');
     const userRolesQuery = query(
       userRolesRef,
-      where('companyId', '==', user.companyId),
+      where('companyId', '==', user.permission.companyId),
       where('userId', '==', user.uid),
-      where('storeId', '==', user.storeId)
+      where('storeId', '==', user.permission.storeId)
     );
     const userRolesSnap = await getDocs(userRolesQuery);
     if (userRolesSnap.empty) return false;
@@ -269,7 +319,7 @@ export class AuthService {
     const roleDefRef = collection(firestore, 'roledefinition');
     const roleDefQuery = query(
       roleDefRef,
-      where('companyId', '==', user.companyId),
+      where('companyId', '==', user.permission.companyId),
       where('roleId', '==', roleId)
     );
     const roleDefSnap = await getDocs(roleDefQuery);

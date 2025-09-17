@@ -22,8 +22,8 @@ export interface Permissions {
 @Injectable({ providedIn: 'root' })
 export class AccessService {
   private defaultPermissions: Permissions = {
-  canViewAccess: true,
-  canViewUserRoles: true,
+    canViewAccess: true,
+    canViewUserRoles: true,
     canAddProducts: true,
     canAddStore: true,
     canAddUser: true,
@@ -39,10 +39,36 @@ export class AccessService {
     canViewOverview: true
   };
 
+  private cashierPermissions: Permissions = {
+  canViewAccess: false,
+  canViewUserRoles: false,
+  canAddProducts: false,
+  canAddStore: false,
+  canAddUser: false,
+  canMakePOS: true,
+  canRemoveUsers: false,
+  canViewInventory: false,
+  canViewPOS: true,
+  canViewProducts: true,
+  canViewStore: false,
+  canViewCompanyProfile: true, // minimal view only
+  canEditCompanyProfile: false,
+  canAddCompanyProfile: false,
+  canViewOverview: false
+  };
+
   private permissionsSignal = signal<Permissions>(this.defaultPermissions);
 
-  setPermissions(permissions: Partial<Permissions>) {
-    this.permissionsSignal.set({ ...this.defaultPermissions, ...permissions });
+  setPermissions(permissions: Partial<Permissions>, role?: string) {
+    if (role === 'cashier') {
+      this.permissionsSignal.set({ ...this.cashierPermissions, ...permissions });
+    } else if (role === 'creator' || role === 'store_manager') {
+      // Both creator and store_manager get all features for now
+      this.permissionsSignal.set({ ...this.defaultPermissions, ...permissions });
+    } else {
+      // Fallback to default permissions
+      this.permissionsSignal.set({ ...this.defaultPermissions, ...permissions });
+    }
   }
 
   get permissions(): Permissions {

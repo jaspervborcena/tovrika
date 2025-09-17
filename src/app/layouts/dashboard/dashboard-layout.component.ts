@@ -3,6 +3,7 @@ import { HostListener } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterOutlet, RouterLink, RouterLinkActive } from '@angular/router';
 import { AuthService } from '../../services/auth.service';
+import { AccessService } from '../../core/services/access.service';
 
 @Component({
   selector: 'app-dashboard-layout',
@@ -11,38 +12,37 @@ import { AuthService } from '../../services/auth.service';
   template: `
     <div class="min-h-screen bg-gray-50 flex flex-col">
       <!-- Sidebar for desktop -->
-  <div class="dashboard-sidebar flex flex-col items-center">
+      <div class="dashboard-sidebar flex flex-col items-center">
         <div class="flex flex-col h-full">
           <!-- Header -->
           <div class="flex-shrink-0 px-4 py-4 border-b border-gray-200 sidebar-header">
             <div class="flex items-center justify-between">
-              <!-- ...existing code... -->
               <div class="font-bold text-2xl mb-4 flex items-center gap-2">
-                Management 
+                Management
               </div>
             </div>
           </div>
-              <a routerLink="/dashboard/access" routerLinkActive="nav-link-active" class="mx-2 flex flex-col items-center justify-center group" title="Access Management">
-                <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z" />
-                </svg>
-                <span class="text-[10px] group-hover:block hidden">Access</span>
-              </a>
-              <a routerLink="/dashboard/company-profile" routerLinkActive="nav-link-active" class="mx-2 flex flex-col items-center justify-center group" title="Company Profile">
-                <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                </svg>
-                <span class="text-[10px] group-hover:block hidden">Profile</span>
-              </a>
-          <!-- Navigation -->
+          <!-- Navigation: Only show allowed links for cashier -->
           <nav class="flex-1 py-4 space-y-2 overflow-y-auto flex flex-col items-center">
-            <a routerLink="/dashboard/overview" routerLinkActive="nav-link-active" class="nav-link flex flex-col items-center justify-center" title="Overview">
-              <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="margin:0 auto;">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2-2z" />
+            <a *ngIf="permissions.canViewCompanyProfile" routerLink="/dashboard/company-profile" routerLinkActive="nav-link-active" class="nav-link flex flex-col items-center justify-center" title="Company Profile">
+              <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
               </svg>
-              <span class="ml-2">Overview</span>
+              <span class="ml-2">Company Profile</span>
             </a>
-            ...existing code for other links with text...
+            <a *ngIf="permissions.canViewProducts" routerLink="/dashboard/products" routerLinkActive="nav-link-active" class="nav-link flex flex-col items-center justify-center" title="Products">
+              <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+              </svg>
+              <span class="ml-2">Products</span>
+            </a>
+            <a *ngIf="permissions.canViewPOS" routerLink="/pos" routerLinkActive="nav-link-active" class="nav-link flex flex-col items-center justify-center" title="Point of Sale">
+              <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span class="ml-2">POS</span>
+            </a>
+            <!-- ...existing code for full menu for other roles, using permissions checks... -->
           </nav>
           <!-- User Info -->
           <div class="flex-shrink-0 border-t border-gray-200 p-4" >
@@ -77,7 +77,12 @@ import { AuthService } from '../../services/auth.service';
 })
 export class DashboardLayoutComponent {
   private authService = inject(AuthService);
+  private accessService = inject(AccessService);
   user = this.authService.getCurrentUser();
+
+  get permissions() {
+    return this.accessService.permissions;
+  }
 
   userInitials(): string {
     const name = this.user?.displayName || this.user?.email || '';
