@@ -61,33 +61,6 @@ export class DashboardComponent implements OnInit {
 
   constructor() {}
 
-  @HostListener('window:resize')
-  onResize() {
-    this.screenWidth = window.innerWidth;
-    this.isMobile = this.screenWidth < 1024;
-  }
-
-  protected closeUserMenu() {
-    this.isUserMenuOpen.set(false);
-  }
-
-  protected async logout() {
-    try {
-      await this.authService.logout();
-    } catch (error) {
-      console.error('Error signing out:', error);
-    }
-  }
-
-  @HostListener('document:click', ['$event'])
-  onDocumentClick(event: Event) {
-    // Close user menu when clicking outside
-    const target = event.target as HTMLElement;
-    if (!target.closest('[data-user-menu]')) {
-      this.isUserMenuOpen.set(false);
-    }
-  }
-
   async ngOnInit() {
     this.screenWidth = window.innerWidth;
     this.isMobile = this.screenWidth < 1024;
@@ -129,6 +102,7 @@ export class DashboardComponent implements OnInit {
         }
       }
     }
+    // If no userRole found, keep default permissions (see everything)
   }
 
   protected onStoreChange(event: Event) {

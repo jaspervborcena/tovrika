@@ -26,6 +26,7 @@ export interface RolePermissions {
   canViewCompanyProfile: boolean;
   canEditCompanyProfile: boolean;
   canAddCompanyProfile: boolean;
+  canViewOverview: boolean;
 }
 
 export interface RoleDefinition {

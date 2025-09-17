@@ -111,6 +111,52 @@ import { UserRole } from '../../../interfaces/user-role.interface';
             <p>Loading user roles...</p>
           </div>
         </div>
+        <!-- Delete Confirmation Modal -->
+        <div class="modal-overlay" *ngIf="showDeleteModal" (click)="cancelDeleteUserRole()">
+          <div class="modal" (click)="$event.stopPropagation()">
+            <div class="modal-header">
+              <h3>Confirm Delete</h3>
+              <button class="close-btn" (click)="cancelDeleteUserRole()">×</button>
+            </div>
+            <div class="modal-body">
+              <ng-container *ngIf="userRoleToDelete">
+                <div *ngIf="userRoleToDelete.roleId === 'cashier' || userRoleToDelete.roleId === 'store_manager'">
+                  <p style="color:#e53e3e;font-weight:500;">You cannot delete the <b>{{ userRoleToDelete.roleId | titlecase }}</b> role.</p>
+                </div>
+                <div *ngIf="userRoleToDelete.roleId !== 'cashier' && userRoleToDelete.roleId !== 'store_manager'">
+                  <p>Are you sure you want to delete the role assignment for <b>{{ userRoleToDelete.email }}</b>?</p>
+                </div>
+              </ng-container>
+            </div>
+            <div class="modal-footer">
+              <button class="btn btn-secondary" (click)="cancelDeleteUserRole()">Cancel</button>
+              <button class="btn btn-danger" (click)="confirmDeleteUserRole()" [disabled]="userRoleToDelete?.roleId === 'cashier' || userRoleToDelete?.roleId === 'store_manager'">Delete</button>
+            </div>
+          </div>
+        </div>
+        <!-- Delete Confirmation Modal -->
+        <div class="modal-overlay" *ngIf="showDeleteModal" (click)="cancelDeleteUserRole()">
+          <div class="modal" (click)="$event.stopPropagation()">
+            <div class="modal-header">
+              <h3>Confirm Delete</h3>
+              <button class="close-btn" (click)="cancelDeleteUserRole()">×</button>
+            </div>
+            <div class="modal-body">
+              <ng-container *ngIf="userRoleToDelete">
+                <div *ngIf="userRoleToDelete.roleId === 'cashier' || userRoleToDelete.roleId === 'store_manager'">
+                  <p style="color:#e53e3e;font-weight:500;">You cannot delete the <b>{{ userRoleToDelete.roleId | titlecase }}</b> role.</p>
+                </div>
+                <div *ngIf="userRoleToDelete.roleId !== 'cashier' && userRoleToDelete.roleId !== 'store_manager'">
+                  <p>Are you sure you want to delete the role assignment for <b>{{ userRoleToDelete.email }}</b>?</p>
+                </div>
+              </ng-container>
+            </div>
+            <div class="modal-footer">
+              <button class="btn btn-secondary" (click)="cancelDeleteUserRole()">Cancel</button>
+              <button class="btn btn-danger" (click)="confirmDeleteUserRole()" [disabled]="userRoleToDelete?.roleId === 'cashier' || userRoleToDelete?.roleId === 'store_manager'">Delete</button>
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- Add/Edit User Role Modal -->
@@ -154,7 +200,8 @@ import { UserRole } from '../../../interfaces/user-role.interface';
               <select 
                 id="roleId"
                 [(ngModel)]="userRoleForm.roleId"
-                class="form-select">
+                class="form-select"
+                [disabled]="userRoleForm.roleId === 'cashier'">
                 <option value="">Select a role</option>
                 <option 
                   *ngFor="let role of availableRoles" 
@@ -589,6 +636,8 @@ import { UserRole } from '../../../interfaces/user-role.interface';
   `]
 })
 export class UserRolesComponent implements OnInit {
+  showDeleteModal: boolean = false;
+  userRoleToDelete: UserRole | null = null;
   findUserError: string = '';
   searchUserEmail: string = '';
   foundUser: any = null;
@@ -766,23 +815,39 @@ export class UserRolesComponent implements OnInit {
   }
 
   async deleteUserRole(userRole: UserRole) {
-    if (confirm(`Are you sure you want to remove the role assignment for ${userRole.email}?`)) {
-      this.isLoading = true;
-      
-      try {
-        await this.userRoleService.deleteUserRole(userRole.id!);
-        await this.loadData();
-      } catch (error) {
-        console.error('Error deleting user role:', error);
-        alert('Error deleting user role. Please try again.');
-      } finally {
-        this.isLoading = false;
-      }
+    this.showDeleteModal = true;
+    this.userRoleToDelete = userRole;
+  }
+
+  async confirmDeleteUserRole() {
+    if (!this.userRoleToDelete) return;
+    // Prevent deletion of cashier and store_manager roles
+    if (this.userRoleToDelete.roleId === 'cashier' || this.userRoleToDelete.roleId === 'store_manager') {
+      this.showDeleteModal = false;
+      this.userRoleToDelete = null;
+      return;
+    }
+    this.isLoading = true;
+    try {
+      await this.userRoleService.deleteUserRole(this.userRoleToDelete.id!);
+      await this.loadData();
+    } catch (error) {
+      console.error('Error deleting user role:', error);
+      // Optionally show error modal
+    } finally {
+      this.isLoading = false;
+      this.showDeleteModal = false;
+      this.userRoleToDelete = null;
     }
   }
 
+  cancelDeleteUserRole() {
+    this.showDeleteModal = false;
+    this.userRoleToDelete = null;
+  }
+
   getStoreName(storeId: string): string {
-    const store = this.availableStores.find(s => s.id === storeId);
+    const store = this.availableStores.find((s: Store) => s.id === storeId);
     return store?.storeName || 'Unknown Store';
   }
 }

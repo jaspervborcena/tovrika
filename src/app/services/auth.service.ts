@@ -38,17 +38,11 @@ export interface User {
 export class AuthService {
   private readonly currentUserSignal = signal<User | null>(null);
   private readonly isLoading = signal<boolean>(true);
+  private readonly currentUserRoleIdSignal = signal<string | undefined>(undefined);
 
   // Computed properties
   readonly isAuthenticated = computed(() => !!this.currentUserSignal());
-  readonly userRole = computed(() => {
-    const user = this.currentUserSignal();
-    if (!user || !user.companyId || !user.uid || !user.storeId) return undefined;
-    // This is a synchronous computed, so we cannot await Firestore calls here.
-    // Instead, you should use an async method to get the user's roleId from userRoles collection when needed.
-    // For template use, consider storing the roleId in a signal after fetching it asynchronously elsewhere in your app.
-    return undefined;
-  });
+  readonly userRole = computed(() => this.currentUserRoleIdSignal());
   readonly hasCompanyAccess = computed(() => !!this.currentUserSignal()?.companyId);
   readonly currentUser = computed(() => this.currentUserSignal());
 
@@ -67,7 +61,7 @@ export class AuthService {
         try {
           const userData = await this.getUserData(firebaseUser.uid);
           this.currentUserSignal.set(userData);
-          
+          await this.fetchAndSetUserRoleId(userData);
           // Check remember me preference
           const rememberMe = localStorage.getItem('rememberMe') === 'true';
           if (!rememberMe) {
@@ -82,9 +76,11 @@ export class AuthService {
           // If we can't load user data, sign them out
           await signOut(this.auth);
           this.currentUserSignal.set(null);
+          this.currentUserRoleIdSignal.set(undefined);
         }
       } else {
         this.currentUserSignal.set(null);
+        this.currentUserRoleIdSignal.set(undefined);
       }
       this.isLoading.set(false);
     });
@@ -98,16 +94,47 @@ export class AuthService {
       } else {
         localStorage.removeItem('rememberMe');
       }
-      
       const credential = await signInWithEmailAndPassword(this.auth, email, password);
       const userData = await this.getUserData(credential.user.uid);
       this.currentUserSignal.set(userData);
-      
+      await this.fetchAndSetUserRoleId(userData);
       console.log('Login successful:', userData?.email);
       return userData;
     } catch (error) {
       console.error('Login error:', error);
       throw error;
+    }
+  }
+  // Fetch and set the current user's roleId from userRoles collection
+  private async fetchAndSetUserRoleId(user: User | null) {
+    if (!user || !user.companyId || !user.uid || !user.storeId) {
+      this.currentUserRoleIdSignal.set(undefined);
+      return;
+    }
+    try {
+      const { getFirestore, collection, query, where, getDocs } = await import('firebase/firestore');
+      const firestore = getFirestore();
+      const userRolesRef = collection(firestore, 'userRoles');
+      const userRolesQuery = query(
+        userRolesRef,
+        where('companyId', '==', user.companyId),
+        where('userId', '==', user.uid),
+        where('storeId', '==', user.storeId)
+      );
+      const userRolesSnap = await getDocs(userRolesQuery);
+      console.log('[AuthService] userRolesSnap:', userRolesSnap.docs.map(doc => doc.data()));
+      if (userRolesSnap.empty) {
+        console.log('[AuthService] No userRoles found for user:', user.uid, 'company:', user.companyId, 'store:', user.storeId);
+        this.currentUserRoleIdSignal.set(undefined);
+        return;
+      }
+      const userRoleData = userRolesSnap.docs[0].data();
+      const roleId = userRoleData['roleId'];
+      console.log('[AuthService] Setting currentUserRoleIdSignal to:', roleId);
+      this.currentUserRoleIdSignal.set(roleId);
+    } catch (error) {
+      console.error('Error fetching user roleId:', error);
+      this.currentUserRoleIdSignal.set(undefined);
     }
   }
 

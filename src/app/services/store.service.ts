@@ -221,29 +221,24 @@ export class StoreService {
   async createStore(store: Omit<Store, 'id' | 'createdAt' | 'updatedAt'>) {
     try {
       const storesRef = collection(this.firestore, 'stores');
-      
       const newStore: Omit<Store, 'id'> = {
         ...store,
         createdAt: new Date(),
         updatedAt: new Date()
       };
-
       const docRef = await addDoc(storesRef, newStore);
       const createdStore: Store = {
         id: docRef.id,
         ...newStore
       };
-
       // Update the signal
       this.storesSignal.update(stores => [...stores, createdStore]);
-      
       // Update the current user's storeIds array
       try {
         const currentUser = this.authService.getCurrentUser();
         if (currentUser) {
           const currentStoreIds = (currentUser as any).storeIds || [];
           const updatedStoreIds = [...currentStoreIds, docRef.id];
-          
           await this.authService.updateUserData({ 
             storeIds: updatedStoreIds
           } as any);
@@ -253,7 +248,9 @@ export class StoreService {
         console.error('Error updating user storeIds:', userUpdateError);
         // Store is created, but user update failed - this is not critical
       }
-      
+      // Add default roles for this store
+      const defaultRolesService = new (await import('./default-roles.service')).DefaultRolesService(this.firestore);
+      await defaultRolesService.createDefaultRoles(store.companyId, docRef.id);
       return docRef.id;
     } catch (error) {
       console.error('Error creating store:', error);

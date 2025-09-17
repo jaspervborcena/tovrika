@@ -2,6 +2,8 @@ import { Injectable } from '@angular/core';
 import { signal } from '@angular/core';
 
 export interface Permissions {
+  canViewAccess: boolean;
+  canViewUserRoles: boolean;
   canAddProducts: boolean;
   canAddStore: boolean;
   canAddUser: boolean;
@@ -20,19 +22,21 @@ export interface Permissions {
 @Injectable({ providedIn: 'root' })
 export class AccessService {
   private defaultPermissions: Permissions = {
-    canAddProducts: false,
-    canAddStore: false,
-    canAddUser: false,
-    canMakePOS: false,
-    canRemoveUsers: false,
-    canViewInventory: false,
+  canViewAccess: true,
+  canViewUserRoles: true,
+    canAddProducts: true,
+    canAddStore: true,
+    canAddUser: true,
+    canMakePOS: true,
+    canRemoveUsers: true,
+    canViewInventory: true,
     canViewPOS: true,
     canViewProducts: true,
-    canViewStore: false,
+    canViewStore: true,
     canViewCompanyProfile: true,
     canEditCompanyProfile: true,
     canAddCompanyProfile: true,
-    canViewOverview: false
+    canViewOverview: true
   };
 
   private permissionsSignal = signal<Permissions>(this.defaultPermissions);

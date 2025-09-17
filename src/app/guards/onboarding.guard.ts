@@ -12,49 +12,90 @@ export const onboardingGuard: CanActivateFn = async (route, state) => {
   const router = inject(Router);
 
   const user = authService.currentUser();
-  
+
   if (!user) {
-    console.warn('OnboardingGuard: No authenticated user');
     router.navigate(['/login']);
     return false;
   }
 
   if (!user.companyId) {
-    console.warn('OnboardingGuard: User has no company association');
     router.navigate(['/dashboard/company-profile']);
     return false;
   }
 
   try {
-    // Check if company profile exists
+    // Load and validate company
     await companyService.loadCompanies();
     const company = await companyService.getActiveCompany();
-    
     if (!company) {
-      console.info('OnboardingGuard: No company profile found, redirecting to setup');
       router.navigate(['/dashboard/company-profile']);
       return false;
     }
 
-    // Check if company has stores
+    // Load stores for the company
     await storeService.loadStoresByCompany(user.companyId);
     const stores = storeService.getStoresByCompany(user.companyId);
-    
-    if (stores.length === 0 && !state.url.includes('stores')) {
-      console.info('OnboardingGuard: No stores configured, redirecting to stores setup');
+
+    // Check if user has access to any valid store
+    const hasValidStore = user.storeIds?.some(storeId =>
+      stores.some(store => store.id === storeId)
+    );
+
+    if (!hasValidStore && !state.url.includes('stores')) {
       router.navigate(['/dashboard/stores']);
       return false;
     }
 
-    // Check role-based access
+    // Role-based access control
     if (route.data?.['roles']) {
       const requiredRoles = route.data['roles'] as string[];
-      const userRole = authService.userRole();
-      
-      console.log(`OnboardingGuard: Role check - Required: [${requiredRoles.join(', ')}], User: ${userRole}, URL: ${state.url}`);
-      
+      let userRole: string | undefined;
+
+      try {
+        const { getFirestore, collection, query, where, getDocs } = await import('firebase/firestore');
+        const firestore = getFirestore();
+        const userRolesRef = collection(firestore, 'userRoles');
+
+        // Use stores from storeService for role lookup
+        if (stores.length === 1) {
+          // Only one store, no need to loop
+          const storeId = stores[0].id;
+          const userRolesQuery = query(
+            userRolesRef,
+            where('companyId', '==', user.companyId),
+            where('userId', '==', user.uid),
+            where('storeId', '==', storeId)
+          );
+          const userRolesSnap = await getDocs(userRolesQuery);
+          if (!userRolesSnap.empty) {
+            const userRoleData = userRolesSnap.docs[0].data();
+            userRole = userRoleData['roleId'];
+            console.log(`[OnboardingGuard] Single store - Role: ${userRole}, Store: ${storeId}`);
+          }
+        } else {
+          // Multiple stores, loop through stores
+          for (const store of stores) {
+            const storeId = store.id;
+            const userRolesQuery = query(
+              userRolesRef,
+              where('companyId', '==', user.companyId),
+              where('userId', '==', user.uid),
+              where('storeId', '==', storeId)
+            );
+            const userRolesSnap = await getDocs(userRolesQuery);
+            if (!userRolesSnap.empty) {
+              const userRoleData = userRolesSnap.docs[0].data();
+              userRole = userRoleData['roleId'];
+              console.log(`[OnboardingGuard] Multi-store - Role: ${userRole}, Store: ${storeId}`);
+              break;
+            }
+          }
+        }
+      } catch (roleError) {
+        console.error('[OnboardingGuard] Error fetching userRoles:', roleError);
+      }
+
       if (!userRole || !requiredRoles.includes(userRole)) {
-        console.warn(`OnboardingGuard: Role check failed. Required: ${requiredRoles.join(', ')}, User: ${userRole}`);
         router.navigate(['/dashboard/overview']);
         return false;
       }
@@ -62,11 +103,12 @@ export const onboardingGuard: CanActivateFn = async (route, state) => {
 
     return true;
   } catch (error) {
-    console.error('OnboardingGuard: Error checking company setup', error);
+    console.error('[OnboardingGuard] Unexpected error:', error);
     router.navigate(['/dashboard/company-profile']);
     return false;
   }
 };
+
 
 export const companyProfileGuard: CanActivateFn = (route, state) => {
   const authService = inject(AuthService);

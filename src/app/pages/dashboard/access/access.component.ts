@@ -1075,7 +1075,8 @@ export class AccessComponent implements OnInit {
         canMakePOS: false,
         canViewCompanyProfile: false,
         canEditCompanyProfile: false,
-        canAddCompanyProfile: false
+        canAddCompanyProfile: false,
+        canViewOverview: false
       },
       storeId: this.selectedStoreId
     };
@@ -1170,7 +1171,7 @@ export class AccessComponent implements OnInit {
   }
 
   isDefaultRole(roleId: string): boolean {
-    const defaultRoles = ['admin', 'manager', 'employee'];
+  const defaultRoles = ['admin', 'manager', 'employee', 'store_manager', 'cashier', 'creator'];
     return defaultRoles.includes(roleId.toLowerCase());
   }
 }

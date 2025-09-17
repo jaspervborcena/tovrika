@@ -68,22 +68,22 @@ export const routes: Routes = [
       },
       // Routes requiring onboarding completion
       {
-        path: 'overview',
-        loadComponent: () => import('./pages/dashboard/overview/overview.component').then(m => m.OverviewComponent),
-        canActivate: [onboardingGuard],
-        data: { roles: ['admin', 'manager'] }
+  path: 'overview',
+  loadComponent: () => import('./pages/dashboard/overview/overview.component').then(m => m.OverviewComponent),
+  canActivate: [onboardingGuard],
+  data: { roles: ['creator', 'store_manager', 'cashier'] }
       },
       {
-        path: 'stores',
-        loadComponent: () => import('./pages/dashboard/stores-management/stores-management.component').then(m => m.StoresManagementComponent),
-        canActivate: [onboardingGuard],
-        data: { roles: ['admin', 'manager'] }
+  path: 'stores',
+  loadComponent: () => import('./pages/dashboard/stores-management/stores-management.component').then(m => m.StoresManagementComponent),
+  canActivate: [onboardingGuard],
+  data: { roles: ['creator', 'store_manager', 'cashier'] }
       },
       {
-        path: 'branches',
-        loadComponent: () => import('./pages/dashboard/branches/branches.component').then(m => m.BranchesComponent),
-        canActivate: [onboardingGuard],
-        data: { roles: ['admin', 'manager'] }
+  path: 'branches',
+  loadComponent: () => import('./pages/dashboard/branches/branches.component').then(m => m.BranchesComponent),
+  canActivate: [onboardingGuard],
+  data: { roles: ['creator', 'store_manager', 'cashier'] }
       },
       {
   path: 'access',
@@ -94,16 +94,16 @@ export const routes: Routes = [
   loadComponent: () => import('./pages/dashboard/user-roles/user-roles.component').then(m => m.UserRolesComponent)
       },
       {
-        path: 'products',
-        loadComponent: () => import('./pages/dashboard/products/product-management.component').then(m => m.ProductManagementComponent),
-        canActivate: [onboardingGuard],
-        data: { roles: ['admin', 'manager'] }
+  path: 'products',
+  loadComponent: () => import('./pages/dashboard/products/product-management.component').then(m => m.ProductManagementComponent),
+  canActivate: [onboardingGuard],
+  data: { roles: ['creator', 'store_manager', 'cashier'] }
       },
       {
-        path: 'inventory',
-        loadComponent: () => import('./pages/dashboard/inventory/inventory.component').then(m => m.InventoryComponent),
-        canActivate: [onboardingGuard],
-        data: { roles: ['admin', 'manager'] }
+  path: 'inventory',
+  loadComponent: () => import('./pages/dashboard/inventory/inventory.component').then(m => m.InventoryComponent),
+  canActivate: [onboardingGuard],
+  data: { roles: ['creator', 'store_manager', 'cashier'] }
       },
       {
         path: 'pos',
