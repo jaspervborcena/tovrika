@@ -258,7 +258,7 @@ export class AccessComponent implements OnInit {
     try {
       const user = await this.authService.getCurrentUser();
       if (user?.permission?.companyId) {
-        this.stores = await this.storeService.getStoresByCompany(user.permission.companyId);
+        this.stores = this.storeService.getStoresByCompany(user.permission.companyId);
       }
     } catch (error) {
       console.error('Error loading stores:', error);

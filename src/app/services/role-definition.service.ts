@@ -60,14 +60,14 @@ export class RoleDefinitionService {
     try {
       const currentUser = await this.authService.waitForAuth();
       
-      if (!currentUser || !currentUser.companyId) {
+      if (!currentUser || !currentUser.permission?.companyId) {
         console.warn('No current user or companyId found');
         this.roleDefinitionsSignal.set([]);
         return;
       }
 
       const roleDefsRef = collection(this.firestore, 'roleDefinition');
-      const q = query(roleDefsRef, where('companyId', '==', currentUser.companyId));
+      const q = query(roleDefsRef, where('companyId', '==', currentUser.permission.companyId));
       
       const querySnapshot = await getDocs(q);
        console.log('roleDefinitionsSignal querySnapshot',querySnapshot);
@@ -91,14 +91,14 @@ export class RoleDefinitionService {
   async createRoleDefinition(roleData: Omit<RoleDefinition, 'id' | 'createdAt' | 'updatedAt' | 'companyId'>): Promise<void> {
     try {
       const currentUser = await this.authService.waitForAuth();
-      if (!currentUser || !currentUser.companyId) {
+      if (!currentUser || !currentUser.permission?.companyId) {
         throw new Error('No authenticated user or company ID found');
       }
 
       const roleDefsRef = collection(this.firestore, 'roleDefinition');
       const docData = {
         ...roleData,
-        companyId: currentUser.companyId,
+        companyId: currentUser.permission.companyId,
         storeId: roleData.storeId || null,
         createdAt: new Date(),
         updatedAt: new Date()
@@ -114,20 +114,20 @@ export class RoleDefinitionService {
   async updateRoleDefinition(roleId: string, roleData: Partial<RoleDefinition>): Promise<void> {
     try {
       const currentUser = await this.authService.waitForAuth();
-      if (!currentUser || !currentUser.companyId) {
+      if (!currentUser || !currentUser.permission?.companyId) {
         throw new Error('No authenticated user or company ID found');
       }
 
       // Verify the role belongs to the current user's company
       const existingRole = this.getRoleDefinition(roleId);
-      if (!existingRole || existingRole.companyId !== currentUser.companyId) {
+      if (!existingRole || existingRole.companyId !== currentUser.permission.companyId) {
         throw new Error('Role not found or access denied');
       }
 
       const roleDocRef = doc(this.firestore, 'roleDefinition', roleId);
       await updateDoc(roleDocRef, {
         ...roleData,
-        companyId: currentUser.companyId, // Ensure companyId cannot be changed
+        companyId: currentUser.permission.companyId, // Ensure companyId cannot be changed
         updatedAt: new Date()
       });
       await this.loadRoleDefinitions(); // Refresh the data
@@ -140,13 +140,13 @@ export class RoleDefinitionService {
   async deleteRoleDefinition(roleId: string): Promise<void> {
     try {
       const currentUser = await this.authService.waitForAuth();
-      if (!currentUser || !currentUser.companyId) {
+      if (!currentUser || !currentUser.permission?.companyId) {
         throw new Error('No authenticated user or company ID found');
       }
 
       // Verify the role belongs to the current user's company
       const existingRole = this.getRoleDefinition(roleId);
-      if (!existingRole || existingRole.companyId !== currentUser.companyId) {
+      if (!existingRole || existingRole.companyId !== currentUser.permission.companyId) {
         throw new Error('Role not found or access denied');
       }
 
@@ -161,23 +161,23 @@ export class RoleDefinitionService {
 
   getRoleDefinition(roleId: string): RoleDefinition | undefined {
     const currentUser = this.authService.currentUser();
-    if (!currentUser || !currentUser.companyId) {
+    if (!currentUser || !currentUser.permission?.companyId) {
       return undefined;
     }
     
     return this.roleDefinitionsSignal().find(role => 
-      role.id === roleId && role.companyId === currentUser.companyId
+      role.id === roleId && role.companyId === currentUser.permission!.companyId
     );
   }
 
   getRoleDefinitionByRoleId(roleId: string): RoleDefinition | undefined {
     const currentUser = this.authService.currentUser();
-    if (!currentUser || !currentUser.companyId) {
+    if (!currentUser || !currentUser.permission?.companyId) {
       return undefined;
     }
     
     return this.roleDefinitionsSignal().find(role => 
-      role.roleId === roleId && role.companyId === currentUser.companyId
+      role.roleId === roleId && role.companyId === currentUser.permission!.companyId
     );
   }
 
@@ -185,14 +185,14 @@ export class RoleDefinitionService {
   getCompanyRoleDefinitions(): RoleDefinition[] {
     const currentUser = this.authService.currentUser();
     
-    if (!currentUser || !currentUser.companyId) {
+    if (!currentUser || !currentUser.permission?.companyId) {
       return [];
     }
     
     const allRoles = this.roleDefinitionsSignal();
     
     const filteredRoles = allRoles.filter(role => {
-      const matches = role.companyId === currentUser.companyId;
+      const matches = role.companyId === currentUser.permission?.companyId;
       return matches;
     });
     

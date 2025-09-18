@@ -233,21 +233,7 @@ export class StoreService {
       };
       // Update the signal
       this.storesSignal.update(stores => [...stores, createdStore]);
-      // Update the current user's storeIds array
-      try {
-        const currentUser = this.authService.getCurrentUser();
-        if (currentUser) {
-          const currentStoreIds = (currentUser as any).storeIds || [];
-          const updatedStoreIds = [...currentStoreIds, docRef.id];
-          await this.authService.updateUserData({ 
-            storeIds: updatedStoreIds
-          } as any);
-          console.log('User storeIds updated successfully');
-        }
-      } catch (userUpdateError) {
-        console.error('Error updating user storeIds:', userUpdateError);
-        // Store is created, but user update failed - this is not critical
-      }
+      
       // Add default roles for this store
       const defaultRolesService = new (await import('./default-roles.service')).DefaultRolesService(this.firestore);
       await defaultRolesService.createDefaultRoles(store.companyId, docRef.id);

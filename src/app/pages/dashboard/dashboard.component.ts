@@ -146,10 +146,10 @@ export class DashboardComponent implements OnInit {
       const user = this.authService.getCurrentUser();
       if (!user) return;
 
-      if (user.companyId) {
+      if (user.permission?.companyId) {
         // Load company-specific data
-        await this.storeService.loadStoresByCompany(user.companyId);
-        await this.productService.loadProducts(user.companyId);
+        await this.storeService.loadStoresByCompany(user.permission.companyId);
+        await this.productService.loadProducts(user.permission.companyId);
         
         this.stores.set(this.storeService.getStores());
         this.totalStores.set(this.stores().length);

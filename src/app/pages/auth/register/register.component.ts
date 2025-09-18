@@ -36,9 +36,8 @@ export class RegisterComponent {
         const user = await this.authService.registerUser(email!, password!, {
           email: email!,
           displayName: displayName!,
-          companyId: '', // Will be set when company is created
-          storeIds: [], // Will be populated when stores are added
           status: 'active'
+          // permission will be set when company/store access is granted
         });
         
         // Admin should create a company first

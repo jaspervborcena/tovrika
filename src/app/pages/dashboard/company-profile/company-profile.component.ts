@@ -537,7 +537,7 @@ export class CompanyProfileComponent {
 
   // Computed values
   protected currentCompany = computed(() => this.companyService.companies()[0]);
-  protected isCreatingCompany = computed(() => !this.authService.getCurrentUser()?.companyId);
+  protected isCreatingCompany = computed(() => !this.authService.getCurrentUser()?.permission?.companyId);
   protected currentUser = computed(() => this.authService.getCurrentUser());
   protected permissions = computed(() => this.accessService.permissions);
   protected canEditOrAddCompanyProfile = computed(() => {
@@ -596,7 +596,7 @@ export class CompanyProfileComponent {
           taxId: company.taxId || '',
           website: company.website || ''
         });
-      } else if (user && !user.companyId) {
+      } else if (user && !user.permission?.companyId) {
         // New company creation - pre-populate with user email if available
         this.profileForm.patchValue({
           name: '',
