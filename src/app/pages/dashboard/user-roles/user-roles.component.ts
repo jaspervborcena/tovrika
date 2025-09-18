@@ -120,40 +120,12 @@ import { UserRole } from '../../../interfaces/user-role.interface';
             </div>
             <div class="modal-body">
               <ng-container *ngIf="userRoleToDelete">
-                <div *ngIf="userRoleToDelete.roleId === 'cashier' || userRoleToDelete.roleId === 'store_manager'">
-                  <p style="color:#e53e3e;font-weight:500;">You cannot delete the <b>{{ userRoleToDelete.roleId | titlecase }}</b> role.</p>
-                </div>
-                <div *ngIf="userRoleToDelete.roleId !== 'cashier' && userRoleToDelete.roleId !== 'store_manager'">
-                  <p>Are you sure you want to delete the role assignment for <b>{{ userRoleToDelete.email }}</b>?</p>
-                </div>
+                <p>Are you sure you want to delete the role assignment for <b>{{ userRoleToDelete.email }}</b>?</p>
               </ng-container>
             </div>
             <div class="modal-footer">
               <button class="btn btn-secondary" (click)="cancelDeleteUserRole()">Cancel</button>
-              <button class="btn btn-danger" (click)="confirmDeleteUserRole()" [disabled]="userRoleToDelete?.roleId === 'cashier' || userRoleToDelete?.roleId === 'store_manager'">Delete</button>
-            </div>
-          </div>
-        </div>
-        <!-- Delete Confirmation Modal -->
-        <div class="modal-overlay" *ngIf="showDeleteModal" (click)="cancelDeleteUserRole()">
-          <div class="modal" (click)="$event.stopPropagation()">
-            <div class="modal-header">
-              <h3>Confirm Delete</h3>
-              <button class="close-btn" (click)="cancelDeleteUserRole()">×</button>
-            </div>
-            <div class="modal-body">
-              <ng-container *ngIf="userRoleToDelete">
-                <div *ngIf="userRoleToDelete.roleId === 'cashier' || userRoleToDelete.roleId === 'store_manager'">
-                  <p style="color:#e53e3e;font-weight:500;">You cannot delete the <b>{{ userRoleToDelete.roleId | titlecase }}</b> role.</p>
-                </div>
-                <div *ngIf="userRoleToDelete.roleId !== 'cashier' && userRoleToDelete.roleId !== 'store_manager'">
-                  <p>Are you sure you want to delete the role assignment for <b>{{ userRoleToDelete.email }}</b>?</p>
-                </div>
-              </ng-container>
-            </div>
-            <div class="modal-footer">
-              <button class="btn btn-secondary" (click)="cancelDeleteUserRole()">Cancel</button>
-              <button class="btn btn-danger" (click)="confirmDeleteUserRole()" [disabled]="userRoleToDelete?.roleId === 'cashier' || userRoleToDelete?.roleId === 'store_manager'">Delete</button>
+              <button class="btn btn-danger" (click)="confirmDeleteUserRole()">Delete</button>
             </div>
           </div>
         </div>
@@ -822,19 +794,20 @@ export class UserRolesComponent implements OnInit {
 
   async confirmDeleteUserRole() {
     if (!this.userRoleToDelete) return;
-    // Prevent deletion of cashier and store_manager roles
-    if (this.userRoleToDelete.roleId === 'cashier' || this.userRoleToDelete.roleId === 'store_manager') {
-      this.showDeleteModal = false;
-      this.userRoleToDelete = null;
-      return;
-    }
+    
+    console.log('🔍 [UserRoles] Attempting to delete user role:', this.userRoleToDelete);
+    console.log('🔍 [UserRoles] User role ID:', this.userRoleToDelete.id);
+    console.log('🔍 [UserRoles] User role email:', this.userRoleToDelete.email);
+    console.log('🔍 [UserRoles] User role roleId:', this.userRoleToDelete.roleId);
+    
     this.isLoading = true;
     try {
       await this.userRoleService.deleteUserRole(this.userRoleToDelete.id!);
+      console.log('🔍 [UserRoles] Successfully deleted user role');
       await this.loadData();
     } catch (error) {
-      console.error('Error deleting user role:', error);
-      // Optionally show error modal
+      console.error('🔍 [UserRoles] Error deleting user role:', error);
+      alert(`Failed to delete user role: ${error}`);
     } finally {
       this.isLoading = false;
       this.showDeleteModal = false;

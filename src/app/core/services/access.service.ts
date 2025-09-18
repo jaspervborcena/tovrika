@@ -98,4 +98,9 @@ export class AccessService {
   canRemove(key: keyof Permissions): boolean {
     return !!this.permissionsSignal()[key];
   }
+
+  reset() {
+    console.log('🔍 [AccessService] Resetting permissions to default');
+    this.permissionsSignal.set(this.defaultPermissions);
+  }
 }

@@ -156,8 +156,11 @@ export class DashboardComponent implements OnInit {
     } else if (roleId === 'store_manager') {
       console.log('🔍 [Dashboard Debug] Setting store_manager permissions');
       this.accessService.setPermissions({}, 'store_manager');
+    } else if (roleId === 'creator') {
+      console.log('🔍 [Dashboard Debug] Setting creator permissions (built-in role)');
+      this.accessService.setPermissions({}, 'creator');
     } else {
-      // For other roles, use roledefinition permissions
+      // For other custom roles, use roledefinition permissions
       const roleDefRef = collection(this.firestore, 'roledefinition');
       const roleDefQuery = query(
         roleDefRef,
@@ -207,6 +210,10 @@ export class DashboardComponent implements OnInit {
   }
 
   get permissions() {
-    return this.accessService.permissions || {};
+    const currentPermissions = this.accessService.permissions || {};
+    console.log('🔍 [Dashboard] Current permissions getter called:', currentPermissions);
+    console.log('🔍 [Dashboard] canViewProducts:', currentPermissions.canViewProducts);
+    console.log('🔍 [Dashboard] canViewPOS:', currentPermissions.canViewPOS);
+    return currentPermissions;
   }
 }

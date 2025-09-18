@@ -190,12 +190,16 @@ import { AuthService } from '../../../services/auth.service';
                 id="roleId" 
                 class="form-input" 
                 [(ngModel)]="newRoleId" 
-                placeholder="Enter role name">
+                placeholder="Enter role name"
+                (input)="validateRoleName()">
               <div class="form-help">Role name will be converted to lowercase with underscores</div>
+              <div *ngIf="roleNameError" class="form-error" style="color: #e53e3e; font-size: 0.875rem; margin-top: 0.25rem;">
+                {{ roleNameError }}
+              </div>
             </div>
             <div class="form-group">
               <label for="storeId">Store</label>
-              <select id="storeId" class="form-input" [(ngModel)]="selectedStoreId">
+              <select id="storeId" class="form-input" [(ngModel)]="selectedStoreId" (change)="validateRoleName()">
                 <option value="">Select a store</option>
                 <option *ngFor="let store of stores" [value]="store.id">{{ store.name }}</option>
               </select>
@@ -203,7 +207,7 @@ import { AuthService } from '../../../services/auth.service';
           </div>
           <div class="modal-footer">
             <button class="btn btn-secondary" (click)="closeAddRoleModal()">Cancel</button>
-            <button class="btn btn-primary" (click)="createNewRole()" [disabled]="!newRoleId.trim()">
+            <button class="btn btn-primary" (click)="createNewRole()" [disabled]="!newRoleId.trim() || roleNameError">
               Create Role
             </button>
           </div>
@@ -223,6 +227,7 @@ export class AccessComponent implements OnInit {
   isLoading = false;
   showAddRoleModal = false;
   newRoleId = '';
+  roleNameError = '';
   selectedStoreId = '';
   stores: any[] = [];
 
@@ -334,17 +339,72 @@ export class AccessComponent implements OnInit {
 
   addNewRole(): void {
     this.newRoleId = '';
+    this.roleNameError = '';
     this.selectedStoreId = '';
     this.showAddRoleModal = true;
   }
 
-  async createNewRole(): Promise<void> {
+  validateRoleName(): void {
     if (!this.newRoleId.trim()) {
+      this.roleNameError = '';
       return;
     }
+    
     const roleId = this.newRoleId.toLowerCase().replace(/\s+/g, '_');
-    if (this.roles.some(role => role.roleId === roleId)) {
-      alert('A role with this name already exists.');
+    
+    // Check for duplicates with same roleId, companyId, and storeId combination
+    const duplicateRole = this.roles.find(role => 
+      role.roleId === roleId && 
+      role.storeId === (this.selectedStoreId || '')
+    );
+    
+    if (duplicateRole) {
+      if (this.selectedStoreId) {
+        this.roleNameError = `A role with the name "${roleId}" already exists in the selected store.`;
+      } else {
+        this.roleNameError = `A role with the name "${roleId}" already exists at the company level.`;
+      }
+      return;
+    }
+    
+    // Check for reserved names
+    const reservedRoles = ['creator', 'cashier', 'store_manager', 'admin', 'owner'];
+    if (reservedRoles.includes(roleId)) {
+      this.roleNameError = `"${roleId}" is a reserved role name.`;
+      return;
+    }
+    
+    // Clear error if validation passes
+    this.roleNameError = '';
+  }
+
+  async createNewRole(): Promise<void> {
+    if (!this.newRoleId.trim()) {
+      alert('Please enter a role name.');
+      return;
+    }
+    
+    const roleId = this.newRoleId.toLowerCase().replace(/\s+/g, '_');
+    
+    // Client-side validation for duplicates with same roleId, companyId, and storeId combination
+    const duplicateRole = this.roles.find(role => 
+      role.roleId === roleId && 
+      role.storeId === (this.selectedStoreId || '')
+    );
+    
+    if (duplicateRole) {
+      if (this.selectedStoreId) {
+        alert(`A role with the name "${roleId}" already exists in the selected store. Please choose a different name.`);
+      } else {
+        alert(`A role with the name "${roleId}" already exists at the company level. Please choose a different name.`);
+      }
+      return;
+    }
+    
+    // Validate against reserved role names
+    const reservedRoles = ['creator', 'cashier', 'store_manager', 'admin', 'owner'];
+    if (reservedRoles.includes(roleId)) {
+      alert(`"${roleId}" is a reserved role name. Please choose a different name.`);
       return;
     }
 
@@ -383,7 +443,11 @@ export class AccessComponent implements OnInit {
       this.closeAddRoleModal();
     } catch (error) {
       console.error('Error creating role:', error);
-      alert('Error creating role. Please try again.');
+      if (error instanceof Error && error.message.includes('already exists')) {
+        alert(error.message);
+      } else {
+        alert('Failed to create role. Please try again.');
+      }
     } finally {
       this.isLoading = false;
     }
@@ -392,6 +456,7 @@ export class AccessComponent implements OnInit {
   closeAddRoleModal(): void {
     this.showAddRoleModal = false;
     this.newRoleId = '';
+    this.roleNameError = '';
     this.selectedStoreId = '';
   }
 

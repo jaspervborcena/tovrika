@@ -141,6 +141,14 @@ export class PosService {
     this.orderDiscountSignal.set(null); // Clear order discount when clearing cart
   }
 
+  // Reset all POS state (called on logout)
+  resetAll(): void {
+    console.log('🔍 [POSService] Resetting all POS data');
+    this.clearCart();
+    this.selectedStoreIdSignal.set('');
+    this.isProcessingSignal.set(false);
+  }
+
   // Order Discount Management
   setOrderDiscount(discount: OrderDiscount): void {
     this.orderDiscountSignal.set(discount);

@@ -89,6 +89,16 @@ export const onboardingGuard: CanActivateFn = async (route, state) => {
     return true;
   }
 
+  // Creator role has full access to all routes
+  if (userRole === 'creator') {
+    return true;
+  }
+
+  // Store manager has access to most routes including POS
+  if (userRole === 'store_manager' && state.url.includes('pos')) {
+    return true;
+  }
+
   if (!stores || stores.length === 0) {
     // Only allow onboarding routes if no stores exist
     if (state.url.includes('stores') || state.url.includes('products')) {
@@ -169,6 +179,16 @@ export const onboardingGuard: CanActivateFn = async (route, state) => {
 
     // If cashier, always allow POS route
     if (userRole === 'cashier' && state.url.includes('pos')) {
+      return true;
+    }
+
+    // Creator role has full access to all routes
+    if (userRole === 'creator') {
+      return true;
+    }
+
+    // Store manager has access to most routes including POS
+    if (userRole === 'store_manager' && state.url.includes('pos')) {
       return true;
     }
 
