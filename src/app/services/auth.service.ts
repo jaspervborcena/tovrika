@@ -33,11 +33,12 @@ export interface User {
   createdAt: Date;
   updatedAt: Date;
   branchId?: string;
-  permission?: {
-    companyId?: string;
+  permissions?: {
+    companyId: string;
     storeId?: string;
-    roleId?: string;
-  };
+    roleId: string;
+  }[];
+  currentCompanyId?: string; // Currently selected company for users with multiple company access
 }
 
 @Injectable({
@@ -51,7 +52,7 @@ export class AuthService {
   // Computed properties
   readonly isAuthenticated = computed(() => !!this.currentUserSignal());
   readonly userRole = computed(() => this.currentUserRoleIdSignal());
-  readonly hasCompanyAccess = computed(() => !!(this.currentUserSignal()?.permission?.companyId));
+  readonly hasCompanyAccess = computed(() => !!this.getCurrentPermission()?.companyId);
   readonly currentUser = computed(() => this.currentUserSignal());
 
   constructor() {
@@ -61,6 +62,54 @@ export class AuthService {
   }
   private auth: Auth;
   private firestore: Firestore;
+
+  // Helper methods for permissions array
+  getCurrentPermission(): { companyId: string; storeId?: string; roleId: string } | null {
+    const user = this.currentUserSignal();
+    if (!user?.permissions || user.permissions.length === 0) return null;
+    
+    // If user has selected a specific company, use that
+    if (user.currentCompanyId) {
+      const permission = user.permissions.find(p => p.companyId === user.currentCompanyId);
+      if (permission) return permission;
+    }
+    
+    // Otherwise, return the first permission
+    return user.permissions[0];
+  }
+
+  getUserCompanies(): { companyId: string; roleId: string }[] {
+    const user = this.currentUserSignal();
+    if (!user?.permissions) return [];
+    
+    // Group by companyId and return unique companies
+    const companies = new Map<string, string>();
+    user.permissions.forEach(p => {
+      if (!companies.has(p.companyId)) {
+        companies.set(p.companyId, p.roleId);
+      }
+    });
+    
+    return Array.from(companies.entries()).map(([companyId, roleId]) => ({
+      companyId,
+      roleId
+    }));
+  }
+
+  hasMultipleCompanies(): boolean {
+    return this.getUserCompanies().length > 1;
+  }
+
+  async selectCompany(companyId: string): Promise<void> {
+    const user = this.currentUserSignal();
+    if (!user) throw new Error('No authenticated user');
+    
+    const hasAccess = user.permissions?.some(p => p.companyId === companyId);
+    if (!hasAccess) throw new Error('User does not have access to this company');
+    
+    // Update the user's current company selection
+    await this.updateUserData({ currentCompanyId: companyId });
+  }
 
   private initAuthListener() {
     onAuthStateChanged(this.auth, async (firebaseUser) => {
@@ -115,10 +164,11 @@ export class AuthService {
   }
   // Fetch and set the current user's roleId from userRoles collection
   private async fetchAndSetUserRoleId(user: User | null) {
-    if (!user || !user.permission?.companyId || !user.uid || !user.permission?.storeId) {
-      // Fallback to permission field in user document
-      if (user && user.permission && user.permission.roleId) {
-        this.currentUserRoleIdSignal.set(user.permission.roleId);
+    const currentPermission = this.getCurrentPermission();
+    if (!user || !currentPermission?.companyId || !user.uid) {
+      // Fallback to permissions array
+      if (currentPermission?.roleId) {
+        this.currentUserRoleIdSignal.set(currentPermission.roleId);
       } else {
         this.currentUserRoleIdSignal.set(undefined);
       }
@@ -130,16 +180,16 @@ export class AuthService {
       const userRolesRef = collection(firestore, 'userRoles');
       const userRolesQuery = query(
         userRolesRef,
-        where('companyId', '==', user.permission.companyId),
+        where('companyId', '==', currentPermission.companyId),
         where('userId', '==', user.uid),
-        where('storeId', '==', user.permission.storeId)
+        where('storeId', '==', currentPermission.storeId || '')
       );
       const userRolesSnap = await getDocs(userRolesQuery);
       console.log('[AuthService] userRolesSnap:', userRolesSnap.docs.map(doc => doc.data()));
       if (userRolesSnap.empty) {
-        // Fallback to permission field in user document
-        if (user && user.permission && user.permission.roleId) {
-          this.currentUserRoleIdSignal.set(user.permission.roleId);
+        // Fallback to permissions array
+        if (currentPermission?.roleId) {
+          this.currentUserRoleIdSignal.set(currentPermission.roleId);
         } else {
           this.currentUserRoleIdSignal.set(undefined);
         }
@@ -151,9 +201,10 @@ export class AuthService {
       this.currentUserRoleIdSignal.set(roleId);
     } catch (error) {
       console.error('Error fetching user roleId:', error);
-      // Fallback to permission field in user document
-      if (user && user.permission && user.permission.roleId) {
-        this.currentUserRoleIdSignal.set(user.permission.roleId);
+      // Fallback to permissions array
+      const currentPermission = this.getCurrentPermission();
+      if (currentPermission?.roleId) {
+        this.currentUserRoleIdSignal.set(currentPermission.roleId);
       } else {
         this.currentUserRoleIdSignal.set(undefined);
       }
@@ -167,22 +218,21 @@ export class AuthService {
   ) {
     try {
       const credential = await createUserWithEmailAndPassword(this.auth, email, password);
-      // Set permission field if not provided, and avoid undefined values
-      let permission = userData.permission || {};
-  if (typeof userData.permission?.companyId !== 'undefined') permission.companyId = userData.permission.companyId;
-  if (typeof userData.permission?.storeId !== 'undefined') permission.storeId = userData.permission.storeId;
-  // If no companyId and no storeId, set roleId to 'creator' by default
-  if (!userData.permission?.companyId && !userData.permission?.storeId) {
-        permission.roleId = 'creator';
+      
+      // Initialize permissions array - for new users, start with creator role if no permissions provided
+      let permissions = userData.permissions || [];
+      if (permissions.length === 0) {
+        // New user with no specific company access gets creator role for their own company
+        permissions = [{
+          companyId: '', // Will be set when they create a company
+          roleId: 'creator'
+        }];
       }
-      // Remove undefined values explicitly
-      if (typeof permission.companyId === 'undefined') delete permission.companyId;
-      if (typeof permission.storeId === 'undefined') delete permission.storeId;
-      if (typeof permission.roleId === 'undefined') delete permission.roleId;
+      
       const user: User = {
         uid: credential.user.uid,
         ...userData,
-        permission,
+        permissions,
         createdAt: new Date(),
         updatedAt: new Date()
       };
@@ -297,7 +347,8 @@ export class AuthService {
   // Check if user has specific permission
   async hasPermission(permission: string): Promise<boolean> {
     const user = this.getCurrentUser();
-    if (!user || !user.permission?.companyId || !user.uid || !user.permission?.storeId) return false;
+    const currentPermission = this.getCurrentPermission();
+    if (!user || !currentPermission?.companyId || !user.uid) return false;
 
     // Fetch userRoles for current user
     const { getFirestore, collection, query, where, getDocs } = await import('firebase/firestore');
@@ -305,9 +356,9 @@ export class AuthService {
     const userRolesRef = collection(firestore, 'userRoles');
     const userRolesQuery = query(
       userRolesRef,
-      where('companyId', '==', user.permission.companyId),
+      where('companyId', '==', currentPermission.companyId),
       where('userId', '==', user.uid),
-      where('storeId', '==', user.permission.storeId)
+      where('storeId', '==', currentPermission.storeId || '')
     );
     const userRolesSnap = await getDocs(userRolesQuery);
     if (userRolesSnap.empty) return false;
@@ -319,7 +370,7 @@ export class AuthService {
     const roleDefRef = collection(firestore, 'roledefinition');
     const roleDefQuery = query(
       roleDefRef,
-      where('companyId', '==', user.permission.companyId),
+      where('companyId', '==', currentPermission.companyId),
       where('roleId', '==', roleId)
     );
     const roleDefSnap = await getDocs(roleDefQuery);

@@ -37,17 +37,25 @@ export class LoginComponent {
           throw new Error('Failed to get user data after login');
         }
         
-        // Fetch roleId from userRoles collection and navigate accordingly
+        // Check if user has multiple companies - if so, redirect to company selection
+        if (this.authService.hasMultipleCompanies()) {
+          this.router.navigate(['/company-selection']);
+          return;
+        }
+        
+        // Single company user - proceed with role-based navigation
+        const currentPermission = this.authService.getCurrentPermission();
         let roleId: string | undefined;
-  if (user.permission?.companyId && user.uid && user.permission?.storeId) {
+        
+        if (currentPermission?.companyId && user.uid && currentPermission?.storeId) {
           const { getFirestore, collection, query, where, getDocs } = await import('firebase/firestore');
           const firestore = getFirestore();
           const userRolesRef = collection(firestore, 'userRoles');
           const userRolesQuery = query(
             userRolesRef,
-            where('companyId', '==', user.permission?.companyId),
+            where('companyId', '==', currentPermission.companyId),
             where('userId', '==', user.uid),
-            where('storeId', '==', user.permission?.storeId)
+            where('storeId', '==', currentPermission.storeId)
           );
           const userRolesSnap = await getDocs(userRolesQuery);
           if (!userRolesSnap.empty) {

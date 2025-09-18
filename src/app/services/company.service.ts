@@ -50,8 +50,9 @@ export class CompanyService {
     const user = this.authService.getCurrentUser();
     if (!user) return null;
 
-    // If user doesn't have companyId, return null (they need to create a company)
-  if (!user.permission?.companyId) return null;
+    // If user doesn't have current company access, return null
+    const currentPermission = this.authService.getCurrentPermission();
+    if (!currentPermission?.companyId) return null;
 
     const companies = this.companies();
     if (companies.length === 0) {
@@ -70,11 +71,12 @@ export class CompanyService {
       }
 
       const companies: Company[] = [];
-    console.log("user companyId:", user.permission?.companyId);
+      const currentPermission = this.authService.getCurrentPermission();
+      console.log("user current company:", currentPermission?.companyId);
       
-      // If user has a companyId, load only that company
-      if (user.permission?.companyId) {
-        const companyDocRef = doc(this.firestore, 'companies', user.permission.companyId);
+      // If user has a current company selected, load only that company
+      if (currentPermission?.companyId) {
+        const companyDocRef = doc(this.firestore, 'companies', currentPermission.companyId);
         const companyDoc = await getDoc(companyDocRef);
 
         if (companyDoc.exists()) {
@@ -119,6 +121,31 @@ export class CompanyService {
     }
   }
 
+  async getCompanyById(companyId: string): Promise<Company | null> {
+    try {
+      const companyDocRef = doc(this.firestore, 'companies', companyId);
+      const companyDoc = await getDoc(companyDocRef);
+
+      if (!companyDoc.exists()) {
+        return null;
+      }
+
+      const companyData = companyDoc.data() as Omit<Company, 'id'>;
+      const company: Company = {
+        ...companyData,
+        id: companyDoc.id,
+        createdAt: this.toDate(companyData['createdAt']),
+        updatedAt: companyData['updatedAt'] ? this.toDate(companyData['updatedAt']) : undefined,
+        stores: [] // We don't load stores for individual company lookup
+      };
+
+      return company;
+    } catch (error) {
+      console.error('Error getting company by ID:', error);
+      return null;
+    }
+  }
+
 
   async createCompany(companyInput: Omit<Company, 'id' | 'createdAt' | 'updatedAt'>) {
     try {
@@ -155,10 +182,30 @@ export class CompanyService {
 
       const docRef = await addDoc(companiesRef, newCompany);
       
-      // Update user's companyId
-      await this.authService.updateUserData({
-      permission: { companyId: docRef.id }
-      });
+      // Update user's permissions - add new company permission or update existing creator permission
+      const currentUser = this.authService.currentUser();
+      if (currentUser) {
+        const permissions = currentUser.permissions || [];
+        
+        // Check if user already has a creator permission without companyId
+        const creatorPermissionIndex = permissions.findIndex(p => p.roleId === 'creator' && !p.companyId);
+        
+        if (creatorPermissionIndex >= 0) {
+          // Update existing creator permission with the new company ID
+          permissions[creatorPermissionIndex].companyId = docRef.id;
+        } else {
+          // Add new creator permission for this company
+          permissions.push({
+            companyId: docRef.id,
+            roleId: 'creator'
+          });
+        }
+        
+        await this.authService.updateUserData({
+          permissions,
+          currentCompanyId: docRef.id // Set this as the current company
+        });
+      }
       
       // Add stores if we have any
       if (stores.length > 0) {
@@ -243,13 +290,15 @@ export class CompanyService {
   // Helper method to check if user needs to create a company
   userNeedsToCreateCompany(): boolean {
     const user = this.authService.getCurrentUser();
-  return !user?.permission?.companyId;
+    const currentPermission = this.authService.getCurrentPermission();
+    return !currentPermission?.companyId;
   }
 
   // Helper method to get current company or null if user needs to create one
   async getCurrentCompanyOrNull(): Promise<Company | null> {
     const user = this.authService.getCurrentUser();
-  if (!user?.permission?.companyId) return null;
+    const currentPermission = this.authService.getCurrentPermission();
+    if (!currentPermission?.companyId) return null;
     return this.getActiveCompany();
   }
 }

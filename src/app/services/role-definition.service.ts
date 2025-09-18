@@ -59,15 +59,16 @@ export class RoleDefinitionService {
   public async loadRoleDefinitions() {
     try {
       const currentUser = await this.authService.waitForAuth();
+      const currentPermission = this.authService.getCurrentPermission();
       
-      if (!currentUser || !currentUser.permission?.companyId) {
+      if (!currentUser || !currentPermission?.companyId) {
         console.warn('No current user or companyId found');
         this.roleDefinitionsSignal.set([]);
         return;
       }
 
       const roleDefsRef = collection(this.firestore, 'roleDefinition');
-      const q = query(roleDefsRef, where('companyId', '==', currentUser.permission.companyId));
+      const q = query(roleDefsRef, where('companyId', '==', currentPermission.companyId));
       
       const querySnapshot = await getDocs(q);
        console.log('roleDefinitionsSignal querySnapshot',querySnapshot);
@@ -91,14 +92,15 @@ export class RoleDefinitionService {
   async createRoleDefinition(roleData: Omit<RoleDefinition, 'id' | 'createdAt' | 'updatedAt' | 'companyId'>): Promise<void> {
     try {
       const currentUser = await this.authService.waitForAuth();
-      if (!currentUser || !currentUser.permission?.companyId) {
+      const currentPermission = this.authService.getCurrentPermission();
+      if (!currentUser || !currentPermission?.companyId) {
         throw new Error('No authenticated user or company ID found');
       }
 
       const roleDefsRef = collection(this.firestore, 'roleDefinition');
       const docData = {
         ...roleData,
-        companyId: currentUser.permission.companyId,
+        companyId: currentPermission.companyId,
         storeId: roleData.storeId || null,
         createdAt: new Date(),
         updatedAt: new Date()

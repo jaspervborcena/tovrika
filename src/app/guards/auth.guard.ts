@@ -17,8 +17,19 @@ export const authGuard: CanActivateFn = (route, state) => {
 
   const currentUser = authService.currentUser();
 
+  // Check if user has multiple companies and hasn't selected one
+  if (authService.hasMultipleCompanies() && !authService.getCurrentPermission()?.companyId) {
+    if (state.url !== '/company-selection') {
+      router.navigate(['/company-selection']);
+      return false;
+    }
+    return true; // Allow access to company-selection page
+  }
+
+  const currentPermission = authService.getCurrentPermission();
+
   // Allow access to company-profile if user has no companyId (onboarding)
-  if (!currentUser?.permission?.companyId) {
+  if (!currentPermission?.companyId) {
     if (state.url.includes('/dashboard/company-profile')) {
       // Treat as creator for onboarding
       return true;
@@ -31,15 +42,15 @@ export const authGuard: CanActivateFn = (route, state) => {
   // Async role check
   const checkRole = async () => {
     let userRole: string = '';
-  if (currentUser?.permission?.companyId && currentUser?.uid && currentUser?.permission?.storeId) {
+    if (currentPermission?.companyId && currentUser?.uid && currentPermission?.storeId) {
       const { getFirestore, collection, query, where, getDocs } = await import('firebase/firestore');
       const firestore = getFirestore();
       const userRolesRef = collection(firestore, 'userRoles');
       const userRolesQuery = query(
         userRolesRef,
-  where('companyId', '==', currentUser.permission?.companyId),
+        where('companyId', '==', currentPermission.companyId),
         where('userId', '==', currentUser.uid),
-  where('storeId', '==', currentUser.permission?.storeId)
+        where('storeId', '==', currentPermission.storeId)
       );
       const userRolesSnap = await getDocs(userRolesQuery);
       if (!userRolesSnap.empty) {
