@@ -664,9 +664,10 @@ export class StoresManagementComponent implements OnInit {
     
     try {
       const currentUser = await this.authService.waitForAuth();
-      if (currentUser?.permission?.companyId) {
-        await this.storeService.loadStoresByCompany(currentUser.permission.companyId);
-        this.stores = this.storeService.getStoresByCompany(currentUser.permission.companyId);
+      const currentPermission = this.authService.getCurrentPermission();
+      if (currentPermission?.companyId) {
+        await this.storeService.loadStoresByCompany(currentPermission.companyId);
+        this.stores = this.storeService.getStoresByCompany(currentPermission.companyId);
         this.filteredStores = [...this.stores];
       } else {
         // Creator account, no companyId yet, allow empty stores array for onboarding
@@ -741,14 +742,15 @@ export class StoresManagementComponent implements OnInit {
 
     try {
       const currentUser = await this.authService.waitForAuth();
-        if (!currentUser?.permission?.companyId) {
+      const currentPermission = this.authService.getCurrentPermission();
+      if (!currentPermission?.companyId) {
         throw new Error('No company ID found');
       }
 
       const formData = this.storeForm.value;
       const storeData: Omit<Store, 'id' | 'createdAt' | 'updatedAt'> = {
         ...formData,
-          companyId: currentUser.permission?.companyId
+        companyId: currentPermission.companyId
       };
 
       if (this.editingStore) {

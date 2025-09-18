@@ -71,11 +71,7 @@ export class HeaderComponent implements OnInit {
   }
 
   protected async logout() {
-    try {
-      await this.authService.logout();
-    } catch (error) {
-      console.error('Error signing out:', error);
-    }
+    await this.authService.logout();
   }
 
   @HostListener('document:click', ['$event'])
@@ -96,17 +92,19 @@ export class HeaderComponent implements OnInit {
       const user = this.authService.getCurrentUser();
       if (!user) return;
 
+      const currentPermission = this.authService.getCurrentPermission();
+      
       // Fetch roleId from userRoles collection
       let roleId: string | undefined;
-      if (user.permission?.companyId && user.uid && user.permission?.companyId) {
+      if (currentPermission?.companyId && user.uid) {
         const { getFirestore, collection, query, where, getDocs } = await import('firebase/firestore');
         const firestore = getFirestore();
         const userRolesRef = collection(firestore, 'userRoles');
         const userRolesQuery = query(
           userRolesRef,
-          where('companyId', '==', user.permission?.companyId),
+          where('companyId', '==', currentPermission.companyId),
           where('userId', '==', user.uid),
-          where('storeId', '==', user.permission?.storeId)
+          where('storeId', '==', currentPermission.storeId)
         );
         const userRolesSnap = await getDocs(userRolesQuery);
         if (!userRolesSnap.empty) {
@@ -116,10 +114,10 @@ export class HeaderComponent implements OnInit {
         }
       }
 
-      if (user.permission?.companyId) {
+      if (currentPermission?.companyId) {
         // Load company-specific data
-        await this.storeService.loadStoresByCompany(user.permission?.companyId);
-        await this.productService.loadProducts(user.permission?.companyId);
+        await this.storeService.loadStoresByCompany(currentPermission.companyId);
+        await this.productService.loadProducts(currentPermission.companyId);
         
         this.stores.set(this.storeService.getStores());
         this.totalStores.set(this.storeService.totalStores());

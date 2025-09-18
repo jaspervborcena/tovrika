@@ -40,13 +40,14 @@ export class TransactionService {
 
   async createTransaction(transaction: Omit<Transaction, 'id' | 'transactionNumber' | 'createdAt' | 'updatedAt'>) {
     const user = this.authService.getCurrentUser();
-  if (!user || !user.permission?.companyId || !user.permission?.storeId || !user.branchId) {
+    const currentPermission = this.authService.getCurrentPermission();
+    if (!user || !currentPermission?.companyId || !currentPermission?.storeId || !user.branchId) {
       throw new Error('User context not found');
     }
 
     try {
       // Generate transaction number
-  const transactionNumber = await this.generateTransactionNumber(user.permission?.companyId);
+      const transactionNumber = await this.generateTransactionNumber(currentPermission.companyId);
 
       const newTransaction: Transaction = {
         ...transaction,
@@ -57,7 +58,7 @@ export class TransactionService {
 
       // Create transaction document
       const branchRef = doc(this.firestore, 
-  `companies/${user.permission?.companyId}/stores/${user.permission?.storeId}/branches/${user.branchId}`
+        `companies/${currentPermission.companyId}/stores/${currentPermission.storeId}/branches/${user.branchId}`
       );
       const transactionsRef = collection(branchRef, 'transactions');
       const docRef = await addDoc(transactionsRef, newTransaction);
@@ -67,8 +68,8 @@ export class TransactionService {
         await this.inventoryService.updateStock(
           item.productId,
           -item.quantity,
-          user.permission?.companyId,
-          user.permission?.storeId,
+          currentPermission.companyId,
+          currentPermission.storeId,
           user.branchId,
           true
         );
@@ -106,14 +107,15 @@ export class TransactionService {
 
   async voidTransaction(transactionId: string) {
     const user = this.authService.getCurrentUser();
-  if (!user || !user.permission?.companyId || !user.permission?.storeId || !user.branchId) {
+    const currentPermission = this.authService.getCurrentPermission();
+    if (!user || !currentPermission?.companyId || !currentPermission?.storeId || !user.branchId) {
       throw new Error('User context not found');
     }
 
     try {
       const transactionRef = doc(
         this.firestore,
-  `companies/${user.permission?.companyId}/stores/${user.permission?.storeId}/branches/${user.branchId}/transactions/${transactionId}`
+        `companies/${currentPermission.companyId}/stores/${currentPermission.storeId}/branches/${user.branchId}/transactions/${transactionId}`
       );
 
       await setDoc(transactionRef, {
@@ -130,8 +132,8 @@ export class TransactionService {
           await this.inventoryService.updateStock(
             item.productId,
             item.quantity,
-            user.permission?.companyId,
-            user.permission?.storeId,
+            currentPermission.companyId,
+            currentPermission.storeId,
             user.branchId,
             true
           );
@@ -145,14 +147,15 @@ export class TransactionService {
 
   async getTransactions(startDate: Date, endDate: Date) {
     const user = this.authService.getCurrentUser();
-    if (!user || !user.permission?.companyId) {
+    const currentPermission = this.authService.getCurrentPermission();
+    if (!user || !currentPermission?.companyId) {
       throw new Error('User context not found');
     }
 
     try {
       const q = query(
         collection(this.firestore, 'transactions'),
-        where('companyId', '==', user.permission?.companyId),
+        where('companyId', '==', currentPermission.companyId),
         where('createdAt', '>=', startDate),
         where('createdAt', '<=', endDate)
       );

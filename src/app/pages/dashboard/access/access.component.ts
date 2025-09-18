@@ -257,8 +257,9 @@ export class AccessComponent implements OnInit {
   async loadStores() {
     try {
       const user = await this.authService.getCurrentUser();
-      if (user?.permission?.companyId) {
-        this.stores = this.storeService.getStoresByCompany(user.permission.companyId);
+      const currentPermission = this.authService.getCurrentPermission();
+      if (currentPermission?.companyId) {
+        this.stores = this.storeService.getStoresByCompany(currentPermission.companyId);
       }
     } catch (error) {
       console.error('Error loading stores:', error);
@@ -350,13 +351,14 @@ export class AccessComponent implements OnInit {
     try {
       this.isLoading = true;
       const user = await this.authService.getCurrentUser();
-      if (!user?.permission?.companyId) {
+      const currentPermission = this.authService.getCurrentPermission();
+      if (!currentPermission?.companyId) {
         throw new Error('User company not found');
       }
 
       const newRole: Omit<RoleDefinition, 'id'> = {
         roleId,
-        companyId: user.permission.companyId,
+        companyId: currentPermission.companyId,
         storeId: this.selectedStoreId || '',
         permissions: {
           canViewProducts: false,

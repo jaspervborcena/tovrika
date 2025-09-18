@@ -30,11 +30,6 @@ export class HomeComponent {
   }
 
   async logout() {
-    try {
-      await this.authService.logout();
-      // User will automatically be redirected by the auth state change
-    } catch (error) {
-      console.error('Logout error:', error);
-    }
+    await this.authService.logout();
   }
 }

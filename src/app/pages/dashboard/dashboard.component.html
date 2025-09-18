@@ -196,13 +196,13 @@
         </svg>
         <span class="absolute bottom-[-1.4rem] left-1/2 -translate-x-1/2 px-2 py-1 bg-gray-900 text-white text-xs rounded shadow-lg opacity-0 group-hover:opacity-100 group-active:opacity-100 transition pointer-events-none whitespace-nowrap">Store</span>
       </a>
-      <a routerLink="access" class="mx-6 flex flex-col items-center group relative" title="Access Management">
+      <a routerLink="access" *ngIf="permissions.canViewAccess" class="mx-6 flex flex-col items-center group relative" title="Access Management">
         <svg class="h-8 w-8 transition-transform duration-150 group-hover:scale-110" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 17l-4 4m0 0l-4-4m4 4V3" />
         </svg>
         <span class="absolute bottom-[-1.4rem] left-1/2 -translate-x-1/2 px-2 py-1 bg-gray-900 text-white text-xs rounded shadow-lg opacity-0 group-hover:opacity-100 group-active:opacity-100 transition pointer-events-none whitespace-nowrap">Access</span>
       </a>
-      <a routerLink="user-roles" class="mx-6 flex flex-col items-center group relative" title="User Roles">
+      <a routerLink="user-roles" *ngIf="permissions.canViewUserRoles" class="mx-6 flex flex-col items-center group relative" title="User Roles">
         <svg class="h-8 w-8 transition-transform duration-150 group-hover:scale-110" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a4 4 0 00-3-3.87M9 20h6M3 20h5v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75M8 3.13a4 4 0 010 7.75" />
         </svg>

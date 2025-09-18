@@ -60,14 +60,26 @@ export class AccessService {
   private permissionsSignal = signal<Permissions>(this.defaultPermissions);
 
   setPermissions(permissions: Partial<Permissions>, role?: string) {
+    console.log('🔍 [AccessService] Setting permissions for role:', role, 'with custom permissions:', permissions);
+    console.log('🔍 [AccessService] Current permissions before update:', this.permissionsSignal());
+    
     if (role === 'cashier') {
-      this.permissionsSignal.set({ ...this.cashierPermissions, ...permissions });
+      const finalPermissions = { ...this.cashierPermissions, ...permissions };
+      console.log('🔍 [AccessService] Final cashier permissions:', finalPermissions);
+      this.permissionsSignal.set(finalPermissions);
+      console.log('🔍 [AccessService] Permissions signal updated to:', this.permissionsSignal());
     } else if (role === 'creator' || role === 'store_manager') {
       // Both creator and store_manager get all features for now
-      this.permissionsSignal.set({ ...this.defaultPermissions, ...permissions });
+      const finalPermissions = { ...this.defaultPermissions, ...permissions };
+      console.log('🔍 [AccessService] Final creator/store_manager permissions:', finalPermissions);
+      this.permissionsSignal.set(finalPermissions);
+      console.log('🔍 [AccessService] Permissions signal updated to:', this.permissionsSignal());
     } else {
       // Fallback to default permissions
-      this.permissionsSignal.set({ ...this.defaultPermissions, ...permissions });
+      const finalPermissions = { ...this.defaultPermissions, ...permissions };
+      console.log('🔍 [AccessService] Final default permissions for role', role, ':', finalPermissions);
+      this.permissionsSignal.set(finalPermissions);
+      console.log('🔍 [AccessService] Permissions signal updated to:', this.permissionsSignal());
     }
   }
 

@@ -184,17 +184,18 @@ export class StoresComponent implements OnInit {
 
   private async setupUser() {
     const user = this.authService.currentUser();
+    const currentPermission = this.authService.getCurrentPermission();
     this.isAdmin = false;
-  this.userCompanyId = user?.permission?.companyId || null;
-  if (user?.permission?.companyId && user?.uid && user?.permission?.storeId) {
+    this.userCompanyId = currentPermission?.companyId || null;
+    if (currentPermission?.companyId && user?.uid && currentPermission?.storeId) {
       const { getFirestore, collection, query, where, getDocs } = await import('firebase/firestore');
       const firestore = getFirestore();
       const userRolesRef = collection(firestore, 'userRoles');
       const userRolesQuery = query(
         userRolesRef,
-      where('companyId', '==', user.permission?.companyId),
+        where('companyId', '==', currentPermission.companyId),
         where('userId', '==', user.uid),
-      where('storeId', '==', user.permission?.storeId)
+        where('storeId', '==', currentPermission.storeId)
       );
       const userRolesSnap = await getDocs(userRolesQuery);
       if (!userRolesSnap.empty) {

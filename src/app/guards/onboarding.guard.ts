@@ -18,8 +18,9 @@ export const onboardingGuard: CanActivateFn = async (route, state) => {
     return false;
   }
 
+  const currentPermission = authService.getCurrentPermission();
   // Step 1: Check company profile
-  if (!user.permission?.companyId) {
+  if (!currentPermission?.companyId) {
     router.navigate(['/dashboard/company-profile']);
     return false;
   }
@@ -32,8 +33,8 @@ export const onboardingGuard: CanActivateFn = async (route, state) => {
   }
 
   // Step 2: Check stores
-  await storeService.loadStoresByCompany(user.permission?.companyId);
-  const stores = storeService.getStoresByCompany(user.permission?.companyId);
+  await storeService.loadStoresByCompany(currentPermission.companyId);
+  const stores = storeService.getStoresByCompany(currentPermission.companyId);
 
   // Role-based access control (move up so userRole is always defined)
   let userRole: string | undefined;
@@ -46,7 +47,7 @@ export const onboardingGuard: CanActivateFn = async (route, state) => {
       const storeId = stores[0].id;
       const userRolesQuery = query(
         userRolesRef,
-  where('companyId', '==', user.permission?.companyId),
+        where('companyId', '==', currentPermission.companyId),
         where('userId', '==', user.uid),
         where('storeId', '==', storeId)
       );
@@ -61,7 +62,7 @@ export const onboardingGuard: CanActivateFn = async (route, state) => {
         const storeId = store.id;
         const userRolesQuery = query(
           userRolesRef,
-          where('companyId', '==', user.permission?.companyId),
+          where('companyId', '==', currentPermission.companyId),
           where('userId', '==', user.uid),
           where('storeId', '==', storeId)
         );
@@ -74,12 +75,12 @@ export const onboardingGuard: CanActivateFn = async (route, state) => {
         }
       }
     }
-    if (!foundUserRole && user.permission && user.permission.roleId) {
-      userRole = user.permission.roleId;
+    if (!foundUserRole && currentPermission?.roleId) {
+      userRole = currentPermission.roleId;
     }
   } catch (roleError) {
-    if (user.permission && user.permission.roleId) {
-      userRole = user.permission.roleId;
+    if (currentPermission?.roleId) {
+      userRole = currentPermission.roleId;
     }
   }
 
@@ -108,8 +109,8 @@ export const onboardingGuard: CanActivateFn = async (route, state) => {
     }
 
     // Load stores for the company
-  await storeService.loadStoresByCompany(user.permission?.companyId);
-  const stores = storeService.getStoresByCompany(user.permission?.companyId);
+    await storeService.loadStoresByCompany(currentPermission.companyId);
+    const stores = storeService.getStoresByCompany(currentPermission.companyId);
 
     // Role-based access control (move up so userRole is always defined)
     let userRole: string | undefined;
@@ -122,7 +123,7 @@ export const onboardingGuard: CanActivateFn = async (route, state) => {
         const storeId = stores[0].id;
         const userRolesQuery = query(
           userRolesRef,
-          where('companyId', '==', user.permission?.companyId),
+          where('companyId', '==', currentPermission.companyId),
           where('userId', '==', user.uid),
           where('storeId', '==', storeId)
         );
@@ -137,7 +138,7 @@ export const onboardingGuard: CanActivateFn = async (route, state) => {
           const storeId = store.id;
           const userRolesQuery = query(
             userRolesRef,
-            where('companyId', '==', user.permission?.companyId),
+            where('companyId', '==', currentPermission.companyId),
             where('userId', '==', user.uid),
             where('storeId', '==', storeId)
           );
@@ -150,21 +151,21 @@ export const onboardingGuard: CanActivateFn = async (route, state) => {
           }
         }
       }
-      if (!foundUserRole && user.permission && user.permission.roleId) {
-        userRole = user.permission.roleId;
+      if (!foundUserRole && currentPermission?.roleId) {
+        userRole = currentPermission.roleId;
       }
     } catch (roleError) {
-      if (user.permission && user.permission.roleId) {
-        userRole = user.permission.roleId;
+      if (currentPermission?.roleId) {
+        userRole = currentPermission.roleId;
       }
     }
 
     // Check if user has access to any valid store
-  // If user has a single storeId, check if it matches any store
-  let hasValidStore = false;
-  if (user.permission?.storeId) {
-    hasValidStore = stores.some(store => store.id === user.permission?.storeId);
-  }
+    // If user has a single storeId, check if it matches any store
+    let hasValidStore = false;
+    if (currentPermission?.storeId) {
+      hasValidStore = stores.some(store => store.id === currentPermission.storeId);
+    }
 
     // If cashier, always allow POS route
     if (userRole === 'cashier' && state.url.includes('pos')) {
@@ -193,7 +194,7 @@ export const onboardingGuard: CanActivateFn = async (route, state) => {
           const storeId = stores[0].id;
           const userRolesQuery = query(
             userRolesRef,
-            where('companyId', '==', user.permission?.companyId),
+            where('companyId', '==', currentPermission.companyId),
             where('userId', '==', user.uid),
             where('storeId', '==', storeId)
           );
@@ -210,7 +211,7 @@ export const onboardingGuard: CanActivateFn = async (route, state) => {
             const storeId = store.id;
             const userRolesQuery = query(
               userRolesRef,
-              where('companyId', '==', user.permission?.companyId),
+              where('companyId', '==', currentPermission.companyId),
               where('userId', '==', user.uid),
               where('storeId', '==', storeId)
             );
@@ -224,17 +225,17 @@ export const onboardingGuard: CanActivateFn = async (route, state) => {
             }
           }
         }
-        // Fallback to user.permission.roleId if no userRoles found
-        if (!foundUserRole && user.permission && user.permission.roleId) {
-          userRole = user.permission.roleId;
-          console.log('[OnboardingGuard] Fallback to user.permission.roleId:', userRole);
+        // Fallback to currentPermission.roleId if no userRoles found
+        if (!foundUserRole && currentPermission?.roleId) {
+          userRole = currentPermission.roleId;
+          console.log('[OnboardingGuard] Fallback to currentPermission.roleId:', userRole);
         }
       } catch (roleError) {
         console.error('[OnboardingGuard] Error fetching userRoles:', roleError);
-        // Fallback to user.permission.roleId if error
-        if (user.permission && user.permission.roleId) {
-          userRole = user.permission.roleId;
-          console.log('[OnboardingGuard] Fallback to user.permission.roleId (error):', userRole);
+        // Fallback to currentPermission.roleId if error
+        if (currentPermission?.roleId) {
+          userRole = currentPermission.roleId;
+          console.log('[OnboardingGuard] Fallback to currentPermission.roleId (error):', userRole);
         }
       }
 

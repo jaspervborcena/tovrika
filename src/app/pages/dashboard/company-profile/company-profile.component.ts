@@ -537,7 +537,7 @@ export class CompanyProfileComponent {
 
   // Computed values
   protected currentCompany = computed(() => this.companyService.companies()[0]);
-  protected isCreatingCompany = computed(() => !this.authService.getCurrentUser()?.permission?.companyId);
+  protected isCreatingCompany = computed(() => !this.authService.getCurrentPermission()?.companyId);
   protected currentUser = computed(() => this.authService.getCurrentUser());
   protected permissions = computed(() => this.accessService.permissions);
   protected canEditOrAddCompanyProfile = computed(() => {
@@ -560,7 +560,10 @@ export class CompanyProfileComponent {
     this.companyService.loadCompanies();
 
     // Set permissions based on user role
+    // TEMPORARILY DISABLED: This was conflicting with dashboard permission setting
+    /*
     effect(() => {
+      console.log('🔍 [CompanyProfile] Effect running...');
       const user = this.authService.getCurrentUser();
       if (user?.uid) {
         console.log('CompanyProfile: user?.uid', user?.uid);
@@ -574,11 +577,17 @@ export class CompanyProfileComponent {
           const permissions = roleDef?.permissions;
           console.log('CompanyProfile: permissions', permissions);
           if (permissions) {
-            this.accessService.setPermissions(permissions);
+            console.log('🔍 [CompanyProfile] Setting permissions from role definition for roleId:', roleId);
+            this.accessService.setPermissions(permissions, roleId);
+          } else {
+            // If no role definition found, set permissions based on role alone
+            console.log('🔍 [CompanyProfile] No role definition found, setting permissions for roleId:', roleId);
+            this.accessService.setPermissions({}, roleId);
           }
         }
       }
     });
+    */
 
     // Update form when company changes
     effect(() => {
@@ -596,7 +605,7 @@ export class CompanyProfileComponent {
           taxId: company.taxId || '',
           website: company.website || ''
         });
-      } else if (user && !user.permission?.companyId) {
+      } else if (user && !this.authService.getCurrentPermission()?.companyId) {
         // New company creation - pre-populate with user email if available
         this.profileForm.patchValue({
           name: '',

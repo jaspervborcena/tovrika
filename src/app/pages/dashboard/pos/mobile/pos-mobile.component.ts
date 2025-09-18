@@ -618,8 +618,9 @@ export class PosMobileComponent implements OnInit {
     const storeInfo = this.currentStoreInfo();
 
     // Prepare transaction data matching the Transaction interface
+    const currentPermission = this.authService.getCurrentPermission();
     const transactionData = {
-  companyId: currentUser.permission?.companyId || '',
+      companyId: currentPermission?.companyId || '',
       storeId: storeInfo?.id || '',
       branchId: currentUser.branchId || 'main-branch', // Use user's branch or default
       cashierId: currentUser.uid || '',
