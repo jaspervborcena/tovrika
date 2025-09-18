@@ -6,11 +6,12 @@ import { collection, doc, setDoc, addDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, app } from '../../firebase.config';
 import { getStorage } from 'firebase/storage';
+import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../shared/components/confirmation-dialog/confirmation-dialog.component';
 
 @Component({
   standalone: true,
   selector: 'app-product-manager',
-  imports: [CommonModule, ReactiveFormsModule],
+  imports: [CommonModule, ReactiveFormsModule, ConfirmationDialogComponent],
   template: `
   <div class="modal-backdrop">
     <div class="modal" (click)="$event.stopPropagation()">
@@ -94,6 +95,14 @@ import { getStorage } from 'firebase/storage';
         </footer>
       </form>
     </div>
+
+    <!-- Confirmation Dialog -->
+    <app-confirmation-dialog
+      *ngIf="showConfirmDialog()"
+      [dialogData]="confirmDialogData()"
+      (confirmed)="onConfirmDialog()"
+      (cancelled)="onCancelDialog()"
+    />
   </div>
   `,
   styles: [
@@ -115,6 +124,16 @@ export class ProductManagerComponent {
   isSaving = false;
   imageFile: File | null = null;
   imagePreviewUrl: string | null = null;
+
+  // Confirmation dialog properties
+  showConfirmDialog = signal(false);
+  confirmDialogData = signal<ConfirmationDialogData>({
+    title: '',
+    message: '',
+    confirmText: 'OK',
+    cancelText: '',
+    type: 'info'
+  });
 
   private storage = getStorage(app);
 
@@ -156,6 +175,20 @@ export class ProductManagerComponent {
 
   get inventoryControls() {
     return this.form.get('inventory') as FormArray;
+  }
+
+  // Confirmation dialog methods
+  showConfirmationDialog(data: ConfirmationDialogData): void {
+    this.confirmDialogData.set(data);
+    this.showConfirmDialog.set(true);
+  }
+
+  onConfirmDialog(): void {
+    this.showConfirmDialog.set(false);
+  }
+
+  onCancelDialog(): void {
+    this.showConfirmDialog.set(false);
   }
 
   addInitialBatch() {
@@ -265,7 +298,12 @@ export class ProductManagerComponent {
       this.imageFile = compressed;
       this.imagePreviewUrl = URL.createObjectURL(compressed);
     } catch (err) {
-      alert('Image too large or compression failed. Please upload a smaller image.');
+      this.showConfirmationDialog({
+        title: 'Image Upload Error',
+        message: 'Image too large or compression failed. Please upload a smaller image.',
+        confirmText: 'OK',
+        type: 'warning'
+      });
     }
   }
 
@@ -350,7 +388,12 @@ export class ProductManagerComponent {
       this.close();
     } catch (err) {
       console.error(err);
-      alert('Failed to save product');
+      this.showConfirmationDialog({
+        title: 'Save Error',
+        message: 'Failed to save product. Please try again.',
+        confirmText: 'OK',
+        type: 'danger'
+      });
       this.isSaving = false;
     }
   }
