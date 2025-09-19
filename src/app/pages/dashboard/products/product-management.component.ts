@@ -8,6 +8,7 @@ import { Store } from '../../../interfaces/store.interface';
 import { AuthService } from '../../../services/auth.service';
 import { ToastService } from '../../../shared/services/toast.service';
 import { ErrorMessages } from '../../../shared/enums';
+import { CategoryService, ProductCategory } from '../../../services/category.service';
 
 @Component({
   selector: 'app-product-management',
@@ -704,12 +705,38 @@ import { ErrorMessages } from '../../../shared/enums';
           <form [formGroup]="productForm" (ngSubmit)="submitProduct()">
             <div class="form-group">
               <label for="category">Category *</label>
-              <input
-                type="text"
-                id="category"
-                formControlName="category"
-                class="form-input"
-                placeholder="Enter category">
+              <div class="category-input-container">
+                <input
+                  type="text"
+                  id="category"
+                  formControlName="category"
+                  class="form-input category-autocomplete"
+                  placeholder="Type category name..."
+                  (input)="onCategoryInput($event)"
+                  (focus)="showCategorySuggestions = true"
+                  (blur)="hideCategorySuggestions()"
+                  autocomplete="off">
+                <button
+                  type="button"
+                  class="btn btn-outline add-category-btn"
+                  (click)="openAddCategoryModal()"
+                  title="Add new category">
+                  <span class="btn-icon">+</span>
+                  Add Category
+                </button>
+              </div>
+              
+              <!-- Category Suggestions -->
+              <div class="category-suggestions" *ngIf="showCategorySuggestions && filteredCategories.length > 0">
+                <div
+                  *ngFor="let category of filteredCategories"
+                  class="category-suggestion-item"
+                  (mousedown)="selectCategory(category)"
+                  [title]="category">
+                  <span class="category-label">{{ category }}</span>
+                </div>
+              </div>
+              
               <div class="error-message" *ngIf="productForm.get('category')?.invalid && productForm.get('category')?.touched">
                 Category is required
               </div>
@@ -1230,7 +1257,8 @@ export class ProductManagementComponent implements OnInit {
     private authService: AuthService,
     private fb: FormBuilder,
     private cdr: ChangeDetectorRef,
-    private toastService: ToastService
+    private toastService: ToastService,
+    private categoryService: CategoryService
   ) {
     this.productForm = this.createProductForm();
     this.inventoryForm = this.createInventoryForm();
@@ -1749,5 +1777,70 @@ export class ProductManagementComponent implements OnInit {
       if (active) return active.unitPrice || product.sellingPrice;
     }
     return product.sellingPrice;
+  }
+
+  // Category Autocomplete Properties and Methods
+  filteredCategories: string[] = [];
+  showCategorySuggestions = false;
+
+  async loadCategories(): Promise<void> {
+    // Categories are already loaded through the computed signal from productService
+    // No need to load separately since we use this.categories()
+  }
+
+  onCategoryInput(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const value = input.value.toLowerCase();
+    
+    if (value.length > 0) {
+      const categoriesArray = this.categories(); // Get current value from computed signal
+      this.filteredCategories = categoriesArray.filter((category: string) => 
+        category.toLowerCase().includes(value)
+      );
+      this.showCategorySuggestions = this.filteredCategories.length > 0;
+    } else {
+      this.showCategorySuggestions = false;
+    }
+  }
+
+  selectCategory(category: string): void {
+    this.productForm.patchValue({ category });
+    this.showCategorySuggestions = false;
+  }
+
+  hideCategorySuggestions(): void {
+    // Add a small delay to allow for click events on suggestions
+    setTimeout(() => {
+      this.showCategorySuggestions = false;
+    }, 200);
+  }
+
+  async openAddCategoryModal(): Promise<void> {
+    const newCategory = prompt('Enter new category name:');
+    if (newCategory && newCategory.trim()) {
+      try {
+        // Create category object matching ProductCategory interface
+        const currentUser = this.authService.currentUser();
+        const companyId = currentUser?.currentCompanyId || 
+                         currentUser?.permissions?.[0]?.companyId || '';
+        
+        const categoryData = {
+          categoryId: `cat_${Date.now()}`,
+          categoryLabel: newCategory.trim(),
+          categoryDescription: newCategory.trim(),
+          categoryGroup: 'General',
+          isActive: true,
+          companyId: companyId
+        };
+        
+        await this.categoryService.createCategory(categoryData);
+        await this.loadCategories(); // Refresh categories list
+        this.productForm.patchValue({ category: newCategory.trim() });
+        this.toastService.success('Category added successfully!');
+      } catch (error) {
+        console.error('Error adding category:', error);
+        this.toastService.error('Failed to add category');
+      }
+    }
   }
 }

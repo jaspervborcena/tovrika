@@ -1,0 +1,32 @@
+[
+  {
+    "fields": {
+      "storeId": { "stringValue": "global" },
+      "typeId": { "stringValue": "store_barbershop" },
+      "typeCategory": { "stringValue": "storeType" },
+      "typeLabel": { "stringValue": "Barbershop" },
+      "typeDescription": { "stringValue": "Haircuts and grooming services" },
+      "createdAt": { "timestampValue": "2025-09-19T11:12:00Z" }
+    }
+  },
+  {
+    "fields": {
+      "storeId": { "stringValue": "global" },
+      "typeId": { "stringValue": "store_restaurant" },
+      "typeCategory": { "stringValue": "storeType" },
+      "typeLabel": { "stringValue": "Restaurant" },
+      "typeDescription": { "stringValue": "Food and beverage service" },
+      "createdAt": { "timestampValue": "2025-09-19T11:12:00Z" }
+    }
+  },
+  {
+    "fields": {
+      "storeId": { "stringValue": "global" },
+      "typeId": { "stringValue": "store_retail" },
+      "typeCategory": { "stringValue": "storeType" },
+      "typeLabel": { "stringValue": "Retail Store" },
+      "typeDescription": { "stringValue": "General merchandise and goods" },
+      "createdAt": { "timestampValue": "2025-09-19T11:12:00Z" }
+    }
+  }
+]

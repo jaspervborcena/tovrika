@@ -4,6 +4,7 @@ import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, Validators } 
 import { StoreService, Store } from '../../../services/store.service';
 import { AuthService } from '../../../services/auth.service';
 import { ToastService } from '../../../shared/services/toast.service';
+import { PredefinedTypesService, PredefinedType } from '../../../services/predefined-types.service';
 
 @Component({
   selector: 'app-stores-management',
@@ -156,12 +157,12 @@ import { ToastService } from '../../../shared/services/toast.service';
                   formControlName="storeType"
                   class="form-select">
                   <option value="">Select store type</option>
-                  <option value="Convenience Store">Convenience Store</option>
-                  <option value="Supermarket">Supermarket</option>
-                  <option value="Department Store">Department Store</option>
-                  <option value="Specialty Store">Specialty Store</option>
-                  <option value="Warehouse">Warehouse</option>
-                  <option value="Outlet">Outlet</option>
+                  <option 
+                    *ngFor="let storeType of storeTypes" 
+                    [value]="storeType.typeLabel"
+                    [title]="storeType.typeDescription">
+                    {{ storeType.typeLabel }}
+                  </option>
                 </select>
                 <div class="error-message" *ngIf="storeForm.get('storeType')?.invalid && storeForm.get('storeType')?.touched">
                   Store type is required
@@ -614,6 +615,7 @@ import { ToastService } from '../../../shared/services/toast.service';
 export class StoresManagementComponent implements OnInit {
   stores: Store[] = [];
   filteredStores: Store[] = [];
+  storeTypes: PredefinedType[] = [];
   
   searchTerm: string = '';
   isLoading: boolean = false;
@@ -627,7 +629,8 @@ export class StoresManagementComponent implements OnInit {
     private authService: AuthService,
     private fb: FormBuilder,
     private cdr: ChangeDetectorRef,
-    private toastService: ToastService
+    private toastService: ToastService,
+    private predefinedTypesService: PredefinedTypesService
   ) {
     this.storeForm = this.fb.group({
       storeName: ['', [Validators.required]],
@@ -643,6 +646,16 @@ export class StoresManagementComponent implements OnInit {
 
   async ngOnInit() {
     await this.loadStores();
+    await this.loadStoreTypes();
+  }
+
+  async loadStoreTypes() {
+    try {
+      this.storeTypes = await this.predefinedTypesService.getStoreTypes();
+    } catch (error) {
+      console.error('Error loading store types:', error);
+      this.toastService.error('Failed to load store types');
+    }
   }
 
   async loadStores() {

@@ -26,6 +26,12 @@ export const routes: Routes = [
     loadComponent: () => import('./pages/help/help.component').then(m => m.HelpComponent)
   },
   
+  // Import Utility Route (admin use only)
+  {
+    path: 'import',
+    loadComponent: () => import('./pages/import/import.component').then(m => m.ImportComponent)
+  },
+  
   // Customer Display Route (no authentication needed)
   {
     path: 'customer-view/:sessionId',

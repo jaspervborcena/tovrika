@@ -1,0 +1,122 @@
+[
+  {
+    "fields": {
+      "storeId": { "stringValue": "global" },
+      "typeId": { "stringValue": "store_barbershop" },
+      "typeCategory": { "stringValue": "storeType" },
+      "typeLabel": { "stringValue": "Barbershop" },
+      "typeDescription": { "stringValue": "Haircuts and grooming services" },
+      "createdAt": { "timestampValue": "2025-09-19T12:00:00Z" }
+    }
+  },
+  {
+    "fields": {
+      "storeId": { "stringValue": "global" },
+      "typeId": { "stringValue": "store_restaurant" },
+      "typeCategory": { "stringValue": "storeType" },
+      "typeLabel": { "stringValue": "Restaurant" },
+      "typeDescription": { "stringValue": "Food and beverage service" },
+      "createdAt": { "timestampValue": "2025-09-19T12:00:00Z" }
+    }
+  },
+  {
+    "fields": {
+      "storeId": { "stringValue": "global" },
+      "typeId": { "stringValue": "store_retail" },
+      "typeCategory": { "stringValue": "storeType" },
+      "typeLabel": { "stringValue": "Retail Store" },
+      "typeDescription": { "stringValue": "General merchandise and goods" },
+      "createdAt": { "timestampValue": "2025-09-19T12:00:00Z" }
+    }
+  },
+  {
+    "fields": {
+      "storeId": { "stringValue": "global" },
+      "typeId": { "stringValue": "store_convenience" },
+      "typeCategory": { "stringValue": "storeType" },
+      "typeLabel": { "stringValue": "Convenience Store" },
+      "typeDescription": { "stringValue": "Quick shopping for daily needs" },
+      "createdAt": { "timestampValue": "2025-09-19T12:00:00Z" }
+    }
+  },
+  {
+    "fields": {
+      "storeId": { "stringValue": "global" },
+      "typeId": { "stringValue": "store_supermarket" },
+      "typeCategory": { "stringValue": "storeType" },
+      "typeLabel": { "stringValue": "Supermarket" },
+      "typeDescription": { "stringValue": "Large self-service grocery store" },
+      "createdAt": { "timestampValue": "2025-09-19T12:00:00Z" }
+    }
+  },
+  {
+    "fields": {
+      "storeId": { "stringValue": "global" },
+      "typeId": { "stringValue": "store_department" },
+      "typeCategory": { "stringValue": "storeType" },
+      "typeLabel": { "stringValue": "Department Store" },
+      "typeDescription": { "stringValue": "Large store with various departments" },
+      "createdAt": { "timestampValue": "2025-09-19T12:00:00Z" }
+    }
+  },
+  {
+    "fields": {
+      "storeId": { "stringValue": "global" },
+      "typeId": { "stringValue": "store_specialty" },
+      "typeCategory": { "stringValue": "storeType" },
+      "typeLabel": { "stringValue": "Specialty Store" },
+      "typeDescription": { "stringValue": "Store focusing on specific products" },
+      "createdAt": { "timestampValue": "2025-09-19T12:00:00Z" }
+    }
+  },
+  {
+    "fields": {
+      "storeId": { "stringValue": "global" },
+      "typeId": { "stringValue": "store_pharmacy" },
+      "typeCategory": { "stringValue": "storeType" },
+      "typeLabel": { "stringValue": "Pharmacy" },
+      "typeDescription": { "stringValue": "Medicine and health products" },
+      "createdAt": { "timestampValue": "2025-09-19T12:00:00Z" }
+    }
+  },
+  {
+    "fields": {
+      "storeId": { "stringValue": "global" },
+      "typeId": { "stringValue": "store_gas_station" },
+      "typeCategory": { "stringValue": "storeType" },
+      "typeLabel": { "stringValue": "Gas Station" },
+      "typeDescription": { "stringValue": "Fuel and automotive services" },
+      "createdAt": { "timestampValue": "2025-09-19T12:00:00Z" }
+    }
+  },
+  {
+    "fields": {
+      "storeId": { "stringValue": "global" },
+      "typeId": { "stringValue": "store_bakery" },
+      "typeCategory": { "stringValue": "storeType" },
+      "typeLabel": { "stringValue": "Bakery" },
+      "typeDescription": { "stringValue": "Fresh bread and baked goods" },
+      "createdAt": { "timestampValue": "2025-09-19T12:00:00Z" }
+    }
+  },
+  {
+    "fields": {
+      "storeId": { "stringValue": "global" },
+      "typeId": { "stringValue": "store_carwash" },
+      "typeCategory": { "stringValue": "storeType" },
+      "typeLabel": { "stringValue": "Car Wash" },
+      "typeDescription": { "stringValue": "Vehicle cleaning and detailing services" },
+      "createdAt": { "timestampValue": "2025-09-19T12:00:00Z" }
+    }
+  },
+  {
+    "fields": {
+      "storeId": { "stringValue": "global" },
+      "typeId": { "stringValue": "store_others" },
+      "typeCategory": { "stringValue": "storeType" },
+      "typeLabel": { "stringValue": "Others" },
+      "typeDescription": { "stringValue": "Custom or miscellaneous store types" },
+      "createdAt": { "timestampValue": "2025-09-19T12:00:00Z" }
+    }
+  }
+]
