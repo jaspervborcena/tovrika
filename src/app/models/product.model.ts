@@ -17,7 +17,6 @@ export interface Product {
   storeId?: string;
   isMultipleInventory?: boolean;
   barcodeId?: string;
-  qrCode?: string;
   imageUrl?: string;
   isVatApplicable?: boolean;
   vatRate?: number;

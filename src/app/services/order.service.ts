@@ -241,10 +241,7 @@ export class OrderService {
         { field: 'orderNumber', value: searchQuery },
         { field: 'invoiceNumber', value: searchQuery },
         
-        // 2. Search by QR code
-        { field: 'qrCode', value: searchQuery },
-        
-        // 3. Search by order ID (exact match)
+        // 2. Search by order ID (exact match)
         { field: 'id', value: searchQuery },
         
         // 4. Search by partial order number (if it's numeric, try with leading zeros)

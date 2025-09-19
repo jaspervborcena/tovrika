@@ -17,6 +17,11 @@ export const routes: Routes = [
     loadComponent: () => import('./pages/auth/register/register.component').then(m => m.RegisterComponent)
   },
   {
+    path: 'company-selection',
+    canActivate: [authGuard],
+    loadComponent: () => import('./pages/company-selection/company-selection.component').then(m => m.CompanySelectionComponent)
+  },
+  {
     path: 'help',
     loadComponent: () => import('./pages/help/help.component').then(m => m.HelpComponent)
   },
@@ -68,46 +73,42 @@ export const routes: Routes = [
       },
       // Routes requiring onboarding completion
       {
-        path: 'overview',
-        loadComponent: () => import('./pages/dashboard/overview/overview.component').then(m => m.OverviewComponent),
-        canActivate: [onboardingGuard],
-        data: { roles: ['admin', 'manager'] }
+  path: 'overview',
+  loadComponent: () => import('./pages/dashboard/overview/overview.component').then(m => m.OverviewComponent),
+  canActivate: [onboardingGuard],
+  data: { roles: ['creator', 'store_manager', 'cashier'] }
       },
       {
-        path: 'stores',
-        loadComponent: () => import('./pages/dashboard/stores-management/stores-management.component').then(m => m.StoresManagementComponent),
-        canActivate: [onboardingGuard],
-        data: { roles: ['admin', 'manager'] }
+  path: 'stores',
+  loadComponent: () => import('./pages/dashboard/stores-management/stores-management.component').then(m => m.StoresManagementComponent),
+  canActivate: [onboardingGuard],
+  data: { roles: ['creator', 'store_manager', 'cashier'] }
       },
       {
-        path: 'branches',
-        loadComponent: () => import('./pages/dashboard/branches/branches.component').then(m => m.BranchesComponent),
-        canActivate: [onboardingGuard],
-        data: { roles: ['admin', 'manager'] }
+  path: 'branches',
+  loadComponent: () => import('./pages/dashboard/branches/branches.component').then(m => m.BranchesComponent),
+  canActivate: [onboardingGuard],
+  data: { roles: ['creator', 'store_manager', 'cashier'] }
       },
       {
-        path: 'access',
-        loadComponent: () => import('./pages/dashboard/access/access.component').then(m => m.AccessComponent),
-        canActivate: [onboardingGuard],
-        data: { roles: ['admin', 'manager'] }
+  path: 'access',
+  loadComponent: () => import('./pages/dashboard/access/access.component').then(m => m.AccessComponent)
       },
       {
-        path: 'user-roles',
-        loadComponent: () => import('./pages/dashboard/user-roles/user-roles.component').then(m => m.UserRolesComponent),
-        canActivate: [onboardingGuard],
-        data: { roles: ['admin', 'manager'] }
+  path: 'user-roles',
+  loadComponent: () => import('./pages/dashboard/user-roles/user-roles.component').then(m => m.UserRolesComponent)
       },
       {
-        path: 'products',
-        loadComponent: () => import('./pages/dashboard/products/product-management.component').then(m => m.ProductManagementComponent),
-        canActivate: [onboardingGuard],
-        data: { roles: ['admin', 'manager'] }
+  path: 'products',
+  loadComponent: () => import('./pages/dashboard/products/product-management.component').then(m => m.ProductManagementComponent),
+  canActivate: [onboardingGuard],
+  data: { roles: ['creator', 'store_manager', 'cashier'] }
       },
       {
-        path: 'inventory',
-        loadComponent: () => import('./pages/dashboard/inventory/inventory.component').then(m => m.InventoryComponent),
-        canActivate: [onboardingGuard],
-        data: { roles: ['admin', 'manager'] }
+  path: 'inventory',
+  loadComponent: () => import('./pages/dashboard/inventory/inventory.component').then(m => m.InventoryComponent),
+  canActivate: [onboardingGuard],
+  data: { roles: ['creator', 'store_manager', 'cashier'] }
       },
       {
         path: 'pos',
@@ -136,17 +137,17 @@ export const routes: Routes = [
   // Standalone POS Route (originally existed)
   {
     path: 'pos',
-    loadComponent: () => import('./pages/dashboard/pos/pos.component').then(m => m.PosComponent)
-    // Temporarily removed guards: canActivate: [authGuard],
-    // data: { roles: ['admin', 'manager', 'cashier'] }
+    loadComponent: () => import('./pages/dashboard/pos/pos.component').then(m => m.PosComponent),
+    canActivate: [onboardingGuard],
+    data: { roles: ['creator', 'store_manager', 'cashier'] }
   },
-  
+
   // Mobile POS Route
   {
     path: 'pos/mobile',
-    loadComponent: () => import('./pages/dashboard/pos/mobile/pos-mobile.component').then(m => m.PosMobileComponent)
-    // Temporarily removed guards: canActivate: [authGuard],
-    // data: { roles: ['admin', 'manager', 'cashier'] }
+    loadComponent: () => import('./pages/dashboard/pos/mobile/pos-mobile.component').then(m => m.PosMobileComponent),
+    canActivate: [onboardingGuard],
+    data: { roles: ['creator', 'store_manager', 'cashier'] }
   },
   
   // Fallback route

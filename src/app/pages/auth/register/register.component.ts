@@ -4,11 +4,12 @@ import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { AuthService } from '../../../services/auth.service';
 import { HeaderComponent } from '../../../shared/components/header/header.component';
+import { LogoComponent } from '../../../shared/components/logo/logo.component';
 
 @Component({
   selector: 'app-register',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule, RouterLink, HeaderComponent],
+  imports: [CommonModule, ReactiveFormsModule, RouterLink, HeaderComponent, LogoComponent],
  templateUrl: './register.component.html',
  styleUrls: ['./register.component.css']
 })
@@ -36,11 +37,8 @@ export class RegisterComponent {
         const user = await this.authService.registerUser(email!, password!, {
           email: email!,
           displayName: displayName!,
-          roleId: 'admin', // First registered user gets admin role
-          companyId: '', // Will be set when company is created
-          storeIds: [], // Will be populated when stores are added
-          status: 'active',
-          permissions: ['all']
+          status: 'active'
+          // permission will be set when company/store access is granted
         });
         
         // Admin should create a company first

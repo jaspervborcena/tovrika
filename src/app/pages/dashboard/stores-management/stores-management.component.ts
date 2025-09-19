@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { StoreService, Store } from '../../../services/store.service';
 import { AuthService } from '../../../services/auth.service';
+import { ToastService } from '../../../shared/services/toast.service';
 
 @Component({
   selector: 'app-stores-management',
@@ -57,7 +58,6 @@ import { AuthService } from '../../../services/auth.service';
                 <th>Store Code</th>
                 <th>Store Type</th>
                 <th>Address</th>
-                <th>Manager</th>
                 <th>Status</th>
                 <th>Actions</th>
               </tr>
@@ -68,7 +68,6 @@ import { AuthService } from '../../../services/auth.service';
                 <td class="store-code-cell">{{ store.storeCode }}</td>
                 <td class="store-type-cell">{{ store.storeType }}</td>
                 <td class="address-cell">{{ store.address }}</td>
-                <td class="manager-cell">{{ store.managerName || 'Not assigned' }}</td>
                 <td class="status-cell">
                   <span class="status-badge" [class]="'status-' + store.status">
                     {{ store.status | titlecase }}
@@ -203,16 +202,6 @@ import { AuthService } from '../../../services/auth.service';
               </div>
 
               <div class="form-group">
-                <label for="managerName">Manager Name</label>
-                <input 
-                  type="text" 
-                  id="managerName"
-                  formControlName="managerName"
-                  placeholder="Enter manager name"
-                  class="form-input">
-              </div>
-
-              <div class="form-group">
                 <label for="status">Status *</label>
                 <select 
                   id="status"
@@ -245,7 +234,7 @@ import { AuthService } from '../../../services/auth.service';
     }
 
     .header {
-      background: linear-gradient(135deg, #059669 0%, #10b981 100%);
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
       color: white;
       padding: 2rem 0;
       margin-bottom: 2rem;
@@ -380,10 +369,6 @@ import { AuthService } from '../../../services/auth.service';
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
-    }
-
-    .manager-cell {
-      color: #4a5568;
     }
 
     .status-badge {
@@ -641,7 +626,8 @@ export class StoresManagementComponent implements OnInit {
     private storeService: StoreService,
     private authService: AuthService,
     private fb: FormBuilder,
-    private cdr: ChangeDetectorRef
+    private cdr: ChangeDetectorRef,
+    private toastService: ToastService
   ) {
     this.storeForm = this.fb.group({
       storeName: ['', [Validators.required]],
@@ -664,10 +650,15 @@ export class StoresManagementComponent implements OnInit {
     
     try {
       const currentUser = await this.authService.waitForAuth();
-      if (currentUser?.companyId) {
-        await this.storeService.loadStoresByCompany(currentUser.companyId);
-        this.stores = this.storeService.getStoresByCompany(currentUser.companyId);
+      const currentPermission = this.authService.getCurrentPermission();
+      if (currentPermission?.companyId) {
+        await this.storeService.loadStoresByCompany(currentPermission.companyId);
+        this.stores = this.storeService.getStoresByCompany(currentPermission.companyId);
         this.filteredStores = [...this.stores];
+      } else {
+        // Creator account, no companyId yet, allow empty stores array for onboarding
+        this.stores = [];
+        this.filteredStores = [];
       }
     } catch (error) {
       console.error('Error loading stores:', error);
@@ -677,17 +668,12 @@ export class StoresManagementComponent implements OnInit {
   }
 
   onSearchChange() {
-    if (!this.searchTerm.trim()) {
-      this.filteredStores = [...this.stores];
-      return;
-    }
-
-    const term = this.searchTerm.toLowerCase();
-    this.filteredStores = this.stores.filter(store => 
-      store.storeName.toLowerCase().includes(term) ||
-      store.storeCode.toLowerCase().includes(term) ||
-      store.storeType.toLowerCase().includes(term) ||
-      store.address.toLowerCase().includes(term)
+    const term = this.searchTerm?.toLowerCase() || '';
+    this.filteredStores = (this.stores || []).filter(store => 
+      store.storeName?.toLowerCase().includes(term) ||
+      store.storeCode?.toLowerCase().includes(term) ||
+      store.storeType?.toLowerCase().includes(term) ||
+      store.address?.toLowerCase().includes(term)
     );
   }
 
@@ -742,14 +728,15 @@ export class StoresManagementComponent implements OnInit {
 
     try {
       const currentUser = await this.authService.waitForAuth();
-      if (!currentUser?.companyId) {
+      const currentPermission = this.authService.getCurrentPermission();
+      if (!currentPermission?.companyId) {
         throw new Error('No company ID found');
       }
 
       const formData = this.storeForm.value;
       const storeData: Omit<Store, 'id' | 'createdAt' | 'updatedAt'> = {
         ...formData,
-        companyId: currentUser.companyId
+        companyId: currentPermission.companyId
       };
 
       if (this.editingStore) {
@@ -764,7 +751,7 @@ export class StoresManagementComponent implements OnInit {
       this.cancelStoreModal();
     } catch (error) {
       console.error('Error saving store:', error);
-      alert('Error saving store. Please try again.');
+      this.toastService.error('Error saving store. Please try again.');
     } finally {
       this.isLoading = false;
     }
@@ -779,7 +766,7 @@ export class StoresManagementComponent implements OnInit {
         await this.loadStores();
       } catch (error) {
         console.error('Error deleting store:', error);
-        alert('Error deleting store. Please try again.');
+        this.toastService.error('Error deleting store. Please try again.');
       } finally {
         this.isLoading = false;
       }

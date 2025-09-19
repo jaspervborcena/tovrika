@@ -4,16 +4,14 @@
     <div class="header-content">
       <div class="header-left">
         <div class="logo-section">
-          <div class="logo-icon">
-            <svg fill="#FCD34D" stroke="#F59E0B" viewBox="0 0 24 24" width="28" height="28">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
-              <circle cx="12" cy="12" r="3" fill="#FCD34D" stroke="#F59E0B" stroke-width="1.5"></circle>
-            </svg>
-          </div>
-          <h1 class="logo-text">
-            <a routerLink="/" class="logo-link">Tovrika</a>
-          </h1>
-          <span class="product-badge">POS System</span>
+          <app-logo 
+            size="md" 
+            [showText]="true" 
+            theme="light" 
+            background="white"
+            [clickable]="true"
+            companyName="Tovrika POS System">
+          </app-logo>
         </div>
       </div>
       

@@ -60,17 +60,20 @@ export class InventoryService {
   }
 
   async updateStock(
-    companyId: string,
-    storeId: string,
-    branchId: string,
-    productId: string,
-    quantity: number,
-    isIncrement: boolean = false
+  productId: string,
+  quantity: number,
+  companyId?: string,
+  storeId?: string,
+  branchId?: string,
+  isIncrement: boolean = false
   ) {
     try {
+      const safeCompanyId = companyId ?? '';
+      const safeStoreId = storeId ?? '';
+      const safeBranchId = branchId ?? '';
       const inventoryRef = doc(
         this.firestore,
-        `companies/${companyId}/stores/${storeId}/branches/${branchId}/inventory/${productId}`
+        `companies/${safeCompanyId}/stores/${safeStoreId}/branches/${safeBranchId}/inventory/${productId}`
       );
 
       const currentItem = this.inventory().find(item => item.productId === productId);
@@ -87,9 +90,9 @@ export class InventoryService {
         // Create new inventory item
         const newItem: InventoryItem = {
           productId,
-          branchId,
-          storeId,
-          companyId,
+          branchId: safeBranchId,
+          storeId: safeStoreId,
+          companyId: safeCompanyId,
           quantity: newQuantity,
           minStock: 10, // Default values, should be configurable
           maxStock: 100,
@@ -125,11 +128,11 @@ export class InventoryService {
       // Use batched writes for multiple updates
       for (const adjustment of adjustments) {
         await this.updateStock(
+          adjustment.productId,
+          adjustment.quantity,
           companyId,
           storeId,
           branchId,
-          adjustment.productId,
-          adjustment.quantity,
           true
         );
       }
