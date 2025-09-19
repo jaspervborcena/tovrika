@@ -59,7 +59,6 @@ export class ProductService {
       storeId: data['storeId'] || '',
       isMultipleInventory: data['isMultipleInventory'] || false,
       barcodeId: data['barcodeId'] || '',
-      qrCode: data['qrCode'] || '',
       imageUrl: data['imageUrl'] || '',
       inventory: this.transformInventoryArray(data['inventory'] || []),
       
@@ -92,8 +91,9 @@ export class ProductService {
   private async waitForAuth(): Promise<string> {
     return new Promise((resolve, reject) => {
       const currentUser = this.authService.getCurrentUser();
-      if (currentUser?.companyId) {
-        resolve(currentUser.companyId);
+      const currentPermission = this.authService.getCurrentPermission();
+      if (currentUser && currentPermission?.companyId) {
+        resolve(currentPermission.companyId);
         return;
       }
 
@@ -101,8 +101,9 @@ export class ProductService {
       let attempts = 0;
       const checkAuth = () => {
         const user = this.authService.getCurrentUser();
-        if (user?.companyId) {
-          resolve(user.companyId);
+        const permission = this.authService.getCurrentPermission();
+        if (user && permission?.companyId) {
+          resolve(permission.companyId);
           return;
         }
         

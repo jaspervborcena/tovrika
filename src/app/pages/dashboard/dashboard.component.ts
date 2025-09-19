@@ -5,6 +5,9 @@ import { StoreService, Store } from '../../services/store.service';
 import { ProductService } from '../../services/product.service';
 import { AuthService } from '../../services/auth.service';
 import { CompanySetupService } from '../../services/companySetup.service';
+import { AccessService, Permissions } from '../../core/services/access.service';
+import { Firestore, collection, query, where, getDocs } from '@angular/fire/firestore';
+import { LogoComponent } from '../../shared/components/logo/logo.component';
 
 @Component({
   selector: 'app-dashboard',
@@ -12,16 +15,28 @@ import { CompanySetupService } from '../../services/companySetup.service';
   imports: [
     CommonModule, 
     RouterLink,
-    RouterOutlet
+    RouterOutlet,
+    LogoComponent
   ],
   templateUrl: './dashboard.component.html',
   styleUrls: ['./dashboard.component.css']
 })
 export class DashboardComponent implements OnInit {
+  // Closes the user menu dropdown
+  protected closeUserMenu() {
+    this.isUserMenuOpen.set(false);
+  }
+
+  // Logs out the current user
+  protected async logout() {
+    await this.authService.logout();
+  }
   private storeService = inject(StoreService);
   private productService = inject(ProductService);
   private authService = inject(AuthService);
   private companyService = inject(CompanySetupService);
+  private accessService = inject(AccessService);
+  private firestore = inject(Firestore);
 
   // Signals
   protected stores = signal<Store[]>([]);
@@ -57,37 +72,118 @@ export class DashboardComponent implements OnInit {
 
   constructor() {}
 
-  @HostListener('window:resize')
-  onResize() {
+  async ngOnInit() {
     this.screenWidth = window.innerWidth;
     this.isMobile = this.screenWidth < 1024;
-  }
+    this.loadDashboardData();
+    const user = this.currentUser();
+    if (!user) return;
 
-  protected closeUserMenu() {
-    this.isUserMenuOpen.set(false);
-  }
-
-  protected async logout() {
-    try {
-      await this.authService.logout();
-    } catch (error) {
-      console.error('Error signing out:', error);
+    const currentPermission = this.authService.getCurrentPermission();
+    console.log('🔍 [Dashboard Debug] currentPermission:', currentPermission);
+    console.log('🔍 [Dashboard Debug] user.permissions:', user.permissions);
+    
+    // Check if BOTH companyId AND storeId exist
+    if (!currentPermission?.companyId || !currentPermission?.storeId) {
+      console.log('🔍 [Dashboard Debug] Missing companyId or storeId, checking user permissions for role');
+      
+      // If either companyId or storeId is missing, check user's role directly from permissions
+      if (currentPermission?.roleId) {
+        console.log('🔍 [Dashboard Debug] Found roleId in permissions:', currentPermission.roleId);
+        
+        if (currentPermission.roleId === 'cashier') {
+          console.log('🔍 [Dashboard Debug] Setting cashier permissions (no storeId/companyId required)');
+          this.accessService.setPermissions({}, 'cashier');
+          return;
+        } else if (currentPermission.roleId === 'store_manager') {
+          console.log('🔍 [Dashboard Debug] Setting store_manager permissions (no storeId/companyId required)');
+          this.accessService.setPermissions({}, 'store_manager');
+          return;
+        }
+      }
+      
+      // If no specific role found or role is creator, default to creator (show all)
+      console.log('🔍 [Dashboard Debug] No specific role or creator role, setting as creator (show all)');
+      this.accessService.setPermissions({}, 'creator');
+      return;
     }
-  }
 
-  @HostListener('document:click', ['$event'])
-  onDocumentClick(event: Event) {
-    // Close user menu when clicking outside
-    const target = event.target as HTMLElement;
-    if (!target.closest('[data-user-menu]')) {
-      this.isUserMenuOpen.set(false);
+    console.log('🔍 [Dashboard Debug] Both companyId and storeId exist, proceeding with userRoles lookup');
+
+    // Try to get roleId from userRoles collection
+    const userRolesRef = collection(this.firestore, 'userRoles');
+    const userRolesQuery = query(
+      userRolesRef,
+      where('companyId', '==', currentPermission.companyId),
+      where('userId', '==', user.uid),
+      where('storeId', '==', currentPermission.storeId || '')
+    );
+    const userRolesSnap = await getDocs(userRolesQuery);
+    let roleId: string | undefined;
+    console.log('🔍 [Dashboard Debug] userRolesSnap.empty:', userRolesSnap.empty);
+    if (!userRolesSnap.empty) {
+      const userRoleData = userRolesSnap.docs[0].data();
+      roleId = userRoleData['roleId'];
+      console.log('🔍 [Dashboard Debug] Found roleId from userRoles:', roleId);
+    } else {
+      // Fallback: use roleId from permissions array if available
+      if (currentPermission?.roleId) {
+        roleId = currentPermission.roleId;
+        console.log('🔍 [Dashboard Debug] Using roleId from permissions array:', roleId);
+      } else {
+        // Final fallback: get user doc from Firestore and check permission field
+        const userDocRef = collection(this.firestore, 'users');
+        const userDocSnap = await getDocs(query(userDocRef, where('uid', '==', user.uid)));
+        if (!userDocSnap.empty) {
+          const userDoc = userDocSnap.docs[0].data();
+          if (userDoc['permission'] && userDoc['permission']['roleId']) {
+            roleId = userDoc['permission']['roleId'];
+            console.log('🔍 [Dashboard Debug] Found roleId from user doc:', roleId);
+          }
+        }
+      }
     }
-  }
 
-  ngOnInit() {
-  this.screenWidth = window.innerWidth;
-  this.isMobile = this.screenWidth < 1024;
-  this.loadDashboardData();
+    if (!roleId) {
+      // If no roleId found, treat as creator
+      console.log('🔍 [Dashboard Debug] No roleId found, setting as creator');
+      this.accessService.setPermissions({}, 'creator');
+      return;
+    }
+
+    console.log('🔍 [Dashboard Debug] Final roleId:', roleId);
+    if (roleId === 'cashier') {
+      console.log('🔍 [Dashboard Debug] Setting cashier permissions');
+      this.accessService.setPermissions({}, 'cashier');
+    } else if (roleId === 'store_manager') {
+      console.log('🔍 [Dashboard Debug] Setting store_manager permissions');
+      this.accessService.setPermissions({}, 'store_manager');
+    } else if (roleId === 'creator') {
+      console.log('🔍 [Dashboard Debug] Setting creator permissions (built-in role)');
+      this.accessService.setPermissions({}, 'creator');
+    } else {
+      // For other custom roles, use roledefinition permissions
+      const roleDefRef = collection(this.firestore, 'roledefinition');
+      const roleDefQuery = query(
+        roleDefRef,
+        where('companyId', '==', currentPermission.companyId),
+        where('roleId', '==', roleId)
+      );
+      const roleDefSnap = await getDocs(roleDefQuery);
+      if (!roleDefSnap.empty) {
+        const roleDefData = roleDefSnap.docs[0].data();
+        if (roleDefData['permissions']) {
+          console.log('🔍 [Dashboard Debug] Setting custom role permissions for:', roleId);
+          this.accessService.setPermissions(roleDefData['permissions'], roleId);
+        } else {
+          console.log('🔍 [Dashboard Debug] No custom permissions found, setting as creator');
+          this.accessService.setPermissions({}, 'creator');
+        }
+      } else {
+        console.log('🔍 [Dashboard Debug] No role definition found, setting as creator');
+        this.accessService.setPermissions({}, 'creator');
+      }
+    }
   }
 
   protected onStoreChange(event: Event) {
@@ -100,27 +196,26 @@ export class DashboardComponent implements OnInit {
       const user = this.authService.getCurrentUser();
       if (!user) return;
 
-      if (user.companyId) {
+      const currentPermission = this.authService.getCurrentPermission();
+      if (currentPermission?.companyId) {
         // Load company-specific data
-        await this.storeService.loadStoresByCompany(user.companyId);
-        await this.productService.loadProducts(user.companyId);
+        await this.storeService.loadStoresByCompany(currentPermission.companyId);
+        await this.productService.loadProducts(currentPermission.companyId);
         
         this.stores.set(this.storeService.getStores());
         this.totalStores.set(this.stores().length);
         this.totalProducts.set(this.productService.totalProducts());
-      } else if ((user.roleId || user.role) === 'admin') {
-        // Load all data for admin
-        this.totalCompanies.set(this.companyService.totalCompanies());
-        
-        const companies = this.companyService.getCompanies();
-        this.recentCompanies.set(
-          companies
-            .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-            .slice(0, 5)
-        );
       }
     } catch (error) {
       console.error('Error loading dashboard data:', error);
     }
+  }
+
+  get permissions() {
+    const currentPermissions = this.accessService.permissions || {};
+    console.log('🔍 [Dashboard] Current permissions getter called:', currentPermissions);
+    console.log('🔍 [Dashboard] canViewProducts:', currentPermissions.canViewProducts);
+    console.log('🔍 [Dashboard] canViewPOS:', currentPermissions.canViewPOS);
+    return currentPermissions;
   }
 }

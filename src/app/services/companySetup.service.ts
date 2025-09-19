@@ -75,15 +75,25 @@ export class CompanySetupService {
       // Update the signal with the new company
       this.companiesSignal.update(companies => [...companies, { ...newCompany, id: docRef.id }]);
       
-      // Update the current user's companyId
+      // Update the current user's permissions array with the new company
       try {
+        const currentUser = this.authService.getCurrentUser();
+        const updatedPermissions = currentUser?.permissions || [];
+        // Add or update permission for this company
+        const existingPermissionIndex = updatedPermissions.findIndex(p => p.companyId === docRef.id);
+        if (existingPermissionIndex >= 0) {
+          updatedPermissions[existingPermissionIndex] = { companyId: docRef.id, roleId: 'creator' };
+        } else {
+          updatedPermissions.push({ companyId: docRef.id, roleId: 'creator' });
+        }
+        
         await this.authService.updateUserData({ 
-          companyId: docRef.id,
-          role: 'admin' // User who creates company becomes admin
+          permissions: updatedPermissions,
+          currentCompanyId: docRef.id // Set as current company
         });
-        console.log('User companyId updated successfully');
+        console.log('User permissions updated successfully');
       } catch (userUpdateError) {
-        console.error('Error updating user companyId:', userUpdateError);
+        console.error('Error updating user permissions:', userUpdateError);
         // Company is created, but user update failed - this is not critical
       }
       

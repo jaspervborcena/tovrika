@@ -2,11 +2,12 @@ import { Component, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink, Router } from '@angular/router';
 import { AuthService } from '../../services/auth.service';
+import { LogoComponent } from '../../shared/components/logo/logo.component';
 
 @Component({
   selector: 'app-home',
   standalone: true,
-  imports: [CommonModule, RouterLink],
+  imports: [CommonModule, RouterLink, LogoComponent],
   templateUrl: './home.component.html',
   styleUrl: './home.component.css'
 })
@@ -30,11 +31,6 @@ export class HomeComponent {
   }
 
   async logout() {
-    try {
-      await this.authService.logout();
-      // User will automatically be redirected by the auth state change
-    } catch (error) {
-      console.error('Logout error:', error);
-    }
+    await this.authService.logout();
   }
 }

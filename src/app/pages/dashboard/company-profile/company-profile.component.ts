@@ -5,6 +5,10 @@ import { Router } from '@angular/router';
 import { CompanyService } from '../../../services/company.service';
 import { AuthService } from '../../../services/auth.service';
 import { Company } from '../../../interfaces/company.interface';
+import { AccessService } from '../../../core/services/access.service';
+import { UserRoleService } from '../../../services/user-role.service';
+import { RoleDefinitionService, RoleDefinition } from '../../../services/role-definition.service';
+import { UserRole } from '../../../interfaces/user-role.interface';
 
 @Component({
   selector: 'app-company-profile',
@@ -16,14 +20,6 @@ import { Company } from '../../../interfaces/company.interface';
       <div class="header">
         <div class="header-content">
           <div class="header-left">
-            <button 
-              (click)="goBack()" 
-              class="back-btn">
-              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
-              </svg>
-              Back to Dashboard
-            </button>
             <div class="header-text">
               <h1 class="page-title">Company Profile</h1>
               <p class="page-subtitle">Configure your company information and settings</p>
@@ -173,13 +169,13 @@ import { Company } from '../../../interfaces/company.interface';
               <button 
                 type="button" 
                 (click)="resetForm()" 
-                [disabled]="loading()"
+                [disabled]="loading() || !canEditOrAddCompanyProfile()"
                 class="btn btn-secondary">
                 Reset Form
               </button>
               <button 
                 type="submit" 
-                [disabled]="loading() || profileForm.invalid"
+                [disabled]="loading() || profileForm.invalid || !canEditOrAddCompanyProfile()"
                 class="btn btn-primary">
                 <span *ngIf="loading()" class="loading-spinner"></span>
                 {{ loading() ? 'Saving Changes...' : (isCreatingCompany() ? 'Create Company Profile' : 'Save Company Profile') }}
@@ -522,6 +518,9 @@ export class CompanyProfileComponent {
   private companyService = inject(CompanyService);
   private authService = inject(AuthService);
   private router = inject(Router);
+  private accessService = inject(AccessService);
+  private userRoleService = inject(UserRoleService);
+  private roleDefinitionService = inject(RoleDefinitionService);
 
   protected profileForm: FormGroup;
   protected loading = signal(false);
@@ -530,8 +529,13 @@ export class CompanyProfileComponent {
 
   // Computed values
   protected currentCompany = computed(() => this.companyService.companies()[0]);
-  protected isCreatingCompany = computed(() => !this.authService.getCurrentUser()?.companyId);
+  protected isCreatingCompany = computed(() => !this.authService.getCurrentPermission()?.companyId);
   protected currentUser = computed(() => this.authService.getCurrentUser());
+  protected permissions = computed(() => this.accessService.permissions);
+  protected canEditOrAddCompanyProfile = computed(() => {
+    const perms = this.permissions();
+    return perms.canViewCompanyProfile && (perms.canEditCompanyProfile || perms.canAddCompanyProfile);
+  });
 
   constructor() {
     this.profileForm = this.fb.group({
@@ -546,7 +550,37 @@ export class CompanyProfileComponent {
 
     // Load companies and set up form subscription
     this.companyService.loadCompanies();
-    
+
+    // Set permissions based on user role
+    // TEMPORARILY DISABLED: This was conflicting with dashboard permission setting
+    /*
+    effect(() => {
+      console.log('🔍 [CompanyProfile] Effect running...');
+      const user = this.authService.getCurrentUser();
+      if (user?.uid) {
+        console.log('CompanyProfile: user?.uid', user?.uid);
+        const userRole = this.userRoleService.getUserRoleByUserId(user.uid) as UserRole | undefined;
+        console.log('CompanyProfile: userRole', userRole);
+        const roleId = userRole?.roleId;
+        if (roleId) {
+           console.log('CompanyProfile: roleId', roleId);
+          const roleDef = this.roleDefinitionService.getRoleDefinitionByRoleId(roleId) as RoleDefinition | undefined;
+          console.log('CompanyProfile: roleDefinition', roleDef);
+          const permissions = roleDef?.permissions;
+          console.log('CompanyProfile: permissions', permissions);
+          if (permissions) {
+            console.log('🔍 [CompanyProfile] Setting permissions from role definition for roleId:', roleId);
+            this.accessService.setPermissions(permissions, roleId);
+          } else {
+            // If no role definition found, set permissions based on role alone
+            console.log('🔍 [CompanyProfile] No role definition found, setting permissions for roleId:', roleId);
+            this.accessService.setPermissions({}, roleId);
+          }
+        }
+      }
+    });
+    */
+
     // Update form when company changes
     effect(() => {
       const company = this.currentCompany();
@@ -563,7 +597,7 @@ export class CompanyProfileComponent {
           taxId: company.taxId || '',
           website: company.website || ''
         });
-      } else if (user && !user.companyId) {
+      } else if (user && !this.authService.getCurrentPermission()?.companyId) {
         // New company creation - pre-populate with user email if available
         this.profileForm.patchValue({
           name: '',
@@ -688,10 +722,6 @@ export class CompanyProfileComponent {
         website: ''
       });
     }
-  }
-
-  protected goBack(): void {
-    this.router.navigate(['/dashboard/overview']);
   }
 
   protected createNewCompany(): void {

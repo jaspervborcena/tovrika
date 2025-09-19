@@ -41,9 +41,7 @@ export class NewCompanyService {
       const companiesRef = collection(this.firestore, this.companiesCollection);
       let companiesQuery = query(companiesRef);
 
-      if ((user.roleId || user.role) !== 'admin') {
-        companiesQuery = query(companiesRef, where('ownerUid', '==', user.uid));
-      }
+  // TODO: If you need to restrict by admin, fetch roleId from userRoles collection here and check
 
       const querySnapshot = await getDocs(companiesQuery);
       const companies: Company[] = [];

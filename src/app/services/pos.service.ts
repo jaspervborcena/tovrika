@@ -141,6 +141,14 @@ export class PosService {
     this.orderDiscountSignal.set(null); // Clear order discount when clearing cart
   }
 
+  // Reset all POS state (called on logout)
+  resetAll(): void {
+    console.log('🔍 [POSService] Resetting all POS data');
+    this.clearCart();
+    this.selectedStoreIdSignal.set('');
+    this.isProcessingSignal.set(false);
+  }
+
   // Order Discount Management
   setOrderDiscount(discount: OrderDiscount): void {
     this.orderDiscountSignal.set(discount);
@@ -385,7 +393,8 @@ export class PosService {
   async getBestSellerProducts(limit: number = 10): Promise<Product[]> {
     try {
       const user = this.authService.getCurrentUser();
-      if (!user?.companyId) return [];
+      const currentPermission = this.authService.getCurrentPermission();
+      if (!currentPermission?.companyId) return [];
 
       // This would typically aggregate order data to find best sellers
       // For now, return products sorted by some criteria

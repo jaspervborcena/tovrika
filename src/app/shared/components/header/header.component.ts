@@ -6,6 +6,7 @@ import { StoreService, Store } from '../../../services/store.service';
 import { ProductService } from '../../../services/product.service';
 import { AuthService } from '../../../services/auth.service';
 import { CompanySetupService } from '../../../services/companySetup.service';
+import { LogoComponent } from '../logo/logo.component';
 
 @Component({
   selector: 'app-header',
@@ -13,7 +14,8 @@ import { CompanySetupService } from '../../../services/companySetup.service';
   imports: [
     CommonModule, 
     RouterLink,
-    FormsModule
+    FormsModule,
+    LogoComponent
   ],
   templateUrl: './header.component.html',
   styleUrls: ['./header.component.css']
@@ -71,11 +73,7 @@ export class HeaderComponent implements OnInit {
   }
 
   protected async logout() {
-    try {
-      await this.authService.logout();
-    } catch (error) {
-      console.error('Error signing out:', error);
-    }
+    await this.authService.logout();
   }
 
   @HostListener('document:click', ['$event'])
@@ -96,15 +94,37 @@ export class HeaderComponent implements OnInit {
       const user = this.authService.getCurrentUser();
       if (!user) return;
 
-      if (user.companyId) {
+      const currentPermission = this.authService.getCurrentPermission();
+      
+      // Fetch roleId from userRoles collection
+      let roleId: string | undefined;
+      if (currentPermission?.companyId && user.uid) {
+        const { getFirestore, collection, query, where, getDocs } = await import('firebase/firestore');
+        const firestore = getFirestore();
+        const userRolesRef = collection(firestore, 'userRoles');
+        const userRolesQuery = query(
+          userRolesRef,
+          where('companyId', '==', currentPermission.companyId),
+          where('userId', '==', user.uid),
+          where('storeId', '==', currentPermission.storeId)
+        );
+        const userRolesSnap = await getDocs(userRolesQuery);
+        if (!userRolesSnap.empty) {
+          const userRoleData = userRolesSnap.docs[0].data();
+          roleId = userRoleData['roleId'];
+          console.log('Header UserRoles:', userRoleData);
+        }
+      }
+
+      if (currentPermission?.companyId) {
         // Load company-specific data
-        await this.storeService.loadStoresByCompany(user.companyId);
-        await this.productService.loadProducts(user.companyId);
+        await this.storeService.loadStoresByCompany(currentPermission.companyId);
+        await this.productService.loadProducts(currentPermission.companyId);
         
         this.stores.set(this.storeService.getStores());
         this.totalStores.set(this.storeService.totalStores());
         this.totalProducts.set(this.productService.totalProducts());
-      } else if ((user.roleId || user.role) === 'admin') {
+  } else if (roleId === 'admin') {
         // Load all data for admin
         this.totalCompanies.set(this.companyService.totalCompanies());
         

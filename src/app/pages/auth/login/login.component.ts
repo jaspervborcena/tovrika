@@ -4,10 +4,11 @@ import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { AuthService } from '../../../services/auth.service';
 import { HeaderComponent } from '../../../shared/components/header/header.component';
+import { LogoComponent } from '../../../shared/components/logo/logo.component';
 @Component({
   selector: 'app-login',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule, RouterLink, HeaderComponent],
+  imports: [CommonModule, ReactiveFormsModule, RouterLink, HeaderComponent, LogoComponent],
   templateUrl: './login.component.html',
   styleUrls: ['./login.component.css']
 })
@@ -37,10 +38,35 @@ export class LoginComponent {
           throw new Error('Failed to get user data after login');
         }
         
-        // Navigate based on user role
-        if ((user.roleId || user.role) === 'admin') {
+        // Check if user has multiple companies - if so, redirect to company selection
+        if (this.authService.hasMultipleCompanies()) {
+          this.router.navigate(['/company-selection']);
+          return;
+        }
+        
+        // Single company user - proceed with role-based navigation
+        const currentPermission = this.authService.getCurrentPermission();
+        let roleId: string | undefined;
+        
+        if (currentPermission?.companyId && user.uid && currentPermission?.storeId) {
+          const { getFirestore, collection, query, where, getDocs } = await import('firebase/firestore');
+          const firestore = getFirestore();
+          const userRolesRef = collection(firestore, 'userRoles');
+          const userRolesQuery = query(
+            userRolesRef,
+            where('companyId', '==', currentPermission.companyId),
+            where('userId', '==', user.uid),
+            where('storeId', '==', currentPermission.storeId)
+          );
+          const userRolesSnap = await getDocs(userRolesQuery);
+          if (!userRolesSnap.empty) {
+            const userRoleData = userRolesSnap.docs[0].data();
+            roleId = userRoleData['roleId'];
+          }
+        }
+        if (roleId === 'admin') {
           this.router.navigate(['/dashboard']);
-        } else if ((user.roleId || user.role) === 'manager') {
+        } else if (roleId === 'manager') {
           this.router.navigate(['/dashboard']);
         } else {
           this.router.navigate(['/pos']);

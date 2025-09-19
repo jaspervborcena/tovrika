@@ -327,9 +327,7 @@ export class PosComponent implements OnInit, AfterViewInit {
       if (!companyId || !storeId) {
         console.error('❌ Missing company or store info for test order creation');
         console.error('CompanyId:', companyId, 'StoreId:', storeId);
-        
-        // Show detailed error info
-        alert(`Debug Info:\nCompany ID: ${companyId || 'MISSING'}\nStore ID: ${storeId || 'MISSING'}\nStore Info: ${JSON.stringify(storeInfo, null, 2)}`);
+        console.error('Store Info:', JSON.stringify(storeInfo, null, 2));
         return;
       }
       
@@ -989,8 +987,9 @@ export class PosComponent implements OnInit, AfterViewInit {
     const storeInfo = this.currentStoreInfo();
 
     // Prepare transaction data matching the Transaction interface
+    const currentPermission = this.authService.getCurrentPermission();
     const transactionData = {
-      companyId: currentUser.companyId || '',
+      companyId: currentPermission?.companyId || '',
       storeId: storeInfo?.id || '',
       branchId: currentUser.branchId || 'main-branch', // Use user's branch or default
       cashierId: currentUser.uid || '',

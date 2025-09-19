@@ -6,6 +6,8 @@ import { ProductService } from '../../../services/product.service';
 import { StoreService } from '../../../services/store.service';
 import { Store } from '../../../interfaces/store.interface';
 import { AuthService } from '../../../services/auth.service';
+import { ToastService } from '../../../shared/services/toast.service';
+import { ErrorMessages } from '../../../shared/enums';
 
 @Component({
   selector: 'app-product-management',
@@ -19,7 +21,7 @@ import { AuthService } from '../../../services/auth.service';
     }
 
     .header {
-      background: linear-gradient(135deg, #059669 0%, #10b981 100%);
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
       color: white;
       padding: 2rem 0;
       margin-bottom: 2rem;
@@ -816,16 +818,6 @@ import { AuthService } from '../../../services/auth.service';
             </div>
 
             <div class="form-group">
-              <label for="qrCode">QR Code</label>
-              <input
-                type="text"
-                id="qrCode"
-                formControlName="qrCode"
-                class="form-input"
-                placeholder="Enter QR code">
-            </div>
-
-            <div class="form-group">
               <label for="imageUrl">Image URL</label>
               <div style="display:flex; gap:0.5rem; align-items:center;">
                 <input
@@ -1237,7 +1229,8 @@ export class ProductManagementComponent implements OnInit {
     private storeService: StoreService,
     private authService: AuthService,
     private fb: FormBuilder,
-    private cdr: ChangeDetectorRef
+    private cdr: ChangeDetectorRef,
+    private toastService: ToastService
   ) {
     this.productForm = this.createProductForm();
     this.inventoryForm = this.createInventoryForm();
@@ -1262,12 +1255,16 @@ export class ProductManagementComponent implements OnInit {
   async ngOnInit(): Promise<void> {
     try {
       const user = this.authService.getCurrentUser();
-      if (user?.companyId) {
-        await this.storeService.loadStoresByCompany(user.companyId);
-        await this.productService.loadProducts(user.companyId);
+      const currentPermission = this.authService.getCurrentPermission();
+      if (currentPermission?.companyId) {
+        await this.storeService.loadStoresByCompany(currentPermission.companyId);
+        await this.productService.loadProducts(currentPermission.companyId);
       } else {
-        await this.storeService.loadStoresByCompany(''); // This might need better handling
-        await this.productService.loadProducts();
+        // Creator account, no companyId or stores yet, allow empty arrays for onboarding
+        this.storeService['storesSignal']?.set([]); // Use bracket notation to bypass private
+        if (this.productService['products'] && typeof this.productService['products'].set === 'function') {
+          this.productService['products'].set([]);
+        }
       }
       this.filterProducts();
     } catch (error) {
@@ -1286,7 +1283,6 @@ export class ProductManagementComponent implements OnInit {
       sellingPrice: [0, [Validators.required, Validators.min(0)]],
       storeId: ['', Validators.required],
       barcodeId: [''],
-      qrCode: [''],
       imageUrl: [''],
       // Tax and Discount Fields
       isVatApplicable: [true],
@@ -1452,7 +1448,6 @@ export class ProductManagementComponent implements OnInit {
           sellingPrice: computedSellingPrice,
           storeId: formValue.storeId,
           barcodeId: formValue.barcodeId,
-          qrCode: formValue.qrCode,
           imageUrl: formValue.imageUrl,
           isMultipleInventory: formValue.isMultipleInventory,
           // Tax and Discount Fields
@@ -1505,7 +1500,6 @@ export class ProductManagementComponent implements OnInit {
           storeId: formValue.storeId,
           isMultipleInventory: formValue.isMultipleInventory,
           barcodeId: formValue.barcodeId,
-          qrCode: formValue.qrCode,
           imageUrl: formValue.imageUrl,
           inventory,
           totalStock,
@@ -1527,7 +1521,7 @@ export class ProductManagementComponent implements OnInit {
       this.filterProducts();
     } catch (error) {
       console.error('Error saving product:', error);
-      alert('Error saving product. Please try again.');
+      this.toastService.error('Error saving product. Please try again.');
     } finally {
       this.loading = false;
     }
@@ -1564,7 +1558,7 @@ export class ProductManagementComponent implements OnInit {
       }
     } catch (error) {
       console.error('Error adding inventory batch:', error);
-      alert('Error adding inventory batch. Please try again.');
+      this.toastService.error(ErrorMessages.INVENTORY_BATCH_ADD_ERROR);
     }
   }
 
@@ -1582,7 +1576,7 @@ export class ProductManagementComponent implements OnInit {
       }
     } catch (error) {
       console.error('Error removing inventory batch:', error);
-      alert('Error removing inventory batch. Please try again.');
+      this.toastService.error(ErrorMessages.INVENTORY_BATCH_REMOVE_ERROR);
     }
   }
 
@@ -1621,7 +1615,7 @@ export class ProductManagementComponent implements OnInit {
       this.selectedProduct = this.productService.getProduct(product.id!) || null;
     } catch (err) {
       console.error(err);
-      alert('Failed to set active batch');
+      this.toastService.error(ErrorMessages.ACTIVE_BATCH_SET_ERROR);
     }
   }
 
@@ -1640,7 +1634,7 @@ export class ProductManagementComponent implements OnInit {
       this.productForm.get('imageUrl')?.setValue(url);
     } catch (err) {
       console.error(err);
-      alert('Image compression or upload failed. Please upload a smaller image.');
+      this.toastService.error(ErrorMessages.IMAGE_UPLOAD_ERROR);
     }
   }
 
@@ -1701,7 +1695,7 @@ export class ProductManagementComponent implements OnInit {
       this.filterProducts();
     } catch (error) {
       console.error('Error deleting product:', error);
-      alert('Error deleting product. Please try again.');
+      this.toastService.error(ErrorMessages.PRODUCT_DELETE_ERROR);
     }
   }
 

@@ -6,6 +6,7 @@ import { RoleDefinitionService, RoleDefinition } from '../../../services/role-de
 import { StoreService, Store } from '../../../services/store.service';
 import { AuthService } from '../../../services/auth.service';
 import { UserRole } from '../../../interfaces/user-role.interface';
+import { ToastService } from '../../../shared/services/toast.service';
 
 @Component({
   selector: 'app-user-roles',
@@ -111,6 +112,24 @@ import { UserRole } from '../../../interfaces/user-role.interface';
             <p>Loading user roles...</p>
           </div>
         </div>
+        <!-- Delete Confirmation Modal -->
+        <div class="modal-overlay" *ngIf="showDeleteModal" (click)="cancelDeleteUserRole()">
+          <div class="modal" (click)="$event.stopPropagation()">
+            <div class="modal-header">
+              <h3>Confirm Delete</h3>
+              <button class="close-btn" (click)="cancelDeleteUserRole()">×</button>
+            </div>
+            <div class="modal-body">
+              <ng-container *ngIf="userRoleToDelete">
+                <p>Are you sure you want to delete the role assignment for <b>{{ userRoleToDelete.email }}</b>?</p>
+              </ng-container>
+            </div>
+            <div class="modal-footer">
+              <button class="btn btn-secondary" (click)="cancelDeleteUserRole()">Cancel</button>
+              <button class="btn btn-danger" (click)="confirmDeleteUserRole()">Delete</button>
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- Add/Edit User Role Modal -->
@@ -123,30 +142,30 @@ import { UserRole } from '../../../interfaces/user-role.interface';
           <div class="modal-body">
             <div class="form-group">
               <label for="email">Email Address</label>
-              <input 
-                type="email" 
-                id="email"
-                [(ngModel)]="userRoleForm.email"
-                placeholder="user@example.com"
-                class="form-input"
-                [disabled]="!!editingUserRole">
+              <div style="display: flex; gap: 0.5rem; align-items: center;">
+                <input 
+                  type="email" 
+                  id="email"
+                  [(ngModel)]="searchUserEmail"
+                  placeholder="user@example.com"
+                  class="form-input"
+                  [disabled]="!!editingUserRole">
+                <button class="btn btn-secondary" (click)="findUserByEmail()" [disabled]="!searchUserEmail || !!editingUserRole">Find</button>
+              </div>
+              <div *ngIf="findUserError" style="color: #e53e3e; margin-top: 0.5rem; font-weight: 500;">{{ findUserError }}</div>
               <p class="form-help" *ngIf="!editingUserRole">
-                The email address of the user to assign a role to
+                Enter the user's email and click Find. The user's name and email will be auto-filled if found.
               </p>
+              <div *ngIf="foundUser">
+                <div><strong>Name:</strong> {{ foundUser.displayName }}</div>
+                <div><strong>Email:</strong> {{ foundUser.email }}</div>
+                <input type="hidden" [(ngModel)]="userRoleForm.userId" [value]="foundUser.uid">
+                <input type="hidden" [(ngModel)]="userRoleForm.email" [value]="foundUser.email">
+              </div>
             </div>
 
             <div class="form-group">
-              <label for="userId">User ID</label>
-              <input 
-                type="text" 
-                id="userId"
-                [(ngModel)]="userRoleForm.userId"
-                placeholder="User identifier"
-                class="form-input"
-                [disabled]="!!editingUserRole">
-              <p class="form-help" *ngIf="!editingUserRole">
-                The unique identifier for this user
-              </p>
+              <!-- User ID is now hidden and auto-filled after finding user by email -->
             </div>
 
             <div class="form-group">
@@ -154,7 +173,8 @@ import { UserRole } from '../../../interfaces/user-role.interface';
               <select 
                 id="roleId"
                 [(ngModel)]="userRoleForm.roleId"
-                class="form-select">
+                class="form-select"
+                [disabled]="userRoleForm.roleId === 'cashier'">
                 <option value="">Select a role</option>
                 <option 
                   *ngFor="let role of availableRoles" 
@@ -206,7 +226,7 @@ import { UserRole } from '../../../interfaces/user-role.interface';
     }
 
     .header {
-      background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
       color: white;
       padding: 2rem 0;
       margin-bottom: 2rem;
@@ -589,6 +609,41 @@ import { UserRole } from '../../../interfaces/user-role.interface';
   `]
 })
 export class UserRolesComponent implements OnInit {
+  showDeleteModal: boolean = false;
+  userRoleToDelete: UserRole | null = null;
+  findUserError: string = '';
+  searchUserEmail: string = '';
+  foundUser: any = null;
+  async findUserByEmail() {
+    if (!this.searchUserEmail) return;
+    try {
+      // Firestore query for user by email
+      const { getFirestore, collection, query, where, getDocs } = await import('firebase/firestore');
+      const firestore = getFirestore();
+      const usersRef = collection(firestore, 'users');
+      const q = query(usersRef, where('email', '==', this.searchUserEmail));
+      const querySnapshot = await getDocs(q);
+      if (!querySnapshot.empty) {
+        const userDoc = querySnapshot.docs[0];
+        const data = userDoc.data();
+        this.foundUser = {
+          uid: userDoc.id,
+          email: data['email'],
+          displayName: data['displayName'] || '',
+        };
+        this.userRoleForm.userId = this.foundUser.uid;
+        this.userRoleForm.email = this.foundUser.email;
+        this.findUserError = '';
+      } else {
+        this.foundUser = null;
+  this.findUserError = 'Unable to find a user for this email.';
+      }
+    } catch (error) {
+      this.foundUser = null;
+      this.toastService.error('Error searching for user. Please try again.');
+      console.error(error);
+    }
+  }
   userRoles: UserRole[] = [];
   filteredUserRoles: UserRole[] = [];
   availableRoles: RoleDefinition[] = [];
@@ -610,7 +665,8 @@ export class UserRolesComponent implements OnInit {
     private userRoleService: UserRoleService,
     private roleDefinitionService: RoleDefinitionService,
     private storeService: StoreService,
-    private authService: AuthService
+    private authService: AuthService,
+    private toastService: ToastService
   ) {}
 
   async ngOnInit() {
@@ -632,8 +688,9 @@ export class UserRolesComponent implements OnInit {
 
       // Load available stores for the company
       const user = this.authService.getCurrentUser();
-      if (user?.companyId) {
-        await this.storeService.loadStoresByCompany(user.companyId);
+      const currentPermission = this.authService.getCurrentPermission();
+      if (currentPermission?.companyId) {
+        await this.storeService.loadStoresByCompany(currentPermission.companyId);
       }
       this.availableStores = this.storeService.getStores();
       
@@ -665,6 +722,8 @@ export class UserRolesComponent implements OnInit {
       roleId: '',
       storeId: ''
     };
+    this.searchUserEmail = '';
+    this.foundUser = null;
     this.showUserRoleModal = true;
   }
 
@@ -724,30 +783,47 @@ export class UserRolesComponent implements OnInit {
       this.cancelUserRoleModal();
     } catch (error) {
       console.error('Error saving user role:', error);
-      alert('Error saving user role. Please try again.');
+      this.toastService.error('Error saving user role. Please try again.');
     } finally {
       this.isLoading = false;
     }
   }
 
   async deleteUserRole(userRole: UserRole) {
-    if (confirm(`Are you sure you want to remove the role assignment for ${userRole.email}?`)) {
-      this.isLoading = true;
-      
-      try {
-        await this.userRoleService.deleteUserRole(userRole.id!);
-        await this.loadData();
-      } catch (error) {
-        console.error('Error deleting user role:', error);
-        alert('Error deleting user role. Please try again.');
-      } finally {
-        this.isLoading = false;
-      }
+    this.showDeleteModal = true;
+    this.userRoleToDelete = userRole;
+  }
+
+  async confirmDeleteUserRole() {
+    if (!this.userRoleToDelete) return;
+    
+    console.log('🔍 [UserRoles] Attempting to delete user role:', this.userRoleToDelete);
+    console.log('🔍 [UserRoles] User role ID:', this.userRoleToDelete.id);
+    console.log('🔍 [UserRoles] User role email:', this.userRoleToDelete.email);
+    console.log('🔍 [UserRoles] User role roleId:', this.userRoleToDelete.roleId);
+    
+    this.isLoading = true;
+    try {
+      await this.userRoleService.deleteUserRole(this.userRoleToDelete.id!);
+      console.log('🔍 [UserRoles] Successfully deleted user role');
+      await this.loadData();
+    } catch (error) {
+      console.error('🔍 [UserRoles] Error deleting user role:', error);
+      this.toastService.error(`Failed to delete user role: ${error}`);
+    } finally {
+      this.isLoading = false;
+      this.showDeleteModal = false;
+      this.userRoleToDelete = null;
     }
   }
 
+  cancelDeleteUserRole() {
+    this.showDeleteModal = false;
+    this.userRoleToDelete = null;
+  }
+
   getStoreName(storeId: string): string {
-    const store = this.availableStores.find(s => s.id === storeId);
+    const store = this.availableStores.find((s: Store) => s.id === storeId);
     return store?.storeName || 'Unknown Store';
   }
 }
