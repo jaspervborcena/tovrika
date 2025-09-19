@@ -3,7 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { RoleDefinitionService, RoleDefinition, RolePermissions } from '../../../services/role-definition.service';
-import { StoreService } from '../../../services/store.service';
+import { StoreService, Store } from '../../../services/store.service';
 import { AuthService } from '../../../services/auth.service';
 import { ToastService } from '../../../shared/services/toast.service';
 import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../shared/components/confirmation-dialog/confirmation-dialog.component';
@@ -203,7 +203,7 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
               <label for="storeId">Store</label>
               <select id="storeId" class="form-input" [(ngModel)]="selectedStoreId" (change)="validateRoleName()">
                 <option value="">Select a store</option>
-                <option *ngFor="let store of stores" [value]="store.id">{{ store.name }}</option>
+                <option *ngFor="let store of stores" [value]="store.id">{{ store.storeName }}</option>
               </select>
             </div>
           </div>
@@ -239,7 +239,7 @@ export class AccessComponent implements OnInit {
   newRoleId = '';
   roleNameError = '';
   selectedStoreId = '';
-  stores: any[] = [];
+  stores: Store[] = [];
 
   // Confirmation dialog properties
   showConfirmDialog = false;
@@ -306,6 +306,7 @@ export class AccessComponent implements OnInit {
       const user = await this.authService.getCurrentUser();
       const currentPermission = this.authService.getCurrentPermission();
       if (currentPermission?.companyId) {
+        await this.storeService.loadStoresByCompany(currentPermission.companyId);
         this.stores = this.storeService.getStoresByCompany(currentPermission.companyId);
       }
     } catch (error) {
