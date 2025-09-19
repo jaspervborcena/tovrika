@@ -8,11 +8,13 @@ import { Store } from '../../../interfaces/store.interface';
 import { AuthService } from '../../../services/auth.service';
 import { ToastService } from '../../../shared/services/toast.service';
 import { ErrorMessages } from '../../../shared/enums';
+import { CategoryService, ProductCategory } from '../../../services/category.service';
+import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../shared/components/confirmation-dialog/confirmation-dialog.component';
 
 @Component({
   selector: 'app-product-management',
   standalone: true,
-  imports: [CommonModule, FormsModule, ReactiveFormsModule],
+  imports: [CommonModule, FormsModule, ReactiveFormsModule, ConfirmationDialogComponent],
   styles: [`
     .products-management {
       padding: 0;
@@ -536,6 +538,80 @@ import { ErrorMessages } from '../../../shared/enums';
         flex-direction: column;
       }
     }
+
+    /* Category Input with Inline Icon */
+    .category-input-container {
+      position: relative;
+    }
+
+    .add-category-icon-btn {
+      position: absolute;
+      right: 0.5rem;
+      top: 50%;
+      transform: translateY(-50%);
+      background: none;
+      border: none;
+      color: #059669;
+      font-size: 1.2rem;
+      cursor: pointer;
+      padding: 0.25rem;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 2rem;
+      height: 2rem;
+      transition: all 0.2s ease;
+    }
+
+    .add-category-icon-btn:hover {
+      background-color: #f0f9ff;
+      color: #047857;
+      transform: translateY(-50%) scale(1.1);
+    }
+
+    .add-category-icon-btn:active {
+      transform: translateY(-50%) scale(0.95);
+    }
+
+    .category-autocomplete {
+      padding-right: 3rem !important;
+    }
+
+    .category-suggestions {
+      position: absolute;
+      top: 100%;
+      left: 0;
+      right: 0;
+      background: white;
+      border: 1px solid #e2e8f0;
+      border-top: none;
+      border-radius: 0 0 6px 6px;
+      max-height: 200px;
+      overflow-y: auto;
+      z-index: 1000;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+
+    .category-suggestion-item {
+      padding: 0.75rem;
+      cursor: pointer;
+      border-bottom: 1px solid #f3f4f6;
+      transition: background-color 0.2s;
+    }
+
+    .category-suggestion-item:hover {
+      background-color: #f8fafc;
+    }
+
+    .category-suggestion-item:last-child {
+      border-bottom: none;
+    }
+
+    .category-label {
+      font-weight: 500;
+      color: #2d3748;
+    }
   `],
   template: `
     <div class="products-management">
@@ -697,19 +773,49 @@ import { ErrorMessages } from '../../../shared/enums';
      style="position: fixed !important; z-index: 9999 !important; background: rgba(0, 0, 0, 0.8) !important;">
       <div class="modal" (click)="$event.stopPropagation()">
         <div class="modal-header">
-          <h3>{{ isEditMode ? 'Edit Product' : 'Add New Product' }}</h3>
-          <button class="close-btn" (click)="closeModal()">×</button>
+          <h3>{{ modalTitle }}</h3>
+          <button class="close-btn" 
+                  (click)="closeModal()"
+                  [style.display]="isCategoryMode ? 'none' : 'block'">×</button>
         </div>
         <div class="modal-body">
-          <form [formGroup]="productForm" (ngSubmit)="submitProduct()">
+          
+          <!-- Product Form Fields -->
+          <div class="product-fields" [style.display]="isProductMode ? 'block' : 'none'">
+            <form [formGroup]="productForm" (ngSubmit)="submitProduct()">
             <div class="form-group">
               <label for="category">Category *</label>
-              <input
-                type="text"
-                id="category"
-                formControlName="category"
-                class="form-input"
-                placeholder="Enter category">
+              <div class="category-input-container">
+                <input
+                  type="text"
+                  id="category"
+                  formControlName="category"
+                  class="form-input category-autocomplete"
+                  placeholder="Type category name..."
+                  (input)="onCategoryInput($event)"
+                  (focus)="showCategorySuggestions = true"
+                  (blur)="hideCategorySuggestions()"
+                  autocomplete="off">
+                <button
+                  type="button"
+                  class="add-category-icon-btn"
+                  (click)="openAddCategoryModal()"
+                  title="Add new category">
+                  +
+                </button>
+              </div>
+              
+              <!-- Category Suggestions -->
+              <div class="category-suggestions" *ngIf="showCategorySuggestions && filteredCategories.length > 0">
+                <div
+                  *ngFor="let category of filteredCategories"
+                  class="category-suggestion-item"
+                  (mousedown)="selectCategory(category)"
+                  [title]="category">
+                  <span class="category-label">{{ category }}</span>
+                </div>
+              </div>
+              
               <div class="error-message" *ngIf="productForm.get('category')?.invalid && productForm.get('category')?.touched">
                 Category is required
               </div>
@@ -1058,16 +1164,80 @@ import { ErrorMessages } from '../../../shared/enums';
                 <div *ngIf="!selectedProduct?.inventory?.length" style="padding:1rem; color:#6b7280;">No inventory batches found for this product.</div>
               </ng-container>
             </div>
-          </form>
+            </form>
+          </div>
+          
+          <!-- Category Form Fields -->
+          <div class="category-fields" [style.display]="isCategoryMode ? 'block' : 'none'">
+            <form [formGroup]="categoryForm" (ngSubmit)="saveCategory()">
+              <div class="form-group">
+                <label for="categoryLabel">Category Name *</label>
+                <input
+                  type="text"
+                  id="categoryLabel"
+                  formControlName="categoryLabel"
+                  class="form-input"
+                  placeholder="Enter category name">
+                <div class="error-message" *ngIf="categoryForm.get('categoryLabel')?.invalid && categoryForm.get('categoryLabel')?.touched">
+                  Category name is required
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label for="categoryDescription">Description</label>
+                <textarea
+                  id="categoryDescription"
+                  formControlName="categoryDescription"
+                  class="form-input"
+                  rows="3"
+                  placeholder="Enter category description (optional)"
+                  maxlength="200"></textarea>
+              </div>
+
+              <div class="form-group">
+                <label for="categoryGroup">Category Group *</label>
+                <select
+                  id="categoryGroup"
+                  formControlName="categoryGroup"
+                  class="form-input">
+                  <option value="">Select Category Group</option>
+                  <option value="food">Food & Beverages</option>
+                  <option value="retail">Retail & Shopping</option>
+                  <option value="services">Services</option>
+                  <option value="electronics">Electronics</option>
+                  <option value="health">Health & Beauty</option>
+                  <option value="automotive">Automotive</option>
+                  <option value="other">Other</option>
+                </select>
+                <div class="error-message" *ngIf="categoryForm.get('categoryGroup')?.invalid && categoryForm.get('categoryGroup')?.touched">
+                  Category group is required
+                </div>
+              </div>
+            </form>
+          </div>
         </div>
         <div class="modal-footer">
-          <button class="btn btn-secondary" (click)="closeModal()">Cancel</button>
-          <button 
-            class="btn btn-primary" 
-            (click)="submitProduct()"
-            [disabled]="productForm.invalid || loading">
-            {{ loading ? 'Saving...' : (isEditMode ? 'Update Product' : 'Create Product') }}
-          </button>
+          <!-- Product Mode Buttons -->
+          <ng-container *ngIf="isProductMode">
+            <button class="btn btn-secondary" (click)="closeModal()">Cancel</button>
+            <button 
+              class="btn btn-primary" 
+              (click)="submitProduct()"
+              [disabled]="productForm.invalid || loading">
+              {{ loading ? 'Saving...' : (isEditMode ? 'Update Product' : 'Create Product') }}
+            </button>
+          </ng-container>
+          
+          <!-- Category Mode Buttons -->
+          <ng-container *ngIf="isCategoryMode">
+            <button class="btn btn-secondary" (click)="cancelCategoryCreation()">Cancel</button>
+            <button 
+              class="btn btn-primary" 
+              (click)="saveCategory()"
+              [disabled]="categoryForm.invalid || loading">
+              {{ loading ? 'Saving...' : 'Save Category' }}
+            </button>
+          </ng-container>
         </div>
       </div>
     </div>
@@ -1196,13 +1366,22 @@ import { ErrorMessages } from '../../../shared/enums';
         </div>
       </div>
     </div>
+
+    <!-- Confirmation Dialog -->
+    @if (showDeleteConfirmation() && deleteConfirmationData()) {
+      <app-confirmation-dialog
+        [dialogData]="deleteConfirmationData()!"
+        (confirmed)="onDeleteConfirmed()"
+        (cancelled)="closeDeleteConfirmation()">
+      </app-confirmation-dialog>
+    }
   `
 })
 export class ProductManagementComponent implements OnInit {
   // Signals
   readonly products = computed(() => this.productService.getProducts());
   readonly stores = computed(() => this.storeService.getStores());
-  readonly categories = computed(() => this.productService.getCategories());
+  readonly categories = computed(() => this.categoryService.getCategoryLabels());
 
   // State
   searchTerm = '';
@@ -1217,9 +1396,24 @@ export class ProductManagementComponent implements OnInit {
   loading = false;
   selectedProduct: Product | null = null;
 
+  // Confirmation dialog state
+  showDeleteConfirmation = signal<boolean>(false);
+  deleteConfirmationData = signal<ConfirmationDialogData | null>(null);
+  productToDelete: Product | null = null;
+  pendingBatchId: string | null = null;
+
+  // Modal mode management
+  modalMode: 'product' | 'category' = 'product';
+  get isProductMode(): boolean { return this.modalMode === 'product'; }
+  get isCategoryMode(): boolean { return this.modalMode === 'category'; }
+  get modalTitle(): string { 
+    return this.modalMode === 'product' ? 'Add New Product' : 'Add New Category';
+  }
+
   // Forms
   productForm: FormGroup;
   inventoryForm: FormGroup;
+  categoryForm: FormGroup;
   
   // Unit types for dropdown
   unitTypes = UNIT_TYPES;
@@ -1230,10 +1424,12 @@ export class ProductManagementComponent implements OnInit {
     private authService: AuthService,
     private fb: FormBuilder,
     private cdr: ChangeDetectorRef,
-    private toastService: ToastService
+    private toastService: ToastService,
+    private categoryService: CategoryService
   ) {
     this.productForm = this.createProductForm();
     this.inventoryForm = this.createInventoryForm();
+    this.categoryForm = this.createCategoryForm();
     // subscribe once to isMultipleInventory changes to toggle related controls
     const isMultiCtrl = this.productForm.get('isMultipleInventory');
     if (isMultiCtrl) {
@@ -1259,6 +1455,7 @@ export class ProductManagementComponent implements OnInit {
       if (currentPermission?.companyId) {
         await this.storeService.loadStoresByCompany(currentPermission.companyId);
         await this.productService.loadProducts(currentPermission.companyId);
+        await this.loadCategories(); // Load categories from CategoryService
       } else {
         // Creator account, no companyId or stores yet, allow empty arrays for onboarding
         this.storeService['storesSignal']?.set([]); // Use bracket notation to bypass private
@@ -1311,6 +1508,14 @@ export class ProductManagementComponent implements OnInit {
       receivedAt: [new Date().toISOString().split('T')[0], Validators.required],
       expiryDate: [''],
       supplier: ['']
+    });
+  }
+
+  private createCategoryForm(): FormGroup {
+    return this.fb.group({
+      categoryLabel: ['', Validators.required],
+      categoryDescription: [''],
+      categoryGroup: ['General'] // Default to 'General'
     });
   }
 
@@ -1432,6 +1637,31 @@ export class ProductManagementComponent implements OnInit {
     this.loading = true;
     try {
       const formValue = this.productForm.value;
+      console.log('🔍 Form value:', formValue);
+      console.log('🔍 Category from form:', formValue.category);
+      
+      // Auto-save category if it doesn't exist
+      const currentUser = this.authService.currentUser();
+      const currentPermission = this.authService.getCurrentPermission();
+      const companyId = currentPermission?.companyId || 
+                       currentUser?.currentCompanyId || 
+                       currentUser?.permissions?.[0]?.companyId || '';
+      const storeId = formValue.storeId;
+      
+      console.log('🔍 Company ID:', companyId);
+      console.log('🔍 Store ID:', storeId);
+      console.log('🔍 Will save category?', !!(formValue.category && storeId));
+      
+      if (formValue.category && storeId) {
+        console.log('🚀 Attempting to save category:', formValue.category, 'for store:', storeId);
+        console.log('🔍 CategoryService debug before save:');
+        this.categoryService.debugCategoryStatus();
+        await this.categoryService.ensureCategoryExists(formValue.category, storeId);
+        console.log('✅ Category save completed');
+        console.log('🔍 CategoryService debug after save:');
+        this.categoryService.debugCategoryStatus();
+      }
+      
       // normalize sellingPrice to avoid undefined being written to Firestore
       const computedSellingPrice = formValue.isMultipleInventory
         ? (formValue.initialUnitPrice || (this.selectedProduct ? (this.selectedProduct.inventory || []).find((b: any) => b.status === 'active')?.unitPrice : 0) || 0)
@@ -1563,10 +1793,26 @@ export class ProductManagementComponent implements OnInit {
   }
 
   async removeInventoryBatch(batchId: string): Promise<void> {
-    if (!this.selectedProduct || !confirm('Are you sure you want to remove this inventory batch?')) return;
+    if (!this.selectedProduct) return;
+
+    // Set up confirmation dialog for inventory batch removal
+    this.deleteConfirmationData.set({
+      title: 'Remove Inventory Batch',
+      message: 'Are you sure you want to remove this inventory batch? This action cannot be undone.',
+      confirmText: 'Remove',
+      cancelText: 'Cancel'
+    });
+    
+    // Store the batchId for use in confirmation
+    this.pendingBatchId = batchId;
+    this.showDeleteConfirmation.set(true);
+  }
+
+  async performBatchRemoval(): Promise<void> {
+    if (!this.selectedProduct || !this.pendingBatchId) return;
 
     try {
-      await this.productService.removeInventoryBatch(this.selectedProduct.id!, batchId);
+      await this.productService.removeInventoryBatch(this.selectedProduct.id!, this.pendingBatchId);
       // Refresh the selected product
       this.selectedProduct = this.productService.getProduct(this.selectedProduct.id!) || null;
       
@@ -1577,6 +1823,8 @@ export class ProductManagementComponent implements OnInit {
     } catch (error) {
       console.error('Error removing inventory batch:', error);
       this.toastService.error(ErrorMessages.INVENTORY_BATCH_REMOVE_ERROR);
+    } finally {
+      this.pendingBatchId = null;
     }
   }
 
@@ -1688,15 +1936,43 @@ export class ProductManagementComponent implements OnInit {
   }
 
   async deleteProduct(product: Product): Promise<void> {
-    if (!confirm(`Are you sure you want to delete "${product.productName}"?`)) return;
+    // Set up confirmation dialog
+    this.productToDelete = product;
+    this.deleteConfirmationData.set({
+      title: 'Delete Product',
+      message: `Are you sure you want to delete "${product.productName}"? This action cannot be undone.`,
+      confirmText: 'Delete',
+      cancelText: 'Cancel',
+      type: 'danger'
+    });
+    this.showDeleteConfirmation.set(true);
+  }
 
-    try {
-      await this.productService.deleteProduct(product.id!);
-      this.filterProducts();
-    } catch (error) {
-      console.error('Error deleting product:', error);
-      this.toastService.error(ErrorMessages.PRODUCT_DELETE_ERROR);
+  // Handle confirmation dialog response
+  async onDeleteConfirmed(): Promise<void> {
+    if (this.productToDelete) {
+      // Handle product deletion
+      try {
+        await this.productService.deleteProduct(this.productToDelete.id!);
+        this.filterProducts();
+        this.toastService.success(`Product "${this.productToDelete.productName}" deleted successfully`);
+      } catch (error) {
+        console.error('Error deleting product:', error);
+        this.toastService.error(ErrorMessages.PRODUCT_DELETE_ERROR);
+      }
+    } else if (this.pendingBatchId) {
+      // Handle batch removal
+      await this.performBatchRemoval();
     }
+    
+    this.closeDeleteConfirmation();
+  }
+
+  closeDeleteConfirmation(): void {
+    this.showDeleteConfirmation.set(false);
+    this.deleteConfirmationData.set(null);
+    this.productToDelete = null;
+    this.pendingBatchId = null;
   }
 
   // Utility methods
@@ -1750,4 +2026,156 @@ export class ProductManagementComponent implements OnInit {
     }
     return product.sellingPrice;
   }
+
+  // Category Autocomplete Properties and Methods
+  filteredCategories: string[] = [];
+  showCategorySuggestions = false;
+
+  async loadCategories(): Promise<void> {
+    try {
+      const currentPermission = this.authService.getCurrentPermission();
+      
+      // Get storeId from the product form if available, or use current permission's storeId
+      const storeId = this.productForm.value.storeId || currentPermission?.storeId;
+      
+      if (storeId) {
+        console.log('🔍 Loading categories for store:', storeId);
+        await this.categoryService.loadCategoriesByStore(storeId);
+        console.log('✅ Categories loaded:', this.categories().length);
+      } else {
+        console.log('❌ No storeId available for loading categories');
+      }
+    } catch (error) {
+      console.error('❌ Error loading categories:', error);
+    }
+  }
+
+  onCategoryInput(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const value = input.value.toLowerCase();
+    
+    console.log('🔍 Category input value:', value);
+    
+    if (value.length > 0) {
+      const categoriesArray = this.categories(); // Get current value from computed signal
+      console.log('🔍 Available categories:', categoriesArray);
+      this.filteredCategories = categoriesArray.filter((category: string) => 
+        category.toLowerCase().includes(value)
+      );
+      console.log('🔍 Filtered categories:', this.filteredCategories);
+      this.showCategorySuggestions = this.filteredCategories.length > 0;
+    } else {
+      this.showCategorySuggestions = false;
+    }
+  }
+
+  selectCategory(category: string): void {
+    this.productForm.patchValue({ category });
+    this.showCategorySuggestions = false;
+  }
+
+  hideCategorySuggestions(): void {
+    // Add a small delay to allow for click events on suggestions
+    setTimeout(() => {
+      this.showCategorySuggestions = false;
+    }, 200);
+  }
+
+  async openAddCategoryModal(): Promise<void> {
+    this.switchToCategoryMode();
+  }
+
+  // Modal transition methods
+  switchToProductMode(): void {
+    this.modalMode = 'product';
+    this.categoryForm.reset({
+      categoryLabel: '',
+      categoryDescription: '',
+      categoryGroup: ''
+    });
+  }
+
+  switchToCategoryMode(): void {
+    this.modalMode = 'category';
+    this.categoryForm.reset({
+      categoryLabel: '',
+      categoryDescription: '',
+      categoryGroup: 'General'
+    });
+  }
+
+  cancelCategoryCreation(): void {
+    this.switchToProductMode();
+  }
+
+  async saveCategory(): Promise<void> {
+    console.log('🔍 saveCategory called');
+    console.log('🔍 Category form valid?', this.categoryForm.valid);
+    console.log('🔍 Category form value:', this.categoryForm.value);
+    console.log('🔍 Category form errors:', this.categoryForm.errors);
+    
+    if (this.categoryForm.invalid) {
+      console.log('❌ Category form is invalid, returning early');
+      // Mark all fields as touched to show validation errors
+      Object.keys(this.categoryForm.controls).forEach(key => {
+        this.categoryForm.get(key)?.markAsTouched();
+      });
+      return;
+    }
+
+    try {
+      this.loading = true;
+      const formValue = this.categoryForm.value;
+      
+      console.log('🔍 Form value:', formValue);
+      
+      // Create category object matching ProductCategory interface
+      const currentUser = this.authService.currentUser();
+      const currentPermission = this.authService.getCurrentPermission();
+      console.log('🔍 Current user data:', currentUser);
+      console.log('🔍 Current permission data:', currentPermission);
+      
+      const companyId = currentPermission?.companyId || 
+                       currentUser?.currentCompanyId || 
+                       currentUser?.permissions?.[0]?.companyId || '';
+      
+      console.log('🔍 Extracted company ID:', companyId);
+      
+      if (!companyId) {
+        throw new Error('No company ID found. User must be associated with a company to create categories.');
+      }
+      
+      // Get storeId from the product form if available
+      const storeId = this.productForm.value.storeId;
+      console.log('🔍 Store ID from product form:', storeId);
+      
+      const categoryData: Omit<ProductCategory, 'id' | 'createdAt' | 'updatedAt'> = {
+        categoryId: `cat_${Date.now()}`,
+        categoryLabel: formValue.categoryLabel,
+        categoryDescription: formValue.categoryDescription || formValue.categoryLabel,
+        categoryGroup: formValue.categoryGroup || 'General',
+        isActive: true,
+        sortOrder: 0,
+        companyId: companyId,
+        storeId: storeId
+      };
+      
+      console.log('🔍 Creating category with data:', categoryData);
+      await this.categoryService.createCategory(categoryData);
+      await this.loadCategories(); // Refresh categories list
+      
+      // Set the new category in the product form and switch back to product mode
+      this.productForm.patchValue({ category: formValue.categoryLabel });
+      this.switchToProductMode();
+      
+      this.toastService.success('Category added successfully!');
+    } catch (error) {
+      console.error('❌ Error adding category:', error);
+      console.error('❌ Full error details:', JSON.stringify(error, null, 2));
+      this.toastService.error('Failed to add category');
+    } finally {
+      this.loading = false;
+    }
+  }
+
 }
