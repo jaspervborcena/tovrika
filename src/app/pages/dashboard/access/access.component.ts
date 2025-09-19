@@ -5,11 +5,13 @@ import { Router } from '@angular/router';
 import { RoleDefinitionService, RoleDefinition, RolePermissions } from '../../../services/role-definition.service';
 import { StoreService } from '../../../services/store.service';
 import { AuthService } from '../../../services/auth.service';
+import { ToastService } from '../../../shared/services/toast.service';
+import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../shared/components/confirmation-dialog/confirmation-dialog.component';
 
 @Component({
   selector: 'app-access',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, ConfirmationDialogComponent],
   template: `
     <div class="access-management">
       <!-- Header -->
@@ -214,6 +216,14 @@ import { AuthService } from '../../../services/auth.service';
         </div>
       </div>
     </div>
+
+    <!-- Confirmation Dialog -->
+    <app-confirmation-dialog
+      *ngIf="showConfirmDialog"
+      [dialogData]="confirmDialogData"
+      (confirmed)="onConfirmDialog()"
+      (cancelled)="onCancelDialog()"
+    />
   `,
   styles: [
     '.access-management { padding: 0; min-height: 100vh; background: #f8fafc; } .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 2rem 0; margin-bottom: 2rem; } .header-content { max-width: 1200px; margin: 0 auto; padding: 0 1rem; } .page-title { font-size: 2.5rem; font-weight: 700; margin: 0 0 0.5rem 0; } .page-subtitle { font-size: 1.1rem; opacity: 0.9; margin: 0; } .tabs-container { max-width: 1200px; margin: 0 auto; padding: 0 1rem; } .tab-headers { display: flex; gap: 0.5rem; margin-bottom: 2rem; flex-wrap: wrap; } .tab-header { background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 1rem 1.5rem; cursor: pointer; transition: all 0.2s; min-width: 160px; text-align: left; } .tab-header:hover { border-color: #667eea; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1); } .tab-header.active { border-color: #667eea; background: #667eea; color: white; } .add-role-tab { border: 2px dashed #cbd5e0; background: transparent; color: #4a5568; } .add-role-tab:hover { border-color: #667eea; background: #f7fafc; color: #667eea; } .tab-content { display: flex; flex-direction: column; gap: 0.25rem; } .tab-label { font-weight: 600; font-size: 1rem; } .tab-details { font-size: 0.875rem; opacity: 0.7; } .tab-content-area { background: white; border-radius: 12px; padding: 2rem; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1); margin-bottom: 2rem; } .role-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; padding-bottom: 1rem; border-bottom: 1px solid #e2e8f0; } .role-title { font-size: 1.875rem; font-weight: 700; color: #1a202c; margin: 0; } .role-actions { display: flex; gap: 0.75rem; } .permissions-section { margin-top: 2rem; } .permissions-title { font-size: 1.5rem; font-weight: 600; color: #2d3748; margin: 0 0 0.5rem 0; } .permissions-subtitle { color: #718096; margin: 0 0 2rem 0; font-size: 0.95rem; } .permissions-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 2rem; margin-bottom: 2rem; } .permission-group { background: #f8fafc; border-radius: 8px; padding: 1.5rem; border: 1px solid #e2e8f0; } .group-title { font-size: 1.125rem; font-weight: 600; color: #2d3748; margin: 0 0 1rem 0; padding-bottom: 0.75rem; border-bottom: 1px solid #e2e8f0; } .permission-items { display: flex; flex-direction: column; gap: 1rem; } .permission-item { background: white; border-radius: 6px; padding: 1rem; border: 1px solid #e2e8f0; transition: border-color 0.2s; } .permission-item:hover { border-color: #cbd5e0; } .permission-label { display: flex; align-items: flex-start; gap: 0.75rem; cursor: pointer; font-weight: 500; } .permission-label input[type="checkbox"] { width: 18px; height: 18px; margin: 0; cursor: pointer; } .permission-text { flex: 1; display: flex; flex-direction: column; gap: 0.25rem; } .permission-name { font-weight: 500; color: #2d3748; font-size: 0.95rem; } .permission-desc { color: #718096; font-size: 0.875rem; line-height: 1.4; } .save-section { margin-top: 2rem; padding-top: 1.5rem; border-top: 1px solid #e2e8f0; display: flex; justify-content: flex-end; } .save-btn { padding: 0.75rem 2rem; font-size: 1rem; } .btn { border: none; border-radius: 6px; padding: 0.5rem 1rem; font-weight: 500; cursor: pointer; transition: all 0.2s; display: inline-flex; align-items: center; gap: 0.5rem; text-decoration: none; } .btn:disabled { opacity: 0.6; cursor: not-allowed; } .btn-primary { background: #667eea; color: white; } .btn-primary:hover:not(:disabled) { background: #5a6fd8; } .btn-secondary { background: #e2e8f0; color: #4a5568; } .btn-secondary:hover:not(:disabled) { background: #cbd5e0; } .btn-danger { background: #f56565; color: white; } .btn-danger:hover:not(:disabled) { background: #e53e3e; } .empty-state, .loading-state { text-align: center; padding: 4rem 2rem; color: #718096; } .empty-content h3, .loading-content p { margin-bottom: 1rem; } .spinner { width: 40px; height: 40px; border: 4px solid #e2e8f0; border-top-color: #667eea; border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 1rem; } @keyframes spin { to { transform: rotate(360deg); } } .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.5); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 1rem; } .modal { background: white; border-radius: 12px; max-width: 500px; width: 100%; max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3); } .modal-header { display: flex; align-items: center; justify-content: space-between; padding: 1.5rem; border-bottom: 1px solid #e2e8f0; } .modal-header h3 { margin: 0; font-size: 1.25rem; font-weight: 600; color: #2d3748; } .close-btn { background: none; border: none; font-size: 1.5rem; cursor: pointer; color: #718096; padding: 0.25rem; line-height: 1; } .close-btn:hover { color: #4a5568; } .modal-body { padding: 1.5rem; } .form-group { margin-bottom: 1rem; } .form-group label { display: block; margin-bottom: 0.5rem; font-weight: 500; color: #2d3748; } .form-input { width: 100%; padding: 0.75rem; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 1rem; transition: border-color 0.2s; } .form-input:focus { outline: none; border-color: #667eea; box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1); } .form-help { margin-top: 0.5rem; font-size: 0.875rem; color: #718096; } .modal-footer { display: flex; gap: 0.75rem; justify-content: flex-end; padding: 1.5rem; border-top: 1px solid #e2e8f0; background: #f8fafc; } @media (max-width: 768px) { .header { padding: 1.5rem 0; } .page-title { font-size: 2rem; } .tab-headers { flex-direction: column; } .tab-header { min-width: auto; } .role-header { flex-direction: column; align-items: flex-start; gap: 1rem; } .role-actions { width: 100%; justify-content: flex-start; } .permissions-grid { grid-template-columns: 1fr; gap: 1.5rem; } }'
@@ -231,16 +241,48 @@ export class AccessComponent implements OnInit {
   selectedStoreId = '';
   stores: any[] = [];
 
+  // Confirmation dialog properties
+  showConfirmDialog = false;
+  confirmDialogData: ConfirmationDialogData = {
+    title: '',
+    message: '',
+    confirmText: 'OK',
+    cancelText: '',
+    type: 'info'
+  };
+  private confirmCallback: (() => void) | null = null;
+
   constructor(
     private roleDefinitionService: RoleDefinitionService,
     private storeService: StoreService,
     private authService: AuthService,
-    private router: Router
+    private router: Router,
+    private toastService: ToastService
   ) {}
 
   async ngOnInit() {
     await this.loadRoles();
     await this.loadStores();
+  }
+
+  // Confirmation dialog methods
+  showConfirmationDialog(data: ConfirmationDialogData, callback?: () => void): void {
+    this.confirmDialogData = data;
+    this.confirmCallback = callback || null;
+    this.showConfirmDialog = true;
+  }
+
+  onConfirmDialog(): void {
+    this.showConfirmDialog = false;
+    if (this.confirmCallback) {
+      this.confirmCallback();
+      this.confirmCallback = null;
+    }
+  }
+
+  onCancelDialog(): void {
+    this.showConfirmDialog = false;
+    this.confirmCallback = null;
   }
 
   async loadRoles() {
@@ -297,7 +339,7 @@ export class AccessComponent implements OnInit {
     } catch (error) {
       console.error('Error saving changes:', error);
       this.isLoading = false;
-      alert('Error saving changes. Please try again.');
+      this.toastService.error('Error saving changes. Please try again.');
       await this.roleDefinitionService.loadRoleDefinitions();
       this.loadRoles();
     }
@@ -310,22 +352,35 @@ export class AccessComponent implements OnInit {
 
   async deleteRole(role: RoleDefinition) {
     if (this.isDefaultRole(role.roleId)) {
-      alert('Default roles cannot be deleted.');
+      this.showConfirmationDialog({
+        title: 'Cannot Delete Role',
+        message: 'Default roles cannot be deleted.',
+        confirmText: 'OK',
+        type: 'warning'
+      });
       return;
     }
-    if (confirm(`Are you sure you want to delete the "${role.roleId}" role?`)) {
+    
+    this.showConfirmationDialog({
+      title: 'Delete Role',
+      message: `Are you sure you want to delete the "${role.roleId}" role? This action cannot be undone.`,
+      confirmText: 'Delete',
+      cancelText: 'Cancel',
+      type: 'danger'
+    }, async () => {
       this.isLoading = true;
       try {
         await this.roleDefinitionService.deleteRoleDefinition(role.id!);
         await this.roleDefinitionService.loadRoleDefinitions();
         this.loadRoles();
+        this.toastService.success(`Role "${role.roleId}" deleted successfully.`);
         this.isLoading = false;
       } catch (error) {
         console.error('Error deleting role:', error);
         this.isLoading = false;
-        alert('Error deleting role. Please try again.');
+        this.toastService.error('Error deleting role. Please try again.');
       }
-    }
+    });
   }
 
   getPermissionCount(permissions: RolePermissions): number {
@@ -380,7 +435,7 @@ export class AccessComponent implements OnInit {
 
   async createNewRole(): Promise<void> {
     if (!this.newRoleId.trim()) {
-      alert('Please enter a role name.');
+      this.toastService.warning('Please enter a role name.');
       return;
     }
     
@@ -394,9 +449,9 @@ export class AccessComponent implements OnInit {
     
     if (duplicateRole) {
       if (this.selectedStoreId) {
-        alert(`A role with the name "${roleId}" already exists in the selected store. Please choose a different name.`);
+        this.toastService.warning(`A role with the name "${roleId}" already exists in the selected store. Please choose a different name.`);
       } else {
-        alert(`A role with the name "${roleId}" already exists at the company level. Please choose a different name.`);
+        this.toastService.warning(`A role with the name "${roleId}" already exists at the company level. Please choose a different name.`);
       }
       return;
     }
@@ -404,7 +459,7 @@ export class AccessComponent implements OnInit {
     // Validate against reserved role names
     const reservedRoles = ['creator', 'cashier', 'store_manager', 'admin', 'owner'];
     if (reservedRoles.includes(roleId)) {
-      alert(`"${roleId}" is a reserved role name. Please choose a different name.`);
+      this.toastService.warning(`"${roleId}" is a reserved role name. Please choose a different name.`);
       return;
     }
 
@@ -444,9 +499,9 @@ export class AccessComponent implements OnInit {
     } catch (error) {
       console.error('Error creating role:', error);
       if (error instanceof Error && error.message.includes('already exists')) {
-        alert(error.message);
+        this.toastService.error(error.message);
       } else {
-        alert('Failed to create role. Please try again.');
+        this.toastService.error('Failed to create role. Please try again.');
       }
     } finally {
       this.isLoading = false;

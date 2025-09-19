@@ -6,6 +6,7 @@ import { RoleDefinitionService, RoleDefinition } from '../../../services/role-de
 import { StoreService, Store } from '../../../services/store.service';
 import { AuthService } from '../../../services/auth.service';
 import { UserRole } from '../../../interfaces/user-role.interface';
+import { ToastService } from '../../../shared/services/toast.service';
 
 @Component({
   selector: 'app-user-roles',
@@ -639,7 +640,7 @@ export class UserRolesComponent implements OnInit {
       }
     } catch (error) {
       this.foundUser = null;
-      alert('Error searching for user.');
+      this.toastService.error('Error searching for user. Please try again.');
       console.error(error);
     }
   }
@@ -664,7 +665,8 @@ export class UserRolesComponent implements OnInit {
     private userRoleService: UserRoleService,
     private roleDefinitionService: RoleDefinitionService,
     private storeService: StoreService,
-    private authService: AuthService
+    private authService: AuthService,
+    private toastService: ToastService
   ) {}
 
   async ngOnInit() {
@@ -781,7 +783,7 @@ export class UserRolesComponent implements OnInit {
       this.cancelUserRoleModal();
     } catch (error) {
       console.error('Error saving user role:', error);
-      alert('Error saving user role. Please try again.');
+      this.toastService.error('Error saving user role. Please try again.');
     } finally {
       this.isLoading = false;
     }
@@ -807,7 +809,7 @@ export class UserRolesComponent implements OnInit {
       await this.loadData();
     } catch (error) {
       console.error('🔍 [UserRoles] Error deleting user role:', error);
-      alert(`Failed to delete user role: ${error}`);
+      this.toastService.error(`Failed to delete user role: ${error}`);
     } finally {
       this.isLoading = false;
       this.showDeleteModal = false;

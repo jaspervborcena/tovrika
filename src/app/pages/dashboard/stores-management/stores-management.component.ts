@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { StoreService, Store } from '../../../services/store.service';
 import { AuthService } from '../../../services/auth.service';
+import { ToastService } from '../../../shared/services/toast.service';
 
 @Component({
   selector: 'app-stores-management',
@@ -641,7 +642,8 @@ export class StoresManagementComponent implements OnInit {
     private storeService: StoreService,
     private authService: AuthService,
     private fb: FormBuilder,
-    private cdr: ChangeDetectorRef
+    private cdr: ChangeDetectorRef,
+    private toastService: ToastService
   ) {
     this.storeForm = this.fb.group({
       storeName: ['', [Validators.required]],
@@ -765,7 +767,7 @@ export class StoresManagementComponent implements OnInit {
       this.cancelStoreModal();
     } catch (error) {
       console.error('Error saving store:', error);
-      alert('Error saving store. Please try again.');
+      this.toastService.error('Error saving store. Please try again.');
     } finally {
       this.isLoading = false;
     }
@@ -780,7 +782,7 @@ export class StoresManagementComponent implements OnInit {
         await this.loadStores();
       } catch (error) {
         console.error('Error deleting store:', error);
-        alert('Error deleting store. Please try again.');
+        this.toastService.error('Error deleting store. Please try again.');
       } finally {
         this.isLoading = false;
       }

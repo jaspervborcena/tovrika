@@ -6,6 +6,7 @@ import { ProductService } from '../../../services/product.service';
 import { StoreService } from '../../../services/store.service';
 import { Store } from '../../../interfaces/store.interface';
 import { AuthService } from '../../../services/auth.service';
+import { ToastService } from '../../../shared/services/toast.service';
 
 @Component({
   selector: 'app-product-management',
@@ -1237,7 +1238,8 @@ export class ProductManagementComponent implements OnInit {
     private storeService: StoreService,
     private authService: AuthService,
     private fb: FormBuilder,
-    private cdr: ChangeDetectorRef
+    private cdr: ChangeDetectorRef,
+    private toastService: ToastService
   ) {
     this.productForm = this.createProductForm();
     this.inventoryForm = this.createInventoryForm();
@@ -1531,7 +1533,7 @@ export class ProductManagementComponent implements OnInit {
       this.filterProducts();
     } catch (error) {
       console.error('Error saving product:', error);
-      alert('Error saving product. Please try again.');
+      this.toastService.error('Error saving product. Please try again.');
     } finally {
       this.loading = false;
     }
