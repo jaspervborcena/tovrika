@@ -7,6 +7,7 @@ import { AuthService } from '../../services/auth.service';
 import { CompanySetupService } from '../../services/companySetup.service';
 import { AccessService, Permissions } from '../../core/services/access.service';
 import { Firestore, collection, query, where, getDocs } from '@angular/fire/firestore';
+import { LogoComponent } from '../../shared/components/logo/logo.component';
 
 @Component({
   selector: 'app-dashboard',
@@ -14,7 +15,8 @@ import { Firestore, collection, query, where, getDocs } from '@angular/fire/fire
   imports: [
     CommonModule, 
     RouterLink,
-    RouterOutlet
+    RouterOutlet,
+    LogoComponent
   ],
   templateUrl: './dashboard.component.html',
   styleUrls: ['./dashboard.component.css']

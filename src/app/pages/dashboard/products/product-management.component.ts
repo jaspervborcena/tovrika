@@ -21,7 +21,7 @@ import { ErrorMessages } from '../../../shared/enums';
     }
 
     .header {
-      background: linear-gradient(135deg, #059669 0%, #10b981 100%);
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
       color: white;
       padding: 2rem 0;
       margin-bottom: 2rem;

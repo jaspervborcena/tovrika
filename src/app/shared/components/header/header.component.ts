@@ -6,6 +6,7 @@ import { StoreService, Store } from '../../../services/store.service';
 import { ProductService } from '../../../services/product.service';
 import { AuthService } from '../../../services/auth.service';
 import { CompanySetupService } from '../../../services/companySetup.service';
+import { LogoComponent } from '../logo/logo.component';
 
 @Component({
   selector: 'app-header',
@@ -13,7 +14,8 @@ import { CompanySetupService } from '../../../services/companySetup.service';
   imports: [
     CommonModule, 
     RouterLink,
-    FormsModule
+    FormsModule,
+    LogoComponent
   ],
   templateUrl: './header.component.html',
   styleUrls: ['./header.component.css']

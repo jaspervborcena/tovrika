@@ -226,7 +226,7 @@ import { ToastService } from '../../../shared/services/toast.service';
     }
 
     .header {
-      background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
       color: white;
       padding: 2rem 0;
       margin-bottom: 2rem;

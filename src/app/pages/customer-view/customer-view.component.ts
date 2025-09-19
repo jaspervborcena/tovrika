@@ -8,11 +8,12 @@ import {
   Unsubscribe 
 } from '@angular/fire/firestore';
 import { CustomerViewSession, LiveCartItem, CartTotals } from '../../interfaces/customer-view.interface';
+import { LogoComponent } from '../../shared/components/logo/logo.component';
 
 @Component({
   selector: 'app-customer-view',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, LogoComponent],
   template: `
     <div class="min-h-screen bg-gradient-to-br from-blue-900 to-purple-900 text-white">
       <!-- Header -->

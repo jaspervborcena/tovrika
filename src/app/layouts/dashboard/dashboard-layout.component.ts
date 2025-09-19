@@ -4,6 +4,8 @@ import { CommonModule } from '@angular/common';
 import { RouterOutlet, RouterLink, RouterLinkActive } from '@angular/router';
 import { AuthService } from '../../services/auth.service';
 import { AccessService } from '../../core/services/access.service';
+import { ToastService } from '../../shared/services/toast.service';
+import { ErrorMessages } from '../../shared/enums/notification-messages.enum';
 
 @Component({
   selector: 'app-dashboard-layout',
@@ -78,6 +80,7 @@ import { AccessService } from '../../core/services/access.service';
 export class DashboardLayoutComponent {
   private authService = inject(AuthService);
   private accessService = inject(AccessService);
+  private toastService = inject(ToastService);
   user = this.authService.getCurrentUser();
 
   get permissions() {
@@ -99,7 +102,7 @@ export class DashboardLayoutComponent {
       await this.authService.logout();
     } catch (err) {
       console.log('Logout error:', err);
-      alert('Unable to log in. Please check your network or try again later.');
+      this.toastService.error(ErrorMessages.NETWORK_ERROR);
     }
   }
 }
