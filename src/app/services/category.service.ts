@@ -22,7 +22,6 @@ export interface ProductCategory {
   categoryLabel: string;
   categoryDescription: string;
   categoryGroup: string;
-  categoryIcon?: string;
   isActive: boolean;
   sortOrder?: number;
   companyId: string;
@@ -48,9 +47,9 @@ export class CategoryService {
   constructor(private authService: AuthService) {}
 
   /**
-   * Load categories for a specific company
+   * Load categories for a specific store
    */
-  async loadCategoriesByCompany(companyId: string): Promise<ProductCategory[]> {
+  async loadCategoriesByStore(storeId: string): Promise<ProductCategory[]> {
     if (this.isLoading) {
       console.log('⏳ Categories already loading, skipping...');
       return this.categoriesSignal();
@@ -58,14 +57,12 @@ export class CategoryService {
 
     try {
       this.isLoading = true;
-      console.log('🏷️ CategoryService.loadCategoriesByCompany called with companyId:', companyId);
+      console.log('🏷️ CategoryService.loadCategoriesByStore called with storeId:', storeId);
 
       const categoriesRef = collection(db, 'categories');
       const q = query(
         categoriesRef,
-        where('companyId', '==', companyId),
-        orderBy('sortOrder'),
-        orderBy('categoryLabel')
+        where('storeId', '==', storeId)
       );
 
       const querySnapshot: QuerySnapshot<DocumentData> = await getDocs(q);
@@ -79,7 +76,6 @@ export class CategoryService {
           categoryLabel: data['categoryLabel'],
           categoryDescription: data['categoryDescription'],
           categoryGroup: data['categoryGroup'],
-          categoryIcon: data['categoryIcon'],
           isActive: data['isActive'] ?? true,
           sortOrder: data['sortOrder'] ?? 0,
           companyId: data['companyId'],
@@ -88,6 +84,9 @@ export class CategoryService {
           updatedAt: data['updatedAt']?.toDate() || new Date()
         });
       });
+
+      // Sort categories by categoryLabel in JavaScript since we can't use orderBy in Firestore query
+      categories.sort((a, b) => a.categoryLabel.localeCompare(b.categoryLabel));
 
       this.categoriesSignal.set(categories);
       this.loadTimestamp = Date.now();
@@ -108,6 +107,23 @@ export class CategoryService {
    */
   async createCategory(categoryData: Omit<ProductCategory, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> {
     try {
+      console.log('🔍 createCategory called with:', categoryData);
+      
+      // Test Firestore connection first
+      console.log('🔍 Testing Firestore connection...');
+      const testRef = collection(db, 'test');
+      console.log('🔍 Test collection reference created successfully');
+      
+      // Test if we can write to Firestore at all
+      console.log('🔍 Testing write permissions...');
+      try {
+        const testDoc = await addDoc(testRef, { test: 'connection test', timestamp: new Date() });
+        console.log('✅ Test write successful, doc ID:', testDoc.id);
+      } catch (testError) {
+        console.error('❌ Test write failed:', testError);
+        throw new Error(`Firestore write test failed: ${(testError as any)?.message || testError}`);
+      }
+      
       const now = new Date();
       const newCategory: Omit<ProductCategory, 'id'> = {
         ...categoryData,
@@ -115,17 +131,44 @@ export class CategoryService {
         updatedAt: now
       };
 
+      console.log('🔍 Full category object to create:', newCategory);
+      
       const categoriesRef = collection(db, 'categories');
+      console.log('🔍 Categories collection reference:', categoriesRef);
+      
+      console.log('🔍 Attempting to add document to Firestore...');
       const docRef = await addDoc(categoriesRef, newCategory);
+      console.log('🔍 Document reference after creation:', docRef);
       
       // Refresh categories after creation
-      await this.loadCategoriesByCompany(categoryData.companyId);
+      console.log('🔍 Refreshing categories after creation...');
+      if (categoryData.storeId) {
+        await this.loadCategoriesByStore(categoryData.storeId);
+      }
       
       console.log('✅ Category created with ID:', docRef.id);
       return docRef.id;
 
     } catch (error) {
       console.error('❌ Error creating category:', error);
+      console.error('❌ Error name:', (error as any)?.name);
+      console.error('❌ Error message:', (error as any)?.message);
+      console.error('❌ Error code:', (error as any)?.code);
+      console.error('❌ Error stack:', (error as any)?.stack);
+      
+      // Check if it's a permission error
+      if ((error as any)?.code === 'permission-denied') {
+        console.error('❌ PERMISSION DENIED: Check Firestore security rules');
+        throw new Error('Permission denied: Unable to create category. Please check your Firestore security rules.');
+      }
+      
+      // Check if it's a network error
+      if ((error as any)?.code === 'unavailable') {
+        console.error('❌ NETWORK ERROR: Firestore unavailable');
+        throw new Error('Network error: Unable to connect to Firestore. Please check your internet connection.');
+      }
+      
+      console.error('❌ Full error object:', JSON.stringify(error, null, 2));
       throw error;
     }
   }
@@ -145,8 +188,8 @@ export class CategoryService {
       
       // Refresh categories after update
       const currentPermission = this.authService.getCurrentPermission();
-      if (currentPermission?.companyId) {
-        await this.loadCategoriesByCompany(currentPermission.companyId);
+      if (currentPermission?.storeId) {
+        await this.loadCategoriesByStore(currentPermission.storeId);
       }
       
       console.log('✅ Category updated:', categoryId);
@@ -167,8 +210,8 @@ export class CategoryService {
       
       // Refresh categories after deletion
       const currentPermission = this.authService.getCurrentPermission();
-      if (currentPermission?.companyId) {
-        await this.loadCategoriesByCompany(currentPermission.companyId);
+      if (currentPermission?.storeId) {
+        await this.loadCategoriesByStore(currentPermission.storeId);
       }
       
       console.log('✅ Category deleted:', categoryId);
@@ -276,6 +319,54 @@ export class CategoryService {
    */
   getActiveCategories(): ProductCategory[] {
     return this.activeCategories();
+  }
+
+  /**
+   * Auto-save category if it doesn't exist (for product creation)
+   */
+  async ensureCategoryExists(categoryLabel: string, storeId: string): Promise<void> {
+    console.log('🔍 ensureCategoryExists called with:', { categoryLabel, storeId });
+    
+    if (!categoryLabel.trim()) {
+      console.log('❌ Category label is empty, returning');
+      return;
+    }
+    
+    // Load categories first to ensure we have the latest data
+    await this.loadCategoriesByStore(storeId);
+    
+    // Check if category already exists
+    const exists = this.categoryExists(categoryLabel.trim());
+    console.log('🔍 Category exists check:', { categoryLabel: categoryLabel.trim(), exists });
+    console.log('🔍 Current categories:', this.categoriesSignal().map(c => c.categoryLabel));
+    
+    if (exists) {
+      console.log('✅ Category already exists, skipping creation');
+      return;
+    }
+
+    try {
+      console.log('🚀 Creating new category...');
+      // Create new category automatically
+      const categoryData: Omit<ProductCategory, 'id' | 'createdAt' | 'updatedAt'> = {
+        categoryId: this.generateCategoryId(categoryLabel),
+        categoryLabel: categoryLabel.trim(),
+        categoryDescription: `Auto-created from product: ${categoryLabel.trim()}`,
+        categoryGroup: 'General',
+        isActive: true,
+        sortOrder: 0,
+        companyId: '', // Optional - can be empty
+        storeId: storeId
+      };
+
+      console.log('🔍 Category data to create:', categoryData);
+      await this.createCategory(categoryData);
+      console.log('✅ Auto-created category:', categoryLabel);
+    } catch (error) {
+      console.error('❌ Error auto-creating category:', error);
+      console.error('❌ Full error details:', JSON.stringify(error, null, 2));
+      // Don't throw error to avoid breaking product creation
+    }
   }
 
   /**
