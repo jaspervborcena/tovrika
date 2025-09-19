@@ -59,7 +59,6 @@ export class ProductService {
       storeId: data['storeId'] || '',
       isMultipleInventory: data['isMultipleInventory'] || false,
       barcodeId: data['barcodeId'] || '',
-      qrCode: data['qrCode'] || '',
       imageUrl: data['imageUrl'] || '',
       inventory: this.transformInventoryArray(data['inventory'] || []),
       

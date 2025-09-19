@@ -58,7 +58,6 @@ import { ToastService } from '../../../shared/services/toast.service';
                 <th>Store Code</th>
                 <th>Store Type</th>
                 <th>Address</th>
-                <th>Manager</th>
                 <th>Status</th>
                 <th>Actions</th>
               </tr>
@@ -69,7 +68,6 @@ import { ToastService } from '../../../shared/services/toast.service';
                 <td class="store-code-cell">{{ store.storeCode }}</td>
                 <td class="store-type-cell">{{ store.storeType }}</td>
                 <td class="address-cell">{{ store.address }}</td>
-                <td class="manager-cell">{{ store.managerName || 'Not assigned' }}</td>
                 <td class="status-cell">
                   <span class="status-badge" [class]="'status-' + store.status">
                     {{ store.status | titlecase }}
@@ -200,16 +198,6 @@ import { ToastService } from '../../../shared/services/toast.service';
                   id="email"
                   formControlName="email"
                   placeholder="Enter email address"
-                  class="form-input">
-              </div>
-
-              <div class="form-group">
-                <label for="managerName">Manager Name</label>
-                <input 
-                  type="text" 
-                  id="managerName"
-                  formControlName="managerName"
-                  placeholder="Enter manager name"
                   class="form-input">
               </div>
 
@@ -381,10 +369,6 @@ import { ToastService } from '../../../shared/services/toast.service';
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
-    }
-
-    .manager-cell {
-      color: #4a5568;
     }
 
     .status-badge {

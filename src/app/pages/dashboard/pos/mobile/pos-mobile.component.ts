@@ -13,6 +13,8 @@ import { PrintService } from '../../../../services/print.service';
 import { TransactionService } from '../../../../services/transaction.service';
 import { AuthService } from '../../../../services/auth.service';
 import { CompanyService } from '../../../../services/company.service';
+import { ToastService } from '../../../../shared/services/toast.service';
+import { ErrorMessages, WarningMessages } from '../../../../shared/enums';
 import { OrderService } from '../../../../services/order.service';
 import { StoreService, Store } from '../../../../services/store.service';
 import { UserRoleService } from '../../../../services/user-role.service';
@@ -41,6 +43,7 @@ export class PosMobileComponent implements OnInit {
   private orderService = inject(OrderService);
   private userRoleService = inject(UserRoleService);
   public currencyService = inject(CurrencyService);
+  private toastService = inject(ToastService);
 
   // Use shared UI state for synchronization with desktop
   readonly searchQuery = computed(() => this.posSharedService.searchQuery());
@@ -426,7 +429,7 @@ export class PosMobileComponent implements OnInit {
 
   addToCart(product: Product): void {
     if (product.totalStock <= 0) {
-      alert('Product is out of stock');
+      this.toastService.warning(WarningMessages.PRODUCT_OUT_OF_STOCK);
       return;
     }
     this.posService.addToCart(product);
@@ -485,7 +488,7 @@ export class PosMobileComponent implements OnInit {
       }
     } catch (error) {
       console.error('Error processing order:', error);
-      alert('Failed to process order. Please try again.');
+      this.toastService.error(ErrorMessages.ORDER_PROCESS_ERROR);
     }
   }
 

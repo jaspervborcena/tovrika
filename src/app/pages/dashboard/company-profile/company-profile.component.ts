@@ -20,14 +20,6 @@ import { UserRole } from '../../../interfaces/user-role.interface';
       <div class="header">
         <div class="header-content">
           <div class="header-left">
-            <button 
-              (click)="goBack()" 
-              class="back-btn">
-              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
-              </svg>
-              Back to Dashboard
-            </button>
             <div class="header-text">
               <h1 class="page-title">Company Profile</h1>
               <p class="page-subtitle">Configure your company information and settings</p>
@@ -730,10 +722,6 @@ export class CompanyProfileComponent {
         website: ''
       });
     }
-  }
-
-  protected goBack(): void {
-    this.router.navigate(['/dashboard/overview']);
   }
 
   protected createNewCompany(): void {

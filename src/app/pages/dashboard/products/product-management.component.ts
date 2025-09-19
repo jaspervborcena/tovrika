@@ -7,6 +7,7 @@ import { StoreService } from '../../../services/store.service';
 import { Store } from '../../../interfaces/store.interface';
 import { AuthService } from '../../../services/auth.service';
 import { ToastService } from '../../../shared/services/toast.service';
+import { ErrorMessages } from '../../../shared/enums';
 
 @Component({
   selector: 'app-product-management',
@@ -817,16 +818,6 @@ import { ToastService } from '../../../shared/services/toast.service';
             </div>
 
             <div class="form-group">
-              <label for="qrCode">QR Code</label>
-              <input
-                type="text"
-                id="qrCode"
-                formControlName="qrCode"
-                class="form-input"
-                placeholder="Enter QR code">
-            </div>
-
-            <div class="form-group">
               <label for="imageUrl">Image URL</label>
               <div style="display:flex; gap:0.5rem; align-items:center;">
                 <input
@@ -1292,7 +1283,6 @@ export class ProductManagementComponent implements OnInit {
       sellingPrice: [0, [Validators.required, Validators.min(0)]],
       storeId: ['', Validators.required],
       barcodeId: [''],
-      qrCode: [''],
       imageUrl: [''],
       // Tax and Discount Fields
       isVatApplicable: [true],
@@ -1458,7 +1448,6 @@ export class ProductManagementComponent implements OnInit {
           sellingPrice: computedSellingPrice,
           storeId: formValue.storeId,
           barcodeId: formValue.barcodeId,
-          qrCode: formValue.qrCode,
           imageUrl: formValue.imageUrl,
           isMultipleInventory: formValue.isMultipleInventory,
           // Tax and Discount Fields
@@ -1511,7 +1500,6 @@ export class ProductManagementComponent implements OnInit {
           storeId: formValue.storeId,
           isMultipleInventory: formValue.isMultipleInventory,
           barcodeId: formValue.barcodeId,
-          qrCode: formValue.qrCode,
           imageUrl: formValue.imageUrl,
           inventory,
           totalStock,
@@ -1570,7 +1558,7 @@ export class ProductManagementComponent implements OnInit {
       }
     } catch (error) {
       console.error('Error adding inventory batch:', error);
-      alert('Error adding inventory batch. Please try again.');
+      this.toastService.error(ErrorMessages.INVENTORY_BATCH_ADD_ERROR);
     }
   }
 
@@ -1588,7 +1576,7 @@ export class ProductManagementComponent implements OnInit {
       }
     } catch (error) {
       console.error('Error removing inventory batch:', error);
-      alert('Error removing inventory batch. Please try again.');
+      this.toastService.error(ErrorMessages.INVENTORY_BATCH_REMOVE_ERROR);
     }
   }
 
@@ -1627,7 +1615,7 @@ export class ProductManagementComponent implements OnInit {
       this.selectedProduct = this.productService.getProduct(product.id!) || null;
     } catch (err) {
       console.error(err);
-      alert('Failed to set active batch');
+      this.toastService.error(ErrorMessages.ACTIVE_BATCH_SET_ERROR);
     }
   }
 
@@ -1646,7 +1634,7 @@ export class ProductManagementComponent implements OnInit {
       this.productForm.get('imageUrl')?.setValue(url);
     } catch (err) {
       console.error(err);
-      alert('Image compression or upload failed. Please upload a smaller image.');
+      this.toastService.error(ErrorMessages.IMAGE_UPLOAD_ERROR);
     }
   }
 
@@ -1707,7 +1695,7 @@ export class ProductManagementComponent implements OnInit {
       this.filterProducts();
     } catch (error) {
       console.error('Error deleting product:', error);
-      alert('Error deleting product. Please try again.');
+      this.toastService.error(ErrorMessages.PRODUCT_DELETE_ERROR);
     }
   }
 
