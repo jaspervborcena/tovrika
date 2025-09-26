@@ -12,14 +12,13 @@ import { PosSharedService } from '../../../services/pos-shared.service';
 import { PrintService } from '../../../services/print.service';
 import { TransactionService } from '../../../services/transaction.service';
 import { AuthService } from '../../../services/auth.service';
-import { CompanyService } from '../../../services/company.service';
+
 import { OrderService } from '../../../services/order.service';
 import { StoreService } from '../../../services/store.service';
 import { UserRoleService } from '../../../services/user-role.service';
 import { CustomerService } from '../../../services/customer.service';
 import { Product } from '../../../interfaces/product.interface';
-import { CartItem, ProductViewType, ReceiptData, OrderDiscount } from '../../../interfaces/pos.interface';
-import { Store } from '../../../interfaces/store.interface';
+import { ProductViewType, OrderDiscount } from '../../../interfaces/pos.interface';
 import { Customer, CustomerFormData } from '../../../interfaces/customer.interface';
 
 @Component({
@@ -38,7 +37,6 @@ export class PosComponent implements OnInit, AfterViewInit {
   private printService = inject(PrintService);
   private transactionService = inject(TransactionService);
   private authService = inject(AuthService);
-  private companyService = inject(CompanyService);
   private storeService = inject(StoreService);
   private orderService = inject(OrderService);
   private userRoleService = inject(UserRoleService);
@@ -73,6 +71,24 @@ export class PosComponent implements OnInit, AfterViewInit {
   readonly currentStoreInfo = computed(() => 
     this.availableStores().find(s => s.id === this.selectedStoreId())
   );
+
+  // Invoice preview
+  readonly nextInvoiceNumber = signal<string>('Loading...');
+
+  async loadNextInvoicePreview(): Promise<void> {
+    try {
+      const nextInvoice = await this.posService.getNextInvoiceNumberPreview();
+      this.nextInvoiceNumber.set(nextInvoice);
+      
+      // Update the customer info invoice number for display
+      this.customerInfo.invoiceNumber = nextInvoice;
+      console.log('📋 Next invoice number loaded:', nextInvoice);
+    } catch (error) {
+      console.error('Error loading invoice preview:', error);
+      this.nextInvoiceNumber.set('Error loading');
+      this.customerInfo.invoiceNumber = 'INV-0000-000000';
+    }
+  }
 
   readonly filteredProducts = computed(() => {
     let filtered = this.products();
@@ -137,7 +153,7 @@ export class PosComponent implements OnInit, AfterViewInit {
     soldTo: '',
     tin: '',
     businessAddress: '',
-    invoiceNumber: `INV-${new Date().getFullYear()}-${String(Date.now()).slice(-6)}`,
+    invoiceNumber: 'INV-0000-000000',
     datetime: new Date().toISOString().slice(0, 16) // Format for datetime-local input
   };
 
@@ -485,6 +501,9 @@ export class PosComponent implements OnInit, AfterViewInit {
       // Set current date and time
       this.updateCurrentDateTime();
       
+      // Load next invoice number preview
+      await this.loadNextInvoicePreview();
+      
       // Debug: log current user and stores to ensure user.storeIds and stores list are correct
       console.log('POS init - currentUser:', this.authService.getCurrentUser());
       console.log('POS init - all stores:', this.storeService.getStores());
@@ -712,7 +731,7 @@ export class PosComponent implements OnInit, AfterViewInit {
   }
 
   generateNewInvoiceNumber(): void {
-    this.customerInfo.invoiceNumber = `INV-${new Date().getFullYear()}-${String(Date.now()).slice(-6)}`;
+    this.customerInfo.invoiceNumber = 'INV-0000-000000';
   }
 
   async addToCart(product: Product): Promise<void> {
@@ -753,22 +772,56 @@ export class PosComponent implements OnInit, AfterViewInit {
 
   async processOrder(): Promise<void> {
     try {
-      // Generate temporary order ID for receipt display (will be replaced when actually saved)
-      const tempOrderId = 'temp-' + Date.now();
+      console.log('🎯 Complete Order clicked - Processing order with invoice increment...');
       
-      // Prepare receipt data without saving the order yet
-      const receiptData = this.prepareReceiptData(tempOrderId);
+      // Use the invoice service to process the order with proper invoice numbering
+      const result = await this.posService.processOrderWithInvoice();
+      
+      if (!result || !result.orderId) {
+        throw new Error('Failed to process order with invoice');
+      }
+
+      console.log('✅ Order processed successfully:', {
+        orderId: result.orderId,
+        invoiceNumber: result.invoiceNumber
+      });
+
+      // Update the customer info with the new invoice number for display
+      this.customerInfo.invoiceNumber = result.invoiceNumber;
+
+      // Update the next invoice preview for the next order
+      await this.loadNextInvoicePreview();
+
+      // Save customer information if available
+      console.log('👤 Saving customer information...');
+      const savedCustomer = await this.saveCustomerData();
+      if (savedCustomer) {
+        console.log('✅ Customer saved successfully:', savedCustomer.customerId);
+      }
+
+      // Prepare receipt data with the real order ID and invoice number
+      const receiptData = this.prepareReceiptData(result.orderId);
+      
+      // Update receipt data with the correct invoice number
+      const updatedReceiptData = { 
+        ...receiptData, 
+        orderId: result.orderId,
+        invoiceNumber: result.invoiceNumber
+      };
       
       // Set receipt data and show modal
-      this.receiptDataSignal.set(receiptData);
+      this.receiptDataSignal.set(updatedReceiptData);
       this.isReceiptModalVisibleSignal.set(true);
+
+      console.log('🧾 Receipt modal opened with invoice:', result.invoiceNumber);
+      
     } catch (error) {
-      console.error('Error preparing order:', error);
+      console.error('❌ Error processing order:', error);
       
       // Show error in a modal dialog instead of browser alert
       await this.showConfirmationDialog({
-        title: 'Order Preparation Failed',
-        message: 'Failed to prepare order. Please try again.',
+        title: 'Order Processing Failed',
+        message: 'Failed to process order. Please try again.',
         confirmText: 'OK',
         cancelText: '',
         type: 'danger'
@@ -861,16 +914,19 @@ export class PosComponent implements OnInit, AfterViewInit {
       // Clear cart and all order-related data
       this.posService.clearCart();
       
-      // Reset customer information
+      // Reset customer information with next invoice number
+      await this.loadNextInvoicePreview();
+      const nextInvoice = this.nextInvoiceNumber();
+      
       this.customerInfo = {
         soldTo: '',
         tin: '',
         businessAddress: '',
-        invoiceNumber: `INV-${new Date().getFullYear()}-${String(Date.now()).slice(-6)}`,
+        invoiceNumber: nextInvoice === 'Loading...' ? 'INV-0000-000000' : nextInvoice,
         datetime: new Date().toISOString().slice(0, 16)
       };
       
-      console.log('New order started - all data cleared');
+      console.log('New order started - all data cleared, next invoice:', this.customerInfo.invoiceNumber);
     }
   }
 
@@ -887,35 +943,22 @@ export class PosComponent implements OnInit, AfterViewInit {
       : 'thermal';
 
     try {
-      // First, save the order to get a real order ID
-      console.log('Saving order to database...');
-      const orderId = await this.posService.processOrder();
+      console.log('🖨️ Print Receipt clicked - Order already processed, just printing...');
+      console.log('🖨️ Receipt data:', {
+        orderId: receiptData.orderId,
+        invoiceNumber: receiptData.invoiceNumber
+      });
+
+      // Save the transaction to the database (for transaction history)
+      console.log('💾 Saving transaction for history...');
+      const savedTransaction = await this.saveTransaction(receiptData);
+      console.log('✅ Transaction saved successfully:', savedTransaction.transactionNumber);
+
+      // Print the receipt (order is already saved)
+      await this.printService.printReceipt(receiptData, validPrinterType);
+      console.log(`✅ Receipt sent to ${validPrinterType} printer for order:`, receiptData.orderId);
       
-      if (!orderId) {
-        throw new Error('Failed to save order');
-      }
-
-      // Save customer information if available
-      console.log('Saving customer information...');
-      const savedCustomer = await this.saveCustomerData();
-      if (savedCustomer) {
-        console.log('Customer saved successfully:', savedCustomer.customerId);
-      }
-
-      // Update receipt data with real order ID
-      const updatedReceiptData = { ...receiptData, orderId };
-      this.receiptDataSignal.set(updatedReceiptData);
-
-      // Then save the transaction to the database
-      console.log('Saving transaction before printing...');
-      const savedTransaction = await this.saveTransaction(updatedReceiptData);
-      console.log('Transaction saved successfully:', savedTransaction.transactionNumber);
-
-      // Then print the receipt
-      await this.printService.printReceipt(updatedReceiptData, validPrinterType);
-      console.log(`Receipt sent to ${validPrinterType} printer for order:`, orderId);
-      
-      // Close the modal after successful save and print
+      // Close the modal after successful print
       this.closeReceiptModal();
       
     } catch (error) {

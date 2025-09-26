@@ -1,12 +1,12 @@
-import { Component, OnInit, computed, inject, signal, HostListener } from '@angular/core';
+import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink, RouterOutlet, Router, NavigationEnd } from '@angular/router';
 import { filter } from 'rxjs/operators';
 import { StoreService, Store } from '../../services/store.service';
 import { ProductService } from '../../services/product.service';
 import { AuthService } from '../../services/auth.service';
-import { CompanySetupService } from '../../services/companySetup.service';
-import { AccessService, Permissions } from '../../core/services/access.service';
+
+import { AccessService } from '../../core/services/access.service';
 import { Firestore, collection, query, where, getDocs } from '@angular/fire/firestore';
 import { LogoComponent } from '../../shared/components/logo/logo.component';
 
@@ -35,7 +35,6 @@ export class DashboardComponent implements OnInit {
   private storeService = inject(StoreService);
   private productService = inject(ProductService);
   private authService = inject(AuthService);
-  private companyService = inject(CompanySetupService);
   private accessService = inject(AccessService);
   private firestore = inject(Firestore);
   private router = inject(Router);
@@ -84,7 +83,7 @@ export class DashboardComponent implements OnInit {
     this.updateCurrentPage();
     this.router.events.pipe(
       filter(event => event instanceof NavigationEnd)
-    ).subscribe((event: NavigationEnd) => {
+    ).subscribe(() => {
       this.updateCurrentPage();
     });
     const user = this.currentUser();

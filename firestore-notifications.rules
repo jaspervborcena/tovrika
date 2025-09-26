@@ -1,0 +1,148 @@
+// Firestore Security Rules for Notifications
+// Add these rules to your firestore.rules file
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Notifications collection rules
+    match /notifications/{notificationId} {
+      
+      // Allow read access if user is the recipient or has appropriate permissions
+      allow read: if isAuthenticated() && canReadNotification(resource.data);
+      
+      // Allow create access for system services and authorized users
+      allow create: if isAuthenticated() && canCreateNotification(request.resource.data);
+      
+      // Allow update for marking as read/unread
+      allow update: if isAuthenticated() && canUpdateNotification(resource.data, request.resource.data);
+      
+      // Allow delete for cleanup (admin only or system)
+      allow delete: if isAuthenticated() && canDeleteNotification(resource.data);
+    }
+    
+    // Helper functions for notification access control
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function getUserId() {
+      return request.auth.uid;
+    }
+    
+    function getUserCompany() {
+      // Get user's company from userRoles collection
+      return get(/databases/$(database)/documents/userRoles/$(getUserId())).data.companyId;
+    }
+    
+    function getUserStore() {
+      // Get user's store from userRoles collection  
+      return get(/databases/$(database)/documents/userRoles/$(getUserId())).data.storeId;
+    }
+    
+    function getUserRole() {
+      // Get user's role from userRoles collection
+      return get(/databases/$(database)/documents/userRoles/$(getUserId())).data.roleId;
+    }
+    
+    // Check if user can read a notification
+    function canReadNotification(notification) {
+      let userId = getUserId();
+      let userCompany = getUserCompany();
+      let userStore = getUserStore();
+      let userRole = getUserRole();
+      
+      // System-wide notifications
+      if (notification.recipientType == 'system') {
+        return true;
+      }
+      
+      // Company-wide notifications (must be in same company)
+      if (notification.recipientType == 'company') {
+        return notification.companyId == userCompany;
+      }
+      
+      // Store-specific notifications (must be in same store)
+      if (notification.recipientType == 'store') {
+        return notification.recipientId == userStore && notification.companyId == userCompany;
+      }
+      
+      // Role-specific notifications (must have same role)
+      if (notification.recipientType == 'role') {
+        return notification.recipientId == userRole && notification.companyId == userCompany;
+      }
+      
+      // User-specific notifications (must be the recipient)
+      if (notification.recipientType == 'user') {
+        return notification.recipientId == userId && notification.companyId == userCompany;
+      }
+      
+      return false;
+    }
+    
+    // Check if user can create a notification
+    function canCreateNotification(notification) {
+      let userId = getUserId();
+      let userCompany = getUserCompany();
+      
+      // Basic validation
+      if (!('companyId' in notification) || 
+          !('recipientType' in notification) ||
+          !('title' in notification) ||
+          !('message' in notification)) {
+        return false;
+      }
+      
+      // Must be creating notification for own company
+      if (notification.companyId != userCompany) {
+        return false;
+      }
+      
+      // Set createdBy to current user
+      if (notification.createdBy != userId) {
+        return false;
+      }
+      
+      // Validate required fields are present
+      return notification.createdAt == request.time &&
+             notification.read == false &&
+             notification.type in ['success', 'warning', 'error', 'info'] &&
+             notification.priority in ['low', 'normal', 'high', 'urgent'];
+    }
+    
+    // Check if user can update a notification (mainly for read status)
+    function canUpdateNotification(oldNotification, newNotification) {
+      let userId = getUserId();
+      
+      // Must be able to read the notification first
+      if (!canReadNotification(oldNotification)) {
+        return false;
+      }
+      
+      // Only allow updating read status and readAt timestamp
+      return newNotification.diff(oldNotification).affectedKeys().hasOnly(['read', 'readAt']) &&
+             newNotification.readAt == request.time;
+    }
+    
+    // Check if user can delete a notification
+    function canDeleteNotification(notification) {
+      let userId = getUserId();
+      let userRole = getUserRole();
+      
+      // System admin or owner can delete any notification in their company
+      if (userRole == 'system_admin' || userRole == 'owner') {
+        return notification.companyId == getUserCompany();
+      }
+      
+      // Users can only delete their own user-specific notifications
+      return notification.recipientType == 'user' && 
+             notification.recipientId == userId &&
+             notification.companyId == getUserCompany();
+    }
+  }
+}
+
+// Example usage in your Firebase project:
+// 1. Copy these rules to your firestore.rules file
+// 2. Deploy using: firebase deploy --only firestore:rules
+// 3. Test the rules in the Firebase Console using the Rules Simulator

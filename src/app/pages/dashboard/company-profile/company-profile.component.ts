@@ -6,9 +6,8 @@ import { CompanyService } from '../../../services/company.service';
 import { AuthService } from '../../../services/auth.service';
 import { Company } from '../../../interfaces/company.interface';
 import { AccessService } from '../../../core/services/access.service';
-import { UserRoleService } from '../../../services/user-role.service';
-import { RoleDefinitionService, RoleDefinition } from '../../../services/role-definition.service';
-import { UserRole } from '../../../interfaces/user-role.interface';
+
+import { RoleDefinitionService } from '../../../services/role-definition.service';
 
 @Component({
   selector: 'app-company-profile',
@@ -519,8 +518,6 @@ export class CompanyProfileComponent {
   private authService = inject(AuthService);
   private router = inject(Router);
   private accessService = inject(AccessService);
-  private userRoleService = inject(UserRoleService);
-  private roleDefinitionService = inject(RoleDefinitionService);
 
   protected profileForm: FormGroup;
   protected loading = signal(false);

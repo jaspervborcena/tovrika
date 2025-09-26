@@ -278,7 +278,7 @@ export const onboardingGuard: CanActivateFn = async (route, state) => {
 };
 
 
-export const companyProfileGuard: CanActivateFn = (route, state) => {
+export const companyProfileGuard: CanActivateFn = () => {
   const authService = inject(AuthService);
   const accessService = inject(AccessService);
   const router = inject(Router);

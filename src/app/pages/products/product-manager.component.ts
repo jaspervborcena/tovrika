@@ -1,8 +1,8 @@
-import { Component, computed, signal } from '@angular/core';
+import { Component, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { FormArray, FormBuilder, FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
+import { FormArray, FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Product, InventoryBatch } from '../../models/product.model';
-import { collection, doc, setDoc, addDoc } from 'firebase/firestore';
+import { collection, addDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, app } from '../../firebase.config';
 import { getStorage } from 'firebase/storage';

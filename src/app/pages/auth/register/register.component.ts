@@ -34,7 +34,7 @@ export class RegisterComponent {
 
       try {
         const { email, password, displayName } = this.registerForm.value;
-        const user = await this.authService.registerUser(email!, password!, {
+        await this.authService.registerUser(email!, password!, {
           email: email!,
           displayName: displayName!,
           status: 'active'

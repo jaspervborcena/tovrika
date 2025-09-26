@@ -16,12 +16,11 @@ import { CompanyService } from '../../../../services/company.service';
 import { ToastService } from '../../../../shared/services/toast.service';
 import { ErrorMessages, WarningMessages } from '../../../../shared/enums';
 import { OrderService } from '../../../../services/order.service';
-import { StoreService, Store } from '../../../../services/store.service';
+import { StoreService } from '../../../../services/store.service';
 import { UserRoleService } from '../../../../services/user-role.service';
 import { CurrencyService } from '../../../../services/currency.service';
 import { Product } from '../../../../interfaces/product.interface';
-import { CartItem, ProductViewType, ReceiptData } from '../../../../interfaces/pos.interface';
-import { Currency, CurrencySymbol, CURRENCY_CONFIGS } from '../../../../interfaces/currency.interface';
+import { ProductViewType } from '../../../../interfaces/pos.interface';
 
 @Component({
   selector: 'app-pos-mobile',
@@ -139,7 +138,7 @@ export class PosMobileComponent implements OnInit {
     soldTo: '',
     tin: '',
     businessAddress: '',
-    invoiceNumber: `INV-${new Date().getFullYear()}-${String(Date.now()).slice(-6)}`,
+    invoiceNumber: 'INV-0000-000000',
     datetime: new Date().toISOString().slice(0, 16) // Format for datetime-local input
   };
 
@@ -463,7 +462,7 @@ export class PosMobileComponent implements OnInit {
   }
 
   generateNewInvoiceNumber(): void {
-    this.customerInfo.invoiceNumber = `INV-${new Date().getFullYear()}-${String(Date.now()).slice(-6)}`;
+    this.customerInfo.invoiceNumber = 'INV-0000-000000';
   }
 
   async processOrder(): Promise<void> {
@@ -476,15 +475,24 @@ export class PosMobileComponent implements OnInit {
         date: orderDate // Convert to date for backend compatibility
       };
       
-      const orderId = await this.posService.processOrder('cash', customerData);
-      if (orderId) {
+      // Use the new invoice service to get both order ID and invoice number
+      const result = await this.posService.processOrderWithInvoice(customerData);
+      if (result) {
+        console.log('Order processed with invoice:', {
+          orderId: result.orderId,
+          invoiceNumber: result.invoiceNumber
+        });
+
+        // Update the customer info with the new invoice number
+        this.customerInfo.invoiceNumber = result.invoiceNumber;
+
         // Prepare receipt data and show receipt modal
-        const receiptData = this.prepareReceiptData(orderId);
+        const receiptData = this.prepareReceiptData(result.orderId);
         this.receiptDataSignal.set(receiptData);
         this.isReceiptModalVisibleSignal.set(true);
         
         // Don't clear cart yet - wait until receipt modal is closed
-        console.log(`Order completed successfully! Order ID: ${orderId}`);
+        console.log(`Order completed successfully! Order ID: ${result.orderId}`);
       }
     } catch (error) {
       console.error('Error processing order:', error);
@@ -497,10 +505,9 @@ export class PosMobileComponent implements OnInit {
       soldTo: '',
       tin: '',
       businessAddress: '',
-      invoiceNumber: '',
+      invoiceNumber: 'INV-0000-000000',
       datetime: new Date().toISOString().slice(0, 16) // Format for datetime-local input
     };
-    this.generateNewInvoiceNumber();
   }
 
   toggleSoldToPanel(): void {
