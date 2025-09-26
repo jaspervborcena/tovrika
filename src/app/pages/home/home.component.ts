@@ -24,7 +24,7 @@ export class HomeComponent {
     // Navigate based on user role
     const role = this.userRole();
     if (role === 'cashier') {
-      this.router.navigate(['/dashboard/pos']);
+      this.router.navigate(['/pos']);
     } else {
       this.router.navigate(['/dashboard']);
     }

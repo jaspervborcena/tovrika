@@ -17,6 +17,7 @@ export interface Permissions {
   canEditCompanyProfile: boolean;
   canAddCompanyProfile: boolean;
   canViewOverview: boolean;
+  canViewSalesReports: boolean;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -36,7 +37,8 @@ export class AccessService {
     canViewCompanyProfile: true,
     canEditCompanyProfile: true,
     canAddCompanyProfile: true,
-    canViewOverview: true
+    canViewOverview: true,
+    canViewSalesReports: true
   };
 
   private cashierPermissions: Permissions = {
@@ -54,7 +56,8 @@ export class AccessService {
   canViewCompanyProfile: true, // minimal view only
   canEditCompanyProfile: false,
   canAddCompanyProfile: false,
-  canViewOverview: false
+  canViewOverview: false,
+  canViewSalesReports: false
   };
 
   private permissionsSignal = signal<Permissions>(this.defaultPermissions);

@@ -68,15 +68,15 @@ export class ReceiptComponent implements OnInit {
     }
     
     // Default fallback
-    return 'N/A';
+    return 'Walk-in Customer';
   }
 
   // Check if we have customer details to show (address/TIN)
   hasCustomerDetails(): boolean {
     const customerName = this.getCustomerDisplayName();
     
-    // Only show details if we have a real customer name (not N/A) and either address or TIN
-    return customerName !== 'N/A' && 
+    // Only show details if we have a real customer name (not Walk-in Customer) and either address or TIN
+    return customerName !== 'Walk-in Customer' && 
            ((this.receiptData?.customerAddress && this.receiptData.customerAddress !== 'N/A') ||
             (this.receiptData?.customerTin && this.receiptData.customerTin !== 'N/A'));
   }

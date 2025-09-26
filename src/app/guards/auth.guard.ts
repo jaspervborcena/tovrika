@@ -67,7 +67,7 @@ export const authGuard: CanActivateFn = (route, state) => {
         // Redirect based on user role
         switch (userRole) {
           case 'cashier':
-            router.navigate(['/dashboard/pos']);
+            router.navigate(['/pos']);
             break;
           case 'manager':
             router.navigate(['/dashboard/overview']);
