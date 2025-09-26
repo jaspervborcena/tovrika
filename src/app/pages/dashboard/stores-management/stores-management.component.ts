@@ -57,6 +57,7 @@ import { PredefinedTypesService, PredefinedType } from '../../../services/predef
               <tr>
                 <th>Store Name</th>
                 <th>Store Code</th>
+                <th>Invoice No</th>
                 <th>Store Type</th>
                 <th>Address</th>
                 <th>Status</th>
@@ -67,6 +68,11 @@ import { PredefinedTypesService, PredefinedType } from '../../../services/predef
               <tr *ngFor="let store of filteredStores">
                 <td class="store-name-cell">{{ store.storeName }}</td>
                 <td class="store-code-cell">{{ store.storeCode }}</td>
+                <td class="invoice-no-cell">
+                  <span class="invoice-number" [class.default-value]="store.invoiceNo === 'INV-0000-000000'">
+                    {{ store.invoiceNo || 'INV-0000-000000' }}
+                  </span>
+                </td>
                 <td class="store-type-cell">{{ store.storeType }}</td>
                 <td class="address-cell">{{ store.address }}</td>
                 <td class="status-cell">
@@ -147,6 +153,19 @@ import { PredefinedTypesService, PredefinedType } from '../../../services/predef
                   class="form-input">
                 <div class="error-message" *ngIf="storeForm.get('storeCode')?.invalid && storeForm.get('storeCode')?.touched">
                   Store code is required
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label for="invoiceNo">Invoice Number</label>
+                <input 
+                  type="text" 
+                  id="invoiceNo"
+                  formControlName="invoiceNo"
+                  placeholder="INV-0000-000000"
+                  class="form-input">
+                <div class="form-help">
+                  Format: INV-YYYY-XXXXXX (e.g., INV-2025-000001)
                 </div>
               </div>
 
@@ -358,6 +377,26 @@ import { PredefinedTypesService, PredefinedType } from '../../../services/predef
       font-size: 0.875rem;
       color: #059669;
       font-weight: 600;
+    }
+
+    .invoice-no-cell {
+      font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+      font-size: 0.875rem;
+    }
+
+    .invoice-number {
+      padding: 0.25rem 0.5rem;
+      border-radius: 4px;
+      background: #e6fffa;
+      color: #234e52;
+      font-weight: 600;
+    }
+
+    .invoice-number.default-value {
+      background: #f7fafc;
+      color: #718096;
+      font-style: italic;
+      border: 1px dashed #cbd5e0;
     }
 
     .store-type-cell {
@@ -573,6 +612,13 @@ import { PredefinedTypesService, PredefinedType } from '../../../services/predef
       color: #f56565;
     }
 
+    .form-help {
+      margin-top: 0.25rem;
+      font-size: 0.75rem;
+      color: #718096;
+      font-style: italic;
+    }
+
     .modal-footer {
       display: flex;
       gap: 0.75rem;
@@ -635,6 +681,7 @@ export class StoresManagementComponent implements OnInit {
     this.storeForm = this.fb.group({
       storeName: ['', [Validators.required]],
       storeCode: ['', [Validators.required]],
+      invoiceNo: ['INV-0000-000000'],
       storeType: ['', [Validators.required]],
       address: ['', [Validators.required]],
       phoneNumber: [''],
@@ -703,6 +750,7 @@ export class StoresManagementComponent implements OnInit {
     console.log('openAddStoreModal called');
     this.editingStore = null;
     this.storeForm.reset({
+      invoiceNo: 'INV-0000-000000',
       status: 'active'
     });
     this.showStoreModal = true;
@@ -711,24 +759,49 @@ export class StoresManagementComponent implements OnInit {
   }
 
   editStore(store: Store) {
+    console.log('📝 editStore called with store:', store);
+    console.log('📝 Original store.invoiceNo:', store.invoiceNo);
+    
     this.editingStore = store;
-    this.storeForm.patchValue({
+    
+    const formValues = {
       storeName: store.storeName,
       storeCode: store.storeCode,
+      invoiceNo: store.invoiceNo || 'INV-0000-000000',
       storeType: store.storeType,
       address: store.address,
       phoneNumber: store.phoneNumber || '',
       email: store.email || '',
       managerName: store.managerName || '',
       status: store.status
-    });
+    };
+    
+    console.log('📝 Form values being patched:', formValues);
+    console.log('📝 invoiceNo being set to:', formValues.invoiceNo);
+    
+    this.storeForm.patchValue(formValues);
+    
+    // Log form state after patching
+    console.log('📝 Form value after patch:', this.storeForm.value);
+    console.log('📝 invoiceNo form control value:', this.storeForm.get('invoiceNo')?.value);
+    
     this.showStoreModal = true;
   }
 
   cancelStoreModal() {
     this.showStoreModal = false;
     this.editingStore = null;
-    this.storeForm.reset();
+    this.storeForm.reset({
+      storeName: '',
+      storeCode: '',
+      invoiceNo: 'INV-0000-000000',
+      storeType: '',
+      address: '',
+      phoneNumber: '',
+      email: '',
+      managerName: '',
+      status: 'active'
+    });
   }
 
   async saveStore() {
@@ -752,12 +825,23 @@ export class StoresManagementComponent implements OnInit {
         companyId: currentPermission.companyId
       };
 
+      console.log('💾 Saving store data:', {
+        formData,
+        storeData,
+        editingStore: this.editingStore?.id,
+        invoiceNoFromForm: formData.invoiceNo
+      });
+
       if (this.editingStore) {
         // Update existing store
+        console.log('📝 Updating store:', this.editingStore.id, 'with data:', storeData);
         await this.storeService.updateStore(this.editingStore.id!, storeData);
+        console.log('✅ Store updated successfully');
       } else {
         // Create new store
+        console.log('➕ Creating new store with data:', storeData);
         await this.storeService.createStore(storeData);
+        console.log('✅ Store created successfully');
       }
 
       await this.loadStores();
@@ -785,4 +869,5 @@ export class StoresManagementComponent implements OnInit {
       }
     }
   }
+
 }

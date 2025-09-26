@@ -28,6 +28,7 @@ export interface Store {
   managerName?: string;
   status: 'active' | 'inactive';
   createdAt: Date;
+  invoiceNo?: string; // Format: INV-YYYY-XXXXXX (e.g., INV-2025-000001)
   updatedAt?: Date;
   taxId?: string;
   tinNumber?: string;
@@ -116,6 +117,7 @@ export class StoreService {
           status: data.status || 'inactive',
           createdAt: data.createdAt?.toDate() || new Date(),
           updatedAt: data.updatedAt?.toDate() || new Date(),
+          invoiceNo: data.invoiceNo || 'INV-0000-000000',
           taxId: data.taxId || '',
           tinNumber: data.tinNumber || '',
           invoiceNumber: data.invoiceNumber || '',
@@ -188,6 +190,7 @@ export class StoreService {
           status: data.status || 'inactive',
           createdAt: data.createdAt?.toDate() || new Date(),
           updatedAt: data.updatedAt?.toDate() || new Date(),
+          invoiceNo: data.invoiceNo || 'INV-0000-000000',
           taxId: data.taxId || '',
           tinNumber: data.tinNumber || '',
           invoiceNumber: data.invoiceNumber || '',
@@ -224,7 +227,8 @@ export class StoreService {
       const newStore: Omit<Store, 'id'> = {
         ...store,
         createdAt: new Date(),
-        updatedAt: new Date()
+        updatedAt: new Date(),
+        invoiceNo: store.invoiceNo || this.generateDefaultInvoiceNo() // Add default invoice number
       };
       const docRef = await addDoc(storesRef, newStore);
       const createdStore: Store = {
@@ -252,8 +256,14 @@ export class StoreService {
         ...updates,
         updatedAt: new Date()
       };
+
+      console.log('🔥 Firestore updateStore - Store ID:', storeId);
+      console.log('🔥 Firestore updateStore - Updates:', updates);
+      console.log('🔥 Firestore updateStore - Final data to save:', updateData);
+      console.log('🔥 Firestore updateStore - Invoice number in updates:', updates.invoiceNo);
       
       await updateDoc(storeRef, updateData);
+      console.log('✅ Firestore document updated successfully');
 
       // Update the signal
       this.storesSignal.update(stores =>
@@ -263,6 +273,7 @@ export class StoreService {
             : store
         )
       );
+      console.log('✅ Local stores signal updated');
     } catch (error) {
       console.error('Error updating store:', error);
       throw error;
@@ -299,6 +310,75 @@ export class StoreService {
     return this.stores().find(store => store.id === storeId);
   }
   
+  /**
+   * Generate default invoice number for new stores
+   */
+  generateDefaultInvoiceNo(): string {
+    const currentYear = new Date().getFullYear();
+    return `INV-${currentYear}-000000`;
+  }
+
+  /**
+   * Parse invoice number to extract parts
+   */
+  parseInvoiceNo(invoiceNo: string): { prefix: string; year: string; sequence: number } | null {
+    const match = invoiceNo.match(/^(INV)-(\d{4})-(\d{6})$/);
+    if (!match) return null;
+    
+    return {
+      prefix: match[1],
+      year: match[2],
+      sequence: parseInt(match[3], 10)
+    };
+  }
+
+  /**
+   * Generate next invoice number
+   */
+  generateNextInvoiceNo(currentInvoiceNo: string): string {
+    const parsed = this.parseInvoiceNo(currentInvoiceNo);
+    if (!parsed) {
+      // If parsing fails, return current year with sequence 1
+      const currentYear = new Date().getFullYear();
+      return `INV-${currentYear}-000001`;
+    }
+
+    const currentYear = new Date().getFullYear();
+    let nextSequence: number;
+    let year: string;
+
+    if (parseInt(parsed.year, 10) === currentYear) {
+      // Same year, increment sequence
+      nextSequence = parsed.sequence + 1;
+      year = parsed.year;
+    } else {
+      // New year, reset sequence to 1
+      nextSequence = 1;
+      year = currentYear.toString();
+    }
+
+    // Pad sequence to 6 digits
+    const paddedSequence = nextSequence.toString().padStart(6, '0');
+    return `${parsed.prefix}-${year}-${paddedSequence}`;
+  }
+
+  /**
+   * Initialize invoice number for existing stores that don't have one
+   */
+  async initializeInvoiceNoForStore(storeId: string): Promise<void> {
+    try {
+      const store = this.getStore(storeId);
+      if (store && !store.invoiceNo) {
+        const defaultInvoiceNo = this.generateDefaultInvoiceNo();
+        await this.updateStore(storeId, { invoiceNo: defaultInvoiceNo });
+        console.log(`✅ Initialized invoice number for store ${store.storeName}: ${defaultInvoiceNo}`);
+      }
+    } catch (error) {
+      console.error('❌ Error initializing invoice number:', error);
+      throw error;
+    }
+  }
+
   // Debug method to check store status
   debugStoreStatus() {
     const stores = this.getStores();
@@ -306,7 +386,7 @@ export class StoreService {
     console.log('  - Total stores:', stores.length);
     console.log('  - Last load time:', this.loadTimestamp ? new Date(this.loadTimestamp).toLocaleTimeString() : 'Never');
     console.log('  - Is loading:', this.isLoading);
-    console.log('  - Stores:', stores.map(s => ({ id: s.id, name: s.storeName, companyId: s.companyId })));
+    console.log('  - Stores:', stores.map(s => ({ id: s.id, name: s.storeName, companyId: s.companyId, invoiceNo: s.invoiceNo })));
     return { stores, count: stores.length, lastLoad: this.loadTimestamp, isLoading: this.isLoading };
   }
 }
