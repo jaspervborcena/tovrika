@@ -3,11 +3,9 @@ import { CommonModule } from '@angular/common';
 import { ActivatedRoute } from '@angular/router';
 import { 
   Firestore, 
-  doc, 
-  onSnapshot, 
   Unsubscribe 
 } from '@angular/fire/firestore';
-import { CustomerViewSession, LiveCartItem, CartTotals } from '../../interfaces/customer-view.interface';
+import { CustomerViewSession, LiveCartItem } from '../../interfaces/customer-view.interface';
 
 @Component({
   selector: 'app-customer-view',
@@ -156,7 +154,6 @@ import { CustomerViewSession, LiveCartItem, CartTotals } from '../../interfaces/
   `]
 })
 export class CustomerViewComponent implements OnInit, OnDestroy {
-  private firestore = inject(Firestore);
   private route = inject(ActivatedRoute);
 
   // Signals
@@ -195,7 +192,7 @@ export class CustomerViewComponent implements OnInit, OnDestroy {
     }
   }
 
-  private subscribeToSession(sessionId: string) {
+  private subscribeToSession(_sessionId: string) {
     // For demo purposes, we'll create a mock session
     // In production, this would listen to Firestore
     this.createMockSession();

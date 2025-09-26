@@ -1,7 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { Router } from '@angular/router';
+
 import { RoleDefinitionService, RoleDefinition, RolePermissions } from '../../../services/role-definition.service';
 import { StoreService, Store } from '../../../services/store.service';
 import { AuthService } from '../../../services/auth.service';
@@ -256,7 +256,6 @@ export class AccessComponent implements OnInit {
     private roleDefinitionService: RoleDefinitionService,
     private storeService: StoreService,
     private authService: AuthService,
-    private router: Router,
     private toastService: ToastService
   ) {}
 
@@ -303,7 +302,6 @@ export class AccessComponent implements OnInit {
 
   async loadStores() {
     try {
-      const user = await this.authService.getCurrentUser();
       const currentPermission = this.authService.getCurrentPermission();
       if (currentPermission?.companyId) {
         await this.storeService.loadStoresByCompany(currentPermission.companyId);
@@ -466,7 +464,6 @@ export class AccessComponent implements OnInit {
 
     try {
       this.isLoading = true;
-      const user = await this.authService.getCurrentUser();
       const currentPermission = this.authService.getCurrentPermission();
       if (!currentPermission?.companyId) {
         throw new Error('User company not found');
