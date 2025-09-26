@@ -62,7 +62,6 @@ type Order = OrderDisplay;
                 type="date" 
                 id="fromDate"
                 [(ngModel)]="fromDate"
-                (change)="onDateChange()"
                 class="date-input">
             </div>
             <div class="date-input-group">
@@ -71,8 +70,23 @@ type Order = OrderDisplay;
                 type="date" 
                 id="toDate"
                 [(ngModel)]="toDate"
-                (change)="onDateChange()"
                 class="date-input">
+            </div>
+            <div class="go-button-group">
+              <button 
+                (click)="loadSalesDataManual()"
+                [disabled]="isLoading()"
+                class="go-button">
+                <span *ngIf="!isLoading()">{{ getDataSourceButtonText() }}</span>
+                <span *ngIf="isLoading()" class="loading-text">Loading...</span>
+              </button>
+              <button 
+                (click)="createTestOrders()"
+                [disabled]="isLoading()"
+                class="debug-button"
+                title="Create test orders for debugging">
+                🧪 Test Data
+              </button>
             </div>
           </div>
         </div>
@@ -86,6 +100,11 @@ type Order = OrderDisplay;
             <div class="total-label">Total Orders</div>
             <div class="total-count">{{ totalOrders() }}</div>
           </div>
+          <div *ngIf="!isLoading() && dataSource()" class="data-source-indicator">
+            <div class="source-badge" [class.api-source]="dataSource() === 'api'" [class.firebase-source]="dataSource() === 'firebase'">
+              {{ dataSource() === 'api' ? '🌐 API Data' : '🔥 Live Data' }}
+            </div>
+          </div>
         </div>
       </div>
 
@@ -93,6 +112,9 @@ type Order = OrderDisplay;
       <div *ngIf="isLoading()" class="loading-state">
         <div class="spinner"></div>
         <p>Loading sales data...</p>
+        <p *ngIf="dataSource()" class="data-source-info">
+          Source: {{ dataSource() === 'api' ? 'External API (Older Data)' : 'Firebase (Recent Data)' }}
+        </p>
       </div>
 
       <!-- Sales Table -->
@@ -288,6 +310,79 @@ type Order = OrderDisplay;
       box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.1);
     }
 
+    .go-button-group {
+      display: flex;
+      align-items: flex-end;
+      gap: 10px;
+    }
+
+    .go-button {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      min-width: 140px;
+      height: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .go-button:hover:not(:disabled) {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+    }
+
+    .go-button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .loading-text {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .loading-text:before {
+      content: "";
+      width: 16px;
+      height: 16px;
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      border-top: 2px solid white;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+
+    .debug-button {
+      background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      height: 40px;
+    }
+
+    .debug-button:hover:not(:disabled) {
+      transform: translateY(-1px);
+      box-shadow: 0 3px 8px rgba(245, 158, 11, 0.4);
+    }
+
+    .debug-button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
     .store-selection {
       margin-bottom: 15px;
       padding: 12px;
@@ -334,6 +429,7 @@ type Order = OrderDisplay;
       display: flex;
       gap: 20px;
       flex-wrap: wrap;
+      align-items: flex-start;
     }
 
     .total-card {
@@ -365,6 +461,13 @@ type Order = OrderDisplay;
       color: #718096;
     }
 
+    .data-source-info {
+      font-size: 0.875rem;
+      color: #6b7280;
+      margin-top: 10px;
+      font-style: italic;
+    }
+
     .spinner {
       width: 40px;
       height: 40px;
@@ -378,6 +481,31 @@ type Order = OrderDisplay;
     @keyframes spin {
       0% { transform: rotate(0deg); }
       100% { transform: rotate(360deg); }
+    }
+
+    /* Data Source Indicator Styles */
+    .data-source-indicator {
+      margin-left: auto;
+    }
+
+    .source-badge {
+      font-size: 0.75rem;
+      padding: 4px 8px;
+      border-radius: 12px;
+      font-weight: 500;
+      display: inline-block;
+    }
+
+    .firebase-source {
+      background: rgba(34, 197, 94, 0.1);
+      color: #16a34a;
+      border: 1px solid rgba(34, 197, 94, 0.2);
+    }
+
+    .api-source {
+      background: rgba(59, 130, 246, 0.1);
+      color: #2563eb;
+      border: 1px solid rgba(59, 130, 246, 0.2);
     }
 
     .sales-table-container {
@@ -757,6 +885,7 @@ export class SalesSummaryComponent implements OnInit {
   isLoading = signal(false);
   showOrderDetails = signal(false);
   selectedOrder = signal<Order | null>(null);
+  dataSource = signal<'firebase' | 'api' | null>(null);
 
   // Date properties
   fromDate: string = '';
@@ -789,8 +918,17 @@ export class SalesSummaryComponent implements OnInit {
   }
 
   async ngOnInit(): Promise<void> {
+    // Set default dates to today
+    const today = new Date();
+    this.fromDate = today.toISOString().split('T')[0];
+    this.toDate = today.toISOString().split('T')[0];
+    
     await this.loadStores();
-    this.loadSalesData();
+    
+    // Wait a bit for stores to be set, then load today's data automatically from Firebase
+    setTimeout(() => {
+      this.loadCurrentDateData();
+    }, 100);
   }
 
   async loadStores(): Promise<void> {
@@ -817,26 +955,131 @@ export class SalesSummaryComponent implements OnInit {
   }
 
   onDateChange(): void {
-    this.loadSalesData();
+    // Don't auto-load on date change, wait for user to click Go button
   }
 
   onStoreChange(): void {
-    this.loadSalesData();
+    // Only reload current date data automatically when store changes
+    if (this.isCurrentDate()) {
+      this.loadCurrentDateData();
+    }
+  }
+
+  /**
+   * Load current date data from Firebase (default behavior)
+   */
+  async loadCurrentDateData(): Promise<void> {
+    console.log('🔄 Loading current date data from Firebase');
+    console.log('📅 Date range:', { from: this.fromDate, to: this.toDate });
+    console.log('🏪 Selected store:', this.selectedStoreId());
+    
+    // Set data source for UI (OrderService handles the actual logic)
+    this.dataSource.set('firebase');
+    
+    // Check if we have any stores and data first
+    const storeId = this.selectedStoreId() || this.authService.getCurrentPermission()?.storeId;
+    console.log('🔍 Debug - Store availability:', {
+      selectedStoreId: this.selectedStoreId(),
+      permissionStoreId: this.authService.getCurrentPermission()?.storeId,
+      finalStoreId: storeId,
+      allStores: this.stores().map(s => ({ id: s.id, name: s.storeName }))
+    });
+    
+    await this.loadSalesData();
+  }
+
+  /**
+   * Manual load triggered by Go button - uses hybrid logic
+   */
+  async loadSalesDataManual(): Promise<void> {
+    if (!this.fromDate || !this.toDate) {
+      alert('Please select both from and to dates');
+      return;
+    }
+
+    // Determine data source based on date range for display purposes
+    const startDate = new Date(this.fromDate);
+    const endDate = new Date(this.toDate);
+    const shouldUseApi = this.shouldUseApiForDates(startDate, endDate);
+    
+    // Set data source for UI indication (OrderService will handle actual logic)
+    this.dataSource.set(shouldUseApi ? 'api' : 'firebase');
+    await this.loadSalesData();
+  }
+
+  /**
+   * Check if current selected dates are today (current date)
+   */
+  private isCurrentDate(): boolean {
+    const today = new Date().toISOString().split('T')[0];
+    return this.fromDate === today && this.toDate === today;
+  }
+
+  /**
+   * Determine if should use API based on dates
+   * Rule: If current date (today) → use Firestore, else → use API
+   */
+  private shouldUseApiForDates(startDate: Date, endDate: Date): boolean {
+    const today = new Date();
+    const todayStr = today.toISOString().split('T')[0];
+    const startStr = startDate.toISOString().split('T')[0];
+    const endStr = endDate.toISOString().split('T')[0];
+    
+    // If date range is current date (today), use Firestore
+    const isCurrentDate = startStr === todayStr && endStr === todayStr;
+    
+    console.log('📅 Date range check:', {
+      today: todayStr,
+      startDate: startStr,
+      endDate: endStr,
+      isCurrentDate,
+      willUseFirestore: isCurrentDate,
+      willUseAPI: !isCurrentDate
+    });
+    
+    // Use API for all dates except current date
+    return !isCurrentDate;
+  }
+
+  /**
+   * Get button text based on data source that will be used
+   */
+  getDataSourceButtonText(): string {
+    if (!this.fromDate || !this.toDate) {
+      return 'Go';
+    }
+
+    const startDate = new Date(this.fromDate);
+    const endDate = new Date(this.toDate);
+    const willUseApi = this.shouldUseApiForDates(startDate, endDate);
+    
+    return willUseApi ? '🌐 Get Data (API)' : '🔥 Get Data (Live)';
   }
 
   refreshData(): void {
     this.loadSalesData();
   }
 
+  /**
+   * Determines which data source will be used based on date range
+   */
   async loadSalesData(): Promise<void> {
     this.isLoading.set(true);
     
     try {
       // Use selected store ID or get from permission
       const storeId = this.selectedStoreId() || this.authService.getCurrentPermission()?.storeId;
+      console.log('🏪 Store ID resolution:', {
+        selectedStoreId: this.selectedStoreId(),
+        permissionStoreId: this.authService.getCurrentPermission()?.storeId,
+        finalStoreId: storeId,
+        allStores: this.stores().map(s => ({ id: s.id, name: s.storeName }))
+      });
+      
       if (!storeId) {
-        console.warn('No storeId found');
+        console.warn('❌ No storeId found - cannot load data');
         this.orders.set([]);
+        this.dataSource.set(null);
         return;
       }
 
@@ -847,22 +1090,24 @@ export class SalesSummaryComponent implements OnInit {
       endDate.setHours(23, 59, 59, 999);
 
       console.log('Loading sales data for store:', storeId, 'from:', startDate, 'to:', endDate);
+      console.log('Data source:', this.dataSource() === 'api' ? 'External API (2+ days old)' : 'Firebase (Recent data)');
 
-      // Get current permission for companyId
-      const currentPermission = this.authService.getCurrentPermission();
+      // Use the hybrid method that automatically determines the data source
+      console.log('📊 Using hybrid data loading...');
+      const orders = await this.orderService.getOrdersByDateRange(storeId, startDate, endDate);
 
-      // Load orders using OrderService - using getRecentOrders for now
-      const orders = await this.orderService.getRecentOrders(
-        currentPermission?.companyId || '', 
-        storeId,
-        50 // Get more orders to filter by date
-      );
+      // Debug: Check what we got back
+      console.log('📊 Order Service returned:', orders.length, 'orders');
+      if (orders.length === 0) {
+        console.log('⚠️ No orders found. This could mean:');
+        console.log('1. No orders exist for this date range');
+        console.log('2. Store ID is incorrect');
+        console.log('3. API/Firebase connection issue');
+        console.log('4. Date format issue');
+      }
 
-      // Filter orders by date range on the client side
-      const filteredOrders = orders.filter(order => {
-        const orderDate = order.createdAt;
-        return orderDate >= startDate && orderDate <= endDate;
-      });
+      // No need to filter on client side - the service handles it
+      const filteredOrders = orders;
 
       // Transform to match our interface - spread all existing properties and add display properties
       const transformedOrders: Order[] = filteredOrders.map((order: any) => ({
@@ -894,6 +1139,32 @@ export class SalesSummaryComponent implements OnInit {
 
   trackByOrderId(index: number, order: Order): string {
     return order.id || index.toString();
+  }
+
+  /**
+   * Debug method to create test orders for testing
+   */
+  async createTestOrders(): Promise<void> {
+    try {
+      const currentPermission = this.authService.getCurrentPermission();
+      const storeId = this.selectedStoreId() || currentPermission?.storeId;
+      
+      if (!currentPermission?.companyId || !storeId) {
+        console.error('❌ Missing companyId or storeId for test order creation');
+        return;
+      }
+
+      console.log('🧪 Creating test order for debugging...');
+      await this.orderService.createTestOrderForToday(currentPermission.companyId, storeId);
+      
+      // Reload data after creating test orders
+      setTimeout(() => {
+        this.loadCurrentDateData();
+      }, 2000);
+      
+    } catch (error) {
+      console.error('❌ Error creating test orders:', error);
+    }
   }
 
   formatDate(date: Date): string {

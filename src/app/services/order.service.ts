@@ -589,34 +589,108 @@ export class OrderService {
 
   async getOrdersByDateRange(storeId: string, startDate: Date, endDate: Date): Promise<Order[]> {
     try {
-      console.log('📊 Loading orders by date range:', {
+      console.log('� SIMPLE FIREBASE QUERY - Loading orders:', {
         storeId,
         startDate: startDate.toISOString(),
         endDate: endDate.toISOString()
       });
 
       const ordersRef = collection(this.firestore, 'orders');
+      console.log('📡 Firebase orders collection reference created');
       
-      // Convert dates to Firestore Timestamps
-      const startTimestamp = Timestamp.fromDate(startDate);
-      const endTimestamp = Timestamp.fromDate(endDate);
+      // First, let's see if there are ANY orders in Firebase
+      console.log('🔍 Step 1: Checking for any orders in Firebase...');
+      const anyOrdersQuery = query(ordersRef, limit(3));
+      const anyOrdersSnapshot = await getDocs(anyOrdersQuery);
+      console.log(`📊 Any orders in Firebase: ${anyOrdersSnapshot.docs.length}`);
+      
+      if (anyOrdersSnapshot.docs.length > 0) {
+        console.log('📋 Sample orders:', anyOrdersSnapshot.docs.map(doc => ({
+          id: doc.id,
+          storeId: doc.data()['storeId'],
+          createdAt: doc.data()['createdAt']?.toDate?.() || doc.data()['createdAt']
+        })));
+      }
 
-      const q = query(
-        ordersRef,
-        where('storeId', '==', storeId),
-        where('createdAt', '>=', startTimestamp),
-        where('createdAt', '<=', endTimestamp),
-        orderBy('createdAt', 'desc')
-      );
+      // Now check for orders with this storeId specifically
+      console.log('🔍 Step 2: Checking for orders with storeId:', storeId);
+      const storeOrdersQuery = query(ordersRef, where('storeId', '==', storeId), limit(10));
+      const storeOrdersSnapshot = await getDocs(storeOrdersQuery);
+      console.log(`📊 Orders for store ${storeId}: ${storeOrdersSnapshot.docs.length}`);
 
-      const querySnapshot = await getDocs(q);
-      const orders = querySnapshot.docs.map(doc => this.transformDoc(doc));
-
-      console.log(`📊 Found ${orders.length} orders for date range`);
-      return orders;
+      if (storeOrdersSnapshot.docs.length > 0) {
+        console.log('✅ Found orders for this store! Returning them...');
+        const orders = storeOrdersSnapshot.docs.map(doc => this.transformDoc(doc));
+        console.log(`📊 Returning ${orders.length} orders`);
+        return orders;
+      } else {
+        console.log('⚠️ No orders found for storeId:', storeId);
+        console.log('💡 This might mean:');
+        console.log('1. Wrong storeId');
+        console.log('2. No orders exist for this store');
+        console.log('3. Orders exist but with different storeId format');
+        return [];
+      }
+      
     } catch (error) {
       console.error('❌ Error getting orders by date range:', error);
+      console.error('❌ Full error:', error);
       return [];
+    }
+  }
+
+  // DEBUG METHOD - Create test order for current date
+  async createTestOrderForToday(companyId: string, storeId: string): Promise<void> {
+    try {
+      console.log('🧪 Creating test order for today:', { companyId, storeId });
+      
+      const testOrder = {
+        companyId,
+        storeId,
+        terminalId: 'terminal-1',
+        assignedCashierId: 'cashier-1',
+        status: 'completed',
+        
+        // Customer Information
+        cashSale: true,
+        soldTo: 'Test Customer',
+        tin: '',
+        businessAddress: '',
+        
+        // Invoice Information
+        invoiceNumber: `INV-${Date.now()}`,
+        logoUrl: '',
+        
+        // Financial Calculations
+        vatableSales: 100,
+        vatAmount: 12,
+        zeroRatedSales: 0,
+        vatExemptAmount: 0,
+        discountAmount: 0,
+        grossAmount: 112,
+        netAmount: 112,
+        totalAmount: 112,
+        
+        // BIR Fields
+        exemptionId: '',
+        signature: '',
+        atpOrOcn: 'OCN-2025-001234',
+        birPermitNo: 'BIR-PERMIT-2025-56789',
+        inclusiveSerialNumber: '000001-000999',
+        
+        // System Fields - IMPORTANT: Use current timestamp
+        createdAt: new Date(),
+        message: 'Test order for debugging - Created on ' + new Date().toISOString()
+      };
+
+      const ordersRef = collection(this.firestore, 'orders');
+      const docRef = await addDoc(ordersRef, testOrder);
+      
+      console.log('✅ Test order created with ID:', docRef.id);
+      console.log('📅 Created at:', new Date().toISOString());
+      
+    } catch (error) {
+      console.error('❌ Error creating test order:', error);
     }
   }
 }
