@@ -105,6 +105,11 @@ export const routes: Routes = [
   loadComponent: () => import('./pages/dashboard/user-roles/user-roles.component').then(m => m.UserRolesComponent)
       },
       {
+  path: 'invoice-setup',
+  loadComponent: () => import('./pages/dashboard/invoice-setup/invoice-setup.component').then(m => m.InvoiceSetupComponent),
+  data: { roles: ['creator', 'store_manager'] }
+      },
+      {
   path: 'products',
   loadComponent: () => import('./pages/dashboard/products/product-management.component').then(m => m.ProductManagementComponent),
   canActivate: [onboardingGuard],

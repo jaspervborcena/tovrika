@@ -13,6 +13,7 @@ export interface Store {
   companyId: string;
   status: 'active' | 'inactive';
   taxRate?: number;
+  invoiceNo?: string; // Invoice number format: INV-YYYY-XXXXXX
   createdAt: Date;
   updatedAt: Date;
   settings?: {

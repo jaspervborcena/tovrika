@@ -2,18 +2,12 @@ import { Injectable, signal, computed, inject } from '@angular/core';
 import {
   Firestore,
   collection,
-  addDoc,
-  doc,
-  updateDoc,
-  query,
-  where,
-  getDocs,
-  orderBy,
-  limit
+  addDoc
 } from '@angular/fire/firestore';
 import { AuthService } from './auth.service';
 import { CompanyService } from './company.service';
 import { ProductService } from './product.service';
+import { InvoiceService } from './invoice.service';
 import { Order, OrderDetail, OrderItem, CartItem, ReceiptData, OrderDiscount, CartSummary } from '../interfaces/pos.interface';
 import { Product } from '../interfaces/product.interface';
 
@@ -78,6 +72,8 @@ export class PosService {
       netAmount
     };
   });
+
+  private invoiceService = inject(InvoiceService);
 
   constructor(
     private firestore: Firestore,
@@ -181,10 +177,11 @@ export class PosService {
     }
   }
 
-  // Order Processing
-  async processOrder(paymentMethod: string = 'cash', customerInfo?: any): Promise<string | null> {
+  // Order Processing with Invoice Number Transaction
+  async processOrder(customerInfo?: any): Promise<string | null> {
     try {
       this.isProcessingSignal.set(true);
+      console.log('🧾 Starting order processing with invoice transaction...');
       
       const user = this.authService.getCurrentUser();
       const company = await this.companyService.getActiveCompany();
@@ -205,21 +202,32 @@ export class PosService {
 
       const summary = this.cartSummary();
 
-      // Create order with enhanced BIR-compliant fields
-      const order: Omit<Order, 'id'> = {
+      // Prepare order items for storage
+      const orderItems: OrderItem[] = cartItems.map(item => ({
+        productId: item.productId,
+        productName: item.productName,
+        quantity: item.quantity,
+        price: item.sellingPrice,
+        total: item.total,
+        vat: item.vatAmount,
+        discount: item.discountAmount,
+        isVatExempt: item.isVatExempt
+      }));
+
+      // Prepare complete order data (without invoice number - will be assigned by transaction)
+      const orderData = {
         companyId: company.id!,
         storeId: storeId,
         assignedCashierId: user.uid,
         status: 'paid',
         
-        // Customer Information - Use provided data or defaults
+        // Customer Information
         cashSale: true,
         soldTo: customerInfo?.soldTo || 'Walk-in Customer',
         tin: customerInfo?.tin || '',
         businessAddress: customerInfo?.businessAddress || '',
         
-        // Invoice Information
-        invoiceNumber: customerInfo?.invoiceNumber || `INV-${new Date().getFullYear()}-${String(Date.now()).slice(-6)}`,
+        // Invoice Information (invoiceNumber will be set by transaction)
         date: customerInfo?.date || new Date(),
         logoUrl: company.logoUrl || '',
         
@@ -233,49 +241,157 @@ export class PosService {
         netAmount: summary.netAmount,
         totalAmount: summary.netAmount,
         
-        // BIR Required Fields - Use company settings if available, otherwise hardcoded defaults
+        // Order Items
+        items: orderItems,
+        
+        // BIR Required Fields
         atpOrOcn: company.atpOrOcn || 'OCN-2025-001234',
         birPermitNo: company.birPermitNo || 'BIR-PERMIT-2025-56789',
         inclusiveSerialNumber: company.inclusiveSerialNumber || '000001-000999',
         
         // System Fields
-        createdAt: new Date(),
         message: 'Thank you! See you again!'
       };
 
-      const orderRef = await addDoc(collection(this.firestore, 'orders'), order);
+      // 🧾 Execute invoice transaction (stores + orders atomically)
+      const invoiceResult = await this.invoiceService.processInvoiceTransaction({
+        storeId,
+        orderData,
+        customerInfo,
+        receiptData: {
+          cartSummary: summary,
+          orderItems: orderItems
+        }
+      });
 
-      // Create order details
-      const orderItems: OrderItem[] = cartItems.map(item => ({
-        productId: item.productId,
-        productName: item.productName,
-        quantity: item.quantity,
-        price: item.sellingPrice,
-        total: item.total,
-        vat: item.vatAmount,
-        discount: item.discountAmount,
-        isVatExempt: item.isVatExempt
-      }));
+      if (!invoiceResult.success) {
+        throw new Error(`Invoice transaction failed: ${invoiceResult.error}`);
+      }
 
-      const orderDetail: Omit<OrderDetail, 'id'> = {
-        companyId: company.id!,
+      console.log('✅ Invoice transaction completed:', {
+        invoiceNumber: invoiceResult.invoiceNumber,
+        orderId: invoiceResult.orderId
+      });
+
+      // Update product inventory (this happens after successful order creation)
+      try {
+        await this.updateProductInventory(cartItems);
+        console.log('✅ Product inventory updated successfully');
+      } catch (inventoryError) {
+        console.error('⚠️ Warning: Order created but inventory update failed:', inventoryError);
+        // Don't throw error here as the order was already created successfully
+      }
+
+      return invoiceResult.orderId;
+
+    } catch (error) {
+      console.error('❌ Error processing order:', error);
+      throw error;
+    } finally {
+      this.isProcessingSignal.set(false);
+    }
+  }
+
+  /**
+   * Process order and return both order ID and invoice number
+   * Used for print receipt functionality
+   */
+  async processOrderWithInvoice(customerInfo?: any): Promise<{ orderId: string; invoiceNumber: string } | null> {
+    try {
+      this.isProcessingSignal.set(true);
+      console.log('🧾 Starting order processing with invoice transaction (returning invoice number)...');
+      
+      const user = this.authService.getCurrentUser();
+      const company = await this.companyService.getActiveCompany();
+      
+      if (!user || !company) {
+        throw new Error('User or company not found');
+      }
+
+      const storeId = this.selectedStoreId();
+      if (!storeId) {
+        throw new Error('No store selected');
+      }
+
+      const cartItems = this.cartItems();
+      if (cartItems.length === 0) {
+        throw new Error('Cart is empty');
+      }
+
+      console.log('Processing order for store:', storeId);
+
+      const cartSummary = this.cartSummary();
+
+      // Prepare complete order data (without invoice number - will be assigned by transaction)
+      const orderData: Order = {
+        companyId: company.id || '',
         storeId: storeId,
-        orderId: orderRef.id,
-        items: orderItems,
+        assignedCashierId: user.uid,
+        
+        // Customer Information
+        cashSale: !customerInfo?.soldTo,
+        soldTo: customerInfo?.soldTo || '',
+        tin: customerInfo?.tin || '',
+        businessAddress: customerInfo?.businessAddress || '',
+        
+        // Invoice Information (invoiceNumber will be set by transaction)
+        invoiceNumber: '',  // Will be filled by transaction
+        date: new Date(),
+        
+        // Financial Information
+        grossAmount: cartSummary.grossAmount,
+        discountAmount: cartSummary.productDiscountAmount + cartSummary.orderDiscountAmount,
+        vatAmount: cartSummary.vatAmount,
+        vatExemptAmount: cartSummary.vatExemptSales,
+        totalAmount: cartSummary.netAmount,
+        netAmount: cartSummary.netAmount,
+        
+        vatableSales: cartSummary.vatableSales,
+        zeroRatedSales: cartSummary.zeroRatedSales,
+        
+        status: 'paid',
+        
+        // BIR Required Fields (can be configured per company)
+        atpOrOcn: 'ATP-001',
+        birPermitNo: 'BIR-001', 
+        inclusiveSerialNumber: '001-100000',
+        message: 'Thank you for your purchase!',
+        
         createdAt: new Date()
       };
 
-      await addDoc(collection(this.firestore, 'orderDetails'), orderDetail);
+      // 🧾 Execute invoice transaction (stores + orders atomically)
+      const invoiceResult = await this.invoiceService.processInvoiceTransaction({
+        storeId: storeId,
+        orderData: orderData
+      });
 
-      // Update product inventory
-      await this.updateProductInventory(cartItems);
+      // Check transaction result
+      if (!invoiceResult.success) {
+        throw new Error(`Invoice transaction failed: ${invoiceResult.error}`);
+      }
 
-      // Don't clear cart here - let receipt component handle it
-      // this.clearCart();
-      return orderRef.id;
+      console.log('✅ Invoice transaction completed:', {
+        invoiceNumber: invoiceResult.invoiceNumber,
+        orderId: invoiceResult.orderId
+      });
+
+      // Update product inventory (this happens after successful order creation)
+      try {
+        await this.updateProductInventory(cartItems);
+        console.log('✅ Product inventory updated successfully');
+      } catch (inventoryError) {
+        console.error('⚠️ Warning: Order created but inventory update failed:', inventoryError);
+        // Don't throw error here as the order was already created successfully
+      }
+
+      return {
+        orderId: invoiceResult.orderId!,
+        invoiceNumber: invoiceResult.invoiceNumber!
+      };
 
     } catch (error) {
-      console.error('Error processing order:', error);
+      console.error('❌ Error processing order with invoice:', error);
       throw error;
     } finally {
       this.isProcessingSignal.set(false);
@@ -387,6 +503,30 @@ export class PosService {
     
     // TODO: Implement actual inventory updates
     // This would involve updating the product quantities in Firestore
+  }
+
+  // Invoice Methods
+  async getNextInvoiceNumberPreview(): Promise<string> {
+    const storeId = this.selectedStoreId();
+    if (!storeId) {
+      return 'No store selected';
+    }
+    
+    try {
+      return await this.invoiceService.getNextInvoiceNumberPreview(storeId);
+    } catch (error) {
+      console.error('Error getting next invoice preview:', error);
+      return 'Error loading preview';
+    }
+  }
+
+  async debugInvoiceStatus(): Promise<any> {
+    const storeId = this.selectedStoreId();
+    if (!storeId) {
+      return { error: 'No store selected' };
+    }
+    
+    return await this.invoiceService.debugInvoiceStatus(storeId);
   }
 
   // Analytics Methods

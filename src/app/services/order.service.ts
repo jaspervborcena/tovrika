@@ -1,13 +1,15 @@
-import { Injectable } from '@angular/core';
+import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Firestore, collection, query, where, getDocs, updateDoc, doc, Timestamp, orderBy, limit, addDoc } from '@angular/fire/firestore';
 import { Order } from '../interfaces/pos.interface';
-import { environment } from '../../environments/environment';
+import { AuthService } from './auth.service';
 
 @Injectable({
   providedIn: 'root'
 })
 export class OrderService {
+  private authService = inject(AuthService);
+  
   constructor(
     private firestore: Firestore,
     private http: HttpClient
@@ -67,27 +69,11 @@ export class OrderService {
       console.log('📡 Firestore orders collection reference created');
       
       // Try a simple query first to test connectivity
-      console.log('🔍 Step 1: Testing simple query (no filters)...');
       try {
         const simpleQuery = query(ordersRef, limit(5));
-        console.log('📡 Executing simple query...');
         const simpleSnapshot = await getDocs(simpleQuery);
-        console.log('📊 Simple query results - Document count:', simpleSnapshot.docs.length);
         
-        if (simpleSnapshot.docs.length > 0) {
-          console.log('📄 Sample documents found:');
-          simpleSnapshot.docs.forEach((d, index) => {
-            const data = d.data();
-            console.log(`   Document ${index + 1}:`, {
-              id: d.id,
-              companyId: data['companyId'],
-              storeId: data['storeId'],
-              invoiceNumber: data['invoiceNumber'],
-              soldTo: data['soldTo'],
-              createdAt: data['createdAt']?.toDate?.()?.toLocaleString() || 'No date'
-            });
-          });
-        } else {
+        if (simpleSnapshot.docs.length === 0) {
           console.log('⚠️ No documents found in orders collection at all');
           console.log('=============== ORDER LOADING END (EMPTY) ===============');
           return [];
@@ -100,39 +86,18 @@ export class OrderService {
       
       // If we have companyId, try with company filter only first
       if (companyId) {
-        console.log('🔍 Step 2: Testing company-only query for companyId:', companyId);
         try {
           const companyQuery = query(
             ordersRef,
             where('companyId', '==', companyId),
             limit(limitCount)
           );
-          console.log('📡 Executing company query...');
           const companySnapshot = await getDocs(companyQuery);
-          console.log('📊 Company query results - Document count:', companySnapshot.docs.length);
           
           if (companySnapshot.docs.length > 0) {
-            console.log('✅ Found orders for company! Details:');
-            companySnapshot.docs.forEach((d, index) => {
-              const data = d.data();
-              console.log(`   Order ${index + 1}:`, {
-                id: d.id,
-                companyId: data['companyId'],
-                storeId: data['storeId'],
-                invoiceNumber: data['invoiceNumber'],
-                status: data['status'],
-                soldTo: data['soldTo'],
-                totalAmount: data['totalAmount'],
-                createdAt: data['createdAt']?.toDate?.()?.toLocaleString() || 'No date'
-              });
-            });
-            
-            console.log('🔍 Step 3: Proceeding with full query (with orderBy)...');
-            
             // Now try the full query with orderBy
             let finalQuery;
             if (storeId) {
-              console.log('🏪 Building store-specific query for storeId:', storeId);
               finalQuery = query(
                 ordersRef,
                 where('companyId', '==', companyId),
@@ -150,39 +115,12 @@ export class OrderService {
               );
             }
             
-            console.log('📡 Executing final query with orderBy...');
             const finalSnapshot = await getDocs(finalQuery);
-            console.log('📊 Final query results - Document count:', finalSnapshot.docs.length);
             
-            if (finalSnapshot.docs.length === 0) {
-              console.log('⚠️ Final query returned no results despite company query having results');
-              console.log('💡 This suggests an indexing issue with orderBy clause');
-            }
-            
-            const results = finalSnapshot.docs.map((d, index) => {
-              console.log(`📄 Processing document ${index + 1}:`, d.id);
-              const transformedOrder = this.transformDoc(d);
-              console.log(`   Transformed order:`, {
-                id: transformedOrder.id,
-                invoiceNumber: transformedOrder.invoiceNumber,
-                soldTo: transformedOrder.soldTo,
-                totalAmount: transformedOrder.totalAmount,
-                createdAt: transformedOrder.createdAt?.toLocaleString()
-              });
-              return transformedOrder;
-            });
-            
-            console.log('✅ Successfully loaded recent orders:', results.length);
-            console.log('=============== ORDER LOADING END (SUCCESS) ===============');
+            const results = finalSnapshot.docs.map(d => this.transformDoc(d));
             return results;
             
           } else {
-            console.log('⚠️ No orders found for company:', companyId);
-            console.log('💡 This could mean:');
-            console.log('   - No orders exist for this company');
-            console.log('   - Company ID is incorrect');
-            console.log('   - Data structure mismatch');
-            console.log('=============== ORDER LOADING END (NO COMPANY DATA) ===============');
             return [];
           }
           
@@ -743,16 +681,23 @@ export class OrderService {
     const fromDate = this.formatDateForApi(startDate);
     const toDate = this.formatDateForApi(endDate);
     
+    // Get Firebase ID token for authentication
+    const idToken = await this.authService.getFirebaseIdToken();
+    if (!idToken) {
+      console.error('❌ No Firebase ID token available for API authentication');
+      return [];
+    }
+
     const params = new URLSearchParams({
       storeId,
       from: fromDate,
       to: toDate
     });
 
-    // Try proxy first, then fallback to direct URL
+    // Updated API URLs with authentication
     const apiUrls = [
-      '/api', // Proxy URL (for development)
-      'https://get-orders-by-date-7bpeqovfmq-de.a.run.app' // Direct URL (fallback)
+      'https://asia-east1-jasperpos-1dfd5.cloudfunctions.net/get-orders-by-date', // Primary authenticated endpoint
+      '/api' // Proxy URL (for development)
     ];
 
     for (let i = 0; i < apiUrls.length; i++) {
@@ -763,17 +708,24 @@ export class OrderService {
           storeId,
           fromDate,
           toDate,
-          fullUrl: `${apiUrl}?${params.toString()}`
+          fullUrl: `${apiUrl}?${params.toString()}`,
+          hasToken: !!idToken
         });
+
+        const headers: any = {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        };
+
+        // Add Authorization header with Firebase ID token
+        if (idToken) {
+          headers['Authorization'] = `Bearer ${idToken}`;
+          console.log('🔐 Added Firebase ID token to Authorization header');
+        }
 
         const response = await this.http.get<any>(
           `${apiUrl}?${params.toString()}`,
-          {
-            headers: {
-              'Content-Type': 'application/json',
-              'Accept': 'application/json'
-            }
-          }
+          { headers }
         ).toPromise();
 
         console.log(`✅ Success with ${apiUrl}:`, response);
@@ -888,6 +840,54 @@ export class OrderService {
         return 'refunded';
       default:
         return 'paid'; // Default to paid for completed orders
+    }
+  }
+
+  /**
+   * Test authentication with the API endpoints
+   */
+  async testAuthenticationEndpoints(): Promise<void> {
+    console.log('🧪 Testing authentication endpoints...');
+    
+    const idToken = await this.authService.getFirebaseIdToken();
+    if (!idToken) {
+      console.error('❌ No Firebase ID token available for testing');
+      return;
+    }
+
+    const headers = {
+      'Authorization': `Bearer ${idToken}`,
+      'Content-Type': 'application/json',
+      'Accept': 'application/json'
+    };
+
+    // Test basic authentication
+    try {
+      console.log('🔐 Testing basic auth endpoint...');
+      const basicAuthResponse = await this.http.get(
+        'https://asia-east1-jasperpos-1dfd5.cloudfunctions.net/test_auth_basic',
+        { headers }
+      ).toPromise();
+      console.log('✅ Basic auth test successful:', basicAuthResponse);
+    } catch (error) {
+      console.error('❌ Basic auth test failed:', error);
+    }
+
+    // Test store access (using current user's store)
+    try {
+      const currentPermission = this.authService.getCurrentPermission();
+      if (currentPermission?.storeId) {
+        console.log('🏪 Testing store access endpoint...');
+        const storeAuthResponse = await this.http.get(
+          `https://asia-east1-jasperpos-1dfd5.cloudfunctions.net/test_auth_store?storeId=${currentPermission.storeId}`,
+          { headers }
+        ).toPromise();
+        console.log('✅ Store auth test successful:', storeAuthResponse);
+      } else {
+        console.warn('⚠️ No storeId found for store auth test');
+      }
+    } catch (error) {
+      console.error('❌ Store auth test failed:', error);
     }
   }
 }
