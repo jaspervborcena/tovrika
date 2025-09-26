@@ -67,27 +67,11 @@ export class OrderService {
       console.log('📡 Firestore orders collection reference created');
       
       // Try a simple query first to test connectivity
-      console.log('🔍 Step 1: Testing simple query (no filters)...');
       try {
         const simpleQuery = query(ordersRef, limit(5));
-        console.log('📡 Executing simple query...');
         const simpleSnapshot = await getDocs(simpleQuery);
-        console.log('📊 Simple query results - Document count:', simpleSnapshot.docs.length);
         
-        if (simpleSnapshot.docs.length > 0) {
-          console.log('📄 Sample documents found:');
-          simpleSnapshot.docs.forEach((d, index) => {
-            const data = d.data();
-            console.log(`   Document ${index + 1}:`, {
-              id: d.id,
-              companyId: data['companyId'],
-              storeId: data['storeId'],
-              invoiceNumber: data['invoiceNumber'],
-              soldTo: data['soldTo'],
-              createdAt: data['createdAt']?.toDate?.()?.toLocaleString() || 'No date'
-            });
-          });
-        } else {
+        if (simpleSnapshot.docs.length === 0) {
           console.log('⚠️ No documents found in orders collection at all');
           console.log('=============== ORDER LOADING END (EMPTY) ===============');
           return [];
@@ -100,39 +84,18 @@ export class OrderService {
       
       // If we have companyId, try with company filter only first
       if (companyId) {
-        console.log('🔍 Step 2: Testing company-only query for companyId:', companyId);
         try {
           const companyQuery = query(
             ordersRef,
             where('companyId', '==', companyId),
             limit(limitCount)
           );
-          console.log('📡 Executing company query...');
           const companySnapshot = await getDocs(companyQuery);
-          console.log('📊 Company query results - Document count:', companySnapshot.docs.length);
           
           if (companySnapshot.docs.length > 0) {
-            console.log('✅ Found orders for company! Details:');
-            companySnapshot.docs.forEach((d, index) => {
-              const data = d.data();
-              console.log(`   Order ${index + 1}:`, {
-                id: d.id,
-                companyId: data['companyId'],
-                storeId: data['storeId'],
-                invoiceNumber: data['invoiceNumber'],
-                status: data['status'],
-                soldTo: data['soldTo'],
-                totalAmount: data['totalAmount'],
-                createdAt: data['createdAt']?.toDate?.()?.toLocaleString() || 'No date'
-              });
-            });
-            
-            console.log('🔍 Step 3: Proceeding with full query (with orderBy)...');
-            
             // Now try the full query with orderBy
             let finalQuery;
             if (storeId) {
-              console.log('🏪 Building store-specific query for storeId:', storeId);
               finalQuery = query(
                 ordersRef,
                 where('companyId', '==', companyId),
@@ -150,39 +113,12 @@ export class OrderService {
               );
             }
             
-            console.log('📡 Executing final query with orderBy...');
             const finalSnapshot = await getDocs(finalQuery);
-            console.log('📊 Final query results - Document count:', finalSnapshot.docs.length);
             
-            if (finalSnapshot.docs.length === 0) {
-              console.log('⚠️ Final query returned no results despite company query having results');
-              console.log('💡 This suggests an indexing issue with orderBy clause');
-            }
-            
-            const results = finalSnapshot.docs.map((d, index) => {
-              console.log(`📄 Processing document ${index + 1}:`, d.id);
-              const transformedOrder = this.transformDoc(d);
-              console.log(`   Transformed order:`, {
-                id: transformedOrder.id,
-                invoiceNumber: transformedOrder.invoiceNumber,
-                soldTo: transformedOrder.soldTo,
-                totalAmount: transformedOrder.totalAmount,
-                createdAt: transformedOrder.createdAt?.toLocaleString()
-              });
-              return transformedOrder;
-            });
-            
-            console.log('✅ Successfully loaded recent orders:', results.length);
-            console.log('=============== ORDER LOADING END (SUCCESS) ===============');
+            const results = finalSnapshot.docs.map(d => this.transformDoc(d));
             return results;
             
           } else {
-            console.log('⚠️ No orders found for company:', companyId);
-            console.log('💡 This could mean:');
-            console.log('   - No orders exist for this company');
-            console.log('   - Company ID is incorrect');
-            console.log('   - Data structure mismatch');
-            console.log('=============== ORDER LOADING END (NO COMPANY DATA) ===============');
             return [];
           }
           
