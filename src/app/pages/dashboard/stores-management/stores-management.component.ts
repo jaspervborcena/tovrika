@@ -662,7 +662,7 @@ export class StoresManagementComponent implements OnInit {
     this.isLoading = true;
     
     try {
-      const currentUser = await this.authService.waitForAuth();
+      await this.authService.waitForAuth();
       const currentPermission = this.authService.getCurrentPermission();
       if (currentPermission?.companyId) {
         await this.storeService.loadStoresByCompany(currentPermission.companyId);
@@ -740,7 +740,7 @@ export class StoresManagementComponent implements OnInit {
     this.isLoading = true;
 
     try {
-      const currentUser = await this.authService.waitForAuth();
+      await this.authService.waitForAuth();
       const currentPermission = this.authService.getCurrentPermission();
       if (!currentPermission?.companyId) {
         throw new Error('No company ID found');

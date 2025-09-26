@@ -12,7 +12,7 @@ import { PosSharedService } from '../../../services/pos-shared.service';
 import { PrintService } from '../../../services/print.service';
 import { TransactionService } from '../../../services/transaction.service';
 import { AuthService } from '../../../services/auth.service';
-import { CompanyService } from '../../../services/company.service';
+
 import { OrderService } from '../../../services/order.service';
 import { StoreService } from '../../../services/store.service';
 import { UserRoleService } from '../../../services/user-role.service';
@@ -37,7 +37,6 @@ export class PosComponent implements OnInit, AfterViewInit {
   private printService = inject(PrintService);
   private transactionService = inject(TransactionService);
   private authService = inject(AuthService);
-  private companyService = inject(CompanyService);
   private storeService = inject(StoreService);
   private orderService = inject(OrderService);
   private userRoleService = inject(UserRoleService);

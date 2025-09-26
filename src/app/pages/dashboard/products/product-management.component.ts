@@ -1,10 +1,10 @@
 import { Component, OnInit, computed, signal, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, Validators, FormArray } from '@angular/forms';
-import { Product, ProductInventory, UNIT_TYPES, UnitType } from '../../../interfaces/product.interface';
+import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
+import { Product, ProductInventory, UNIT_TYPES } from '../../../interfaces/product.interface';
 import { ProductService } from '../../../services/product.service';
 import { StoreService } from '../../../services/store.service';
-import { Store } from '../../../interfaces/store.interface';
+
 import { AuthService } from '../../../services/auth.service';
 import { ToastService } from '../../../shared/services/toast.service';
 import { ErrorMessages } from '../../../shared/enums';
@@ -1507,7 +1507,6 @@ export class ProductManagementComponent implements OnInit {
 
   async ngOnInit(): Promise<void> {
     try {
-      const user = this.authService.getCurrentUser();
       const currentPermission = this.authService.getCurrentPermission();
       if (currentPermission?.companyId) {
         await this.storeService.loadStoresByCompany(currentPermission.companyId);

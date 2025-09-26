@@ -2,7 +2,6 @@ import { Component, OnInit, OnDestroy, computed, inject, signal } from '@angular
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute } from '@angular/router';
 import { 
-  Firestore, 
   Unsubscribe 
 } from '@angular/fire/firestore';
 import { CustomerViewSession, LiveCartItem } from '../../interfaces/customer-view.interface';
