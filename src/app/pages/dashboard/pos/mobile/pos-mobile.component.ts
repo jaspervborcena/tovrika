@@ -16,12 +16,11 @@ import { CompanyService } from '../../../../services/company.service';
 import { ToastService } from '../../../../shared/services/toast.service';
 import { ErrorMessages, WarningMessages } from '../../../../shared/enums';
 import { OrderService } from '../../../../services/order.service';
-import { StoreService, Store } from '../../../../services/store.service';
+import { StoreService } from '../../../../services/store.service';
 import { UserRoleService } from '../../../../services/user-role.service';
 import { CurrencyService } from '../../../../services/currency.service';
 import { Product } from '../../../../interfaces/product.interface';
-import { CartItem, ProductViewType, ReceiptData } from '../../../../interfaces/pos.interface';
-import { Currency, CurrencySymbol, CURRENCY_CONFIGS } from '../../../../interfaces/currency.interface';
+import { ProductViewType } from '../../../../interfaces/pos.interface';
 
 @Component({
   selector: 'app-pos-mobile',
@@ -476,7 +475,7 @@ export class PosMobileComponent implements OnInit {
         date: orderDate // Convert to date for backend compatibility
       };
       
-      const orderId = await this.posService.processOrder('cash', customerData);
+      const orderId = await this.posService.processOrder(customerData);
       if (orderId) {
         // Prepare receipt data and show receipt modal
         const receiptData = this.prepareReceiptData(orderId);

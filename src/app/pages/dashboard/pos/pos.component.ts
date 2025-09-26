@@ -18,8 +18,7 @@ import { StoreService } from '../../../services/store.service';
 import { UserRoleService } from '../../../services/user-role.service';
 import { CustomerService } from '../../../services/customer.service';
 import { Product } from '../../../interfaces/product.interface';
-import { CartItem, ProductViewType, ReceiptData, OrderDiscount } from '../../../interfaces/pos.interface';
-import { Store } from '../../../interfaces/store.interface';
+import { ProductViewType, OrderDiscount } from '../../../interfaces/pos.interface';
 import { Customer, CustomerFormData } from '../../../interfaces/customer.interface';
 
 @Component({

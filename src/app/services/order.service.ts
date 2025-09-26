@@ -2,7 +2,6 @@ import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Firestore, collection, query, where, getDocs, updateDoc, doc, Timestamp, orderBy, limit, addDoc } from '@angular/fire/firestore';
 import { Order } from '../interfaces/pos.interface';
-import { environment } from '../../environments/environment';
 
 @Injectable({
   providedIn: 'root'

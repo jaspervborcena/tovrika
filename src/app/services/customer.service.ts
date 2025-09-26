@@ -1,5 +1,5 @@
 import { Injectable, inject } from '@angular/core';
-import { Firestore, collection, addDoc, doc, updateDoc, query, where, getDocs, orderBy, limit } from '@angular/fire/firestore';
+import { Firestore, collection, addDoc, query, where, getDocs, orderBy, limit } from '@angular/fire/firestore';
 import { Customer, CustomerFormData } from '../interfaces/customer.interface';
 
 @Injectable({

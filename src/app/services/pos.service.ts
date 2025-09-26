@@ -1,15 +1,8 @@
-import { Injectable, signal, computed, inject } from '@angular/core';
+import { Injectable, signal, computed } from '@angular/core';
 import {
   Firestore,
   collection,
-  addDoc,
-  doc,
-  updateDoc,
-  query,
-  where,
-  getDocs,
-  orderBy,
-  limit
+  addDoc
 } from '@angular/fire/firestore';
 import { AuthService } from './auth.service';
 import { CompanyService } from './company.service';
@@ -182,7 +175,7 @@ export class PosService {
   }
 
   // Order Processing
-  async processOrder(paymentMethod: string = 'cash', customerInfo?: any): Promise<string | null> {
+  async processOrder(customerInfo?: any): Promise<string | null> {
     try {
       this.isProcessingSignal.set(true);
       
