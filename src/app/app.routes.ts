@@ -116,17 +116,12 @@ export const routes: Routes = [
   canActivate: [onboardingGuard],
   data: { roles: ['creator', 'store_manager', 'cashier'] }
       },
+
       {
-        path: 'pos',
-        loadComponent: () => import('./pages/dashboard/pos/pos.component').then(m => m.PosComponent)
-        // Temporarily removed guards for testing: canActivate: [onboardingGuard],
-        // data: { roles: ['admin', 'manager', 'cashier'] }
-      },
-      {
-        path: 'pos/mobile',
-        loadComponent: () => import('./pages/dashboard/pos/mobile/pos-mobile.component').then(m => m.PosMobileComponent)
-        // Temporarily removed guards for testing: canActivate: [onboardingGuard],
-        // data: { roles: ['admin', 'manager', 'cashier'] }
+        path: 'sales/summary',
+        loadComponent: () => import('./pages/dashboard/sales/sales-summary/sales-summary.component').then(m => m.SalesSummaryComponent),
+        canActivate: [onboardingGuard],
+        data: { roles: ['creator', 'store_manager'] }
       }
     ]
   },

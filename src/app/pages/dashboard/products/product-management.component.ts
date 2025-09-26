@@ -612,6 +612,63 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
       font-weight: 500;
       color: #2d3748;
     }
+
+    /* Enhanced Empty State Styles */
+    .empty-icon {
+      font-size: 4rem;
+      margin-bottom: 1rem;
+      opacity: 0.7;
+    }
+
+    .empty-content h3 {
+      font-size: 1.5rem;
+      font-weight: 600;
+      color: #2d3748;
+      margin-bottom: 0.5rem;
+    }
+
+    .empty-content p {
+      color: #718096;
+      margin-bottom: 1.5rem;
+      font-size: 1rem;
+    }
+
+    /* Professional Refresh Button */
+    .refresh-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 10px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      box-shadow: 0 3px 6px rgba(16, 185, 129, 0.2);
+    }
+
+    .refresh-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(16, 185, 129, 0.3);
+      background: linear-gradient(135deg, #059669 0%, #047857 100%);
+    }
+
+    .refresh-btn:active {
+      transform: translateY(0);
+      box-shadow: 0 3px 6px rgba(16, 185, 129, 0.2);
+    }
+
+    .refresh-btn svg {
+      animation: none;
+      transition: transform 0.3s ease;
+    }
+
+    .refresh-btn:hover svg {
+      animation: spin 1s linear infinite;
+    }
   `],
   template: `
     <div class="products-management">
@@ -671,9 +728,6 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
       <div class="table-container">
         <div class="table-header">
           <h3>Products ({{ filteredProducts().length }})</h3>
-          <button class="btn btn-secondary" (click)="refreshProducts()">
-            Refresh
-          </button>
         </div>
 
       <div class="table-wrapper" *ngIf="filteredProducts().length > 0">
@@ -748,11 +802,14 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
         <!-- Empty State -->
         <div class="empty-state" *ngIf="filteredProducts().length === 0 && !loading">
           <div class="empty-content">
-            <h3>No Products Found</h3>
+            <div class="empty-icon">📦</div>
             <p *ngIf="searchTerm">No products match your search criteria.</p>
-            <p *ngIf="!searchTerm">No products have been created yet.</p>
-            <button class="btn btn-primary" (click)="openAddModal()">
-              Add Your First Product
+            <p *ngIf="!searchTerm">No product found.</p>
+            <button class="refresh-btn" (click)="refreshProducts()">
+              <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M4 12a8 8 0 0 1 8-8V2.5L16 6l-4 3.5V8a6 6 0 1 0 6 6h1.5A7.5 7.5 0 1 1 4 12Z"/>
+              </svg>
+              Refresh Products
             </button>
           </div>
         </div>

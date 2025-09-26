@@ -8,5 +8,8 @@ export const environment = {
   messagingSenderId: "251258556341",
   appId: "1:251258556341:web:28cdcafbdb4ad89675d3fc",
   measurementId: "G-MG8T2RZ051"
+  },
+  api: {
+    baseUrl: "https://asia-east1-jasperpos-1dfd5.cloudfunctions.net"
   }
 };

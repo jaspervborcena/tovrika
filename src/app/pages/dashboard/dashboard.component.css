@@ -333,6 +333,7 @@
 .nav-sections {
   flex: 1;
   padding: 1rem 0;
+  background: white;
 }
 
 .nav-section {
@@ -366,6 +367,8 @@
   transition: all 0.2s ease;
   border-left: 3px solid transparent;
   position: relative;
+  background: white;
+  border-radius: 0;
 }
 
 .nav-item:hover {
@@ -374,32 +377,78 @@
   border-left-color: #667eea;
 }
 
-.nav-item.active {
-  background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
-  color: #667eea;
-  border-left-color: #667eea;
+.nav-item.active,
+.nav-item[routerLinkActive="active"] {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border-left-color: transparent;
   font-weight: 700;
+  border-radius: 0 25px 25px 0;
+  margin-right: 1rem;
+  transform: translateX(5px);
+  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+}
+
+.nav-item.active:hover,
+.nav-item[routerLinkActive="active"]:hover {
+  background: linear-gradient(135deg, #5a6fd8 0%, #6b4190 100%);
+  color: white;
+  transform: translateX(8px);
+  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
 }
 
 .nav-item.pos-special {
   margin-top: 0.5rem;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  border-radius: 0 25px 25px 0;
-  margin-right: 1rem;
-  border-left: 3px solid transparent;
+  background: white;
+  color: #667eea;
+  border-radius: 0;
+  margin-right: 0;
+  border-left: 3px solid #667eea;
 }
 
 .nav-item.pos-special:hover {
+  background: #f8fafc;
+  color: #667eea;
+  transform: translateX(5px);
+}
+
+/* POS item gets gradient when active, just like other nav items */
+.nav-item.pos-special.active {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border-left-color: transparent;
+  font-weight: 700;
+  border-radius: 0 25px 25px 0;
+  margin-right: 1rem;
+  transform: translateX(5px);
+  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+}
+
+.nav-item.pos-special.active:hover {
   background: linear-gradient(135deg, #5a6fd8 0%, #6b4190 100%);
   color: white;
-  transform: translateX(5px);
+  transform: translateX(8px);
+  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
 }
 
 .nav-icon {
   width: 1.25rem;
   height: 1.25rem;
   flex-shrink: 0;
+}
+
+.nav-item.active .nav-icon,
+.nav-item[routerLinkActive="active"] .nav-icon {
+  color: white;
+}
+
+/* POS item icon - blue by default, white when active */
+.nav-item.pos-special .nav-icon {
+  color: #667eea;
+}
+
+.nav-item.pos-special.active .nav-icon {
+  color: white;
 }
 
 .nav-badge {
@@ -414,13 +463,15 @@
   text-align: center;
 }
 
-.nav-item.active .nav-badge {
-  background: white;
-  color: #667eea;
+.nav-item.active .nav-badge,
+.nav-item[routerLinkActive="active"] .nav-badge {
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.3);
 }
 
 .pos-badge {
-  background: rgba(255, 255, 255, 0.2);
+  background: #667eea;
   color: white;
   font-size: 0.6875rem;
   font-weight: 700;
@@ -429,6 +480,13 @@
   margin-left: auto;
   text-transform: uppercase;
   letter-spacing: 0.025em;
+}
+
+/* POS badge when active - semi-transparent white background */
+.nav-item.pos-special.active .pos-badge {
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.3);
 }
 
 /* Add Store Item Styling */

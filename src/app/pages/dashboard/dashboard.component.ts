@@ -1,6 +1,7 @@
 import { Component, OnInit, computed, inject, signal, HostListener } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { RouterLink, RouterOutlet } from '@angular/router';
+import { RouterLink, RouterOutlet, Router, NavigationEnd } from '@angular/router';
+import { filter } from 'rxjs/operators';
 import { StoreService, Store } from '../../services/store.service';
 import { ProductService } from '../../services/product.service';
 import { AuthService } from '../../services/auth.service';
@@ -37,6 +38,7 @@ export class DashboardComponent implements OnInit {
   private companyService = inject(CompanySetupService);
   private accessService = inject(AccessService);
   private firestore = inject(Firestore);
+  private router = inject(Router);
 
   // Signals
   protected stores = signal<Store[]>([]);
@@ -47,6 +49,7 @@ export class DashboardComponent implements OnInit {
   protected totalCompanies = signal<number>(0);
   protected totalStores = signal<number>(0);
   protected totalProducts = signal<number>(0);
+  protected currentActivePage = signal<string>('');
   protected recentCompanies = signal<any[]>([]);
   
   // User-related signals
@@ -76,6 +79,14 @@ export class DashboardComponent implements OnInit {
     this.screenWidth = window.innerWidth;
     this.isMobile = this.screenWidth < 1024;
     this.loadDashboardData();
+    
+    // Track current route for active menu item
+    this.updateCurrentPage();
+    this.router.events.pipe(
+      filter(event => event instanceof NavigationEnd)
+    ).subscribe((event: NavigationEnd) => {
+      this.updateCurrentPage();
+    });
     const user = this.currentUser();
     if (!user) return;
 
@@ -217,5 +228,33 @@ export class DashboardComponent implements OnInit {
     console.log('🔍 [Dashboard] canViewProducts:', currentPermissions.canViewProducts);
     console.log('🔍 [Dashboard] canViewPOS:', currentPermissions.canViewPOS);
     return currentPermissions;
+  }
+
+  private updateCurrentPage() {
+    const url = this.router.url;
+    
+    if (url.includes('/dashboard/company-profile')) {
+      this.currentActivePage.set('company-profile');
+    } else if (url.includes('/dashboard/stores')) {
+      this.currentActivePage.set('stores');
+    } else if (url.includes('/dashboard/access')) {
+      this.currentActivePage.set('access');
+    } else if (url.includes('/dashboard/user-roles')) {
+      this.currentActivePage.set('user-roles');
+    } else if (url.includes('/dashboard/products')) {
+      this.currentActivePage.set('products');
+    } else if (url === '/pos' || url.startsWith('/pos/')) {
+      this.currentActivePage.set('pos');
+    } else if (url.includes('/dashboard/sales/summary')) {
+      this.currentActivePage.set('sales-summary');
+    } else if (url.includes('/dashboard/inventory')) {
+      this.currentActivePage.set('inventory');
+    } else {
+      this.currentActivePage.set('');
+    }
+  }
+
+  protected isActiveNavItem(pageName: string): boolean {
+    return this.currentActivePage() === pageName;
   }
 }
