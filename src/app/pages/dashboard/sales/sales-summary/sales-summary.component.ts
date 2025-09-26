@@ -80,13 +80,6 @@ type Order = OrderDisplay;
                 <span *ngIf="!isLoading()">{{ getDataSourceButtonText() }}</span>
                 <span *ngIf="isLoading()" class="loading-text">Loading...</span>
               </button>
-              <button 
-                (click)="createTestOrders()"
-                [disabled]="isLoading()"
-                class="debug-button"
-                title="Create test orders for debugging">
-                🧪 Test Data
-              </button>
             </div>
           </div>
         </div>
@@ -99,11 +92,6 @@ type Order = OrderDisplay;
           <div class="total-card">
             <div class="total-label">Total Orders</div>
             <div class="total-count">{{ totalOrders() }}</div>
-          </div>
-          <div *ngIf="!isLoading() && dataSource()" class="data-source-indicator">
-            <div class="source-badge" [class.api-source]="dataSource() === 'api'" [class.firebase-source]="dataSource() === 'firebase'">
-              {{ dataSource() === 'api' ? '🌐 API Data' : '🔥 Live Data' }}
-            </div>
           </div>
         </div>
       </div>
@@ -122,7 +110,7 @@ type Order = OrderDisplay;
         <div class="table-header">
           <h3>Sales Details</h3>
           <div class="table-info">
-            Showing {{ orders().length }} orders
+            Showing {{ paginatedOrders().length }} of {{ totalOrders() }} orders
           </div>
         </div>
         
@@ -142,7 +130,7 @@ type Order = OrderDisplay;
             </thead>
             <tbody>
               <tr 
-                *ngFor="let order of orders(); trackBy: trackByOrderId"
+                *ngFor="let order of paginatedOrders(); trackBy: trackByOrderId"
                 class="order-row">
                 <td class="invoice-number">{{ order.invoiceNumber || 'N/A' }}</td>
                 <td class="order-date">
@@ -175,7 +163,7 @@ type Order = OrderDisplay;
               </tr>
               
               <!-- Empty State -->
-              <tr *ngIf="orders().length === 0" class="empty-state">
+              <tr *ngIf="paginatedOrders().length === 0" class="empty-state">
                 <td colspan="8">
                   <div class="empty-message">
                     <div class="empty-icon">📊</div>
@@ -191,6 +179,66 @@ type Order = OrderDisplay;
               </tr>
             </tbody>
           </table>
+        </div>
+        
+        <!-- Pagination Controls -->
+        <div *ngIf="totalFilteredOrders() > itemsPerPage()" class="pagination-container">
+          <div class="pagination-info">
+            Page {{ currentPage() }} of {{ totalPages() }} 
+            ({{ ((currentPage() - 1) * itemsPerPage()) + 1 }}-{{ min(currentPage() * itemsPerPage(), totalFilteredOrders()) }} of {{ totalFilteredOrders() }} items)
+          </div>
+          
+          <div class="pagination-controls">
+            <button 
+              (click)="goToFirstPage()" 
+              [disabled]="currentPage() === 1"
+              class="pagination-btn"
+              title="First page">
+              <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M18.41 7.41L17 6l-6 6 6 6 1.41-1.41L13.83 12l4.58-4.59zM6 6h2v12H6V6z"/>
+              </svg>
+            </button>
+            
+            <button 
+              (click)="goToPreviousPage()" 
+              [disabled]="currentPage() === 1"
+              class="pagination-btn"
+              title="Previous page">
+              <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12l4.58-4.59z"/>
+              </svg>
+            </button>
+            
+            <div class="page-numbers">
+              <button 
+                *ngFor="let page of getPageNumbers()"
+                (click)="goToPage(page)"
+                [class.active]="page === currentPage()"
+                class="page-number-btn">
+                {{ page }}
+              </button>
+            </div>
+            
+            <button 
+              (click)="goToNextPage()" 
+              [disabled]="currentPage() === totalPages()"
+              class="pagination-btn"
+              title="Next page">
+              <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M8.59 16.59L10 18l6-6-6-6-1.41 1.41L13.17 12l-4.58 4.59z"/>
+              </svg>
+            </button>
+            
+            <button 
+              (click)="goToLastPage()" 
+              [disabled]="currentPage() === totalPages()"
+              class="pagination-btn"
+              title="Last page">
+              <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M5.59 7.41L7 6l6 6-6 6-1.41-1.41L10.17 12 5.59 7.41zM16 6h2v12h-2V6z"/>
+              </svg>
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -488,25 +536,7 @@ type Order = OrderDisplay;
       margin-left: auto;
     }
 
-    .source-badge {
-      font-size: 0.75rem;
-      padding: 4px 8px;
-      border-radius: 12px;
-      font-weight: 500;
-      display: inline-block;
-    }
 
-    .firebase-source {
-      background: rgba(34, 197, 94, 0.1);
-      color: #16a34a;
-      border: 1px solid rgba(34, 197, 94, 0.2);
-    }
-
-    .api-source {
-      background: rgba(59, 130, 246, 0.1);
-      color: #2563eb;
-      border: 1px solid rgba(59, 130, 246, 0.2);
-    }
 
     .sales-table-container {
       background: white;
@@ -870,6 +900,92 @@ type Order = OrderDisplay;
     .close-btn:active {
       transform: scale(0.95);
     }
+
+    /* Pagination Styles */
+    .pagination-container {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 16px 24px;
+      background: #f8fafc;
+      border-top: 1px solid #e2e8f0;
+    }
+
+    .pagination-info {
+      font-size: 14px;
+      color: #6b7280;
+    }
+
+    .pagination-controls {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .pagination-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 36px;
+      height: 36px;
+      border: 1px solid #d1d5db;
+      background: white;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      color: #6b7280;
+    }
+
+    .pagination-btn:hover:not(:disabled) {
+      background: #f3f4f6;
+      border-color: #9ca3af;
+      color: #374151;
+    }
+
+    .pagination-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      background: #f9fafb;
+    }
+
+    .page-numbers {
+      display: flex;
+      gap: 4px;
+      margin: 0 8px;
+    }
+
+    .page-number-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 36px;
+      height: 36px;
+      border: 1px solid #d1d5db;
+      background: white;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      color: #6b7280;
+      font-size: 14px;
+      font-weight: 500;
+    }
+
+    .page-number-btn:hover {
+      background: #f3f4f6;
+      border-color: #9ca3af;
+      color: #374151;
+    }
+
+    .page-number-btn.active {
+      background: #3b82f6;
+      border-color: #3b82f6;
+      color: white;
+    }
+
+    .page-number-btn.active:hover {
+      background: #2563eb;
+      border-color: #2563eb;
+    }
   `]
 })
 export class SalesSummaryComponent implements OnInit {
@@ -886,6 +1002,10 @@ export class SalesSummaryComponent implements OnInit {
   showOrderDetails = signal(false);
   selectedOrder = signal<Order | null>(null);
   dataSource = signal<'firebase' | 'api' | null>(null);
+  
+  // Pagination signals
+  currentPage = signal<number>(1);
+  itemsPerPage = signal<number>(20);
 
   // Date properties
   fromDate: string = '';
@@ -901,7 +1021,27 @@ export class SalesSummaryComponent implements OnInit {
     return this.stores().length > 1;
   });
 
-  // Computed values
+  // Computed values for pagination
+  filteredOrders = computed(() => {
+    return this.orders();
+  });
+
+  totalFilteredOrders = computed(() => {
+    return this.orders().length;
+  });
+
+  totalPages = computed(() => {
+    return Math.ceil(this.totalFilteredOrders() / this.itemsPerPage());
+  });
+
+  paginatedOrders = computed(() => {
+    const filtered = this.filteredOrders();
+    const startIndex = (this.currentPage() - 1) * this.itemsPerPage();
+    const endIndex = startIndex + this.itemsPerPage();
+    return filtered.slice(startIndex, endIndex);
+  });
+
+  // Original computed values
   totalSales = computed(() => {
     return this.orders().reduce((total, order) => total + order.totalAmount, 0);
   });
@@ -1042,18 +1182,10 @@ export class SalesSummaryComponent implements OnInit {
   }
 
   /**
-   * Get button text based on data source that will be used
+   * Get button text - always shows "Go"
    */
   getDataSourceButtonText(): string {
-    if (!this.fromDate || !this.toDate) {
-      return 'Go';
-    }
-
-    const startDate = new Date(this.fromDate);
-    const endDate = new Date(this.toDate);
-    const willUseApi = this.shouldUseApiForDates(startDate, endDate);
-    
-    return willUseApi ? '🌐 Get Data (API)' : '🔥 Get Data (Live)';
+    return 'Go';
   }
 
   refreshData(): void {
@@ -1141,32 +1273,6 @@ export class SalesSummaryComponent implements OnInit {
     return order.id || index.toString();
   }
 
-  /**
-   * Debug method to create test orders for testing
-   */
-  async createTestOrders(): Promise<void> {
-    try {
-      const currentPermission = this.authService.getCurrentPermission();
-      const storeId = this.selectedStoreId() || currentPermission?.storeId;
-      
-      if (!currentPermission?.companyId || !storeId) {
-        console.error('❌ Missing companyId or storeId for test order creation');
-        return;
-      }
-
-      console.log('🧪 Creating test order for debugging...');
-      await this.orderService.createTestOrderForToday(currentPermission.companyId, storeId);
-      
-      // Reload data after creating test orders
-      setTimeout(() => {
-        this.loadCurrentDateData();
-      }, 2000);
-      
-    } catch (error) {
-      console.error('❌ Error creating test orders:', error);
-    }
-  }
-
   formatDate(date: Date): string {
     return new Intl.DateTimeFormat('en-US', {
       year: 'numeric',
@@ -1184,6 +1290,56 @@ export class SalesSummaryComponent implements OnInit {
 
   private formatDateForInput(date: Date): string {
     return date.toISOString().split('T')[0];
+  }
+
+  // Pagination methods
+  goToPage(page: number): void {
+    if (page >= 1 && page <= this.totalPages()) {
+      this.currentPage.set(page);
+    }
+  }
+
+  goToFirstPage(): void {
+    this.currentPage.set(1);
+  }
+
+  goToLastPage(): void {
+    this.currentPage.set(this.totalPages());
+  }
+
+  goToPreviousPage(): void {
+    const current = this.currentPage();
+    if (current > 1) {
+      this.currentPage.set(current - 1);
+    }
+  }
+
+  goToNextPage(): void {
+    const current = this.currentPage();
+    if (current < this.totalPages()) {
+      this.currentPage.set(current + 1);
+    }
+  }
+
+  getPageNumbers(): number[] {
+    const total = this.totalPages();
+    const current = this.currentPage();
+    const pages: number[] = [];
+    
+    // Show up to 5 pages around current page
+    const start = Math.max(1, current - 2);
+    const end = Math.min(total, start + 4);
+    
+    for (let i = start; i <= end; i++) {
+      pages.push(i);
+    }
+    
+    return pages;
+  }
+
+  // Helper method for template
+  min(a: number, b: number): number {
+    return Math.min(a, b);
   }
 
 

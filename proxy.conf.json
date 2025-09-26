@@ -1,0 +1,11 @@
+{
+  "/api": {
+    "target": "https://get-orders-by-date-7bpeqovfmq-de.a.run.app",
+    "secure": true,
+    "changeOrigin": true,
+    "logLevel": "debug",
+    "pathRewrite": {
+      "^/api": ""
+    }
+  }
+}
