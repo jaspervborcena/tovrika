@@ -10,6 +10,8 @@ export const environment = {
   measurementId: "G-MG8T2RZ051"
   },
   api: {
-    baseUrl: "https://asia-east1-jasperpos-1dfd5.cloudfunctions.net"
+    baseUrl: "https://asia-east1-jasperpos-1dfd5.cloudfunctions.net",
+    ordersApi: "/api", // Uses proxy in development
+    directOrdersApi: "https://get-orders-by-date-7bpeqovfmq-de.a.run.app"
   }
 };

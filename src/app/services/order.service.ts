@@ -1,12 +1,17 @@
 import { Injectable } from '@angular/core';
+import { HttpClient } from '@angular/common/http';
 import { Firestore, collection, query, where, getDocs, updateDoc, doc, Timestamp, orderBy, limit, addDoc } from '@angular/fire/firestore';
 import { Order } from '../interfaces/pos.interface';
+import { environment } from '../../environments/environment';
 
 @Injectable({
   providedIn: 'root'
 })
 export class OrderService {
-  constructor(private firestore: Firestore) {}
+  constructor(
+    private firestore: Firestore,
+    private http: HttpClient
+  ) {}
 
   private transformDoc(d: any): Order {
     const data = d.data();
@@ -589,11 +594,22 @@ export class OrderService {
 
   async getOrdersByDateRange(storeId: string, startDate: Date, endDate: Date): Promise<Order[]> {
     try {
-      console.log('� SIMPLE FIREBASE QUERY - Loading orders:', {
+      console.log('📊 HYBRID QUERY - Loading orders:', {
         storeId,
         startDate: startDate.toISOString(),
         endDate: endDate.toISOString()
       });
+
+      // Check if we should use API or Firebase based on date
+      const useApi = this.shouldUseApi(startDate, endDate);
+      
+      if (useApi) {
+        console.log('🌐 Using API for historical data');
+        return await this.getOrdersFromApi(storeId, startDate, endDate);
+      } else {
+        console.log('🔥 Using Firebase for current date');
+        // Fall back to existing Firebase logic below
+      }
 
       const ordersRef = collection(this.firestore, 'orders');
       console.log('📡 Firebase orders collection reference created');
@@ -691,6 +707,187 @@ export class OrderService {
       
     } catch (error) {
       console.error('❌ Error creating test order:', error);
+    }
+  }
+
+  /**
+   * Determines if we should use API based on date range
+   * Rule: If current date (today) → Firebase, else → API
+   */
+  private shouldUseApi(startDate: Date, endDate: Date): boolean {
+    const today = new Date();
+    const todayStr = today.toISOString().split('T')[0];
+    const startStr = startDate.toISOString().split('T')[0];
+    const endStr = endDate.toISOString().split('T')[0];
+    
+    // If date range is current date (today), use Firebase
+    const isCurrentDate = startStr === todayStr && endStr === todayStr;
+    
+    console.log('🔍 Date logic check:', {
+      today: todayStr,
+      startDate: startStr,
+      endDate: endStr,
+      isCurrentDate,
+      willUseFirebase: isCurrentDate,
+      willUseAPI: !isCurrentDate
+    });
+    
+    // Use API for all dates except current date
+    return !isCurrentDate;
+  }
+
+  /**
+   * Get orders from API (for historical dates)
+   */
+  private async getOrdersFromApi(storeId: string, startDate: Date, endDate: Date): Promise<Order[]> {
+    const fromDate = this.formatDateForApi(startDate);
+    const toDate = this.formatDateForApi(endDate);
+    
+    const params = new URLSearchParams({
+      storeId,
+      from: fromDate,
+      to: toDate
+    });
+
+    // Try proxy first, then fallback to direct URL
+    const apiUrls = [
+      '/api', // Proxy URL (for development)
+      'https://get-orders-by-date-7bpeqovfmq-de.a.run.app' // Direct URL (fallback)
+    ];
+
+    for (let i = 0; i < apiUrls.length; i++) {
+      const apiUrl = apiUrls[i];
+      
+      try {
+        console.log(`🌐 Attempt ${i + 1}: Fetching from ${apiUrl}`, {
+          storeId,
+          fromDate,
+          toDate,
+          fullUrl: `${apiUrl}?${params.toString()}`
+        });
+
+        const response = await this.http.get<any>(
+          `${apiUrl}?${params.toString()}`,
+          {
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json'
+            }
+          }
+        ).toPromise();
+
+        console.log(`✅ Success with ${apiUrl}:`, response);
+
+        if (response?.success && response.orders) {
+          const orders = response.orders.map((order: any) => this.transformApiOrder(order));
+          console.log(`🌐 API returned ${orders.length} orders for date range ${fromDate} to ${toDate}`);
+          console.log('🌐 Sample transformed order:', orders[0]);
+          return orders;
+        } else {
+          console.warn(`⚠️ API response unsuccessful or empty from ${apiUrl}:`, response);
+          // If this URL didn't work, try the next one
+          if (i === apiUrls.length - 1) {
+            return []; // This was the last URL, return empty
+          }
+          continue; // Try next URL
+        }
+      } catch (error: any) {
+        console.error(`❌ API call error for ${apiUrl}:`, {
+          attempt: i + 1,
+          message: error.message,
+          status: error.status,
+          statusText: error.statusText,
+          url: error.url,
+          error: error
+        });
+        
+        // Check if it's a CORS error
+        if (error.status === 0 && error.statusText === 'Unknown Error') {
+          console.error(`🚫 CORS error detected for ${apiUrl}. ${i < apiUrls.length - 1 ? 'Trying direct URL...' : 'All URLs failed.'}`);
+        }
+        
+        // If this is the last URL, return empty array
+        if (i === apiUrls.length - 1) {
+          console.error('❌ All API endpoints failed');
+          return [];
+        }
+        // Otherwise, continue to next URL
+      }
+    }
+    
+    return []; // Fallback return
+  }
+
+  /**
+   * Format date for API (YYYYMMDD format for Python Cloud Function)
+   */
+  private formatDateForApi(date: Date): string {
+    const dateStr = date.toISOString().split('T')[0]; // YYYY-MM-DD
+    return dateStr.replace(/-/g, ''); // Convert to YYYYMMDD
+  }
+
+  /**
+   * Transform API order data to Order interface
+   * Handles the response structure from get-orders-by-date API
+   */
+  private transformApiOrder(apiOrder: any): Order {
+    console.log('🔄 Transforming API order:', apiOrder);
+    
+    return {
+      id: apiOrder.order_id || apiOrder.id || '',
+      companyId: '', // Not provided in API response
+      storeId: apiOrder.store_id || '',
+      terminalId: 'terminal-1', // Default since not in API
+      assignedCashierId: '', // Not provided in API response
+      status: this.mapApiStatus(apiOrder.status),
+      
+      // Customer Information
+      cashSale: true, // Default for API orders
+      soldTo: 'Walk-in Customer', // Default since not in API
+      tin: '',
+      businessAddress: '',
+      
+      // Invoice Information
+      invoiceNumber: apiOrder.invoice_number || '',
+      logoUrl: '',
+      date: apiOrder.created_at ? new Date(apiOrder.created_at) : new Date(),
+      
+      // Financial Calculations - using API response fields
+      vatableSales: 0, // Not provided in current API response
+      vatAmount: 0, // Not provided in current API response
+      zeroRatedSales: 0,
+      vatExemptAmount: 0,
+      discountAmount: 0, // Not provided in current API response
+      grossAmount: apiOrder.gross_amount || apiOrder.total_amount || 0,
+      netAmount: apiOrder.net_amount || apiOrder.total_amount || 0,
+      totalAmount: apiOrder.total_amount || 0,
+      
+      // BIR Fields - defaults since not in API
+      exemptionId: '',
+      signature: '',
+      atpOrOcn: 'OCN-2025-001234',
+      birPermitNo: 'BIR-PERMIT-2025-56789',
+      inclusiveSerialNumber: '000001-000999',
+      
+      // System Fields
+      createdAt: apiOrder.created_at ? new Date(apiOrder.created_at) : new Date(),
+      message: 'Thank you for your purchase!'
+    };
+  }
+
+  /**
+   * Map API status to expected status values
+   */
+  private mapApiStatus(apiStatus: string): 'pending' | 'paid' | 'cancelled' | 'refunded' {
+    switch (apiStatus?.toLowerCase()) {
+      case 'paid':
+        return 'paid';
+      case 'cancelled':
+        return 'cancelled';
+      case 'refunded':
+        return 'refunded';
+      default:
+        return 'paid'; // Default to paid for completed orders
     }
   }
 }

@@ -109,7 +109,8 @@
               "buildTarget": "pos-system:build:production"
             },
             "development": {
-              "buildTarget": "pos-system:build:development"
+              "buildTarget": "pos-system:build:development",
+              "proxyConfig": "proxy.conf.json"
             }
           },
           "defaultConfiguration": "development"
