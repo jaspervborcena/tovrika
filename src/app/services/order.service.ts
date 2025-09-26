@@ -586,4 +586,37 @@ export class OrderService {
       }
     }
   }
+
+  async getOrdersByDateRange(storeId: string, startDate: Date, endDate: Date): Promise<Order[]> {
+    try {
+      console.log('📊 Loading orders by date range:', {
+        storeId,
+        startDate: startDate.toISOString(),
+        endDate: endDate.toISOString()
+      });
+
+      const ordersRef = collection(this.firestore, 'orders');
+      
+      // Convert dates to Firestore Timestamps
+      const startTimestamp = Timestamp.fromDate(startDate);
+      const endTimestamp = Timestamp.fromDate(endDate);
+
+      const q = query(
+        ordersRef,
+        where('storeId', '==', storeId),
+        where('createdAt', '>=', startTimestamp),
+        where('createdAt', '<=', endTimestamp),
+        orderBy('createdAt', 'desc')
+      );
+
+      const querySnapshot = await getDocs(q);
+      const orders = querySnapshot.docs.map(doc => this.transformDoc(doc));
+
+      console.log(`📊 Found ${orders.length} orders for date range`);
+      return orders;
+    } catch (error) {
+      console.error('❌ Error getting orders by date range:', error);
+      return [];
+    }
+  }
 }
