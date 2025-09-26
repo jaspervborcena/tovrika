@@ -13,12 +13,29 @@ export const appConfig: ApplicationConfig = {
     provideRouter(routes),
     provideAnimations(),
     provideHttpClient(),
-    provideFirebaseApp(() => initializeApp(environment.firebase)),
+    provideFirebaseApp(() => {
+      console.log('🔥 Initializing Firebase App...');
+      try {
+        const app = initializeApp(environment.firebase);
+        console.log('✅ Firebase App initialized successfully');
+        return app;
+      } catch (error) {
+        console.error('❌ Firebase App initialization failed:', error);
+        throw error;
+      }
+    }),
     provideAuth(() => {
-      const auth = getAuth();
-      // Firebase Auth automatically uses IndexedDB for persistence on web
-      // This ensures user sessions persist across browser tabs and page refreshes
-      return auth;
+      console.log('🔐 Initializing Firebase Auth...');
+      try {
+        const auth = getAuth();
+        // Firebase Auth automatically uses IndexedDB for persistence on web
+        // This ensures user sessions persist across browser tabs and page refreshes
+        console.log('✅ Firebase Auth initialized successfully');
+        return auth;
+      } catch (error) {
+        console.error('❌ Firebase Auth initialization failed:', error);
+        throw error;
+      }
     }),
     provideFirestore(() => getFirestore())
   ]
