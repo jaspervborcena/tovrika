@@ -5,8 +5,6 @@ import { ContentLayoutComponent } from '../../shared/components/content-layout/c
 import { NotificationService } from '../../services/notification.service';
 import { NotificationData, NotificationCategory } from '../../interfaces/notification.interface';
 
-// Using NotificationData interface from notification.interface.ts
-
 @Component({
   selector: 'app-notifications',
   standalone: true,

@@ -80,6 +80,12 @@ type Order = OrderDisplay;
                 <span *ngIf="!isLoading()">{{ getDataSourceButtonText() }}</span>
                 <span *ngIf="isLoading()" class="loading-text">Loading...</span>
               </button>
+              <button 
+                (click)="testAuthentication()"
+                [disabled]="isLoading()"
+                class="test-auth-button">
+                🔐 Test Auth
+              </button>
             </div>
           </div>
         </div>
@@ -387,6 +393,34 @@ type Order = OrderDisplay;
     }
 
     .go-button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .test-auth-button {
+      background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%);
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 6px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      height: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+    }
+
+    .test-auth-button:hover:not(:disabled) {
+      transform: translateY(-1px);
+      box-shadow: 0 3px 8px rgba(255, 107, 107, 0.4);
+    }
+
+    .test-auth-button:disabled {
       opacity: 0.6;
       cursor: not-allowed;
       transform: none;
@@ -1342,5 +1376,10 @@ export class SalesSummaryComponent implements OnInit {
     return Math.min(a, b);
   }
 
+  // Test authentication method
+  async testAuthentication(): Promise<void> {
+    console.log('🧪 Testing API authentication from Sales Summary...');
+    await this.orderService.testAuthenticationEndpoints();
+  }
 
 }

@@ -1,12 +1,15 @@
-import { Injectable } from '@angular/core';
+import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Firestore, collection, query, where, getDocs, updateDoc, doc, Timestamp, orderBy, limit, addDoc } from '@angular/fire/firestore';
 import { Order } from '../interfaces/pos.interface';
+import { AuthService } from './auth.service';
 
 @Injectable({
   providedIn: 'root'
 })
 export class OrderService {
+  private authService = inject(AuthService);
+  
   constructor(
     private firestore: Firestore,
     private http: HttpClient
@@ -678,16 +681,23 @@ export class OrderService {
     const fromDate = this.formatDateForApi(startDate);
     const toDate = this.formatDateForApi(endDate);
     
+    // Get Firebase ID token for authentication
+    const idToken = await this.authService.getFirebaseIdToken();
+    if (!idToken) {
+      console.error('❌ No Firebase ID token available for API authentication');
+      return [];
+    }
+
     const params = new URLSearchParams({
       storeId,
       from: fromDate,
       to: toDate
     });
 
-    // Try proxy first, then fallback to direct URL
+    // Updated API URLs with authentication
     const apiUrls = [
-      '/api', // Proxy URL (for development)
-      'https://get-orders-by-date-7bpeqovfmq-de.a.run.app' // Direct URL (fallback)
+      'https://asia-east1-jasperpos-1dfd5.cloudfunctions.net/get-orders-by-date', // Primary authenticated endpoint
+      '/api' // Proxy URL (for development)
     ];
 
     for (let i = 0; i < apiUrls.length; i++) {
@@ -698,17 +708,24 @@ export class OrderService {
           storeId,
           fromDate,
           toDate,
-          fullUrl: `${apiUrl}?${params.toString()}`
+          fullUrl: `${apiUrl}?${params.toString()}`,
+          hasToken: !!idToken
         });
+
+        const headers: any = {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        };
+
+        // Add Authorization header with Firebase ID token
+        if (idToken) {
+          headers['Authorization'] = `Bearer ${idToken}`;
+          console.log('🔐 Added Firebase ID token to Authorization header');
+        }
 
         const response = await this.http.get<any>(
           `${apiUrl}?${params.toString()}`,
-          {
-            headers: {
-              'Content-Type': 'application/json',
-              'Accept': 'application/json'
-            }
-          }
+          { headers }
         ).toPromise();
 
         console.log(`✅ Success with ${apiUrl}:`, response);
@@ -823,6 +840,54 @@ export class OrderService {
         return 'refunded';
       default:
         return 'paid'; // Default to paid for completed orders
+    }
+  }
+
+  /**
+   * Test authentication with the API endpoints
+   */
+  async testAuthenticationEndpoints(): Promise<void> {
+    console.log('🧪 Testing authentication endpoints...');
+    
+    const idToken = await this.authService.getFirebaseIdToken();
+    if (!idToken) {
+      console.error('❌ No Firebase ID token available for testing');
+      return;
+    }
+
+    const headers = {
+      'Authorization': `Bearer ${idToken}`,
+      'Content-Type': 'application/json',
+      'Accept': 'application/json'
+    };
+
+    // Test basic authentication
+    try {
+      console.log('🔐 Testing basic auth endpoint...');
+      const basicAuthResponse = await this.http.get(
+        'https://asia-east1-jasperpos-1dfd5.cloudfunctions.net/test_auth_basic',
+        { headers }
+      ).toPromise();
+      console.log('✅ Basic auth test successful:', basicAuthResponse);
+    } catch (error) {
+      console.error('❌ Basic auth test failed:', error);
+    }
+
+    // Test store access (using current user's store)
+    try {
+      const currentPermission = this.authService.getCurrentPermission();
+      if (currentPermission?.storeId) {
+        console.log('🏪 Testing store access endpoint...');
+        const storeAuthResponse = await this.http.get(
+          `https://asia-east1-jasperpos-1dfd5.cloudfunctions.net/test_auth_store?storeId=${currentPermission.storeId}`,
+          { headers }
+        ).toPromise();
+        console.log('✅ Store auth test successful:', storeAuthResponse);
+      } else {
+        console.warn('⚠️ No storeId found for store auth test');
+      }
+    } catch (error) {
+      console.error('❌ Store auth test failed:', error);
     }
   }
 }
