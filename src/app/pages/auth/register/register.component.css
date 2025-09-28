@@ -6,8 +6,10 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 2rem 1rem;
+  padding: 2rem 0;
   padding-top: calc(2rem + 80px); /* Account for fixed header height */
+  margin: 0;
+  width: 100%;
 }
 
 .auth-wrapper::before {
