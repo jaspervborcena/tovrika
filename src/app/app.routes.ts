@@ -1,6 +1,7 @@
 import { Routes } from '@angular/router';
 import { authGuard } from './guards/auth.guard';
 import { onboardingGuard, companyProfileGuard } from './guards/onboarding.guard';
+import { policyGuard } from './guards/policy.guard';
 
 export const routes: Routes = [
   // Public Routes
@@ -17,8 +18,13 @@ export const routes: Routes = [
     loadComponent: () => import('./pages/auth/register/register.component').then(m => m.RegisterComponent)
   },
   {
-    path: 'company-selection',
+    path: 'policy-agreement',
     canActivate: [authGuard],
+    loadComponent: () => import('./pages/auth/policy-agreement/policy-agreement.component').then(m => m.PolicyAgreementComponent)
+  },
+  {
+    path: 'company-selection',
+    canActivate: [authGuard, policyGuard],
     loadComponent: () => import('./pages/company-selection/company-selection.component').then(m => m.CompanySelectionComponent)
   },
   {
@@ -65,7 +71,7 @@ export const routes: Routes = [
   {
     path: 'dashboard',
     loadComponent: () => import('./pages/dashboard/dashboard.component').then(m => m.DashboardComponent),
-    canActivate: [authGuard],
+    canActivate: [authGuard, policyGuard],
     children: [
       {
         path: '',
@@ -135,7 +141,7 @@ export const routes: Routes = [
   {
     path: 'notifications',
     loadComponent: () => import('./pages/notifications/notifications.component').then(m => m.NotificationsComponent),
-    canActivate: [authGuard]
+    canActivate: [authGuard, policyGuard]
   },
   
   
@@ -144,7 +150,7 @@ export const routes: Routes = [
   {
     path: 'pos',
     loadComponent: () => import('./pages/dashboard/pos/pos.component').then(m => m.PosComponent),
-    canActivate: [onboardingGuard],
+    canActivate: [authGuard, policyGuard, onboardingGuard],
     data: { roles: ['creator', 'store_manager', 'cashier'] }
   },
 
@@ -152,7 +158,7 @@ export const routes: Routes = [
   {
     path: 'pos/mobile',
     loadComponent: () => import('./pages/dashboard/pos/mobile/pos-mobile.component').then(m => m.PosMobileComponent),
-    canActivate: [onboardingGuard],
+    canActivate: [authGuard, policyGuard, onboardingGuard],
     data: { roles: ['creator', 'store_manager', 'cashier'] }
   },
   
