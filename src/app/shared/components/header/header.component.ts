@@ -7,6 +7,7 @@ import { ProductService } from '../../../services/product.service';
 import { AuthService } from '../../../services/auth.service';
 import { CompanySetupService } from '../../../services/companySetup.service';
 import { LogoComponent } from '../logo/logo.component';
+import { AppConstants } from '../../enums';
 
 @Component({
   selector: 'app-header',
@@ -41,6 +42,9 @@ export class HeaderComponent implements OnInit {
   // User-related signals
   protected currentUser = computed(() => this.authService.getCurrentUser());
   protected isUserMenuOpen = signal<boolean>(false);
+  
+  // App constants
+  protected appName = AppConstants.APP_NAME;
   
   // Device toggle for POS pages
   protected isPosPage = computed(() => {

@@ -18,7 +18,7 @@ The `LogoComponent` is a centralized, reusable component for displaying the offi
   theme="primary"
   alignment="center"
   [clickable]="true"
-  companyName="Tovrika POS System">
+  companyName="Tovrika">
 </app-logo>
 ```
 
@@ -32,7 +32,7 @@ The `LogoComponent` is a centralized, reusable component for displaying the offi
 | `alignment` | `'start' \| 'center' \| 'end'` | `'start'` | Alignment of the logo container |
 | `showText` | `boolean` | `true` | Whether to show the company name text |
 | `clickable` | `boolean` | `false` | Whether the logo should have hover effects |
-| `companyName` | `string` | `'Tovrika POS System'` | Company name to display |
+| `companyName` | `string` | `'Tovrika'` | Company name to display |
 | `customWidth` | `string` | `''` | Custom width (use with size="custom") |
 | `customHeight` | `string` | `''` | Custom height (use with size="custom") |
 | `responsive` | `boolean` | `true` | Whether to enable responsive behavior |

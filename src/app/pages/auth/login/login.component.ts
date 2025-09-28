@@ -5,6 +5,7 @@ import { Router, RouterLink } from '@angular/router';
 import { AuthService } from '../../../services/auth.service';
 import { HeaderComponent } from '../../../shared/components/header/header.component';
 import { LogoComponent } from '../../../shared/components/logo/logo.component';
+import { AppConstants } from '../../../shared/enums';
 @Component({
   selector: 'app-login',
   standalone: true,
@@ -16,6 +17,9 @@ export class LoginComponent {
   private fb = inject(FormBuilder);
   private authService = inject(AuthService);
   private router = inject(Router);
+
+  // App constants
+  readonly appName = AppConstants.APP_NAME;
 
   loginForm = this.fb.group({
     email: ['', [Validators.required, Validators.email]],

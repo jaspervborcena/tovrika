@@ -9,6 +9,7 @@ import { AuthService } from '../../services/auth.service';
 import { AccessService } from '../../core/services/access.service';
 import { Firestore, collection, query, where, getDocs } from '@angular/fire/firestore';
 import { LogoComponent } from '../../shared/components/logo/logo.component';
+import { AppConstants } from '../../shared/enums';
 
 @Component({
   selector: 'app-dashboard',
@@ -45,6 +46,9 @@ export class DashboardComponent implements OnInit {
   protected selectedStore = computed(() => 
     this.stores().find(store => store.id === this.selectedStoreId())
   );
+  
+  // App constants
+  protected appName = AppConstants.APP_NAME;
   protected totalCompanies = signal<number>(0);
   protected totalStores = signal<number>(0);
   protected totalProducts = signal<number>(0);
