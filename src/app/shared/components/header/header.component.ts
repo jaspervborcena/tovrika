@@ -8,6 +8,7 @@ import { AuthService } from '../../../services/auth.service';
 import { CompanySetupService } from '../../../services/companySetup.service';
 import { LogoComponent } from '../logo/logo.component';
 import { AppConstants } from '../../enums';
+import { NetworkService } from '../../../core/services/network.service';
 
 @Component({
   selector: 'app-header',
@@ -27,6 +28,7 @@ export class HeaderComponent implements OnInit {
   private authService = inject(AuthService);
   private companyService = inject(CompanySetupService);
   private router = inject(Router);
+  private networkService = inject(NetworkService);
 
   // Signals
   protected stores = signal<Store[]>([]);
@@ -43,8 +45,22 @@ export class HeaderComponent implements OnInit {
   protected currentUser = computed(() => this.authService.getCurrentUser());
   protected isUserMenuOpen = signal<boolean>(false);
   
-  // App constants
-  protected appName = AppConstants.APP_NAME;
+  // App constants and network status
+  protected isOnline = computed(() => {
+    const status = this.networkService.isOnline();
+    console.log('🎨 Header: Network status is:', status ? 'ONLINE' : 'OFFLINE');
+    return status;
+  });
+  protected appName = computed(() => {
+    const name = this.isOnline() ? AppConstants.APP_NAME : AppConstants.APP_NAME_OFFLINE;
+    console.log('🏷️ Header: App name is:', name);
+    return name;
+  });
+  protected headerClass = computed(() => {
+    const cssClass = this.isOnline() ? 'dashboard-header' : 'dashboard-header offline';
+    console.log('💄 Header: CSS class is:', cssClass);
+    return cssClass;
+  });
   
   // Device toggle for POS pages
   protected isPosPage = computed(() => {
@@ -78,6 +94,20 @@ export class HeaderComponent implements OnInit {
 
   protected async logout() {
     await this.authService.logout();
+  }
+
+  // Debug method to test offline mode
+  protected toggleOfflineMode() {
+    const currentStatus = this.networkService.getCurrentStatus();
+    console.log('🔄 Toggling offline mode. Current status:', currentStatus ? 'ONLINE' : 'OFFLINE');
+    this.networkService.setOfflineMode(currentStatus);
+    
+    // Force change detection after a short delay
+    setTimeout(() => {
+      console.log('🔄 After toggle - isOnline():', this.isOnline());
+      console.log('🔄 After toggle - headerClass():', this.headerClass());
+      console.log('🔄 After toggle - appName():', this.appName());
+    }, 200);
   }
 
   @HostListener('document:click', ['$event'])

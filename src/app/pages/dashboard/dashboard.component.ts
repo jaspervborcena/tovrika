@@ -10,6 +10,7 @@ import { AccessService } from '../../core/services/access.service';
 import { Firestore, collection, query, where, getDocs } from '@angular/fire/firestore';
 import { LogoComponent } from '../../shared/components/logo/logo.component';
 import { AppConstants } from '../../shared/enums';
+import { NetworkService } from '../../core/services/network.service';
 
 @Component({
   selector: 'app-dashboard',
@@ -39,6 +40,7 @@ export class DashboardComponent implements OnInit {
   private accessService = inject(AccessService);
   private firestore = inject(Firestore);
   private router = inject(Router);
+  private networkService = inject(NetworkService);
 
   // Signals
   protected stores = signal<Store[]>([]);
@@ -47,8 +49,14 @@ export class DashboardComponent implements OnInit {
     this.stores().find(store => store.id === this.selectedStoreId())
   );
   
-  // App constants
-  protected appName = AppConstants.APP_NAME;
+  // App constants and network status
+  protected isOnline = computed(() => this.networkService.isOnline());
+  protected appName = computed(() => 
+    this.isOnline() ? AppConstants.APP_NAME : AppConstants.APP_NAME_OFFLINE
+  );
+  protected headerClass = computed(() => 
+    this.isOnline() ? 'dashboard-header' : 'dashboard-header offline'
+  );
   protected totalCompanies = signal<number>(0);
   protected totalStores = signal<number>(0);
   protected totalProducts = signal<number>(0);
