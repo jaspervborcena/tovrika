@@ -1,6 +1,7 @@
 <div class="dashboard-layout">
   <!-- Professional Header -->
-  <header class="dashboard-header">
+  <header [class]="headerClass()" 
+          [style.background]="isOnline() ? null : 'linear-gradient(135deg, #dc2626 0%, #b91c1c 100%)'">
     <div class="header-content">
       <div class="header-left">
         <div class="logo-section">
@@ -10,7 +11,7 @@
             theme="light" 
             background="white"
             [clickable]="true"
-            companyName="Tovrika POS System">
+            [companyName]="appName()">
           </app-logo>
         </div>
         <div class="breadcrumb">

@@ -19,6 +19,43 @@
   right: 0;
   z-index: 50;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  transition: background 0.3s ease;
+}
+
+/* Offline Header Styles - High Specificity */
+header.home-header.offline {
+  background: #dc2626 !important;
+  background: -webkit-linear-gradient(135deg, #dc2626 0%, #b91c1c 100%) !important;
+  background: -moz-linear-gradient(135deg, #dc2626 0%, #b91c1c 100%) !important;
+  background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%) !important;
+  box-shadow: 0 4px 20px rgba(220, 38, 38, 0.3) !important;
+  border-bottom: 2px solid rgba(255, 255, 255, 0.2) !important;
+  border-top: 2px solid #b91c1c !important;
+}
+
+
+
+.home-header.offline::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: repeating-linear-gradient(
+    45deg,
+    transparent,
+    transparent 8px,
+    rgba(255, 255, 255, 0.03) 8px,
+    rgba(255, 255, 255, 0.03) 16px
+  );
+  pointer-events: none;
+  z-index: 1;
+}
+
+.home-header.offline .header-content {
+  position: relative;
+  z-index: 2;
 }
 
 .header-content {
@@ -126,6 +163,10 @@
   width: 1.125rem;
   height: 1.125rem;
 }
+
+
+
+
 
 .signin-btn {
   background: rgba(255, 255, 255, 0.15);

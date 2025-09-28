@@ -1,5 +1,6 @@
 import { Component, Input } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { AppConstants } from '../../enums';
 
 export type LogoSize = 'sm' | 'md' | 'lg' | 'xl' | 'custom';
 export type LogoVariant = 'full' | 'icon' | 'text';
@@ -173,7 +174,7 @@ export class LogoComponent {
   @Input() alignment: 'start' | 'center' | 'end' = 'start';
   @Input() showText: boolean = true;
   @Input() clickable: boolean = false;
-  @Input() companyName: string = 'Tovrika POS System';
+  @Input() companyName: string = AppConstants.APP_NAME;
   @Input() customWidth: string = '';
   @Input() customHeight: string = '';
   @Input() responsive: boolean = true;

@@ -1,10 +1,12 @@
-import { Component, inject } from '@angular/core';
+import { Component, inject, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { AuthService } from '../../../services/auth.service';
 import { HeaderComponent } from '../../../shared/components/header/header.component';
 import { LogoComponent } from '../../../shared/components/logo/logo.component';
+import { AppConstants } from '../../../shared/enums';
+import { NetworkService } from '../../../core/services/network.service';
 @Component({
   selector: 'app-login',
   standalone: true,
@@ -16,6 +18,13 @@ export class LoginComponent {
   private fb = inject(FormBuilder);
   private authService = inject(AuthService);
   private router = inject(Router);
+  private networkService = inject(NetworkService);
+
+  // App constants and network status
+  readonly isOnline = this.networkService.isOnline;
+  readonly appName = computed(() => 
+    this.isOnline() ? AppConstants.APP_NAME : AppConstants.APP_NAME_OFFLINE
+  );
 
   loginForm = this.fb.group({
     email: ['', [Validators.required, Validators.email]],
