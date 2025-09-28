@@ -507,6 +507,8 @@ export class PosComponent implements OnInit, AfterViewInit {
   }
 
   async ngOnInit(): Promise<void> {
+    console.log('🎯 POS COMPONENT: ngOnInit called - POS is loading!');
+    console.log('🎯 POS COMPONENT: Current URL:', window.location.href);
     try {
       await this.loadData();
       // Set current date and time
