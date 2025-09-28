@@ -21,6 +21,8 @@ export const policyGuard: CanActivateFn = async (route, state) => {
   const hasAgreedToPolicy = userData?.isAgreedToPolicy ?? false;
 
   console.log('🛡️ PolicyGuard: User policy agreement status:', hasAgreedToPolicy);
+  console.log('🛡️ PolicyGuard: User data:', userData);
+  console.log('🛡️ PolicyGuard: Trying to access:', state.url);
 
   if (!hasAgreedToPolicy) {
     // If trying to access policy-agreement page, allow it

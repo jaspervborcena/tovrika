@@ -29,7 +29,7 @@
               type="checkbox" 
               id="terms" 
               [checked]="agreedToTerms()"
-              (change)="agreedToTerms.set($event.target?.checked || false)"
+              (change)="onTermsChange($event)"
               class="custom-checkbox"
             >
             <label for="terms" class="checkbox-label">
@@ -53,7 +53,7 @@
               type="checkbox" 
               id="privacy" 
               [checked]="agreedToPrivacy()"
-              (change)="agreedToPrivacy.set($event.target?.checked || false)"
+              (change)="onPrivacyChange($event)"
               class="custom-checkbox"
             >
             <label for="privacy" class="checkbox-label">

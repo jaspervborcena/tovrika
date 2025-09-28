@@ -19,8 +19,13 @@ export const onboardingGuard: CanActivateFn = async (route, state) => {
   }
 
   const currentPermission = authService.getCurrentPermission();
+  
+  console.log('🛡️ OnboardingGuard: Checking access for:', state.url);
+  console.log('🛡️ OnboardingGuard: Current permission:', currentPermission);
+  
   // Step 1: Check company profile
   if (!currentPermission?.companyId) {
+    console.log('🛡️ OnboardingGuard: No company ID, redirecting to company-profile');
     router.navigate(['/dashboard/company-profile']);
     return false;
   }
@@ -28,13 +33,18 @@ export const onboardingGuard: CanActivateFn = async (route, state) => {
   await companyService.loadCompanies();
   const company = await companyService.getActiveCompany();
   if (!company) {
+    console.log('🛡️ OnboardingGuard: No active company found, redirecting to company-profile');
     router.navigate(['/dashboard/company-profile']);
     return false;
   }
+  
+  console.log('🛡️ OnboardingGuard: Company found:', company.name);
 
   // Step 2: Check stores
   await storeService.loadStoresByCompany(currentPermission.companyId);
   const stores = storeService.getStoresByCompany(currentPermission.companyId);
+  
+  console.log('🛡️ OnboardingGuard: Stores found:', stores?.length || 0);
 
   // Role-based access control (move up so userRole is always defined)
   let userRole: string | undefined;
