@@ -50,8 +50,9 @@ export class RegisterComponent {
           // permission will be set when company/store access is granted
         });
         
-        // Admin should create a company first
-        this.router.navigate(['/dashboard']);
+        // Always redirect to policy agreement first
+        // The policy guard will handle subsequent navigation based on agreement status
+        this.router.navigate(['/policy-agreement']);
       } catch (err: any) {
         this.error = err.message || 'An error occurred during registration';
       } finally {

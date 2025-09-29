@@ -1,0 +1,192 @@
+<div class="policy-wrapper">
+  <div class="policy-container">
+    <div class="policy-card">
+      <!-- Header -->
+      <div class="policy-header">
+        <div class="app-logo">
+          <div class="logo-icon">T</div>
+          <h1 class="logo-text">{{ appName }}</h1>
+        </div>
+        <h2 class="policy-title">Terms & Privacy Agreement</h2>
+        <p class="policy-subtitle">
+          Before you continue, please review and accept our terms of service and privacy policy.
+        </p>
+      </div>
+
+      <!-- Error Alert -->
+      @if (error()) {
+        <div class="error-alert">
+          <div class="error-icon">⚠️</div>
+          <span>{{ error() }}</span>
+        </div>
+      }
+
+      <!-- Agreement Content -->
+      <div class="agreement-section">
+        <div class="agreement-item">
+          <div class="checkbox-container">
+            <input 
+              type="checkbox" 
+              id="terms" 
+              [checked]="agreedToTerms()"
+              (change)="onTermsChange($event)"
+              class="custom-checkbox"
+            >
+            <label for="terms" class="checkbox-label">
+              <div class="checkbox-text">
+                I agree to the 
+                <button 
+                  type="button" 
+                  (click)="openTermsModal()" 
+                  class="policy-link"
+                >
+                  Terms of Service
+                </button>
+              </div>
+            </label>
+          </div>
+        </div>
+
+        <div class="agreement-item">
+          <div class="checkbox-container">
+            <input 
+              type="checkbox" 
+              id="privacy" 
+              [checked]="agreedToPrivacy()"
+              (change)="onPrivacyChange($event)"
+              class="custom-checkbox"
+            >
+            <label for="privacy" class="checkbox-label">
+              <div class="checkbox-text">
+                I agree to the 
+                <button 
+                  type="button" 
+                  (click)="openPrivacyModal()" 
+                  class="policy-link"
+                >
+                  Privacy Policy
+                </button>
+              </div>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <!-- Actions -->
+      <div class="policy-actions">
+        <button 
+          type="button"
+          [disabled]="!canProceed()"
+          (click)="acceptPolicies()"
+          class="accept-btn"
+          [class.loading]="isLoading()"
+        >
+          @if (isLoading()) {
+            <div class="loading-spinner"></div>
+            <span>Processing...</span>
+          } @else {
+            <span>Accept & Continue</span>
+          }
+        </button>
+        
+        <p class="policy-note">
+          By continuing, you acknowledge that you have read and understood our policies.
+        </p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Terms of Service Modal -->
+@if (showTermsModal()) {
+  <div class="modal-overlay" (click)="closeModals()">
+    <div class="modal-content" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h3>Terms of Service</h3>
+        <button type="button" (click)="closeModals()" class="close-btn">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="terms-content">
+          <h4>1. Acceptance of Terms</h4>
+          <p>By using {{ appName }}, you agree to be bound by these Terms of Service.</p>
+          
+          <h4>2. Service Description</h4>
+          <p>{{ appName }} is a Point of Sale (POS) system designed to help businesses manage sales, inventory, and customer data.</p>
+          
+          <h4>3. User Responsibilities</h4>
+          <p>You are responsible for:</p>
+          <ul>
+            <li>Maintaining the security of your account credentials</li>
+            <li>Using the service in compliance with applicable laws</li>
+            <li>Ensuring accurate data entry and management</li>
+          </ul>
+          
+          <h4>4. Data Storage</h4>
+          <p>{{ appName }} may store data locally on your device for offline functionality. This includes user preferences, product information, and transaction data.</p>
+          
+          <h4>5. Limitation of Liability</h4>
+          <p>{{ appName }} provides the service "as is" without warranties of any kind.</p>
+          
+          <h4>6. Changes to Terms</h4>
+          <p>We reserve the right to modify these terms at any time with notice to users.</p>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" (click)="closeModals()" class="modal-btn">Close</button>
+      </div>
+    </div>
+  </div>
+}
+
+<!-- Privacy Policy Modal -->
+@if (showPrivacyModal()) {
+  <div class="modal-overlay" (click)="closeModals()">
+    <div class="modal-content" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h3>Privacy Policy</h3>
+        <button type="button" (click)="closeModals()" class="close-btn">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="privacy-content">
+          <h4>1. Information We Collect</h4>
+          <p>We collect information you provide directly, such as:</p>
+          <ul>
+            <li>Account information (name, email, company details)</li>
+            <li>Business data (products, sales, inventory)</li>
+            <li>Usage data and preferences</li>
+          </ul>
+          
+          <h4>2. Local Data Storage</h4>
+          <p>{{ appName }} stores data locally on your device including:</p>
+          <ul>
+            <li>Login status and user preferences</li>
+            <li>Product catalog and inventory data</li>
+            <li>Transaction history for offline functionality</li>
+            <li>Company and store information</li>
+          </ul>
+          
+          <h4>3. How We Use Information</h4>
+          <p>We use collected information to:</p>
+          <ul>
+            <li>Provide and maintain the POS service</li>
+            <li>Enable offline functionality</li>
+            <li>Improve user experience</li>
+            <li>Ensure data synchronization across devices</li>
+          </ul>
+          
+          <h4>4. Data Security</h4>
+          <p>We implement security measures to protect your data both online and in local storage.</p>
+          
+          <h4>5. Your Rights</h4>
+          <p>You have the right to access, update, or delete your data at any time.</p>
+          
+          <h4>6. Contact Us</h4>
+          <p>For privacy concerns, contact us through the help section of the application.</p>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" (click)="closeModals()" class="modal-btn">Close</button>
+      </div>
+    </div>
+  </div>
+}

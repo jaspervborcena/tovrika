@@ -12,6 +12,7 @@ import { PosSharedService } from '../../../services/pos-shared.service';
 import { PrintService } from '../../../services/print.service';
 import { TransactionService } from '../../../services/transaction.service';
 import { AuthService } from '../../../services/auth.service';
+import { NetworkService } from '../../../core/services/network.service';
 
 import { OrderService } from '../../../services/order.service';
 import { StoreService } from '../../../services/store.service';
@@ -37,6 +38,7 @@ export class PosComponent implements OnInit, AfterViewInit {
   private printService = inject(PrintService);
   private transactionService = inject(TransactionService);
   private authService = inject(AuthService);
+  private networkService = inject(NetworkService);
   private storeService = inject(StoreService);
   private orderService = inject(OrderService);
   private userRoleService = inject(UserRoleService);
@@ -74,9 +76,18 @@ export class PosComponent implements OnInit, AfterViewInit {
 
   // Invoice preview
   readonly nextInvoiceNumber = signal<string>('Loading...');
+  readonly showOfflineInvoiceDialog = signal<boolean>(false);
 
   async loadNextInvoicePreview(): Promise<void> {
     try {
+      // Check if online/offline
+      if (this.networkService.isOffline()) {
+        console.log('📋 Offline mode: Using default invoice number');
+        this.nextInvoiceNumber.set('INV-0000-000000 (Offline)');
+        this.customerInfo.invoiceNumber = 'INV-0000-000000';
+        return;
+      }
+
       const nextInvoice = await this.posService.getNextInvoiceNumberPreview();
       this.nextInvoiceNumber.set(nextInvoice);
       
@@ -85,7 +96,7 @@ export class PosComponent implements OnInit, AfterViewInit {
       console.log('📋 Next invoice number loaded:', nextInvoice);
     } catch (error) {
       console.error('Error loading invoice preview:', error);
-      this.nextInvoiceNumber.set('Error loading');
+      this.nextInvoiceNumber.set('INV-0000-000000 (Error)');
       this.customerInfo.invoiceNumber = 'INV-0000-000000';
     }
   }
@@ -496,6 +507,8 @@ export class PosComponent implements OnInit, AfterViewInit {
   }
 
   async ngOnInit(): Promise<void> {
+    console.log('🎯 POS COMPONENT: ngOnInit called - POS is loading!');
+    console.log('🎯 POS COMPONENT: Current URL:', window.location.href);
     try {
       await this.loadData();
       // Set current date and time
@@ -734,6 +747,62 @@ export class PosComponent implements OnInit, AfterViewInit {
     this.customerInfo.invoiceNumber = 'INV-0000-000000';
   }
 
+  // Offline invoice handling methods
+  showOfflineInvoiceUpdate(): void {
+    this.showOfflineInvoiceDialog.set(true);
+  }
+
+  proceedWithDefaultInvoice(): void {
+    this.showOfflineInvoiceDialog.set(false);
+    this.processOfflineOrder();
+  }
+
+  async updateOfflineInvoice(newInvoiceNumber: string): Promise<void> {
+    if (newInvoiceNumber.trim()) {
+      this.customerInfo.invoiceNumber = newInvoiceNumber.trim();
+    }
+    this.showOfflineInvoiceDialog.set(false);
+    await this.processOfflineOrder();
+  }
+
+  async processOfflineOrder(): Promise<void> {
+    try {
+      console.log('📱 Processing offline order with invoice:', this.customerInfo.invoiceNumber);
+      
+      // Generate a temporary order ID for offline mode
+      const tempOrderId = `offline-${Date.now()}`;
+      
+      // Prepare receipt data with offline invoice number
+      const receiptData = this.prepareReceiptData(tempOrderId);
+      
+      // Update receipt data with the offline invoice number
+      const updatedReceiptData = { 
+        ...receiptData, 
+        orderId: tempOrderId,
+        invoiceNumber: this.customerInfo.invoiceNumber
+      };
+      
+      // Set receipt data and show modal
+      this.receiptDataSignal.set(updatedReceiptData);
+      this.isReceiptModalVisibleSignal.set(true);
+
+      console.log('🧾 Offline receipt modal opened with invoice:', this.customerInfo.invoiceNumber);
+      
+      // Clear cart for next order
+      this.clearCart();
+      
+    } catch (error) {
+      console.error('❌ Error processing offline order:', error);
+      
+      // Show error to user
+      await this.showConfirmationDialog({
+        title: 'Offline Order Error',
+        message: `Failed to process offline order: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        confirmText: 'OK'
+      });
+    }
+  }
+
   async addToCart(product: Product): Promise<void> {
     if (product.totalStock <= 0) {
       await this.showConfirmationDialog({
@@ -774,7 +843,20 @@ export class PosComponent implements OnInit, AfterViewInit {
     try {
       console.log('🎯 Complete Order clicked - Processing order with invoice increment...');
       
-      // Use the invoice service to process the order with proper invoice numbering
+      // Handle offline mode
+      if (this.networkService.isOffline()) {
+        // Check if invoice number is still default, show dialog to update if needed
+        if (this.customerInfo.invoiceNumber === 'INV-0000-000000') {
+          this.showOfflineInvoiceDialog.set(true);
+          return; // Wait for user to handle the dialog
+        }
+        
+        // Process offline order with hardcoded invoice number
+        await this.processOfflineOrder();
+        return;
+      }
+      
+      // Online mode - use the invoice service to process the order with proper invoice numbering
       const result = await this.posService.processOrderWithInvoice();
       
       if (!result || !result.orderId) {

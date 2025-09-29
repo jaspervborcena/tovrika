@@ -47,39 +47,9 @@ export class LoginComponent {
           throw new Error('Failed to get user data after login');
         }
         
-        // Check if user has multiple companies - if so, redirect to company selection
-        if (this.authService.hasMultipleCompanies()) {
-          this.router.navigate(['/company-selection']);
-          return;
-        }
-        
-        // Single company user - proceed with role-based navigation
-        const currentPermission = this.authService.getCurrentPermission();
-        let roleId: string | undefined;
-        
-        if (currentPermission?.companyId && user.uid && currentPermission?.storeId) {
-          const { getFirestore, collection, query, where, getDocs } = await import('firebase/firestore');
-          const firestore = getFirestore();
-          const userRolesRef = collection(firestore, 'userRoles');
-          const userRolesQuery = query(
-            userRolesRef,
-            where('companyId', '==', currentPermission.companyId),
-            where('userId', '==', user.uid),
-            where('storeId', '==', currentPermission.storeId)
-          );
-          const userRolesSnap = await getDocs(userRolesQuery);
-          if (!userRolesSnap.empty) {
-            const userRoleData = userRolesSnap.docs[0].data();
-            roleId = userRoleData['roleId'];
-          }
-        }
-        if (roleId === 'admin') {
-          this.router.navigate(['/dashboard']);
-        } else if (roleId === 'manager') {
-          this.router.navigate(['/dashboard']);
-        } else {
-          this.router.navigate(['/pos']);
-        }
+        // Always redirect to policy agreement first
+        // The policy guard will handle subsequent navigation based on agreement status
+        this.router.navigate(['/policy-agreement']);
       } catch (err: any) {
         this.error = err.message || 'An error occurred during login';
       } finally {

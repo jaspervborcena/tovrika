@@ -657,3 +657,39 @@
       (confirmed)="onConfirmationConfirmed()"
       (cancelled)="onConfirmationCancelled()">
     </app-confirmation-dialog>
+
+    <!-- Offline Invoice Update Dialog -->
+    <div *ngIf="showOfflineInvoiceDialog()" class="modal-overlay">
+      <div class="offline-invoice-dialog">
+        <div class="dialog-header">
+          <h3>🔄 Update Invoice Number</h3>
+          <p>System is offline. Current invoice number is hardcoded.</p>
+        </div>
+        
+        <div class="dialog-content">
+          <label for="newInvoiceNumber">Enter new invoice number:</label>
+          <input 
+            #newInvoiceInput
+            type="text" 
+            id="newInvoiceNumber"
+            [value]="customerInfo.invoiceNumber"
+            placeholder="INV-0000-000000"
+            class="invoice-input">
+        </div>
+        
+        <div class="dialog-actions">
+          <button 
+            type="button"
+            class="btn-secondary"
+            (click)="proceedWithDefaultInvoice()">
+            Keep Default
+          </button>
+          <button 
+            type="button"
+            class="btn-primary"
+            (click)="updateOfflineInvoice(newInvoiceInput.value)">
+            Update & Proceed
+          </button>
+        </div>
+      </div>
+    </div>
