@@ -1,4 +1,5 @@
 import { Injectable, inject, signal, computed } from '@angular/core';
+import { User } from '../../services/auth.service';
 import { IndexedDBService, OfflineUserData, OfflineProduct, OfflineOrder } from './indexeddb.service';
 import { NetworkService } from './network.service';
 
@@ -42,13 +43,13 @@ export class OfflineStorageService {
       const currentUser = await this.indexedDBService.getCurrentUser();
       this.currentUserSignal.set(currentUser);
 
-      if (currentUser?.storeId) {
+      if (currentUser?.currentStoreId) {
         // Load products for current store
-        const products = await this.indexedDBService.getProductsByStore(currentUser.storeId);
+        const products = await this.indexedDBService.getProductsByStore(currentUser.currentStoreId);
         this.productsSignal.set(products);
 
         // Load pending orders
-        const orders = await this.indexedDBService.getPendingOrders(currentUser.storeId);
+        const orders = await this.indexedDBService.getPendingOrders(currentUser.currentStoreId);
         this.pendingOrdersSignal.set(orders);
       }
 
@@ -59,27 +60,29 @@ export class OfflineStorageService {
   }
 
   // User Management
-  async saveUserSession(userData: {
-    uid: string;
-    email: string;
-    displayName: string;
-    firstName?: string;
-    lastName?: string;
-    company?: { id: string; name: string };
-    storeId?: string;
+  async saveUserSession(userData: User & {
     isAgreedToPolicy?: boolean;
+    currentStoreId?: string;
   }): Promise<void> {
     try {
+      // Get the current store ID from permissions or passed parameter
+      const currentStoreId = userData.currentStoreId || 
+                           userData.permissions?.[0]?.storeId || 
+                           undefined;
+                           
       const offlineUserData: OfflineUserData = {
         uid: userData.uid,
+        email: userData.email,
+        displayName: userData.displayName,
+        status: userData.status,
+        createdAt: userData.createdAt,
+        updatedAt: userData.updatedAt,
+        branchId: userData.branchId,
+        permissions: userData.permissions || [],
+        currentCompanyId: userData.currentCompanyId,
         isLoggedIn: true,
         isAgreedToPolicy: userData.isAgreedToPolicy || false,
-        username: userData.email,
-        firstName: userData.firstName || userData.displayName?.split(' ')[0] || '',
-        lastName: userData.lastName || userData.displayName?.split(' ').slice(1).join(' ') || '',
-        email: userData.email,
-        company: userData.company || { id: '', name: '' },
-        storeId: userData.storeId || '',
+        currentStoreId: currentStoreId,
         lastSync: new Date()
       };
 
@@ -160,8 +163,8 @@ export class OfflineStorageService {
       
       // Update signal if products are for current store
       const currentUser = this.currentUserSignal();
-      if (currentUser?.storeId) {
-        const storeProducts = products.filter(p => p.storeId === currentUser.storeId);
+      if (currentUser?.currentStoreId) {
+        const storeProducts = products.filter(p => p.storeId === currentUser.currentStoreId);
         if (storeProducts.length > 0) {
           this.productsSignal.set(storeProducts);
         }

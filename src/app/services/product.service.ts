@@ -146,25 +146,44 @@ export class ProductService {
   }
 async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promise<void> {
     try {
+      // Validate required companyId
+      if (!companyId) {
+        console.error('❌ CompanyId is required for loading products');
+        return;
+      }
+
+      console.log('📦 Loading products for:', { companyId, storeId });
+      
       const productsRef = collection(this.firestore, 'products');
       
       let q;
       if (storeId) {
+        // Load products for specific company and store
         q = query(productsRef, 
           where('companyId', '==', companyId),
           where('storeId', '==', storeId)
         );
+        console.log('🎯 Querying products for company + store:', { companyId, storeId });
       } else {
+        // Load all products for the company
         q = query(productsRef, where('companyId', '==', companyId));
+        console.log('🎯 Querying all products for company:', companyId);
       }
       
       const querySnapshot = await getDocs(q);
-
       const products = querySnapshot.docs.map(doc => this.transformFirestoreDoc(doc));
-      console.log("loadProductsByCompanyAndStore",products)
+      
+      console.log(`✅ Loaded ${products.length} products:`, {
+        companyId,
+        storeId,
+        productsFound: products.length,
+        productNames: products.map(p => p.productName).slice(0, 5) // Show first 5 product names
+      });
+      
       this.products.set(products);
     } catch (error) {
-      console.error('Error loading products:', error);
+      console.error('❌ Error loading products:', error);
+      console.error('Query parameters:', { companyId, storeId });
       throw error;
     }
   }
