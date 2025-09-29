@@ -1,12 +1,22 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
   <defs>
+    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#3B82F6"/>
+      <stop offset="100%" style="stop-color:#1E40AF"/>
+    </linearGradient>
     <style>
-      .refresh-icon { fill: #FCD34D; stroke: #F59E0B; }
-      .center-dot { fill: #F59E0B; }
+      .bg { fill: url(#bgGradient); }
+      .text { fill: #FFFFFF; font-family: 'Arial', sans-serif; font-weight: bold; font-size: 18px; }
+      .accent { fill: #10B981; }
+      .shadow { fill: rgba(0,0,0,0.2); }
     </style>
   </defs>
-  <!-- Refresh arrows -->
-  <path class="refresh-icon" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-  <!-- Center dot -->
-  <circle class="center-dot" cx="12" cy="12" r="2.5"/>
+  <!-- Background with rounded corners -->
+  <rect class="bg" x="2" y="2" width="28" height="28" rx="6" ry="6"/>
+  <!-- Shadow for text -->
+  <text class="shadow" x="16.5" y="21.5" text-anchor="middle">T</text>
+  <!-- Letter T for Tovrika -->
+  <text class="text" x="16" y="21" text-anchor="middle">T</text>
+  <!-- Small POS indicator -->
+  <circle class="accent" cx="25" cy="7" r="2"/>
 </svg>
