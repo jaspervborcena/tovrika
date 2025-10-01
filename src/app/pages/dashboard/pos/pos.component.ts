@@ -13,6 +13,7 @@ import { PrintService } from '../../../services/print.service';
 import { TransactionService } from '../../../services/transaction.service';
 import { AuthService } from '../../../services/auth.service';
 import { NetworkService } from '../../../core/services/network.service';
+import { IndexedDBService } from '../../../core/services/indexeddb.service';
 
 import { OrderService } from '../../../services/order.service';
 import { StoreService } from '../../../services/store.service';
@@ -39,6 +40,7 @@ export class PosComponent implements OnInit, AfterViewInit {
   private transactionService = inject(TransactionService);
   private authService = inject(AuthService);
   private networkService = inject(NetworkService);
+  private indexedDBService = inject(IndexedDBService);
   private storeService = inject(StoreService);
   private orderService = inject(OrderService);
   private userRoleService = inject(UserRoleService);
@@ -104,8 +106,11 @@ export class PosComponent implements OnInit, AfterViewInit {
   readonly filteredProducts = computed(() => {
     let filtered = this.products();
 
+    // Use selectedStoreId for filtering (this will already be set from IndexedDB via initializeStore)
+    // The IndexedDB-first logic is handled in loadData() and initializeStore() methods
+    let storeId = this.selectedStoreId();
+
     // Filter by store only (no company filtering needed since products are already loaded by store)
-    const storeId = this.selectedStoreId();
     if (storeId) {
       filtered = filtered.filter(p => p.storeId === storeId);
     }
@@ -506,6 +511,45 @@ export class PosComponent implements OnInit, AfterViewInit {
     };
   }
 
+  // Helper method to get the active permission from IndexedDB user data
+  private getActivePermission(offlineUserData: any, currentStoreId?: string): any {
+    if (!offlineUserData?.permissions || offlineUserData.permissions.length === 0) {
+      return null;
+    }
+
+    // If user has only one permission, use it
+    if (offlineUserData.permissions.length === 1) {
+      return offlineUserData.permissions[0];
+    }
+
+    // If multiple permissions and we have a currentStoreId, find matching permission
+    if (currentStoreId && offlineUserData.permissions.length > 1) {
+      const matchingPermission = offlineUserData.permissions.find((p: any) => 
+        p.storeId === currentStoreId
+      );
+      if (matchingPermission) {
+        console.log('🔑 Found matching permission for storeId:', currentStoreId);
+        return matchingPermission;
+      }
+    }
+
+    // If multiple permissions but no specific store match, try to find by companyId
+    if (offlineUserData.permissions.length > 1) {
+      // For now, prioritize permissions with 'creator' or 'admin' role
+      const priorityPermission = offlineUserData.permissions.find((p: any) => 
+        p.roleId === 'creator' || p.roleId === 'admin'
+      );
+      if (priorityPermission) {
+        console.log('🔑 Using priority permission (creator/admin):', priorityPermission.roleId);
+        return priorityPermission;
+      }
+    }
+
+    // Fallback: use the first permission (could be enhanced with user preference)
+    console.log('🔑 Using first permission as fallback from', offlineUserData.permissions.length, 'permissions');
+    return offlineUserData.permissions[0];
+  }
+
   async ngOnInit(): Promise<void> {
     console.log('🎯 POS COMPONENT: ngOnInit called - POS is loading!');
     console.log('🎯 POS COMPONENT: Current URL:', window.location.href);
@@ -549,19 +593,41 @@ export class PosComponent implements OnInit, AfterViewInit {
   }
 
   private async loadData(): Promise<void> {
-    // Load user roles to get store access permissions
     const user = this.authService.getCurrentUser();
     if (user?.uid) {
       try {
-        // Load user roles first
-        console.log('📋 Loading user roles...');
-        await this.userRoleService.loadUserRoles();
+        // PRIORITY 1: Check IndexedDB for user data first
+        let userRole: any = null;
+        let useIndexedDBData = false;
         
-        // Get the current user's role by userId
-        const userRole = this.userRoleService.getUserRoleByUserId(user.uid);
+        try {
+          const offlineUserData = await this.indexedDBService.getUserData(user.uid);
+          if (offlineUserData?.permissions && offlineUserData.permissions.length > 0) {
+            // Use IndexedDB data - handle multiple permissions
+            const permission = this.getActivePermission(offlineUserData, offlineUserData.currentStoreId);
+            if (permission) {
+              userRole = {
+                companyId: permission.companyId,
+                storeId: offlineUserData.currentStoreId || permission.storeId,
+                roleId: permission.roleId
+              };
+              useIndexedDBData = true;
+              console.log('💾 Selected permission from', offlineUserData.permissions.length, 'available permissions');
+            }
+            console.log('� PRIORITY: Using user role from IndexedDB:', userRole);
+          }
+        } catch (error) {
+          console.log('⚠️ Could not get user role from IndexedDB:', error);
+        }
         
-        // Debug logging as requested
-        console.log('userRoles in pos:', userRole);
+        // FALLBACK: Load from database if IndexedDB data not available
+        if (!useIndexedDBData) {
+          console.log('🗄️ FALLBACK: Loading user roles from database...');
+          await this.userRoleService.loadUserRoles();
+          userRole = this.userRoleService.getUserRoleByUserId(user.uid);
+          console.log('🗄️ User role from database:', userRole);
+        }
+        
         console.log('user.uid:', user.uid);
         
         if (userRole && userRole.storeId) {
@@ -607,6 +673,23 @@ export class PosComponent implements OnInit, AfterViewInit {
   }
 
   private async initializeStore(): Promise<void> {
+    // PRIORITY 1: Check IndexedDB first for stored user data
+    try {
+      const currentUser = this.authService.getCurrentUser();
+      if (currentUser?.uid) {
+        const offlineUserData = await this.indexedDBService.getUserData(currentUser.uid);
+        if (offlineUserData?.currentStoreId) {
+          console.log('💾 PRIORITY: Using storeId from IndexedDB:', offlineUserData.currentStoreId);
+          await this.selectStore(offlineUserData.currentStoreId);
+          return; // Success - exit early
+        }
+        console.log('💾 No currentStoreId found in IndexedDB, falling back to database process');
+      }
+    } catch (error) {
+      console.log('⚠️ Could not retrieve userData from IndexedDB:', error);
+    }
+
+    // FALLBACK: Use current database process
     // Wait for stores to be available with retries
     let retryCount = 0;
     const maxRetries = 10;
@@ -641,15 +724,45 @@ export class PosComponent implements OnInit, AfterViewInit {
         
         // Auto-select store if none is currently selected or selection was invalid
         if (!currentlySelected || !selectedStore) {
-          const storeToSelect = stores[0]; // Always select the first store
+          let storeIdToSelect: string | null = null;
           
-          if (stores.length === 1) {
-            console.log('🏪 Single store detected, auto-selecting:', storeToSelect.storeName, '(ID:', storeToSelect.id, ')');
-          } else {
-            console.log('🏪 Multiple stores available, auto-selecting first:', storeToSelect.storeName, '(ID:', storeToSelect.id, ')');
+          // First, try to get storeId from IndexedDB user permissions
+          try {
+            const currentUser = this.authService.getCurrentUser();
+            if (currentUser?.uid) {
+              const offlineUserData = await this.indexedDBService.getUserData(currentUser.uid);
+              if (offlineUserData?.permissions && offlineUserData.permissions.length > 0) {
+                const permission = this.getActivePermission(offlineUserData, offlineUserData.currentStoreId);
+                if (permission) {
+                  const indexedDbStoreId = offlineUserData.currentStoreId || permission.storeId;
+                  const indexedDbStore = stores.find(store => store.id === indexedDbStoreId);
+                  if (indexedDbStore && indexedDbStoreId) {
+                    storeIdToSelect = indexedDbStoreId;
+                    console.log('💾 PRIORITY: Using storeId from IndexedDB permissions:', storeIdToSelect);
+                    console.log('💾 Selected from', offlineUserData.permissions.length, 'available permissions');
+                  }
+                }
+              }
+            }
+          } catch (error) {
+            console.log('⚠️ Could not get storeId from IndexedDB permissions:', error);
           }
           
-          if (storeToSelect.id) {
+          // Fallback to first available store if no IndexedDB store found
+          if (!storeIdToSelect) {
+            storeIdToSelect = stores[0]?.id || null;
+            console.log('🗄️ FALLBACK: Using first available store:', storeIdToSelect);
+          }
+          
+          const storeToSelect = stores.find(store => store.id === storeIdToSelect);
+          
+          if (storeToSelect?.id) {
+            if (stores.length === 1) {
+              console.log('🏪 Single store detected, auto-selecting:', storeToSelect.storeName, '(ID:', storeToSelect.id, ')');
+            } else {
+              console.log('🏪 Multiple stores available, auto-selecting:', storeToSelect.storeName, '(ID:', storeToSelect.id, ')');
+            }
+            
             await this.selectStore(storeToSelect.id);
             console.log('✅ Auto-selection completed for store:', storeToSelect.storeName);
             
@@ -687,10 +800,67 @@ export class PosComponent implements OnInit, AfterViewInit {
 
   // Event handlers
   async selectStore(storeId: string): Promise<void> {
+    console.log('🎯 selectStore called with storeId:', storeId);
+    console.log('🏪 Available stores:', this.availableStores().map(s => ({ id: s.id, name: s.storeName, companyId: s.companyId })));
+    
+    // Set the selected store first
     this.posService.setSelectedStore(storeId);
-    const storeInfo = this.availableStores().find(s => s.id === storeId);
-    if (storeInfo?.companyId) {
-      await this.productService.loadProductsByCompanyAndStore(storeInfo.companyId, storeId);
+    
+    // PRIORITY: Get companyId from IndexedDB first, then fallback to database
+    let companyId: string | undefined;
+    
+    try {
+      const currentUser = this.authService.getCurrentUser();
+      if (currentUser?.uid) {
+        const offlineUserData = await this.indexedDBService.getUserData(currentUser.uid);
+        console.log('💾 IndexedDB user data:', offlineUserData);
+        
+        if (offlineUserData?.permissions && offlineUserData.permissions.length > 0) {
+          const permission = this.getActivePermission(offlineUserData, storeId);
+          console.log('🔑 Active permission found:', permission);
+          
+          if (permission) {
+            companyId = permission.companyId;
+            console.log('💾 PRIORITY: Using companyId from IndexedDB:', companyId);
+            console.log('💾 Selected permission from', offlineUserData.permissions.length, 'available permissions');
+          }
+        }
+      }
+    } catch (error) {
+      console.log('⚠️ Could not get companyId from IndexedDB:', error);
+    }
+    
+    // FALLBACK: Get companyId from database store info (like mobile POS)
+    if (!companyId) {
+      const storeInfo = this.availableStores().find(s => s.id === storeId);
+      companyId = storeInfo?.companyId;
+      console.log('🗄️ FALLBACK: Using companyId from database store info:', companyId);
+      console.log('🗄️ Store info found:', storeInfo);
+    }
+    
+    if (companyId) {
+      console.log('📦 Loading products for companyId:', companyId, 'storeId:', storeId);
+      await this.productService.loadProductsByCompanyAndStore(companyId, storeId);
+      console.log('✅ Product loading completed');
+      console.log('🛍️ Total products loaded:', this.productService.getProducts().length);
+      
+      // Save selected store to IndexedDB for future sessions
+      try {
+        const currentUser = this.authService.getCurrentUser();
+        if (currentUser?.uid) {
+          const existingUserData = await this.indexedDBService.getUserData(currentUser.uid);
+          if (existingUserData) {
+            const updatedUserData = { ...existingUserData, currentStoreId: storeId };
+            await this.indexedDBService.saveUserData(updatedUserData);
+            console.log('💾 Store selection saved to IndexedDB:', storeId);
+          }
+        }
+      } catch (error) {
+        console.log('⚠️ Could not save store selection to IndexedDB:', error);
+      }
+    } else {
+      console.error('❌ No companyId available from IndexedDB or database - cannot load products');
+      console.error('❌ This will prevent products from loading for store:', storeId);
     }
   }
 
