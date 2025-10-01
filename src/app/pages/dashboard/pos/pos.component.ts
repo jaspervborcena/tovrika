@@ -1,4 +1,4 @@
-import { Component, OnInit, AfterViewInit, OnDestroy, computed, signal, inject } from '@angular/core';
+import { Component, OnInit, AfterViewInit, OnDestroy, HostListener, computed, signal, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterModule, Router, NavigationEnd } from '@angular/router';
@@ -103,6 +103,16 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   readonly nextInvoiceNumber = signal<string>('Loading...');
   readonly showOfflineInvoiceDialog = signal<boolean>(false);
 
+  // New Order Workflow State
+  readonly isNewOrderActive = signal<boolean>(false);
+  readonly offlineInvoicePreference = signal<'manual' | 'auto'>('auto');
+  readonly offlineManualInvoiceNumber = signal<string>('INV-0000-000000');
+  
+  // Payment Dialog State
+  readonly paymentModalVisible = signal<boolean>(false);
+  paymentAmountTendered: number = 0;
+  paymentDescription: string = '';
+
   async loadNextInvoicePreview(): Promise<void> {
     try {
       // Check if online/offline
@@ -201,7 +211,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   readonly isSoldToCollapsed = computed(() => this.isSoldToCollapsedSignal());
   
   // Navigation collapse state for desktop POS
-  private isNavigationCollapsedSignal = signal<boolean>(false);
+  private isNavigationCollapsedSignal = signal<boolean>(true);
   readonly isNavigationCollapsed = computed(() => this.isNavigationCollapsedSignal());
   
   // Access tabs for POS management
@@ -578,18 +588,36 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     console.log('🎯 POS COMPONENT: Current URL:', window.location.href);
     console.log('🎯 POS COMPONENT: Timestamp:', new Date().toISOString());
     try {
-      // await this.loadData();
+      console.log('📊 STEP 1: Loading data (stores, products, categories)...');
+      // Load data first to ensure stores and products are available
+      await this.loadData();
+      console.log('✅ STEP 1 COMPLETED: Data loading finished');
+      
+      console.log('📊 STEP 2: Setting current date and time...');
       // Set current date and time
       this.updateCurrentDateTime();
       
+      console.log('📊 STEP 3: Loading next invoice number preview...');
       // Load next invoice number preview
       await this.loadNextInvoicePreview();
+      console.log('✅ STEP 3 COMPLETED: Invoice number loaded');
+      
+      console.log('📊 STEP 4: Initializing store selection...');
       await this.initializeStore(); 
+      console.log('✅ STEP 4 COMPLETED: Store initialization finished');
+      
       // Debug: log current user and stores to ensure user.storeIds and stores list are correct
-      console.log('POS init - currentUser:', this.authService.getCurrentUser());
-      console.log('POS init - all stores:', this.storeService.getStores());
+      console.log('🔍 FINAL CHECK - currentUser:', this.authService.getCurrentUser());
+      console.log('🔍 FINAL CHECK - all stores:', this.storeService.getStores());
+      console.log('🔍 FINAL CHECK - available stores:', this.availableStores());
+      console.log('🔍 FINAL CHECK - selected store:', this.selectedStoreId());
+      console.log('🔍 FINAL CHECK - products count:', this.products().length);
+      console.log('🔍 FINAL CHECK - categories count:', this.categories().length);
+      
+      console.log('🎉 POS INITIALIZATION COMPLETED SUCCESSFULLY!');
     } catch (error) {
-      console.error('Error initializing POS:', error);
+      console.error('❌ Error initializing POS:', error);
+      console.error('❌ Error details:', error);
     }
   }
 
@@ -604,10 +632,145 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     }
   }
 
+  // F4 Hotkey for Clear Data
+  @HostListener('document:keydown.f4', ['$event'])
+  async onF4KeyPress(event: KeyboardEvent): Promise<void> {
+    event.preventDefault(); // Prevent default F4 behavior
+    
+    if (this.cartItems().length > 0) {
+      await this.clearCart(); // clearCart() already has confirmation dialog
+    }
+  }
+
+  // F5 Hotkey for New Order
+  @HostListener('document:keydown.f5', ['$event'])
+  async onF5KeyPress(event: KeyboardEvent): Promise<void> {
+    event.preventDefault(); // Prevent page refresh
+    
+    const confirmed = await this.showConfirmationDialog({
+      title: 'Create New Order',
+      message: 'Would you like to create a new order?',
+      confirmText: 'Yes',
+      cancelText: 'No',
+      type: 'info'
+    });
+    
+    if (confirmed) {
+      await this.startNewOrderDirect();
+    }
+  }
+
+  // F6 Hotkey for Complete Order
+  @HostListener('document:keydown.f6', ['$event'])
+  async onF6KeyPress(event: KeyboardEvent): Promise<void> {
+    event.preventDefault(); // Prevent default F6 behavior
+    
+    if (this.cartItems().length > 0 && !this.isProcessing()) {
+      const confirmed = await this.showConfirmationDialog({
+        title: 'Complete Order',
+        message: 'Are you sure you want to complete this order?',
+        confirmText: 'Yes',
+        cancelText: 'No',
+        type: 'info'
+      });
+      
+      if (confirmed) {
+        await this.processOrder();
+      }
+    }
+  }
+
+
+  // Check if products can be clicked (New Order must be active)
+  canInteractWithProducts(): boolean {
+    return this.isNewOrderActive();
+  }
+
+  // Direct new order without confirmation dialog (used internally)
+  async startNewOrderDirect(): Promise<void> {
+    console.log('🆕 Starting new order directly');
+    
+    // Set new order as active
+    this.isNewOrderActive.set(true);
+    
+    // Clear cart and all order-related data
+    this.posService.clearCart();
+    
+    // Reset customer information with next invoice number
+    await this.loadNextInvoicePreview();
+    const nextInvoice = this.nextInvoiceNumber();
+    
+    this.customerInfo = {
+      soldTo: '',
+      tin: '',
+      businessAddress: '',
+      invoiceNumber: nextInvoice === 'Loading...' ? 'INV-0000-000000' : nextInvoice,
+      datetime: new Date().toISOString().slice(0, 16)
+    };
+    
+    console.log('🆕 New order started directly - next invoice:', this.customerInfo.invoiceNumber);
+  }
+
+  // Payment Dialog Methods
+  showPaymentModal(): boolean {
+    return this.paymentModalVisible();
+  }
+
+  showPaymentDialog(): void {
+    console.log('💳 Opening payment dialog');
+    this.paymentAmountTendered = 0;
+    this.paymentDescription = '';
+    this.paymentModalVisible.set(true);
+  }
+
+  closePaymentDialog(): void {
+    console.log('💳 Closing payment dialog');
+    this.paymentModalVisible.set(false);
+    this.paymentAmountTendered = 0;
+    this.paymentDescription = '';
+  }
+
+  calculateChange(): number {
+    const totalAmount = this.cartSummary().netAmount;
+    const tendered = this.paymentAmountTendered || 0;
+    const change = tendered - totalAmount;
+    return Math.max(0, change); // Don't allow negative change
+  }
+
+  processPayment(): void {
+    console.log('💳 Processing payment');
+    const totalAmount = this.cartSummary().netAmount;
+    const tendered = this.paymentAmountTendered || 0;
+    
+    if (tendered < totalAmount) {
+      console.warn('⚠️ Insufficient amount tendered');
+      // You can add a notification here later
+      return;
+    }
+    
+    const change = this.calculateChange();
+    console.log('💳 Payment processed:', {
+      totalAmount,
+      tendered,
+      change,
+      description: this.paymentDescription
+    });
+    
+    // Close the dialog
+    this.closePaymentDialog();
+    
+    // Here you would save the payment details
+    // For now, just log the transaction
+    console.log('💾 Payment saved (not connected to database yet)');
+  }
+
   // Method to reinitialize the component when navigating back to POS
   private async reinitializeComponent(): Promise<void> {
     console.log('🔄 POS COMPONENT: Reinitializing component due to navigation');
     try {
+      // Load data first to ensure stores and products are available
+      await this.loadData();
+      
       // Set current date and time
       this.updateCurrentDateTime();
       
@@ -1098,6 +1261,27 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   async addToCart(product: Product): Promise<void> {
+    // Check if new order is active first
+    if (!this.canInteractWithProducts()) {
+      const confirmed = await this.showConfirmationDialog({
+        title: 'Create New Order',
+        message: 'Would you like to create a new order?',
+        confirmText: 'Yes',
+        cancelText: 'No',
+        type: 'info'
+      });
+      
+      if (confirmed) {
+        // Start new order automatically
+        await this.startNewOrderDirect();
+        // After starting new order, add the product
+        if (product.totalStock > 0) {
+          this.posService.addToCart(product);
+        }
+      }
+      return;
+    }
+
     if (product.totalStock <= 0) {
       await this.showConfirmationDialog({
         title: 'Out of Stock',
@@ -1139,14 +1323,8 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       
       // Handle offline mode
       if (this.networkService.isOffline()) {
-        // Check if invoice number is still default, show dialog to update if needed
-        if (this.customerInfo.invoiceNumber === 'INV-0000-000000') {
-          this.showOfflineInvoiceDialog.set(true);
-          return; // Wait for user to handle the dialog
-        }
-        
-        // Process offline order with hardcoded invoice number
-        await this.processOfflineOrder();
+        // Always show offline dialog to get user preference
+        await this.showOfflineInvoicePreferenceDialog();
         return;
       }
       
@@ -1287,6 +1465,9 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     });
 
     if (confirmed) {
+      // Set new order as active
+      this.isNewOrderActive.set(true);
+      
       // Clear cart and all order-related data
       this.posService.clearCart();
       
@@ -1302,7 +1483,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
         datetime: new Date().toISOString().slice(0, 16)
       };
       
-      console.log('New order started - all data cleared, next invoice:', this.customerInfo.invoiceNumber);
+      console.log('🆕 New order started - all data cleared, next invoice:', this.customerInfo.invoiceNumber);
     }
   }
 
@@ -1481,6 +1662,84 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       (this as any)._confirmationResolve(false);
       (this as any)._confirmationResolve = null;
     }
+  }
+
+  // Offline Invoice Preference Dialog Methods
+  async showOfflineInvoicePreferenceDialog(): Promise<void> {
+    // Check if user has a saved preference
+    const savedPreference = await this.indexedDBService.getSetting('offlineInvoicePreference');
+    
+    if (savedPreference && savedPreference.preference) {
+      // User has saved preference, use it directly
+      console.log('📱 Using saved offline invoice preference:', savedPreference.preference);
+      await this.processOfflineOrderWithPreference(savedPreference);
+      return;
+    }
+
+    // No saved preference, show dialog
+    this.showOfflineInvoiceDialog.set(true);
+  }
+
+  async onOfflineInvoiceConfirmed(preference: 'manual' | 'auto', manualInvoiceNumber?: string): Promise<void> {
+    console.log('📱 Offline invoice preference selected:', preference, manualInvoiceNumber);
+    
+    const preferenceData = {
+      preference,
+      manualInvoiceNumber: preference === 'manual' ? manualInvoiceNumber : undefined
+    };
+
+    // Save preference to IndexedDB
+    await this.indexedDBService.saveSetting('offlineInvoicePreference', preferenceData);
+    
+    // Close dialog
+    this.showOfflineInvoiceDialog.set(false);
+    
+    // Process the order with the preference
+    await this.processOfflineOrderWithPreference(preferenceData);
+  }
+
+  async processOfflineOrderWithPreference(preferenceData: { preference: 'manual' | 'auto'; manualInvoiceNumber?: string }): Promise<void> {
+    if (preferenceData.preference === 'manual' && preferenceData.manualInvoiceNumber) {
+      // Use manual invoice number
+      this.customerInfo.invoiceNumber = preferenceData.manualInvoiceNumber;
+    } else {
+      // Auto-increment: get current invoice and add 1
+      const currentInvoice = this.customerInfo.invoiceNumber;
+      if (currentInvoice === 'INV-0000-000000') {
+        this.customerInfo.invoiceNumber = 'INV-0001-000001';
+      } else {
+        // Extract number and increment
+        const match = currentInvoice.match(/INV-(\d+)-(\d+)/);
+        if (match) {
+          const year = match[1];
+          const number = parseInt(match[2]) + 1;
+          this.customerInfo.invoiceNumber = `INV-${year}-${number.toString().padStart(6, '0')}`;
+        }
+      }
+    }
+
+    // Process the offline order
+    await this.processOfflineOrder();
+  }
+
+  // Dialog interaction methods
+  onInvoicePreferenceChange(preference: 'manual' | 'auto'): void {
+    console.log('📱 Invoice preference changed to:', preference);
+    this.offlineInvoicePreference.set(preference);
+  }
+
+  onManualInvoiceNumberChange(invoiceNumber: string): void {
+    this.offlineManualInvoiceNumber.set(invoiceNumber);
+  }
+
+  onOfflineInvoiceCancelled(): void {
+    this.showOfflineInvoiceDialog.set(false);
+  }
+
+  onOfflineInvoiceOk(): void {
+    const preference = this.offlineInvoicePreference();
+    const manualNumber = preference === 'manual' ? this.offlineManualInvoiceNumber() : undefined;
+    this.onOfflineInvoiceConfirmed(preference, manualNumber);
   }
 
   // Helper method to get unit type display
