@@ -8,6 +8,7 @@ import { AuthService } from './auth.service';
 import { CompanyService } from './company.service';
 import { ProductService } from './product.service';
 import { InvoiceService } from './invoice.service';
+import { IndexedDBService } from '../core/services/indexeddb.service';
 import { Order, OrderDetail, OrderItem, CartItem, ReceiptData, OrderDiscount, CartSummary } from '../interfaces/pos.interface';
 import { Product } from '../interfaces/product.interface';
 
@@ -79,7 +80,8 @@ export class PosService {
     private firestore: Firestore,
     private authService: AuthService,
     private companyService: CompanyService,
-    private productService: ProductService
+    private productService: ProductService,
+    private indexedDBService: IndexedDBService
   ) {
     // Load persisted store selection on service initialization
     this.loadPersistedStoreSelection();
@@ -155,25 +157,41 @@ export class PosService {
   }
 
   // Store Management
-  setSelectedStore(storeId: string): void {
+  async setSelectedStore(storeId: string): Promise<void> {
     this.selectedStoreIdSignal.set(storeId);
     
-    // Save to localStorage for persistence
-    if (storeId) {
-      localStorage.setItem('pos_selected_store_id', storeId);
-    } else {
-      localStorage.removeItem('pos_selected_store_id');
+    // Save to IndexedDB for persistence
+    try {
+      const currentUser = this.authService.getCurrentUser();
+      if (currentUser?.uid) {
+        // Get existing user data and update currentStoreId
+        const existingUserData = await this.indexedDBService.getUserData(currentUser.uid);
+        if (existingUserData) {
+          existingUserData.currentStoreId = storeId;
+          await this.indexedDBService.saveUserData(existingUserData);
+          console.log('💾 Store selection saved to IndexedDB:', storeId);
+        }
+      }
+    } catch (error) {
+      console.error('⚠️ Failed to save store selection to IndexedDB:', error);
     }
     
     this.clearCart(); // Clear cart when switching stores
   }
 
-  // Load selected store from localStorage on service initialization
-  private loadPersistedStoreSelection(): void {
-    const savedStoreId = localStorage.getItem('pos_selected_store_id');
-    if (savedStoreId) {
-      this.selectedStoreIdSignal.set(savedStoreId);
-      console.log('🏪 Restored store selection from localStorage:', savedStoreId);
+  // Load selected store from IndexedDB on service initialization
+  private async loadPersistedStoreSelection(): Promise<void> {
+    try {
+      const currentUser = this.authService.getCurrentUser();
+      if (currentUser?.uid) {
+        const offlineUserData = await this.indexedDBService.getUserData(currentUser.uid);
+        if (offlineUserData?.currentStoreId) {
+          this.selectedStoreIdSignal.set(offlineUserData.currentStoreId);
+          console.log('💾 Restored store selection from IndexedDB:', offlineUserData.currentStoreId);
+        }
+      }
+    } catch (error) {
+      console.error('⚠️ Failed to load store selection from IndexedDB:', error);
     }
   }
 

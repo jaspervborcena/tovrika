@@ -1,7 +1,8 @@
-import { Component, OnInit, AfterViewInit, computed, signal, inject } from '@angular/core';
+import { Component, OnInit, AfterViewInit, OnDestroy, computed, signal, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { RouterModule } from '@angular/router';
+import { RouterModule, Router, NavigationEnd } from '@angular/router';
+import { Subscription } from 'rxjs';
 import { HeaderComponent } from '../../../shared/components/header/header.component';
 import { ReceiptComponent } from './receipt/receipt.component';
 import { DiscountModalComponent } from '../../../shared/components/discount-modal/discount-modal.component';
@@ -30,7 +31,7 @@ import { Customer, CustomerFormData } from '../../../interfaces/customer.interfa
   templateUrl: './pos.component.html',
   styleUrls: ['./pos.component.css']
 })
-export class PosComponent implements OnInit, AfterViewInit {
+export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
 
   // Services
   private productService = inject(ProductService);
@@ -45,6 +46,26 @@ export class PosComponent implements OnInit, AfterViewInit {
   private orderService = inject(OrderService);
   private userRoleService = inject(UserRoleService);
   private customerService = inject(CustomerService);
+  private router = inject(Router);
+
+  private routerSubscription: any;
+
+  constructor() {
+    console.log('🏗️ POS COMPONENT: Constructor called - Component is being created!');
+    console.log('🏗️ POS COMPONENT: Constructor timestamp:', new Date().toISOString());
+    
+    // Listen for navigation events
+    this.routerSubscription = this.router.events.subscribe(event => {
+      if (event instanceof NavigationEnd) {
+        console.log('🔄 Navigation event detected - URL:', event.url);
+        if (event.url === '/pos') {
+          console.log('🎯 Navigation to POS detected - Reinitializing component');
+          // Force reinitialize when navigating to POS
+          setTimeout(() => this.reinitializeComponent(), 100);
+        }
+      }
+    });
+  }
 
   // Use shared UI state for synchronization with mobile
   readonly searchQuery = computed(() => this.posSharedService.searchQuery());
@@ -553,14 +574,15 @@ export class PosComponent implements OnInit, AfterViewInit {
   async ngOnInit(): Promise<void> {
     console.log('🎯 POS COMPONENT: ngOnInit called - POS is loading!');
     console.log('🎯 POS COMPONENT: Current URL:', window.location.href);
+    console.log('🎯 POS COMPONENT: Timestamp:', new Date().toISOString());
     try {
-      await this.loadData();
+      // await this.loadData();
       // Set current date and time
       this.updateCurrentDateTime();
       
       // Load next invoice number preview
       await this.loadNextInvoicePreview();
-      
+      await this.initializeStore(); 
       // Debug: log current user and stores to ensure user.storeIds and stores list are correct
       console.log('POS init - currentUser:', this.authService.getCurrentUser());
       console.log('POS init - all stores:', this.storeService.getStores());
@@ -570,25 +592,30 @@ export class PosComponent implements OnInit, AfterViewInit {
   }
 
   async ngAfterViewInit(): Promise<void> {
-    // Auto-select store after DOM is fully initialized and data is loaded
+  
+  }
+
+  ngOnDestroy(): void {
+    console.log('🏗️ POS COMPONENT: ngOnDestroy called - Component is being destroyed');
+    if (this.routerSubscription) {
+      this.routerSubscription.unsubscribe();
+    }
+  }
+
+  // Method to reinitialize the component when navigating back to POS
+  private async reinitializeComponent(): Promise<void> {
+    console.log('🔄 POS COMPONENT: Reinitializing component due to navigation');
     try {
-      await this.initializeStore();
-      console.log('POS AfterViewInit - availableStores:', this.availableStores());
-      console.log('POS AfterViewInit - selectedStoreId after auto-selection:', this.selectedStoreId());
+      // Set current date and time
+      this.updateCurrentDateTime();
       
-      // Multiple fallback attempts to ensure store selection works
-      const fallbackIntervals = [500, 1000, 2000]; // Try after 0.5s, 1s, and 2s
+      // Load next invoice number preview
+      await this.loadNextInvoicePreview();
+      await this.initializeStore(); 
       
-      fallbackIntervals.forEach((delay, index) => {
-        setTimeout(async () => {
-          if (!this.selectedStoreId() && this.availableStores().length > 0) {
-            console.log(`🔄 Fallback auto-selection triggered (attempt ${index + 1})`);
-            await this.initializeStore();
-          }
-        }, delay);
-      });
+      console.log('🔄 POS COMPONENT: Reinitialization completed');
     } catch (error) {
-      console.error('Error in auto-store selection:', error);
+      console.error('🔄 Error reinitializing POS component:', error);
     }
   }
 
@@ -673,17 +700,43 @@ export class PosComponent implements OnInit, AfterViewInit {
   }
 
   private async initializeStore(): Promise<void> {
-    // PRIORITY 1: Check IndexedDB first for stored user data
+    // PRIORITY: Use IndexedDB as primary source for all user data (uid, companyId, storeId, roleId)
     try {
       const currentUser = this.authService.getCurrentUser();
-      if (currentUser?.uid) {
-        const offlineUserData = await this.indexedDBService.getUserData(currentUser.uid);
-        if (offlineUserData?.currentStoreId) {
-          console.log('💾 PRIORITY: Using storeId from IndexedDB:', offlineUserData.currentStoreId);
+      const offlineUserData = await this.indexedDBService.getUserData(currentUser?.uid || '');
+      
+      if (offlineUserData?.currentStoreId) {
+        console.log('💾 PRIORITY: Using IndexedDB data - uid:', offlineUserData.uid, 'storeId:', offlineUserData.currentStoreId);
+        
+        // Verify the store exists in availableStores before selecting
+        const availableStores = this.availableStores();
+        const storeExists = availableStores.find(store => store.id === offlineUserData.currentStoreId);
+        
+        if (storeExists) {
+          console.log('✅ IndexedDB store verified, selecting store');
           await this.selectStore(offlineUserData.currentStoreId);
+          console.log('✅ Store selection from IndexedDB completed');
           return; // Success - exit early
+        } else {
+          console.warn('⚠️ IndexedDB store not found in available stores');
+          console.log('🏪 Available stores:', availableStores.map(s => ({ id: s.id, name: s.storeName })));
         }
-        console.log('💾 No currentStoreId found in IndexedDB, falling back to database process');
+      }
+      
+      // If no currentStoreId, try to get from permissions in IndexedDB
+      if (offlineUserData?.permissions && offlineUserData.permissions.length > 0) {
+        const permission = this.getActivePermission(offlineUserData);
+        if (permission?.storeId) {
+          console.log('💾 Using storeId from IndexedDB permissions:', permission.storeId);
+          const availableStores = this.availableStores();
+          const storeExists = availableStores.find(store => store.id === permission.storeId);
+          
+          if (storeExists) {
+            await this.selectStore(permission.storeId);
+            console.log('✅ Store selection from IndexedDB permissions completed');
+            return;
+          }
+        }
       }
     } catch (error) {
       console.log('⚠️ Could not retrieve userData from IndexedDB:', error);
@@ -719,7 +772,7 @@ export class PosComponent implements OnInit, AfterViewInit {
         } else if (currentlySelected && !selectedStore) {
           console.warn('⚠️ Persisted store selection is invalid, clearing and selecting new store');
           // Clear invalid selection
-          this.posService.setSelectedStore('');
+          await this.posService.setSelectedStore('');
         }
         
         // Auto-select store if none is currently selected or selection was invalid
@@ -804,7 +857,7 @@ export class PosComponent implements OnInit, AfterViewInit {
     console.log('🏪 Available stores:', this.availableStores().map(s => ({ id: s.id, name: s.storeName, companyId: s.companyId })));
     
     // Set the selected store first
-    this.posService.setSelectedStore(storeId);
+    await this.posService.setSelectedStore(storeId);
     
     // PRIORITY: Get companyId from IndexedDB first, then fallback to database
     let companyId: string | undefined;
