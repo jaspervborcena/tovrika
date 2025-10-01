@@ -1,18 +1,18 @@
 import { Injectable } from '@angular/core';
+import { User } from '../../services/auth.service';
 
-export interface OfflineUserData {
-  uid: string;
+export interface UserPermission {
+  companyId: string;
+  roleId: string;
+  storeId?: string; // Optional to match auth.service.ts format
+  status?: 'active' | 'inactive'; // Optional field
+}
+
+export interface OfflineUserData extends User {
   isLoggedIn: boolean;
   isAgreedToPolicy: boolean;
-  username: string;
-  firstName: string;
-  lastName: string;
-  email: string;
-  company: {
-    id: string;
-    name: string;
-  };
-  storeId: string;
+  currentStoreId?: string; // Current store for offline operations
+  permissions: UserPermission[]; // Array of user permissions for different companies/stores
   lastSync: Date;
 }
 
