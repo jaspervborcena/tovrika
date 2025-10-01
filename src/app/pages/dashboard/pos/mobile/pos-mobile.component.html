@@ -32,18 +32,21 @@
     <!-- ROW 2: INVOICE SETTINGS -->
     <div class="pos-row invoice-row">
       <div class="row-header">📄 Invoice</div>
-      <div class="invoice-fields">
-        <div class="mobile-field-group">
-          <label>Invoice Number:</label>
-          <div class="input-action-pair">
-            <input type="text" [(ngModel)]="customerInfo.invoiceNumber" placeholder="Auto-generated">
-            <button (click)="generateNewInvoiceNumber()" class="action-btn">New</button>
-          </div>
-        </div>
-        <div class="mobile-field-group">
-          <label>Date & Time:</label>
-          <input type="datetime-local" [(ngModel)]="customerInfo.datetime">
-        </div>
+      <div class="invoice-table-container">
+        <table class="invoice-table">
+          <tr>
+            <td class="invoice-label">Date & Time:</td>
+            <td class="invoice-input">
+              <input type="datetime-local" [(ngModel)]="customerInfo.datetime" class="invoice-datetime-input">
+            </td>
+          </tr>
+          <tr>
+            <td class="invoice-label">Invoice Number:</td>
+            <td class="invoice-input">
+              <input type="text" [(ngModel)]="customerInfo.invoiceNumber" placeholder="Auto-generated" readonly class="invoice-number-input">
+            </td>
+          </tr>
+        </table>
       </div>
     </div>
 

@@ -1,7 +1,8 @@
-import { Component, OnInit, computed, signal, inject, ViewChild } from '@angular/core';
+import { Component, OnInit, AfterViewInit, OnDestroy, computed, signal, inject, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { RouterModule } from '@angular/router';
+import { RouterModule, Router, NavigationEnd } from '@angular/router';
+import { Subscription } from 'rxjs';
 import { HeaderComponent } from '../../../../shared/components/header/header.component';
 import { ReceiptComponent } from '../receipt/receipt.component';
 import { CartFabComponent } from '../../../../shared/components/cart-fab/cart-fab.component';
@@ -14,6 +15,9 @@ import { TransactionService } from '../../../../services/transaction.service';
 import { AuthService } from '../../../../services/auth.service';
 import { CompanyService } from '../../../../services/company.service';
 import { ToastService } from '../../../../shared/services/toast.service';
+import { NetworkService } from '../../../../core/services/network.service';
+import { IndexedDBService } from '../../../../core/services/indexeddb.service';
+import { PosUtilsService } from '../../../../services/pos-utils.service';
 import { ErrorMessages, WarningMessages } from '../../../../shared/enums';
 import { OrderService } from '../../../../services/order.service';
 import { StoreService } from '../../../../services/store.service';
@@ -29,7 +33,7 @@ import { ProductViewType } from '../../../../interfaces/pos.interface';
   templateUrl: './pos-mobile.component.html',
   styleUrls: ['./pos-mobile.component.css']
 })
-export class PosMobileComponent implements OnInit {
+export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
   // Services
   private productService = inject(ProductService);
   private posService = inject(PosService);
@@ -43,6 +47,29 @@ export class PosMobileComponent implements OnInit {
   private userRoleService = inject(UserRoleService);
   public currencyService = inject(CurrencyService);
   private toastService = inject(ToastService);
+  private networkService = inject(NetworkService);
+  private indexedDBService = inject(IndexedDBService);
+  private router = inject(Router);
+  private posUtilsService = inject(PosUtilsService);
+
+  private routerSubscription: Subscription | undefined;
+
+  constructor() {
+    console.log('🏗️ POS MOBILE COMPONENT: Constructor called - Component is being created!');
+    console.log('🏗️ POS MOBILE COMPONENT: Constructor timestamp:', new Date().toISOString());
+    
+    // Listen for navigation events
+    this.routerSubscription = this.router.events.subscribe(event => {
+      if (event instanceof NavigationEnd) {
+        console.log('🔄 Mobile Navigation event detected - URL:', event.url);
+        if (event.url === '/pos/mobile') {
+          console.log('🎯 Navigation to POS Mobile detected - Reinitializing component');
+          // Force reinitialize when navigating to POS Mobile
+          setTimeout(() => this.reinitializeComponent(), 100);
+        }
+      }
+    });
+  }
 
   // Use shared UI state for synchronization with desktop
   readonly searchQuery = computed(() => this.posSharedService.searchQuery());
@@ -276,29 +303,26 @@ export class PosMobileComponent implements OnInit {
   }
 
   async ngOnInit(): Promise<void> {
+    console.log('🎯 POS MOBILE COMPONENT: ngOnInit called - POS Mobile is loading!');
+    console.log('🎯 POS MOBILE COMPONENT: Current URL:', window.location.href);
+    console.log('🎯 POS MOBILE COMPONENT: Timestamp:', new Date().toISOString());
     try {
-      // Set up a watcher to monitor store changes
-      const storeWatcher = setInterval(() => {
-        const currentStoreCount = this.availableStores().length;
-        if (currentStoreCount === 0) {
-          console.warn('🚨 STORES DISAPPEARED! Store count is now 0');
-          console.log('🔍 StoreService stores:', this.storeService.getStores().length);
-          console.log('🔍 Current user:', this.authService.getCurrentUser());
-        }
-      }, 2000);
+      // await this.loadData(); // Commented out to match desktop POS behavior
+      // Set current date and time
+      this.updateCurrentDateTime();
       
-      // Clear watcher after 30 seconds
-      setTimeout(() => clearInterval(storeWatcher), 30000);
+      // Load next invoice number preview
+      await this.loadNextInvoicePreview();
       
-      this.initializeStore();
-      await this.loadData();
+      // Initialize store (this will handle IndexedDB priority and product loading)
+      await this.initializeStore();
       
-      // debug: log current user and stores to ensure user.storeIds and stores list are correct
-      console.log('POS init - currentUser:', this.authService.getCurrentUser());
-      console.log('POS init - all stores:', this.storeService.getStores());
-      console.log('POS init - availableStores:', this.availableStores());
+      // Debug: log current user and stores to ensure user.storeIds and stores list are correct
+      console.log('POS Mobile init - currentUser:', this.authService.getCurrentUser());
+      console.log('POS Mobile init - all stores:', this.storeService.getStores());
+      console.log('POS Mobile init - availableStores:', this.availableStores());
     } catch (error) {
-      console.error('Error initializing POS:', error);
+      console.error('Error initializing POS Mobile:', error);
     }
   }
 
@@ -337,7 +361,7 @@ export class PosMobileComponent implements OnInit {
           
           // Initialize selected store now that stores are loaded
           console.log('🎯 Initializing store selection...');
-          this.initializeStore();
+          await this.initializeStore();
           
           // Load products for the user's company and current selected store (if any)
           const selectedStore = this.selectedStoreId();
@@ -364,30 +388,281 @@ export class PosMobileComponent implements OnInit {
     }
   }
 
-  private initializeStore(): void {
-    console.log('🎯 initializeStore called');
-    const stores = this.availableStores();
-    console.log('🎯 Available stores for initialization:', stores.length);
+  private async initializeStore(): Promise<void> {
+    console.log('🎯 Mobile initializeStore called - checking stores and loading if needed');
     
-    const currentSelectedStore = this.selectedStoreId();
-    console.log('🎯 Currently selected store:', currentSelectedStore);
+    // First, ensure stores are loaded by checking if we have any stores
+    const currentUser = this.authService.getCurrentUser();
+    let availableStores = this.availableStores();
     
-    if (stores.length > 0 && !currentSelectedStore) {
-      console.log('🎯 Selecting first store:', stores[0].storeName, 'ID:', stores[0].id);
-      this.selectStore(stores[0].id!);
-    } else if (stores.length === 0) {
-      console.warn('⚠️ No stores available for initialization');
+    if (availableStores.length === 0 && currentUser?.uid) {
+      console.log('🏪 Mobile No stores available, loading from database...');
+      
+      try {
+        // Load user roles first to get store access permissions
+        await this.userRoleService.loadUserRoles();
+        
+        // Get the current user's role by userId
+        const userRole = this.userRoleService.getUserRoleByUserId(currentUser.uid);
+        console.log('👤 Mobile User role loaded:', userRole);
+        
+        if (userRole && userRole.storeId) {
+          // Load companies first
+          console.log('📊 Mobile Loading companies...');
+          await this.companyService.loadCompanies();
+          
+          // Load stores based on user's assigned store
+          console.log('🏪 Mobile Loading stores for user role:', userRole.storeId);
+          await this.storeService.loadStores([userRole.storeId]);
+          
+          // Wait a bit for signals to update
+          await new Promise(resolve => setTimeout(resolve, 100));
+          
+          console.log('✅ Mobile Stores loaded, refreshing available stores...');
+          
+          // Load products for the user's company and store after loading stores
+          const refreshedStores = this.availableStores();
+          console.log('📦 Mobile Loading products after store loading, available stores:', refreshedStores.length);
+          
+          if (refreshedStores.length > 0 && userRole.companyId) {
+            // Auto-select the loaded store and load products
+            const storeToLoad = refreshedStores.find(s => s.id === userRole.storeId) || refreshedStores[0];
+            if (storeToLoad?.id) {
+              console.log('📦 Mobile Auto-loading products for store:', storeToLoad.storeName, 'company:', userRole.companyId);
+              await this.productService.loadProductsByCompanyAndStore(userRole.companyId, storeToLoad.id);
+              console.log('✅ Mobile Initial product loading completed');
+            }
+          }
+        } else {
+          console.warn('⚠️ Mobile No user role or store ID found');
+          return;
+        }
+      } catch (error) {
+        console.error('❌ Mobile Error loading stores:', error);
+        return;
+      }
     } else {
-      console.log('✅ Store already selected:', currentSelectedStore);
+      console.log('✅ Mobile Stores already available, count:', availableStores.length);
+    }
+
+    // PRIORITY: Use IndexedDB as primary source for all user data (uid, companyId, storeId, roleId)
+    try {
+      const offlineUserData = await this.indexedDBService.getUserData(currentUser?.uid || '');
+      
+      if (offlineUserData?.currentStoreId) {
+        console.log('💾 PRIORITY: Mobile using IndexedDB data - uid:', offlineUserData.uid, 'storeId:', offlineUserData.currentStoreId);
+        
+        // Verify the store exists in availableStores before selecting
+        availableStores = this.availableStores(); // Refresh after potential loading
+        const storeExists = availableStores.find(store => store.id === offlineUserData.currentStoreId);
+        
+        if (storeExists) {
+          console.log('✅ Mobile IndexedDB store verified, selecting store');
+          await this.selectStore(offlineUserData.currentStoreId);
+          console.log('✅ Mobile Store selection from IndexedDB completed');
+          return; // Success - exit early
+        } else {
+          console.warn('⚠️ Mobile IndexedDB store not found in available stores');
+          console.log('� Mobile Available stores:', availableStores.map(s => ({ id: s.id, name: s.storeName })));
+        }
+      }
+      
+      // If no currentStoreId, try to get from permissions in IndexedDB
+      if (offlineUserData?.permissions && offlineUserData.permissions.length > 0) {
+        const permission = this.getActivePermission(offlineUserData);
+        if (permission?.storeId) {
+          console.log('💾 Mobile Using storeId from IndexedDB permissions:', permission.storeId);
+          availableStores = this.availableStores(); // Refresh after potential loading
+          const storeExists = availableStores.find(store => store.id === permission.storeId);
+          
+          if (storeExists) {
+            await this.selectStore(permission.storeId);
+            console.log('✅ Mobile Store selection from IndexedDB permissions completed');
+            return;
+          }
+        }
+      }
+    } catch (error) {
+      console.log('⚠️ Mobile Could not retrieve userData from IndexedDB:', error);
+    }
+
+    // FALLBACK: Use current database process
+    // Wait for stores to be available with retries
+    let retryCount = 0;
+    const maxRetries = 10;
+    const retryDelay = 500; // 500ms between retries
+    
+    while (retryCount < maxRetries) {
+      const stores = this.availableStores();
+      const currentlySelected = this.selectedStoreId();
+      
+      console.log(`🏪 Mobile Store initialization attempt ${retryCount + 1}/${maxRetries} - Available stores:`, stores.length);
+      
+      if (stores.length > 0) {
+        console.log('🏪 Mobile Stores found, proceeding with auto-selection');
+        console.log('� Mobile Currently selected store:', currentlySelected);
+        
+        // Check if currently selected store is valid in available stores
+        const selectedStore = stores.find(store => store.id === currentlySelected);
+        
+        if (currentlySelected && selectedStore) {
+          console.log('✅ Mobile Valid store already selected from persistent state:', selectedStore.storeName);
+          
+          // Load products for the already selected store
+          if (selectedStore.companyId) {
+            await this.productService.loadProductsByCompanyAndStore(selectedStore.companyId, currentlySelected);
+          }
+          return; // Success, exit the function
+        } else if (currentlySelected && !selectedStore) {
+          console.warn('⚠️ Mobile Persisted store selection is invalid, clearing and selecting new store');
+          // Clear invalid selection
+          await this.posService.setSelectedStore('');
+        }
+        
+        // Auto-select store if none is currently selected or selection was invalid
+        if (!currentlySelected || !selectedStore) {
+          let storeIdToSelect: string | null = null;
+          
+          // First, try to get storeId from IndexedDB user permissions
+          try {
+            const currentUser = this.authService.getCurrentUser();
+            if (currentUser?.uid) {
+              const offlineUserData = await this.indexedDBService.getUserData(currentUser.uid);
+              if (offlineUserData?.permissions && offlineUserData.permissions.length > 0) {
+                const permission = this.getActivePermission(offlineUserData, offlineUserData.currentStoreId);
+                if (permission) {
+                  const indexedDbStoreId = offlineUserData.currentStoreId || permission.storeId;
+                  const indexedDbStore = stores.find(store => store.id === indexedDbStoreId);
+                  if (indexedDbStore && indexedDbStoreId) {
+                    storeIdToSelect = indexedDbStoreId;
+                    console.log('💾 Mobile PRIORITY: Using storeId from IndexedDB permissions:', storeIdToSelect);
+                    console.log('💾 Mobile Selected from', offlineUserData.permissions.length, 'available permissions');
+                  }
+                }
+              }
+            }
+          } catch (error) {
+            console.log('⚠️ Mobile Could not get storeId from IndexedDB permissions:', error);
+          }
+          
+          // Fallback to first available store if no IndexedDB store found
+          if (!storeIdToSelect) {
+            storeIdToSelect = stores[0]?.id || null;
+            console.log('🗄️ Mobile FALLBACK: Using first available store:', storeIdToSelect);
+          }
+          
+          const storeToSelect = stores.find(store => store.id === storeIdToSelect);
+          
+          if (storeToSelect?.id) {
+            if (stores.length === 1) {
+              console.log('🏪 Mobile Single store detected, auto-selecting:', storeToSelect.storeName, '(ID:', storeToSelect.id, ')');
+            } else {
+              console.log('🏪 Mobile Multiple stores available, auto-selecting:', storeToSelect.storeName, '(ID:', storeToSelect.id, ')');
+            }
+            
+            await this.selectStore(storeToSelect.id);
+            console.log('✅ Mobile Auto-selection completed for store:', storeToSelect.storeName);
+            
+            // Verify the selection worked
+            const afterSelection = this.selectedStoreId();
+            if (afterSelection === storeToSelect.id) {
+              console.log('✅ Mobile Store auto-selection verified successful');
+              return; // Success, exit the function
+            } else {
+              console.warn('⚠️ Mobile Store auto-selection may have failed - expected:', storeToSelect.id, 'actual:', afterSelection);
+            }
+          }
+        }
+        
+        // If we reach here, something went wrong but we have stores
+        break;
+      } else {
+        console.log(`⏳ Mobile No stores available yet, waiting... (attempt ${retryCount + 1}/${maxRetries})`);
+        retryCount++;
+        
+        if (retryCount < maxRetries) {
+          await new Promise(resolve => setTimeout(resolve, retryDelay));
+        }
+      }
+    }
+    
+    // Final check after all retries
+    const finalStores = this.availableStores();
+    const finalSelectedStore = this.selectedStoreId();
+    
+    if (finalStores.length === 0) {
+      console.error('❌ Mobile No stores available after all retry attempts. Check user permissions and store loading.');
+    } else {
+      console.warn('⚠️ Mobile Stores are available but auto-selection failed after retries');
+    }
+    
+    // FINAL PRODUCT LOADING CHECK - Ensure products are loaded for any selected store
+    if (finalSelectedStore && finalStores.length > 0) {
+      console.log('🔍 Mobile Final check - ensuring products are loaded for selected store:', finalSelectedStore);
+      const selectedStoreInfo = finalStores.find(s => s.id === finalSelectedStore);
+      
+      if (selectedStoreInfo?.companyId) {
+        const currentProducts = this.products();
+        console.log('📦 Mobile Current products count:', currentProducts.length);
+        
+        if (currentProducts.length === 0) {
+          console.log('📦 Mobile No products found, loading products for company:', selectedStoreInfo.companyId, 'store:', finalSelectedStore);
+          try {
+            await this.productService.loadProductsByCompanyAndStore(selectedStoreInfo.companyId, finalSelectedStore);
+            console.log('✅ Mobile Final product loading completed, products count:', this.products().length);
+            console.log('📂 Mobile Categories available:', this.categories().length);
+          } catch (error) {
+            console.error('❌ Mobile Error in final product loading:', error);
+          }
+        } else {
+          console.log('✅ Mobile Products already loaded, count:', currentProducts.length);
+        }
+      }
+    } else {
+      console.warn('⚠️ Mobile No selected store for final product loading check');
     }
   }
 
   // Event handlers
   async selectStore(storeId: string): Promise<void> {
-    this.posService.setSelectedStore(storeId);
-    const storeInfo = this.availableStores().find(s => s.id === storeId);
-    if (storeInfo?.companyId) {
-      await this.productService.loadProductsByCompanyAndStore(storeInfo.companyId, storeId);
+    console.log('🎯 Mobile selectStore called with storeId:', storeId);
+    console.log('🏪 Mobile Available stores:', this.availableStores().map(s => ({ id: s.id, name: s.storeName, companyId: s.companyId })));
+    
+    // Set the selected store first
+    await this.posService.setSelectedStore(storeId);
+    
+    // PRIORITY: Get companyId from IndexedDB first, then fallback to database
+    let companyId: string | undefined;
+    
+    try {
+      const currentUser = this.authService.getCurrentUser();
+      const offlineUserData = await this.indexedDBService.getUserData(currentUser?.uid || '');
+      
+      if (offlineUserData?.permissions) {
+        const permission = this.getActivePermission(offlineUserData, storeId);
+        if (permission?.companyId) {
+          companyId = permission.companyId;
+          console.log('💾 Mobile Using companyId from IndexedDB:', companyId);
+        }
+      }
+    } catch (error) {
+      console.log('⚠️ Mobile Could not get companyId from IndexedDB:', error);
+    }
+    
+    // Fallback: Get companyId from availableStores (database data)
+    if (!companyId) {
+      const storeInfo = this.availableStores().find(s => s.id === storeId);
+      companyId = storeInfo?.companyId;
+      console.log('🗄️ Mobile Fallback: Using companyId from database:', companyId);
+    }
+    
+    // Load products if we have companyId
+    if (companyId) {
+      console.log('📦 Mobile Loading products for store:', storeId, 'company:', companyId);
+      await this.productService.loadProductsByCompanyAndStore(companyId, storeId);
+      console.log('✅ Mobile Product loading completed');
+    } else {
+      console.error('❌ Mobile No companyId found for store:', storeId);
     }
   }
 
@@ -459,10 +734,6 @@ export class PosMobileComponent implements OnInit {
 
   hideCartModal(): void {
     // Modal will handle its own closing
-  }
-
-  generateNewInvoiceNumber(): void {
-    this.customerInfo.invoiceNumber = 'INV-0000-000000';
   }
 
   async processOrder(): Promise<void> {
@@ -652,5 +923,80 @@ export class PosMobileComponent implements OnInit {
 
     // Save transaction using the transaction service
     return await this.transactionService.createTransaction(transactionData);
+  }
+
+  // Lifecycle methods
+  async ngAfterViewInit(): Promise<void> {
+    // Mobile specific initialization if needed
+  }
+
+  ngOnDestroy(): void {
+    console.log('🏗️ POS MOBILE COMPONENT: ngOnDestroy called - Component is being destroyed');
+    if (this.routerSubscription) {
+      this.routerSubscription.unsubscribe();
+    }
+  }
+
+  // Method to reinitialize the component when navigating back to POS Mobile
+  private async reinitializeComponent(): Promise<void> {
+    console.log('🔄 POS MOBILE COMPONENT: Reinitializing component due to navigation');
+    try {
+      // Set current date and time
+      this.updateCurrentDateTime();
+      
+      // Load next invoice number preview
+      await this.loadNextInvoicePreview();
+      
+      // Initialize store (this will handle IndexedDB priority and product loading)
+      await this.initializeStore();
+      
+      console.log('🔄 POS MOBILE COMPONENT: Reinitialization completed');
+    } catch (error) {
+      console.error('🔄 Mobile Error reinitializing POS component:', error);
+    }
+  }
+
+  // Helper method for permissions - same as main POS component
+  private getActivePermission(offlineUserData: any, preferredStoreId?: string): any {
+    if (!offlineUserData?.permissions || offlineUserData.permissions.length === 0) {
+      return null;
+    }
+
+    // If preferredStoreId is provided, try to find a permission for that store
+    if (preferredStoreId) {
+      const preferredPermission = offlineUserData.permissions.find((p: any) => p.storeId === preferredStoreId);
+      if (preferredPermission) {
+        return preferredPermission;
+      }
+    }
+
+    // Return the first permission
+    return offlineUserData.permissions[0];
+  }
+
+  // Date/time management - same as main POS component
+  updateCurrentDateTime(): void {
+    this.customerInfo.datetime = new Date().toISOString().slice(0, 16);
+  }
+
+  // Invoice preview loading - same as main POS component
+  async loadNextInvoicePreview(): Promise<void> {
+    try {
+      // Check if online/offline
+      if (this.networkService.isOffline()) {
+        console.log('📋 Mobile Offline mode: Using default invoice number');
+        this.customerInfo.invoiceNumber = 'INV-0000-000000 (Offline)';
+        return;
+      }
+
+      const nextInvoice = await this.posService.getNextInvoiceNumberPreview();
+      
+      // Update the customer info invoice number for display
+      this.customerInfo.invoiceNumber = nextInvoice;
+      console.log('📋 Mobile Next invoice number loaded:', nextInvoice);
+    } catch (error) {
+      console.error('Mobile Error loading invoice preview:', error);
+      this.customerInfo.invoiceNumber = 'INV-0000-000000 (Error)';
+    }
   }
 }

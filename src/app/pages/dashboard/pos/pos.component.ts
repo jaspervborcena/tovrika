@@ -20,6 +20,7 @@ import { OrderService } from '../../../services/order.service';
 import { StoreService } from '../../../services/store.service';
 import { UserRoleService } from '../../../services/user-role.service';
 import { CustomerService } from '../../../services/customer.service';
+import { CompanyService } from '../../../services/company.service';
 import { Product } from '../../../interfaces/product.interface';
 import { ProductViewType, OrderDiscount } from '../../../interfaces/pos.interface';
 import { Customer, CustomerFormData } from '../../../interfaces/customer.interface';
@@ -46,6 +47,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   private orderService = inject(OrderService);
   private userRoleService = inject(UserRoleService);
   private customerService = inject(CustomerService);
+  private companyService = inject(CompanyService);
   private router = inject(Router);
 
   private routerSubscription: any;
@@ -700,16 +702,57 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   private async initializeStore(): Promise<void> {
+    console.log('🎯 Desktop initializeStore called - checking stores and loading if needed');
+    
+    // First, ensure stores are loaded by checking if we have any stores
+    const currentUser = this.authService.getCurrentUser();
+    let availableStores = this.availableStores();
+    
+    if (availableStores.length === 0 && currentUser?.uid) {
+      console.log('🏪 Desktop No stores available, loading from database...');
+      
+      try {
+        // Load user roles first to get store access permissions
+        await this.userRoleService.loadUserRoles();
+        
+        // Get the current user's role by userId
+        const userRole = this.userRoleService.getUserRoleByUserId(currentUser.uid);
+        console.log('👤 Desktop User role loaded:', userRole);
+        
+        if (userRole && userRole.storeId) {
+          // Load companies first
+          console.log('📊 Desktop Loading companies...');
+          await this.companyService.loadCompanies();
+          
+          // Load stores based on user's assigned store
+          console.log('🏪 Desktop Loading stores for user role:', userRole.storeId);
+          await this.storeService.loadStores([userRole.storeId]);
+          
+          // Wait a bit for signals to update
+          await new Promise(resolve => setTimeout(resolve, 100));
+          
+          console.log('✅ Desktop Stores loaded, refreshing available stores...');
+        } else {
+          console.warn('⚠️ Desktop No user role or store ID found');
+          return;
+        }
+      } catch (error) {
+        console.error('❌ Desktop Error loading stores:', error);
+        return;
+      }
+    } else {
+      console.log('✅ Desktop Stores already available, count:', availableStores.length);
+    }
+
     // PRIORITY: Use IndexedDB as primary source for all user data (uid, companyId, storeId, roleId)
     try {
-      const currentUser = this.authService.getCurrentUser();
       const offlineUserData = await this.indexedDBService.getUserData(currentUser?.uid || '');
       
       if (offlineUserData?.currentStoreId) {
         console.log('💾 PRIORITY: Using IndexedDB data - uid:', offlineUserData.uid, 'storeId:', offlineUserData.currentStoreId);
         
         // Verify the store exists in availableStores before selecting
-        const availableStores = this.availableStores();
+        availableStores = this.availableStores(); // Refresh after potential loading
         const storeExists = availableStores.find(store => store.id === offlineUserData.currentStoreId);
         
         if (storeExists) {
@@ -728,7 +771,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
         const permission = this.getActivePermission(offlineUserData);
         if (permission?.storeId) {
           console.log('💾 Using storeId from IndexedDB permissions:', permission.storeId);
-          const availableStores = this.availableStores();
+          availableStores = this.availableStores(); // Refresh after potential loading
           const storeExists = availableStores.find(store => store.id === permission.storeId);
           
           if (storeExists) {
@@ -844,10 +887,38 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     
     // Final check after all retries
     const finalStores = this.availableStores();
+    const finalSelectedStore = this.selectedStoreId();
+    
     if (finalStores.length === 0) {
-      console.error('❌ No stores available after all retry attempts. Check user permissions and store loading.');
+      console.error('❌ Desktop No stores available after all retry attempts. Check user permissions and store loading.');
     } else {
-      console.warn('⚠️ Stores are available but auto-selection failed after retries');
+      console.warn('⚠️ Desktop Stores are available but auto-selection failed after retries');
+    }
+    
+    // FINAL PRODUCT LOADING CHECK - Ensure products are loaded for any selected store
+    if (finalSelectedStore && finalStores.length > 0) {
+      console.log('🔍 Desktop Final check - ensuring products are loaded for selected store:', finalSelectedStore);
+      const selectedStoreInfo = finalStores.find(s => s.id === finalSelectedStore);
+      
+      if (selectedStoreInfo?.companyId) {
+        const currentProducts = this.products();
+        console.log('📦 Desktop Current products count:', currentProducts.length);
+        
+        if (currentProducts.length === 0) {
+          console.log('📦 Desktop No products found, loading products for company:', selectedStoreInfo.companyId, 'store:', finalSelectedStore);
+          try {
+            await this.productService.loadProductsByCompanyAndStore(selectedStoreInfo.companyId, finalSelectedStore);
+            console.log('✅ Desktop Final product loading completed, products count:', this.products().length);
+            console.log('📂 Desktop Categories available:', this.categories().length);
+          } catch (error) {
+            console.error('❌ Desktop Error in final product loading:', error);
+          }
+        } else {
+          console.log('✅ Desktop Products already loaded, count:', currentProducts.length);
+        }
+      }
+    } else {
+      console.warn('⚠️ Desktop No selected store for final product loading check');
     }
   }
 
