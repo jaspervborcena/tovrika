@@ -8,6 +8,7 @@ import { AuthService } from './auth.service';
 import { CompanyService } from './company.service';
 import { ProductService } from './product.service';
 import { InvoiceService } from './invoice.service';
+import { IndexedDBService } from '../core/services/indexeddb.service';
 import { Order, OrderDetail, OrderItem, CartItem, ReceiptData, OrderDiscount, CartSummary } from '../interfaces/pos.interface';
 import { Product } from '../interfaces/product.interface';
 
@@ -79,7 +80,8 @@ export class PosService {
     private firestore: Firestore,
     private authService: AuthService,
     private companyService: CompanyService,
-    private productService: ProductService
+    private productService: ProductService,
+    private indexedDBService: IndexedDBService
   ) {
     // Load persisted store selection on service initialization
     this.loadPersistedStoreSelection();
@@ -155,25 +157,41 @@ export class PosService {
   }
 
   // Store Management
-  setSelectedStore(storeId: string): void {
+  async setSelectedStore(storeId: string): Promise<void> {
     this.selectedStoreIdSignal.set(storeId);
     
-    // Save to localStorage for persistence
-    if (storeId) {
-      localStorage.setItem('pos_selected_store_id', storeId);
-    } else {
-      localStorage.removeItem('pos_selected_store_id');
+    // Save to IndexedDB for persistence
+    try {
+      const currentUser = this.authService.getCurrentUser();
+      if (currentUser?.uid) {
+        // Get existing user data and update currentStoreId
+        const existingUserData = await this.indexedDBService.getUserData(currentUser.uid);
+        if (existingUserData) {
+          existingUserData.currentStoreId = storeId;
+          await this.indexedDBService.saveUserData(existingUserData);
+          console.log('💾 Store selection saved to IndexedDB:', storeId);
+        }
+      }
+    } catch (error) {
+      console.error('⚠️ Failed to save store selection to IndexedDB:', error);
     }
     
     this.clearCart(); // Clear cart when switching stores
   }
 
-  // Load selected store from localStorage on service initialization
-  private loadPersistedStoreSelection(): void {
-    const savedStoreId = localStorage.getItem('pos_selected_store_id');
-    if (savedStoreId) {
-      this.selectedStoreIdSignal.set(savedStoreId);
-      console.log('🏪 Restored store selection from localStorage:', savedStoreId);
+  // Load selected store from IndexedDB on service initialization
+  private async loadPersistedStoreSelection(): Promise<void> {
+    try {
+      const currentUser = this.authService.getCurrentUser();
+      if (currentUser?.uid) {
+        const offlineUserData = await this.indexedDBService.getUserData(currentUser.uid);
+        if (offlineUserData?.currentStoreId) {
+          this.selectedStoreIdSignal.set(offlineUserData.currentStoreId);
+          console.log('💾 Restored store selection from IndexedDB:', offlineUserData.currentStoreId);
+        }
+      }
+    } catch (error) {
+      console.error('⚠️ Failed to load store selection from IndexedDB:', error);
     }
   }
 
@@ -257,11 +275,7 @@ export class PosService {
       const invoiceResult = await this.invoiceService.processInvoiceTransaction({
         storeId,
         orderData,
-        customerInfo,
-        receiptData: {
-          cartSummary: summary,
-          orderItems: orderItems
-        }
+        customerInfo
       });
 
       if (!invoiceResult.success) {
@@ -293,8 +307,135 @@ export class PosService {
   }
 
   /**
+   * NEW: Process order with new customerInfo and payments structure
+   */
+  async processOrderWithInvoiceAndPayment(
+    customerInfo: { fullName: string; address: string; tin: string; customerId: string }, 
+    payments: { amountTendered: number; changeAmount: number; paymentDescription: string }
+  ): Promise<{ orderId: string; invoiceNumber: string } | null> {
+    try {
+      this.isProcessingSignal.set(true);
+      console.log('🧾 Starting NEW order processing with customerInfo and payments...');
+      
+      const user = this.authService.getCurrentUser();
+      const company = await this.companyService.getActiveCompany();
+      
+      if (!user || !company) {
+        throw new Error('User or company not found');
+      }
+
+      const storeId = this.selectedStoreId();
+      if (!storeId) {
+        throw new Error('No store selected');
+      }
+
+      const cartItems = this.cartItems();
+      if (cartItems.length === 0) {
+        throw new Error('Cart is empty');
+      }
+
+      console.log('Processing NEW order structure for store:', storeId);
+      console.log('📝 Customer info:', customerInfo);
+      console.log('💳 Payment info:', payments);
+
+      const cartSummary = this.cartSummary();
+
+      // Prepare order items for storage
+      const orderItems: OrderItem[] = cartItems.map(item => ({
+        productId: item.productId,
+        productName: item.productName,
+        quantity: item.quantity,
+        price: item.sellingPrice,
+        total: item.total,
+        vat: item.vatAmount,
+        discount: item.discountAmount,
+        isVatExempt: item.isVatExempt
+      }));
+
+      console.log('📦 Order items prepared:', orderItems.length, 'items');
+
+      // Prepare NEW order data structure (without customerInfo at root level)
+      const orderData: any = {
+        companyId: company.id || '',
+        storeId: storeId,
+        assignedCashierId: user.uid,
+        
+        // Payment type determination
+        cashSale: payments.paymentDescription.toLowerCase().includes('cash') || !payments.paymentDescription,
+        
+        // Invoice Information (invoiceNumber will be set by transaction)
+        invoiceNumber: '',  // Will be filled by transaction
+        date: new Date(),
+        
+        // Financial Information
+        grossAmount: cartSummary.grossAmount,
+        discountAmount: cartSummary.productDiscountAmount + cartSummary.orderDiscountAmount,
+        vatAmount: cartSummary.vatAmount,
+        vatExemptAmount: cartSummary.vatExemptSales,
+        totalAmount: cartSummary.netAmount,
+        netAmount: cartSummary.netAmount,
+        
+        vatableSales: cartSummary.vatableSales,
+        zeroRatedSales: cartSummary.zeroRatedSales,
+        
+        status: 'completed',
+        
+        // BIR Required Fields
+        atpOrOcn: 'ATP-001',
+        birPermitNo: 'BIR-001', 
+        inclusiveSerialNumber: '001-100000',
+        message: 'Thank you for your purchase!',
+        
+        // Order Items (FIXED: now includes cart items)
+        items: orderItems,
+        
+        createdAt: new Date()
+      };
+
+      console.log('📦 Complete orderData being sent to invoice service:', JSON.stringify(orderData, null, 2));
+      
+      // 🧾 Execute invoice transaction with NEW structure
+      const invoiceResult = await this.invoiceService.processInvoiceTransaction({
+        storeId: storeId,
+        orderData: orderData,
+        customerInfo: customerInfo, // Pass as separate parameter
+        paymentsData: payments      // Pass as separate parameter
+      });
+
+      // Check transaction result
+      if (!invoiceResult.success) {
+        throw new Error(`Invoice transaction failed: ${invoiceResult.error}`);
+      }
+
+      console.log('✅ NEW Invoice transaction completed:', {
+        invoiceNumber: invoiceResult.invoiceNumber,
+        orderId: invoiceResult.orderId
+      });
+
+      // Update product inventory
+      try {
+        await this.updateProductInventory(cartItems);
+        console.log('✅ Product inventory updated successfully');
+      } catch (inventoryError) {
+        console.error('⚠️ Warning: Order created but inventory update failed:', inventoryError);
+      }
+
+      return {
+        orderId: invoiceResult.orderId!,
+        invoiceNumber: invoiceResult.invoiceNumber!
+      };
+
+    } catch (error) {
+      console.error('❌ Error processing NEW order with invoice:', error);
+      throw error;
+    } finally {
+      this.isProcessingSignal.set(false);
+    }
+  }
+
+  /**
    * Process order and return both order ID and invoice number
-   * Used for print receipt functionality
+   * Used for print receipt functionality (LEGACY - keeping for backward compatibility)
    */
   async processOrderWithInvoice(customerInfo?: any): Promise<{ orderId: string; invoiceNumber: string } | null> {
     try {

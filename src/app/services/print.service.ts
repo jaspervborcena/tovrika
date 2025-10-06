@@ -1,14 +1,252 @@
 import { Injectable } from '@angular/core';
 
+// Web Bluetooth API types (simplified)
+declare const navigator: any;
+
 @Injectable({
   providedIn: 'root'
 })
 export class PrintService {
+  
+  // Bluetooth printer connection state
+  private bluetoothDevice: any = null;
+  private bluetoothCharacteristic: any = null;
+  private isConnected = false;
 
   constructor() { }
 
   /**
-   * Print receipt using browser's print functionality (for testing/backup)
+   * 🎯 SMART PRINT: Main method - handles Bluetooth connection and printing
+   * Auto-connects on first use, reuses connection for subsequent prints
+   */
+  async printReceiptSmart(receiptData: any): Promise<void> {
+    try {
+      console.log('🖨️ Starting smart print process...');
+      console.log('📄 Receipt data received:', {
+        hasData: !!receiptData,
+        orderId: receiptData?.orderId,
+        invoiceNumber: receiptData?.invoiceNumber,
+        itemsCount: receiptData?.items?.length || 0
+      });
+      
+      // Check if Web Bluetooth is supported
+      if (!navigator.bluetooth) {
+        console.warn('⚠️ Web Bluetooth not supported, falling back to browser print');
+        this.printBrowserReceipt(receiptData);
+        return;
+      }
+
+      // If not connected, attempt to connect
+      if (!this.isConnected) {
+        console.log('📱 Bluetooth printer not connected, attempting connection...');
+        const connected = await this.connectToBluetoothPrinter();
+        
+        if (!connected) {
+          console.warn('❌ Bluetooth connection failed, falling back to browser print');
+          this.printBrowserReceipt(receiptData);
+          return;
+        }
+      }
+
+      // Print via Bluetooth
+      console.log('🖨️ Printing via Bluetooth...');
+      await this.printViaBluetoothESCPOS(receiptData);
+      console.log('✅ Bluetooth print completed successfully');
+
+    } catch (error) {
+      console.error('❌ Print error:', error);
+      console.log('🔄 Falling back to browser print...');
+      this.printBrowserReceipt(receiptData);
+    }
+  }
+
+  /**
+   * 📱 Connect to Bluetooth thermal printer
+   */
+  private async connectToBluetoothPrinter(): Promise<boolean> {
+    try {
+      console.log('🔍 Scanning for Bluetooth printers...');
+      
+      // Request Bluetooth device - use broader search for thermal printers
+      this.bluetoothDevice = await navigator.bluetooth.requestDevice({
+        // Don't use filters initially - let user choose from available devices
+        acceptAllDevices: true,
+        optionalServices: [
+          '000018f0-0000-1000-8000-00805f9b34fb', // Custom service
+          '0000110e-0000-1000-8000-00805f9b34fb', // Audio/Video Remote Control
+          '00001101-0000-1000-8000-00805f9b34fb', // Serial Port Profile
+          '0000180f-0000-1000-8000-00805f9b34fb', // Battery Service
+          '49535343-fe7d-4ae5-8fa9-9fafd205e455'  // Common thermal printer service
+        ]
+      });
+
+      console.log('📱 Found device:', this.bluetoothDevice.name);
+
+      // Connect to GATT server
+      const server = await this.bluetoothDevice.gatt!.connect();
+      console.log('🔗 Connected to GATT server');
+
+      // Try to find a suitable service
+      let service = null;
+      let characteristic = null;
+
+      try {
+        // Try common thermal printer service first
+        service = await server.getPrimaryService('49535343-fe7d-4ae5-8fa9-9fafd205e455');
+        characteristic = await service.getCharacteristic('49535343-1e4d-4bd9-ba61-23c647249616');
+      } catch (e1) {
+        try {
+          // Try Serial Port Profile
+          service = await server.getPrimaryService('00001101-0000-1000-8000-00805f9b34fb');
+          const characteristics = await service.getCharacteristics();
+          characteristic = characteristics[0]; // Use first available
+        } catch (e2) {
+          try {
+            // Try custom service
+            service = await server.getPrimaryService('000018f0-0000-1000-8000-00805f9b34fb');
+            characteristic = await service.getCharacteristic('00002af1-0000-1000-8000-00805f9b34fb');
+          } catch (e3) {
+            throw new Error('No compatible service found for thermal printer');
+          }
+        }
+      }
+
+      this.bluetoothCharacteristic = characteristic;
+      this.isConnected = true;
+      console.log('✅ Bluetooth printer connected successfully');
+      return true;
+
+    } catch (error) {
+      console.error('❌ Bluetooth connection failed:', error);
+      this.isConnected = false;
+      return false;
+    }
+  }
+
+  /**
+   * 🖨️ Print via Bluetooth using ESC/POS commands
+   */
+  private async printViaBluetoothESCPOS(receiptData: any): Promise<void> {
+    if (!this.bluetoothCharacteristic) {
+      throw new Error('Bluetooth characteristic not available');
+    }
+
+    // Generate ESC/POS commands
+    const escposCommands = this.generateESCPOSCommands(receiptData);
+    
+    // Convert string to Uint8Array for Bluetooth transmission
+    const encoder = new TextEncoder();
+    const data = encoder.encode(escposCommands);
+    
+    // Send to printer in chunks (some printers have buffer limits)
+    const chunkSize = 512;
+    for (let i = 0; i < data.length; i += chunkSize) {
+      const chunk = data.slice(i, i + chunkSize);
+      await this.bluetoothCharacteristic.writeValue(chunk);
+      
+      // Small delay between chunks
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+  }
+
+  /**
+   * 📄 Generate ESC/POS commands for thermal printer
+   */
+  private generateESCPOSCommands(receiptData: any): string {
+    let commands = '';
+    
+    // Initialize printer
+    commands += '\x1B\x40'; // ESC @ - Initialize
+    
+    // Store header (centered, bold)
+    commands += '\x1B\x61\x01'; // Center align
+    commands += '\x1B\x45\x01'; // Bold on
+    commands += (receiptData?.storeInfo?.storeName || 'STORE NAME') + '\n';
+    commands += '\x1B\x45\x00'; // Bold off
+    commands += '\x1B\x61\x00'; // Left align
+    
+    // Store details
+    commands += (receiptData?.storeInfo?.address || '') + '\n';
+    commands += `Tel: ${receiptData?.storeInfo?.phone || 'N/A'}\n`;
+    commands += `TIN: ${receiptData?.storeInfo?.tin || 'N/A'}\n`;
+    commands += '--------------------------------\n';
+    
+    // Invoice info
+    commands += `Invoice: ${receiptData?.invoiceNumber || 'N/A'}\n`;
+    commands += `Date: ${new Date().toLocaleString()}\n`;
+    
+    if (receiptData?.customerName && receiptData.customerName !== 'Walk-in Customer') {
+      commands += `Customer: ${receiptData.customerName}\n`;
+    }
+    
+    commands += '--------------------------------\n';
+    
+    // Items
+    commands += 'ITEMS:\n';
+    if (receiptData?.items) {
+      receiptData.items.forEach((item: any) => {
+        const name = (item.productName || item.name || 'Item').substring(0, 20);
+        const qty = item.quantity || 1;
+        const price = (item.total || item.price || 0).toFixed(2);
+        
+        commands += `${name.padEnd(20)}\n`;
+        commands += `  ${qty}x @ ${price.padStart(10)}\n`;
+      });
+    }
+    
+    commands += '--------------------------------\n';
+    
+    // Totals
+    commands += `Subtotal: ${((receiptData?.grossAmount || 0) - (receiptData?.vatAmount || 0)).toFixed(2).padStart(20)}\n`;
+    commands += `VAT: ${(receiptData?.vatAmount || 0).toFixed(2).padStart(25)}\n`;
+    commands += `TOTAL: ${(receiptData?.netAmount || 0).toFixed(2).padStart(23)}\n`;
+    
+    // Payment info (if available)
+    if (receiptData?.paymentInfo) {
+      commands += '--------------------------------\n';
+      commands += `Tendered: ${receiptData.paymentInfo.amountTendered.toFixed(2).padStart(19)}\n`;
+      commands += `Change: ${receiptData.paymentInfo.changeAmount.toFixed(2).padStart(21)}\n`;
+    }
+    
+    commands += '--------------------------------\n';
+    commands += '\x1B\x61\x01'; // Center align
+    commands += 'Thank you for your business!\n';
+    commands += '\x1B\x61\x00'; // Left align
+    commands += '\n\n\n'; // Feed paper
+    commands += '\x1D\x56\x41'; // Cut paper
+    
+    return commands;
+  }
+
+  /**
+   * 🔌 Disconnect from Bluetooth printer
+   */
+  async disconnectBluetoothPrinter(): Promise<void> {
+    try {
+      if (this.bluetoothDevice && this.bluetoothDevice.gatt.connected) {
+        await this.bluetoothDevice.gatt.disconnect();
+      }
+      this.bluetoothDevice = null;
+      this.bluetoothCharacteristic = null;
+      this.isConnected = false;
+      console.log('📱 Bluetooth printer disconnected');
+    } catch (error) {
+      console.error('❌ Error disconnecting:', error);
+    }
+  }
+
+  /**
+   * 📊 Get connection status
+   */
+  getConnectionStatus(): { connected: boolean; deviceName?: string } {
+    return {
+      connected: this.isConnected,
+      deviceName: this.bluetoothDevice?.name || undefined
+    };
+  }
+
+  /**
+   * Print receipt using browser's print functionality (FALLBACK)
    */
   printBrowserReceipt(receiptData: any): void {
     // Create a new window for printing

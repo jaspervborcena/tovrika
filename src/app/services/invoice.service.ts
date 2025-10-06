@@ -15,7 +15,7 @@ export interface InvoiceTransactionData {
   storeId: string;
   orderData: any; // The complete order data to be saved
   customerInfo?: any;
-  receiptData?: any;
+  paymentsData?: any; // Payment information
 }
 
 export interface InvoiceResult {
@@ -38,7 +38,7 @@ export class InvoiceService {
    * This ensures that invoice numbers are never duplicated
    */
   async processInvoiceTransaction(transactionData: InvoiceTransactionData): Promise<InvoiceResult> {
-    const { storeId, orderData, customerInfo, receiptData } = transactionData;
+    const { storeId, orderData, customerInfo, paymentsData } = transactionData;
     
     console.log('🧾 Starting invoice transaction for store:', storeId);
     
@@ -71,17 +71,70 @@ export class InvoiceService {
         const ordersRef = collection(this.firestore, 'orders');
         const orderDocRef = doc(ordersRef); // Generate new doc reference
         
+        // 5. Create orderDetails documents with batching (BEFORE removing items from main order)
+        if (orderData.items && orderData.items.length > 0) {
+          const batches = this.createOrderDetailsBatches(orderData.items, 50);
+          console.log(`📦 Creating ${batches.length} orderDetails batch(es) for ${orderData.items.length} total items`);
+          
+          // Create one document per batch to avoid 1MB Firestore limit
+          batches.forEach((batch: { batchNumber: number; items: any[] }) => {
+            const orderDetailsRef = collection(this.firestore, 'orderDetails');
+            const orderDetailsDocRef = doc(orderDetailsRef);
+            
+            const orderDetailsData = {
+              orderId: orderDocRef.id,
+              companyId: orderData.companyId,
+              storeId: storeId,
+              batchNumber: batch.batchNumber,
+              items: batch.items, // Max 50 items per batch
+              createdAt: new Date()
+            };
+            
+            transaction.set(orderDetailsDocRef, orderDetailsData);
+            console.log(`📦 Batch ${batch.batchNumber}/${batches.length} prepared with ${batch.items.length} items (docId: ${orderDetailsDocRef.id})`);
+          });
+          
+          console.log(`✅ All ${batches.length} orderDetails batches prepared successfully for order ${orderDocRef.id}`);
+        }
+        
+        // Remove items from main order data (items will only be in orderDetails collection)
+        const { items, ...orderDataWithoutItems } = orderData;
+        
         const completeOrderData = {
-          ...orderData,
-          invoiceNumber: nextInvoiceNo, // Assign the generated invoice number
+          ...orderDataWithoutItems, // Order data WITHOUT items
+          invoiceNumber: nextInvoiceNo,
           storeId: storeId,
           createdAt: new Date(),
           updatedAt: new Date(),
           status: 'completed',
-          customerInfo: customerInfo || null,
-          receiptData: receiptData || null,
-          createdBy: this.authService.getCurrentUser()?.uid || 'system'
+          createdBy: this.authService.getCurrentUser()?.uid || 'system',
+          
+          // NEW: customerInfo as a proper map structure
+          customerInfo: customerInfo ? {
+            customerId: customerInfo.customerId || '',
+            fullName: customerInfo.fullName || 'Walk-in Customer',
+            address: customerInfo.address || 'Philippines',
+            tin: customerInfo.tin || ''
+          } : {
+            customerId: '',
+            fullName: 'Walk-in Customer',
+            address: 'Philippines',
+            tin: ''
+          },
+          
+          // NEW: payments as a proper map structure  
+          payments: paymentsData ? {
+            amountTendered: paymentsData.amountTendered || 0,
+            changeAmount: paymentsData.changeAmount || 0,
+            paymentDescription: paymentsData.paymentDescription || 'Cash Payment'
+          } : {
+            amountTendered: 0,
+            changeAmount: 0,
+            paymentDescription: 'Cash Payment'
+          }
         };
+        
+        console.log('🔥 Main order structure (WITHOUT items):', JSON.stringify(completeOrderData, null, 2));
         
         transaction.set(orderDocRef, completeOrderData);
         
@@ -202,5 +255,26 @@ export class InvoiceService {
         error: error instanceof Error ? error.message : 'Unknown error'
       };
     }
+  }
+
+  /**
+   * Create batches of order items to avoid Firestore 1MB document limit
+   * Each batch will contain maximum specified items (default 50)
+   */
+  private createOrderDetailsBatches(items: any[], maxItemsPerBatch: number = 50): Array<{ batchNumber: number; items: any[] }> {
+    const batches = [];
+    
+    for (let i = 0; i < items.length; i += maxItemsPerBatch) {
+      const batchNumber = Math.floor(i / maxItemsPerBatch) + 1;
+      const batchItems = items.slice(i, i + maxItemsPerBatch);
+      
+      batches.push({
+        batchNumber: batchNumber,
+        items: batchItems
+      });
+    }
+    
+    console.log(`🔢 Created ${batches.length} batches from ${items.length} items (max ${maxItemsPerBatch} per batch)`);
+    return batches;
   }
 }
