@@ -196,7 +196,8 @@
               <div 
                 *ngFor="let product of filteredProducts()"
                 (click)="addToCart(product)"
-                class="product-list-item">
+                class="product-list-item"
+                [class.disabled]="!canInteractWithProducts()">
                 <img 
                   [src]="product.imageUrl || 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAiIGhlaWdodD0iNDAiIHZpZXdCb3g9IjAgMCA0MCA0MCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjQwIiBoZWlnaHQ9IjQwIiBmaWxsPSIjRjNGNEY2Ii8+CjxwYXRoIGQ9Ik0xNiAxNkMyMC40MTgzIDE2IDI0IDE5LjU4MTcgMjQgMjRDMjQgMjguNDE4MyAyMC40MTgzIDMyIDE2IDMyQzExLjU4MTcgMzIgOCAyOC40MTgzIDggMjRDOCAxOS41ODE3IDExLjU4MTcgMTYgMTYgMTZaIiBmaWxsPSIjRDFENURCIi8+CjxwYXRoIGQ9Ik0yNiAxNkMzMC40MTgzIDE2IDM0IDE5LjU4MTcgMzQgMjRDMzQgMjguNDE4MyAzMC40MTgzIDMyIDI2IDMyQzIxLjU4MTcgMzIgMTggMjguNDE4MyAxOCAyNEMxOCAxOS41ODE3IDIxLjU4MTcgMTYgMjYgMTZaIiBmaWxsPSIjRDFENURCIi8+CjwvZ3ZnPgo='"
                   [alt]="product.productName"
@@ -220,7 +221,8 @@
               <div 
                 *ngFor="let product of filteredProducts()"
                 (click)="addToCart(product)"
-                class="product-grid-item">
+                class="product-grid-item"
+                [class.disabled]="!canInteractWithProducts()">
                 <img 
                   [src]="product.imageUrl || 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAiIGhlaWdodD0iNDAiIHZpZXdCb3g9IjAgMCA0MCA0MCIgZmlsbD0ibm9uZSIgeG1zbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjQwIiBoZWlnaHQ9IjQwIiBmaWxsPSIjRjNGNEY2Ii8+CjxwYXRoIGQ9Ik0xNiAxNkMyMC40MTgzIDE2IDI0IDE5LjU4MTcgMjQgMjRDMjQgMjguNDE4MyAyMC40MTgzIDMyIDE2IDMyQzExLjU4MTcgMzIgOCAyOC40MTgzIDggMjRDOCAxOS41ODE3IDExLjU4MTcgMTYgMTYgMTZaIiBmaWxsPSIjRDFENURCIi8+CjxwYXRoIGQ9Ik0yNiAxNkMzMC40MTgzIDE2IDM0IDE5LjU4MTcgMzQgMjRDMzQgMjguNDE4MyAzMC40MTgzIDMyIDI2IDMyQzIxLjU4MTcgMzIgMTggMjguNDE4MyAxOCAyNEMxOCAxOS41ODE3IDIxLjU4MTcgMTYgMjYgMTZaIiBmaWxsPSIjRDFENURCIi8+CjwvZ3ZnPgo='"
                   [alt]="product.productName"
@@ -249,7 +251,8 @@
                   <div 
                     *ngFor="let product of promoProducts()"
                     (click)="addToCart(product)"
-                    class="product-grid-item promo">
+                    class="product-grid-item promo"
+                    [class.disabled]="!canInteractWithProducts()">
                     <div class="promo-badge">PROMO</div>
                     <img 
                       [src]="product.imageUrl || 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAiIGhlaWdodD0iNDAiIHZpZXdCb3g9IjAgMCA0MCA0MCIgZmlsbD0ibm9uZSIgeG1zbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjQwIiBoZWlnaHQ9IjQwIiBmaWxsPSIjRjNGNEY2Ii8+CjxwYXRoIGQ9Ik0xNiAxNkMyMC40MTgzIDE2IDI0IDE5LjU4MTcgMjQgMjRDMjQgMjguNDE4MyAyMC40MTgzIDMyIDE2IDMyQzExLjU4MTcgMzIgOCAyOC40MTgzIDggMjRDOCAxOS41ODE3IDExLjU4MTcgMTYgMTYgMTZaIiBmaWxsPSIjRDFENURCIi8+CjxwYXRoIGQ9Ik0yNiAxNkMzMC40MTgzIDE2IDM0IDE5LjU4MTcgMzQgMjRDMzQgMjguNDE4MyAzMC40MTgzIDMyIDI2IDMyQzIxLjU4MTcgMzIgMTggMjguNDE4MyAxOCAyNEMxOCAxOS41ODE3IDIxLjU4MTcgMTYgMjYgMTZaIiBmaWxsPSIjRDFENURCIi8+CjwvZ3ZnPgo='"
@@ -275,7 +278,8 @@
                   <div 
                     *ngFor="let product of bestSellerProducts(); let i = index"
                     (click)="addToCart(product)"
-                    class="product-list-item bestseller">
+                    class="product-list-item bestseller"
+                    [class.disabled]="!canInteractWithProducts()">
                     <div class="rank-badge">{{ i + 1 }}</div>
                     <img 
                       [src]="product.imageUrl || 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAiIGhlaWdodD0iNDAiIHZpZXdCb3g9IjAgMCA0MCA0MCIgZmlsbD0ibm9uZSIgeG1zbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjQwIiBoZWlnaHQ9IjQwIiBmaWxsPSIjRjNGNEY2Ii8+CjxwYXRoIGQ9Ik0xNiAxNkMyMC40MTgzIDE2IDI0IDE5LjU4MTcgMjQgMjRDMjQgMjguNDE4MyAyMC40MTgzIDMyIDE2IDMyQzExLjU4MTcgMzIgOCAyOC40MTgzIDggMjRDOCAxOS41ODE3IDExLjU4MTcgMTYgMTYgMTZaIiBmaWxsPSIjRDFENURCIi8+CjxwYXRoIGQ9Ik0yNiAxNkMzMC40MTgzIDE2IDM0IDE5LjU4MTcgMzQgMjRDMzQgMjguNDE4MyAzMC40MTgzIDMyIDI2IDMyQzIxLjU4MTcgMzIgMTggMjguNDE4MyAxOCAyNEMxOCAxOS41ODE3IDIxLjU4MTcgMTYgMjYgMTZaIiBmaWxsPSIjRDFENURCIi8+CjwvZ3JnPgo='"
@@ -505,6 +509,22 @@
               </div>
             </div> -->
 
+            <!-- Hotkey Hints -->
+            <div class="hotkey-hints">
+              <div class="hotkey-item">
+                <kbd>F4</kbd>
+                <span>Clear Order</span>
+              </div>
+              <div class="hotkey-item">
+                <kbd>F5</kbd>
+                <span>New Order</span>
+              </div>
+              <div class="hotkey-item">
+                <kbd>F6</kbd>
+                <span>Complete Order</span>
+              </div>
+            </div>
+
             <!-- Cart Items with Invoice Info -->
             <div class="cart-items">
               <!-- Invoice Info integrated into cart -->
@@ -513,11 +533,11 @@
                 <div class="invoice-compact-layout">
                   <div class="invoice-field-compact">
                     <label>Invoice #:</label>
-                    <input type="text" [(ngModel)]="customerInfo.invoiceNumber" placeholder="Auto-generated">
+                    <input type="text" [(ngModel)]="invoiceNumber" placeholder="Auto-generated">
                   </div>
                   <div class="invoice-field-compact">
                     <label>Date & Time:</label>
-                    <input type="datetime-local" [(ngModel)]="customerInfo.datetime">
+                    <input type="datetime-local" [(ngModel)]="datetime">
                   </div>
                 </div>
               </div>
@@ -601,6 +621,22 @@
               </div>
             </div>
 
+            <!-- New Order Section with Payment Button -->
+            <div class="new-order-section">
+              <button 
+                (click)="startNewOrder()" 
+                class="btn btn-new-order"
+                [class.active]="isNewOrderActive()">
+                New Order
+              </button>
+              <button 
+                (click)="showPaymentDialog()" 
+                class="btn btn-payment"
+                [disabled]="cartItems().length === 0">
+                Payment
+              </button>
+            </div>
+
             <!-- Action Buttons -->
             <div class="action-buttons">
               <button 
@@ -614,15 +650,6 @@
                 [disabled]="cartItems().length === 0 || isProcessing()"
                 class="btn btn-primary">
                 {{ isProcessing() ? 'Processing...' : 'Complete Order' }}
-              </button>
-            </div>
-
-            <!-- New Order Button (shown when cart has items or order is completed) -->
-            <div class="new-order-section" *ngIf="cartItems().length > 0">
-              <button 
-                (click)="startNewOrder()" 
-                class="btn btn-new-order">
-                New Order
               </button>
             </div>
 
@@ -658,37 +685,131 @@
       (cancelled)="onConfirmationCancelled()">
     </app-confirmation-dialog>
 
-    <!-- Offline Invoice Update Dialog -->
+    <!-- Offline Invoice Preference Dialog -->
     <div *ngIf="showOfflineInvoiceDialog()" class="modal-overlay">
       <div class="offline-invoice-dialog">
         <div class="dialog-header">
-          <h3>🔄 Update Invoice Number</h3>
-          <p>System is offline. Current invoice number is hardcoded.</p>
+          <h3>🔄 System is Offline</h3>
+          <p>The system is offline. Would you like to manually input the invoice number?</p>
         </div>
         
         <div class="dialog-content">
-          <label for="newInvoiceNumber">Enter new invoice number:</label>
-          <input 
-            #newInvoiceInput
-            type="text" 
-            id="newInvoiceNumber"
-            [value]="customerInfo.invoiceNumber"
-            placeholder="INV-0000-000000"
-            class="invoice-input">
+          <div class="radio-group">
+            <div class="radio-option">
+              <input 
+                type="radio" 
+                id="manual-invoice" 
+                name="invoice-preference" 
+                value="manual"
+                [checked]="offlineInvoicePreference() === 'manual'"
+                (change)="onInvoicePreferenceChange('manual')">
+              <label for="manual-invoice">Manually input invoice number</label>
+            </div>
+            
+            <div class="manual-input-section" *ngIf="offlineInvoicePreference() === 'manual'">
+              <input 
+                type="text" 
+                placeholder="INV-0000-000000"
+                [value]="offlineManualInvoiceNumber()"
+                (input)="onManualInvoiceNumberChange($any($event.target).value)"
+                class="invoice-input">
+            </div>
+            
+            <div class="radio-option">
+              <input 
+                type="radio" 
+                id="auto-invoice" 
+                name="invoice-preference" 
+                value="auto"
+                [checked]="offlineInvoicePreference() === 'auto'"
+                (change)="onInvoicePreferenceChange('auto')">
+              <label for="auto-invoice">Proceed with current invoice number + 1</label>
+            </div>
+          </div>
         </div>
         
         <div class="dialog-actions">
           <button 
             type="button"
             class="btn-secondary"
-            (click)="proceedWithDefaultInvoice()">
-            Keep Default
+            (click)="onOfflineInvoiceCancelled()">
+            Cancel
           </button>
           <button 
             type="button"
             class="btn-primary"
-            (click)="updateOfflineInvoice(newInvoiceInput.value)">
-            Update & Proceed
+            (click)="onOfflineInvoiceOk()">
+            OK
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Payment Dialog -->
+    <div *ngIf="showPaymentModal()" class="modal-overlay">
+      <div class="payment-dialog">
+        <div class="dialog-header">
+          <h3>💳 Payment Processing</h3>
+          <p>Enter payment details for this order</p>
+        </div>
+        
+        <div class="dialog-content">
+          <div class="payment-amounts">
+            <div class="amount-field">
+              <label for="total-amount">Total Amount Due:</label>
+              <input 
+                type="text" 
+                id="total-amount"
+                [value]="'₱' + cartSummary().netAmount.toFixed(2)"
+                readonly
+                class="amount-input readonly">
+            </div>
+            
+            <div class="amount-field">
+              <label for="amount-tendered">Amount Tendered:</label>
+              <input 
+                type="number" 
+                id="amount-tendered"
+                [(ngModel)]="paymentAmountTendered"
+                placeholder="0.00"
+                step="0.01"
+                class="amount-input">
+            </div>
+            
+            <div class="amount-field">
+              <label for="change-amount">Change:</label>
+              <input 
+                type="text" 
+                id="change-amount"
+                [value]="'₱' + calculateChange().toFixed(2)"
+                readonly
+                class="amount-input readonly">
+            </div>
+          </div>
+          
+          <div class="payment-description">
+            <label for="payment-desc">Payment Description:</label>
+            <textarea 
+              id="payment-desc"
+              [(ngModel)]="paymentDescription"
+              placeholder="Enter payment method details (e.g., Cash, Card type, E-wallet details, etc.)"
+              rows="3"
+              class="payment-textarea"></textarea>
+          </div>
+        </div>
+        
+        <div class="dialog-actions">
+          <button 
+            type="button"
+            class="btn-secondary"
+            (click)="closePaymentDialog()">
+            Cancel
+          </button>
+          <button 
+            type="button"
+            class="btn-primary"
+            (click)="processPayment()">
+            Process Payment
           </button>
         </div>
       </div>
