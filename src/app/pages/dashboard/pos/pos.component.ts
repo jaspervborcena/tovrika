@@ -1581,14 +1581,10 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
         invoiceNumber: receiptData.invoiceNumber
       });
 
-      // Save the transaction to the database (for transaction history)
-      console.log('💾 Saving transaction for history...');
-      const savedTransaction = await this.saveTransaction(receiptData);
-      console.log('✅ Transaction saved successfully:', savedTransaction.transactionNumber);
-
-      // Print the receipt (order is already saved)
-      await this.printService.printReceipt(receiptData, validPrinterType);
-      console.log(`✅ Receipt sent to ${validPrinterType} printer for order:`, receiptData.orderId);
+      // Just print the receipt (order and transaction are already saved)
+      console.log('🖨️ Printing receipt...');
+      await this.printService.printReceiptSmart(receiptData);
+      console.log(`✅ Receipt sent to printer for order:`, receiptData.orderId);
       
       // Close the modal after successful print
       this.closeReceiptModal();
@@ -1599,10 +1595,10 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       // Show error in a modal dialog instead of browser alert
       await this.showConfirmationDialog({
         title: 'Print Receipt Failed',
-        message: 'Failed to save order and print receipt. Please try again.',
+        message: 'Failed to print receipt. The order has been saved successfully. You can try printing again or use browser print as fallback.',
         confirmText: 'OK',
         cancelText: '',
-        type: 'danger'
+        type: 'warning'
       });
     }
   }
