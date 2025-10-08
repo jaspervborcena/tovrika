@@ -161,56 +161,109 @@ export class PrintService {
     // Store header (centered, bold)
     commands += '\x1B\x61\x01'; // Center align
     commands += '\x1B\x45\x01'; // Bold on
-    commands += (receiptData?.storeInfo?.storeName || 'STORE NAME') + '\n';
+    commands += (receiptData?.storeInfo?.storeName || 'Store Name') + '\n';
+    commands += '\x1B\x45\x00'; // Bold off
+    
+    // Store details
+    commands += (receiptData?.storeInfo?.address || 'Store Address') + '\n';
+    commands += `Tel: ${receiptData?.storeInfo?.phone || 'N/A'} | Email: ${receiptData?.storeInfo?.email || 'N/A'}\n`;
+    commands += `TIN: ${receiptData?.storeInfo?.tin || 'N/A'}\n`;
+    
+    // BIR Information
+    if (receiptData?.storeInfo?.birPermitNo) {
+      commands += `BIR Permit No: ${receiptData.storeInfo.birPermitNo}\n`;
+    }
+    if (receiptData?.storeInfo?.inclusiveSerialNumber) {
+      commands += `Serial Number: ${receiptData.storeInfo.inclusiveSerialNumber}\n`;
+    }
+    if (receiptData?.storeInfo?.minNumber) {
+      commands += `MIN: ${receiptData.storeInfo.minNumber}\n`;
+    }
+    
+    commands += `Invoice #: ${receiptData?.invoiceNumber || 'Auto-generated'}\n`;
+    
+    // Invoice Type (centered, bold)
+    commands += '\x1B\x45\x01'; // Bold on
+    commands += (receiptData?.storeInfo?.invoiceType || 'SALES INVOICE') + '\n';
     commands += '\x1B\x45\x00'; // Bold off
     commands += '\x1B\x61\x00'; // Left align
     
-    // Store details
-    commands += (receiptData?.storeInfo?.address || '') + '\n';
-    commands += `Tel: ${receiptData?.storeInfo?.phone || 'N/A'}\n`;
-    commands += `TIN: ${receiptData?.storeInfo?.tin || 'N/A'}\n`;
     commands += '--------------------------------\n';
     
-    // Invoice info
-    commands += `Invoice: ${receiptData?.invoiceNumber || 'N/A'}\n`;
-    commands += `Date: ${new Date().toLocaleString()}\n`;
+    // Payment Method Indicators
+    const isCashSale = receiptData?.paymentMethod === 'cash' || !receiptData?.paymentMethod;
+    const isChargeSale = receiptData?.paymentMethod === 'charge' || receiptData?.paymentMethod === 'credit';
+    commands += `Cash: ${isCashSale ? '[X]' : '[ ]'}  Charge: ${isChargeSale ? '[X]' : '[ ]'}\n`;
+    
+    commands += '--------------------------------\n';
+    
+    // Customer info
+    const getCustomerDisplayName = () => {
+      if (!receiptData?.customerName || receiptData.customerName === 'Walk-in Customer') {
+        return receiptData?.customerName || 'Walk-in Customer';
+      }
+      return receiptData.customerName;
+    };
+    
+    commands += `SOLD TO: ${getCustomerDisplayName()}\n`;
     
     if (receiptData?.customerName && receiptData.customerName !== 'Walk-in Customer') {
-      commands += `Customer: ${receiptData.customerName}\n`;
+      if (receiptData?.customerAddress && receiptData?.customerAddress !== 'N/A') {
+        commands += `Address: ${receiptData.customerAddress}\n`;
+      }
+      if (receiptData?.customerTin && receiptData?.customerTin !== 'N/A') {
+        commands += `TIN: ${receiptData.customerTin}\n`;
+      }
     }
     
     commands += '--------------------------------\n';
     
-    // Items
-    commands += 'ITEMS:\n';
+    // Date and Cashier
+    commands += `Cashier: ${receiptData?.cashier || 'N/A'}\n`;
+    commands += `Date: ${new Date(receiptData?.receiptDate || new Date()).toLocaleString()}\n`;
+    
+    commands += '--------------------------------\n';
+    
+    // Items header
+    commands += 'SKU      Qty  Amount    Total\n';
+    commands += '--------------------------------\n';
+    
     if (receiptData?.items) {
       receiptData.items.forEach((item: any) => {
-        const name = (item.productName || item.name || 'Item').substring(0, 20);
-        const qty = item.quantity || 1;
-        const price = (item.total || item.price || 0).toFixed(2);
+        const sku = (item.skuId || item.productId || 'N/A').substring(0, 8).padEnd(8);
+        const qty = (item.quantity || 1).toString().padStart(3);
+        const unitType = item.unitType && item.unitType !== 'N/A' ? ` ${item.unitType}` : '';
+        const amount = (item.sellingPrice || item.price || 0).toFixed(2).padStart(7);
+        const total = (item.total || 0).toFixed(2).padStart(8);
         
-        commands += `${name.padEnd(20)}\n`;
-        commands += `  ${qty}x @ ${price.padStart(10)}\n`;
+        // Product name (full line)
+        commands += `${(item.productName || item.name || 'Item').substring(0, 32)}\n`;
+        // SKU, qty, amount, total
+        commands += `${sku} ${qty}${unitType.substring(0, 3)} ${amount} ${total}\n`;
       });
     }
     
     commands += '--------------------------------\n';
     
     // Totals
-    commands += `Subtotal: ${((receiptData?.grossAmount || 0) - (receiptData?.vatAmount || 0)).toFixed(2).padStart(20)}\n`;
-    commands += `VAT: ${(receiptData?.vatAmount || 0).toFixed(2).padStart(25)}\n`;
-    commands += `TOTAL: ${(receiptData?.netAmount || 0).toFixed(2).padStart(23)}\n`;
+    commands += `Subtotal: ${(receiptData?.subtotal || 0).toFixed(2).padStart(20)}\n`;
     
-    // Payment info (if available)
-    if (receiptData?.paymentInfo) {
-      commands += '--------------------------------\n';
-      commands += `Tendered: ${receiptData.paymentInfo.amountTendered.toFixed(2).padStart(19)}\n`;
-      commands += `Change: ${receiptData.paymentInfo.changeAmount.toFixed(2).padStart(21)}\n`;
+    if (receiptData?.vatAmount && receiptData.vatAmount > 0) {
+      commands += `VAT (12%): ${receiptData.vatAmount.toFixed(2).padStart(19)}\n`;
+    }
+    if (receiptData?.discount && receiptData.discount > 0) {
+      commands += `Discount: ${receiptData.discount.toFixed(2).padStart(20)}\n`;
     }
     
-    commands += '--------------------------------\n';
+    commands += '================================\n';
+    commands += '\x1B\x45\x01'; // Bold on
+    commands += `TOTAL: ${(receiptData?.totalAmount || receiptData?.netAmount || 0).toFixed(2).padStart(23)}\n`;
+    commands += '\x1B\x45\x00'; // Bold off
+    commands += '================================\n';
+    
     commands += '\x1B\x61\x01'; // Center align
-    commands += 'Thank you for your business!\n';
+    commands += 'Thank you for your purchase!\n';
+    commands += 'Please come again\n';
     commands += '\x1B\x61\x00'; // Left align
     commands += '\n\n\n'; // Feed paper
     commands += '\x1D\x56\x41'; // Cut paper
@@ -260,19 +313,45 @@ export class PrintService {
         <head>
           <title>Receipt</title>
           <style>
+            @media print {
+              body { margin: 0 !important; }
+              @page { margin: 0; }
+            }
             body { 
               font-family: 'Courier New', monospace; 
               font-size: 12px; 
               margin: 0; 
-              padding: 10px;
-              width: 250px;
+              padding: 5px;
+              width: 300px;
+              line-height: 1.3;
             }
             .center { text-align: center; }
             .bold { font-weight: bold; }
-            .line { border-bottom: 1px solid #000; margin: 5px 0; }
-            table { width: 100%; border-collapse: collapse; }
-            td { padding: 2px 0; }
+            .line { 
+              border-bottom: 1px solid #000; 
+              margin: 8px 0; 
+              width: 100%; 
+            }
+            table { 
+              width: 100%; 
+              border-collapse: collapse; 
+              margin: 5px 0;
+            }
+            td, th { 
+              padding: 2px 4px; 
+              vertical-align: top;
+            }
             .right { text-align: right; }
+            th { 
+              font-weight: bold; 
+              text-align: left;
+            }
+            th:nth-child(2), th:nth-child(3), th:nth-child(4) {
+              text-align: center;
+            }
+            th:nth-child(3), th:nth-child(4) {
+              text-align: right;
+            }
           </style>
         </head>
         <body>${printContent}</body>
@@ -474,87 +553,142 @@ export class PrintService {
    * Generate HTML content for browser printing
    */
   private generatePrintableReceipt(receiptData: any): string {
+    // Get customer display name (same logic as preview)
+    const getCustomerDisplayName = () => {
+      if (!receiptData?.customerName || receiptData.customerName === 'Walk-in Customer') {
+        return receiptData?.customerName || 'Walk-in Customer';
+      }
+      return receiptData.customerName;
+    };
+
+    // Check if has customer details (same logic as preview)
+    const hasCustomerDetails = () => {
+      return receiptData?.customerName && 
+             receiptData.customerName !== 'Walk-in Customer' &&
+             (receiptData?.customerAddress && receiptData.customerAddress !== 'N/A') ||
+             (receiptData?.customerTin && receiptData.customerTin !== 'N/A');
+    };
+
     let html = `
       <div class="center">
-        <div class="bold" style="font-size: 16px;">${receiptData?.storeInfo?.storeName || 'STORE NAME'}</div>
-        <div>${receiptData?.storeInfo?.address || ''}</div>
+        <div class="bold" style="font-size: 16px;">${receiptData?.storeInfo?.storeName || 'Store Name'}</div>
+        <div>${receiptData?.storeInfo?.address || 'Store Address'}</div>
         <div>Tel: ${receiptData?.storeInfo?.phone || 'N/A'} | Email: ${receiptData?.storeInfo?.email || 'N/A'}</div>
         <div>TIN: ${receiptData?.storeInfo?.tin || 'N/A'}</div>
     `;
 
-    // BIR Information
+    // BIR Information (matching preview)
     if (receiptData?.storeInfo?.birPermitNo) {
-      html += `<div>BIR Permit No: ${receiptData.storeInfo.birPermitNo}</div>`;
+      html += `<div><strong>BIR Permit No:</strong> ${receiptData.storeInfo.birPermitNo}</div>`;
     }
     if (receiptData?.storeInfo?.inclusiveSerialNumber) {
-      html += `<div>Serial Number: ${receiptData.storeInfo.inclusiveSerialNumber}</div>`;
+      html += `<div><strong>Serial Number:</strong> ${receiptData.storeInfo.inclusiveSerialNumber}</div>`;
     }
     if (receiptData?.storeInfo?.minNumber) {
-      html += `<div>MIN: ${receiptData.storeInfo.minNumber}</div>`;
+      html += `<div><strong>MIN:</strong> ${receiptData.storeInfo.minNumber}</div>`;
     }
 
     html += `
-        <div>Invoice #: ${receiptData?.invoiceNumber || 'N/A'}</div>
+        <div><strong>Invoice #: ${receiptData?.invoiceNumber || 'Auto-generated'}</strong></div>
         <div class="bold">${receiptData?.storeInfo?.invoiceType || 'SALES INVOICE'}</div>
       </div>
       
       <div class="line"></div>
     `;
 
-    // Customer info
-    if (receiptData?.customerName) {
-      html += `
-        <div class="bold">SOLD TO:</div>
-        <div>Customer: ${receiptData.customerName}</div>
-      `;
-      if (receiptData?.customerAddress) {
-        html += `<div>Address: ${receiptData.customerAddress}</div>`;
-      }
-      if (receiptData?.customerTin) {
-        html += `<div>TIN: ${receiptData.customerTin}</div>`;
-      }
-      html += '<div class="line"></div>';
-    }
-
+    // Payment Method Indicators (matching preview)
+    const isCashSale = receiptData?.paymentMethod === 'cash' || !receiptData?.paymentMethod;
+    const isChargeSale = receiptData?.paymentMethod === 'charge' || receiptData?.paymentMethod === 'credit';
+    
     html += `
-      <div>Date: ${new Date(receiptData?.receiptDate).toLocaleDateString()}</div>
-      <div>Cashier: ${receiptData?.cashier || 'N/A'}</div>
-      <div class="line"></div>
-      
-      <table>
+      <div style="margin: 10px 0;">
+        <div style="display: flex; justify-content: center; gap: 20px;">
+          <div style="display: flex; align-items: center; gap: 5px;">
+            <span>Cash</span>
+            <div style="width: 12px; height: 12px; border: 1px solid #000; border-radius: 50%; ${isCashSale ? 'background-color: #000;' : ''}"></div>
+          </div>
+          <div style="display: flex; align-items: center; gap: 5px;">
+            <span>Charge</span>
+            <div style="width: 12px; height: 12px; border: 1px solid #000; border-radius: 50%; ${isChargeSale ? 'background-color: #000;' : ''}"></div>
+          </div>
+        </div>
+      </div>
     `;
 
-    // Items
+    // Sold To Section (matching preview)
+    html += `
+      <div class="line"></div>
+      <div class="bold">SOLD TO: ${getCustomerDisplayName()}</div>
+    `;
+
+    if (hasCustomerDetails()) {
+      if (receiptData?.customerAddress && receiptData?.customerAddress !== 'N/A') {
+        html += `<div><strong>Address:</strong> ${receiptData.customerAddress}</div>`;
+      }
+      if (receiptData?.customerTin && receiptData?.customerTin !== 'N/A') {
+        html += `<div><strong>TIN:</strong> ${receiptData.customerTin}</div>`;
+      }
+    }
+
+    // Cashier and Date (matching preview)
+    html += `
+      <div class="line"></div>
+      <div><strong>Cashier:</strong> ${receiptData?.cashier || 'N/A'}</div>
+      <div><strong>Date:</strong> ${new Date(receiptData?.receiptDate || new Date()).toLocaleString()}</div>
+      <div class="line"></div>
+      
+      <table style="width: 100%; border-collapse: collapse;">
+        <thead>
+          <tr>
+            <th style="text-align: left; padding: 4px 2px; border-bottom: 1px solid #000;">SKU</th>
+            <th style="text-align: center; padding: 4px 2px; border-bottom: 1px solid #000;">Qty</th>
+            <th style="text-align: right; padding: 4px 2px; border-bottom: 1px solid #000;">Amount</th>
+            <th style="text-align: right; padding: 4px 2px; border-bottom: 1px solid #000;">Total</th>
+          </tr>
+        </thead>
+        <tbody>
+    `;
+
+    // Items (matching preview format with SKU)
     receiptData?.items?.forEach((item: any) => {
+      const qty = item.quantity || 1;
+      const unitType = item.unitType && item.unitType !== 'N/A' ? ` ${item.unitType}` : '';
+      const qtyDisplay = `${qty}${unitType}`;
+      
       html += `
         <tr>
-          <td colspan="3">${item.productName}</td>
-        </tr>
-        <tr>
-          <td>${item.quantity} x ${item.sellingPrice.toFixed(2)}</td>
-          <td></td>
-          <td class="right">${item.total.toFixed(2)}</td>
+          <td style="padding: 4px 2px; vertical-align: top;">
+            <div style="font-size: 10px; color: #666;">${item.skuId || item.productId || 'N/A'}</div>
+            <div style="font-weight: bold;">${item.productName || item.name}</div>
+          </td>
+          <td style="padding: 4px 2px; text-align: center; vertical-align: top;">${qtyDisplay}</td>
+          <td style="padding: 4px 2px; text-align: right; vertical-align: top;">₱${(item.sellingPrice || item.price || 0).toFixed(2)}</td>
+          <td style="padding: 4px 2px; text-align: right; vertical-align: top;">₱${(item.total || 0).toFixed(2)}</td>
         </tr>
       `;
     });
 
     html += `
+        </tbody>
       </table>
       <div class="line"></div>
       
-      <table>
-        <tr><td>Subtotal:</td><td class="right">${receiptData?.subtotal?.toFixed(2) || '0.00'}</td></tr>
+      <table style="width: 100%;">
+        <tr><td>Subtotal:</td><td class="right">₱${(receiptData?.subtotal || 0).toFixed(2)}</td></tr>
     `;
 
-    if (receiptData?.vatAmount > 0) {
-      html += `<tr><td>VAT (12%):</td><td class="right">${receiptData.vatAmount.toFixed(2)}</td></tr>`;
+    if (receiptData?.vatAmount && receiptData.vatAmount > 0) {
+      html += `<tr><td>VAT (12%):</td><td class="right">₱${receiptData.vatAmount.toFixed(2)}</td></tr>`;
     }
-    if (receiptData?.discount > 0) {
-      html += `<tr><td>Discount:</td><td class="right">${receiptData.discount.toFixed(2)}</td></tr>`;
+    if (receiptData?.discount && receiptData.discount > 0) {
+      html += `<tr><td>Discount:</td><td class="right">-₱${receiptData.discount.toFixed(2)}</td></tr>`;
     }
 
     html += `
-        <tr class="bold"><td>TOTAL:</td><td class="right">${receiptData?.totalAmount?.toFixed(2) || '0.00'}</td></tr>
+        <tr style="border-top: 1px solid #000; font-weight: bold;">
+          <td style="padding-top: 5px;"><strong>TOTAL:</strong></td>
+          <td class="right" style="padding-top: 5px;"><strong>₱${(receiptData?.totalAmount || receiptData?.netAmount || 0).toFixed(2)}</strong></td>
+        </tr>
       </table>
       
       <div class="center" style="margin-top: 20px;">
