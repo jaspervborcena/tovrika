@@ -108,6 +108,22 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   readonly offlineInvoicePreference = signal<'manual' | 'auto'>('auto');
   readonly offlineManualInvoiceNumber = signal<string>('INV-0000-000000');
   
+  // Regular properties for ngModel binding (signals don't work well with ngModel)
+  manualInvoiceInput: string = 'INV-0000-000000';
+  
+  // Computed properties for UI display
+  readonly completeOrderButtonText = computed(() => {
+    if (this.isProcessing()) {
+      return 'Processing...';
+    }
+    
+    if (this.networkService.isOffline()) {
+      return 'Complete Offline Order';
+    }
+    
+    return 'Complete Order';
+  });
+  
   // Payment Dialog State
   readonly paymentModalVisible = signal<boolean>(false);
   paymentAmountTendered: number = 0;
@@ -115,23 +131,13 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
 
   async loadNextInvoicePreview(): Promise<void> {
     try {
-      // Check if online/offline
-      if (this.networkService.isOffline()) {
-        console.log('📋 Offline mode: Using default invoice number');
-        this.nextInvoiceNumber.set('INV-0000-000000 (Offline)');
-        this.invoiceNumber = 'INV-0000-000000';
-        return;
-      }
-
-      const nextInvoice = await this.posService.getNextInvoiceNumberPreview();
-      this.nextInvoiceNumber.set(nextInvoice);
-      
-      // Update the customer info invoice number for display
-      this.invoiceNumber = nextInvoice;
-      console.log('📋 Next invoice number loaded:', nextInvoice);
+      // Always use default placeholder until payment is processed
+      console.log('📋 Setting default invoice number placeholder');
+      this.nextInvoiceNumber.set('INV-0000-000000');
+      this.invoiceNumber = 'INV-0000-000000';
     } catch (error) {
       console.error('Error loading invoice preview:', error);
-      this.nextInvoiceNumber.set('INV-0000-000000 (Error)');
+      this.nextInvoiceNumber.set('INV-0000-000000');
       this.invoiceNumber = 'INV-0000-000000';
     }
   }
@@ -763,6 +769,26 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
         description: this.paymentDescription
       });
       
+      // Generate real invoice number when payment is being processed
+      let realInvoiceNumber: string;
+      try {
+        if (this.networkService.isOffline()) {
+          // In offline mode, use manual invoice handling
+          realInvoiceNumber = this.manualInvoiceInput || 'INV-0000-000000';
+        } else {
+          // In online mode, get next invoice number from service
+          realInvoiceNumber = await this.posService.getNextInvoiceNumberPreview();
+        }
+        
+        // Update the display immediately
+        this.nextInvoiceNumber.set(realInvoiceNumber);
+        this.invoiceNumber = realInvoiceNumber;
+        console.log('📋 Real invoice number generated:', realInvoiceNumber);
+      } catch (invoiceError) {
+        console.warn('Warning: Could not generate invoice number:', invoiceError);
+        realInvoiceNumber = 'INV-0000-000000';
+      }
+      
       // Close payment dialog first
       this.closePaymentDialog();
       
@@ -820,11 +846,11 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
         invoiceNumber: result.invoiceNumber
       });
 
-      // Update the invoice number for display
+      // Update the invoice number for display with the final result
       this.invoiceNumber = result.invoiceNumber;
+      this.nextInvoiceNumber.set(result.invoiceNumber);
 
-      // Update the next invoice preview for the next order
-      await this.loadNextInvoicePreview();
+      console.log('📋 Invoice number updated to final result:', result.invoiceNumber);
 
       // Save customer information if available
       console.log('👤 Saving customer information...');
@@ -1378,12 +1404,8 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       });
       
       if (confirmed) {
-        // Start new order automatically
+        // Start new order automatically (but don't add the product)
         await this.startNewOrderDirect();
-        // After starting new order, add the product
-        if (product.totalStock > 0) {
-          this.posService.addToCart(product);
-        }
       }
       return;
     }
@@ -1420,12 +1442,16 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
 
     if (confirmed) {
       this.posService.clearCart();
+      // Reset invoice number to default placeholder
+      this.nextInvoiceNumber.set('INV-0000-000000');
+      this.invoiceNumber = 'INV-0000-000000';
+      console.log('📋 Invoice number reset to default after clearing cart');
     }
   }
 
   async processOrder(): Promise<void> {
     try {
-      console.log('🎯 Complete Order clicked - Opening payment dialog first...');
+      console.log('🎯 Complete Order clicked...');
       
       // Validate cart has items
       if (this.cartItems().length === 0) {
@@ -1433,16 +1459,17 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
         return;
       }
       
-      // Handle offline mode
+      // Handle offline mode - skip payment dialog and go directly to invoice preference
       if (this.networkService.isOffline()) {
-        // Always show offline dialog to get user preference
+        console.log('📱 Offline mode - showing invoice preference dialog...');
         await this.showOfflineInvoicePreferenceDialog();
         return;
       }
 
       // Online mode - Open payment dialog first (no Firestore save yet)
-      console.log('💳 Opening payment dialog for order completion...');
-      this.showPaymentDialog();    } catch (error) {
+      console.log('💳 Online mode - opening payment dialog for order completion...');
+      this.showPaymentDialog();
+    } catch (error) {
       console.error('❌ Error processing order:', error);
       
       // Show error in a modal dialog instead of browser alert
@@ -1748,6 +1775,8 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     }
 
     // No saved preference, show dialog
+    // Initialize manual input with current invoice number
+    this.manualInvoiceInput = this.invoiceNumber || 'INV-0000-000000';
     this.showOfflineInvoiceDialog.set(true);
   }
 
@@ -1770,24 +1799,27 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   async processOfflineOrderWithPreference(preferenceData: { preference: 'manual' | 'auto'; manualInvoiceNumber?: string }): Promise<void> {
+    // Generate real invoice number based on preference
+    let realInvoiceNumber: string;
+    
     if (preferenceData.preference === 'manual' && preferenceData.manualInvoiceNumber) {
       // Use manual invoice number
-      this.invoiceNumber = preferenceData.manualInvoiceNumber;
+      realInvoiceNumber = preferenceData.manualInvoiceNumber;
     } else {
-      // Auto-increment: get current invoice and add 1
-      const currentInvoice = this.invoiceNumber;
-      if (currentInvoice === 'INV-0000-000000') {
-        this.invoiceNumber = 'INV-0001-000001';
-      } else {
-        // Extract number and increment
-        const match = currentInvoice.match(/INV-(\d+)-(\d+)/);
-        if (match) {
-          const year = match[1];
-          const number = parseInt(match[2]) + 1;
-          this.invoiceNumber = `INV-${year}-${number.toString().padStart(6, '0')}`;
-        }
+      // Auto-increment: try to get next invoice from service, fallback to increment
+      try {
+        realInvoiceNumber = await this.posService.getNextInvoiceNumberPreview();
+      } catch (error) {
+        console.warn('Could not get next invoice number, using fallback increment:', error);
+        // Fallback: Auto-increment from default
+        realInvoiceNumber = 'INV-0001-000001';
       }
     }
+
+    // Update invoice number displays
+    this.invoiceNumber = realInvoiceNumber;
+    this.nextInvoiceNumber.set(realInvoiceNumber);
+    console.log('📋 Real invoice number set for offline order:', realInvoiceNumber);
 
     // Process the offline order
     await this.processOfflineOrder();
@@ -1797,10 +1829,16 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   onInvoicePreferenceChange(preference: 'manual' | 'auto'): void {
     console.log('📱 Invoice preference changed to:', preference);
     this.offlineInvoicePreference.set(preference);
+    
+    // Initialize manual input with current invoice number if switching to manual
+    if (preference === 'manual') {
+      this.manualInvoiceInput = this.invoiceNumber || 'INV-0000-000000';
+    }
   }
 
   onManualInvoiceNumberChange(invoiceNumber: string): void {
     this.offlineManualInvoiceNumber.set(invoiceNumber);
+    this.manualInvoiceInput = invoiceNumber;
   }
 
   onOfflineInvoiceCancelled(): void {
@@ -1809,7 +1847,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
 
   onOfflineInvoiceOk(): void {
     const preference = this.offlineInvoicePreference();
-    const manualNumber = preference === 'manual' ? this.offlineManualInvoiceNumber() : undefined;
+    const manualNumber = preference === 'manual' ? this.manualInvoiceInput : undefined;
     this.onOfflineInvoiceConfirmed(preference, manualNumber);
   }
 

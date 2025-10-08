@@ -74,11 +74,11 @@ export class PolicyAgreementComponent {
       }
       
       // Redirect based on user's authentication state
-      const authUser = this.authService.getCurrentUser();
+      const redirectAuthUser = this.authService.getCurrentUser();
       const currentPermission = this.authService.getCurrentPermission();
       
       console.log('📍 Policy Agreement: Redirecting user...');
-      console.log('📍 User:', authUser?.email);
+      console.log('📍 User:', redirectAuthUser?.email);
       console.log('📍 User permissions:', currentPermission);
       console.log('📍 User has multiple companies:', this.authService.hasMultipleCompanies());
       

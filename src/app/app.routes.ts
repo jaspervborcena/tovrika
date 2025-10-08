@@ -19,8 +19,14 @@ export const routes: Routes = [
   },
   {
     path: 'policy-agreement',
-    canActivate: [authGuard],
-    loadComponent: () => import('./pages/auth/policy-agreement/policy-agreement.component').then(m => m.PolicyAgreementComponent)
+    // Remove authGuard to prevent circular dependencies during chunk errors
+    loadComponent: () => import('./pages/auth/policy-agreement/policy-agreement.component')
+      .then(m => m.PolicyAgreementComponent)
+      .catch(error => {
+        console.warn('🔄 Policy agreement component failed to load, triggering reload:', error);
+        setTimeout(() => window.location.reload(), 100);
+        throw error;
+      })
   },
   {
     path: 'company-selection',

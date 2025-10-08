@@ -3,13 +3,21 @@ import { Router } from '@angular/router';
 import { CanActivateFn } from '@angular/router';
 import { AuthService } from '../services/auth.service';
 import { OfflineStorageService } from '../core/services/offline-storage.service';
+import { NetworkService } from '../core/services/network.service';
 
 export const policyGuard: CanActivateFn = async (route, state) => {
   const authService = inject(AuthService);
   const offlineStorageService = inject(OfflineStorageService);
+  const networkService = inject(NetworkService);
   const router = inject(Router);
 
   console.log('🛡️ PolicyGuard: Starting policy check for URL:', state.url);
+  
+  // In offline mode, bypass policy check to avoid chunk loading issues
+  if (networkService.isOffline()) {
+    console.log('🛡️ PolicyGuard: Offline mode detected - bypassing policy check');
+    return true;
+  }
 
   // Check if user is authenticated
   const currentUser = authService.getCurrentUser();
@@ -47,7 +55,14 @@ export const policyGuard: CanActivateFn = async (route, state) => {
     return true;
   } catch (error) {
     console.error('🛡️ PolicyGuard: Error checking policy status:', error);
-    // On error, redirect to policy agreement to be safe
+    
+    // In offline mode, allow access rather than redirecting to policy-agreement
+    if (networkService.isOffline()) {
+      console.log('🛡️ PolicyGuard: Error in offline mode - allowing access to avoid chunk loading issues');
+      return true;
+    }
+    
+    // Only redirect to policy agreement if online
     router.navigate(['/policy-agreement']);
     return false;
   }

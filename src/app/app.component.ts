@@ -1,6 +1,7 @@
-import { Component } from '@angular/core';
+import { Component, inject } from '@angular/core';
 import { RouterOutlet } from '@angular/router';
 import { ToastComponent } from './shared/components/toast/toast.component';
+import { ChunkErrorService } from './core/services/chunk-error.service';
 
 @Component({
   selector: 'app-root',
@@ -19,4 +20,12 @@ import { ToastComponent } from './shared/components/toast/toast.component';
 })
 export class AppComponent {
   title = 'POS System';
+  
+  // Initialize chunk error handling
+  private chunkErrorService = inject(ChunkErrorService);
+  
+  constructor() {
+    // Service auto-initializes when injected
+    console.log('🛡️ Chunk error protection enabled');
+  }
 }
