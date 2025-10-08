@@ -27,8 +27,10 @@
       <!-- Offline Status Indicator -->
       <div *ngIf="!isOnline()" class="offline-alert">
         <span style="color: #f59e0b;">📱 Offline Mode</span>
-        <small style="display: block; margin-top: 0.25rem; color: #6b7280;">
-          Limited to login/logout. Registration and password reset require internet connection.
+        <small style="display: block; margin-top: 0.25rem; color: #6b7280; line-height: 1.4;">
+          In offline mode, your POS data is stored securely on this device and will not sync to the cloud until you reconnect. 
+          Once online, data synchronization will resume automatically based on your subscription plan. 
+          Registration and password reset require internet connection.
         </small>
       </div>
       

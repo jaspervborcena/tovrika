@@ -99,7 +99,7 @@ import { MainLayoutComponent } from '../../../layouts/main-layout/main-layout.co
                   </div>
                   <div>
                     <h3 class="font-semibold text-gray-900 mb-1">Sync Data</h3>
-                    <p class="text-gray-600">All offline data is automatically synchronized to the cloud</p>
+                    <p class="text-gray-600">Offline data syncs to cloud based on your subscription plan</p>
                   </div>
                 </div>
               </div>
