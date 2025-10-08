@@ -1,4 +1,4 @@
-import { Injectable, computed, signal } from '@angular/core';
+import { Injectable, computed, signal, inject } from '@angular/core';
 import { 
   collection, 
   doc, 
@@ -15,6 +15,8 @@ import {
 } from 'firebase/firestore';
 import { db } from '../firebase.config';
 import { AuthService } from './auth.service';
+import { FirestoreSecurityService } from '../core/services/firestore-security.service';
+import { OfflineDocumentService } from '../core/services/offline-document.service';
 
 export interface ProductCategory {
   id?: string;
@@ -44,7 +46,11 @@ export class CategoryService {
     this.categoriesSignal().filter(cat => cat.isActive)
   );
 
-  constructor(private authService: AuthService) {}
+  constructor(
+    private authService: AuthService,
+    private offlineDocService: OfflineDocumentService,
+    private firestoreSecurityService: FirestoreSecurityService
+  ) {}
 
   /**
    * Load categories for a specific store
@@ -114,16 +120,6 @@ export class CategoryService {
       const testRef = collection(db, 'test');
       console.log('🔍 Test collection reference created successfully');
       
-      // Test if we can write to Firestore at all
-      console.log('🔍 Testing write permissions...');
-      try {
-        const testDoc = await addDoc(testRef, { test: 'connection test', timestamp: new Date() });
-        console.log('✅ Test write successful, doc ID:', testDoc.id);
-      } catch (testError) {
-        console.error('❌ Test write failed:', testError);
-        throw new Error(`Firestore write test failed: ${(testError as any)?.message || testError}`);
-      }
-      
       const now = new Date();
       const newCategory: Omit<ProductCategory, 'id'> = {
         ...categoryData,
@@ -133,12 +129,9 @@ export class CategoryService {
 
       console.log('🔍 Full category object to create:', newCategory);
       
-      const categoriesRef = collection(db, 'categories');
-      console.log('🔍 Categories collection reference:', categoriesRef);
-      
-      console.log('🔍 Attempting to add document to Firestore...');
-      const docRef = await addDoc(categoriesRef, newCategory);
-      console.log('🔍 Document reference after creation:', docRef);
+      console.log('🔍 Creating category with offline-safe document service...');
+      // 🔥 NEW APPROACH: Use OfflineDocumentService for offline-safe creation
+      const documentId = await this.offlineDocService.createDocument('categories', newCategory);
       
       // Refresh categories after creation
       console.log('🔍 Refreshing categories after creation...');
@@ -146,8 +139,8 @@ export class CategoryService {
         await this.loadCategoriesByStore(categoryData.storeId);
       }
       
-      console.log('✅ Category created with ID:', docRef.id);
-      return docRef.id;
+      console.log('✅ Category created with ID:', documentId, navigator.onLine ? '(online)' : '(offline)');
+      return documentId;
 
     } catch (error) {
       console.error('❌ Error creating category:', error);

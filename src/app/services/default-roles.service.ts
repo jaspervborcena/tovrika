@@ -1,10 +1,14 @@
 import { Injectable } from '@angular/core';
 import { RoleDefinition, RolePermissions } from './role-definition.service';
 import { Firestore, collection, addDoc } from '@angular/fire/firestore';
+import { OfflineDocumentService } from '../core/services/offline-document.service';
 
 @Injectable({ providedIn: 'root' })
 export class DefaultRolesService {
-  constructor(private firestore: Firestore) {}
+  constructor(
+    private firestore: Firestore,
+    private offlineDocService: OfflineDocumentService
+  ) {}
 
   getDefaultRoles(companyId: string, storeId: string): RoleDefinition[] {
     const now = new Date();
@@ -80,9 +84,10 @@ export class DefaultRolesService {
 
   async createDefaultRoles(companyId: string, storeId: string): Promise<void> {
     const roles = this.getDefaultRoles(companyId, storeId);
-    const roleDefsRef = collection(this.firestore, 'roleDefinition');
     for (const role of roles) {
-      await addDoc(roleDefsRef, role);
+      // 🔥 NEW APPROACH: Use OfflineDocumentService for offline-safe creation
+      const documentId = await this.offlineDocService.createDocument('roleDefinition', role);
+      console.log('✅ Default role created with ID:', documentId, `(${role.roleId})`, navigator.onLine ? '(online)' : '(offline)');
     }
   }
 }

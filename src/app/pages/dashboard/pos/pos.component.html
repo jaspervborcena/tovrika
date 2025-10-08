@@ -621,19 +621,13 @@
               </div>
             </div>
 
-            <!-- New Order Section with Payment Button -->
+            <!-- New Order Section -->
             <div class="new-order-section">
               <button 
                 (click)="startNewOrder()" 
                 class="btn btn-new-order"
                 [class.active]="isNewOrderActive()">
                 New Order
-              </button>
-              <button 
-                (click)="showPaymentDialog()" 
-                class="btn btn-payment"
-                [disabled]="cartItems().length === 0">
-                Payment
               </button>
             </div>
 

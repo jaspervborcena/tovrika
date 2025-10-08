@@ -1,4 +1,4 @@
-import { Injectable, computed, signal } from '@angular/core';
+import { Injectable, computed, signal, inject } from '@angular/core';
 import { 
   Firestore, 
   collection, 
@@ -14,12 +14,15 @@ import {
 } from '@angular/fire/firestore';
 import { Product, ProductInventory } from '../interfaces/product.interface';
 import { AuthService } from './auth.service';
+import { FirestoreSecurityService } from '../core/services/firestore-security.service';
+import { OfflineDocumentService } from '../core/services/offline-document.service';
 
 @Injectable({
   providedIn: 'root'
 })
 export class ProductService {
   private readonly products = signal<Product[]>([]);
+  private readonly offlineDocService = inject(OfflineDocumentService);
   
   // Computed properties
   readonly totalProducts = computed(() => this.products().length);
@@ -41,7 +44,8 @@ export class ProductService {
 
   constructor(
     private firestore: Firestore,
-    private authService: AuthService
+    private authService: AuthService,
+    private securityService: FirestoreSecurityService
   ) {}
 
   private transformFirestoreDoc(doc: any): Product {
@@ -154,6 +158,18 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
 
       console.log('📦 Loading products for:', { companyId, storeId });
       
+      // Debug: Check current UID context for security
+      try {
+        const currentUID = await this.securityService.getCurrentUserUID();
+        console.log('🔐 Current UID for product loading:', currentUID);
+        
+        // Check if we have offline UID available
+        const offlineUID = await this.securityService.getCurrentUserUID();
+        console.log('💾 UID from security service (includes IndexedDB):', offlineUID);
+      } catch (uidError) {
+        console.warn('⚠️ Could not get UID for product loading:', uidError);
+      }
+      
       const productsRef = collection(this.firestore, 'products');
       
       let q;
@@ -177,8 +193,25 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
         companyId,
         storeId,
         productsFound: products.length,
-        productNames: products.map(p => p.productName).slice(0, 5) // Show first 5 product names
+        productNames: products.map(p => p.productName).slice(0, 5), // Show first 5 product names
+        hasUID: products.map(p => !!(p as any).uid).slice(0, 5), // Check if products have UID fields
+        sampleProduct: products.length > 0 ? {
+          id: products[0].id,
+          name: products[0].productName,
+          hasUID: !!(products[0] as any).uid,
+          companyId: products[0].companyId,
+          storeId: products[0].storeId
+        } : null
       });
+      
+      // Validate that we actually have products before setting
+      if (products.length === 0) {
+        console.warn('⚠️ No products found for query:', { companyId, storeId });
+        console.warn('⚠️ This could be due to:');
+        console.warn('   1. No products exist for this company/store');
+        console.warn('   2. Products lack proper UID fields (security filtering)');
+        console.warn('   3. Firestore security rules blocking access');
+      }
       
       this.products.set(products);
     } catch (error) {
@@ -190,43 +223,47 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
   async createProduct(productData: Omit<Product, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> {
     try {
       const companyId = await this.waitForAuth();
-      const productsRef = collection(this.firestore, 'products');
       
-      const newProduct = {
+      // Prepare product data with required fields
+      const productToCreate = {
         ...productData,
         companyId,
         status: productData.status || 'active',
         inventory: productData.inventory.map(inv => ({
           ...inv,
           receivedAt: Timestamp.fromDate(inv.receivedAt)
-        })),
-        createdAt: Timestamp.fromDate(new Date()),
-        updatedAt: Timestamp.fromDate(new Date())
+        }))
       };
 
-      const docRef = await addDoc(productsRef, newProduct);
+      // 🔥 NEW APPROACH: Pre-generate documentId, then create with that ID
+      const documentId = await this.offlineDocService.createDocument('products', productToCreate);
 
-      // Update the signal
+      // Update the signal with the new product (works with both real and temp IDs)
       this.products.update(products => [
         ...products, 
-        { ...productData, id: docRef.id, companyId, createdAt: new Date(), updatedAt: new Date() }
+        { 
+          ...productData, 
+          id: documentId, 
+          companyId, 
+          createdAt: new Date(), 
+          updatedAt: new Date(),
+          // Add offline flag if it's a temporary ID
+          isOfflineCreated: documentId.startsWith('temp_')
+        }
       ]);
       
-      return docRef.id;
+      console.log('✅ Product created with pre-generated ID:', documentId, navigator.onLine ? '(online)' : '(offline)');
+      return documentId;
     } catch (error) {
-      console.error('Error creating product:', error);
+      console.error('❌ Error creating product:', error);
       throw error;
     }
   }
 
   async updateProduct(productId: string, updates: Partial<Product>): Promise<void> {
     try {
-      const productRef = doc(this.firestore, 'products', productId);
-      
-      const updateData: any = {
-        ...updates,
-        updatedAt: Timestamp.fromDate(new Date())
-      };
+      // Prepare update data with proper Timestamp conversion
+      const updateData: any = { ...updates };
 
       // Handle inventory array updates
       if (updates.inventory) {
@@ -235,8 +272,9 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
           receivedAt: Timestamp.fromDate(inv.receivedAt)
         }));
       }
-      
-      await updateDoc(productRef, updateData);
+
+      // 🔥 NEW APPROACH: Use OfflineDocumentService for consistent online/offline updates
+      await this.offlineDocService.updateDocument('products', productId, updateData);
 
       // Update the signal
       this.products.update(products =>
@@ -246,8 +284,10 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
             : product
         )
       );
+
+      console.log('✅ Product updated with ID:', productId, navigator.onLine ? '(online)' : '(offline)');
     } catch (error) {
-      console.error('Error updating product:', error);
+      console.error('❌ Error updating product:', error);
       throw error;
     }
   }

@@ -899,7 +899,23 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   // Method to reinitialize the component when navigating back to POS
   private async reinitializeComponent(): Promise<void> {
     console.log('🔄 POS COMPONENT: Reinitializing component due to navigation');
+    
+    // Check if products are already loaded to prevent unnecessary reloading
+    const currentProductCount = this.products().length;
+    console.log('🔄 Current product count before reinit:', currentProductCount);
+    
+    // Only reinitialize if we don't have products or user context has changed
+    const user = this.authService.getCurrentUser();
+    if (currentProductCount > 0 && user?.uid) {
+      console.log('🔄 Products already loaded and user authenticated - skipping full reinit');
+      // Just update the time and invoice preview
+      this.updateCurrentDateTime();
+      await this.loadNextInvoicePreview();
+      return;
+    }
+    
     try {
+      console.log('🔄 Performing full reinitialization...');
       // Load data first to ensure stores and products are available
       await this.loadData();
       
@@ -910,7 +926,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       await this.loadNextInvoicePreview();
       await this.initializeStore(); 
       
-      console.log('🔄 POS COMPONENT: Reinitialization completed');
+      console.log('🔄 POS COMPONENT: Reinitialization completed - products:', this.products().length);
     } catch (error) {
       console.error('🔄 Error reinitializing POS component:', error);
     }
@@ -1185,7 +1201,36 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     const finalSelectedStore = this.selectedStoreId();
     
     if (finalStores.length === 0) {
-      console.error('❌ Desktop No stores available after all retry attempts. Check user permissions and store loading.');
+      console.error('❌ Desktop No stores available after all retry attempts. Using IndexedDB fallback...');
+      
+      // FALLBACK: Use IndexedDB userData.permissions[0].storeId as reliable default
+      try {
+        const currentUser = this.authService.getCurrentUser();
+        const offlineUserData = await this.indexedDBService.getUserData(currentUser?.uid || '');
+        
+        if (offlineUserData?.permissions && offlineUserData.permissions.length > 0) {
+          const fallbackStoreId = offlineUserData.permissions[0].storeId;
+          
+          if (fallbackStoreId) {
+            console.log('🔄 Using IndexedDB fallback storeId:', fallbackStoreId);
+            
+            // Force select the store from IndexedDB, even if it's not in availableStores
+            await this.selectStore(fallbackStoreId);
+            
+            // Load products for this store
+            const fallbackCompanyId = offlineUserData.permissions[0].companyId;
+            if (fallbackCompanyId) {
+              console.log('📦 Loading products for fallback store - company:', fallbackCompanyId, 'store:', fallbackStoreId);
+              await this.productService.loadProductsByCompanyAndStore(fallbackCompanyId, fallbackStoreId);
+            }
+            
+            console.log('✅ IndexedDB fallback store selection completed');
+            return;
+          }
+        }
+      } catch (error) {
+        console.error('❌ IndexedDB fallback failed:', error);
+      }
     } else {
       console.warn('⚠️ Desktop Stores are available but auto-selection failed after retries');
     }

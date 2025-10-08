@@ -14,6 +14,8 @@ import {
   documentId
 } from '@angular/fire/firestore';
 import { AuthService } from './auth.service';
+import { FirestoreSecurityService } from '../core/services/firestore-security.service';
+import { OfflineDocumentService } from '../core/services/offline-document.service';
 
 export interface Store {
   id?: string;
@@ -75,7 +77,9 @@ export class StoreService {
 
   constructor(
     private firestore: Firestore,
-    private authService: AuthService
+    private authService: AuthService,
+    private firestoreSecurityService: FirestoreSecurityService,
+    private offlineDocService: OfflineDocumentService
   ) {}
 
   async loadStores(storeIds: string[]) {
@@ -223,25 +227,28 @@ export class StoreService {
 
   async createStore(store: Omit<Store, 'id' | 'createdAt' | 'updatedAt'>) {
     try {
-      const storesRef = collection(this.firestore, 'stores');
       const newStore: Omit<Store, 'id'> = {
         ...store,
         createdAt: new Date(),
         updatedAt: new Date(),
         invoiceNo: store.invoiceNo || this.generateDefaultInvoiceNo() // Add default invoice number
       };
-      const docRef = await addDoc(storesRef, newStore);
+      
+      // 🔥 NEW APPROACH: Use OfflineDocumentService for offline-safe creation
+      const documentId = await this.offlineDocService.createDocument('stores', newStore);
       const createdStore: Store = {
-        id: docRef.id,
+        id: documentId,
         ...newStore
       };
       // Update the signal
       this.storesSignal.update(stores => [...stores, createdStore]);
       
       // Add default roles for this store
-      const defaultRolesService = new (await import('./default-roles.service')).DefaultRolesService(this.firestore);
-      await defaultRolesService.createDefaultRoles(store.companyId, docRef.id);
-      return docRef.id;
+      const defaultRolesService = new (await import('./default-roles.service')).DefaultRolesService(this.firestore, this.offlineDocService);
+      await defaultRolesService.createDefaultRoles(store.companyId, documentId);
+      
+      console.log('✅ Store created with ID:', documentId, navigator.onLine ? '(online)' : '(offline)');
+      return documentId;
     } catch (error) {
       console.error('Error creating store:', error);
       throw error;
@@ -252,10 +259,10 @@ export class StoreService {
     try {
       const storeRef = doc(this.firestore, 'stores', storeId);
       
-      const updateData = {
+      const updateData = await this.firestoreSecurityService.addUpdateSecurityFields({
         ...updates,
         updatedAt: new Date()
-      };
+      });
 
       console.log('🔥 Firestore updateStore - Store ID:', storeId);
       console.log('🔥 Firestore updateStore - Updates:', updates);

@@ -1,46 +1,278 @@
-# 🏪 Modern POS System# 🏪 Modern POS System
+# 🏪 Tovrika Modern POS System
 
+A comprehensive **Enterprise-Grade Point of Sale (POS) system** built with Angular 19 and Firebase, featuring advanced multi-tenant security, offline-first architecture, and seamless online/offline operations for retail businesses.
 
+## 🌟 Latest Features & Security Enhancements
 
-A comprehensive Point of Sale (POS) system built with Angular 19 and Firebase, designed for multi-store retail operations with advanced features and mobile-responsive design.A comprehensive Point of Sale (POS) system built with Angular 19 and Firebase, designed for multi-store retail operations with advanced features and mobile-responsive design.
+### 🔐 **Enterprise Multi-Tenant Security (NEW!)**
+- **UID-Based Data Isolation** - Complete user data segregation using Firestore security rules
+- **IndexedDB UID Integration** - Seamless UID injection from cached user data for offline operations
+- **Comprehensive Security Fields** - Enhanced document tracking with `createdBy`, `updatedBy`, and offline operation flags
+- **Firestore Security Rules** - Database-level protection preventing unauthorized access to other users' data
+- **Multi-Company Support** - Full tenant isolation for enterprise deployments
 
+## 🚀 Core POS Features
 
+### 💼 **Business Operations**
+- ✅ **Multi-Store Management** - Manage multiple stores and branches with complete data isolation
+- ✅ **Product Catalog** - Comprehensive product management with inventory tracking and UID security
+- ✅ **Cart & Checkout** - Intuitive shopping cart with VAT calculations and secure transactions
+- ✅ **Transaction Management** - Automatic transaction saving with complete audit trail
+- ✅ **Advanced Order Management** - Real-time order processing with item-level actions (return, damage, refund, cancel)
+- ✅ **Sales Analytics Dashboard** - Comprehensive reporting with date filtering and store selection
+- ✅ **Customer Management** - Complete customer database with transaction history
 
-## 📚 Documentation## 🚀 Features
+### 🧾 **Receipt & Printing System**
+- ✅ **Professional Receipt System** - BIR-compliant receipt printing with thermal printer support
+- ✅ **Multi-Printer Support** - USB thermal printers, network printers, and browser printing
+- ✅ **Payment Method Indicators** - Cash/Charge circles on receipts
+- ✅ **Thermal Printer Integration** - ESC/POS commands for receipt printers
+- ✅ **Receipt Customization** - Branded receipts with company details
 
+### 👥 **User Management & Security**
+- ✅ **Role-Based Access Control** - Creator, Store Manager, Cashier roles with specific permissions
+- ✅ **User Authentication** - Hybrid online/offline authentication system
+- ✅ **Permission Management** - Granular permissions for different user roles
+- ✅ **Secure User Sessions** - Complete session management with offline support
 
+### 📱 **Interface & User Experience**
+- ✅ **Standalone POS Interface** - Dedicated cashier interface accessible at `/pos`
+- ✅ **Mobile POS Interface** - Dedicated mobile interface for cashiers
+- ✅ **Professional UI Design** - Modern gradient headers and consistent styling
+- ✅ **Responsive Design** - Desktop and mobile-optimized interface
+- ✅ **Customer View Display** - Customer-facing display capabilities
 
-All comprehensive documentation has been moved to the `docs/` folder:### Core Functionality
+## 🔐 Advanced Security & Multi-Tenant Architecture
 
-- ✅ **Multi-Store Management** - Manage multiple stores and branches
+### 🛡️ **Data Security Features**
+- **Enterprise-Level Data Isolation** - Each user can only access their own data via UID-based security
+- **Automatic UID Injection** - All documents automatically include user UID from Firebase Auth or IndexedDB
+- **Enhanced Document Tracking** - Complete audit trail with creator/updater tracking and offline operation flags
+- **Secure Offline Operations** - Full security even when operating offline using cached credentials
 
-- **[Complete Documentation](docs/README.md)** - Full system documentation, features, and technical details- ✅ **Product Catalog** - Comprehensive product management with inventory tracking
+### 🏢 **Multi-Tenant Support**
+- **Company-Level Isolation** - Complete data separation between different companies
+- **Store-Level Permissions** - Users can be granted access to specific stores within companies
+- **Role-Based Security** - Different permission levels for different user roles
+- **Scalable Architecture** - Designed to handle multiple companies with thousands of users
 
-- **[App Header Usage Guide](docs/app-header-usage.md)** - Implementation guide for the centralized header component- ✅ **Cart & Checkout** - Intuitive shopping cart with VAT calculations
+## 🔄 Offline-First Architecture
 
-- ✅ **Professional Receipt System** - BIR-compliant receipt printing with thermal printer support and payment method indicators
+### 🌐 **Hybrid Online/Offline Operations**
+- **Seamless Authentication** - Automatic fallback from Firebase Auth to IndexedDB credentials
+- **Complete Offline POS** - Full point-of-sale functionality without internet connectivity
+- **Smart Data Sync** - Automatic synchronization when connectivity returns
+- **Offline Order Processing** - Create and process orders completely offline
 
-## 🚀 Quick Start- ✅ **Multi-Printer Support** - USB thermal printers, network printers, and browser printing
+### 💾 **Local Data Management**
+- **IndexedDB Integration** - Robust local database for offline data and session management
+- **Secure Credential Storage** - SHA-256 hashed password storage with salt encryption
+- **Cached User Data** - User profiles and permissions stored locally for offline access
+- **Offline Product Catalog** - Complete product information available offline
 
-- ✅ **Transaction Management** - Automatic transaction saving with audit trail
+### 🔒 **Security in Offline Mode**
+- **Encrypted Local Storage** - All sensitive data encrypted using Web Crypto API
+- **UID Persistence** - User identifiers maintained for security even when offline
+- **Secure Session Management** - Protected user sessions with automatic expiration
+- **Data Integrity** - Maintains data consistency between online and offline operations
 
-```bash- ✅ **User Management** - Role-based access control (Admin, Manager, Cashier)
+## 🚀 Quick Start
 
-# Install dependencies- ✅ **Advanced Order Management** - Automatic order display, refresh functionality, and item-level actions (return, damage, refund, cancel)
+### **Installation & Setup**
+```bash
+# Clone the repository
+git clone [repository-url]
+cd tovrika-pos
 
-npm install- ✅ **Sales Analytics Dashboard** - Comprehensive sales summary with date filtering, store selection, and order details
+# Install dependencies
+npm install
 
-- ✅ **Standalone POS Interface** - Dedicated cashier interface accessible directly at `/pos` without dashboard navigation
+# Start development server
+npm start
 
-# Start development server- ✅ **Receipt Enhancement** - Payment method indicators (Cash/Charge circles) and direct receipt access from orders
+# Access the application at http://localhost:4200
+```
 
-npm start- ✅ **Professional UI Design** - Gradient headers, professional buttons, and consistent styling across all components
+### **Firebase Configuration**
+1. Create a Firebase project at [Firebase Console](https://console.firebase.google.com)
+2. Enable Firestore Database and Authentication
+3. Update `src/app/firebase.config.ts` with your Firebase configuration
+4. Deploy the Firestore security rules from `firestore.rules`
 
-- ✅ **Walk-in Customer System** - Standardized default customer handling for transactions without specific customer information
+### **First Login**
+1. Navigate to the application
+2. Create your first user account
+3. Set up your company and store information
+4. Start using the POS system!
 
-# Access the application at http://localhost:4200- ✅ **Responsive Design** - Desktop and mobile-optimized interface
+## 🛠️ Technology Stack
+
+### **Frontend Technologies**
+- **Angular 19** - Latest Angular framework with standalone components and signals
+- **TypeScript** - Type-safe development with enhanced IDE support
+- **Tailwind CSS** - Utility-first CSS framework for rapid UI development
+- **RxJS** - Reactive programming for handling asynchronous operations
+
+### **Backend & Database**
+- **Firebase** - Google's comprehensive app development platform
+- **Firestore** - NoSQL document database with real-time synchronization
+- **Firebase Auth** - Secure user authentication and authorization
+- **Firestore Security Rules** - Database-level security enforcement
+
+### **Offline & Local Storage**
+- **IndexedDB** - Browser-based database for offline data storage
+- **Web Crypto API** - Secure cryptographic operations for password hashing
+- **Service Workers** - Background processes for offline functionality
+- **Local Storage** - Additional browser storage for app settings
+
+### **Printing & Hardware**
+- **ESC/POS Thermal Printers** - Direct thermal printer communication
+- **Web Serial API** - Browser-based serial communication with hardware
+- **USB Printer Support** - Direct connection to USB thermal printers
+- **Network Printer Support** - WiFi and Ethernet printer connectivity
+
+## 🇵🇭 Business Compliance
+
+### **Philippine BIR Compliance**
+- **BIR-Compliant Receipts** - Sales invoice template meeting Philippine tax requirements
+- **VAT Management** - Automated VAT calculations and exemptions
+- **Dynamic Invoice Types** - Support for different invoice types as required by BIR
+- **Store Settings** - Configurable store parameters and BIR information
+- **Receipt Numbering** - Sequential invoice numbering with store-specific prefixes
+
+### **Tax & Accounting Features**
+- **Automatic Tax Calculations** - Built-in tax computation for Philippine requirements
+- **Receipt Customization** - Branded receipts with company details and BIR information
+- **Transaction Audit Trail** - Complete transaction history for accounting purposes
+- **Sales Reporting** - Comprehensive sales reports for tax filing
+
+## 📁 Project Structure
 
 ```
+├── docs/                           # 📚 Complete documentation
+│   ├── firestore-security-current-status.md
+│   ├── indexeddb-uid-integration-status.md
+│   ├── app-header-usage.md
+│   └── offline-mode-fixes-summary.md
+├── src/app/
+│   ├── pages/                      # 📄 Page components
+│   │   ├── auth/                   # Authentication pages
+│   │   ├── dashboard/              # Main dashboard with POS
+│   │   ├── company-selection/      # Company/store selection
+│   │   └── customer-view/          # Customer-facing display
+│   ├── services/                   # 🔧 Business logic services
+│   │   ├── auth.service.ts         # Authentication & user management
+│   │   ├── product.service.ts      # Product catalog management
+│   │   ├── invoice.service.ts      # Transaction processing
+│   │   ├── customer.service.ts     # Customer management
+│   │   └── pos.service.ts          # POS operations
+│   ├── core/services/             # 🛠️ Core system services
+│   │   ├── firestore-security.service.ts    # UID security management
+│   │   ├── indexeddb.service.ts             # Local database operations
+│   │   ├── offline-storage.service.ts       # Offline data management
+│   │   └── uid-integration-test.service.ts  # Security testing
+│   ├── shared/                    # 🔄 Shared components
+│   ├── interfaces/               # 📋 TypeScript interfaces
+│   └── guards/                   # 🛡️ Route protection
+└── firestore.rules               # 🔒 Database security rules
+```
+
+## 📚 Documentation
+
+### **Complete Documentation**
+- **[Main Documentation](docs/README.md)** - Comprehensive system documentation
+- **[Security Implementation](docs/firestore-security-current-status.md)** - Multi-tenant security details
+- **[IndexedDB Integration](docs/indexeddb-uid-integration-status.md)** - Offline UID management
+- **[App Header Guide](docs/app-header-usage.md)** - Component usage guidelines
+- **[Offline Mode Guide](docs/offline-mode-fixes-summary.md)** - Offline functionality overview
+
+### **Testing & Validation**
+- **Security Testing** - Use `UidIntegrationTestService` to validate UID integration
+- **Offline Testing** - Test complete POS functionality without internet
+- **Multi-User Testing** - Verify data isolation between different users
+- **Receipt Testing** - Validate thermal printer compatibility
+
+## 🔧 Development & Deployment
+
+### **Development Workflow**
+```bash
+# Run development server
+npm start
+
+# Run tests
+npm test
+
+# Build for production
+npm run build
+
+# Lint code
+npm run lint
+```
+
+### **Production Deployment**
+1. **Build the application**: `npm run build`
+2. **Deploy Firestore rules**: Upload `firestore.rules` to Firebase Console
+3. **Configure Firebase hosting** or deploy to your preferred hosting platform
+4. **Set up SSL certificates** for secure HTTPS operation
+5. **Configure thermal printers** for receipt printing
+
+### **Security Deployment**
+1. **Deploy Firestore Security Rules** - Ensure UID-based access control is active
+2. **Verify Multi-Tenant Isolation** - Test with multiple user accounts
+3. **Validate Offline Security** - Confirm UID injection works offline
+4. **Monitor Security Logs** - Set up Firebase security monitoring
+
+## 🎯 Key Benefits
+
+### **For Business Owners**
+- ✅ **Complete Offline Operations** - Never lose sales due to internet outages
+- ✅ **Multi-Store Management** - Manage multiple locations from one system
+- ✅ **BIR Compliance** - Meet Philippine tax requirements automatically
+- ✅ **Professional Receipts** - Branded, professional-looking receipts
+- ✅ **Comprehensive Analytics** - Make data-driven business decisions
+
+### **For Developers**
+- ✅ **Enterprise Security** - Built-in multi-tenant architecture with UID-based isolation
+- ✅ **Offline-First Design** - Robust offline functionality with automatic sync
+- ✅ **Modern Tech Stack** - Latest Angular 19 with TypeScript and Firebase
+- ✅ **Comprehensive Documentation** - Well-documented codebase with examples
+- ✅ **Scalable Architecture** - Designed for enterprise-level deployments
+
+### **For IT Administrators**
+- ✅ **Secure by Design** - Multi-layered security with database-level protection
+- ✅ **Easy Deployment** - Simple setup with comprehensive configuration options
+- ✅ **Hardware Integration** - Support for various thermal printers and devices
+- ✅ **Monitoring & Analytics** - Built-in logging and performance monitoring
+
+## 📞 Support & Community
+
+### **Getting Help**
+- **Documentation** - Check the comprehensive docs in the `docs/` folder
+- **Issues** - Report bugs and feature requests via GitHub Issues
+- **Testing** - Use built-in test services to validate functionality
+
+### **Contributing**
+- **Pull Requests** - Contributions welcome following coding standards
+- **Feature Requests** - Submit enhancement ideas via GitHub Issues
+- **Security Reports** - Report security issues privately to maintainers
+
+---
+
+## 🔒 Security Features Summary
+
+**This POS system implements enterprise-grade security with:**
+- **Multi-Tenant Architecture** - Complete data isolation between users/companies
+- **UID-Based Security** - Every document includes user identification for access control
+- **Offline Security** - Maintains security even when operating without internet
+- **Database-Level Protection** - Firestore security rules prevent unauthorized access
+- **Encrypted Local Storage** - Secure offline credential and data storage
+- **Complete Audit Trail** - Track who created/modified every piece of data
+
+**Perfect for businesses requiring secure, scalable, and reliable POS operations with full offline capabilities.**
+
+---
+
+*Built with ❤️ for modern retail businesses requiring enterprise-grade security and reliability.*
 
 ### Advanced Features
 

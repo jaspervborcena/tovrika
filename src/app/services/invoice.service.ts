@@ -10,6 +10,8 @@ import {
 } from '@angular/fire/firestore';
 import { StoreService } from './store.service';
 import { AuthService } from './auth.service';
+import { FirestoreSecurityService } from '../core/services/firestore-security.service';
+import { OfflineDocumentService } from '../core/services/offline-document.service';
 
 export interface InvoiceTransactionData {
   storeId: string;
@@ -32,6 +34,8 @@ export class InvoiceService {
   private firestore = inject(Firestore);
   private storeService = inject(StoreService);
   private authService = inject(AuthService);
+  private securityService = inject(FirestoreSecurityService);
+  private offlineDocService = inject(OfflineDocumentService);
 
   /**
    * Generate and assign invoice number with atomic transaction
@@ -77,22 +81,24 @@ export class InvoiceService {
           console.log(`📦 Creating ${batches.length} orderDetails batch(es) for ${orderData.items.length} total items`);
           
           // Create one document per batch to avoid 1MB Firestore limit
-          batches.forEach((batch: { batchNumber: number; items: any[] }) => {
+          for (const batch of batches) {
             const orderDetailsRef = collection(this.firestore, 'orderDetails');
             const orderDetailsDocRef = doc(orderDetailsRef);
             
-            const orderDetailsData = {
+            // Add security fields to orderDetails (with IndexedDB UID support)
+            const orderDetailsWithSecurity = await this.securityService.addSecurityFields({
               orderId: orderDocRef.id,
               companyId: orderData.companyId,
               storeId: storeId,
               batchNumber: batch.batchNumber,
-              items: batch.items, // Max 50 items per batch
-              createdAt: new Date()
-            };
+              items: batch.items // Max 50 items per batch
+            });
+            
+            const orderDetailsData = orderDetailsWithSecurity;
             
             transaction.set(orderDetailsDocRef, orderDetailsData);
             console.log(`📦 Batch ${batch.batchNumber}/${batches.length} prepared with ${batch.items.length} items (docId: ${orderDetailsDocRef.id})`);
-          });
+          }
           
           console.log(`✅ All ${batches.length} orderDetails batches prepared successfully for order ${orderDocRef.id}`);
         }
@@ -100,14 +106,17 @@ export class InvoiceService {
         // Remove items from main order data (items will only be in orderDetails collection)
         const { items, ...orderDataWithoutItems } = orderData;
         
-        const completeOrderData = {
+        // Add security fields to order (with IndexedDB UID support)
+        const orderWithSecurity = await this.securityService.addSecurityFields({
           ...orderDataWithoutItems, // Order data WITHOUT items
           invoiceNumber: nextInvoiceNo,
           storeId: storeId,
-          createdAt: new Date(),
-          updatedAt: new Date(),
           status: 'completed',
-          createdBy: this.authService.getCurrentUser()?.uid || 'system',
+          createdBy: this.authService.getCurrentUser()?.uid || 'system'
+        });
+        
+        const completeOrderData = {
+          ...orderWithSecurity,
           
           // NEW: customerInfo as a proper map structure
           customerInfo: customerInfo ? {

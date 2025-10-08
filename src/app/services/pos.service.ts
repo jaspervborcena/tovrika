@@ -9,6 +9,8 @@ import { CompanyService } from './company.service';
 import { ProductService } from './product.service';
 import { InvoiceService } from './invoice.service';
 import { IndexedDBService } from '../core/services/indexeddb.service';
+import { FirestoreSecurityService } from '../core/services/firestore-security.service';
+import { OfflineDocumentService } from '../core/services/offline-document.service';
 import { Order, OrderDetail, OrderItem, CartItem, ReceiptData, OrderDiscount, CartSummary } from '../interfaces/pos.interface';
 import { Product } from '../interfaces/product.interface';
 
@@ -20,6 +22,7 @@ export class PosService {
   private readonly selectedStoreIdSignal = signal<string>('');
   private readonly isProcessingSignal = signal<boolean>(false);
   private readonly orderDiscountSignal = signal<OrderDiscount | null>(null);
+  private readonly offlineDocService = inject(OfflineDocumentService);
 
   // Computed values
   readonly cartItems = computed(() => this.cartItemsSignal());
@@ -81,7 +84,8 @@ export class PosService {
     private authService: AuthService,
     private companyService: CompanyService,
     private productService: ProductService,
-    private indexedDBService: IndexedDBService
+    private indexedDBService: IndexedDBService,
+    private securityService: FirestoreSecurityService
   ) {
     // Load persisted store selection on service initialization
     this.loadPersistedStoreSelection();

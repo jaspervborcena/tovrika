@@ -16,6 +16,8 @@ import {
   writeBatch
 } from '@angular/fire/firestore';
 import { AuthService } from './auth.service';
+import { FirestoreSecurityService } from '../core/services/firestore-security.service';
+import { OfflineDocumentService } from '../core/services/offline-document.service';
 import { ToastService } from '../shared/services/toast.service';
 import { 
   NotificationData, 
@@ -32,6 +34,8 @@ export class NotificationService {
   private firestore = inject(Firestore);
   private authService = inject(AuthService);
   private toastService = inject(ToastService);
+  private firestoreSecurityService = inject(FirestoreSecurityService);
+  private offlineDocService = inject(OfflineDocumentService);
 
   // Reactive state
   private notifications = signal<NotificationData[]>([]);
@@ -180,14 +184,16 @@ export class NotificationService {
     
     const docData = {
       ...notificationData,
-      createdAt: Timestamp.now(),
+      createdAt: new Date(),
       read: false,
-      // Convert dates to Firestore timestamps
-      expiresAt: notificationData.expiresAt ? Timestamp.fromDate(notificationData.expiresAt) : null,
+      // Convert dates to Firestore timestamps for offline compatibility
+      expiresAt: notificationData.expiresAt || null,
     };
 
-    const docRef = await addDoc(notificationsRef, docData);
-    return docRef.id;
+    // 🔥 NEW APPROACH: Use OfflineDocumentService for offline-safe creation
+    const documentId = await this.offlineDocService.createDocument('notifications', docData);
+    console.log('✅ Notification created with ID:', documentId, navigator.onLine ? '(online)' : '(offline)');
+    return documentId;
   }
 
   /**
