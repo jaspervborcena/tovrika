@@ -1,114 +1,59 @@
-# 🏪 Modern POS System# 🏪 Modern POS System
+# 🏪 Modern POS System
 
+A comprehensive Point of Sale (POS) system built with Angular 19 and Firebase, designed for multi-store retail operations with advanced features and mobile-responsive design.
 
+## 🚀 Features
 
-A comprehensive Point of Sale (POS) system built with Angular 19 and Firebase, designed for multi-store retail operations with advanced features and mobile-responsive design.A comprehensive Point of Sale (POS) system built with Angular 19 and Firebase, designed for multi-store retail operations with advanced features and mobile-responsive design.
-
-
-
-## 📚 Documentation## 🚀 Features
-
-
-
-All comprehensive documentation has been moved to the `docs/` folder:### Core Functionality
-
+### Core Functionality
 - ✅ **Multi-Store Management** - Manage multiple stores and branches
-
-- **[Complete Documentation](docs/README.md)** - Full system documentation, features, and technical details- ✅ **Product Catalog** - Comprehensive product management with inventory tracking
-
-- **[App Header Usage Guide](docs/app-header-usage.md)** - Implementation guide for the centralized header component- ✅ **Cart & Checkout** - Intuitive shopping cart with VAT calculations
-
+- ✅ **Product Catalog** - Comprehensive product management with inventory tracking
+- ✅ **Cart & Checkout** - Intuitive shopping cart with VAT calculations
 - ✅ **Professional Receipt System** - BIR-compliant receipt printing with thermal printer support and payment method indicators
-
-## 🚀 Quick Start- ✅ **Multi-Printer Support** - USB thermal printers, network printers, and browser printing
-
+- ✅ **Multi-Printer Support** - USB thermal printers, network printers, and browser printing
 - ✅ **Transaction Management** - Automatic transaction saving with audit trail
-
-```bash- ✅ **User Management** - Role-based access control (Admin, Manager, Cashier)
-
-# Install dependencies- ✅ **Advanced Order Management** - Automatic order display, refresh functionality, and item-level actions (return, damage, refund, cancel)
-
-npm install- ✅ **Sales Analytics Dashboard** - Comprehensive sales summary with date filtering, store selection, and order details
-
+- ✅ **User Management** - Role-based access control (Admin, Manager, Cashier)
+- ✅ **Advanced Order Management** - Automatic order display, refresh functionality, and item-level actions (return, damage, refund, cancel)
+- ✅ **Sales Analytics Dashboard** - Comprehensive sales summary with date filtering, store selection, and order details
 - ✅ **Standalone POS Interface** - Dedicated cashier interface accessible directly at `/pos` without dashboard navigation
-
-# Start development server- ✅ **Receipt Enhancement** - Payment method indicators (Cash/Charge circles) and direct receipt access from orders
-
-npm start- ✅ **Professional UI Design** - Gradient headers, professional buttons, and consistent styling across all components
-
+- ✅ **Receipt Enhancement** - Payment method indicators (Cash/Charge circles) and direct receipt access from orders
+- ✅ **Professional UI Design** - Gradient headers, professional buttons, and consistent styling across all components
 - ✅ **Walk-in Customer System** - Standardized default customer handling for transactions without specific customer information
-
-# Access the application at http://localhost:4200- ✅ **Responsive Design** - Desktop and mobile-optimized interface
-
-```
+- ✅ **Responsive Design** - Desktop and mobile-optimized interface
 
 ### Advanced Features
-
-## 🔑 Key Features- 🔐 **Hybrid Authentication System** - Online/offline authentication with seamless fallback
-
+- 🔐 **Hybrid Authentication System** - Online/offline authentication with seamless fallback
 - 💾 **Cloud Sync** - Real-time data synchronization with offline capabilities
-
-- ✅ **Multi-Store Management** - Manage multiple stores and branches- 📱 **Mobile POS** - Dedicated mobile interface for cashiers
-
-- ✅ **Offline Authentication** - Hybrid online/offline authentication system- 🧾 **VAT Management** - Automated VAT calculations and exemptions
-
-- ✅ **Professional Receipt System** - BIR-compliant receipt printing- 📊 **Analytics Ready** - Built-in analytics infrastructure
-
-- ✅ **Mobile POS Interface** - Dedicated mobile cashier interface- 🎯 **Customer View** - Customer-facing display capabilities
-
-- ✅ **Sales Analytics** - Comprehensive reporting and analytics- 🔄 **Advanced Offline Support** - Complete offline authentication and data persistence
-
-- ✅ **Real-time Sync** - Cloud synchronization with offline capabilities- 🔒 **Secure Offline Credentials** - SHA-256 hashed password storage with salt encryption
-
+- 📱 **Mobile POS** - Dedicated mobile interface for cashiers
+- 🧾 **VAT Management** - Automated VAT calculations and exemptions
+- 📊 **Analytics Ready** - Built-in analytics infrastructure
+- 🎯 **Customer View** - Customer-facing display capabilities
+- 🔄 **Advanced Offline Support** - Complete offline authentication and data persistence
+- 🔒 **Secure Offline Credentials** - SHA-256 hashed password storage with salt encryption
 - 💿 **IndexedDB Integration** - Local database for offline data and session management
 
-## 🛠️ Technology Stack
-
 ### Business Compliance
-
-- **Frontend**: Angular 19, TypeScript, Tailwind CSS- 🇵🇭 **BIR Compliance** - Philippine tax requirements with dynamic invoice types
-
-- **Backend**: Firebase, Firestore, Firebase Auth- 🧾 **Professional Receipts** - Sales invoice template with store branding
-
-- **Offline Storage**: IndexedDB, Web Crypto API- �️ **Thermal Printer Support** - ESC/POS commands for receipt printers
-
-- **Printing**: ESC/POS thermal printers, Web Serial API- �📋 **Store Settings** - Configurable store parameters and BIR information
-
+- 🇵🇭 **BIR Compliance** - Philippine tax requirements with dynamic invoice types
+- 🧾 **Professional Receipts** - Sales invoice template with store branding
+- �️ **Thermal Printer Support** - ESC/POS commands for receipt printers
+- �📋 **Store Settings** - Configurable store parameters and BIR information
 - 🏢 **Company Management** - Multi-company support
+- 📄 **Receipt Customization** - Branded receipts with company details
 
-## 📁 Project Structure- 📄 **Receipt Customization** - Branded receipts with company details
+## � Offline Authentication System
 
+### Hybrid Authentication Architecture
+The POS system features a sophisticated offline authentication system that provides seamless operation even without internet connectivity, ensuring business continuity for retail operations.
 
-
-```## � Offline Authentication System
-
-├── docs/                    # 📚 Complete documentation
-
-├── src/app/### Hybrid Authentication Architecture
-
-│   ├── pages/              # Page componentsThe POS system features a sophisticated offline authentication system that provides seamless operation even without internet connectivity, ensuring business continuity for retail operations.
-
-│   ├── services/           # Business logic
-
-│   ├── shared/             # Shared components### Key Features
-
-│   └── interfaces/         # TypeScript interfaces- **🌐 Online-First Approach** - Attempts Firebase authentication first, with automatic offline fallback
-
-└── ...- **🔒 Secure Credential Storage** - SHA-256 password hashing with random salt generation
-
-```- **💾 Local Session Management** - IndexedDB-based storage for encrypted user credentials
-
+### Key Features
+- **🌐 Online-First Approach** - Attempts Firebase authentication first, with automatic offline fallback
+- **🔒 Secure Credential Storage** - SHA-256 password hashing with random salt generation
+- **💾 Local Session Management** - IndexedDB-based storage for encrypted user credentials
 - **⏰ Configurable Session Duration** - 1 day default, 30 days with "Remember Me" option
-
-For complete project structure and detailed documentation, see [docs/README.md](docs/README.md).- **🔄 Seamless Fallback** - Automatic detection and switching between online/offline modes
-
+- **🔄 Seamless Fallback** - Automatic detection and switching between online/offline modes
 - **📱 Network State Awareness** - Real-time network connectivity monitoring
-
----- **🛡️ Policy Agreement Integration** - Offline users maintain policy compliance state
-
+- **🛡️ Policy Agreement Integration** - Offline users maintain policy compliance state
 - **🚫 Selective Online Requirements** - In offline mode, data is stored locally and syncs to cloud when online. Registration and password reset require internet connection
 
-**Built with ❤️ using Angular & Firebase**
 ### Security Architecture
 ```typescript
 // Password Security
@@ -532,7 +477,7 @@ This project is proprietary software. All rights reserved.
 - **Login Component Enhancement** - Offline status indicators and improved user feedback systems
 - **Security Best Practices** - Industry-standard encryption, secure random salt generation, and session expiry management
 - **Business Continuity Focus** - Designed specifically for retail POS environments with intermittent connectivity
-- **Selective Online Requirements** - Registration and password reset require internet, login/logout work offline
+- **Selective Online Requirements** - Offline mode stores data locally with cloud sync when online. Registration and password reset require internet, login/logout work offline
 - **Comprehensive Error Handling** - Robust error management with user-friendly messaging and automatic recovery
 - **Performance Optimization** - Efficient credential lookup and validation with minimal overhead
 - **Enterprise Architecture** - Scalable design supporting multi-store and multi-user environments

@@ -63,10 +63,27 @@ export class LoginComponent {
         // Small delay to ensure user session is fully established
         await new Promise(resolve => setTimeout(resolve, 200));
         
-        // Always redirect to policy agreement first
-        // The policy guard will handle subsequent navigation based on agreement status
-        console.log('🔐 Login: Redirecting to policy agreement...');
-        await this.router.navigate(['/policy-agreement']);
+        // In offline mode, skip policy-agreement to avoid chunk loading issues
+        if (!this.isOnline()) {
+          console.log('🔐 Login: Offline mode - redirecting directly to dashboard...');
+          try {
+            await this.router.navigate(['/dashboard']);
+          } catch (navError) {
+            console.warn('🔐 Login: Dashboard navigation failed, trying POS...', navError);
+            // Fallback to POS if dashboard also fails
+            await this.router.navigate(['/pos']);
+          }
+        } else {
+          // Online mode - redirect to policy agreement first with fallback
+          try {
+            console.log('🔐 Login: Online mode - redirecting to policy agreement...');
+            await this.router.navigate(['/policy-agreement']);
+          } catch (navError) {
+            console.warn('🔐 Login: Policy agreement navigation failed, going to dashboard...', navError);
+            // If policy-agreement fails (chunk error), go to dashboard
+            await this.router.navigate(['/dashboard']);
+          }
+        }
       } catch (err: any) {
         console.error('🔐 Login: Login failed:', err);
         this.error = err.message || 'An error occurred during login';

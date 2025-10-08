@@ -649,7 +649,7 @@
                 (click)="processOrder()" 
                 [disabled]="cartItems().length === 0 || isProcessing()"
                 class="btn btn-primary">
-                {{ isProcessing() ? 'Processing...' : 'Complete Order' }}
+                {{ completeOrderButtonText() }}
               </button>
             </div>
 
@@ -710,9 +710,10 @@
               <input 
                 type="text" 
                 placeholder="INV-0000-000000"
-                [value]="offlineManualInvoiceNumber()"
-                (input)="onManualInvoiceNumberChange($any($event.target).value)"
-                class="invoice-input">
+                [(ngModel)]="manualInvoiceInput"
+                class="invoice-input"
+                autocomplete="off"
+                spellcheck="false">
             </div>
             
             <div class="radio-option">
