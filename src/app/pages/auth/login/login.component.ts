@@ -34,6 +34,7 @@ export class LoginComponent {
 
   isLoading = false;
   error = '';
+  offlineLoginUsed = false;
 
   async onSubmit(event: Event) {
     if (this.loginForm.valid) {
@@ -41,16 +42,33 @@ export class LoginComponent {
       this.error = '';
       event.preventDefault();
       try {
+        console.log('🔐 Login: Starting hybrid login process...');
         const { email, password, rememberMe } = this.loginForm.value;
+        
         const user = await this.authService.login(email!, password!, rememberMe!);
         if (!user) {
           throw new Error('Failed to get user data after login');
         }
         
+        console.log('🔐 Login: User authenticated successfully:', user.email);
+        
+        // Check if offline access was used
+        const hasOfflineAccess = await this.authService.hasOfflineAccess(email!);
+        this.offlineLoginUsed = hasOfflineAccess && !this.isOnline();
+        
+        if (this.offlineLoginUsed) {
+          console.log('📱 Login: Offline authentication was used');
+        }
+        
+        // Small delay to ensure user session is fully established
+        await new Promise(resolve => setTimeout(resolve, 200));
+        
         // Always redirect to policy agreement first
         // The policy guard will handle subsequent navigation based on agreement status
-        this.router.navigate(['/policy-agreement']);
+        console.log('🔐 Login: Redirecting to policy agreement...');
+        await this.router.navigate(['/policy-agreement']);
       } catch (err: any) {
+        console.error('🔐 Login: Login failed:', err);
         this.error = err.message || 'An error occurred during login';
       } finally {
         this.isLoading = false;

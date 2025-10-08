@@ -39,33 +39,65 @@ export class PolicyAgreementComponent {
     this.error.set('');
 
     try {
+      console.log('📝 Policy Agreement: Starting policy acceptance process...');
+      
+      // Check current user state before proceeding
+      const currentAuthUser = this.authService.getCurrentUser();
+      const offlineUser = this.offlineStorageService.currentUser();
+      console.log('📝 Policy Agreement: Auth user:', currentAuthUser?.email);
+      console.log('📝 Policy Agreement: Offline user:', offlineUser?.email);
+      
+      if (!currentAuthUser) {
+        throw new Error('No current user found in AuthService');
+      }
+      
+      // Ensure offline storage is initialized
+      await this.offlineStorageService.loadOfflineData();
+      
+      // If still no offline user, try refreshing user data
+      if (!this.offlineStorageService.currentUser()) {
+        console.log('📝 Policy Agreement: No offline user found, refreshing user data...');
+        await this.offlineStorageService.refreshUserData();
+      }
+      
+      // Update policy agreement
       await this.offlineStorageService.updatePolicyAgreement(true);
       console.log('✅ Policy Agreement: User accepted policies');
+      
+      // Small delay to ensure data is saved
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      // Verify the update was successful
+      const userData = this.offlineStorageService.currentUser();
+      if (!userData?.isAgreedToPolicy) {
+        throw new Error('Policy agreement was not saved properly');
+      }
       
       // Redirect based on user's authentication state
       const authUser = this.authService.getCurrentUser();
       const currentPermission = this.authService.getCurrentPermission();
       
       console.log('📍 Policy Agreement: Redirecting user...');
+      console.log('📍 User:', authUser?.email);
       console.log('📍 User permissions:', currentPermission);
       console.log('📍 User has multiple companies:', this.authService.hasMultipleCompanies());
       
-      // Check if user has multiple companies first
+      // Determine redirect destination
       if (this.authService.hasMultipleCompanies()) {
         console.log('📍 Redirecting to company selection (multiple companies)');
-        this.router.navigate(['/company-selection']);
+        await this.router.navigate(['/company-selection']);
       } else if (currentPermission?.companyId) {
         // User has a company, redirect to dashboard
         console.log('📍 Redirecting to dashboard (has company)');
-        this.router.navigate(['/dashboard']);
+        await this.router.navigate(['/dashboard']);
       } else {
         // User needs to select/create company
         console.log('📍 Redirecting to company selection (no company)');
-        this.router.navigate(['/company-selection']);
+        await this.router.navigate(['/company-selection']);
       }
     } catch (error: any) {
       console.error('❌ Policy Agreement: Failed to save agreement:', error);
-      this.error.set('Failed to save policy agreement. Please try again.');
+      this.error.set(error.message || 'Failed to save policy agreement. Please try again.');
     } finally {
       this.isLoading.set(false);
     }

@@ -39,9 +39,22 @@ export class OfflineStorageService {
   // Load offline data into signals
   async loadOfflineData(): Promise<void> {
     try {
+      console.log('💾 OfflineStorage: Loading offline data...');
+      
+      // Ensure database is initialized
+      await this.indexedDBService.initDB();
+      
       // Load current user
       const currentUser = await this.indexedDBService.getCurrentUser();
       this.currentUserSignal.set(currentUser);
+      
+      console.log('💾 OfflineStorage: Current user loaded:', {
+        exists: !!currentUser,
+        uid: currentUser?.uid,
+        email: currentUser?.email,
+        isLoggedIn: currentUser?.isLoggedIn,
+        isAgreedToPolicy: currentUser?.isAgreedToPolicy
+      });
 
       if (currentUser?.currentStoreId) {
         // Load products for current store
@@ -51,11 +64,14 @@ export class OfflineStorageService {
         // Load pending orders
         const orders = await this.indexedDBService.getPendingOrders(currentUser.currentStoreId);
         this.pendingOrdersSignal.set(orders);
+        
+        console.log('💾 OfflineStorage: Store data loaded for store:', currentUser.currentStoreId);
       }
 
       console.log('💾 OfflineStorage: Data loaded successfully');
     } catch (error) {
       console.error('💾 OfflineStorage: Failed to load data:', error);
+      throw error;
     }
   }
 
@@ -98,16 +114,49 @@ export class OfflineStorageService {
 
   async updatePolicyAgreement(agreed: boolean): Promise<void> {
     const currentUser = this.currentUserSignal();
-    if (!currentUser) return;
+    console.log('💾 OfflineStorage: updatePolicyAgreement - Current user signal:', {
+      exists: !!currentUser,
+      uid: currentUser?.uid,
+      email: currentUser?.email,
+      isLoggedIn: currentUser?.isLoggedIn
+    });
+    
+    if (!currentUser) {
+      console.error('💾 OfflineStorage: No current user found for policy update');
+      throw new Error('No current user found');
+    }
 
     try {
-      const updatedUser = { ...currentUser, isAgreedToPolicy: agreed };
+      const updatedUser = { ...currentUser, isAgreedToPolicy: agreed, lastSync: new Date() };
       await this.indexedDBService.saveUserData(updatedUser);
       this.currentUserSignal.set(updatedUser);
       
       console.log('💾 OfflineStorage: Policy agreement updated:', agreed);
+      console.log('💾 OfflineStorage: Updated user data:', {
+        uid: updatedUser.uid,
+        email: updatedUser.email,
+        isAgreedToPolicy: updatedUser.isAgreedToPolicy
+      });
     } catch (error) {
       console.error('💾 OfflineStorage: Failed to update policy agreement:', error);
+      throw error;
+    }
+  }
+
+  // Force refresh user data from IndexedDB
+  async refreshUserData(): Promise<void> {
+    try {
+      console.log('💾 OfflineStorage: Refreshing user data...');
+      const currentUser = await this.indexedDBService.getCurrentUser();
+      this.currentUserSignal.set(currentUser);
+      
+      console.log('💾 OfflineStorage: User data refreshed:', {
+        exists: !!currentUser,
+        uid: currentUser?.uid,
+        isAgreedToPolicy: currentUser?.isAgreedToPolicy
+      });
+    } catch (error) {
+      console.error('💾 OfflineStorage: Failed to refresh user data:', error);
       throw error;
     }
   }

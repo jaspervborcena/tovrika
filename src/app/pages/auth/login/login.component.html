@@ -24,6 +24,14 @@
         {{ error }}
       </div>
       
+      <!-- Offline Status Indicator -->
+      <div *ngIf="!isOnline()" class="offline-alert">
+        <span style="color: #f59e0b;">📱 Offline Mode</span>
+        <small style="display: block; margin-top: 0.25rem; color: #6b7280;">
+          Limited to login/logout. Registration and password reset require internet connection.
+        </small>
+      </div>
+      
       <!-- Login Form -->
       <form [formGroup]="loginForm" (ngSubmit)="onSubmit($event)">
         <!-- Email Field -->
