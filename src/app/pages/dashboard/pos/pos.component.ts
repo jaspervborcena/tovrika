@@ -869,7 +869,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       }
 
       // Prepare receipt data with the real order ID and invoice number
-      const receiptData = this.prepareReceiptData(result.orderId);
+      const receiptData = await this.prepareReceiptData(result.orderId);
       
       // Update receipt data with the correct invoice number and payment info
       const updatedReceiptData = { 
@@ -1416,7 +1416,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       const tempOrderId = `offline-${Date.now()}`;
       
       // Prepare receipt data with offline invoice number
-      const receiptData = this.prepareReceiptData(tempOrderId);
+      const receiptData = await this.prepareReceiptData(tempOrderId);
       
       // Update receipt data with the offline invoice number
       const updatedReceiptData = { 
@@ -1537,12 +1537,20 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     }
   }
 
-  private prepareReceiptData(orderId: string): any {
+  private async prepareReceiptData(orderId: string): Promise<any> {
     const cartItems = this.cartItems();
     const cartSummary = this.cartSummary();
     const storeInfo = this.currentStoreInfo();
     const customerInfo = this.customerInfo;
     const currentUser = this.authService.currentUser();
+    
+    // Get company information for tax ID and phone
+    let company = null;
+    try {
+      company = await this.companyService.getActiveCompany();
+    } catch (error) {
+      console.warn('Could not fetch company info for receipt:', error);
+    }
     
     // Get date and invoice number from shared service (receipt panel data)
     const receiptDate = this.posSharedService.orderDate();
@@ -1561,16 +1569,16 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       invoiceNumber: invoiceNumber || this.invoiceNumber,
       receiptDate: receiptDate, // Date from shared service
       storeInfo: {
-        storeName: (storeInfo as any)?.storeName || 'Unknown Store',
-        address: (storeInfo as any)?.address || 'Store Address',
-        phone: (storeInfo as any)?.phone || 'N/A',
-        email: storeInfo?.email || 'N/A',
-        tin: (storeInfo as any)?.tinNumber || 'N/A',
+        storeName: company?.name || (storeInfo as any)?.storeName || 'Unknown Store',
+        address: company?.address || (storeInfo as any)?.address || 'Store Address',
+        phone: company?.phone || (storeInfo as any)?.phone || 'N/A', // 🔥 Use company phone
+        email: company?.email || storeInfo?.email || 'N/A', // 🔥 Use company email
+        tin: company?.taxId || company?.tin || (storeInfo as any)?.tinNumber || 'N/A', // 🔥 Use company tax ID/TIN
         invoiceType: (storeInfo as any)?.invoiceType || 'SALES INVOICE',
-        birPermitNo: (storeInfo as any)?.birPermitNo || null,
+        birPermitNo: company?.birPermitNo || (storeInfo as any)?.birPermitNo || null,
         minNumber: (storeInfo as any)?.minNumber || null,
         serialNumber: (storeInfo as any)?.serialNumber || null,
-        inclusiveSerialNumber: (storeInfo as any)?.inclusiveSerialNumber || null
+        inclusiveSerialNumber: company?.inclusiveSerialNumber || (storeInfo as any)?.inclusiveSerialNumber || null
       },
       customerName: customerName,
       customerAddress: customerName ? (customerInfo.businessAddress || 'N/A') : null,

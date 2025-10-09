@@ -6,7 +6,10 @@ import {
   runTransaction,
   collection,
   addDoc,
-  DocumentReference
+  DocumentReference,
+  query,
+  where,
+  getDocs
 } from '@angular/fire/firestore';
 import { StoreService } from './store.service';
 import { AuthService } from './auth.service';
@@ -38,8 +41,50 @@ export class InvoiceService {
   private offlineDocService = inject(OfflineDocumentService);
 
   /**
+   * Check if an invoice number already exists in the orders collection
+   */
+  async checkInvoiceNumberExists(invoiceNumber: string, storeId: string): Promise<boolean> {
+    try {
+      console.log('🔍 Checking if invoice number exists:', invoiceNumber);
+      
+      const ordersRef = collection(this.firestore, 'orders');
+      const q = query(
+        ordersRef,
+        where('invoiceNumber', '==', invoiceNumber),
+        where('storeId', '==', storeId)
+      );
+      
+      const snapshot = await getDocs(q);
+      const exists = !snapshot.empty;
+      
+      console.log(`🔍 Invoice number ${invoiceNumber} exists:`, exists);
+      
+      if (exists) {
+        console.log('⚠️ Duplicate invoice number detected:', invoiceNumber);
+        // Log the existing order details
+        snapshot.docs.forEach(doc => {
+          console.log('📋 Existing order:', {
+            id: doc.id,
+            invoiceNumber: doc.data()['invoiceNumber'],
+            createdAt: doc.data()['createdAt'],
+            totalAmount: doc.data()['totalAmount']
+          });
+        });
+      }
+      
+      return exists;
+      
+    } catch (error) {
+      console.error('❌ Error checking invoice number existence:', error);
+      // In case of error, assume it doesn't exist to allow the transaction to proceed
+      return false;
+    }
+  }
+
+  /**
    * Generate and assign invoice number with atomic transaction
    * This ensures that invoice numbers are never duplicated
+   * Now includes duplicate prevention check
    */
   async processInvoiceTransaction(transactionData: InvoiceTransactionData): Promise<InvoiceResult> {
     const { storeId, orderData, customerInfo, paymentsData } = transactionData;
@@ -64,6 +109,17 @@ export class InvoiceService {
         // 2. Generate next invoice number
         const nextInvoiceNo = this.storeService.generateNextInvoiceNo(currentInvoiceNo);
         console.log('🧾 Next invoice number:', nextInvoiceNo);
+        
+        // 🚨 NEW: Check for duplicate invoice number before proceeding
+        const isDuplicate = await this.checkInvoiceNumberExists(nextInvoiceNo, storeId);
+        
+        if (isDuplicate) {
+          const errorMessage = `Duplicate invoice number detected: ${nextInvoiceNo}. This order may have already been processed.`;
+          console.error('🚨 DUPLICATE PREVENTION:', errorMessage);
+          throw new Error(errorMessage);
+        }
+        
+        console.log('✅ Invoice number is unique, proceeding with transaction:', nextInvoiceNo);
         
         // 3. Update store with new invoice number
         transaction.update(storeDocRef, { 
