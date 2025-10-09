@@ -741,6 +741,15 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     this.paymentDescription = '';
   }
 
+  debugTenderedField(): void {
+    console.log('🔍 Tendered field debug:', {
+      currentValue: this.paymentAmountTendered,
+      fieldType: typeof this.paymentAmountTendered,
+      modalVisible: this.paymentModalVisible(),
+      element: document.getElementById('amount-tendered')
+    });
+  }
+
   calculateChange(): number {
     const totalAmount = this.cartSummary().netAmount;
     const tendered = this.paymentAmountTendered || 0;
@@ -1634,17 +1643,12 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     }
   }
 
-  async printReceipt(printerType?: string): Promise<void> {
+  async printReceipt(): Promise<void> {
     const receiptData = this.receiptData();
     if (!receiptData) {
       console.error('No receipt data available for printing');
       return;
     }
-
-    // Type guard for printer type
-    const validPrinterType = ['thermal', 'network', 'browser'].includes(printerType || '') 
-      ? printerType as 'thermal' | 'network' | 'browser'
-      : 'thermal';
 
     try {
       console.log('🖨️ Print Receipt clicked - Order already processed, just printing...');
@@ -1653,21 +1657,21 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
         invoiceNumber: receiptData.invoiceNumber
       });
 
-      // Just print the receipt (order and transaction are already saved)
-      console.log('🖨️ Printing receipt...');
+      // 🔥 ENHANCED: Use smart print - auto-connects if needed, prints directly
+      console.log('🖨️ Using smart print (auto-detect and connect)...');
       await this.printService.printReceiptSmart(receiptData);
-      console.log(`✅ Receipt sent to printer for order:`, receiptData.orderId);
+      console.log(`✅ Receipt printed successfully for order:`, receiptData.orderId);
       
       // Close the modal after successful print
       this.closeReceiptModal();
       
     } catch (error) {
-      console.error('Error during save and print process:', error);
+      console.error('Error during print process:', error);
       
       // Show error in a modal dialog instead of browser alert
       await this.showConfirmationDialog({
         title: 'Print Receipt Failed',
-        message: 'Failed to print receipt. The order has been saved successfully. You can try printing again or use browser print as fallback.',
+        message: 'Failed to print receipt. Please check your printer connection and try printing again.',
         confirmText: 'OK',
         cancelText: '',
         type: 'warning'
