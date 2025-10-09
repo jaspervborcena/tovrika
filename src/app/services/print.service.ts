@@ -417,27 +417,32 @@ export class PrintService {
     
     commands += '--------------------------------\n';
     
-    // Totals - Right aligned for 58mm printer
+    // Totals - Right aligned for 58mm printer (show ALL fields like receipt display)
     const receiptWidth = 32; // 58mm printer width
     
+    // Subtotal - always show
     const subtotalAmt = (receiptData?.subtotal || 0).toFixed(2);
     const subtotalLine = `Subtotal: ${subtotalAmt}`;
     const subtotalSpaces = ' '.repeat(receiptWidth - subtotalLine.length);
     commands += `${subtotalSpaces}${subtotalLine}\n`;
     
-    if (receiptData?.vatAmount && receiptData.vatAmount > 0) {
-      const vatAmt = receiptData.vatAmount.toFixed(2);
-      const vatLine = `VAT (12%): ${vatAmt}`;
-      const vatSpaces = ' '.repeat(receiptWidth - vatLine.length);
-      commands += `${vatSpaces}${vatLine}\n`;
-    }
+    // VAT (12%) - always show (even if 0.00)
+    const vatAmt = (receiptData?.vatAmount || 0).toFixed(2);
+    const vatLine = `VAT (12%): ${vatAmt}`;
+    const vatSpaces = ' '.repeat(receiptWidth - vatLine.length);
+    commands += `${vatSpaces}${vatLine}\n`;
     
-    if (receiptData?.discount && receiptData.discount > 0) {
-      const discountAmt = receiptData.discount.toFixed(2);
-      const discountLine = `Discount: -${discountAmt}`;
-      const discountSpaces = ' '.repeat(receiptWidth - discountLine.length);
-      commands += `${discountSpaces}${discountLine}\n`;
-    }
+    // VAT Exempt - always show (even if 0.00)
+    const vatExemptAmt = (receiptData?.vatExempt || 0).toFixed(2);
+    const vatExemptLine = `VAT Exempt: ${vatExemptAmt}`;
+    const vatExemptSpaces = ' '.repeat(receiptWidth - vatExemptLine.length);
+    commands += `${vatExemptSpaces}${vatExemptLine}\n`;
+    
+    // Discount - always show (even if 0.00)
+    const discountAmt = (receiptData?.discount || 0).toFixed(2);
+    const discountLine = `Discount: ${discountAmt}`;
+    const discountSpaces = ' '.repeat(receiptWidth - discountLine.length);
+    commands += `${discountSpaces}${discountLine}\n`;
     
     commands += '================================\n';
     commands += '\x1B\x45\x01'; // Bold on
@@ -447,6 +452,42 @@ export class PrintService {
     commands += `${totalSpaces}${totalLine}\n`;
     commands += '\x1B\x45\x00'; // Bold off
     commands += '================================\n';
+    
+    // Discount Information (for PWD/Senior/Special Discounts)
+    if (receiptData?.orderDiscount) {
+      commands += '\n';
+      commands += 'DISCOUNT INFORMATION\n';
+      commands += '--------------------------------\n';
+      
+      let discountType = receiptData.orderDiscount.type;
+      if (receiptData.orderDiscount.customType) {
+        discountType += ` (${receiptData.orderDiscount.customType})`;
+      }
+      commands += `${discountType} Discount\n`;
+      
+      if (receiptData.orderDiscount.exemptionId) {
+        commands += `ID: ${receiptData.orderDiscount.exemptionId}\n`;
+      }
+      
+      if (receiptData.orderDiscount.customerName) {
+        commands += `Customer: ${receiptData.orderDiscount.customerName}\n`;
+      }
+      
+      const discountAmt = (receiptData?.discount || 0).toFixed(2);
+      commands += `Discount Amount: ${discountAmt}\n`;
+      
+      // Signature line for PWD/Senior discounts
+      if (receiptData.orderDiscount.type === 'PWD' || receiptData.orderDiscount.type === 'SENIOR') {
+        commands += '\n';
+        commands += 'Customer Signature:\n';
+        if (receiptData.orderDiscount.signature) {
+          commands += `${receiptData.orderDiscount.signature}\n`;
+        } else {
+          commands += '_________________________\n';
+        }
+      }
+      commands += '================================\n';
+    }
     
     // Thank you message - CENTERED for Xprinter
     commands += '\x1B\x61\x01'; // Center alignment
@@ -684,22 +725,60 @@ export class PrintService {
       
       <table style="width: 100%;">
         <tr><td>Subtotal:</td><td class="right">₱${(receiptData?.subtotal || 0).toFixed(2)}</td></tr>
+        <tr><td>VAT (12%):</td><td class="right">₱${(receiptData?.vatAmount || 0).toFixed(2)}</td></tr>
+        <tr><td>VAT Exempt:</td><td class="right">₱${(receiptData?.vatExempt || 0).toFixed(2)}</td></tr>
+        <tr><td>Discount:</td><td class="right">₱${(receiptData?.discount || 0).toFixed(2)}</td></tr>
     `;
-
-    if (receiptData?.vatAmount && receiptData.vatAmount > 0) {
-      html += `<tr><td>VAT (12%):</td><td class="right">₱${receiptData.vatAmount.toFixed(2)}</td></tr>`;
-    }
-    if (receiptData?.discount && receiptData.discount > 0) {
-      html += `<tr><td>Discount:</td><td class="right">-₱${receiptData.discount.toFixed(2)}</td></tr>`;
-    }
 
     html += `
         <tr style="border-top: 1px solid #000; font-weight: bold;">
           <td style="padding-top: 5px;"><strong>TOTAL:</strong></td>
           <td class="right" style="padding-top: 5px;"><strong>₱${(receiptData?.totalAmount || receiptData?.netAmount || 0).toFixed(2)}</strong></td>
         </tr>
-      </table>
+      </table>`;
+
+    // Discount Information Section (for PWD/Senior/Special Discounts)
+    if (receiptData?.orderDiscount) {
+      html += `
+        <div class="line"></div>
+        <div style="margin: 10px 0;">
+          <h4 style="margin: 5px 0; font-size: 14px;">Discount Information</h4>
+      `;
       
+      let discountType = receiptData.orderDiscount.type;
+      if (receiptData.orderDiscount.customType) {
+        discountType += ` (${receiptData.orderDiscount.customType})`;
+      }
+      html += `<div><strong>${discountType} Discount</strong></div>`;
+      
+      if (receiptData.orderDiscount.exemptionId) {
+        html += `<div>ID: ${receiptData.orderDiscount.exemptionId}</div>`;
+      }
+      
+      if (receiptData.orderDiscount.customerName) {
+        html += `<div>Customer: ${receiptData.orderDiscount.customerName}</div>`;
+      }
+      
+      const discountAmt = (receiptData?.discount || 0).toFixed(2);
+      html += `<div>Discount Amount: ₱${discountAmt}</div>`;
+      
+      // Signature section for PWD/Senior discounts
+      if (receiptData.orderDiscount.type === 'PWD' || receiptData.orderDiscount.type === 'SENIOR') {
+        html += `
+          <div style="margin-top: 15px;">
+            <div style="margin-bottom: 5px;"><strong>Customer Signature:</strong></div>
+        `;
+        if (receiptData.orderDiscount.signature) {
+          html += `<div>${receiptData.orderDiscount.signature}</div>`;
+        } else {
+          html += `<div style="border-bottom: 1px solid #000; width: 200px; height: 20px;">&nbsp;</div>`;
+        }
+        html += `</div>`;
+      }
+      html += `</div>`;
+    }
+
+    html += `
       <div class="footer-section no-break">
         <div>Thank you for your purchase!</div>
         <div>Please come again</div>
