@@ -12,6 +12,8 @@ import {
   addDoc
 } from '@angular/fire/firestore';
 import { AuthService } from './auth.service';
+import { FirestoreSecurityService } from '../core/services/firestore-security.service';
+import { OfflineDocumentService } from '../core/services/offline-document.service';
 import { UserRole } from '../interfaces/user-role.interface';
 
 @Injectable({
@@ -30,7 +32,7 @@ export class UserRoleService {
       const q = query(roleDefRef, where('companyId', '==', companyId), where('roleId', '==', role.roleId));
       const snap = await getDocs(q);
       if (snap.empty) {
-        await addDoc(roleDefRef, {
+        const roleData = {
           companyId,
           roleId: role.roleId,
           name: role.name,
@@ -38,7 +40,9 @@ export class UserRoleService {
           permissions: this.getDefaultPermissionsForRole(role.roleId),
           createdAt: new Date(),
           updatedAt: new Date()
-        });
+        };
+        // 🔥 NEW APPROACH: Use OfflineDocumentService for offline-safe creation
+        await this.offlineDocService.createDocument('roledefinition', roleData);
       }
     }
   }
@@ -111,7 +115,9 @@ export class UserRoleService {
 
   constructor(
     private firestore: Firestore, 
-    private authService: AuthService
+    private authService: AuthService,
+    private firestoreSecurityService: FirestoreSecurityService,
+    private offlineDocService: OfflineDocumentService
   ) {}
 
   async loadUserRoles() {
@@ -168,7 +174,8 @@ export class UserRoleService {
       };
       
       // Add user role to userRoles collection
-      await addDoc(userRolesRef, docData);
+      // 🔥 NEW APPROACH: Use OfflineDocumentService for offline-safe creation
+      await this.offlineDocService.createDocument('userRoles', docData);
 
       // Update user's permission field in users collection
       const userDocRef = doc(this.firestore, 'users', userRoleData.userId);

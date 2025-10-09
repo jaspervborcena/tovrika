@@ -11,6 +11,8 @@ import {
   addDoc
 } from '@angular/fire/firestore';
 import { AuthService } from './auth.service';
+import { FirestoreSecurityService } from '../core/services/firestore-security.service';
+import { OfflineDocumentService } from '../core/services/offline-document.service';
 
 export interface RolePermissions {
   canViewPOS: boolean;
@@ -50,7 +52,12 @@ export class RoleDefinitionService {
   // Computed properties
   public readonly totalRoles = computed(() => this.roleDefinitionsSignal().length);
 
-  constructor(private firestore: Firestore, private authService: AuthService) {
+  constructor(
+    private firestore: Firestore, 
+    private authService: AuthService,
+    private firestoreSecurityService: FirestoreSecurityService,
+    private offlineDocService: OfflineDocumentService
+  ) {
     // Don't auto-load roles in constructor, let components trigger loading
   }
   
@@ -175,8 +182,10 @@ export class RoleDefinitionService {
       };
       
       console.log('🔍 [RoleDefinitionService] Creating new role definition:', docData);
-      await addDoc(roleDefsRef, docData);
+      // 🔥 NEW APPROACH: Use OfflineDocumentService for offline-safe creation
+      const documentId = await this.offlineDocService.createDocument('roleDefinition', docData);
       await this.loadRoleDefinitions(); // Refresh the data
+      console.log('✅ Role definition created with ID:', documentId, navigator.onLine ? '(online)' : '(offline)');
     } catch (error) {
       console.error('Error creating role definition:', error);
       throw error;

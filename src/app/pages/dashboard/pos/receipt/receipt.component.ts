@@ -13,9 +13,8 @@ export class ReceiptComponent implements OnInit {
   @Input() isVisible: boolean = false;
   @Input() receiptData: any = null;
   @Output() closeModal = new EventEmitter<void>();
-  @Output() printReceipt = new EventEmitter<string>(); // Pass printer type
+  @Output() printReceipt = new EventEmitter<void>(); // Simplified - no printer type needed
 
-  selectedPrinterType: 'thermal' | 'network' | 'browser' = 'thermal';
   isPrinting: boolean = false;
 
   ngOnInit() {
@@ -30,7 +29,7 @@ export class ReceiptComponent implements OnInit {
     if (this.isPrinting) return; // Prevent double-clicking
     
     this.isPrinting = true;
-    this.printReceipt.emit(this.selectedPrinterType);
+    this.printReceipt.emit(); // Simplified - smart print will handle everything
     
     // Reset printing state after a delay (will be reset when modal closes anyway)
     setTimeout(() => {

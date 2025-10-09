@@ -851,17 +851,12 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
     this.resetCustomerForm();
   }
 
-  async printReceipt(printerType?: string): Promise<void> {
+  async printReceipt(): Promise<void> {
     const receiptData = this.receiptData();
     if (!receiptData) {
       console.error('No receipt data available for printing');
       return;
     }
-
-    // Type guard for printer type
-    const validPrinterType = ['thermal', 'network', 'browser'].includes(printerType || '') 
-      ? printerType as 'thermal' | 'network' | 'browser'
-      : 'thermal';
 
     try {
       // First, save the transaction to the database
@@ -869,9 +864,10 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
       const savedTransaction = await this.saveTransaction(receiptData);
       console.log('Transaction saved successfully:', savedTransaction.transactionNumber);
 
-      // Then print the receipt
-      await this.printService.printReceipt(receiptData, validPrinterType);
-      console.log(`Receipt sent to ${validPrinterType} printer for order:`, receiptData.orderId);
+      // 🔥 ENHANCED: Use smart print - auto-connects if needed
+      console.log('🖨️ Using smart print (auto-detect and connect)...');
+      await this.printService.printReceiptSmart(receiptData);
+      console.log(`✅ Receipt printed successfully for order:`, receiptData.orderId);
       
       // Close the modal after successful save and print
       this.closeReceiptModal();
@@ -880,7 +876,7 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
       console.error('Error during print process:', error);
       // Still try to print even if save fails
       try {
-        await this.printService.printReceipt(receiptData, validPrinterType);
+        await this.printService.printReceiptSmart(receiptData);
         console.log('Receipt printed despite save error');
         this.closeReceiptModal();
       } catch (printError) {

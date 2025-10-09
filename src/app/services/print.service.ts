@@ -12,12 +12,16 @@ export class PrintService {
   private bluetoothDevice: any = null;
   private bluetoothCharacteristic: any = null;
   private isConnected = false;
+  
+  // USB printer connection state
+  private usbPort: any = null;
+  private usbConnected = false;
 
   constructor() { }
 
   /**
-   * 🎯 SMART PRINT: Main method - handles Bluetooth connection and printing
-   * Auto-connects on first use, reuses connection for subsequent prints
+   * 🚀 SMART PRINT: Auto-detects printer type and connection method
+   * Priority: 1) USB/Cable printers (Web Serial) 2) Bluetooth 3) Browser print
    */
   async printReceiptSmart(receiptData: any): Promise<void> {
     try {
@@ -29,22 +33,81 @@ export class PrintService {
         itemsCount: receiptData?.items?.length || 0
       });
       
+      // 🔥 PRIORITY 1: Try USB/Cable printer first (Web Serial API)
+      if ('serial' in navigator) {
+        // Test USB connection first
+        const usbTest = await this.testUSBConnection();
+        console.log('🧪 USB Connection Test:', usbTest);
+        
+        try {
+          console.log('🔌 USB/Cable printer support detected, trying USB connection...');
+          await this.printToThermalPrinter(receiptData);
+          console.log('✅ USB/Cable print completed successfully');
+          return;
+        } catch (usbError: any) {
+          console.log('⚠️ USB/Cable printer error:', usbError.message);
+          
+          // If user cancelled port selection, don't try Bluetooth
+          if (usbError.message.includes('cancelled') || usbError.message.includes('No port selected')) {
+            throw new Error('Print cancelled. Please select your USB printer port or use a Bluetooth printer.');
+          }
+          
+          // Check if we have USB printers available - if yes, try system print dialog as fallback
+          const hasUsbPrinters = await this.checkUSBPrintersAvailable();
+          if (hasUsbPrinters) {
+            console.log('🔄 USB direct connection failed, trying system print dialog...');
+            try {
+              this.printBrowserReceipt(receiptData);
+              console.log('✅ Fallback to system print dialog successful');
+              return;
+            } catch (printError) {
+              console.error('💥 Both USB direct and system print failed:', printError);
+              throw new Error('❌ USB printer detected but connection failed. System print dialog also failed. Please check browser console for detailed error information.');
+            }
+          }
+          
+          console.log('🔄 No USB printers found, trying Bluetooth printer...');
+        }
+      } else {
+        console.log('⚠️ USB printing not supported in this browser, trying Bluetooth...');
+      }
+
+      // 🔥 PRIORITY 2: Try Bluetooth printer
       // Check if Web Bluetooth is supported
       if (!navigator.bluetooth) {
-        console.warn('⚠️ Web Bluetooth not supported, falling back to browser print');
-        this.printBrowserReceipt(receiptData);
+        throw new Error('Neither USB nor Bluetooth printer support detected. Please connect a USB printer or use a Bluetooth-compatible browser.');
+      }
+
+      // Check existing Bluetooth connection
+      if (this.isConnected && this.bluetoothDevice && this.bluetoothDevice.gatt.connected) {
+        console.log('✅ Already connected to Bluetooth printer:', this.bluetoothDevice.name);
+        console.log('🖨️ Printing directly via existing Bluetooth connection...');
+        await this.printViaBluetoothESCPOS(receiptData);
+        console.log('✅ Bluetooth print completed successfully');
         return;
       }
 
-      // If not connected, attempt to connect
+      // Reset connection state if device got disconnected
+      if (this.bluetoothDevice && !this.bluetoothDevice.gatt.connected) {
+        console.log('📱 Bluetooth device disconnected, resetting connection state...');
+        this.isConnected = false;
+        this.bluetoothCharacteristic = null;
+      }
+
+      // Check if Bluetooth printers are available before attempting connection
+      const hasBluetoothPrinters = await this.checkBluetoothPrintersAvailable();
+      if (!hasBluetoothPrinters) {
+        console.log('⚠️ No Bluetooth printers found');
+        throw new Error('❌ No printers available. Please connect a USB printer or pair a Bluetooth printer.');
+      }
+
+      // Try to connect to Bluetooth printer
       if (!this.isConnected) {
-        console.log('📱 Bluetooth printer not connected, attempting connection...');
+        console.log('📱 Attempting Bluetooth printer connection...');
         const connected = await this.connectToBluetoothPrinter();
         
         if (!connected) {
-          console.warn('❌ Bluetooth connection failed, falling back to browser print');
-          this.printBrowserReceipt(receiptData);
-          return;
+          throw new Error('❌ Bluetooth printer connection failed. Please check your Bluetooth printer is powered on and paired.');
         }
       }
 
@@ -55,13 +118,59 @@ export class PrintService {
 
     } catch (error) {
       console.error('❌ Print error:', error);
-      console.log('🔄 Falling back to browser print...');
-      this.printBrowserReceipt(receiptData);
+      
+      // Reset connection on error
+      this.isConnected = false;
+      this.bluetoothCharacteristic = null;
+      
+      // Show user-friendly error instead of browser print fallback
+      alert(`Print Error: ${error instanceof Error ? error.message : 'Unable to print receipt. Please check your printer connection.'}`);
+      throw error;
     }
   }
 
   /**
-   * 📱 Connect to Bluetooth thermal printer
+   * � Check if USB printers are available
+   */
+  private async checkUSBPrintersAvailable(): Promise<boolean> {
+    try {
+      if (!('serial' in navigator)) {
+        return false;
+      }
+
+      // Check if any USB ports were previously granted
+      const ports = await (navigator as any).serial.getPorts();
+      if (ports.length > 0) {
+        console.log('✅ USB printer ports available:', ports.length);
+        return true;
+      }
+      return false;
+    } catch (error) {
+      console.log('🔍 USB printer check failed:', error);
+      return false;
+    }
+  }
+
+  /**
+   * 🔍 Check if Bluetooth printers are available
+   */
+  private async checkBluetoothPrintersAvailable(): Promise<boolean> {
+    try {
+      if (!navigator.bluetooth) {
+        return false;
+      }
+
+      // Check if any Bluetooth devices were previously paired
+      const devices = await navigator.bluetooth.getDevices();
+      return devices.length > 0;
+    } catch (error) {
+      console.log('🔍 Bluetooth printer check failed:', error);
+      return false;
+    }
+  }
+
+  /**
+   * �📱 Connect to Bluetooth thermal printer
    */
   private async connectToBluetoothPrinter(): Promise<boolean> {
     try {
@@ -150,31 +259,37 @@ export class PrintService {
   }
 
   /**
-   * 📄 Generate ESC/POS commands for thermal printer
+   * 📄 Generate ESC/POS commands for 58mm thermal printer
+   * Optimized for small paper width with condensed fonts
    */
   private generateESCPOSCommands(receiptData: any): string {
     let commands = '';
     
-    // Initialize printer
-    commands += '\x1B\x40'; // ESC @ - Initialize
+    // Initialize printer with smaller font and natural alignment
+    commands += '\x1B\x40'; // ESC @ - Initialize (resets all settings)
+    commands += '\x1B\x21\x01'; // ESC ! - Small font size with compressed printing
+    commands += '\x1B\x4D\x01'; // ESC M - Select font B (smaller)
+    commands += '\x0F'; // SI - Select condensed printing
+    commands += '\x1B\x20\x00'; // ESC SP - Set character spacing to 0 (compact)
+    commands += '\x1B\x33\x10'; // ESC 3 - Set line spacing to minimal
     
-    // Store header (centered, bold)
-    commands += '\x1B\x61\x01'; // Center align
+    // Store header (natural alignment like SOLD TO)
     commands += '\x1B\x45\x01'; // Bold on
     commands += (receiptData?.storeInfo?.storeName || 'Store Name') + '\n';
     commands += '\x1B\x45\x00'; // Bold off
     
-    // Store details
+    // Store details (natural alignment)
     commands += (receiptData?.storeInfo?.address || 'Store Address') + '\n';
-    commands += `Tel: ${receiptData?.storeInfo?.phone || 'N/A'} | Email: ${receiptData?.storeInfo?.email || 'N/A'}\n`;
+    commands += `Tel: ${receiptData?.storeInfo?.phone || 'N/A'}\n`;
+    commands += `Email: ${receiptData?.storeInfo?.email || 'N/A'}\n`;
     commands += `TIN: ${receiptData?.storeInfo?.tin || 'N/A'}\n`;
     
-    // BIR Information
+    // BIR Information (condensed)
     if (receiptData?.storeInfo?.birPermitNo) {
-      commands += `BIR Permit No: ${receiptData.storeInfo.birPermitNo}\n`;
+      commands += `BIR: ${receiptData.storeInfo.birPermitNo}\n`;
     }
     if (receiptData?.storeInfo?.inclusiveSerialNumber) {
-      commands += `Serial Number: ${receiptData.storeInfo.inclusiveSerialNumber}\n`;
+      commands += `SN: ${receiptData.storeInfo.inclusiveSerialNumber}\n`;
     }
     if (receiptData?.storeInfo?.minNumber) {
       commands += `MIN: ${receiptData.storeInfo.minNumber}\n`;
@@ -182,20 +297,19 @@ export class PrintService {
     
     commands += `Invoice #: ${receiptData?.invoiceNumber || 'Auto-generated'}\n`;
     
-    // Invoice Type (centered, bold)
+    // Invoice Type (natural alignment, bold)
     commands += '\x1B\x45\x01'; // Bold on
     commands += (receiptData?.storeInfo?.invoiceType || 'SALES INVOICE') + '\n';
     commands += '\x1B\x45\x00'; // Bold off
-    commands += '\x1B\x61\x00'; // Left align
     
-    commands += '--------------------------------\n';
+    commands += '--------------------------------------------------\n'; // 50 chars
     
-    // Payment Method Indicators
+    // Payment Method Indicators (natural alignment)
     const isCashSale = receiptData?.paymentMethod === 'cash' || !receiptData?.paymentMethod;
     const isChargeSale = receiptData?.paymentMethod === 'charge' || receiptData?.paymentMethod === 'credit';
-    commands += `Cash: ${isCashSale ? '[X]' : '[ ]'}  Charge: ${isChargeSale ? '[X]' : '[ ]'}\n`;
+    commands += `Cash: ${isCashSale ? '[X]' : '[ ]'}   Charge: ${isChargeSale ? '[X]' : '[ ]'}\n`;
     
-    commands += '--------------------------------\n';
+    commands += '--------------------------------------------------\n';
     
     // Customer info
     const getCustomerDisplayName = () => {
@@ -216,55 +330,75 @@ export class PrintService {
       }
     }
     
-    commands += '--------------------------------\n';
+    commands += '--------------------------------------------------\n';
     
-    // Date and Cashier
+    // Date and Cashier (compact)
     commands += `Cashier: ${receiptData?.cashier || 'N/A'}\n`;
-    commands += `Date: ${new Date(receiptData?.receiptDate || new Date()).toLocaleString()}\n`;
+    const date = new Date(receiptData?.receiptDate || new Date());
+    commands += `${date.toLocaleDateString()} ${date.toLocaleTimeString()}\n`;
     
-    commands += '--------------------------------\n';
+    commands += '--------------------------------------------------\n';
     
-    // Items header
-    commands += 'SKU      Qty  Amount    Total\n';
-    commands += '--------------------------------\n';
+    // Items header (smaller font spacing)
+    commands += 'Item                            Qty     Total\n';
+    commands += '--------------------------------------------------\n';
     
     if (receiptData?.items) {
       receiptData.items.forEach((item: any) => {
-        const sku = (item.skuId || item.productId || 'N/A').substring(0, 8).padEnd(8);
-        const qty = (item.quantity || 1).toString().padStart(3);
-        const unitType = item.unitType && item.unitType !== 'N/A' ? ` ${item.unitType}` : '';
-        const amount = (item.sellingPrice || item.price || 0).toFixed(2).padStart(7);
-        const total = (item.total || 0).toFixed(2).padStart(8);
+        const qty = (item.quantity || 1).toString();
+        const unitType = item.unitType && item.unitType !== 'N/A' ? ` ${item.unitType.substring(0, 2)}` : '';
+        const total = (item.total || 0).toFixed(2);
         
-        // Product name (full line)
-        commands += `${(item.productName || item.name || 'Item').substring(0, 32)}\n`;
-        // SKU, qty, amount, total
-        commands += `${sku} ${qty}${unitType.substring(0, 3)} ${amount} ${total}\n`;
+        // Product name (max 32 chars with smaller font)
+        const productName = (item.productName || item.name || 'Item').substring(0, 32);
+        
+        // Better spacing calculation for left-aligned Qty with smaller font
+        const qtyWithUnit = `${qty}${unitType}`;
+        const qtyPadded = qtyWithUnit.padEnd(5); // Fixed width for Qty column
+        const totalPadded = total.padStart(8); // Right-align total
+        
+        // Calculate spaces between product name and qty
+        const spacesNeeded = 32 - productName.length;
+        const spaces = ' '.repeat(Math.max(1, spacesNeeded));
+        
+        // Single line: Name + spaces + Qty + Total
+        commands += `${productName}${spaces} ${qtyPadded} ${totalPadded}\n`;
+        
+        // Price per unit on next line
+        const unitPrice = (item.sellingPrice || item.price || 0).toFixed(2);
+        commands += `  @ ${unitPrice} each\n`;
       });
     }
     
-    commands += '--------------------------------\n';
+    commands += '--------------------------------------------------\n';
     
-    // Totals
-    commands += `Subtotal: ${(receiptData?.subtotal || 0).toFixed(2).padStart(20)}\n`;
+    // Totals (properly aligned within 50 chars)
+    const subtotalAmt = (receiptData?.subtotal || 0).toFixed(2);
+    const subtotalSpaces = ' '.repeat(50 - 9 - subtotalAmt.length); // 'Subtotal:' = 9 chars
+    commands += `Subtotal:${subtotalSpaces}${subtotalAmt}\n`;
     
     if (receiptData?.vatAmount && receiptData.vatAmount > 0) {
-      commands += `VAT (12%): ${receiptData.vatAmount.toFixed(2).padStart(19)}\n`;
+      const vatAmt = receiptData.vatAmount.toFixed(2);
+      const vatSpaces = ' '.repeat(50 - 9 - vatAmt.length); // 'VAT(12%):' = 9 chars
+      commands += `VAT(12%):${vatSpaces}${vatAmt}\n`;
     }
     if (receiptData?.discount && receiptData.discount > 0) {
-      commands += `Discount: ${receiptData.discount.toFixed(2).padStart(20)}\n`;
+      const discountAmt = receiptData.discount.toFixed(2);
+      const discountSpaces = ' '.repeat(50 - 9 - discountAmt.length); // 'Discount:' = 9 chars
+      commands += `Discount:${discountSpaces}${discountAmt}\n`;
     }
     
-    commands += '================================\n';
+    commands += '==================================================\n'; // 50 chars
     commands += '\x1B\x45\x01'; // Bold on
-    commands += `TOTAL: ${(receiptData?.totalAmount || receiptData?.netAmount || 0).toFixed(2).padStart(23)}\n`;
+    const totalAmt = (receiptData?.totalAmount || receiptData?.netAmount || 0).toFixed(2);
+    const totalSpaces = ' '.repeat(50 - 6 - totalAmt.length); // 'TOTAL:' = 6 chars
+    commands += `TOTAL:${totalSpaces}${totalAmt}\n`;
     commands += '\x1B\x45\x00'; // Bold off
-    commands += '================================\n';
+    commands += '==================================================\n';
     
-    commands += '\x1B\x61\x01'; // Center align
+    // Thank you message (natural alignment like header and SOLD TO)
     commands += 'Thank you for your purchase!\n';
     commands += 'Please come again\n';
-    commands += '\x1B\x61\x00'; // Left align
     commands += '\n\n\n'; // Feed paper
     commands += '\x1D\x56\x41'; // Cut paper
     
@@ -365,135 +499,152 @@ export class PrintService {
   }
 
   /**
-   * Generate ESC/POS commands for thermal printers
+   * 🧪 Test USB printer connectivity
    */
-  generateEscPosCommands(receiptData: any): string {
-    let commands = '';
-    
-    // ESC/POS Command Constants
-    const ESC = '\x1B';
-    const GS = '\x1D';
-    
-    // Initialize printer
-    commands += ESC + '@'; // Initialize
-    commands += ESC + 'a' + '\x01'; // Center alignment
-    
-    // Store name (large, bold)
-    commands += ESC + '!' + '\x30'; // Double height and width
-    commands += (receiptData?.storeInfo?.storeName || 'STORE NAME') + '\n';
-    commands += ESC + '!' + '\x00'; // Reset to normal
-    
-    // Store info
-    commands += (receiptData?.storeInfo?.address || '') + '\n';
-    commands += `Tel: ${receiptData?.storeInfo?.phone || 'N/A'} | Email: ${receiptData?.storeInfo?.email || 'N/A'}\n`;
-    commands += `TIN: ${receiptData?.storeInfo?.tin || 'N/A'}\n`;
-    
-    // BIR Information
-    if (receiptData?.storeInfo?.birPermitNo) {
-      commands += `BIR Permit No: ${receiptData.storeInfo.birPermitNo}\n`;
-    }
-    if (receiptData?.storeInfo?.inclusiveSerialNumber) {
-      commands += `Serial Number: ${receiptData.storeInfo.inclusiveSerialNumber}\n`;
-    }
-    if (receiptData?.storeInfo?.minNumber) {
-      commands += `MIN: ${receiptData.storeInfo.minNumber}\n`;
-    }
-    
-    commands += `Invoice #: ${receiptData?.invoiceNumber || 'N/A'}\n`;
-    
-    // Invoice Type (centered, bold)
-    commands += ESC + 'a' + '\x01'; // Center
-    commands += ESC + 'E' + '\x01'; // Bold on
-    commands += (receiptData?.storeInfo?.invoiceType || 'SALES INVOICE') + '\n';
-    commands += ESC + 'E' + '\x00'; // Bold off
-    
-    // Line separator
-    commands += ESC + 'a' + '\x00'; // Left align
-    commands += '--------------------------------\n';
-    
-    // Customer info
-    if (receiptData?.customerName) {
-      commands += ESC + 'E' + '\x01'; // Bold on
-      commands += 'SOLD TO:\n';
-      commands += ESC + 'E' + '\x00'; // Bold off
-      commands += `Customer: ${receiptData.customerName}\n`;
-      if (receiptData?.customerAddress) {
-        commands += `Address: ${receiptData.customerAddress}\n`;
+  async testUSBConnection(): Promise<{ success: boolean; message: string; details?: any }> {
+    try {
+      if (!('serial' in navigator)) {
+        return { success: false, message: 'Web Serial API not supported in this browser' };
       }
-      if (receiptData?.customerTin) {
-        commands += `TIN: ${receiptData.customerTin}\n`;
+
+      const ports = await (navigator as any).serial.getPorts();
+      if (ports.length === 0) {
+        return { success: false, message: 'No USB printers have been granted permission' };
       }
-      commands += '--------------------------------\n';
+
+      const port = ports[0];
+      const testResult = {
+        success: true,
+        message: 'USB printer connection available',
+        details: {
+          portsCount: ports.length,
+          portInfo: port.getInfo ? port.getInfo() : 'Port info not available',
+          readable: !!port.readable,
+          writable: !!port.writable
+        }
+      };
+
+      console.log('🧪 USB Connection Test Result:', testResult);
+      return testResult;
+    } catch (error: any) {
+      return { 
+        success: false, 
+        message: `USB test failed: ${error.message}`,
+        details: { error: error.name, code: error.code }
+      };
     }
-    
-    // Date and Cashier
-    commands += `Date: ${new Date(receiptData?.receiptDate).toLocaleDateString()}\n`;
-    commands += `Cashier: ${receiptData?.cashier || 'N/A'}\n`;
-    commands += '--------------------------------\n';
-    
-    // Items
-    receiptData?.items?.forEach((item: any) => {
-      commands += `${item.productName}\n`;
-      commands += `  ${item.quantity} x ${item.sellingPrice.toFixed(2)}`;
-      commands += `${' '.repeat(Math.max(1, 20 - item.total.toFixed(2).length))}${item.total.toFixed(2)}\n`;
-    });
-    
-    commands += '--------------------------------\n';
-    
-    // Totals
-    commands += `Subtotal:${' '.repeat(15)}${receiptData?.subtotal?.toFixed(2) || '0.00'}\n`;
-    if (receiptData?.vatAmount > 0) {
-      commands += `VAT (12%):${' '.repeat(14)}${receiptData.vatAmount.toFixed(2)}\n`;
-    }
-    if (receiptData?.discount > 0) {
-      commands += `Discount:${' '.repeat(15)}${receiptData.discount.toFixed(2)}\n`;
-    }
-    
-    commands += '================================\n';
-    commands += ESC + 'E' + '\x01'; // Bold on
-    commands += `TOTAL:${' '.repeat(18)}${receiptData?.totalAmount?.toFixed(2) || '0.00'}\n`;
-    commands += ESC + 'E' + '\x00'; // Bold off
-    commands += '================================\n';
-    
-    // Thank you message
-    commands += ESC + 'a' + '\x01'; // Center
-    commands += '\nThank you for your purchase!\n';
-    commands += 'Please come again\n\n';
-    
-    // Cut paper
-    commands += GS + 'V' + '\x42' + '\x00'; // Partial cut
-    
-    return commands;
   }
 
   /**
    * Send to thermal printer via Web Serial API (for USB printers)
+   * Enhanced with detailed diagnostics and error handling
    */
   async printToThermalPrinter(receiptData: any): Promise<void> {
     try {
+      console.log('🔌 Starting USB thermal printer process...');
+      
       // Check if Web Serial API is supported
       if (!('serial' in navigator)) {
         throw new Error('Web Serial API not supported. Use Chrome/Edge with HTTPS.');
       }
 
-      // Request port
-      const port = await (navigator as any).serial.requestPort();
-      await port.open({ baudRate: 9600 });
+      let port = this.usbPort;
 
-      const escPosCommands = this.generateEscPosCommands(receiptData);
+      // If no existing connection or connection is closed, request new port
+      if (!port || !port.readable) {
+        console.log('🔌 No existing USB connection, checking available ports...');
+        
+        // Check if any ports are already available (previously granted)
+        const ports = await (navigator as any).serial.getPorts();
+        console.log('🔍 Available USB ports:', ports.length);
+        
+        if (ports.length > 0) {
+          console.log('✅ Using previously granted USB port:', ports[0]);
+          port = ports[0]; // Use the first available port
+        } else {
+          console.log('📱 No granted ports found, requesting new USB port access...');
+          console.log('💡 Please select your thermal printer from the dialog');
+          port = await (navigator as any).serial.requestPort();
+          console.log('✅ USB port selected:', port);
+        }
+        
+        this.usbPort = port;
+      } else {
+        console.log('✅ Using existing USB port connection');
+      }
+
+      // Detailed port opening with better error handling
+      console.log('🔌 Port readable status:', !!port.readable);
+      console.log('🔒 Port locked status:', port.readable ? port.readable.locked : 'N/A');
+      
+      if (!port.readable || port.readable.locked) {
+        console.log('🔓 Opening USB port with baudRate: 9600...');
+        await port.open({ 
+          baudRate: 9600,
+          dataBits: 8,
+          stopBits: 1,
+          parity: 'none',
+          flowControl: 'none'
+        });
+        console.log('✅ USB port opened successfully');
+        console.log('📊 Port info:', {
+          readable: !!port.readable,
+          writable: !!port.writable,
+          signals: port.getSignals ? await port.getSignals() : 'Not available'
+        });
+      }
+
+      // Generate ESC/POS commands
+      console.log('🧾 Generating ESC/POS commands for receipt...');
+      const escPosCommands = this.generateESCPOSCommands(receiptData);
+      console.log('📝 Generated commands length:', escPosCommands.length, 'characters');
+      
       const encoder = new TextEncoder();
       const data = encoder.encode(escPosCommands);
+      console.log('💾 Encoded data size:', data.length, 'bytes');
+
+      // Write to printer
+      console.log('✍️ Writing data to USB printer...');
+      if (!port.writable) {
+        throw new Error('USB port is not writable. Port may be disconnected.');
+      }
 
       const writer = port.writable.getWriter();
+      console.log('📤 Sending data to printer...');
       await writer.write(data);
       writer.releaseLock();
-      await port.close();
+      console.log('📤 Data sent successfully, writer released');
 
-      console.log('Receipt sent to thermal printer successfully');
-    } catch (error) {
-      console.error('Thermal printer error:', error);
-      // Fallback to browser print
-      this.printBrowserReceipt(receiptData);
+      // Don't close the port - keep it open for next print
+      this.usbConnected = true;
+      console.log('✅ Receipt sent to USB thermal printer successfully');
+
+    } catch (error: any) {
+      console.error('❌ USB thermal printer error details:', {
+        name: error.name,
+        message: error.message,
+        code: error.code,
+        stack: error.stack?.split('\n')[0] // Just first line of stack
+      });
+      
+      // Reset connection on error
+      this.usbPort = null;
+      this.usbConnected = false;
+      
+      // Handle specific error cases with detailed guidance
+      if (error.name === 'NotFoundError' || error.message.includes('No port selected')) {
+        throw new Error('🚫 USB printer port selection was cancelled. Please select your thermal printer from the list to continue.');
+      } else if (error.name === 'NetworkError' || error.message.includes('device not found')) {
+        throw new Error('🔌 USB printer disconnected. Please check your USB cable connection and ensure the printer is powered on.');
+      } else if (error.name === 'InvalidStateError' || error.message.includes('already open')) {
+        throw new Error('🔒 USB printer port is busy. Please wait a moment and try printing again.');
+      } else if (error.name === 'NotAllowedError' || error.message.includes('permission')) {
+        throw new Error('🛡️ USB printer access denied. Please grant permission to access the USB port and try again.');
+      } else if (error.message.includes('not writable')) {
+        throw new Error('📝 Cannot write to USB printer. Please check if another application is using the printer.');
+      } else {
+        throw new Error(`🔧 USB printer connection issue: ${error.message}. Try unplugging and reconnecting your USB printer.`);
+      }
     }
   }
 
@@ -502,7 +653,7 @@ export class PrintService {
    */
   async printToNetworkPrinter(receiptData: any, printerIp: string = '192.168.1.100'): Promise<void> {
     try {
-      const escPosCommands = this.generateEscPosCommands(receiptData);
+      const escPosCommands = this.generateESCPOSCommands(receiptData);
       
       // Send to your backend API that handles network printing
       const response = await fetch('/api/print', {
@@ -524,16 +675,15 @@ export class PrintService {
       console.log('Receipt sent to network printer successfully');
     } catch (error) {
       console.error('Network printer error:', error);
-      // Fallback to browser print
-      this.printBrowserReceipt(receiptData);
+      throw error; // Let the calling method handle the error
     }
   }
 
   /**
-   * Main print method - tries thermal printer first, falls back to browser
+   * Legacy print method - use printReceiptSmart() instead for better auto-detection
    */
-  async printReceipt(receiptData: any, printerType: 'thermal' | 'network' | 'browser' = 'thermal'): Promise<void> {
-    console.log('Printing receipt:', receiptData);
+  async printReceipt(receiptData: any, printerType: 'thermal' | 'network' = 'thermal'): Promise<void> {
+    console.log('Printing receipt via legacy method:', receiptData);
 
     switch (printerType) {
       case 'thermal':
@@ -542,10 +692,8 @@ export class PrintService {
       case 'network':
         await this.printToNetworkPrinter(receiptData);
         break;
-      case 'browser':
       default:
-        this.printBrowserReceipt(receiptData);
-        break;
+        throw new Error('Invalid printer type. Use "thermal" or "network".');
     }
   }
 

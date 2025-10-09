@@ -1,6 +1,8 @@
 import { Injectable, inject } from '@angular/core';
 import { Firestore, collection, doc, setDoc, addDoc, query, where, getDocs, getDoc } from '@angular/fire/firestore';
 import { AuthService } from './auth.service';
+import { FirestoreSecurityService } from '../core/services/firestore-security.service';
+import { OfflineDocumentService } from '../core/services/offline-document.service';
 import { ProductService } from './product.service';
 import { InventoryService } from './inventory.service';
 
@@ -35,6 +37,8 @@ export interface Transaction {
 export class TransactionService {
   private firestore = inject(Firestore);
   private authService = inject(AuthService);
+  private firestoreSecurityService = inject(FirestoreSecurityService);
+  private offlineDocService = inject(OfflineDocumentService);
   private productService = inject(ProductService);
   private inventoryService = inject(InventoryService);
 
@@ -56,12 +60,9 @@ export class TransactionService {
         updatedAt: new Date()
       };
 
-      // Create transaction document
-      const branchRef = doc(this.firestore, 
-        `companies/${currentPermission.companyId}/stores/${currentPermission.storeId}/branches/${user.branchId}`
-      );
-      const transactionsRef = collection(branchRef, 'transactions');
-      const docRef = await addDoc(transactionsRef, newTransaction);
+      // 🔥 OFFLINE-SAFE: Use OfflineDocumentService for pre-generated IDs
+      const collectionPath = `companies/${currentPermission.companyId}/stores/${currentPermission.storeId}/branches/${user.branchId}/transactions`;
+      const documentId = await this.offlineDocService.createDocument(collectionPath, newTransaction);
 
       // Update inventory
       for (const item of transaction.items) {
@@ -75,7 +76,8 @@ export class TransactionService {
         );
       }
 
-      return docRef.id;
+      console.log('✅ Transaction created with pre-generated ID:', documentId, navigator.onLine ? '(online)' : '(offline)');
+      return documentId;
     } catch (error) {
       console.error('Error creating transaction:', error);
       throw error;
@@ -118,10 +120,11 @@ export class TransactionService {
         `companies/${currentPermission.companyId}/stores/${currentPermission.storeId}/branches/${user.branchId}/transactions/${transactionId}`
       );
 
-      await setDoc(transactionRef, {
+      const updateData = await this.firestoreSecurityService.addUpdateSecurityFields({
         status: 'void',
         updatedAt: new Date()
-      }, { merge: true });
+      });
+      await setDoc(transactionRef, updateData, { merge: true });
 
       // Reverse inventory changes
       const transaction = await getDoc(transactionRef);

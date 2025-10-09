@@ -16,6 +16,8 @@ import {
 } from '@angular/fire/firestore';
 import { Company, Store, Branch } from '../interfaces/company.interface';
 import { AuthService } from './auth.service';
+import { FirestoreSecurityService } from '../core/services/firestore-security.service';
+import { OfflineDocumentService } from '../core/services/offline-document.service';
 
 @Injectable({
   providedIn: 'root'
@@ -29,7 +31,9 @@ export class CompanyService {
 
   constructor(
     private firestore: Firestore,
-    private authService: AuthService
+    private authService: AuthService,
+    private firestoreSecurityService: FirestoreSecurityService,
+    private offlineDocService: OfflineDocumentService
   ) {}
 
   // Helper function to convert Firestore Timestamp to Date
@@ -180,7 +184,8 @@ export class CompanyService {
         updatedAt: new Date()
       };
 
-      const docRef = await addDoc(companiesRef, newCompany);
+      // 🔥 NEW APPROACH: Use OfflineDocumentService for offline-safe creation
+      const documentId = await this.offlineDocService.createDocument('companies', newCompany);
       
       // Update user's permissions - add new company permission or update existing creator permission
       const currentUser = this.authService.currentUser();
@@ -192,28 +197,29 @@ export class CompanyService {
         
         if (creatorPermissionIndex >= 0) {
           // Update existing creator permission with the new company ID
-          permissions[creatorPermissionIndex].companyId = docRef.id;
+          permissions[creatorPermissionIndex].companyId = documentId;
         } else {
           // Add new creator permission for this company
           permissions.push({
-            companyId: docRef.id,
+            companyId: documentId,
             roleId: 'creator'
           });
         }
         
         await this.authService.updateUserData({
           permissions,
-          currentCompanyId: docRef.id // Set this as the current company
+          currentCompanyId: documentId // Set this as the current company
         });
       }
       
       // Add stores if we have any
       if (stores.length > 0) {
-        await this.addStoresAndBranches(docRef.id, stores);
+        await this.addStoresAndBranches(documentId, stores);
       }
 
       await this.loadCompanies(); // Reload to get fresh data
-      return docRef.id;
+      console.log('✅ Company created with ID:', documentId, navigator.onLine ? '(online)' : '(offline)');
+      return documentId;
     } catch (error) {
       console.error('Error creating company:', error);
       throw error;
@@ -240,19 +246,20 @@ export class CompanyService {
         createdAt: new Date(),
         updatedAt: new Date()
       };
-      const storeRef = await addDoc(storesRef, newStore);
+      // 🔥 NEW APPROACH: Use OfflineDocumentService for offline-safe creation
+      const storeId = await this.offlineDocService.createDocument('stores', newStore);
 
       if (branches && branches.length > 0) {
-        const branchesRef = collection(this.firestore, 'branches');
         for (const branch of branches) {
           const newBranch = {
             ...branch,
             companyId,
-            storeId: storeRef.id,
+            storeId: storeId,
             createdAt: new Date(),
             updatedAt: new Date()
           };
-          await addDoc(branchesRef, newBranch);
+          // 🔥 NEW APPROACH: Use OfflineDocumentService for offline-safe creation
+          await this.offlineDocService.createDocument('branches', newBranch);
         }
       }
     }

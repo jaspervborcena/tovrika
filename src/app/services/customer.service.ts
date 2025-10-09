@@ -1,12 +1,16 @@
 import { Injectable, inject } from '@angular/core';
 import { Firestore, collection, addDoc, query, where, getDocs, orderBy, limit } from '@angular/fire/firestore';
 import { Customer, CustomerFormData } from '../interfaces/customer.interface';
+import { FirestoreSecurityService } from '../core/services/firestore-security.service';
+import { OfflineDocumentService } from '../core/services/offline-document.service';
 
 @Injectable({
   providedIn: 'root'
 })
 export class CustomerService {
   private firestore = inject(Firestore);
+  private securityService = inject(FirestoreSecurityService);
+  private offlineDocService = inject(OfflineDocumentService);
 
   /**
    * Generate next customer ID
@@ -70,7 +74,8 @@ export class CustomerService {
       const customerId = await this.generateCustomerId(companyId);
       const { firstName, lastName } = this.parseFullName(customerData.soldTo || 'Walk-in Customer');
       
-      const customer: Customer = {
+      // Add security fields to customer data
+      const customerWithSecurity = await this.securityService.addSecurityFields({
         companyId,
         storeId,
         customerId,
@@ -84,16 +89,14 @@ export class CustomerService {
         isSeniorCitizen: customerData.isSeniorCitizen || false,
         isPWD: customerData.isPWD || false,
         exemptionId: customerData.exemptionId,
-        country: 'Philippines', // Default for now
-        createdAt: new Date(),
-        updatedAt: new Date()
-      };
+        country: 'Philippines' // Default for now
+      });
 
-      const customersRef = collection(this.firestore, 'customers');
-      const docRef = await addDoc(customersRef, customer);
+      // 🔥 OFFLINE-SAFE: Use OfflineDocumentService for pre-generated IDs
+      const documentId = await this.offlineDocService.createDocument('customers', customerWithSecurity);
       
-      console.log('✅ Customer saved successfully:', docRef.id);
-      return { ...customer, id: docRef.id };
+      console.log('✅ Customer saved successfully with pre-generated ID:', documentId, navigator.onLine ? '(online)' : '(offline)');
+      return { ...customerWithSecurity, id: documentId };
     } catch (error) {
       console.error('❌ Error saving customer:', error);
       return null;
