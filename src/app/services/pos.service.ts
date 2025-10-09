@@ -253,6 +253,13 @@ export class PosService {
         date: customerInfo?.date || new Date(),
         logoUrl: company.logoUrl || '',
         
+        // Company Information
+        companyName: company.name || '',
+        companyAddress: company.address || '',
+        companyPhone: company.phone || '',
+        companyTaxId: company.taxId || company.tin || '',
+        companyEmail: company.email || '',
+        
         // Financial Calculations
         vatableSales: summary.vatableSales,
         vatAmount: summary.vatAmount,
@@ -371,6 +378,13 @@ export class PosService {
         invoiceNumber: '',  // Will be filled by transaction
         date: new Date(),
         
+        // Company Information
+        companyName: company.name || '',
+        companyAddress: company.address || '',
+        companyPhone: company.phone || '',
+        companyTaxId: company.taxId || company.tin || '',
+        companyEmail: company.email || '',
+        
         // Financial Information
         grossAmount: cartSummary.grossAmount,
         discountAmount: cartSummary.productDiscountAmount + cartSummary.orderDiscountAmount,
@@ -468,7 +482,7 @@ export class PosService {
       const cartSummary = this.cartSummary();
 
       // Prepare complete order data (without invoice number - will be assigned by transaction)
-      const orderData: Order = {
+      const orderData = {
         companyId: company.id || '',
         storeId: storeId,
         assignedCashierId: user.uid,
@@ -482,6 +496,13 @@ export class PosService {
         // Invoice Information (invoiceNumber will be set by transaction)
         invoiceNumber: '',  // Will be filled by transaction
         date: new Date(),
+        
+        // Company Information
+        companyName: company.name || '',
+        companyAddress: company.address || '',
+        companyPhone: company.phone || '',
+        companyTaxId: company.taxId || company.tin || '',
+        companyEmail: company.email || '',
         
         // Financial Information
         grossAmount: cartSummary.grossAmount,

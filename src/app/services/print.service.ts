@@ -354,14 +354,14 @@ export class PrintService {
     commands += '\x1B\x45\x00'; // Bold off
     commands += '\x1B\x61\x00'; // Left alignment for rest
     
-    commands += '--------------------------------------------------\n';
+    commands += '--------------------------------\n';
     
-    // Payment Method
-    const isCashSale = receiptData?.paymentMethod === 'cash' || !receiptData?.paymentMethod;
-    const isChargeSale = receiptData?.paymentMethod === 'charge' || receiptData?.paymentMethod === 'credit';
-    commands += `Cash: ${isCashSale ? '[X]' : '[ ]'}   Charge: ${isChargeSale ? '[X]' : '[ ]'}\n`;
+    // Payment Method with filled/empty circles (Cash by default, both can be selected)
+    const isCashSale = receiptData?.isCashSale !== false; // Default to true unless explicitly false
+    const isChargeSale = receiptData?.isChargeSale === true; // Only true if explicitly set
+    commands += `Cash: ${isCashSale ? '\u25CF' : '\u25CB'}   Charge: ${isChargeSale ? '\u25CF' : '\u25CB'}\n`;
     
-    commands += '--------------------------------------------------\n';
+    commands += '--------------------------------\n';
     
     // Customer info
     const customerName = receiptData?.customerName || 'Walk-in Customer';
@@ -385,9 +385,9 @@ export class PrintService {
     
     commands += '--------------------------------------------------\n';
     
-    // Items header
-    commands += 'Item                            Qty     Total\n';
-    commands += '--------------------------------------------------\n';
+    // Items header - Optimized for 58mm printer
+    commands += 'Qty Product Name             Total\n';
+    commands += '--------------------------------\n';
     
     if (receiptData?.items) {
       receiptData.items.forEach((item: any) => {
@@ -395,46 +395,58 @@ export class PrintService {
         const unitType = item.unitType && item.unitType !== 'N/A' ? ` ${item.unitType.substring(0, 2)}` : '';
         const total = (item.total || 0).toFixed(2);
         
-        const productName = (item.productName || item.name || 'Item').substring(0, 32);
+        // Optimize for 58mm: Qty first, then product name, then total
         const qtyWithUnit = `${qty}${unitType}`;
-        const qtyPadded = qtyWithUnit.padEnd(5);
-        const totalPadded = total.padStart(8);
+        const qtyPadded = qtyWithUnit.padEnd(3); // 3 chars for quantity
         
-        const spacesNeeded = 32 - productName.length;
-        const spaces = ' '.repeat(Math.max(1, spacesNeeded));
+        // Product name - limited to fit 58mm width
+        const maxProductNameLength = 20; // Reduced for 58mm
+        const productName = (item.productName || item.name || 'Item').substring(0, maxProductNameLength);
+        const productPadded = productName.padEnd(maxProductNameLength);
         
-        commands += `${productName}${spaces} ${qtyPadded} ${totalPadded}\n`;
+        // Total - right aligned
+        const totalPadded = total.padStart(7); // 7 chars for amount
         
+        commands += `${qtyPadded} ${productPadded} ${totalPadded}\n`;
+        
+        // Unit price on separate line, indented
         const unitPrice = (item.sellingPrice || item.price || 0).toFixed(2);
-        commands += `  @ ${unitPrice} each\n`;
+        commands += `    @ ${unitPrice} each\n`;
       });
     }
     
-    commands += '--------------------------------------------------\n';
+    commands += '--------------------------------\n';
     
-    // Totals
+    // Totals - Right aligned for 58mm printer
+    const receiptWidth = 32; // 58mm printer width
+    
     const subtotalAmt = (receiptData?.subtotal || 0).toFixed(2);
-    const subtotalSpaces = ' '.repeat(50 - 9 - subtotalAmt.length);
-    commands += `Subtotal:${subtotalSpaces}${subtotalAmt}\n`;
+    const subtotalLine = `Subtotal: ${subtotalAmt}`;
+    const subtotalSpaces = ' '.repeat(receiptWidth - subtotalLine.length);
+    commands += `${subtotalSpaces}${subtotalLine}\n`;
     
     if (receiptData?.vatAmount && receiptData.vatAmount > 0) {
       const vatAmt = receiptData.vatAmount.toFixed(2);
-      const vatSpaces = ' '.repeat(50 - 9 - vatAmt.length);
-      commands += `VAT(12%):${vatSpaces}${vatAmt}\n`;
-    }
-    if (receiptData?.discount && receiptData.discount > 0) {
-      const discountAmt = receiptData.discount.toFixed(2);
-      const discountSpaces = ' '.repeat(50 - 9 - discountAmt.length);
-      commands += `Discount:${discountSpaces}${discountAmt}\n`;
+      const vatLine = `VAT (12%): ${vatAmt}`;
+      const vatSpaces = ' '.repeat(receiptWidth - vatLine.length);
+      commands += `${vatSpaces}${vatLine}\n`;
     }
     
-    commands += '==================================================\n';
+    if (receiptData?.discount && receiptData.discount > 0) {
+      const discountAmt = receiptData.discount.toFixed(2);
+      const discountLine = `Discount: -${discountAmt}`;
+      const discountSpaces = ' '.repeat(receiptWidth - discountLine.length);
+      commands += `${discountSpaces}${discountLine}\n`;
+    }
+    
+    commands += '================================\n';
     commands += '\x1B\x45\x01'; // Bold on
     const totalAmt = (receiptData?.totalAmount || receiptData?.netAmount || 0).toFixed(2);
-    const totalSpaces = ' '.repeat(50 - 6 - totalAmt.length);
-    commands += `TOTAL:${totalSpaces}${totalAmt}\n`;
+    const totalLine = `TOTAL: ${totalAmt}`;
+    const totalSpaces = ' '.repeat(receiptWidth - totalLine.length);
+    commands += `${totalSpaces}${totalLine}\n`;
     commands += '\x1B\x45\x00'; // Bold off
-    commands += '==================================================\n';
+    commands += '================================\n';
     
     // Thank you message - CENTERED for Xprinter
     commands += '\x1B\x61\x01'; // Center alignment
@@ -593,9 +605,9 @@ export class PrintService {
       <div class="line"></div>
     `;
 
-    // Payment Method Indicators (matching preview)
-    const isCashSale = receiptData?.paymentMethod === 'cash' || !receiptData?.paymentMethod;
-    const isChargeSale = receiptData?.paymentMethod === 'charge' || receiptData?.paymentMethod === 'credit';
+    // Payment Method Indicators (Cash by default, both can be selected)
+    const isCashSale = receiptData?.isCashSale !== false; // Default to true unless explicitly false
+    const isChargeSale = receiptData?.isChargeSale === true; // Only true if explicitly set
     
     html += `
       <div style="margin: 10px 0;">
