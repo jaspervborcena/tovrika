@@ -621,19 +621,13 @@
               </div>
             </div>
 
-            <!-- New Order Section with Payment Button -->
+            <!-- New Order Section -->
             <div class="new-order-section">
               <button 
                 (click)="startNewOrder()" 
                 class="btn btn-new-order"
                 [class.active]="isNewOrderActive()">
                 New Order
-              </button>
-              <button 
-                (click)="showPaymentDialog()" 
-                class="btn btn-payment"
-                [disabled]="cartItems().length === 0">
-                Payment
               </button>
             </div>
 
@@ -667,7 +661,7 @@
       [isVisible]="isReceiptModalVisible()"
       [receiptData]="receiptData()"
       (closeModal)="closeReceiptModal()"
-      (printReceipt)="printReceipt($event)">
+      (printReceipt)="printReceipt()">
     </app-receipt>
 
     <!-- Discount Modal -->
@@ -774,7 +768,10 @@
                 [(ngModel)]="paymentAmountTendered"
                 placeholder="0.00"
                 step="0.01"
-                class="amount-input">
+                class="amount-input"
+                (click)="debugTenderedField()"
+                (focus)="debugTenderedField()"
+                [disabled]="false">
             </div>
             
             <div class="amount-field">

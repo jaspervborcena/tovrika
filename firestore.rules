@@ -1,0 +1,149 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Authentication requirement for all collections
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Check if user owns the document (UID-based security)
+    function isOwner(resource) {
+      return resource.data.uid == request.auth.uid;
+    }
+    
+    // Check if creating document with user's UID
+    function isCreatingOwnDocument() {
+      return request.resource.data.uid == request.auth.uid;
+    }
+
+    // ===== MAIN COLLECTIONS WITH UID SECURITY =====
+    
+    // Products Collection - Users can only access their own products
+    match /products/{productId} {
+      allow read, write: if isAuthenticated() && 
+                        (resource == null || isOwner(resource)) &&
+                        (request.resource == null || isCreatingOwnDocument());
+    }
+    
+    // Orders Collection - Users can only access their own orders
+    match /orders/{orderId} {
+      allow read, write: if isAuthenticated() && 
+                        (resource == null || isOwner(resource)) &&
+                        (request.resource == null || isCreatingOwnDocument());
+    }
+    
+    // Order Details Collection - Users can only access their own order details
+    match /orderDetails/{orderDetailId} {
+      allow read, write: if isAuthenticated() && 
+                        (resource == null || isOwner(resource)) &&
+                        (request.resource == null || isCreatingOwnDocument());
+    }
+    
+    // Customers Collection - Users can only access their own customers
+    match /customers/{customerId} {
+      allow read, write: if isAuthenticated() && 
+                        (resource == null || isOwner(resource)) &&
+                        (request.resource == null || isCreatingOwnDocument());
+    }
+    
+    // Stores Collection - Users can only access their own stores
+    match /stores/{storeId} {
+      allow read, write: if isAuthenticated() && 
+                        (resource == null || isOwner(resource)) &&
+                        (request.resource == null || isCreatingOwnDocument());
+    }
+    
+    // Companies Collection - Users can only access their own companies
+    match /companies/{companyId} {
+      allow read, write: if isAuthenticated() && 
+                        (resource == null || isOwner(resource)) &&
+                        (request.resource == null || isCreatingOwnDocument());
+    }
+    
+    // Branches Collection - Users can only access their own branches
+    match /branches/{branchId} {
+      allow read, write: if isAuthenticated() && 
+                        (resource == null || isOwner(resource)) &&
+                        (request.resource == null || isCreatingOwnDocument());
+    }
+    
+    // Categories Collection - Users can only access their own categories
+    match /categories/{categoryId} {
+      allow read, write: if isAuthenticated() && 
+                        (resource == null || isOwner(resource)) &&
+                        (request.resource == null || isCreatingOwnDocument());
+    }
+    
+    // User Roles Collection - Users can only access their own user roles
+    match /userRoles/{userRoleId} {
+      allow read, write: if isAuthenticated() && 
+                        (resource == null || isOwner(resource)) &&
+                        (request.resource == null || isCreatingOwnDocument());
+    }
+    
+    // Role Definitions Collection - Users can only access their own role definitions
+    match /roledefinition/{roleDefId} {
+      allow read, write: if isAuthenticated() && 
+                        (resource == null || isOwner(resource)) &&
+                        (request.resource == null || isCreatingOwnDocument());
+    }
+    
+    // Notifications Collection - Users can only access their own notifications
+    match /notifications/{notificationId} {
+      allow read, write: if isAuthenticated() && 
+                        (resource == null || isOwner(resource)) &&
+                        (request.resource == null || isCreatingOwnDocument());
+    }
+    
+    // ===== NESTED COLLECTIONS =====
+    
+    // Company > Store > Branch > Transactions
+    match /companies/{companyId}/stores/{storeId}/branches/{branchId}/transactions/{transactionId} {
+      allow read, write: if isAuthenticated() && 
+                        (resource == null || isOwner(resource)) &&
+                        (request.resource == null || isCreatingOwnDocument());
+    }
+    
+    // ===== USER PROFILE COLLECTION =====
+    
+    // Users Collection - Users can only access their own profile
+    match /users/{userId} {
+      allow read, write: if isAuthenticated() && 
+                        (userId == request.auth.uid || 
+                         (resource != null && isOwner(resource)));
+    }
+    
+    // ===== SYSTEM/SHARED COLLECTIONS =====
+    
+    // Predefined Types - Read-only for authenticated users
+    match /predefinedTypes/{docId} {
+      allow read: if isAuthenticated();
+      allow write: if false; // System managed only
+    }
+    
+    // System configurations - Read-only for authenticated users
+    match /systemConfig/{docId} {
+      allow read: if isAuthenticated();
+      allow write: if false; // System managed only
+    }
+    
+    // ===== CATCH-ALL SECURITY =====
+    
+    // Any other collection requires UID-based security
+    match /{document=**} {
+      allow read, write: if isAuthenticated() && 
+                        (resource == null || isOwner(resource)) &&
+                        (request.resource == null || isCreatingOwnDocument());
+    }
+  }
+}
+
+// Storage Rules (for file uploads if needed)
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /{allPaths=**} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}

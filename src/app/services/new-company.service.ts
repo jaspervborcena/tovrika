@@ -13,6 +13,7 @@ import {
   DocumentReference
 } from '@angular/fire/firestore';
 import { AuthService } from './auth.service';
+import { OfflineDocumentService } from '../core/services/offline-document.service';
 import { Company, Store, Branch } from '../interfaces/company.interface';
 
 @Injectable({
@@ -28,7 +29,10 @@ export class NewCompanyService {
   readonly companies = computed(() => this.companiesSignal());
   readonly totalCompanies = computed(() => this.companiesSignal());
 
-  constructor(private authService: AuthService) {
+  constructor(
+    private authService: AuthService,
+    private offlineDocService: OfflineDocumentService
+  ) {
     this.firestore = inject(Firestore);
   }
   private firestore: Firestore;
@@ -110,15 +114,17 @@ export class NewCompanyService {
         updatedAt: new Date()
       };
 
-      const docRef = await addDoc(companiesRef, newCompany);
+      // 🔥 NEW APPROACH: Use OfflineDocumentService for offline-safe creation
+      const documentId = await this.offlineDocService.createDocument(this.companiesCollection, newCompany);
       
       // Add stores if any
       if (company.stores && company.stores.length > 0) {
-        await this.addStoresAndBranches(docRef.id, company.stores);
+        await this.addStoresAndBranches(documentId, company.stores);
       }
 
       await this.loadCompanies(); // Reload to get fresh data
-      return docRef.id;
+      console.log('✅ Company created with ID:', documentId, navigator.onLine ? '(online)' : '(offline)');
+      return documentId;
     } catch (error) {
       console.error('Error creating company:', error);
       throw error;
@@ -139,18 +145,20 @@ export class NewCompanyService {
         createdAt: new Date(),
         updatedAt: new Date()
       };
-      const storeRef = await addDoc(storesRef, newStore);
+      // 🔥 NEW APPROACH: Use OfflineDocumentService for offline-safe creation
+      const storeId = await this.offlineDocService.createDocument(this.storesCollection, newStore);
 
       if (store.branches && store.branches.length > 0) {
-        const branchesRef = collection(this.firestore, this.branchesCollection);
         for (const branch of store.branches) {
-          await addDoc(branchesRef, {
+          const newBranch = {
             ...branch,
             companyId,
-            storeId: storeRef.id,
+            storeId: storeId,
             createdAt: new Date(),
             updatedAt: new Date()
-          });
+          };
+          // 🔥 NEW APPROACH: Use OfflineDocumentService for offline-safe creation
+          await this.offlineDocService.createDocument(this.branchesCollection, newBranch);
         }
       }
     }
@@ -231,24 +239,26 @@ export class NewCompanyService {
 
   // Public methods for store and branch creation
   async createStore(data: Omit<Store, 'id' | 'branches' | 'updatedAt'>) {
-    const storesRef = collection(this.firestore, this.storesCollection);
     const cleanStore = this.removeUndefinedValues(data);
     const newStore = {
       ...cleanStore,
       updatedAt: new Date()
     };
-    const storeRef = await addDoc(storesRef, newStore);
-    return storeRef.id;
+    // 🔥 NEW APPROACH: Use OfflineDocumentService for offline-safe creation
+    const documentId = await this.offlineDocService.createDocument(this.storesCollection, newStore);
+    console.log('✅ Store created with ID:', documentId, navigator.onLine ? '(online)' : '(offline)');
+    return documentId;
   }
 
   async createBranch(data: Omit<Branch, 'id' | 'updatedAt'>) {
-    const branchesRef = collection(this.firestore, this.branchesCollection);
     const cleanBranch = this.removeUndefinedValues(data);
     const newBranch = {
       ...cleanBranch,
       updatedAt: new Date()
     };
-    const branchRef = await addDoc(branchesRef, newBranch);
-    return branchRef.id;
+    // 🔥 NEW APPROACH: Use OfflineDocumentService for offline-safe creation
+    const documentId = await this.offlineDocService.createDocument(this.branchesCollection, newBranch);
+    console.log('✅ Branch created with ID:', documentId, navigator.onLine ? '(online)' : '(offline)');
+    return documentId;
   }
 }

@@ -3,16 +3,20 @@ import { HttpClient } from '@angular/common/http';
 import { Firestore, collection, query, where, getDocs, updateDoc, doc, Timestamp, orderBy, limit, addDoc } from '@angular/fire/firestore';
 import { Order } from '../interfaces/pos.interface';
 import { AuthService } from './auth.service';
+import { FirestoreSecurityService } from '../core/services/firestore-security.service';
+import { OfflineDocumentService } from '../core/services/offline-document.service';
 
 @Injectable({
   providedIn: 'root'
 })
 export class OrderService {
   private authService = inject(AuthService);
+  private offlineDocService = inject(OfflineDocumentService);
   
   constructor(
     private firestore: Firestore,
-    private http: HttpClient
+    private http: HttpClient,
+    private securityService: FirestoreSecurityService
   ) {}
 
   private transformDoc(d: any): Order {
@@ -488,8 +492,9 @@ export class OrderService {
         console.log(`📝 Creating test order ${i}:`, testOrder);
         console.log(`📡 Attempting to add document ${i} to Firestore...`);
         
-        const docRef = await addDoc(ordersRef, testOrder);
-        console.log(`✅ Test order ${i} created with ID:`, docRef.id);
+        // 🔥 OFFLINE-SAFE: Use OfflineDocumentService for pre-generated IDs
+        const documentId = await this.offlineDocService.createDocument('orders', testOrder);
+        console.log(`✅ Test order ${i} created with pre-generated ID:`, documentId, navigator.onLine ? '(online)' : '(offline)');
         
         // Small delay between orders
         await new Promise(resolve => setTimeout(resolve, 100));
@@ -637,10 +642,10 @@ export class OrderService {
         message: 'Test order for debugging - Created on ' + new Date().toISOString()
       };
 
-      const ordersRef = collection(this.firestore, 'orders');
-      const docRef = await addDoc(ordersRef, testOrder);
+      // 🔥 OFFLINE-SAFE: Use OfflineDocumentService for pre-generated IDs
+      const documentId = await this.offlineDocService.createDocument('orders', testOrder);
       
-      console.log('✅ Test order created with ID:', docRef.id);
+      console.log('✅ Test order created with pre-generated ID:', documentId, navigator.onLine ? '(online)' : '(offline)');
       console.log('📅 Created at:', new Date().toISOString());
       
     } catch (error) {
