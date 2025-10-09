@@ -20,6 +20,13 @@ export interface Order {
   logoUrl?: string;
   date?: Date;
   
+  // Company Information
+  companyName?: string;
+  companyAddress?: string;
+  companyPhone?: string;
+  companyTaxId?: string;
+  companyEmail?: string;
+  
   // Financial Calculations
   vatableSales?: number;
   vatAmount: number;
