@@ -21,6 +21,8 @@ import { StoreService } from '../../../services/store.service';
 import { UserRoleService } from '../../../services/user-role.service';
 import { CustomerService } from '../../../services/customer.service';
 import { CompanyService } from '../../../services/company.service';
+import { TranslationService } from '../../../services/translation.service';
+import { TranslateModule } from '@ngx-translate/core';
 import { Product } from '../../../interfaces/product.interface';
 import { ProductViewType, OrderDiscount } from '../../../interfaces/pos.interface';
 import { Customer, CustomerFormData } from '../../../interfaces/customer.interface';
@@ -28,7 +30,7 @@ import { Customer, CustomerFormData } from '../../../interfaces/customer.interfa
 @Component({
   selector: 'app-pos',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterModule, HeaderComponent, ReceiptComponent, DiscountModalComponent, ConfirmationDialogComponent],
+  imports: [CommonModule, FormsModule, RouterModule, HeaderComponent, ReceiptComponent, DiscountModalComponent, ConfirmationDialogComponent, TranslateModule],
   templateUrl: './pos.component.html',
   styleUrls: ['./pos.component.css']
 })
@@ -48,6 +50,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   private userRoleService = inject(UserRoleService);
   private customerService = inject(CustomerService);
   private companyService = inject(CompanyService);
+  private translationService = inject(TranslationService);
   private router = inject(Router);
 
   private routerSubscription: any;
@@ -153,14 +156,14 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   // Computed properties for UI display
   readonly completeOrderButtonText = computed(() => {
     if (this.isProcessing()) {
-      return 'Processing...';
+      return 'messages.loading';
     }
     
     if (this.isOrderCompleted()) {
-      return 'Print Receipt';
+      return 'pos.printReceipt';
     }
     
-    return 'Complete Order';
+    return 'pos.completeOrder';
   });
 
   // Check if complete order button should be enabled
@@ -336,6 +339,19 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   readonly accessTabs = ['New', 'Orders', 'Cancelled', 'Refunds & Returns', 'Split Payments', 'Discounts & Promotions'] as const;
   private accessTabSignal = signal<string>('New');
   readonly accessTab = computed(() => this.accessTabSignal());
+
+  // Method to translate access tab names
+  getAccessTabTranslation(tab: string): string {
+    const tabKeyMap: { [key: string]: string } = {
+      'New': 'pos.newTab',
+      'Orders': 'pos.ordersTab',
+      'Cancelled': 'pos.cancelledTab',
+      'Refunds & Returns': 'pos.refundsTab',
+      'Split Payments': 'pos.splitPaymentsTab',
+      'Discounts & Promotions': 'pos.discountsTab'
+    };
+    return this.translationService.instant(tabKeyMap[tab] || tab);
+  }
 
   // Order search (used when viewing Orders tab)
   private orderSearchSignal = signal<string>('');
@@ -1129,10 +1145,10 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     event.preventDefault(); // Prevent page refresh
     
     const confirmed = await this.showConfirmationDialog({
-      title: 'Create New Order',
-      message: 'Would you like to create a new order?',
-      confirmText: 'Yes',
-      cancelText: 'No',
+      title: this.translationService.instant('pos.createNewOrder'),
+      message: this.translationService.instant('pos.createNewOrderPrompt'),
+      confirmText: this.translationService.instant('buttons.yes'),
+      cancelText: this.translationService.instant('buttons.no'),
       type: 'info'
     });
     
@@ -2081,10 +2097,10 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     // Check if new order is active first
     if (!this.canInteractWithProducts()) {
       const confirmed = await this.showConfirmationDialog({
-        title: 'Create New Order',
-        message: 'Would you like to create a new order?',
-        confirmText: 'Yes',
-        cancelText: 'No',
+        title: this.translationService.instant('pos.createNewOrder'),
+        message: this.translationService.instant('pos.createNewOrderPrompt'),
+        confirmText: this.translationService.instant('buttons.yes'),
+        cancelText: this.translationService.instant('buttons.no'),
         type: 'info'
       });
       

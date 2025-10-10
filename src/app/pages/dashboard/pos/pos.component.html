@@ -12,8 +12,8 @@
           <div class="navigation-toggle-row">
             <button class="navigation-toggle-btn" (click)="toggleNavigationPanel()">
               <span class="toggle-icon" [class.expanded]="!isNavigationCollapsed()">▼</span>
-              <span class="toggle-text">{{ isNavigationCollapsed() ? 'Show Controls' : 'Hide Controls' }}</span>
-              <span class="controls-hint">Store • Categories • Customer • Access Tabs</span>
+              <span class="toggle-text">{{ isNavigationCollapsed() ? ('pos.showControls' | translate) : ('pos.hideControls' | translate) }}</span>
+              <span class="controls-hint">{{ 'pos.controlsHint' | translate }}</span>
             </button>
           </div>
 
@@ -22,7 +22,7 @@
             
             <!-- Store Selection -->
             <div class="store-selection-section">
-              <h3>🏪 Store Selection</h3>
+              <h3>🏪 {{ 'pos.selectStore' | translate }}</h3>
               <div class="store-buttons-inline">
                 <button
                   *ngFor="let store of availableStores()"
@@ -34,7 +34,7 @@
                 </button>
                 <!-- Fallback if no stores -->
                 <div *ngIf="availableStores().length === 0" class="no-stores-message">
-                  No stores available
+                  {{ 'messages.noDataFound' | translate }}
                 </div>
               </div>
             </div>
@@ -43,7 +43,7 @@
             <div class="categories-panel compact-layout">
             <!-- Left Column: Categories -->
             <div class="categories-column">
-              <h3>📂 Categories</h3>
+              <h3>📂 {{ 'pos.categories' | translate }}</h3>
               
               <!-- Categories -->
               <div class="category-list two-columns">
@@ -51,7 +51,7 @@
                   [class.active]="selectedCategory() === 'all'"
                   (click)="setSelectedCategory('all')"
                   class="category-btn">
-                  All Products
+                  {{ 'pos.allProducts' | translate }}
                 </button>
                 <button 
                   *ngFor="let category of categories()"
@@ -74,7 +74,7 @@
                       [checked]="isCashSale()"
                       (change)="toggleCashSale()"
                       class="sales-type-checkbox">
-                    <span class="checkbox-label">💵 Cash Payment</span>
+                    <span class="checkbox-label">💵 {{ 'pos.cashPayment' | translate }}</span>
                   </label>
                   <label class="sales-type-option">
                     <input 
@@ -82,14 +82,14 @@
                       [checked]="isChargeSale()"
                       (change)="toggleChargeSale()"
                       class="sales-type-checkbox">
-                    <span class="checkbox-label">💳 Card Payment</span>
+                    <span class="checkbox-label">💳 {{ 'pos.cardPayment' | translate }}</span>
                   </label>
                 </div>
               </div>
               
               <!-- Customer Header -->
               <div class="customer-header" (click)="toggleSoldToPanel()">
-                <h3>👤 Customer</h3>
+                <h3>👤 {{ 'pos.customer' | translate }}</h3>
                 <span class="expand-arrow" [class.expanded]="!isSoldToCollapsed()">▼</span>
               </div>
               
@@ -98,19 +98,19 @@
                 <input 
                   type="text" 
                   [(ngModel)]="customerInfo.soldTo"
-                  placeholder="Customer Name (Optional)"
+                  [placeholder]="'pos.customerNamePlaceholder' | translate"
                   class="customer-name-input">
               </div>
               
               <!-- Expandable customer details -->
               <div class="customer-details" [class.hidden]="isSoldToCollapsed()">
                 <div class="customer-field-group">
-                  <label>TIN:</label>
-                  <input type="text" [(ngModel)]="customerInfo.tin" placeholder="123-456-789-000">
+                  <label>{{ 'pos.tinLabel' | translate }}:</label>
+                  <input type="text" [(ngModel)]="customerInfo.tin" [placeholder]="'pos.tinPlaceholder' | translate">
                 </div>
                 <div class="customer-field-group">
-                  <label>Business Address:</label>
-                  <input type="text" [(ngModel)]="customerInfo.businessAddress" placeholder="Full Address">
+                  <label>{{ 'pos.businessAddressLabel' | translate }}:</label>
+                  <input type="text" [(ngModel)]="customerInfo.businessAddress" [placeholder]="'pos.businessAddressPlaceholder' | translate">
                 </div>
               </div>
             </div>
@@ -125,7 +125,7 @@
                       [class.active]="accessTab() === t"
                       class="tab-header">
                 <div class="tab-content">
-                  <span class="tab-label">{{ t }}</span>
+                  <span class="tab-label">{{ getAccessTabTranslation(t) }}</span>
                 </div>
               </button>
             </div>
@@ -158,7 +158,7 @@
               <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"></path>
               </svg>
-              List
+              {{ 'pos.listView' | translate }}
             </button>
             <button 
               [class.active]="currentView() === 'grid'"
@@ -167,7 +167,7 @@
               <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM14 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1v-4zM14 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z"></path>
               </svg>
-              Grid
+              {{ 'pos.gridView' | translate }}
             </button>
             <button 
               [class.active]="currentView() === 'custom'"
@@ -176,7 +176,7 @@
               <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"></path>
               </svg>
-              Promos
+              {{ 'pos.promosView' | translate }}
             </button>
             <button 
               [class.active]="currentView() === 'bestsellers'"
@@ -185,7 +185,7 @@
               <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
               </svg>
-              Best Sellers
+              {{ 'pos.bestSellersView' | translate }}
             </button>
           </div>
 
@@ -427,7 +427,7 @@
                   <div style="color: #6b7280;">{{ selectedOrder()?.storeId || 'Global' }}</div>
                 </div>
                 <div style="text-align: right;">
-                  <div style="font-weight: 600; color: #374151;">Total Amount</div>
+                  <div style="font-weight: 600; color: #374151;">{{ 'pos.total' | translate }} {{ 'pos.amount' | translate }}</div>
                   <div style="font-weight: 700; font-size: 1.25rem; color: #059669;">{{ selectedOrder()?.totalAmount | currency:'PHP':'symbol':'1.2-2' }}</div>
                 </div>
               </div>
@@ -451,7 +451,7 @@
                     </div>
                     <div style="text-align: right;">
                       <div style="font-weight: 600;">{{ (item.price * item.quantity) | currency:'PHP':'symbol':'1.2-2' }}</div>
-                      <div style="font-size: 0.85rem; color: #6b7280;">Total</div>
+                      <div style="font-size: 0.85rem; color: #6b7280;">{{ 'pos.total' | translate }}</div>
                     </div>
                   </div>
                   
@@ -513,15 +513,15 @@
             <div class="hotkey-hints">
               <div class="hotkey-item">
                 <kbd>F4</kbd>
-                <span>Clear Order</span>
+                <span>{{ 'pos.clearCart' | translate }}</span>
               </div>
               <div class="hotkey-item">
                 <kbd>F5</kbd>
-                <span>New Order</span>
+                <span>{{ 'pos.newOrder' | translate }}</span>
               </div>
               <div class="hotkey-item">
                 <kbd>F6</kbd>
-                <span>Complete Order</span>
+                <span>{{ 'pos.completeOrder' | translate }}</span>
               </div>
             </div>
 
@@ -529,28 +529,28 @@
             <div class="cart-items">
               <!-- Invoice Info integrated into cart -->
               <div class="cart-invoice-info">
-                <h4 class="invoice-header">📄 Invoice Information</h4>
+                <h4 class="invoice-header">📄 {{ 'pos.invoiceInformation' | translate }}</h4>
                 <div class="invoice-compact-layout">
                   <div class="invoice-field-compact">
-                    <label>Invoice #:</label>
+                    <label>{{ 'pos.invoiceNumber' | translate }}:</label>
                     <input type="text" [(ngModel)]="invoiceNumber" placeholder="Auto-generated">
                   </div>
                   <div class="invoice-field-compact">
-                    <label>Date & Time:</label>
+                    <label>{{ 'pos.dateTime' | translate }}:</label>
                     <input type="datetime-local" [(ngModel)]="datetime">
                   </div>
                 </div>
               </div>
               
               <div class="cart-header">
-                <span>Item</span>
-                <span>Qty</span>
-                <span>Price</span>
-                <span>Total</span>
+                <span>{{ 'pos.product' | translate }}</span>
+                <span>{{ 'pos.quantity' | translate }}</span>
+                <span>{{ 'pos.price' | translate }}</span>
+                <span>{{ 'pos.total' | translate }}</span>
               </div>
               
               <div *ngIf="cartItems().length === 0" class="empty-cart">
-                <p>No items in cart</p>
+                <p>{{ 'pos.cartEmpty' | translate }}</p>
               </div>
 
               <div 
@@ -576,15 +576,15 @@
             <!-- Receipt Summary -->
             <div class="receipt-summary">
               <div class="summary-line">
-                <span>Vatable:</span>
+                <span>{{ 'pos.vatableSales' | translate }}:</span>
                 <span>₱{{ cartSummary().vatableSales.toFixed(2) }}</span>
               </div>
               <div class="summary-line">
-                <span>Non-Vatable:</span>
+                <span>{{ 'pos.vatExemptSales' | translate }}:</span>
                 <span>₱{{ cartSummary().vatExemptSales.toFixed(2) }}</span>
               </div>
               <div class="summary-line">
-                <span>VAT Amount:</span>
+                <span>{{ 'pos.vatAmount' | translate }}:</span>
                 <span>₱{{ cartSummary().vatAmount.toFixed(2) }}</span>
               </div>
               <div class="summary-line" *ngIf="cartSummary().zeroRatedSales > 0">
@@ -592,11 +592,11 @@
                 <span>₱{{ cartSummary().zeroRatedSales.toFixed(2) }}</span>
               </div>
               <div class="summary-line" *ngIf="cartSummary().productDiscountAmount > 0">
-                <span>Product Discounts:</span>
+                <span>{{ 'pos.productDiscounts' | translate }}:</span>
                 <span>-₱{{ cartSummary().productDiscountAmount.toFixed(2) }}</span>
               </div>
               <div class="summary-line">
-                <span>Gross Amount:</span>
+                <span>{{ 'pos.grossAmount' | translate }}:</span>
                 <span>₱{{ cartSummary().grossAmount.toFixed(2) }}</span>
               </div>
               
@@ -611,12 +611,12 @@
                   *ngIf="!orderDiscount() && cartItems().length > 0" 
                   (click)="showDiscountModal()" 
                   class="btn btn-discount">
-                  Add Discount
+                  {{ 'pos.addDiscount' | translate }}
                 </button>
               </div>
               
               <div class="summary-line total">
-                <span>Net Amount:</span>
+                <span>{{ 'pos.netAmount' | translate }}:</span>
                 <span>₱{{ cartSummary().netAmount.toFixed(2) }}</span>
               </div>
             </div>
@@ -627,7 +627,7 @@
                 (click)="startNewOrder()" 
                 class="btn btn-new-order"
                 [class.active]="isNewOrderActive()">
-                New Order
+                {{ 'pos.newOrder' | translate }}
               </button>
             </div>
 
@@ -637,13 +637,13 @@
                 (click)="clearCart()" 
                 [disabled]="cartItems().length === 0 || !isNewOrderActive()"
                 class="btn btn-secondary">
-                Clear Cart
+                {{ 'pos.clearCart' | translate }}
               </button>
               <button 
                 (click)="processOrder()" 
                 [disabled]="cartItems().length === 0 || isProcessing()"
                 class="btn btn-primary">
-                {{ completeOrderButtonText() }}
+                {{ completeOrderButtonText() | translate }}
               </button>
             </div>
 
@@ -744,14 +744,14 @@
     <div *ngIf="showPaymentModal()" class="modal-overlay">
       <div class="payment-dialog">
         <div class="dialog-header">
-          <h3>💳 Payment Processing</h3>
-          <p>Enter payment details for this order</p>
+          <h3>💳 {{ 'pos.paymentProcessing' | translate }}</h3>
+          <p>{{ 'pos.enterPaymentDetails' | translate }}</p>
         </div>
         
         <div class="dialog-content">
           <div class="payment-amounts">
             <div class="amount-field">
-              <label for="total-amount">Total Amount Due:</label>
+              <label for="total-amount">{{ 'pos.totalAmountDue' | translate }}:</label>
               <input 
                 type="text" 
                 id="total-amount"
@@ -761,7 +761,7 @@
             </div>
             
             <div class="amount-field">
-              <label for="amount-tendered">Amount Tendered:</label>
+              <label for="amount-tendered">{{ 'pos.amountTendered' | translate }}:</label>
               <input 
                 type="number" 
                 id="amount-tendered"
@@ -775,7 +775,7 @@
             </div>
             
             <div class="amount-field">
-              <label for="change-amount">Change:</label>
+              <label for="change-amount">{{ 'pos.change' | translate }}:</label>
               <input 
                 type="text" 
                 id="change-amount"
@@ -786,11 +786,11 @@
           </div>
           
           <div class="payment-description">
-            <label for="payment-desc">Payment Description:</label>
+            <label for="payment-desc">{{ 'pos.paymentDescription' | translate }}:</label>
             <textarea 
               id="payment-desc"
               [(ngModel)]="paymentDescription"
-              placeholder="Enter payment method details (e.g., Cash, Card type, E-wallet details, etc.)"
+              [placeholder]="'pos.paymentDescriptionPlaceholder' | translate"
               rows="3"
               class="payment-textarea"></textarea>
           </div>
@@ -801,13 +801,13 @@
             type="button"
             class="btn-secondary"
             (click)="closePaymentDialog()">
-            Cancel
+            {{ 'buttons.cancel' | translate }}
           </button>
           <button 
             type="button"
             class="btn-primary"
             (click)="processPayment()">
-            Process Payment
+            {{ 'pos.processPayment' | translate }}
           </button>
         </div>
       </div>

@@ -25,13 +25,15 @@ import { OrderService } from '../../../../services/order.service';
 import { StoreService } from '../../../../services/store.service';
 import { UserRoleService } from '../../../../services/user-role.service';
 import { CurrencyService } from '../../../../services/currency.service';
+import { TranslationService } from '../../../../services/translation.service';
+import { TranslateModule } from '@ngx-translate/core';
 import { Product } from '../../../../interfaces/product.interface';
 import { ProductViewType } from '../../../../interfaces/pos.interface';
 
 @Component({
   selector: 'app-pos-mobile',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterModule, HeaderComponent, ReceiptComponent, CartFabComponent, MobileCartModalComponent],
+  imports: [CommonModule, FormsModule, RouterModule, HeaderComponent, ReceiptComponent, CartFabComponent, MobileCartModalComponent, TranslateModule],
   templateUrl: './pos-mobile.component.html',
   styleUrls: ['./pos-mobile.component.css']
 })
@@ -54,6 +56,7 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
   private indexedDBService = inject(IndexedDBService);
   private router = inject(Router);
   private posUtilsService = inject(PosUtilsService);
+  private translationService = inject(TranslationService);
 
   private routerSubscription: Subscription | undefined;
 

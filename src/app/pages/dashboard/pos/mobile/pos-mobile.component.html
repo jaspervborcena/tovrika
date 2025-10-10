@@ -17,7 +17,7 @@
     
     <!-- ROW 1: STORES SELECTION -->
     <div class="pos-row stores-row">
-      <div class="row-header">🏪 Stores</div>
+      <div class="row-header">🏪 {{ 'pos.store' | translate }}</div>
       <div class="stores-tabs-container">
         <button 
           *ngFor="let store of availableStores()" 
@@ -31,7 +31,7 @@
 
     <!-- ROW 2: INVOICE SETTINGS -->
     <div class="pos-row invoice-row">
-      <div class="row-header">📄 Invoice</div>
+      <div class="row-header">📄 {{ 'pos.receipt' | translate }}</div>
       <div class="invoice-table-container">
         <table class="invoice-table">
           <tr>
@@ -52,7 +52,7 @@
 
     <!-- ROW 3: CATEGORIES TABS -->
     <div class="pos-row categories-row">
-      <div class="row-header">📂 Categories</div>
+      <div class="row-header">📂 {{ 'pos.categories' | translate }}</div>
       <div class="categories-tabs-container">
         <button 
           class="mobile-tab"
@@ -117,7 +117,7 @@
 
   <!-- ROW 6: SEARCH & VIEW OPTIONS -->
   <div class="pos-row search-row">
-    <div class="row-header">🔍 Search</div>
+    <div class="row-header">🔍 {{ 'pos.search' | translate }}</div>
     <div class="search-container">
       <div class="search-input-container">
         <input 
@@ -171,7 +171,7 @@
           <div class="product-details">
             <div class="product-name">{{ product.productName }}</div>
             <div class="product-sku">SKU: {{ product.skuId }}</div>
-            <div class="product-stock">Stock: {{ product.totalStock }}</div>
+            <div class="product-stock">{{ 'products.stock' | translate }}: {{ product.totalStock }}</div>
           </div>
           <div class="product-pricing">
             <div class="product-price">₱{{ (product.sellingPrice || 0).toFixed(2) }}</div>
@@ -326,7 +326,7 @@
           <strong>Status:</strong> {{ selectedOrder()?.status }}
         </div>
         <div class="info-row">
-          <strong>Total Amount:</strong> ₱{{ selectedOrder()?.totalAmount | number:'1.2-2' }}
+          <strong>{{ 'pos.total' | translate }} {{ 'pos.amount' | translate }}:</strong> ₱{{ selectedOrder()?.totalAmount | number:'1.2-2' }}
         </div>
       </div>
       
