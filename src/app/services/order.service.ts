@@ -122,7 +122,17 @@ export class OrderService {
             const finalSnapshot = await getDocs(finalQuery);
             
             const results = finalSnapshot.docs.map(d => this.transformDoc(d));
-            return results;
+            
+            // Add client-side sorting as safety measure (in case Firestore orderBy doesn't work properly)
+            const sortedResults = results.sort((a, b) => {
+              const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+              const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+              return dateB - dateA; // Descending order (newest first)
+            });
+            
+            console.log('✅ Orders loaded and sorted:', sortedResults.length, 'orders');
+            console.log('=============== ORDER LOADING END (SUCCESS) ===============');
+            return sortedResults;
             
           } else {
             return [];
@@ -146,9 +156,17 @@ export class OrderService {
             console.log('📡 Executing fallback query...');
             const fallbackSnapshot = await getDocs(fallbackQuery);
             const results = fallbackSnapshot.docs.map(d => this.transformDoc(d));
-            console.log('✅ Fallback query successful, found:', results.length, 'orders');
+            
+            // Client-side sorting as fallback when Firestore orderBy fails
+            const sortedResults = results.sort((a, b) => {
+              const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+              const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+              return dateB - dateA; // Descending order (newest first)
+            });
+            
+            console.log('✅ Fallback query successful, found:', sortedResults.length, 'orders (client-side sorted)');
             console.log('=============== ORDER LOADING END (FALLBACK SUCCESS) ===============');
-            return results;
+            return sortedResults;
           } catch (fallbackError) {
             console.error('❌ Fallback query also failed:', fallbackError);
             console.log('=============== ORDER LOADING END (FALLBACK FAILED) ===============');

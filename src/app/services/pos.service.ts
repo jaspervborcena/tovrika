@@ -241,6 +241,8 @@ export class PosService {
         companyId: company.id!,
         storeId: storeId,
         assignedCashierId: user.uid,
+        assignedCashierEmail: user.email || 'Unknown Cashier',
+        assignedCashierName: user.displayName || user.email || 'Unknown Cashier',
         status: 'paid',
         
         // Customer Information
@@ -370,6 +372,8 @@ export class PosService {
         companyId: company.id || '',
         storeId: storeId,
         assignedCashierId: user.uid,
+        assignedCashierEmail: user.email || 'Unknown Cashier',
+        assignedCashierName: user.displayName || user.email || 'Unknown Cashier',
         
         // Payment type determination
         cashSale: payments.paymentDescription.toLowerCase().includes('cash') || !payments.paymentDescription,
@@ -486,6 +490,8 @@ export class PosService {
         companyId: company.id || '',
         storeId: storeId,
         assignedCashierId: user.uid,
+        assignedCashierEmail: user.email || 'Unknown Cashier',
+        assignedCashierName: user.displayName || user.email || 'Unknown Cashier',
         
         // Customer Information
         cashSale: !customerInfo?.soldTo,

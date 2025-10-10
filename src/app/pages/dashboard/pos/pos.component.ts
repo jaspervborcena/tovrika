@@ -144,31 +144,8 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   });
   
   // Order completion status - tracks if current order is already processed
-  readonly isOrderCompleted = computed(() => {
-    // Order is considered completed if:
-    // 1. Invoice number is not the default placeholder
-    // 2. Cart has items (so it's not just a fresh start)
-    // 3. New order is active (so we're in an active order session)
-    const invoiceNum = this.nextInvoiceNumber();
-    const hasItems = this.cartItems().length > 0;
-    const isNewOrder = this.isNewOrderActive();
-    
-    const isCompleted = isNewOrder && 
-                       hasItems && 
-                       invoiceNum !== 'Loading...' && 
-                       invoiceNum !== 'INV-0000-000000' &&
-                       invoiceNum.startsWith('INV-') &&
-                       invoiceNum.length > 15; // Real invoice numbers are longer
-    
-    console.log('🔍 Order completion check:', {
-      invoiceNum,
-      hasItems,
-      isNewOrder,
-      isCompleted
-    });
-    
-    return isCompleted;
-  });
+  readonly isOrderCompleted = signal<boolean>(false);
+  readonly completedOrderData = signal<any>(null); // Store completed order data for reprinting
   
   // Regular properties for ngModel binding (signals don't work well with ngModel)
   manualInvoiceInput: string = 'INV-0000-000000';
@@ -179,8 +156,10 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       return 'Processing...';
     }
     
-    // Keep the label as "Complete Order" but functionality changes based on order status
-    // The processOrder() method will handle whether to complete or reprint
+    if (this.isOrderCompleted()) {
+      return 'Print Receipt';
+    }
+    
     return 'Complete Order';
   });
 
@@ -755,12 +734,12 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   // Open order receipt for viewing/printing
-  openOrderReceipt(order: any): void {
+  async openOrderReceipt(order: any): Promise<void> {
     try {
       console.log('Opening receipt for order:', order);
       
-      // Convert order data to receipt format
-      const receiptData = this.convertOrderToReceiptData(order);
+      // Convert order data to receipt format (now async for company data)
+      const receiptData = await this.convertOrderToReceiptData(order);
       
       // Set receipt data and show modal
       this.receiptDataSignal.set(receiptData);
@@ -773,44 +752,112 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     }
   }
 
-  // Convert order data to receipt format
-  private convertOrderToReceiptData(order: any): any {
+  // Convert order data to receipt format - matches prepareReceiptData format
+  private async convertOrderToReceiptData(order: any): Promise<any> {
     const storeInfo = this.currentStoreInfo();
     
+    // Get company information for consistent display
+    let company = null;
+    try {
+      company = await this.companyService.getActiveCompany();
+    } catch (error) {
+      console.warn('Could not fetch company info for order receipt:', error);
+    }
+
+    // Determine customer name - consistent with prepareReceiptData
+    const customerName = order.soldTo && order.soldTo.trim() && order.soldTo !== 'Walk-in Customer' 
+      ? order.soldTo.trim() 
+      : null;
+
+    // Resolve cashier name from order data
+    let cashierName = 'Unknown Cashier';
+    
+    // Check if this order was created by the current user
+    const currentUser = this.authService.getCurrentUser();
+    const isCurrentUserOrder = currentUser && currentUser.uid === order.assignedCashierId;
+    
+    if (isCurrentUserOrder) {
+      // If current user is viewing their own order, always use their current info
+      // This handles cases where managers/higher roles are doing POS transactions
+      cashierName = currentUser.displayName || currentUser.email || 'Current User';
+    } else {
+      // For orders by other users, try to resolve the cashier name
+      // Priority 1: Use stored cashier name if available (for new orders)
+      if (order.assignedCashierName && order.assignedCashierName !== order.assignedCashierId) {
+        cashierName = order.assignedCashierName;
+      } 
+      // Priority 2: Use stored cashier email if available (for new orders)
+      else if (order.assignedCashierEmail) {
+        cashierName = order.assignedCashierEmail;
+      }
+      // Priority 3: Legacy support - try to resolve from user ID (for old orders)
+      else if (order.assignedCashierId) {
+        try {
+          // For other users, try to get user role information
+          const userRole = this.userRoleService.getUserRoleByUserId(order.assignedCashierId);
+          if (userRole?.email) {
+            cashierName = userRole.email;
+          } else {
+            // Try to get user info from IndexedDB as last resort
+            try {
+              const userData = await this.indexedDBService.getUserData(order.assignedCashierId);
+              cashierName = userData?.email || `Cashier ${order.assignedCashierId.slice(0, 8)}...`;
+            } catch {
+              cashierName = `Cashier ${order.assignedCashierId.slice(0, 8)}...`;
+            }
+          }
+        } catch (error) {
+          console.warn('Could not resolve cashier name for user ID:', order.assignedCashierId, error);
+          cashierName = `Cashier ${order.assignedCashierId?.slice(0, 8)}...`;
+        }
+      }
+    }
+
     return {
       orderId: order.id,
       invoiceNumber: order.invoiceNumber,
       receiptDate: order.date || order.createdAt,
       storeInfo: {
-        storeName: storeInfo?.storeName || 'Unknown Store',
-        address: storeInfo?.address || 'Store Address',
-        phone: (storeInfo as any)?.phone || 'N/A',
-        email: storeInfo?.email || 'N/A',
-        tin: (storeInfo as any)?.tinNumber || 'N/A',
+        storeName: company?.name || (storeInfo as any)?.storeName || 'Unknown Store',
+        address: company?.address || (storeInfo as any)?.address || 'Store Address',
+        phone: company?.phone || (storeInfo as any)?.phone || 'N/A', // Use company phone
+        email: company?.email || storeInfo?.email || 'N/A', // Use company email
+        tin: company?.taxId || company?.tin || (storeInfo as any)?.tinNumber || 'N/A', // Use company tax ID/TIN
         invoiceType: (storeInfo as any)?.invoiceType || 'SALES INVOICE',
-        birPermitNo: (storeInfo as any)?.birPermitNo || null,
+        birPermitNo: company?.birPermitNo || (storeInfo as any)?.birPermitNo || null,
         minNumber: (storeInfo as any)?.minNumber || null,
         serialNumber: (storeInfo as any)?.serialNumber || null,
-        inclusiveSerialNumber: (storeInfo as any)?.inclusiveSerialNumber || null
+        inclusiveSerialNumber: company?.inclusiveSerialNumber || (storeInfo as any)?.inclusiveSerialNumber || null
       },
-      customerName: order.soldTo && order.soldTo !== 'Walk-in Customer' ? order.soldTo : null,
-      customerAddress: order.businessAddress || null,
-      customerTin: order.tin || null,
-      cashier: order.assignedCashierId || 'Unknown Cashier',
-      paymentMethod: order.cashSale ? 'Cash' : 'Charge', // Determine from order data
+      customerName: customerName,
+      customerAddress: customerName ? (order.businessAddress || 'N/A') : null,
+      customerTin: customerName ? (order.tin || 'N/A') : null,
+      cashier: cashierName,
+      paymentMethod: order.cashSale ? 'Cash' : 'Charge',
       isCashSale: order.cashSale || true,
       isChargeSale: !order.cashSale || false,
-      items: order.items || [],
-      subtotal: order.grossAmount || order.totalAmount,
+      items: (order.items || []).map((item: any) => ({
+        productName: item.productName || item.name,
+        skuId: item.skuId || item.sku,
+        quantity: item.quantity || 1,
+        unitType: item.unitType || 'pc',
+        sellingPrice: item.sellingPrice || item.price || item.amount,
+        total: item.total || (item.quantity * (item.sellingPrice || item.price || item.amount)),
+        vatAmount: item.vatAmount || 0,
+        discountAmount: item.discountAmount || 0
+      })),
+      subtotal: order.grossAmount || order.subtotal || order.totalAmount,
       vatAmount: order.vatAmount || 0,
       vatExempt: order.vatExemptAmount || 0,
       discount: order.discountAmount || 0,
-      totalAmount: order.totalAmount,
+      totalAmount: order.totalAmount || order.netAmount,
       vatRate: 12,
-      orderDiscount: order.exemptionId ? {
+      // Enhanced order discount handling - check for both exemptionId and full discount object
+      orderDiscount: order.orderDiscount || (order.exemptionId ? {
         type: 'CUSTOM',
-        exemptionId: order.exemptionId
-      } : null
+        exemptionId: order.exemptionId,
+        customerName: order.discountCustomerName || customerName
+      } : null)
     };
   }
 
@@ -930,6 +977,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
         // Simulate a completed order for testing
         this.nextInvoiceNumber.set('INV-2024-001234567890');
         this.isNewOrderActive.set(true);
+        this.isOrderCompleted.set(true);
         console.log('🧪 Simulated completed order state for testing');
       },
       checkOrderStatus: () => {
@@ -939,17 +987,25 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
           cartItems: this.cartItems().length,
           isNewOrderActive: this.isNewOrderActive(),
           canEditCart: this.canEditCartItems(),
-          buttonEnabled: this.isCompleteOrderButtonEnabled()
+          canClearCart: this.canClearCart(),
+          canRemoveFromCart: this.canRemoveFromCart(),
+          canChangeQuantity: this.canChangeQuantity(),
+          buttonEnabled: this.isCompleteOrderButtonEnabled(),
+          buttonText: this.completeOrderButtonText(),
+          completedOrderData: this.completedOrderData()
         });
         return {
           isCompleted: this.isOrderCompleted(),
           canEdit: this.canEditCartItems(),
+          canClear: this.canClearCart(),
           buttonEnabled: this.isCompleteOrderButtonEnabled()
         };
       },
       resetOrderState: () => {
         this.nextInvoiceNumber.set('INV-0000-000000');
         this.isNewOrderActive.set(false);
+        this.isOrderCompleted.set(false);
+        this.completedOrderData.set(null);
         this.posService.clearCart();
         console.log('🔄 Order state reset to initial state');
       }
@@ -1034,6 +1090,22 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   async onF4KeyPress(event: KeyboardEvent): Promise<void> {
     event.preventDefault(); // Prevent default F4 behavior
     
+    // Check if order is already completed
+    if (this.isOrderCompleted()) {
+      await this.showConfirmationDialog({
+        title: 'Clear Cart Disabled',
+        message: 'This order is already completed. Please start a new order to clear the cart.',
+        confirmText: 'Start New Order',
+        cancelText: 'Cancel',
+        type: 'info'
+      }).then(async (confirmed) => {
+        if (confirmed) {
+          await this.startNewOrderDirect();
+        }
+      });
+      return;
+    }
+    
     // Only allow clear cart if new order is active
     if (!this.isNewOrderActive()) {
       await this.showConfirmationDialog({
@@ -1074,19 +1146,9 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   async onF6KeyPress(event: KeyboardEvent): Promise<void> {
     event.preventDefault(); // Prevent default F6 behavior
     
-    // If order is already completed, show reprint option
+    // If order is already completed, just show receipt
     if (this.isOrderCompleted()) {
-      const confirmed = await this.showConfirmationDialog({
-        title: 'Reprint Receipt',
-        message: 'Order is already completed. Would you like to reprint the receipt?',
-        confirmText: 'Reprint',
-        cancelText: 'Cancel',
-        type: 'info'
-      });
-      
-      if (confirmed) {
-        await this.reprintCompletedOrderReceipt();
-      }
+      await this.showCompletedOrderReceipt();
       return;
     }
     
@@ -1119,12 +1181,17 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
 
   // Check if quantity can be changed for cart items
   canChangeQuantity(): boolean {
-    return !this.isOrderCompleted();
+    return this.isNewOrderActive() && !this.isOrderCompleted();
   }
 
   // Check if items can be removed from cart
   canRemoveFromCart(): boolean {
-    return !this.isOrderCompleted();
+    return this.isNewOrderActive() && !this.isOrderCompleted();
+  }
+
+  // Check if cart can be cleared
+  canClearCart(): boolean {
+    return this.isNewOrderActive() && !this.isOrderCompleted() && this.cartItems().length > 0;
   }
 
   // Get user-friendly error message for store loading issues
@@ -1190,6 +1257,10 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   // Direct new order without confirmation dialog (used internally)
   async startNewOrderDirect(): Promise<void> {
     console.log('🆕 Starting new order directly');
+    
+    // Clear completed order status and data
+    this.isOrderCompleted.set(false);
+    this.completedOrderData.set(null);
     
     // Set new order as active
     this.isNewOrderActive.set(true);
@@ -1382,6 +1453,10 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
         invoiceNumber: result.invoiceNumber,
         paymentInfo: paymentInfo
       };
+      
+      // Mark order as completed and store the receipt data for reprinting
+      this.isOrderCompleted.set(true);
+      this.completedOrderData.set(updatedReceiptData);
       
       // Set receipt data and show modal
       this.receiptDataSignal.set(updatedReceiptData);
@@ -2052,6 +2127,22 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   async clearCart(): Promise<void> {
+    // Check if order is already completed
+    if (this.isOrderCompleted()) {
+      await this.showConfirmationDialog({
+        title: 'Clear Cart Disabled',
+        message: 'This order is already completed. Please start a new order to clear the cart.',
+        confirmText: 'Start New Order',
+        cancelText: 'Cancel',
+        type: 'info'
+      }).then(async (confirmed) => {
+        if (confirmed) {
+          await this.startNewOrderDirect();
+        }
+      });
+      return;
+    }
+
     // Check if new order is active before allowing cart clearing
     if (!this.isNewOrderActive()) {
       console.log('❌ Clear cart blocked: New order must be initiated first');
@@ -2122,14 +2213,44 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     }
   }
 
+  // Show receipt for already completed order
+  async showCompletedOrderReceipt(): Promise<void> {
+    try {
+      console.log('🧾 Showing receipt for completed order...');
+      
+      const completedData = this.completedOrderData();
+      if (completedData) {
+        // Use stored receipt data
+        this.receiptDataSignal.set(completedData);
+        this.isReceiptModalVisibleSignal.set(true);
+        console.log('📄 Showing stored receipt data for completed order');
+      } else {
+        // Fallback: prepare receipt data from current state
+        const receiptData = await this.prepareReceiptData('completed-order-' + Date.now());
+        const updatedReceiptData = { 
+          ...receiptData, 
+          invoiceNumber: this.nextInvoiceNumber(),
+          orderId: 'completed-' + this.nextInvoiceNumber()
+        };
+        
+        this.receiptDataSignal.set(updatedReceiptData);
+        this.isReceiptModalVisibleSignal.set(true);
+        console.log('📄 Showing fallback receipt data for completed order');
+      }
+      
+    } catch (error) {
+      console.error('❌ Error showing completed order receipt:', error);
+    }
+  }
+
   async processOrder(): Promise<void> {
     try {
       console.log('🎯 Complete Order clicked...');
       
-      // Check if order is already completed - if so, just reprint receipt
+      // Check if order is already completed - if so, just show receipt
       if (this.isOrderCompleted()) {
-        console.log('🖨️ Order already completed, reprinting receipt...');
-        await this.reprintCompletedOrderReceipt();
+        console.log('🖨️ Order already completed, showing receipt...');
+        await this.showCompletedOrderReceipt();
         return;
       }
       
@@ -2190,6 +2311,10 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     // Determine payment method based on cash/charge selection
     const paymentMethod = this.getPaymentMethodText();
 
+    // Always use current user as cashier since they're the one doing the POS transaction
+    // Whether they're a cashier, manager, or higher - they are the one processing the sale
+    const cashierName = currentUser?.displayName || currentUser?.email || 'Unknown Cashier';
+
     return {
       orderId,
       invoiceNumber: invoiceNumber || this.invoiceNumber,
@@ -2209,7 +2334,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       customerName: customerName,
       customerAddress: customerName ? (customerInfo.businessAddress || 'N/A') : null,
       customerTin: customerName ? (customerInfo.tin || 'N/A') : null,
-      cashier: currentUser?.displayName || currentUser?.email || 'Unknown Cashier',
+      cashier: cashierName,
       paymentMethod: paymentMethod, // Add payment method
       isCashSale: this.isCashSale(),
       isChargeSale: this.isChargeSale(),
