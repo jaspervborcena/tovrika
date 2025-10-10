@@ -81,6 +81,19 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     
     if (stores.length === 0) {
       console.warn('⚠️ No stores available from role-based loading');
+      
+      // Enhanced debugging for empty stores
+      console.log('🔍 DEBUGGING EMPTY STORES:');
+      console.log('  - Current user:', this.authService.getCurrentUser()?.uid || 'No user');
+      console.log('  - Store service state:', this.storeService.debugStoreStatus());
+      console.log('  - Component initialization state:', {
+        products: this.products().length,
+        categories: this.categories().length,
+        selectedStore: this.selectedStoreId()
+      });
+      
+      // Try to trigger store loading as fallback
+      this.handleEmptyStores();
     } else {
       console.log('🏪 Store details:', stores.map(s => ({ id: s.id, name: s.storeName, companyId: s.companyId })));
     }
@@ -92,8 +105,16 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   readonly cartSummary = computed(() => this.posService.cartSummary());
   readonly isProcessing = computed(() => this.posService.isProcessing());
   
-  readonly products = computed(() => this.productService.getProducts());
-  readonly categories = computed(() => this.productService.getCategories());
+  readonly products = computed(() => {
+    const prods = this.productService.getProducts();
+    console.log('🔍 PRODUCTS COMPUTED - Count:', prods.length);
+    return prods;
+  });
+  readonly categories = computed(() => {
+    const cats = this.productService.getCategories();
+    console.log('🔍 CATEGORIES COMPUTED - Count:', cats.length, 'Categories:', cats);
+    return cats;
+  });
   
   readonly currentStoreInfo = computed(() => 
     this.availableStores().find(s => s.id === this.selectedStoreId())
@@ -108,6 +129,47 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   readonly offlineInvoicePreference = signal<'manual' | 'auto'>('auto');
   readonly offlineManualInvoiceNumber = signal<string>('INV-0000-000000');
   
+  // Store availability status
+  readonly hasStoreLoadingError = computed(() => {
+    const stores = this.availableStores();
+    const user = this.authService.getCurrentUser();
+    return stores.length === 0 && !!user?.uid;
+  });
+  
+  // Hardware printer status
+  readonly hardwarePrinterStatus = signal<{ available: boolean; type: string; ready: boolean }>({
+    available: false,
+    type: 'none',
+    ready: false
+  });
+  
+  // Order completion status - tracks if current order is already processed
+  readonly isOrderCompleted = computed(() => {
+    // Order is considered completed if:
+    // 1. Invoice number is not the default placeholder
+    // 2. Cart has items (so it's not just a fresh start)
+    // 3. New order is active (so we're in an active order session)
+    const invoiceNum = this.nextInvoiceNumber();
+    const hasItems = this.cartItems().length > 0;
+    const isNewOrder = this.isNewOrderActive();
+    
+    const isCompleted = isNewOrder && 
+                       hasItems && 
+                       invoiceNum !== 'Loading...' && 
+                       invoiceNum !== 'INV-0000-000000' &&
+                       invoiceNum.startsWith('INV-') &&
+                       invoiceNum.length > 15; // Real invoice numbers are longer
+    
+    console.log('🔍 Order completion check:', {
+      invoiceNum,
+      hasItems,
+      isNewOrder,
+      isCompleted
+    });
+    
+    return isCompleted;
+  });
+  
   // Regular properties for ngModel binding (signals don't work well with ngModel)
   manualInvoiceInput: string = 'INV-0000-000000';
   
@@ -117,12 +179,30 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       return 'Processing...';
     }
     
-    if (this.networkService.isOffline()) {
-      return 'Complete Offline Order';
-    }
-    
+    // Keep the label as "Complete Order" but functionality changes based on order status
+    // The processOrder() method will handle whether to complete or reprint
     return 'Complete Order';
   });
+
+  // Check if complete order button should be enabled
+  readonly isCompleteOrderButtonEnabled = computed(() => {
+    // Button is enabled if:
+    // 1. Not currently processing
+    // 2. Either has cart items (for new orders) OR order is completed (for reprint)
+    return !this.isProcessing() && 
+           (this.cartItems().length > 0 || this.isOrderCompleted());
+  });
+
+  // Get CSS classes for complete order button to indicate mode
+  getCompleteOrderButtonClass(): string {
+    const baseClass = 'btn btn-primary';
+    
+    if (this.isOrderCompleted()) {
+      return `${baseClass} btn-reprint`; // Special class for reprint mode
+    }
+    
+    return baseClass;
+  }
   
   // Payment Dialog State
   readonly paymentModalVisible = signal<boolean>(false);
@@ -143,52 +223,102 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   readonly filteredProducts = computed(() => {
-    let filtered = this.products();
+    const allProducts = this.products();
+    const storeId = this.selectedStoreId();
+    const stores = this.availableStores();
+    
+    // 🔍 DEBUG: Log initial state
+    console.log('🔍 FILTERED PRODUCTS DEBUG:', {
+      totalProducts: allProducts.length,
+      selectedStoreId: storeId,
+      availableStores: stores.length,
+      storeNames: stores.map(s => s.storeName)
+    });
 
-    // Use selectedStoreId for filtering (this will already be set from IndexedDB via initializeStore)
-    // The IndexedDB-first logic is handled in loadData() and initializeStore() methods
-    let storeId = this.selectedStoreId();
+    let filtered = allProducts;
 
-    // Filter by store only (no company filtering needed since products are already loaded by store)
-    if (storeId) {
-      filtered = filtered.filter(p => p.storeId === storeId);
-    }
-
-    // Determine active store ids: if a store is selected use that, otherwise use visible stores
-    const activeStoreIds = storeId ? [storeId] : this.availableStores().map(s => s.id).filter(Boolean) as string[];
-    if (activeStoreIds && activeStoreIds.length) {
-      // Include products that belong to the active stores OR have no storeId (global products)
-      filtered = filtered.filter(p => !p.storeId || activeStoreIds.includes(p.storeId));
+    // ✅ FIXED: Simplified store filtering logic
+    if (storeId && stores.length > 0) {
+      // Filter products that belong to the selected store OR have no storeId (global products)
+      filtered = allProducts.filter(p => {
+        const belongsToStore = p.storeId === storeId;
+        const isGlobalProduct = !p.storeId;
+        const included = belongsToStore || isGlobalProduct;
+        
+        if (!included && p.storeId) {
+          console.log('🔍 Product filtered out:', p.productName, 'productStoreId:', p.storeId, 'selectedStoreId:', storeId);
+        }
+        
+        return included;
+      });
+      
+      console.log('🔍 After store filtering:', {
+        originalCount: allProducts.length,
+        filteredCount: filtered.length,
+        productsWithStoreId: filtered.filter(p => p.storeId === storeId).length,
+        globalProducts: filtered.filter(p => !p.storeId).length
+      });
+    } else if (stores.length > 0) {
+      // If no specific store selected but stores available, use all store products
+      const storeIds = stores.map(s => s.id).filter(Boolean);
+      filtered = allProducts.filter(p => !p.storeId || storeIds.includes(p.storeId));
+      
+      console.log('🔍 No specific store - using all available stores:', storeIds);
+    } else {
+      // No stores available - show all products (fallback)
+      console.log('🔍 No stores available - showing all products as fallback');
     }
 
     // Filter by category
     const category = this.selectedCategory();
     if (category !== 'all') {
+      const beforeCategoryCount = filtered.length;
       filtered = filtered.filter(p => p.category === category);
+      console.log('🔍 After category filtering:', {
+        category,
+        beforeCount: beforeCategoryCount,
+        afterCount: filtered.length
+      });
     }
 
     // Filter by search query
     const query = this.searchQuery().toLowerCase();
     if (query) {
+      const beforeSearchCount = filtered.length;
       filtered = filtered.filter(p =>
         p.productName.toLowerCase().includes(query) ||
         p.skuId.toLowerCase().includes(query) ||
         p.barcodeId?.toLowerCase().includes(query)
       );
+      console.log('🔍 After search filtering:', {
+        query,
+        beforeCount: beforeSearchCount,
+        afterCount: filtered.length
+      });
     }
 
     // Sort by newest (createdAt) if present, otherwise keep original
     try {
       filtered = filtered.slice().sort((a, b) => (b.createdAt?.getTime ? b.createdAt.getTime() : 0) - (a.createdAt?.getTime ? a.createdAt.getTime() : 0));
     } catch (e) {
-      // ignore sort errors and continue
+      console.warn('🔍 Sort error (ignored):', e);
     }
 
     // Limit to top 20 when in list or grid view
     const view = this.currentView();
+    const finalCount = filtered.length;
+    
     if (view === 'list' || view === 'grid') {
-      return filtered.slice(0, 20);
+      filtered = filtered.slice(0, 20);
     }
+    
+    console.log('🔍 FINAL FILTERED PRODUCTS:', {
+      finalCount: finalCount,
+      displayCount: filtered.length,
+      view: view,
+      sampleProducts: filtered.slice(0, 3).map(p => ({ name: p.productName, storeId: p.storeId, category: p.category }))
+    });
+    
     return filtered;
   });
 
@@ -374,6 +504,137 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       console.log('✅ Manual refresh completed');
     } catch (error) {
       console.error('❌ Error during manual refresh:', error);
+    }
+  }
+
+  // Handle empty stores scenario with fallback recovery
+  private handleEmptyStores(): void {
+    console.log('🔧 Attempting to recover from empty stores...');
+    
+    // Debounce multiple calls to avoid infinite loops
+    if ((this as any)._emptyStoresRecoveryInProgress) {
+      console.log('🔧 Store recovery already in progress, skipping...');
+      return;
+    }
+    
+    (this as any)._emptyStoresRecoveryInProgress = true;
+    
+    // Try recovery after a short delay
+    setTimeout(async () => {
+      try {
+        console.log('🔄 Initiating store recovery process...');
+        
+        const currentUser = this.authService.getCurrentUser();
+        if (!currentUser?.uid) {
+          console.error('❌ No authenticated user for store recovery');
+          return;
+        }
+        
+        // Try IndexedDB first as most reliable source
+        const offlineUserData = await this.indexedDBService.getUserData(currentUser.uid);
+        if (offlineUserData?.permissions && offlineUserData.permissions.length > 0) {
+          console.log('💾 Found IndexedDB permissions, attempting store recovery...');
+          
+          const permission = this.getActivePermission(offlineUserData);
+          if (permission?.storeId) {
+            console.log('🔄 Reloading store from IndexedDB permission:', permission.storeId);
+            await this.storeService.loadStores([permission.storeId]);
+            
+            // Verify recovery worked
+            setTimeout(() => {
+              const recoveredStores = this.storeService.getStores();
+              console.log('✅ Store recovery result:', recoveredStores.length, 'stores recovered');
+              (this as any)._emptyStoresRecoveryInProgress = false;
+            }, 500);
+            return;
+          }
+        }
+        
+        // Fallback to user roles loading
+        console.log('🗄️ Fallback: Attempting user roles loading...');
+        await this.userRoleService.loadUserRoles();
+        const userRole = this.userRoleService.getUserRoleByUserId(currentUser.uid);
+        
+        if (userRole?.storeId) {
+          console.log('🔄 Reloading store from user role:', userRole.storeId);
+          await this.storeService.loadStores([userRole.storeId]);
+        } else if (userRole?.companyId) {
+          console.log('🔄 Reloading all company stores from user role:', userRole.companyId);
+          await this.storeService.loadStoresByCompany(userRole.companyId);
+        }
+        
+      } catch (error) {
+        console.error('❌ Store recovery failed:', error);
+      } finally {
+        (this as any)._emptyStoresRecoveryInProgress = false;
+      }
+    }, 1000); // 1 second delay to avoid rapid retries
+  }
+
+  // Manual refresh stores - for user-triggered recovery
+  async refreshStores(): Promise<void> {
+    try {
+      console.log('🔄 Manual store refresh initiated...');
+      
+      const currentUser = this.authService.getCurrentUser();
+      if (!currentUser?.uid) {
+        console.error('❌ No authenticated user for manual store refresh');
+        return;
+      }
+      
+      // Show loading state
+      console.log('⏳ Refreshing stores...');
+      
+      // Try multiple recovery methods
+      let recovered = false;
+      
+      // Method 1: IndexedDB
+      try {
+        const offlineUserData = await this.indexedDBService.getUserData(currentUser.uid);
+        if (offlineUserData?.permissions && offlineUserData.permissions.length > 0) {
+          const permission = this.getActivePermission(offlineUserData);
+          if (permission?.storeId) {
+            await this.storeService.loadStores([permission.storeId]);
+            recovered = true;
+            console.log('✅ Stores recovered via IndexedDB method');
+          }
+        }
+      } catch (error) {
+        console.log('⚠️ IndexedDB recovery method failed:', error);
+      }
+      
+      // Method 2: User roles
+      if (!recovered) {
+        try {
+          await this.userRoleService.loadUserRoles();
+          const userRole = this.userRoleService.getUserRoleByUserId(currentUser.uid);
+          
+          if (userRole?.storeId) {
+            await this.storeService.loadStores([userRole.storeId]);
+            recovered = true;
+            console.log('✅ Stores recovered via user roles method');
+          } else if (userRole?.companyId) {
+            await this.storeService.loadStoresByCompany(userRole.companyId);
+            recovered = true;
+            console.log('✅ Stores recovered via company loading method');
+          }
+        } catch (error) {
+          console.log('⚠️ User roles recovery method failed:', error);
+        }
+      }
+      
+      // Verify recovery
+      setTimeout(() => {
+        const stores = this.availableStores();
+        if (stores.length > 0) {
+          console.log('🎉 Store refresh successful! Recovered', stores.length, 'stores');
+        } else {
+          console.error('❌ Store refresh failed - still no stores available');
+        }
+      }, 500);
+      
+    } catch (error) {
+      console.error('❌ Manual store refresh failed:', error);
     }
   }
 
@@ -596,6 +857,117 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     console.log('🎯 POS COMPONENT: ngOnInit called - POS is loading!');
     console.log('🎯 POS COMPONENT: Current URL:', window.location.href);
     console.log('🎯 POS COMPONENT: Timestamp:', new Date().toISOString());
+    
+    // 🔍 DEBUG: Make debug methods available globally for console debugging
+    (window as any).debugPOS = {
+      refreshProducts: () => this.debugRefreshProducts(),
+      checkFilteredProducts: () => {
+        console.log('🔍 CURRENT STATE:', {
+          products: this.products().length,
+          filteredProducts: this.filteredProducts().length,
+          selectedStore: this.selectedStoreId(),
+          selectedCategory: this.selectedCategory(),
+          searchQuery: this.searchQuery(),
+          currentView: this.currentView()
+        });
+        return this.filteredProducts();
+      },
+      forceUpdate: () => {
+        // Force signal updates by accessing them
+        this.products();
+        this.categories();
+        this.filteredProducts();
+        console.log('🔍 Signals accessed - check console for update logs');
+      },
+      // Store debugging methods
+      refreshStores: () => this.refreshStores(),
+      checkStores: () => {
+        console.log('🏪 STORE DEBUG STATE:', {
+          availableStores: this.availableStores().length,
+          selectedStore: this.selectedStoreId(),
+          hasStoreError: this.hasStoreLoadingError(),
+          storeServiceState: this.storeService.debugStoreStatus(),
+          user: this.authService.getCurrentUser()?.uid || 'No user'
+        });
+        return this.availableStores();
+      },
+      forceStoreRecovery: () => this.handleEmptyStores(),
+      debugUserData: async () => {
+        const user = this.authService.getCurrentUser();
+        if (user?.uid) {
+          const indexedData = await this.indexedDBService.getUserData(user.uid);
+          const userRole = this.userRoleService.getUserRoleByUserId(user.uid);
+          console.log('👤 USER DEBUG DATA:', {
+            user: { uid: user.uid, email: user.email },
+            indexedData,
+            userRole,
+            currentPermission: this.authService.getCurrentPermission()
+          });
+          return { indexedData, userRole };
+        }
+        return null;
+      },
+      // Hardware printer debugging
+      checkPrinterStatus: () => this.checkHardwarePrinterStatus(),
+      getPrinterStatus: () => {
+        console.log('🖨️ PRINTER STATUS:', {
+          status: this.hardwarePrinterStatus(),
+          displayText: this.getPrinterStatusText()
+        });
+        return this.hardwarePrinterStatus();
+      },
+      testDirectPrint: async () => {
+        const mockReceiptData = {
+          orderId: 'TEST-123',
+          invoiceNumber: 'TEST-INV-001',
+          items: [{ productName: 'Test Item', quantity: 1, sellingPrice: 10.00, total: 10.00 }],
+          totalAmount: 10.00
+        };
+        return await this.printService.printReceiptDirect(mockReceiptData);
+      },
+      // Order completion testing
+      simulateCompletedOrder: () => {
+        // Simulate a completed order for testing
+        this.nextInvoiceNumber.set('INV-2024-001234567890');
+        this.isNewOrderActive.set(true);
+        console.log('🧪 Simulated completed order state for testing');
+      },
+      checkOrderStatus: () => {
+        console.log('📋 ORDER STATUS CHECK:', {
+          isOrderCompleted: this.isOrderCompleted(),
+          invoiceNumber: this.nextInvoiceNumber(),
+          cartItems: this.cartItems().length,
+          isNewOrderActive: this.isNewOrderActive(),
+          canEditCart: this.canEditCartItems(),
+          buttonEnabled: this.isCompleteOrderButtonEnabled()
+        });
+        return {
+          isCompleted: this.isOrderCompleted(),
+          canEdit: this.canEditCartItems(),
+          buttonEnabled: this.isCompleteOrderButtonEnabled()
+        };
+      },
+      resetOrderState: () => {
+        this.nextInvoiceNumber.set('INV-0000-000000');
+        this.isNewOrderActive.set(false);
+        this.posService.clearCart();
+        console.log('🔄 Order state reset to initial state');
+      }
+    };
+    console.log('🔍 DEBUG: Global debug methods available:');
+    console.log('  - window.debugPOS.refreshProducts() - Refresh product data');
+    console.log('  - window.debugPOS.checkFilteredProducts() - Check product filtering state');
+    console.log('  - window.debugPOS.forceUpdate() - Force signal updates');
+    console.log('  - window.debugPOS.refreshStores() - Manual store refresh');
+    console.log('  - window.debugPOS.checkStores() - Check store loading state');
+    console.log('  - window.debugPOS.forceStoreRecovery() - Force store recovery');
+    console.log('  - window.debugPOS.debugUserData() - Show user/permission data');
+    console.log('  - window.debugPOS.checkPrinterStatus() - Check hardware printers');
+    console.log('  - window.debugPOS.getPrinterStatus() - Show current printer status');
+    console.log('  - window.debugPOS.testDirectPrint() - Test direct printing');
+    console.log('  - window.debugPOS.simulateCompletedOrder() - Simulate completed order');
+    console.log('  - window.debugPOS.checkOrderStatus() - Check order completion status');
+    console.log('  - window.debugPOS.resetOrderState() - Reset order to initial state');
     try {
       console.log('📊 STEP 1: Loading data (stores, products, categories)...');
       // Load data first to ensure stores and products are available
@@ -615,13 +987,29 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       await this.initializeStore(); 
       console.log('✅ STEP 4 COMPLETED: Store initialization finished');
       
-      // Debug: log current user and stores to ensure user.storeIds and stores list are correct
+      console.log('📊 STEP 5: Checking hardware printer availability...');
+      await this.checkHardwarePrinterStatus();
+      console.log('✅ STEP 5 COMPLETED: Hardware printer status checked');
+      
+      // 🔍 ENHANCED DEBUG: More detailed final check
       console.log('🔍 FINAL CHECK - currentUser:', this.authService.getCurrentUser());
       console.log('🔍 FINAL CHECK - all stores:', this.storeService.getStores());
       console.log('🔍 FINAL CHECK - available stores:', this.availableStores());
       console.log('🔍 FINAL CHECK - selected store:', this.selectedStoreId());
       console.log('🔍 FINAL CHECK - products count:', this.products().length);
       console.log('🔍 FINAL CHECK - categories count:', this.categories().length);
+      
+      // 🔍 NEW: Check filtered products specifically
+      console.log('🔍 FINAL CHECK - filtered products count:', this.filteredProducts().length);
+      console.log('🔍 FINAL CHECK - selected category:', this.selectedCategory());
+      console.log('🔍 FINAL CHECK - search query:', this.searchQuery());
+      console.log('🔍 FINAL CHECK - current view:', this.currentView());
+      
+      // 🔍 NEW: Force a small delay to let signals update, then check again
+      setTimeout(() => {
+        console.log('🔍 DELAYED CHECK (500ms) - filtered products count:', this.filteredProducts().length);
+        console.log('🔍 DELAYED CHECK - sample filtered products:', this.filteredProducts().slice(0, 3).map(p => ({ name: p.productName, storeId: p.storeId })));
+      }, 500);
       
       console.log('🎉 POS INITIALIZATION COMPLETED SUCCESSFULLY!');
     } catch (error) {
@@ -645,6 +1033,18 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   @HostListener('document:keydown.f4', ['$event'])
   async onF4KeyPress(event: KeyboardEvent): Promise<void> {
     event.preventDefault(); // Prevent default F4 behavior
+    
+    // Only allow clear cart if new order is active
+    if (!this.isNewOrderActive()) {
+      await this.showConfirmationDialog({
+        title: 'Clear Cart Disabled',
+        message: 'Please start a new order first before clearing cart data.',
+        confirmText: 'OK',
+        cancelText: '',
+        type: 'warning'
+      });
+      return;
+    }
     
     if (this.cartItems().length > 0) {
       await this.clearCart(); // clearCart() already has confirmation dialog
@@ -674,6 +1074,23 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   async onF6KeyPress(event: KeyboardEvent): Promise<void> {
     event.preventDefault(); // Prevent default F6 behavior
     
+    // If order is already completed, show reprint option
+    if (this.isOrderCompleted()) {
+      const confirmed = await this.showConfirmationDialog({
+        title: 'Reprint Receipt',
+        message: 'Order is already completed. Would you like to reprint the receipt?',
+        confirmText: 'Reprint',
+        cancelText: 'Cancel',
+        type: 'info'
+      });
+      
+      if (confirmed) {
+        await this.reprintCompletedOrderReceipt();
+      }
+      return;
+    }
+    
+    // For incomplete orders, proceed with normal completion
     if (this.cartItems().length > 0 && !this.isProcessing()) {
       const confirmed = await this.showConfirmationDialog({
         title: 'Complete Order',
@@ -693,6 +1110,81 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   // Check if products can be clicked (New Order must be active)
   canInteractWithProducts(): boolean {
     return this.isNewOrderActive();
+  }
+
+  // Check if cart items can be edited (not completed order)
+  canEditCartItems(): boolean {
+    return this.isNewOrderActive() && !this.isOrderCompleted();
+  }
+
+  // Check if quantity can be changed for cart items
+  canChangeQuantity(): boolean {
+    return !this.isOrderCompleted();
+  }
+
+  // Check if items can be removed from cart
+  canRemoveFromCart(): boolean {
+    return !this.isOrderCompleted();
+  }
+
+  // Get user-friendly error message for store loading issues
+  getStoreLoadingErrorMessage(): string | null {
+    if (!this.hasStoreLoadingError()) {
+      return null;
+    }
+    
+    const user = this.authService.getCurrentUser();
+    if (!user) {
+      return 'Please log in to access stores';
+    }
+    
+    return 'No stores available. This may be due to:\n' +
+           '• Network connectivity issues\n' +
+           '• User permission problems\n' +
+           '• Store configuration issues\n\n' +
+           'Please try refreshing or contact your administrator.';
+  }
+
+  // Check if the system is ready for POS operations
+  isSystemReady(): boolean {
+    return this.availableStores().length > 0 && 
+           this.products().length > 0 && 
+           !!this.selectedStoreId();
+  }
+
+  // Check and update hardware printer status
+  async checkHardwarePrinterStatus(): Promise<void> {
+    try {
+      const status = await this.printService.isHardwarePrinterAvailable();
+      this.hardwarePrinterStatus.set({
+        available: status.hasHardware,
+        type: status.type,
+        ready: status.details.ready || status.details.connected || false
+      });
+      
+      console.log('🖨️ Hardware printer status updated:', this.hardwarePrinterStatus());
+    } catch (error) {
+      console.error('❌ Failed to check hardware printer status:', error);
+      this.hardwarePrinterStatus.set({
+        available: false,
+        type: 'none',
+        ready: false
+      });
+    }
+  }
+
+  // Get printer status display text
+  getPrinterStatusText(): string {
+    const status = this.hardwarePrinterStatus();
+    if (!status.available) {
+      return 'Browser Print Only';
+    }
+    
+    if (status.ready) {
+      return `${status.type} Printer Ready`;
+    } else {
+      return `${status.type} Printer Available`;
+    }
   }
 
   // Direct new order without confirmation dialog (used internally)
@@ -729,8 +1221,11 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
 
   showPaymentDialog(): void {
     console.log('💳 Opening payment dialog');
-    this.paymentAmountTendered = 0;
-    this.paymentDescription = '';
+    // Only reset if the modal was previously closed, don't reset on reopens
+    if (!this.paymentModalVisible()) {
+      this.paymentAmountTendered = this.cartSummary().netAmount; // Auto-fill with total amount
+      this.paymentDescription = '';
+    }
     this.paymentModalVisible.set(true);
   }
 
@@ -746,8 +1241,17 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       currentValue: this.paymentAmountTendered,
       fieldType: typeof this.paymentAmountTendered,
       modalVisible: this.paymentModalVisible(),
-      element: document.getElementById('amount-tendered')
+      element: document.getElementById('amount-tendered'),
+      cartTotal: this.cartSummary().netAmount
     });
+  }
+
+  // Handle input changes for amount tendered
+  onAmountTenderedChange(value: any): void {
+    console.log('💳 Amount tendered changed to:', value);
+    const numValue = parseFloat(value) || 0;
+    this.paymentAmountTendered = numValue;
+    console.log('💳 Updated paymentAmountTendered to:', this.paymentAmountTendered);
   }
 
   calculateChange(): number {
@@ -1011,6 +1515,34 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
         } else {
           console.warn('No user role found or no store/company assigned to user');
           console.log('Available user role data:', userRole);
+          
+          // Enhanced fallback for missing user roles
+          console.log('🔄 Attempting IndexedDB fallback for missing user roles...');
+          try {
+            const offlineUserData = await this.indexedDBService.getUserData(user.uid);
+            if (offlineUserData?.permissions && offlineUserData.permissions.length > 0) {
+              console.log('💾 Found IndexedDB permissions as fallback');
+              const permission = this.getActivePermission(offlineUserData);
+              
+              if (permission?.storeId) {
+                console.log('🏪 Loading store from IndexedDB fallback:', permission.storeId);
+                await this.storeService.loadStores([permission.storeId]);
+                
+                if (permission.companyId) {
+                  console.log('📦 Loading products from IndexedDB fallback');
+                  await this.productService.loadProductsByCompanyAndStore(permission.companyId, permission.storeId);
+                }
+              } else if (permission?.companyId) {
+                console.log('🏪 Loading company stores from IndexedDB fallback:', permission.companyId);
+                await this.storeService.loadStoresByCompany(permission.companyId);
+                await this.productService.loadProductsByCompanyAndStore(permission.companyId);
+              }
+            } else {
+              console.error('❌ No IndexedDB fallback data available');
+            }
+          } catch (fallbackError) {
+            console.error('❌ IndexedDB fallback failed:', fallbackError);
+          }
         }
       } catch (error) {
         console.error('Error in loadData method:', error);
@@ -1211,6 +1743,14 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     
     if (finalStores.length === 0) {
       console.error('❌ Desktop No stores available after all retry attempts. Using IndexedDB fallback...');
+      
+      // Enhanced error reporting for debugging
+      console.error('🔍 STORE LOADING FAILURE ANALYSIS:');
+      console.error('  - User:', currentUser?.uid);
+      console.error('  - User roles loaded:', this.userRoleService);
+      console.error('  - Store service debug:', this.storeService.debugStoreStatus());
+      console.error('  - Available stores signal:', this.storeService.getStores());
+      console.error('  - Network status:', this.networkService.isOffline() ? 'OFFLINE' : 'ONLINE');
       
       // FALLBACK: Use IndexedDB userData.permissions[0].storeId as reliable default
       try {
@@ -1447,6 +1987,22 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   async addToCart(product: Product): Promise<void> {
+    // Check if order is already completed
+    if (this.isOrderCompleted()) {
+      await this.showConfirmationDialog({
+        title: 'Order Already Completed',
+        message: 'This order is already completed. Please start a new order to add more items.',
+        confirmText: 'Start New Order',
+        cancelText: 'Cancel',
+        type: 'info'
+      }).then(async (confirmed) => {
+        if (confirmed) {
+          await this.startNewOrderDirect();
+        }
+      });
+      return;
+    }
+
     // Check if new order is active first
     if (!this.canInteractWithProducts()) {
       const confirmed = await this.showConfirmationDialog({
@@ -1478,14 +2034,30 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   removeFromCart(productId: string): void {
+    // Prevent removal if order is already completed
+    if (!this.canRemoveFromCart()) {
+      console.warn('❌ Cannot remove items: Order is already completed');
+      return;
+    }
     this.posService.removeFromCart(productId);
   }
 
   updateQuantity(productId: string, quantity: number): void {
+    // Prevent quantity changes if order is already completed
+    if (!this.canChangeQuantity()) {
+      console.warn('❌ Cannot change quantity: Order is already completed');
+      return;
+    }
     this.posService.updateCartItemQuantity(productId, quantity);
   }
 
   async clearCart(): Promise<void> {
+    // Check if new order is active before allowing cart clearing
+    if (!this.isNewOrderActive()) {
+      console.log('❌ Clear cart blocked: New order must be initiated first');
+      return;
+    }
+
     const confirmed = await this.showConfirmationDialog({
       title: 'Clear Cart',
       message: 'Are you sure you want to clear the cart? All items will be removed.',
@@ -1503,11 +2075,65 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     }
   }
 
+  // Reprint receipt for already completed order
+  async reprintCompletedOrderReceipt(): Promise<void> {
+    try {
+      console.log('🖨️ Reprinting receipt for completed order...');
+      
+      // Prepare receipt data from current cart and order info
+      const receiptData = await this.prepareReceiptData('completed-order-' + Date.now());
+      
+      // Update receipt data with completed order info
+      const updatedReceiptData = { 
+        ...receiptData, 
+        invoiceNumber: this.nextInvoiceNumber(),
+        orderId: 'completed-' + this.nextInvoiceNumber()
+      };
+      
+      // Print directly using the new direct print method
+      const printResult = await this.printService.printReceiptDirect(updatedReceiptData);
+      
+      if (printResult.success) {
+        console.log(`✅ Receipt reprinted successfully via ${printResult.method}`);
+        
+        // Show success message
+        await this.showConfirmationDialog({
+          title: 'Receipt Reprinted',
+          message: `Receipt reprinted successfully via ${printResult.method} printer`,
+          confirmText: 'OK',
+          cancelText: '',
+          type: 'info'
+        });
+      } else {
+        throw new Error(printResult.message);
+      }
+      
+    } catch (error) {
+      console.error('❌ Error reprinting receipt:', error);
+      
+      // Show error dialog
+      await this.showConfirmationDialog({
+        title: 'Reprint Failed',
+        message: 'Failed to reprint receipt. Please try again.',
+        confirmText: 'OK',
+        cancelText: '',
+        type: 'warning'
+      });
+    }
+  }
+
   async processOrder(): Promise<void> {
     try {
       console.log('🎯 Complete Order clicked...');
       
-      // Validate cart has items
+      // Check if order is already completed - if so, just reprint receipt
+      if (this.isOrderCompleted()) {
+        console.log('🖨️ Order already completed, reprinting receipt...');
+        await this.reprintCompletedOrderReceipt();
+        return;
+      }
+      
+      // Validate cart has items for new orders
       if (this.cartItems().length === 0) {
         console.warn('⚠️ Cannot process order: Cart is empty');
         return;
@@ -1665,13 +2291,30 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
         invoiceNumber: receiptData.invoiceNumber
       });
 
-      // 🔥 ENHANCED: Use smart print - auto-connects if needed, prints directly
-      console.log('🖨️ Using smart print (auto-detect and connect)...');
-      await this.printService.printReceiptSmart(receiptData);
-      console.log(`✅ Receipt printed successfully for order:`, receiptData.orderId);
+      // 🎯 NEW: Use direct hardware print - bypasses browser dialog when hardware is connected
+      console.log('🎯 Checking for hardware printers and printing directly...');
+      const printResult = await this.printService.printReceiptDirect(receiptData);
       
-      // Close the modal after successful print
-      this.closeReceiptModal();
+      if (printResult.success) {
+        console.log(`✅ Receipt printed successfully via ${printResult.method}:`, receiptData.orderId);
+        console.log(`📄 Print details: ${printResult.message}`);
+        
+        // Show success message to user
+        if (printResult.method !== 'Browser') {
+          await this.showConfirmationDialog({
+            title: 'Print Successful',
+            message: `Receipt printed successfully via ${printResult.method} printer`,
+            confirmText: 'OK',
+            cancelText: '',
+            type: 'info'
+          });
+        }
+        
+        // Close the modal after successful print
+        this.closeReceiptModal();
+      } else {
+        throw new Error(printResult.message);
+      }
       
     } catch (error) {
       console.error('Error during print process:', error);
@@ -1944,6 +2587,36 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
         return '#7c3aed'; // Purple
       default:
         return '#6b7280'; // Gray
+    }
+  }
+
+  // 🔍 DEBUG: Manual product refresh for debugging
+  async debugRefreshProducts(): Promise<void> {
+    console.log('🔍 DEBUG: Manual product refresh triggered');
+    const storeId = this.selectedStoreId();
+    const storeInfo = this.currentStoreInfo();
+    
+    console.log('🔍 DEBUG: Current state before refresh:', {
+      selectedStoreId: storeId,
+      storeInfo: storeInfo,
+      productsCount: this.products().length,
+      filteredProductsCount: this.filteredProducts().length
+    });
+    
+    if (storeInfo?.companyId && storeId) {
+      console.log('🔍 DEBUG: Reloading products...');
+      await this.productService.loadProductsByCompanyAndStore(storeInfo.companyId, storeId);
+      
+      // Wait a moment for signals to update
+      setTimeout(() => {
+        console.log('🔍 DEBUG: After refresh:', {
+          productsCount: this.products().length,
+          filteredProductsCount: this.filteredProducts().length,
+          sampleProducts: this.products().slice(0, 3).map(p => ({ name: p.productName, storeId: p.storeId }))
+        });
+      }, 200);
+    } else {
+      console.log('🔍 DEBUG: Cannot refresh - missing store info');
     }
   }
 

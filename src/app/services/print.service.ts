@@ -20,6 +20,65 @@ export class PrintService {
   constructor() { }
 
   /**
+   * 🎯 DIRECT HARDWARE PRINT: Bypasses browser dialog when hardware printers are available
+   * This method checks for connected hardware first and prints directly if found
+   */
+  async printReceiptDirect(receiptData: any): Promise<{ success: boolean; method: string; message: string }> {
+    try {
+      console.log('🎯 Starting direct hardware print...');
+      
+      // Check for available hardware printers
+      const hardwareCheck = await this.isHardwarePrinterAvailable();
+      
+      if (hardwareCheck.hasHardware) {
+        console.log(`🖨️ Hardware printer detected (${hardwareCheck.type}), printing directly...`);
+        
+        try {
+          // Print using the smart method (will use hardware automatically)
+          await this.printReceiptSmart(receiptData);
+          
+          return {
+            success: true,
+            method: hardwareCheck.type,
+            message: `Receipt printed successfully via ${hardwareCheck.type} printer`
+          };
+          
+        } catch (hardwareError: any) {
+          console.log(`❌ ${hardwareCheck.type} printing failed:`, hardwareError.message);
+          
+          // If hardware print fails, fall back to browser print
+          console.log('🔄 Hardware failed, falling back to browser print...');
+          this.printBrowserReceipt(receiptData);
+          
+          return {
+            success: true,
+            method: 'Browser',
+            message: `${hardwareCheck.type} printer failed, used browser print instead`
+          };
+        }
+      } else {
+        // No hardware available, use browser print directly
+        console.log('🖨️ No hardware printers detected, using browser print...');
+        this.printBrowserReceipt(receiptData);
+        
+        return {
+          success: true,
+          method: 'Browser',
+          message: 'No hardware printers found, used browser print'
+        };
+      }
+      
+    } catch (error: any) {
+      console.error('❌ Direct print failed:', error);
+      return {
+        success: false,
+        method: 'Failed',
+        message: error.message || 'Print operation failed'
+      };
+    }
+  }
+
+  /**
    * 🚀 SMART PRINT: Auto-detects printer type and connection method
    * Priority: 1) USB/Cable printers (Web Serial) 2) Bluetooth 3) Browser print fallback
    */
@@ -123,6 +182,65 @@ export class PrintService {
         throw error;
       }
     }
+  }
+
+  /**
+   * 🔍 Check if hardware printers (USB or Bluetooth) are connected and ready
+   */
+  async isHardwarePrinterAvailable(): Promise<{ hasHardware: boolean; type: string; details: any }> {
+    let result = { hasHardware: false, type: 'none', details: {} };
+    
+    // Check USB printers first (highest priority)
+    if ('serial' in navigator) {
+      try {
+        const ports = await (navigator as any).serial.getPorts();
+        if (ports.length > 0) {
+          // Check if any port is a connected thermal printer
+          for (const port of ports) {
+            if (port.readable && !port.readable.locked) {
+              result = { 
+                hasHardware: true, 
+                type: 'USB', 
+                details: { 
+                  portsAvailable: ports.length,
+                  connected: true,
+                  ready: true
+                }
+              };
+              console.log('🔌 USB thermal printer detected and ready');
+              break;
+            }
+          }
+        }
+      } catch (error) {
+        console.log('🔍 USB printer check failed:', error);
+      }
+    }
+    
+    // Check Bluetooth printers if no USB found
+    if (!result.hasHardware) {
+      const bluetoothResult = await this.checkBluetoothPrintersAvailable();
+      if (bluetoothResult) {
+        // Check if we're already connected to a Bluetooth printer
+        const isBluetoothReady = this.isConnected && 
+                                 this.bluetoothDevice && 
+                                 this.bluetoothDevice.gatt?.connected;
+        
+        result = { 
+          hasHardware: true, 
+          type: 'Bluetooth', 
+          details: { 
+            devicesAvailable: true,
+            connected: isBluetoothReady,
+            ready: isBluetoothReady
+          }
+        };
+        console.log('📱 Bluetooth thermal printer detected', isBluetoothReady ? '(connected)' : '(available)');
+      }
+    }
+    
+    console.log('🔍 Hardware printer availability check:', result);
+    return result;
   }
 
   /**
