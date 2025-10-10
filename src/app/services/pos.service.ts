@@ -161,7 +161,7 @@ export class PosService {
   }
 
   // Store Management
-  async setSelectedStore(storeId: string): Promise<void> {
+  async setSelectedStore(storeId: string, options?: { preserveCart?: boolean }): Promise<void> {
     this.selectedStoreIdSignal.set(storeId);
     
     // Save to IndexedDB for persistence
@@ -180,7 +180,12 @@ export class PosService {
       console.error('⚠️ Failed to save store selection to IndexedDB:', error);
     }
     
-    this.clearCart(); // Clear cart when switching stores
+    // Only clear cart if explicitly requested or if cart is empty
+    if (!options?.preserveCart && this.cartItems().length === 0) {
+      this.clearCart();
+    } else if (!options?.preserveCart) {
+      console.log('🛒 Cart preserved during store selection - cart has items');
+    }
   }
 
   // Load selected store from IndexedDB on service initialization
@@ -241,6 +246,8 @@ export class PosService {
         companyId: company.id!,
         storeId: storeId,
         assignedCashierId: user.uid,
+        assignedCashierEmail: user.email || 'Unknown Cashier',
+        assignedCashierName: user.displayName || user.email || 'Unknown Cashier',
         status: 'paid',
         
         // Customer Information
@@ -370,6 +377,8 @@ export class PosService {
         companyId: company.id || '',
         storeId: storeId,
         assignedCashierId: user.uid,
+        assignedCashierEmail: user.email || 'Unknown Cashier',
+        assignedCashierName: user.displayName || user.email || 'Unknown Cashier',
         
         // Payment type determination
         cashSale: payments.paymentDescription.toLowerCase().includes('cash') || !payments.paymentDescription,
@@ -486,6 +495,8 @@ export class PosService {
         companyId: company.id || '',
         storeId: storeId,
         assignedCashierId: user.uid,
+        assignedCashierEmail: user.email || 'Unknown Cashier',
+        assignedCashierName: user.displayName || user.email || 'Unknown Cashier',
         
         // Customer Information
         cashSale: !customerInfo?.soldTo,
