@@ -1891,8 +1891,8 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     console.log('🎯 selectStore called with storeId:', storeId);
     console.log('🏪 Available stores:', this.availableStores().map(s => ({ id: s.id, name: s.storeName, companyId: s.companyId })));
     
-    // Set the selected store first
-    await this.posService.setSelectedStore(storeId);
+    // Set the selected store first - preserve cart to prevent accidental clearing
+    await this.posService.setSelectedStore(storeId, { preserveCart: true });
     
     // PRIORITY: Get companyId from IndexedDB first, then fallback to database
     let companyId: string | undefined;
