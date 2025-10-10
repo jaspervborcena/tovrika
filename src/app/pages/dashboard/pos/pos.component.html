@@ -635,7 +635,7 @@
             <div class="action-buttons">
               <button 
                 (click)="clearCart()" 
-                [disabled]="cartItems().length === 0"
+                [disabled]="cartItems().length === 0 || !isNewOrderActive()"
                 class="btn btn-secondary">
                 Clear Cart
               </button>

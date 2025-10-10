@@ -37,13 +37,13 @@
           <tr>
             <td class="invoice-label">Date & Time:</td>
             <td class="invoice-input">
-              <input type="datetime-local" [(ngModel)]="customerInfo.datetime" class="invoice-datetime-input">
+              <input type="datetime-local" [(ngModel)]="datetime" class="invoice-datetime-input">
             </td>
           </tr>
           <tr>
             <td class="invoice-label">Invoice Number:</td>
             <td class="invoice-input">
-              <input type="text" [(ngModel)]="customerInfo.invoiceNumber" placeholder="Auto-generated" readonly class="invoice-number-input">
+              <input type="text" [(ngModel)]="invoiceNumber" placeholder="Auto-generated" readonly class="invoice-number-input">
             </td>
           </tr>
         </table>
@@ -164,7 +164,9 @@
         <div 
           *ngFor="let product of filteredProducts()"
           (click)="addToCart(product)"
-          class="product-row">
+          class="product-row"
+          [class.disabled]="isOrderCompleted()"
+          [class.out-of-stock]="product.totalStock <= 0">
           <img [src]="product.imageUrl || '/assets/placeholder.png'" class="product-thumb">
           <div class="product-details">
             <div class="product-name">{{ product.productName }}</div>
@@ -175,6 +177,9 @@
             <div class="product-price">₱{{ (product.sellingPrice || 0).toFixed(2) }}</div>
             <div *ngIf="product.hasDiscount" class="discount-tag">{{ product.discountValue }}% OFF</div>
           </div>
+          <div *ngIf="isOrderCompleted()" class="order-completed-overlay">
+            <span>Order Completed</span>
+          </div>
         </div>
       </div>
 
@@ -183,13 +188,18 @@
         <div 
           *ngFor="let product of filteredProducts()"
           (click)="addToCart(product)"
-          class="product-card">
+          class="product-card"
+          [class.disabled]="isOrderCompleted()"
+          [class.out-of-stock]="product.totalStock <= 0">
           <img [src]="product.imageUrl || '/assets/placeholder.png'" class="product-image">
           <div class="product-card-info">
             <div class="product-name">{{ product.productName }}</div>
             <div class="product-price">₱{{ (product.sellingPrice || 0).toFixed(2) }}</div>
             <div class="product-stock">Stock: {{ product.totalStock }}</div>
             <div *ngIf="product.hasDiscount" class="promo-badge">PROMO</div>
+          </div>
+          <div *ngIf="isOrderCompleted()" class="order-completed-overlay">
+            <span>Order Completed</span>
           </div>
         </div>
       </div>
@@ -201,13 +211,18 @@
           <div 
             *ngFor="let product of promoProducts()"
             (click)="addToCart(product)"
-            class="product-card promo-card">
+            class="product-card promo-card"
+            [class.disabled]="isOrderCompleted()"
+            [class.out-of-stock]="product.totalStock <= 0">
             <div class="promo-flag">PROMO</div>
             <img [src]="product.imageUrl || '/assets/placeholder.png'" class="product-image">
             <div class="product-card-info">
               <div class="product-name">{{ product.productName }}</div>
               <div class="product-price">₱{{ (product.sellingPrice || 0).toFixed(2) }}</div>
               <div class="discount-info">{{ product.discountValue }}% OFF</div>
+            </div>
+            <div *ngIf="isOrderCompleted()" class="order-completed-overlay">
+              <span>Order Completed</span>
             </div>
           </div>
         </div>
@@ -220,7 +235,9 @@
           <div 
             *ngFor="let product of bestSellerProducts(); let i = index"
             (click)="addToCart(product)"
-            class="product-row bestseller-row">
+            class="product-row bestseller-row"
+            [class.disabled]="isOrderCompleted()"
+            [class.out-of-stock]="product.totalStock <= 0">
             <div class="rank-badge">{{ i + 1 }}</div>
             <img [src]="product.imageUrl || '/assets/placeholder.png'" class="product-thumb">
             <div class="product-details">
@@ -229,6 +246,9 @@
             </div>
             <div class="product-pricing">
               <div class="product-price">₱{{ (product.sellingPrice || 0).toFixed(2) }}</div>
+            </div>
+            <div *ngIf="isOrderCompleted()" class="order-completed-overlay">
+              <span>Order Completed</span>
             </div>
           </div>
         </div>
@@ -267,12 +287,18 @@
 
 </div>
 
-<!-- Floating Action Button for Cart -->
-<app-cart-fab (cartOpened)="showCartModal()"></app-cart-fab>
+<!-- Floating Action Buttons -->
+<div class="floating-actions">
+  <button class="fab new-order-fab" (click)="startNewOrderDirect()" title="New Order">
+    🆕
+  </button>
+  <app-cart-fab (cartOpened)="showCartModal()"></app-cart-fab>
+</div>
 
 <!-- Mobile Cart Modal -->
 <app-mobile-cart-modal 
   #cartModal
+  [isOrderCompleted]="isOrderCompleted()"
   (modalClosed)="hideCartModal()"
   (orderProcessed)="processOrder()">
 </app-mobile-cart-modal>
@@ -320,6 +346,7 @@
       
       <div class="modal-actions">
         <button (click)="closeOrder()" class="mobile-btn secondary-btn">Close</button>
+        <button (click)="openOrderReceipt(selectedOrder())" class="mobile-btn info-btn">View Receipt</button>
         <button *ngIf="selectedOrder()?.status !== 'Cancelled'" 
                 (click)="updateOrderStatus(selectedOrder()?.id, 'Cancelled')" 
                 class="mobile-btn warning-btn">Cancel Order</button>
@@ -338,3 +365,32 @@
   (closeModal)="closeReceiptModal()"
   (printReceipt)="printReceipt()">
 </app-receipt>
+
+
+
+<!-- Confirmation Dialog -->
+<div *ngIf="isConfirmationDialogVisible()" class="modal-overlay">
+  <div class="confirmation-modal" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h3>{{ confirmationDialogData()?.title }}</h3>
+    </div>
+    
+    <div class="modal-body">
+      <p>{{ confirmationDialogData()?.message }}</p>
+    </div>
+    
+    <div class="modal-footer">
+      <button 
+        *ngIf="confirmationDialogData()?.cancelText"
+        (click)="confirmationDialogData()?.onCancel?.()" 
+        class="mobile-btn secondary-btn">
+        {{ confirmationDialogData()?.cancelText }}
+      </button>
+      <button 
+        (click)="confirmationDialogData()?.onConfirm?.()" 
+        [class]="'mobile-btn ' + (confirmationDialogData()?.type === 'danger' ? 'danger-btn' : confirmationDialogData()?.type === 'warning' ? 'warning-btn' : 'primary-btn')">
+        {{ confirmationDialogData()?.confirmText }}
+      </button>
+    </div>
+  </div>
+</div>

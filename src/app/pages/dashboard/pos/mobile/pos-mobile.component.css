@@ -553,6 +553,18 @@ input, textarea {
   box-shadow: 0 3px 8px rgba(0, 0, 0, 0.1);
 }
 
+.product-row.disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  position: relative;
+}
+
+.product-row.disabled:hover {
+  background: #f8f9fa;
+  transform: none;
+  box-shadow: none;
+}
+
 .product-thumb {
   width: 50px;
   height: 50px;
@@ -622,6 +634,17 @@ input, textarea {
   background: #e9ecef;
   transform: translateY(-2px);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.product-card.disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.product-card.disabled:hover {
+  background: #f8f9fa;
+  transform: none;
+  box-shadow: none;
 }
 
 .product-image {
@@ -1298,4 +1321,554 @@ input[type="datetime-local"]:focus {
   .products-grid-mobile {
     grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
   }
+}
+
+/* Workflow Controls Styling */
+.workflow-row {
+  background: linear-gradient(135deg, #28a745, #20c997);
+  color: white;
+}
+
+.workflow-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px;
+}
+
+.workflow-btn {
+  flex: 1;
+  min-width: 120px;
+  padding: 12px 16px;
+  border: none;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: center;
+  color: white;
+}
+
+.new-order-btn {
+  background: linear-gradient(135deg, #007bff, #0056b3);
+}
+
+.new-order-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, #0056b3, #004085);
+  transform: translateY(-1px);
+}
+
+.clear-cart-btn {
+  background: linear-gradient(135deg, #6c757d, #5a6268);
+}
+
+.clear-cart-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, #5a6268, #495057);
+  transform: translateY(-1px);
+}
+
+.complete-order-btn {
+  background: linear-gradient(135deg, #28a745, #20c997);
+}
+
+.complete-order-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, #20c997, #17a2b8);
+  transform: translateY(-1px);
+}
+
+.complete-order-btn.btn-reprint {
+  background: linear-gradient(135deg, #17a2b8, #138496);
+}
+
+.workflow-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.order-status-indicator {
+  padding: 8px 12px;
+  margin: 8px 12px 0;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.order-status-indicator {
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+}
+
+.order-status-indicator.new-order {
+  background: rgba(0, 123, 255, 0.2);
+  color: #007bff;
+}
+
+/* Payment Modal Styling */
+.payment-modal {
+  background: white;
+  border-radius: 12px;
+  width: 90%;
+  max-width: 400px;
+  max-height: 90vh;
+  overflow: auto;
+}
+
+.payment-summary {
+  background: #f8f9fa;
+  padding: 16px;
+  border-radius: 8px;
+  margin-bottom: 16px;
+}
+
+.summary-row {
+  font-size: 18px;
+  color: #28a745;
+}
+
+.payment-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.form-group label {
+  font-weight: 600;
+  color: #495057;
+}
+
+.payment-input {
+  padding: 12px;
+  border: 2px solid #dee2e6;
+  border-radius: 8px;
+  font-size: 16px;
+}
+
+.payment-input:focus {
+  outline: none;
+  border-color: #007bff;
+  box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.1);
+}
+
+.change-display {
+  background: #e8f5e8;
+  padding: 12px;
+  border-radius: 8px;
+  border-left: 4px solid #28a745;
+}
+
+.change-row {
+  font-size: 16px;
+  color: #28a745;
+}
+
+/* Confirmation Modal Styling */
+.confirmation-modal {
+  background: white;
+  border-radius: 16px;
+  width: 90%;
+  max-width: 420px;
+  box-shadow: 0 20px 25px rgba(0, 0, 0, 0.15), 0 10px 10px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+  animation: modalSlideIn 0.3s ease-out;
+}
+
+@keyframes modalSlideIn {
+  from {
+    opacity: 0;
+    transform: scale(0.9) translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.confirmation-modal .modal-header {
+  background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+  padding: 24px;
+  border-bottom: 1px solid #dee2e6;
+}
+
+.confirmation-modal .modal-header h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #2c3e50;
+  text-align: center;
+}
+
+.confirmation-modal .modal-body {
+  padding: 24px;
+}
+
+.confirmation-modal .modal-body p {
+  font-size: 15px;
+  line-height: 1.6;
+  color: #495057;
+  text-align: center;
+  margin: 0;
+}
+
+.confirmation-modal .modal-footer {
+  padding: 20px 24px 24px;
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+}
+
+/* Button Styling */
+.mobile-btn {
+  padding: 14px 24px;
+  border: none;
+  border-radius: 10px;
+  font-weight: 600;
+  font-size: 15px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: center;
+  min-width: 110px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.mobile-btn.primary-btn {
+  background: linear-gradient(135deg, #28a745, #20c997);
+  color: white;
+}
+
+.mobile-btn.primary-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(40, 167, 69, 0.3);
+}
+
+.mobile-btn.secondary-btn {
+  background: #6c757d;
+  color: white;
+}
+
+.mobile-btn.secondary-btn:hover {
+  background: #5a6268;
+  transform: translateY(-1px);
+}
+
+.mobile-btn.warning-btn {
+  background: linear-gradient(135deg, #ffc107, #e0a800);
+  color: #212529;
+}
+
+.mobile-btn.danger-btn {
+  background: linear-gradient(135deg, #dc3545, #c82333);
+  color: white;
+}
+
+.mobile-btn.info-btn {
+  background: linear-gradient(135deg, #17a2b8, #138496);
+  color: white;
+}
+
+.mobile-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.mobile-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* Floating Action Buttons */
+.floating-actions {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  z-index: 100;
+}
+
+.fab {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  border: none;
+  cursor: pointer;
+  font-size: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  transition: all 0.2s ease;
+}
+
+.new-order-fab {
+  background: linear-gradient(135deg, #007bff, #0056b3);
+  color: white;
+}
+
+.new-order-fab:hover {
+  background: linear-gradient(135deg, #0056b3, #004085);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(0, 123, 255, 0.3);
+}
+
+/* Enhanced Payment Modal */
+.payment-modal-mobile {
+  background: white;
+  border-radius: 16px;
+  width: 95vw;
+  max-width: 450px;
+  max-height: 85vh;
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  display: flex;
+  flex-direction: column;
+  z-index: 1000;
+}
+
+.payment-modal-header {
+  background: linear-gradient(135deg, #007bff, #0056b3);
+  color: white;
+  padding: 20px;
+  border-radius: 16px 16px 0 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.payment-modal-header h3 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.modal-close-btn {
+  background: rgba(255, 255, 255, 0.2);
+  border: none;
+  color: white;
+  font-size: 24px;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s ease;
+}
+
+.modal-close-btn:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.payment-modal-body {
+  padding: 24px;
+  flex: 1;
+  overflow-y: auto;
+}
+
+.payment-summary-mobile {
+  background: linear-gradient(135deg, #e8f5e8, #f0f9f0);
+  padding: 20px;
+  border-radius: 12px;
+  margin-bottom: 24px;
+  border-left: 4px solid #28a745;
+}
+
+.total-amount-display {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.total-label {
+  font-size: 16px;
+  font-weight: 600;
+  color: #495057;
+}
+
+.total-value {
+  font-size: 24px;
+  font-weight: 700;
+  color: #28a745;
+}
+
+.payment-form-mobile {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.payment-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.payment-field label {
+  font-weight: 600;
+  color: #374151;
+  font-size: 14px;
+}
+
+.payment-input-mobile {
+  padding: 16px;
+  border: 2px solid #e5e7eb;
+  border-radius: 12px;
+  font-size: 18px;
+  font-weight: 600;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.payment-input-mobile:focus {
+  outline: none;
+  border-color: #007bff;
+  box-shadow: 0 0 0 4px rgba(0, 123, 255, 0.1);
+}
+
+.payment-textarea-mobile {
+  padding: 12px 16px;
+  border: 2px solid #e5e7eb;
+  border-radius: 12px;
+  font-size: 16px;
+  resize: vertical;
+  min-height: 60px;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.payment-textarea-mobile:focus {
+  outline: none;
+  border-color: #007bff;
+  box-shadow: 0 0 0 4px rgba(0, 123, 255, 0.1);
+}
+
+.change-display-mobile {
+  background: linear-gradient(135deg, #e8f5e8, #f0f9f0);
+  padding: 16px 20px;
+  border-radius: 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-left: 4px solid #28a745;
+}
+
+.change-label {
+  font-size: 16px;
+  font-weight: 600;
+  color: #495057;
+}
+
+.change-amount {
+  font-size: 20px;
+  font-weight: 700;
+  color: #28a745;
+}
+
+.change-amount.negative {
+  color: #dc3545;
+}
+
+.payment-modal-footer {
+  padding: 20px 24px;
+  border-top: 1px solid #e5e7eb;
+  display: flex;
+  gap: 12px;
+  background: #f9fafb;
+  border-radius: 0 0 16px 16px;
+}
+
+.payment-btn {
+  flex: 1;
+  padding: 16px 24px;
+  border: none;
+  border-radius: 12px;
+  font-weight: 700;
+  font-size: 16px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: center;
+}
+
+.cancel-btn {
+  background: #6c757d;
+  color: white;
+}
+
+.cancel-btn:hover {
+  background: #5a6268;
+  transform: translateY(-1px);
+}
+
+.process-btn {
+  background: linear-gradient(135deg, #28a745, #20c997);
+  color: white;
+}
+
+.process-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, #20c997, #17a2b8);
+  transform: translateY(-1px);
+}
+
+.process-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* Make Receipt Modal Scrollable */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  z-index: 999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+/* Ensure receipt component is scrollable */
+app-receipt {
+  max-height: 90vh;
+  overflow: hidden;
+}
+
+/* Order Completed Overlay */
+.order-completed-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  z-index: 2;
+}
+
+.order-completed-overlay span {
+  color: white;
+  font-weight: 600;
+  font-size: 12px;
+  text-align: center;
+  padding: 4px 8px;
+  background: rgba(220, 38, 38, 0.9);
+  border-radius: 4px;
 }

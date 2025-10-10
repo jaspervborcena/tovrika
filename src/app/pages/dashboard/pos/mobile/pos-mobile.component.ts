@@ -1,4 +1,4 @@
-import { Component, OnInit, AfterViewInit, OnDestroy, computed, signal, inject, ViewChild } from '@angular/core';
+import { Component, OnInit, AfterViewInit, OnDestroy, computed, signal, inject, ViewChild, HostListener } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterModule, Router, NavigationEnd } from '@angular/router';
@@ -7,6 +7,7 @@ import { HeaderComponent } from '../../../../shared/components/header/header.com
 import { ReceiptComponent } from '../receipt/receipt.component';
 import { CartFabComponent } from '../../../../shared/components/cart-fab/cart-fab.component';
 import { MobileCartModalComponent } from '../../../../shared/components/mobile-cart-modal/mobile-cart-modal.component';
+import { ConfirmationDialogComponent } from '../../../../shared/components/confirmation-dialog/confirmation-dialog.component';
 import { ProductService } from '../../../../services/product.service';
 import { PosService } from '../../../../services/pos.service';
 import { PosSharedService } from '../../../../services/pos-shared.service';
@@ -14,6 +15,7 @@ import { PrintService } from '../../../../services/print.service';
 import { TransactionService } from '../../../../services/transaction.service';
 import { AuthService } from '../../../../services/auth.service';
 import { CompanyService } from '../../../../services/company.service';
+import { CustomerService } from '../../../../services/customer.service';
 import { ToastService } from '../../../../shared/services/toast.service';
 import { NetworkService } from '../../../../core/services/network.service';
 import { IndexedDBService } from '../../../../core/services/indexeddb.service';
@@ -42,6 +44,7 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
   private transactionService = inject(TransactionService);
   private authService = inject(AuthService);
   private companyService = inject(CompanyService);
+  private customerService = inject(CustomerService);
   private storeService = inject(StoreService);
   private orderService = inject(OrderService);
   private userRoleService = inject(UserRoleService);
@@ -102,6 +105,19 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
     this.availableStores().find(s => s.id === this.selectedStoreId())
   );
 
+  // Invoice preview
+  readonly nextInvoiceNumber = signal<string>('Loading...');
+  readonly showOfflineInvoiceDialog = signal<boolean>(false);
+
+  // Store availability status
+  readonly hasStoreLoadingError = computed(() => {
+    const stores = this.availableStores();
+    const user = this.authService.getCurrentUser();
+    return stores.length === 0 && !!user?.uid;
+  });
+
+
+
   readonly filteredProducts = computed(() => {
     let filtered = this.products();
 
@@ -160,14 +176,17 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
   // Template properties
   currentDate = new Date();
   
-  // Customer information for order
+  // Customer information for order (only customer-specific fields)
   customerInfo = {
     soldTo: '',
     tin: '',
     businessAddress: '',
-    invoiceNumber: 'INV-0000-000000',
-    datetime: new Date().toISOString().slice(0, 16) // Format for datetime-local input
+    customerId: '' // NEW: for existing/new customers
   };
+
+  // Order-level information (moved from customerInfo)
+  invoiceNumber: string = 'INV-0000-000000';
+  datetime: string = new Date().toISOString().slice(0, 16); // Format for datetime-local input
 
   // UI State for collapsible panels
   private isSoldToCollapsedSignal = signal<boolean>(true);
@@ -201,6 +220,31 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
   private receiptDataSignal = signal<any>(null);
   readonly isReceiptModalVisible = computed(() => this.isReceiptModalVisibleSignal());
   readonly receiptData = computed(() => this.receiptDataSignal());
+
+  // Discount modal state
+  private isDiscountModalVisibleSignal = signal<boolean>(false);
+  readonly isDiscountModalVisible = computed(() => this.isDiscountModalVisibleSignal());
+  readonly orderDiscount = computed(() => this.posService.orderDiscount());
+
+  // Confirmation dialog state
+  private isConfirmationDialogVisibleSignal = signal<boolean>(false);
+  private confirmationDialogDataSignal = signal<any>(null);
+  readonly isConfirmationDialogVisible = computed(() => this.isConfirmationDialogVisibleSignal());
+  readonly confirmationDialogData = computed(() => this.confirmationDialogDataSignal());
+
+  // Sales type state - now supports both cash and charge
+  private salesTypeCashSignal = signal<boolean>(true);
+  private salesTypeChargeSignal = signal<boolean>(false);
+  readonly isCashSale = computed(() => this.salesTypeCashSignal());
+  readonly isChargeSale = computed(() => this.salesTypeChargeSignal());
+
+  // Order completion state - track if order is completed to prevent cart editing
+  private isOrderCompletedSignal = signal<boolean>(false);
+  readonly isOrderCompleted = computed(() => this.isOrderCompletedSignal());
+
+  // New order state - track if new order has been started
+  private hasActiveOrderSignal = signal<boolean>(false);
+  readonly hasActiveOrder = computed(() => this.hasActiveOrderSignal());
 
   // Cart modal reference
   @ViewChild('cartModal') cartModal!: MobileCartModalComponent;
@@ -302,6 +346,699 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
     }
   }
 
+  // Refresh orders - manually triggered by user
+  async refreshOrders(): Promise<void> {
+    try {
+      console.log('🔄 Mobile Manual refresh triggered...');
+      
+      // Clear current orders first to show loading state
+      this.ordersSignal.set([]);
+      
+      // If there's a search query, search again, otherwise load recent orders
+      const searchQuery = this.orderSearchQuery().trim();
+      if (searchQuery) {
+        console.log('🔍 Mobile Refreshing search results for query:', searchQuery);
+        await this.searchOrders();
+      } else {
+        console.log('📋 Mobile Refreshing recent orders...');
+        await this.loadRecentOrders();
+      }
+      
+      console.log('✅ Mobile Manual refresh completed');
+    } catch (error) {
+      console.error('❌ Mobile Error during manual refresh:', error);
+    }
+  }
+
+  // Handle empty stores scenario with fallback recovery
+  private handleEmptyStores(): void {
+    console.log('🔧 Mobile Attempting to recover from empty stores...');
+    
+    // Debounce multiple calls to avoid infinite loops
+    if ((this as any)._emptyStoresRecoveryInProgress) {
+      console.log('🔧 Mobile Store recovery already in progress, skipping...');
+      return;
+    }
+    
+    (this as any)._emptyStoresRecoveryInProgress = true;
+    
+    // Try recovery after a short delay
+    setTimeout(async () => {
+      try {
+        console.log('🔄 Mobile Initiating store recovery process...');
+        
+        const currentUser = this.authService.getCurrentUser();
+        if (!currentUser?.uid) {
+          console.error('❌ Mobile No authenticated user for store recovery');
+          return;
+        }
+        
+        // Try IndexedDB first as most reliable source
+        const offlineUserData = await this.indexedDBService.getUserData(currentUser.uid);
+        if (offlineUserData?.permissions && offlineUserData.permissions.length > 0) {
+          console.log('💾 Mobile Found IndexedDB permissions, attempting store recovery...');
+          
+          const permission = this.getActivePermission(offlineUserData);
+          if (permission?.storeId) {
+            console.log('🔄 Mobile Reloading store from IndexedDB permission:', permission.storeId);
+            await this.storeService.loadStores([permission.storeId]);
+            
+            // Verify recovery worked
+            setTimeout(() => {
+              const recoveredStores = this.storeService.getStores();
+              console.log('✅ Mobile Store recovery result:', recoveredStores.length, 'stores recovered');
+              (this as any)._emptyStoresRecoveryInProgress = false;
+            }, 500);
+            return;
+          }
+        }
+        
+        // Fallback to user roles loading
+        console.log('🗄️ Mobile Fallback: Attempting user roles loading...');
+        await this.userRoleService.loadUserRoles();
+        const userRole = this.userRoleService.getUserRoleByUserId(currentUser.uid);
+        
+        if (userRole?.storeId) {
+          console.log('🔄 Mobile Reloading store from user role:', userRole.storeId);
+          await this.storeService.loadStores([userRole.storeId]);
+        } else if (userRole?.companyId) {
+          console.log('🔄 Mobile Reloading all company stores from user role:', userRole.companyId);
+          await this.storeService.loadStoresByCompany(userRole.companyId);
+        }
+        
+      } catch (error) {
+        console.error('❌ Mobile Store recovery failed:', error);
+      } finally {
+        (this as any)._emptyStoresRecoveryInProgress = false;
+      }
+    }, 1000); // 1 second delay to avoid rapid retries
+  }
+
+  // Manual refresh stores - for user-triggered recovery
+  async refreshStores(): Promise<void> {
+    try {
+      console.log('🔄 Mobile Manual store refresh initiated...');
+      
+      const currentUser = this.authService.getCurrentUser();
+      if (!currentUser?.uid) {
+        console.error('❌ Mobile No authenticated user for manual store refresh');
+        return;
+      }
+      
+      // Show loading state
+      console.log('⏳ Mobile Refreshing stores...');
+      
+      // Try multiple recovery methods
+      let recovered = false;
+      
+      // Method 1: IndexedDB
+      try {
+        const offlineUserData = await this.indexedDBService.getUserData(currentUser.uid);
+        if (offlineUserData?.permissions && offlineUserData.permissions.length > 0) {
+          const permission = this.getActivePermission(offlineUserData);
+          if (permission?.storeId) {
+            await this.storeService.loadStores([permission.storeId]);
+            recovered = true;
+            console.log('✅ Mobile Stores recovered via IndexedDB method');
+          }
+        }
+      } catch (error) {
+        console.log('⚠️ Mobile IndexedDB recovery method failed:', error);
+      }
+      
+      // Method 2: User roles
+      if (!recovered) {
+        try {
+          await this.userRoleService.loadUserRoles();
+          const userRole = this.userRoleService.getUserRoleByUserId(currentUser.uid);
+          
+          if (userRole?.storeId) {
+            await this.storeService.loadStores([userRole.storeId]);
+            recovered = true;
+            console.log('✅ Mobile Stores recovered via user roles method');
+          } else if (userRole?.companyId) {
+            await this.storeService.loadStoresByCompany(userRole.companyId);
+            recovered = true;
+            console.log('✅ Mobile Stores recovered via company loading method');
+          }
+        } catch (error) {
+          console.log('⚠️ Mobile User roles recovery method failed:', error);
+        }
+      }
+      
+      // Verify recovery
+      setTimeout(() => {
+        const stores = this.availableStores();
+        if (stores.length > 0) {
+          console.log('🎉 Mobile Store refresh successful! Recovered', stores.length, 'stores');
+        } else {
+          console.error('❌ Mobile Store refresh failed - still no stores available');
+        }
+      }, 500);
+      
+    } catch (error) {
+      console.error('❌ Mobile Manual store refresh failed:', error);
+    }
+  }
+
+  // Debug method to create test orders
+  async createTestOrder(): Promise<void> {
+    try {
+      console.log('🎯 Mobile Debug button clicked - creating test order...');
+      
+      // Check authentication first
+      const currentUser = this.authService.getCurrentUser();
+      console.log('👤 Mobile Current user:', currentUser);
+      
+      const storeInfo = this.currentStoreInfo();
+      const companyId = storeInfo?.companyId;
+      const storeId = this.selectedStoreId();
+      
+      console.log('🏪 Mobile Debug - Store info check:', { 
+        storeInfo, 
+        companyId, 
+        storeId,
+        availableStores: this.availableStores(),
+        selectedStoreId: this.selectedStoreId()
+      });
+      
+      if (!companyId || !storeId) {
+        console.error('❌ Mobile Missing company or store info for test order creation');
+        console.error('Mobile CompanyId:', companyId, 'StoreId:', storeId);
+        console.error('Mobile Store Info:', JSON.stringify(storeInfo, null, 2));
+        return;
+      }
+      
+      console.log('🧪 Mobile Creating test order with valid IDs...');
+      await this.orderService.createTestOrder(companyId, storeId);
+      
+      console.log('🔄 Mobile Refreshing orders after test order creation...');
+      // Refresh orders after creating test order
+      await this.loadRecentOrders();
+    } catch (error) {
+      console.error('❌ Mobile Error in createTestOrder component method:', error);
+    }
+  }
+
+  // Process individual item actions (return, damage, refund, cancel)
+  async processItemAction(orderId: string, itemIndex: number, action: string, item: any): Promise<void> {
+    try {
+      console.log(`Mobile Processing ${action} for item:`, { orderId, itemIndex, action, item });
+      
+      const confirmed = await this.showConfirmationDialog({
+        title: `${action.charAt(0).toUpperCase() + action.slice(1)} Item`,
+        message: `Are you sure you want to ${action} "${item.name || item.productName}"?`,
+        confirmText: `Yes, ${action.charAt(0).toUpperCase() + action.slice(1)}`,
+        cancelText: 'Cancel',
+        type: action === 'cancel' || action === 'damage' ? 'warning' : 'info'
+      });
+
+      if (confirmed) {
+        // Here you can implement the specific logic for each action
+        switch (action) {
+          case 'return':
+            console.log('Mobile Processing return for item:', item);
+            // TODO: Implement return logic
+            break;
+          case 'damage':
+            console.log('Mobile Processing damage for item:', item);
+            // TODO: Implement damage reporting logic
+            break;
+          case 'refund':
+            console.log('Mobile Processing refund for item:', item);
+            // TODO: Implement refund logic
+            break;
+          case 'cancel':
+            console.log('Mobile Processing cancellation for item:', item);
+            // TODO: Implement item cancellation logic
+            break;
+        }
+        
+        // Show success message
+        await this.showConfirmationDialog({
+          title: 'Success',
+          message: `Item ${action} has been processed successfully.`,
+          confirmText: 'OK',
+          cancelText: '',
+          type: 'info'
+        });
+        
+        // Refresh the orders list
+        await this.refreshOrders();
+      }
+    } catch (error) {
+      console.error(`Mobile Error processing ${action} for item:`, error);
+      await this.showConfirmationDialog({
+        title: 'Error',
+        message: `Failed to process ${action}. Please try again.`,
+        confirmText: 'OK',
+        cancelText: '',
+        type: 'danger'
+      });
+    }
+  }
+
+  // Open order receipt for viewing/printing
+  async openOrderReceipt(order: any): Promise<void> {
+    try {
+      console.log('Mobile Opening receipt for order:', order);
+      
+      // Convert order data to receipt format (now async for company data)
+      const receiptData = await this.convertOrderToReceiptData(order);
+      
+      // Set receipt data and show modal
+      this.receiptDataSignal.set(receiptData);
+      this.isReceiptModalVisibleSignal.set(true);
+      
+      // Close the order details modal
+      this.closeOrder();
+    } catch (error) {
+      console.error('Mobile Error opening order receipt:', error);
+    }
+  }
+
+  // Convert order data to receipt format - matches prepareReceiptData format
+  private async convertOrderToReceiptData(order: any): Promise<any> {
+    const storeInfo = this.currentStoreInfo();
+    
+    // Get company information for consistent display
+    let company = null;
+    try {
+      company = await this.companyService.getActiveCompany();
+    } catch (error) {
+      console.warn('Mobile Could not fetch company info for order receipt:', error);
+    }
+
+    // Determine customer name - consistent with prepareReceiptData
+    const customerName = order.soldTo && order.soldTo.trim() && order.soldTo !== 'Walk-in Customer' 
+      ? order.soldTo.trim() 
+      : null;
+
+    // Resolve cashier name from order data
+    let cashierName = 'Unknown Cashier';
+    
+    // Check if this order was created by the current user
+    const currentUser = this.authService.getCurrentUser();
+    const isCurrentUserOrder = currentUser && currentUser.uid === order.assignedCashierId;
+    
+    if (isCurrentUserOrder) {
+      // If current user is viewing their own order, always use their current info
+      // This handles cases where managers/higher roles are doing POS transactions
+      cashierName = currentUser.displayName || currentUser.email || 'Current User';
+    } else {
+      // For orders by other users, try to resolve the cashier name
+      // Priority 1: Use stored cashier name if available (for new orders)
+      if (order.assignedCashierName && order.assignedCashierName !== order.assignedCashierId) {
+        cashierName = order.assignedCashierName;
+      } 
+      // Priority 2: Use stored cashier email if available (for new orders)
+      else if (order.assignedCashierEmail) {
+        cashierName = order.assignedCashierEmail;
+      }
+      // Priority 3: Legacy support - try to resolve from user ID (for old orders)
+      else if (order.assignedCashierId) {
+        try {
+          // For other users, try to get user role information
+          const userRole = this.userRoleService.getUserRoleByUserId(order.assignedCashierId);
+          if (userRole?.email) {
+            cashierName = userRole.email;
+          } else {
+            // Try to get user info from IndexedDB as last resort
+            try {
+              const userData = await this.indexedDBService.getUserData(order.assignedCashierId);
+              cashierName = userData?.email || `Cashier ${order.assignedCashierId.slice(0, 8)}...`;
+            } catch {
+              cashierName = `Cashier ${order.assignedCashierId.slice(0, 8)}...`;
+            }
+          }
+        } catch (error) {
+          console.warn('Mobile Could not resolve cashier name for user ID:', order.assignedCashierId, error);
+          cashierName = `Cashier ${order.assignedCashierId?.slice(0, 8)}...`;
+        }
+      }
+    }
+
+    return {
+      orderId: order.id,
+      invoiceNumber: order.invoiceNumber,
+      receiptDate: order.date || order.createdAt,
+      storeInfo: {
+        storeName: company?.name || (storeInfo as any)?.storeName || 'Unknown Store',
+        address: company?.address || (storeInfo as any)?.address || 'Store Address',
+        phone: company?.phone || (storeInfo as any)?.phone || 'N/A', // Use company phone
+        email: company?.email || storeInfo?.email || 'N/A', // Use company email
+        tin: company?.taxId || company?.tin || (storeInfo as any)?.tinNumber || 'N/A', // Use company tax ID/TIN
+        invoiceType: (storeInfo as any)?.invoiceType || 'SALES INVOICE',
+        birPermitNo: company?.birPermitNo || (storeInfo as any)?.birPermitNo || null,
+        minNumber: (storeInfo as any)?.minNumber || null,
+        serialNumber: (storeInfo as any)?.serialNumber || null,
+        inclusiveSerialNumber: company?.inclusiveSerialNumber || (storeInfo as any)?.inclusiveSerialNumber || null
+      },
+      customerName: customerName,
+      customerAddress: customerName ? (order.businessAddress || 'N/A') : null,
+      customerTin: customerName ? (order.tin || 'N/A') : null,
+      cashier: cashierName,
+      paymentMethod: order.cashSale ? 'Cash' : 'Charge',
+      isCashSale: order.cashSale || true,
+      isChargeSale: !order.cashSale || false,
+      items: (order.items || []).map((item: any) => ({
+        productName: item.productName || item.name,
+        skuId: item.skuId || item.sku,
+        quantity: item.quantity || 1,
+        unitType: item.unitType || 'pc',
+        sellingPrice: item.sellingPrice || item.price || item.amount,
+        total: item.total || (item.quantity * (item.sellingPrice || item.price || item.amount)),
+        vatAmount: item.vatAmount || 0,
+        discountAmount: item.discountAmount || 0
+      })),
+      subtotal: order.grossAmount || order.subtotal || order.totalAmount,
+      vatAmount: order.vatAmount || 0,
+      vatExempt: order.vatExemptAmount || 0,
+      discount: order.discountAmount || 0,
+      totalAmount: order.totalAmount || order.netAmount,
+      vatRate: 12,
+      // Enhanced order discount handling - check for both exemptionId and full discount object
+      orderDiscount: order.orderDiscount || (order.exemptionId ? {
+        type: 'CUSTOM',
+        exemptionId: order.exemptionId,
+        customerName: order.discountCustomerName || customerName
+      } : null)
+    };
+  }
+
+  // Confirmation dialog methods
+  async showConfirmationDialog(data: {
+    title: string;
+    message: string;
+    confirmText: string;
+    cancelText?: string;
+    type?: 'info' | 'warning' | 'danger';
+  }): Promise<boolean> {
+    return new Promise((resolve) => {
+      this.confirmationDialogDataSignal.set({
+        ...data,
+        onConfirm: () => {
+          this.isConfirmationDialogVisibleSignal.set(false);
+          resolve(true);
+        },
+        onCancel: () => {
+          this.isConfirmationDialogVisibleSignal.set(false);
+          resolve(false);
+        }
+      });
+      this.isConfirmationDialogVisibleSignal.set(true);
+    });
+  }
+
+  closeConfirmationDialog(): void {
+    this.isConfirmationDialogVisibleSignal.set(false);
+    this.confirmationDialogDataSignal.set(null);
+  }
+
+  toggleCashSale(): void {
+    this.salesTypeCashSignal.update(value => !value);
+  }
+
+  toggleChargeSale(): void {
+    this.salesTypeChargeSignal.update(value => !value);
+  }
+
+  // Get user-friendly error message for store loading issues
+  getStoreLoadingErrorMessage(): string | null {
+    if (!this.hasStoreLoadingError()) {
+      return null;
+    }
+    
+    const user = this.authService.getCurrentUser();
+    if (!user) {
+      return 'Please log in to access stores';
+    }
+    
+    return 'No stores available. This may be due to:\n' +
+           '• Network connectivity issues\n' +
+           '• User permission problems\n' +
+           '• Store configuration issues\n\n' +
+           'Please try refreshing or contact your administrator.';
+  }
+
+  // Check if the system is ready for POS operations
+  isSystemReady(): boolean {
+    return this.availableStores().length > 0 && 
+           this.products().length > 0 && 
+           !!this.selectedStoreId();
+  }
+
+
+
+  // F4 Hotkey for Clear Data
+  @HostListener('document:keydown.f4', ['$event'])
+  async onF4KeyPress(event: KeyboardEvent): Promise<void> {
+    event.preventDefault(); // Prevent default F4 behavior
+    
+    if (this.cartItems().length > 0) {
+      await this.clearCartWithConfirmation();
+    }
+  }
+
+  // F5 Hotkey for New Order
+  @HostListener('document:keydown.f5', ['$event'])
+  async onF5KeyPress(event: KeyboardEvent): Promise<void> {
+    event.preventDefault(); // Prevent page refresh
+    
+    const confirmed = await this.showConfirmationDialog({
+      title: 'Create New Order',
+      message: 'Would you like to create a new order?',
+      confirmText: 'Yes',
+      cancelText: 'No',
+      type: 'info'
+    });
+    
+    if (confirmed) {
+      await this.startNewOrderDirect();
+    }
+  }
+
+  // F6 Hotkey for Complete Order
+  @HostListener('document:keydown.f6', ['$event'])
+  async onF6KeyPress(event: KeyboardEvent): Promise<void> {
+    event.preventDefault(); // Prevent default F6 behavior
+    
+    if (this.cartItems().length > 0 && !this.isProcessing()) {
+      const confirmed = await this.showConfirmationDialog({
+        title: 'Complete Order',
+        message: 'Are you sure you want to complete this order?',
+        confirmText: 'Yes',
+        cancelText: 'No',
+        type: 'info'
+      });
+      
+      if (confirmed) {
+        await this.processOrder();
+      }
+    }
+  }
+
+  // Simple state checks - like desktop
+  canClearCart(): boolean {
+    return this.cartItems().length > 0;
+  }
+
+  // Simple new order - like desktop
+  async startNewOrderDirect(): Promise<void> {
+    console.log('🆕 Mobile Starting new order via FAB');
+    
+    // If there's already an active order or completed order, confirm before clearing
+    if (this.hasActiveOrder() || this.isOrderCompleted()) {
+      const confirmed = await this.showConfirmationDialog({
+        title: 'Start New Order',
+        message: 'This will clear your current cart and start fresh. Continue?',
+        confirmText: 'Start New',
+        cancelText: 'Cancel',
+        type: 'warning'
+      });
+      
+      if (!confirmed) return;
+    }
+    
+    // Clear cart and reset customer info
+    this.posService.clearCart();
+    
+    // Reset order completion status to allow cart editing
+    this.isOrderCompletedSignal.set(false);
+    
+    // Set active order state
+    this.hasActiveOrderSignal.set(true);
+    
+    this.customerInfo = {
+      soldTo: '',
+      tin: '',
+      businessAddress: '',
+      customerId: ''
+    };
+    
+    // Update date/time to current
+    this.updateCurrentDateTime();
+    
+    console.log('🆕 Mobile New order started via FAB');
+  }
+
+  // Enhanced clear cart with confirmation
+  async clearCartWithConfirmation(): Promise<void> {
+    if (confirm('Are you sure you want to clear the cart?')) {
+      this.posService.clearCart();
+      // Reset active order state when cart is cleared
+      this.hasActiveOrderSignal.set(false);
+    }
+  }
+
+
+
+
+
+
+
+  // Process customer information based on form state (for new order structure)
+  private processCustomerInfo(): any {
+    const soldToField = this.customerInfo.soldTo?.trim();
+    const addressField = this.customerInfo.businessAddress?.trim();
+    const tinField = this.customerInfo.tin?.trim();
+    
+    return {
+      fullName: soldToField || "Walk-in Customer",
+      address: addressField || "Philippines", 
+      tin: tinField || "",
+      customerId: this.customerInfo.customerId || ""
+    };
+  }
+
+  // Enhanced prepare receipt data with company integration
+  private async prepareReceiptDataEnhanced(orderId: string): Promise<any> {
+    const cartItems = this.cartItems();
+    const cartSummary = this.cartSummary();
+    const storeInfo = this.currentStoreInfo();
+    
+    // Get company information for consistent display
+    let company = null;
+    try {
+      company = await this.companyService.getActiveCompany();
+    } catch (error) {
+      console.warn('Mobile Could not fetch company info for receipt:', error);
+    }
+
+    // Determine customer name - if soldTo is empty or default, treat as N/A
+    const customerName = this.customerInfo.soldTo && this.customerInfo.soldTo.trim() && this.customerInfo.soldTo !== 'Walk-in Customer' 
+      ? this.customerInfo.soldTo.trim() 
+      : null;
+
+    // Always use current user as cashier since they are operating the POS
+    // This handles managers and other roles who use the POS system
+    const currentUser = this.authService.getCurrentUser();
+    const cashierName = currentUser?.displayName || currentUser?.email || 'Unknown Cashier';
+
+    return {
+      orderId,
+      invoiceNumber: this.nextInvoiceNumber(),
+      receiptDate: new Date(),
+      storeInfo: {
+        storeName: company?.name || (storeInfo as any)?.storeName || 'Unknown Store',
+        address: company?.address || (storeInfo as any)?.address || 'Store Address',
+        phone: company?.phone || (storeInfo as any)?.phone || 'N/A', // Use company phone
+        email: company?.email || storeInfo?.email || 'N/A', // Use company email
+        tin: company?.taxId || company?.tin || (storeInfo as any)?.tinNumber || 'N/A', // Use company tax ID/TIN
+        invoiceType: (storeInfo as any)?.invoiceType || 'SALES INVOICE',
+        birPermitNo: company?.birPermitNo || (storeInfo as any)?.birPermitNo || null,
+        minNumber: (storeInfo as any)?.minNumber || null,
+        serialNumber: (storeInfo as any)?.serialNumber || null,
+        inclusiveSerialNumber: company?.inclusiveSerialNumber || (storeInfo as any)?.inclusiveSerialNumber || null
+      },
+      customerName: customerName,
+      customerAddress: customerName ? (this.customerInfo.businessAddress || 'N/A') : null,
+      customerTin: customerName ? (this.customerInfo.tin || 'N/A') : null,
+      cashier: cashierName, // Always use current user as cashier regardless of role
+      paymentMethod: this.isCashSale() ? 'Cash' : 'Charge',
+      isCashSale: this.isCashSale(),
+      isChargeSale: this.isChargeSale(),
+      items: cartItems.map(item => ({
+        productName: item.productName,
+        skuId: item.skuId,
+        quantity: item.quantity,
+        unitType: item.unitType || 'pc',
+        sellingPrice: item.sellingPrice,
+        total: item.total,
+        vatAmount: item.vatAmount || 0,
+        discountAmount: item.discountAmount || 0
+      })),
+      subtotal: cartSummary.grossAmount,
+      vatAmount: cartSummary.vatAmount,
+      vatExempt: cartSummary.vatExemptSales,
+      discount: cartSummary.productDiscountAmount + cartSummary.orderDiscountAmount,
+      totalAmount: cartSummary.netAmount,
+      vatRate: 12,
+      // Enhanced order discount handling
+      orderDiscount: this.orderDiscount()
+    };
+  }
+
+  // Save customer data if provided
+  async saveCustomerData(): Promise<any> {
+    try {
+      const customerName = this.customerInfo.soldTo?.trim();
+      
+      // Only save if customer name is provided and not default
+      if (!customerName || customerName === 'Walk-in Customer') {
+        return null;
+      }
+
+      const currentUser = this.authService.getCurrentUser();
+      const currentPermission = this.authService.getCurrentPermission();
+      const storeInfo = this.currentStoreInfo();
+      
+      if (!currentUser?.uid || !currentPermission?.companyId || !storeInfo?.id) {
+        console.warn('Mobile Missing required info for customer save:', {
+          hasUser: !!currentUser?.uid,
+          hasCompany: !!currentPermission?.companyId,
+          hasStore: !!storeInfo?.id
+        });
+        return null;
+      }
+
+      // Prepare customer data
+      const customerData = {
+        fullName: customerName,
+        email: '', // Not captured in mobile form
+        phone: '', // Not captured in mobile form
+        address: this.customerInfo.businessAddress?.trim() || '',
+        tin: this.customerInfo.tin?.trim() || '',
+        companyId: currentPermission.companyId,
+        storeId: storeInfo.id,
+        createdBy: currentUser.uid,
+        isActive: true
+      };
+
+      console.log('💾 Mobile Saving customer data:', customerData);
+      const savedCustomer = await this.customerService.saveCustomerFromPOS(
+        {
+          soldTo: customerName,
+          tin: this.customerInfo.tin?.trim() || '',
+          businessAddress: this.customerInfo.businessAddress?.trim() || ''
+        },
+        currentPermission.companyId,
+        storeInfo.id
+      );
+      console.log('✅ Mobile Customer saved:', savedCustomer);
+      
+      // Update the customerInfo with the saved customer ID for future reference
+      if (savedCustomer) {
+        this.customerInfo.customerId = savedCustomer.customerId;
+      }
+      
+      return savedCustomer;
+    } catch (error) {
+      console.error('❌ Mobile Error saving customer data:', error);
+      return null; // Don't fail the entire order process if customer save fails
+    }
+  }
+
   async ngOnInit(): Promise<void> {
     console.log('🎯 POS MOBILE COMPONENT: ngOnInit called - POS Mobile is loading!');
     console.log('🎯 POS MOBILE COMPONENT: Current URL:', window.location.href);
@@ -321,8 +1058,30 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
       console.log('POS Mobile init - currentUser:', this.authService.getCurrentUser());
       console.log('POS Mobile init - all stores:', this.storeService.getStores());
       console.log('POS Mobile init - availableStores:', this.availableStores());
+      
+      // Initialize active order state based on existing cart
+      this.initializeOrderState();
     } catch (error) {
       console.error('Error initializing POS Mobile:', error);
+    }
+  }
+
+  // Initialize order state based on current situation
+  private initializeOrderState(): void {
+    const cartItems = this.posService.cartItems();
+    
+    // If there are items in cart, assume there's an active or completed order
+    if (cartItems && cartItems.length > 0) {
+      // Check if this is a completed order by checking some completion indicator
+      // For now, assume if cart exists but no active order, it's completed
+      this.hasActiveOrderSignal.set(false);
+      this.isOrderCompletedSignal.set(true);
+      console.log('🔄 Found existing completed order - cart disabled');
+    } else {
+      // No items, fresh start
+      this.hasActiveOrderSignal.set(false);
+      this.isOrderCompletedSignal.set(false);
+      console.log('🔄 Order state initialized - waiting for user to start new order');
     }
   }
 
@@ -628,8 +1387,8 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
     console.log('🎯 Mobile selectStore called with storeId:', storeId);
     console.log('🏪 Mobile Available stores:', this.availableStores().map(s => ({ id: s.id, name: s.storeName, companyId: s.companyId })));
     
-    // Set the selected store first
-    await this.posService.setSelectedStore(storeId);
+    // Set the selected store first - preserve cart to prevent disappearing
+    await this.posService.setSelectedStore(storeId, { preserveCart: true });
     
     // PRIORITY: Get companyId from IndexedDB first, then fallback to database
     let companyId: string | undefined;
@@ -701,11 +1460,49 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
     }
   }
 
-  addToCart(product: Product): void {
+  async addToCart(product: Product): Promise<void> {
     if (product.totalStock <= 0) {
       this.toastService.warning(WarningMessages.PRODUCT_OUT_OF_STOCK);
       return;
     }
+
+    // Check if order is completed - prevent adding to completed order
+    if (this.isOrderCompleted()) {
+      const confirmed = await this.showConfirmationDialog({
+        title: 'Order Already Completed',
+        message: 'The current order is completed. Do you want to start a new order to add this item?',
+        confirmText: 'Start New Order',
+        cancelText: 'Cancel',
+        type: 'info'
+      });
+
+      if (confirmed) {
+        // Start new order and then add the item
+        this.startNewOrderDirect();
+        this.posService.addToCart(product);
+      }
+      return;
+    }
+
+    // Check if no active order exists - show create new order dialog (like desktop)
+    if (!this.hasActiveOrder()) {
+      const confirmed = await this.showConfirmationDialog({
+        title: 'Start New Order',
+        message: 'Do you want to start a new order? You can then add products to your cart.',
+        confirmText: 'Start Order',
+        cancelText: 'Cancel',
+        type: 'info'
+      });
+
+      if (confirmed) {
+        // Just mark that new order is started - don't add the product yet
+        this.hasActiveOrderSignal.set(true);
+        console.log('🆕 New order started - ready to add products');
+      }
+      return;
+    }
+
+    // Normal add to cart for active orders
     this.posService.addToCart(product);
   }
 
@@ -724,6 +1521,8 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
   clearCart(): void {
     if (confirm('Are you sure you want to clear the cart?')) {
       this.posService.clearCart();
+      // Reset active order state when cart is cleared
+      this.hasActiveOrderSignal.set(false);
     }
   }
 
@@ -739,7 +1538,7 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
   async processOrder(): Promise<void> {
     try {
       // Convert datetime string to Date object
-      const orderDate = this.customerInfo.datetime ? new Date(this.customerInfo.datetime) : new Date();
+      const orderDate = this.datetime ? new Date(this.datetime) : new Date();
       
       const customerData = {
         ...this.customerInfo,
@@ -749,24 +1548,29 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
       // Use the new invoice service to get both order ID and invoice number
       const result = await this.posService.processOrderWithInvoice(customerData);
       if (result) {
-        console.log('Order processed with invoice:', {
+        console.log('Mobile Order processed with invoice:', {
           orderId: result.orderId,
           invoiceNumber: result.invoiceNumber
         });
 
-        // Update the customer info with the new invoice number
-        this.customerInfo.invoiceNumber = result.invoiceNumber;
+        // Update the invoice number with the new result
+        this.invoiceNumber = result.invoiceNumber;
 
-        // Prepare receipt data and show receipt modal
-        const receiptData = this.prepareReceiptData(result.orderId);
+        // Mark order as completed to prevent cart editing
+        this.isOrderCompletedSignal.set(true);
+        
+        // Reset active order state since order is now complete
+        this.hasActiveOrderSignal.set(false);
+
+        // Prepare receipt data and show receipt modal immediately (like desktop)
+        const receiptData = await this.prepareReceiptDataEnhanced(result.orderId);
         this.receiptDataSignal.set(receiptData);
         this.isReceiptModalVisibleSignal.set(true);
         
-        // Don't clear cart yet - wait until receipt modal is closed
-        console.log(`Order completed successfully! Order ID: ${result.orderId}`);
+        console.log(`Mobile Order completed successfully! Order ID: ${result.orderId}`);
       }
     } catch (error) {
-      console.error('Error processing order:', error);
+      console.error('Mobile Error processing order:', error);
       this.toastService.error(ErrorMessages.ORDER_PROCESS_ERROR);
     }
   }
@@ -776,9 +1580,10 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
       soldTo: '',
       tin: '',
       businessAddress: '',
-      invoiceNumber: 'INV-0000-000000',
-      datetime: new Date().toISOString().slice(0, 16) // Format for datetime-local input
+      customerId: ''
     };
+    this.invoiceNumber = 'INV-0000-000000';
+    this.datetime = new Date().toISOString().slice(0, 16); // Format for datetime-local input
   }
 
   toggleSoldToPanel(): void {
@@ -808,7 +1613,7 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
 
     return {
       orderId,
-      invoiceNumber: invoiceNumber || customerInfo.invoiceNumber,
+      invoiceNumber: invoiceNumber || this.invoiceNumber,
       receiptDate: receiptDate, // Date from shared service
       storeInfo: {
         storeName: (storeInfo as any)?.storeName || 'Unknown Store',
@@ -846,9 +1651,9 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
     this.isReceiptModalVisibleSignal.set(false);
     this.receiptDataSignal.set(null);
     
-    // Clear cart and reset form after receipt modal is closed
-    this.posService.clearCart();
-    this.resetCustomerForm();
+    // DON'T auto-clear cart - let user manually clear when they want to start new order
+    // Cart items remain visible but user can manually clear or start new order
+    console.log('🧾 Mobile Receipt modal closed - cart preserved');
   }
 
   async printReceipt(): Promise<void> {
@@ -931,6 +1736,9 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
     if (this.routerSubscription) {
       this.routerSubscription.unsubscribe();
     }
+    
+    // Don't clear invoice number on destroy - preserve it for when user returns
+    console.log('📋 Mobile Preserving invoice number:', this.invoiceNumber);
   }
 
   // Method to reinitialize the component when navigating back to POS Mobile
@@ -972,27 +1780,33 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
 
   // Date/time management - same as main POS component
   updateCurrentDateTime(): void {
-    this.customerInfo.datetime = new Date().toISOString().slice(0, 16);
+    this.datetime = new Date().toISOString().slice(0, 16);
   }
 
   // Invoice preview loading - same as main POS component
   async loadNextInvoicePreview(): Promise<void> {
     try {
+      // Only load new invoice number if we don't already have one
+      if (this.invoiceNumber && this.invoiceNumber !== 'INV-0000-000000') {
+        console.log('📋 Mobile Preserving existing invoice number:', this.invoiceNumber);
+        return;
+      }
+
       // Check if online/offline
       if (this.networkService.isOffline()) {
         console.log('📋 Mobile Offline mode: Using default invoice number');
-        this.customerInfo.invoiceNumber = 'INV-0000-000000 (Offline)';
+        this.invoiceNumber = 'INV-0000-000000 (Offline)';
         return;
       }
 
       const nextInvoice = await this.posService.getNextInvoiceNumberPreview();
       
-      // Update the customer info invoice number for display
-      this.customerInfo.invoiceNumber = nextInvoice;
+      // Update the invoice number for display
+      this.invoiceNumber = nextInvoice;
       console.log('📋 Mobile Next invoice number loaded:', nextInvoice);
     } catch (error) {
       console.error('Mobile Error loading invoice preview:', error);
-      this.customerInfo.invoiceNumber = 'INV-0000-000000 (Error)';
+      this.invoiceNumber = 'INV-0000-000000 (Error)';
     }
   }
 }

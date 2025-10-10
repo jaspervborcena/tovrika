@@ -1,4 +1,4 @@
-import { Component, computed, inject, signal, output } from '@angular/core';
+import { Component, computed, inject, signal, output, input } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { PosService } from '../../../services/pos.service';
 import { CartItem } from '../../../interfaces/pos.interface';
@@ -29,25 +29,38 @@ import { CartItem } from '../../../interfaces/pos.interface';
                 <div class="item-name">{{ item.productName }}</div>
                 <div class="item-sku">{{ item.skuId }} - ₱{{ item.sellingPrice.toFixed(2) }} each</div>
               </div>
-              <button (click)="removeFromCart(item.productId)" class="remove-item-btn">×</button>
+              <button 
+                (click)="removeFromCart(item.productId)" 
+                class="remove-item-btn" 
+                [disabled]="isOrderCompleted()"
+                [class.disabled]="isOrderCompleted()">×</button>
             </div>
             
             <!-- Item Controls Row -->
             <div class="item-controls-row">
               <div class="quantity-control">
-                <button (click)="updateQuantity(item.productId, item.quantity - 1)" class="qty-btn">-</button>
+                <button 
+                  (click)="updateQuantity(item.productId, item.quantity - 1)" 
+                  class="qty-btn"
+                  [disabled]="isOrderCompleted()"
+                  [class.disabled]="isOrderCompleted()">-</button>
                 <span class="qty-display">{{ item.quantity }}</span>
-                <button (click)="updateQuantity(item.productId, item.quantity + 1)" class="qty-btn">+</button>
+                <button 
+                  (click)="updateQuantity(item.productId, item.quantity + 1)" 
+                  class="qty-btn"
+                  [disabled]="isOrderCompleted()"
+                  [class.disabled]="isOrderCompleted()">+</button>
               </div>
               <div class="item-total-price">₱{{ item.total.toFixed(2) }}</div>
             </div>
             
             <!-- VAT Exemption Toggle -->
             <div class="item-controls" *ngIf="item.isVatApplicable">
-              <label class="vat-exempt-toggle">
+              <label class="vat-exempt-toggle" [class.disabled]="isOrderCompleted()">
                 <input 
                   type="checkbox" 
                   [checked]="item.isVatExempt"
+                  [disabled]="isOrderCompleted()"
                   (change)="toggleVatExemption(item.productId)">
                 VAT Exempt
               </label>
@@ -85,9 +98,17 @@ import { CartItem } from '../../../interfaces/pos.interface';
         
         <!-- Action Buttons -->
         <div class="cart-actions" *ngIf="cartItems().length > 0">
-          <button class="btn btn-secondary" (click)="clearCart()">Clear Cart</button>
-          <button class="btn btn-primary" (click)="processOrder()" [disabled]="isProcessing()">
-            {{ isProcessing() ? 'Processing...' : 'Complete Order' }}
+          <button 
+            class="btn btn-secondary" 
+            (click)="clearCart()" 
+            [disabled]="isOrderCompleted()"
+            [class.disabled]="isOrderCompleted()">Clear Cart</button>
+          <button 
+            class="btn btn-primary" 
+            (click)="processOrder()" 
+            [disabled]="isProcessing() || isOrderCompleted()"
+            [class.disabled]="isOrderCompleted()">
+            {{ isOrderCompleted() ? 'Order Completed' : (isProcessing() ? 'Processing...' : 'Complete Order') }}
           </button>
         </div>
       </div>
@@ -354,10 +375,31 @@ import { CartItem } from '../../../interfaces/pos.interface';
       background: #047857;
     }
     
-    .btn:disabled {
+    .btn:disabled,
+    .btn.disabled {
       background: #d1d5db;
       color: #9ca3af;
       cursor: not-allowed;
+    }
+
+    .remove-item-btn:disabled,
+    .remove-item-btn.disabled {
+      background: #d1d5db;
+      color: #9ca3af;
+      cursor: not-allowed;
+    }
+
+    .qty-btn:disabled,
+    .qty-btn.disabled {
+      background: #d1d5db;
+      color: #9ca3af;
+      cursor: not-allowed;
+    }
+
+    .vat-exempt-toggle.disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      pointer-events: none;
     }
   `]
 })
@@ -366,6 +408,7 @@ export class MobileCartModalComponent {
   
   // Props
   isVisible = signal<boolean>(false);
+  isOrderCompleted = input<boolean>(false);
   
   // Outputs
   modalClosed = output<void>();
@@ -387,23 +430,28 @@ export class MobileCartModalComponent {
   }
   
   updateQuantity(productId: string, quantity: number): void {
+    if (this.isOrderCompleted()) return; // Prevent editing completed orders
     this.posService.updateCartItemQuantity(productId, quantity);
   }
   
   removeFromCart(productId: string): void {
+    if (this.isOrderCompleted()) return; // Prevent editing completed orders
     this.posService.removeFromCart(productId);
   }
   
   toggleVatExemption(productId: string): void {
+    if (this.isOrderCompleted()) return; // Prevent editing completed orders
     this.posService.toggleVatExemption(productId);
   }
   
   clearCart(): void {
+    if (this.isOrderCompleted()) return; // Prevent clearing completed orders
     this.posService.clearCart();
     this.closeModal();
   }
   
   processOrder(): void {
+    if (this.isOrderCompleted()) return; // Prevent processing already completed orders
     this.orderProcessed.emit();
     this.closeModal();
   }
