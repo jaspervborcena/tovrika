@@ -1604,14 +1604,14 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
       if (receiptData) {
         // Receipt data already exists, just print directly
         console.log('🖨️ Printing existing receipt with RawBT...');
-        this.printService.printRawBT(receiptData);
+        this.printService.printMobileThermal(receiptData);
         console.log('✅ Receipt sent to RawBT');
       } else {
         // Fallback: prepare receipt data from current state
         console.warn('⚠️ No receipt data found, preparing from current cart...');
         const fallbackReceiptData = await this.prepareReceiptDataEnhanced('completed-' + Date.now());
         this.receiptDataSignal.set(fallbackReceiptData);
-        this.printService.printRawBT(fallbackReceiptData);
+        this.printService.printMobileThermal(fallbackReceiptData);
         console.log('✅ Fallback receipt sent to RawBT');
       }
       
@@ -1716,7 +1716,7 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
 
       // 🔥 MOBILE: Use RawBT print - RawBT handles Bluetooth connection automatically
       console.log('🖨️ Sending to RawBT for thermal printing...');
-      this.printService.printRawBT(receiptData);
+      this.printService.printMobileThermal(receiptData);
       console.log(`✅ ESC/POS sent to RawBT for order:`, receiptData.orderId);
       
       // Close the modal after successful save and print
@@ -1726,7 +1726,7 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
       console.error('Error during print process:', error);
       // Still try to print even if save fails
       try {
-        this.printService.printRawBT(receiptData);
+        this.printService.printMobileThermal(receiptData);
         console.log('ESC/POS sent to RawBT despite save error');
         this.closeReceiptModal();
       } catch (printError) {

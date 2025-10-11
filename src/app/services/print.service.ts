@@ -948,35 +948,90 @@ export class PrintService {
   }
 
   /**
-   * 🖨️ RAWBT PRINT: Show print preview for RawBT app to handle
-   * RawBT automatically handles the Bluetooth connection to thermal printer
-   * Just open the content and RawBT will show print preview
+   * 🖨️ MOBILE PRINT: Show browser print dialog with ESC/POS formatted receipt
+   * User can select their paired Bluetooth thermal printer from the dialog
    */
-  printRawBT(receiptData: any): void {
-    console.log('🖨️ Generating ESC/POS for RawBT...');
+  printMobileThermal(receiptData: any): void {
+    console.log('🖨️ Starting direct mobile ESC/POS print (iframe)...');
     
-    // Generate ESC/POS commands
+    // Generate ESC/POS commands instead of HTML
     const escposCommands = this.generateESCPOSCommands(receiptData);
     
-    // Create a blob with the ESC/POS content
-    const blob = new Blob([escposCommands], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
+    // Create iframe for printing
+    const iframe = document.createElement('iframe');
+    iframe.style.position = 'fixed';
+    iframe.style.right = '0';
+    iframe.style.bottom = '0';
+    iframe.style.width = '0';
+    iframe.style.height = '0';
+    iframe.style.border = '0';
+    document.body.appendChild(iframe);
     
-    // Open in new window - RawBT will intercept and show print preview
-    const printWindow = window.open(url, '_blank');
-    
-    if (!printWindow) {
-      alert('Print Error: Popup blocked. Please allow popups for this site to print with RawBT.');
+    const iframeDoc = iframe.contentWindow?.document;
+    if (!iframeDoc) {
+      console.error('❌ Unable to create print iframe');
+      // Fallback to dialog version
+      this.printBrowserReceipt(receiptData);
       return;
     }
     
-    console.log('✅ ESC/POS content sent to RawBT');
+    iframeDoc.open();
+    // Wrap ESC/POS in pre tag to preserve formatting
+    iframeDoc.write(`
+      <html>
+        <head>
+          <title>Receipt - ${receiptData?.invoiceNumber || 'Invoice'}</title>
+          <style>
+            @media print {
+              body { margin: 0 !important; }
+              @page { 
+                margin: 3mm; 
+                size: 58mm auto;
+              }
+            }
+            body { 
+              font-family: 'Courier New', monospace; 
+              font-size: 11px; 
+              margin: 0; 
+              padding: 3px;
+              width: 100%;
+              max-width: 210px;
+              line-height: 1.2;
+            }
+            pre {
+              margin: 0;
+              padding: 0;
+              font-family: 'Courier New', monospace;
+              font-size: 11px;
+              white-space: pre-wrap;
+              word-wrap: break-word;
+            }
+          </style>
+        </head>
+        <body><pre>${escposCommands}</pre></body>
+      </html>
+    `);
+    iframeDoc.close();
     
-    // Clean up the URL after a delay
+    // Wait for content to load, then print
     setTimeout(() => {
-      URL.revokeObjectURL(url);
-      console.log('🧹 Cleaned up blob URL');
-    }, 5000);
+      try {
+        iframe.contentWindow?.focus();
+        iframe.contentWindow?.print();
+        console.log('✅ Direct ESC/POS print command sent');
+        
+        // Remove iframe after printing
+        setTimeout(() => {
+          document.body.removeChild(iframe);
+          console.log('🧹 Print iframe cleaned up');
+        }, 1000);
+      } catch (error) {
+        console.error('❌ Direct print error:', error);
+        document.body.removeChild(iframe);
+        // Fallback to dialog version
+        this.printBrowserReceipt(receiptData);
+      }
+    }, 500);
   }
 
   /**

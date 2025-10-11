@@ -461,7 +461,9 @@ export class MobileCartModalComponent {
   }
   
   processOrder(): void {
-    if (this.isOrderCompleted()) return; // Prevent processing already completed orders
+    // Allow processing even if order is completed (for reprinting)
+    // The parent component's processOrder() will check isOrderCompleted() 
+    // and show the receipt instead
     this.orderProcessed.emit();
     this.closeModal();
   }
