@@ -717,6 +717,136 @@ export class PrintService {
   }
 
   /**
+   * 🖨️ Direct print without dialog - Auto-prints to default/last used printer
+   * Perfect for mobile devices with paired Bluetooth printers
+   */
+  printDirectMobile(receiptData: any): void {
+    console.log('🖨️ Starting direct mobile print (no dialog)...');
+    
+    const printContent = this.generatePrintableReceipt(receiptData);
+    
+    // Create iframe for silent printing
+    const iframe = document.createElement('iframe');
+    iframe.style.position = 'fixed';
+    iframe.style.right = '0';
+    iframe.style.bottom = '0';
+    iframe.style.width = '0';
+    iframe.style.height = '0';
+    iframe.style.border = '0';
+    document.body.appendChild(iframe);
+    
+    const iframeDoc = iframe.contentWindow?.document;
+    if (!iframeDoc) {
+      console.error('❌ Unable to create print iframe');
+      // Fallback to dialog version
+      this.printBrowserReceipt(receiptData);
+      return;
+    }
+    
+    iframeDoc.open();
+    iframeDoc.write(`
+      <html>
+        <head>
+          <title>Receipt - ${receiptData?.invoiceNumber || 'Invoice'}</title>
+          <style>
+            @media print {
+              body { margin: 0 !important; }
+              @page { 
+                margin: 3mm; 
+                size: 58mm auto; /* Optimized for 58mm thermal paper */
+              }
+            }
+            body { 
+              font-family: 'Courier New', monospace; 
+              font-size: 11px; 
+              margin: 0; 
+              padding: 3px;
+              width: 100%;
+              max-width: 210px; /* ~58mm in pixels */
+              line-height: 1.3;
+            }
+            .center { 
+              text-align: center !important; 
+              width: 100%;
+              display: block;
+            }
+            .left { text-align: left; }
+            .right { text-align: right; }
+            .bold { font-weight: bold; }
+            .small { font-size: 9px; }
+            .line { 
+              border-bottom: 1px solid #000; 
+              margin: 3px 0; 
+              width: 100%; 
+            }
+            .dashed-line {
+              border-bottom: 1px dashed #000;
+              margin: 3px 0;
+              width: 100%;
+            }
+            .header-section {
+              text-align: center !important;
+              margin-bottom: 10px;
+            }
+            .footer-section {
+              text-align: center !important;
+              margin-top: 15px;
+              font-weight: bold;
+            }
+            table { 
+              width: 100%; 
+              border-collapse: collapse; 
+              margin: 2px 0;
+              font-size: 10px;
+            }
+            td, th { 
+              padding: 1px 2px; 
+              vertical-align: top;
+            }
+            th { 
+              font-weight: bold; 
+              text-align: left;
+              border-bottom: 1px solid #000;
+            }
+            .item-row td {
+              border-bottom: none;
+            }
+            .price-row {
+              font-size: 9px;
+              color: #666;
+            }
+            .no-break {
+              page-break-inside: avoid;
+            }
+          </style>
+        </head>
+        <body>${printContent}</body>
+      </html>
+    `);
+    iframeDoc.close();
+    
+    // Wait for content to load, then print
+    setTimeout(() => {
+      try {
+        iframe.contentWindow?.focus();
+        iframe.contentWindow?.print();
+        console.log('✅ Direct print command sent');
+        
+        // Remove iframe after printing
+        setTimeout(() => {
+          document.body.removeChild(iframe);
+          console.log('🧹 Print iframe cleaned up');
+        }, 1000);
+      } catch (error) {
+        console.error('❌ Direct print error:', error);
+        document.body.removeChild(iframe);
+        // Fallback to dialog version
+        this.printBrowserReceipt(receiptData);
+      }
+    }, 500);
+  }
+
+  /**
    * Generate HTML content for browser printing
    */
   private generatePrintableReceipt(receiptData: any): string {
