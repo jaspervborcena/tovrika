@@ -948,36 +948,24 @@ export class PrintService {
   }
 
   /**
-   * 🖨️ MOBILE PRINT: Show browser print dialog with ESC/POS formatted receipt
-   * User can select their paired Bluetooth thermal printer from the dialog
+   * 🖨️ MOBILE PRINT: Direct ESC/POS print using new window (not iframe)
+   * Opens print dialog with ESC/POS formatted for thermal printer
    */
   printMobileThermal(receiptData: any): void {
-    console.log('🖨️ Starting direct mobile ESC/POS print (iframe)...');
+    console.log('🖨️ Starting mobile ESC/POS print...');
     
-    // Generate ESC/POS commands instead of HTML
+    // Generate ESC/POS commands
     const escposCommands = this.generateESCPOSCommands(receiptData);
     
-    // Create iframe for printing
-    const iframe = document.createElement('iframe');
-    iframe.style.position = 'fixed';
-    iframe.style.right = '0';
-    iframe.style.bottom = '0';
-    iframe.style.width = '0';
-    iframe.style.height = '0';
-    iframe.style.border = '0';
-    document.body.appendChild(iframe);
-    
-    const iframeDoc = iframe.contentWindow?.document;
-    if (!iframeDoc) {
-      console.error('❌ Unable to create print iframe');
-      // Fallback to dialog version
-      this.printBrowserReceipt(receiptData);
+    // Create a new window for printing
+    const printWindow = window.open('', '_blank', 'width=400,height=600');
+    if (!printWindow) {
+      alert('Print Error: Popup blocked. Please allow popups for this site to print receipts.');
       return;
     }
     
-    iframeDoc.open();
-    // Wrap ESC/POS in pre tag to preserve formatting
-    iframeDoc.write(`
+    // Write ESC/POS content wrapped in pre tag
+    printWindow.document.write(`
       <html>
         <head>
           <title>Receipt - ${receiptData?.invoiceNumber || 'Invoice'}</title>
@@ -1008,30 +996,12 @@ export class PrintService {
             }
           </style>
         </head>
-        <body><pre>${escposCommands}</pre></body>
+        <body onload="window.print(); window.close();"><pre>${escposCommands}</pre></body>
       </html>
     `);
-    iframeDoc.close();
     
-    // Wait for content to load, then print
-    setTimeout(() => {
-      try {
-        iframe.contentWindow?.focus();
-        iframe.contentWindow?.print();
-        console.log('✅ Direct ESC/POS print command sent');
-        
-        // Remove iframe after printing
-        setTimeout(() => {
-          document.body.removeChild(iframe);
-          console.log('🧹 Print iframe cleaned up');
-        }, 1000);
-      } catch (error) {
-        console.error('❌ Direct print error:', error);
-        document.body.removeChild(iframe);
-        // Fallback to dialog version
-        this.printBrowserReceipt(receiptData);
-      }
-    }, 500);
+    printWindow.document.close();
+    console.log('✅ ESC/POS print window opened');
   }
 
   /**
