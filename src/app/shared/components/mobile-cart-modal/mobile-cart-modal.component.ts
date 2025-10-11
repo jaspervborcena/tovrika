@@ -106,9 +106,9 @@ import { CartItem } from '../../../interfaces/pos.interface';
           <button 
             class="btn btn-primary" 
             (click)="processOrder()" 
-            [disabled]="isProcessing() || isOrderCompleted()"
-            [class.disabled]="isOrderCompleted()">
-            {{ isOrderCompleted() ? 'Order Completed' : (isProcessing() ? 'Processing...' : 'Complete Order') }}
+            [disabled]="isProcessing()"
+            [class.processing]="isProcessing()">
+            {{ getOrderButtonText() }}
           </button>
         </div>
       </div>
@@ -427,6 +427,16 @@ export class MobileCartModalComponent {
   closeModal(): void {
     this.isVisible.set(false);
     this.modalClosed.emit();
+  }
+  
+  getOrderButtonText(): string {
+    if (this.isOrderCompleted()) {
+      return 'Print Receipt';
+    }
+    if (this.isProcessing()) {
+      return 'Processing...';
+    }
+    return 'Complete Order';
   }
   
   updateQuantity(productId: string, quantity: number): void {
