@@ -1540,6 +1540,21 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
 
   async processOrder(): Promise<void> {
     try {
+      console.log('🎯 Complete Order clicked...');
+      
+      // Check if order is already completed - if so, just print receipt (like desktop)
+      if (this.isOrderCompleted()) {
+        console.log('🖨️ Order already completed, printing receipt...');
+        await this.showCompletedOrderReceipt();
+        return;
+      }
+      
+      // Validate cart has items for new orders
+      if (this.cartItems().length === 0) {
+        console.warn('⚠️ Cannot process order: Cart is empty');
+        return;
+      }
+      
       // Convert datetime string to Date object
       const orderDate = this.datetime ? new Date(this.datetime) : new Date();
       
@@ -1575,6 +1590,33 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
     } catch (error) {
       console.error('Mobile Error processing order:', error);
       this.toastService.error(ErrorMessages.ORDER_PROCESS_ERROR);
+    }
+  }
+
+  /**
+   * Show receipt for already completed order (like desktop POS)
+   */
+  async showCompletedOrderReceipt(): Promise<void> {
+    try {
+      console.log('🧾 Showing receipt for completed order...');
+      
+      const receiptData = this.receiptData();
+      if (receiptData) {
+        // Receipt data already exists, just print directly
+        console.log('🖨️ Printing existing receipt with RawBT...');
+        this.printService.printRawBT(receiptData);
+        console.log('✅ Receipt sent to RawBT');
+      } else {
+        // Fallback: prepare receipt data from current state
+        console.warn('⚠️ No receipt data found, preparing from current cart...');
+        const fallbackReceiptData = await this.prepareReceiptDataEnhanced('completed-' + Date.now());
+        this.receiptDataSignal.set(fallbackReceiptData);
+        this.printService.printRawBT(fallbackReceiptData);
+        console.log('✅ Fallback receipt sent to RawBT');
+      }
+      
+    } catch (error) {
+      console.error('❌ Error showing completed order receipt:', error);
     }
   }
 
@@ -1672,10 +1714,10 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
       const savedTransaction = await this.saveTransaction(receiptData);
       console.log('Transaction saved successfully:', savedTransaction.transactionNumber);
 
-      // 🔥 MOBILE: Use direct print (no dialog) - auto-prints to paired Bluetooth printer
-      console.log('🖨️ Using direct mobile print (auto-prints to default printer)...');
-      this.printService.printDirectMobile(receiptData);
-      console.log(`✅ Print command sent for order:`, receiptData.orderId);
+      // 🔥 MOBILE: Use RawBT print - RawBT handles Bluetooth connection automatically
+      console.log('🖨️ Sending to RawBT for thermal printing...');
+      this.printService.printRawBT(receiptData);
+      console.log(`✅ ESC/POS sent to RawBT for order:`, receiptData.orderId);
       
       // Close the modal after successful save and print
       this.closeReceiptModal();
@@ -1684,8 +1726,8 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
       console.error('Error during print process:', error);
       // Still try to print even if save fails
       try {
-        this.printService.printDirectMobile(receiptData);
-        console.log('Print command sent despite save error');
+        this.printService.printRawBT(receiptData);
+        console.log('ESC/POS sent to RawBT despite save error');
         this.closeReceiptModal();
       } catch (printError) {
         console.error('Print error:', printError);
