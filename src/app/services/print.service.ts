@@ -847,6 +847,139 @@ export class PrintService {
   }
 
   /**
+   * 🖨️ MOBILE ESC/POS: Direct print to paired Bluetooth printer without dialog
+   * Reuses existing connection or connects to previously paired device
+   */
+  async printMobileESCPOS(receiptData: any): Promise<void> {
+    try {
+      console.log('🖨️ Starting mobile ESC/POS print...');
+      
+      // Check if Web Bluetooth is supported
+      if (!navigator.bluetooth) {
+        console.log('⚠️ Bluetooth not supported on this device');
+        throw new Error('Bluetooth not supported. Please use a device with Bluetooth capability.');
+      }
+
+      // 🔥 STRATEGY 1: Use existing connection if available
+      if (this.isConnected && this.bluetoothDevice && this.bluetoothDevice.gatt.connected) {
+        console.log('✅ Using existing Bluetooth connection:', this.bluetoothDevice.name);
+        await this.printViaBluetoothESCPOS(receiptData);
+        console.log('✅ ESC/POS print completed via existing connection');
+        return;
+      }
+
+      // 🔥 STRATEGY 2: Try to reconnect to previously paired device
+      console.log('🔄 Checking for previously paired Bluetooth devices...');
+      
+      try {
+        // Get previously authorized devices (no dialog)
+        const devices = await navigator.bluetooth.getDevices();
+        console.log(`📱 Found ${devices.length} previously paired device(s)`);
+        
+        if (devices.length > 0) {
+          // Try to connect to the first paired device (most recent)
+          for (const device of devices) {
+            try {
+              console.log(`🔌 Attempting to reconnect to: ${device.name || 'Unknown Device'}`);
+              this.bluetoothDevice = device;
+              
+              // Connect to GATT server
+              const server = await device.gatt!.connect();
+              console.log('🔗 Connected to GATT server');
+
+              // Try to find a suitable service
+              let service = null;
+              let characteristic = null;
+
+              try {
+                service = await server.getPrimaryService('49535343-fe7d-4ae5-8fa9-9fafd205e455');
+                characteristic = await service.getCharacteristic('49535343-1e4d-4bd9-ba61-23c647249616');
+              } catch (e1) {
+                try {
+                  service = await server.getPrimaryService('00001101-0000-1000-8000-00805f9b34fb');
+                  const characteristics = await service.getCharacteristics();
+                  characteristic = characteristics[0];
+                } catch (e2) {
+                  try {
+                    service = await server.getPrimaryService('000018f0-0000-1000-8000-00805f9b34fb');
+                    characteristic = await service.getCharacteristic('00002af1-0000-1000-8000-00805f9b34fb');
+                  } catch (e3) {
+                    console.log('⚠️ No compatible service found on this device, trying next...');
+                    continue;
+                  }
+                }
+              }
+
+              this.bluetoothCharacteristic = characteristic;
+              this.isConnected = true;
+              console.log('✅ Reconnected to paired printer successfully');
+              
+              // Print immediately
+              await this.printViaBluetoothESCPOS(receiptData);
+              console.log('✅ ESC/POS print completed via auto-reconnect');
+              return;
+              
+            } catch (reconnectError) {
+              console.log(`⚠️ Failed to reconnect to ${device.name}:`, reconnectError);
+              continue; // Try next device
+            }
+          }
+        }
+      } catch (getDevicesError) {
+        console.log('⚠️ getDevices() not supported or failed:', getDevicesError);
+      }
+
+      // 🔥 STRATEGY 3: Manual connection (shows device picker - only if auto-reconnect failed)
+      console.log('📱 No paired device available, requesting manual connection...');
+      const connected = await this.connectToBluetoothPrinter();
+      
+      if (!connected) {
+        throw new Error('Failed to connect to Bluetooth printer');
+      }
+
+      // Print via Bluetooth
+      await this.printViaBluetoothESCPOS(receiptData);
+      console.log('✅ ESC/POS print completed via manual connection');
+
+    } catch (error) {
+      console.error('❌ Mobile ESC/POS print error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 🖨️ RAWBT PRINT: Show print preview for RawBT app to handle
+   * RawBT automatically handles the Bluetooth connection to thermal printer
+   * Just open the content and RawBT will show print preview
+   */
+  printRawBT(receiptData: any): void {
+    console.log('🖨️ Generating ESC/POS for RawBT...');
+    
+    // Generate ESC/POS commands
+    const escposCommands = this.generateESCPOSCommands(receiptData);
+    
+    // Create a blob with the ESC/POS content
+    const blob = new Blob([escposCommands], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    
+    // Open in new window - RawBT will intercept and show print preview
+    const printWindow = window.open(url, '_blank');
+    
+    if (!printWindow) {
+      alert('Print Error: Popup blocked. Please allow popups for this site to print with RawBT.');
+      return;
+    }
+    
+    console.log('✅ ESC/POS content sent to RawBT');
+    
+    // Clean up the URL after a delay
+    setTimeout(() => {
+      URL.revokeObjectURL(url);
+      console.log('🧹 Cleaned up blob URL');
+    }, 5000);
+  }
+
+  /**
    * Generate HTML content for browser printing
    */
   private generatePrintableReceipt(receiptData: any): string {
