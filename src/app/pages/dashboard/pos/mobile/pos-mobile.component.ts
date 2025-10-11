@@ -1672,10 +1672,10 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
       const savedTransaction = await this.saveTransaction(receiptData);
       console.log('Transaction saved successfully:', savedTransaction.transactionNumber);
 
-      // 🔥 MOBILE FIX: Use browser print directly (window.print) - more reliable on mobile
-      console.log('🖨️ Using browser print for mobile (window.print)...');
-      this.printService.printBrowserReceipt(receiptData);
-      console.log(`✅ Print dialog opened for order:`, receiptData.orderId);
+      // 🔥 MOBILE: Use direct print (no dialog) - auto-prints to paired Bluetooth printer
+      console.log('🖨️ Using direct mobile print (auto-prints to default printer)...');
+      this.printService.printDirectMobile(receiptData);
+      console.log(`✅ Print command sent for order:`, receiptData.orderId);
       
       // Close the modal after successful save and print
       this.closeReceiptModal();
@@ -1684,8 +1684,8 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
       console.error('Error during print process:', error);
       // Still try to print even if save fails
       try {
-        this.printService.printBrowserReceipt(receiptData);
-        console.log('Print dialog opened despite save error');
+        this.printService.printDirectMobile(receiptData);
+        console.log('Print command sent despite save error');
         this.closeReceiptModal();
       } catch (printError) {
         console.error('Print error:', printError);
