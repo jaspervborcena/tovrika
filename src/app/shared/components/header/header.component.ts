@@ -9,6 +9,8 @@ import { CompanySetupService } from '../../../services/companySetup.service';
 import { LogoComponent } from '../logo/logo.component';
 import { AppConstants } from '../../enums';
 import { NetworkService } from '../../../core/services/network.service';
+import { TranslationService, Language } from '../../../services/translation.service';
+import { TranslateModule } from '@ngx-translate/core';
 
 @Component({
   selector: 'app-header',
@@ -17,7 +19,8 @@ import { NetworkService } from '../../../core/services/network.service';
     CommonModule, 
     RouterLink,
     FormsModule,
-    LogoComponent
+    LogoComponent,
+    TranslateModule
   ],
   templateUrl: './header.component.html',
   styleUrls: ['./header.component.css']
@@ -29,6 +32,7 @@ export class HeaderComponent implements OnInit {
   private companyService = inject(CompanySetupService);
   private router = inject(Router);
   private networkService = inject(NetworkService);
+  private translationService = inject(TranslationService);
 
   // Signals
   protected stores = signal<Store[]>([]);
@@ -44,6 +48,14 @@ export class HeaderComponent implements OnInit {
   // User-related signals
   protected currentUser = computed(() => this.authService.getCurrentUser());
   protected isUserMenuOpen = signal<boolean>(false);
+  
+  // Translation signals
+  protected currentLanguage = computed(() => this.translationService.currentLanguage());
+  protected availableLanguages = computed(() => this.translationService.availableLanguages);
+  protected isLanguageMenuOpen = signal<boolean>(false);
+  
+  // Notification control - disabled when not logged in
+  protected showNotifications = computed(() => !!this.currentUser());
   
   // App constants and network status
   protected isOnline = computed(() => {
@@ -121,6 +133,11 @@ export class HeaderComponent implements OnInit {
 
   ngOnInit() {
     this.loadDashboardData();
+    
+    // Subscribe to language changes for debugging
+    this.translationService.getLanguageChange().subscribe(lang => {
+      console.log('🌐 Header: Language changed to:', lang);
+    });
   }
 
   private async loadDashboardData() {
@@ -181,5 +198,24 @@ export class HeaderComponent implements OnInit {
 
   switchToDesktop(): void {
     this.router.navigate(['/pos']);
+  }
+
+  // Language selection methods
+  toggleLanguageMenu(): void {
+    this.isLanguageMenuOpen.set(!this.isLanguageMenuOpen());
+  }
+
+  selectLanguage(language: Language): void {
+    console.log('🌐 Switching to language:', language.code, language.name);
+    this.translationService.setLanguage(language.code);
+    this.isLanguageMenuOpen.set(false);
+  }
+
+  @HostListener('document:click', ['$event'])
+  closeLanguageMenu(event: Event): void {
+    const target = event.target as HTMLElement;
+    if (!target.closest('.language-selector')) {
+      this.isLanguageMenuOpen.set(false);
+    }
   }
 }

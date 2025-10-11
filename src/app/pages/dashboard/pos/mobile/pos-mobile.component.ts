@@ -25,13 +25,15 @@ import { OrderService } from '../../../../services/order.service';
 import { StoreService } from '../../../../services/store.service';
 import { UserRoleService } from '../../../../services/user-role.service';
 import { CurrencyService } from '../../../../services/currency.service';
+import { TranslationService } from '../../../../services/translation.service';
+import { TranslateModule } from '@ngx-translate/core';
 import { Product } from '../../../../interfaces/product.interface';
 import { ProductViewType } from '../../../../interfaces/pos.interface';
 
 @Component({
   selector: 'app-pos-mobile',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterModule, HeaderComponent, ReceiptComponent, CartFabComponent, MobileCartModalComponent],
+  imports: [CommonModule, FormsModule, RouterModule, HeaderComponent, ReceiptComponent, CartFabComponent, MobileCartModalComponent, TranslateModule],
   templateUrl: './pos-mobile.component.html',
   styleUrls: ['./pos-mobile.component.css']
 })
@@ -54,6 +56,7 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
   private indexedDBService = inject(IndexedDBService);
   private router = inject(Router);
   private posUtilsService = inject(PosUtilsService);
+  private translationService = inject(TranslationService);
 
   private routerSubscription: Subscription | undefined;
 
@@ -1669,10 +1672,10 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
       const savedTransaction = await this.saveTransaction(receiptData);
       console.log('Transaction saved successfully:', savedTransaction.transactionNumber);
 
-      // 🔥 ENHANCED: Use smart print - auto-connects if needed
-      console.log('🖨️ Using smart print (auto-detect and connect)...');
-      await this.printService.printReceiptSmart(receiptData);
-      console.log(`✅ Receipt printed successfully for order:`, receiptData.orderId);
+      // 🔥 MOBILE FIX: Use browser print directly (window.print) - more reliable on mobile
+      console.log('🖨️ Using browser print for mobile (window.print)...');
+      this.printService.printBrowserReceipt(receiptData);
+      console.log(`✅ Print dialog opened for order:`, receiptData.orderId);
       
       // Close the modal after successful save and print
       this.closeReceiptModal();
@@ -1681,8 +1684,8 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
       console.error('Error during print process:', error);
       // Still try to print even if save fails
       try {
-        await this.printService.printReceiptSmart(receiptData);
-        console.log('Receipt printed despite save error');
+        this.printService.printBrowserReceipt(receiptData);
+        console.log('Print dialog opened despite save error');
         this.closeReceiptModal();
       } catch (printError) {
         console.error('Print error:', printError);
