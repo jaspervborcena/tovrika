@@ -9,12 +9,20 @@ import { provideAnimations } from '@angular/platform-browser/animations';
 import { routes } from './app.routes';
 import { ChunkErrorService } from './core/services/chunk-error.service';
 import { RouterErrorService } from './core/services/router-error.service';
+import { TranslateModule } from '@ngx-translate/core';
+import { importProvidersFrom } from '@angular/core';
 
 export const appConfig: ApplicationConfig = {
   providers: [
     provideRouter(routes),
     provideAnimations(),
     provideHttpClient(),
+    // Translation module
+    importProvidersFrom(
+      TranslateModule.forRoot({
+        defaultLanguage: 'en'
+      })
+    ),
     provideFirebaseApp(() => {
       try {
         return initializeApp(environment.firebase);
