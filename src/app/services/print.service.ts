@@ -431,8 +431,9 @@ export class PrintService {
 
   /**
    * 📄 Generate ESC/POS commands for thermal printer (optimized for Xprinter)
+   * Made public to allow components to generate ESC/POS content for preview
    */
-  private generateESCPOSCommands(receiptData: any): string {
+  generateESCPOSCommands(receiptData: any): string {
     let commands = '';
     
     // Initialize printer
@@ -950,6 +951,7 @@ export class PrintService {
   /**
    * 🖨️ MOBILE PRINT: Direct ESC/POS print using new window (not iframe)
    * Opens print dialog with ESC/POS formatted for thermal printer
+   * Print preview shows ONLY the receipt content, not the parent page
    */
   printMobileThermal(receiptData: any): void {
     console.log('🖨️ Starting mobile ESC/POS print...');
@@ -996,12 +998,18 @@ export class PrintService {
             }
           </style>
         </head>
-        <body onload="window.print(); window.close();"><pre>${escposCommands}</pre></body>
+        <body><pre>${escposCommands}</pre></body>
       </html>
     `);
     
     printWindow.document.close();
-    console.log('✅ ESC/POS print window opened');
+    
+    // Wait for content to load, then trigger print dialog
+    setTimeout(() => {
+      printWindow.focus();
+      printWindow.print();
+      console.log('✅ ESC/POS print dialog opened');
+    }, 500);
   }
 
   /**
