@@ -167,6 +167,14 @@ export const routes: Routes = [
     // canActivate: [authGuard, policyGuard, onboardingGuard], // TEMPORARILY DISABLED
     // data: { roles: ['creator', 'store_manager', 'cashier'] } // TEMPORARILY DISABLED
   },
+
+  // Mobile Receipt Preview Route - TEMPORARILY REMOVING ALL GUARDS FOR TESTING
+  {
+    path: 'pos/mobile/receipt-preview',
+    loadComponent: () => import('./pages/dashboard/pos/mobile/mobile-receipt-preview.component').then(m => m.MobileReceiptPreviewComponent)
+    // canActivate: [authGuard, policyGuard, onboardingGuard], // TEMPORARILY DISABLED
+    // data: { roles: ['creator', 'store_manager', 'cashier'] } // TEMPORARILY DISABLED
+  },
   
   // Fallback route
   {

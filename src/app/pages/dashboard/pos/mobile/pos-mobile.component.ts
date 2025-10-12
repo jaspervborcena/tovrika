@@ -1602,17 +1602,21 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
       
       const receiptData = this.receiptData();
       if (receiptData) {
-        // Receipt data already exists, just print directly
-        console.log('🖨️ Printing existing receipt with RawBT...');
-        this.printService.printMobileThermal(receiptData);
-        console.log('✅ Receipt sent to RawBT');
+        // Navigate to receipt preview with ESC/POS content
+        console.log('� Navigating to receipt preview...');
+        const escposContent = this.printService.generateESCPOSCommands(receiptData);
+        this.router.navigate(['/pos/mobile/receipt-preview'], {
+          state: { receiptContent: escposContent }
+        });
       } else {
         // Fallback: prepare receipt data from current state
         console.warn('⚠️ No receipt data found, preparing from current cart...');
         const fallbackReceiptData = await this.prepareReceiptDataEnhanced('completed-' + Date.now());
         this.receiptDataSignal.set(fallbackReceiptData);
-        this.printService.printMobileThermal(fallbackReceiptData);
-        console.log('✅ Fallback receipt sent to RawBT');
+        const escposContent = this.printService.generateESCPOSCommands(fallbackReceiptData);
+        this.router.navigate(['/pos/mobile/receipt-preview'], {
+          state: { receiptContent: escposContent }
+        });
       }
       
     } catch (error) {
@@ -1714,23 +1718,27 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
       const savedTransaction = await this.saveTransaction(receiptData);
       console.log('Transaction saved successfully:', savedTransaction.transactionNumber);
 
-      // 🔥 MOBILE: Use RawBT print - RawBT handles Bluetooth connection automatically
-      console.log('🖨️ Sending to RawBT for thermal printing...');
-      this.printService.printMobileThermal(receiptData);
-      console.log(`✅ ESC/POS sent to RawBT for order:`, receiptData.orderId);
+      // 🔥 MOBILE: Navigate to receipt preview page
+      console.log('� Navigating to receipt preview...');
+      const escposContent = this.printService.generateESCPOSCommands(receiptData);
+      this.router.navigate(['/pos/mobile/receipt-preview'], {
+        state: { receiptContent: escposContent }
+      });
       
-      // Close the modal after successful save and print
+      // Close the modal after successful save and navigation
       this.closeReceiptModal();
       
     } catch (error) {
       console.error('Error during print process:', error);
-      // Still try to print even if save fails
+      // Still try to show preview even if save fails
       try {
-        this.printService.printMobileThermal(receiptData);
-        console.log('ESC/POS sent to RawBT despite save error');
+        const escposContent = this.printService.generateESCPOSCommands(receiptData);
+        this.router.navigate(['/pos/mobile/receipt-preview'], {
+          state: { receiptContent: escposContent }
+        });
         this.closeReceiptModal();
       } catch (printError) {
-        console.error('Print error:', printError);
+        console.error('Navigation error:', printError);
       }
     }
   }
