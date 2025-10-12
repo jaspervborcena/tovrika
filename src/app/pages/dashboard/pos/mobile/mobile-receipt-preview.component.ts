@@ -110,8 +110,8 @@ import { Location } from '@angular/common';
 
     .receipt-content pre {
       font-family: 'Courier New', monospace;
-      font-size: 11px;
-      line-height: 1.2;
+      font-size: 12px;
+      line-height: 1.3;
       white-space: pre-wrap;
       word-wrap: break-word;
       background: white;
@@ -120,6 +120,8 @@ import { Location } from '@angular/common';
       box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
       max-width: 300px;
       margin: 0;
+      font-weight: 500;
+      letter-spacing: 0.3px;
     }
 
     .print-actions {
@@ -196,6 +198,9 @@ import { Location } from '@angular/common';
         border-radius: 0;
         padding: 3px;
         max-width: none;
+        font-size: 12px;
+        line-height: 1.3;
+        font-weight: 500;
       }
 
       @page {
