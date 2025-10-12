@@ -432,23 +432,26 @@ export class PrintService {
   /**
    * 📄 Generate ESC/POS commands for thermal printer (optimized for Xprinter)
    * Made public to allow components to generate ESC/POS content for preview
+   * Updated: Increased font size and improved print quality
    */
   generateESCPOSCommands(receiptData: any): string {
     let commands = '';
     
-    // Initialize printer
+    // Initialize printer with better quality settings
     commands += '\x1B\x40'; // Initialize
-    commands += '\x1B\x21\x01'; // Small font
-    commands += '\x1B\x4D\x01'; // Font B
-    commands += '\x0F'; // Condensed printing
+    commands += '\x1D\x21\x00'; // Normal font size (not condensed)
+    commands += '\x1B\x4D\x00'; // Font A (clearer than Font B)
+    commands += '\x1B\x7B\x32'; // Increase print density for darker text
     
-    // Store header - CENTERED for Xprinter
+    // Store header - CENTERED and LARGER
     commands += '\x1B\x61\x01'; // Center alignment
+    commands += '\x1D\x21\x11'; // Double height and width for store name
     commands += '\x1B\x45\x01'; // Bold on
     commands += (receiptData?.storeInfo?.storeName || 'Store Name') + '\n';
     commands += '\x1B\x45\x00'; // Bold off
+    commands += '\x1D\x21\x00'; // Back to normal size
     
-    // Store details - CENTERED
+    // Store details - CENTERED with normal font
     commands += (receiptData?.storeInfo?.address || 'Store Address') + '\n';
     commands += `Tel: ${receiptData?.storeInfo?.phone || 'N/A'}\n`;
     commands += `Email: ${receiptData?.storeInfo?.email || 'N/A'}\n`;
@@ -467,10 +470,12 @@ export class PrintService {
     
     commands += `Invoice #: ${receiptData?.invoiceNumber || 'Auto-generated'}\n`;
     
-    // Invoice Type (centered, bold)
+    // Invoice Type (centered, bold, slightly larger)
+    commands += '\x1D\x21\x01'; // Double height for invoice type
     commands += '\x1B\x45\x01'; // Bold on
     commands += (receiptData?.storeInfo?.invoiceType || 'SALES INVOICE') + '\n';
     commands += '\x1B\x45\x00'; // Bold off
+    commands += '\x1D\x21\x00'; // Back to normal size
     commands += '\x1B\x61\x00'; // Left alignment for rest
     
     commands += '--------------------------------\n';
@@ -478,13 +483,17 @@ export class PrintService {
     // Payment Method with filled/empty circles (Cash by default, both can be selected)
     const isCashSale = receiptData?.isCashSale !== false; // Default to true unless explicitly false
     const isChargeSale = receiptData?.isChargeSale === true; // Only true if explicitly set
+    commands += '\x1B\x45\x01'; // Bold for payment method
     commands += `Cash: ${isCashSale ? '\u25CF' : '\u25CB'}   Charge: ${isChargeSale ? '\u25CF' : '\u25CB'}\n`;
+    commands += '\x1B\x45\x00'; // Bold off
     
     commands += '--------------------------------\n';
     
-    // Customer info
+    // Customer info - BOLD for sold to
+    commands += '\x1B\x45\x01'; // Bold on
     const customerName = receiptData?.customerName || 'Walk-in Customer';
     commands += `SOLD TO: ${customerName}\n`;
+    commands += '\x1B\x45\x00'; // Bold off
     
     if (receiptData?.customerName && receiptData.customerName !== 'Walk-in Customer') {
       if (receiptData?.customerAddress && receiptData?.customerAddress !== 'N/A') {
@@ -497,15 +506,19 @@ export class PrintService {
     
     commands += '--------------------------------------------------\n';
     
-    // Date and Cashier
+    // Date and Cashier - BOLD
+    commands += '\x1B\x45\x01'; // Bold on
     commands += `Cashier: ${receiptData?.cashier || 'N/A'}\n`;
     const date = new Date(receiptData?.receiptDate || new Date());
     commands += `${date.toLocaleDateString()} ${date.toLocaleTimeString()}\n`;
+    commands += '\x1B\x45\x00'; // Bold off
     
     commands += '--------------------------------------------------\n';
     
-    // Items header - Optimized for 58mm printer
+    // Items header - BOLD and clearer
+    commands += '\x1B\x45\x01'; // Bold on
     commands += 'Qty Product Name             Total\n';
+    commands += '\x1B\x45\x00'; // Bold off
     commands += '--------------------------------\n';
     
     if (receiptData?.items) {
@@ -526,7 +539,10 @@ export class PrintService {
         // Total - right aligned
         const totalPadded = total.padStart(7); // 7 chars for amount
         
+        // Make item lines slightly bolder
+        commands += '\x1B\x45\x01'; // Bold on for item
         commands += `${qtyPadded} ${productPadded} ${totalPadded}\n`;
+        commands += '\x1B\x45\x00'; // Bold off
         
         // Unit price on separate line, indented
         const unitPrice = (item.sellingPrice || item.price || 0).toFixed(2);
@@ -536,40 +552,51 @@ export class PrintService {
     
     commands += '--------------------------------\n';
     
-    // Totals - Right aligned for 58mm printer (show ALL fields like receipt display)
+    // Totals - Right aligned for 58mm printer with BOLD amounts
     const receiptWidth = 32; // 58mm printer width
     
-    // Subtotal - always show
+    // Subtotal - always show (BOLD)
+    commands += '\x1B\x45\x01'; // Bold on
     const subtotalAmt = (receiptData?.subtotal || 0).toFixed(2);
     const subtotalLine = `Subtotal: ${subtotalAmt}`;
     const subtotalSpaces = ' '.repeat(receiptWidth - subtotalLine.length);
     commands += `${subtotalSpaces}${subtotalLine}\n`;
+    commands += '\x1B\x45\x00'; // Bold off
     
-    // VAT (12%) - always show (even if 0.00)
+    // VAT (12%) - always show (BOLD)
+    commands += '\x1B\x45\x01'; // Bold on
     const vatAmt = (receiptData?.vatAmount || 0).toFixed(2);
     const vatLine = `VAT (12%): ${vatAmt}`;
     const vatSpaces = ' '.repeat(receiptWidth - vatLine.length);
     commands += `${vatSpaces}${vatLine}\n`;
+    commands += '\x1B\x45\x00'; // Bold off
     
-    // VAT Exempt - always show (even if 0.00)
+    // VAT Exempt - always show (BOLD)
+    commands += '\x1B\x45\x01'; // Bold on
     const vatExemptAmt = (receiptData?.vatExempt || 0).toFixed(2);
     const vatExemptLine = `VAT Exempt: ${vatExemptAmt}`;
     const vatExemptSpaces = ' '.repeat(receiptWidth - vatExemptLine.length);
     commands += `${vatExemptSpaces}${vatExemptLine}\n`;
+    commands += '\x1B\x45\x00'; // Bold off
     
-    // Discount - always show (even if 0.00)
+    // Discount - always show (BOLD)
+    commands += '\x1B\x45\x01'; // Bold on
     const discountAmt = (receiptData?.discount || 0).toFixed(2);
     const discountLine = `Discount: ${discountAmt}`;
     const discountSpaces = ' '.repeat(receiptWidth - discountLine.length);
     commands += `${discountSpaces}${discountLine}\n`;
+    commands += '\x1B\x45\x00'; // Bold off
     
     commands += '================================\n';
+    // Total - DOUBLE SIZE and BOLD
+    commands += '\x1D\x21\x11'; // Double height and width
     commands += '\x1B\x45\x01'; // Bold on
     const totalAmt = (receiptData?.totalAmount || receiptData?.netAmount || 0).toFixed(2);
     const totalLine = `TOTAL: ${totalAmt}`;
-    const totalSpaces = ' '.repeat(receiptWidth - totalLine.length);
+    const totalSpaces = ' '.repeat(Math.floor(receiptWidth / 2) - totalLine.length);
     commands += `${totalSpaces}${totalLine}\n`;
     commands += '\x1B\x45\x00'; // Bold off
+    commands += '\x1D\x21\x00'; // Back to normal size
     commands += '================================\n';
     
     // Discount Information (for PWD/Senior/Special Discounts)
