@@ -21,15 +21,11 @@ export interface Company {
   id?: string;
   name: string;
   slug: string;
-  ownerUid: string;
-  plan: string;
-  address?: string;
   logoUrl?: string;
-  settings?: {
-    currency: string;
-    timezone: string;
-  };
+  email?: string;
+  phone?: string;
+  website?: string;
+  ownerUid: string;
   createdAt: Date;
   updatedAt?: Date;
-  stores?: Store[];
 }

@@ -57,9 +57,10 @@ import { PredefinedTypesService, PredefinedType } from '../../../services/predef
               <tr>
                 <th>Store Name</th>
                 <th>Store Code</th>
-                <th>Invoice No</th>
+                <th>Branch Name</th>
                 <th>Store Type</th>
-                <th>Address</th>
+                <th>BIR Status</th>
+                <th>Subscription</th>
                 <th>Status</th>
                 <th>Actions</th>
               </tr>
@@ -68,13 +69,18 @@ import { PredefinedTypesService, PredefinedType } from '../../../services/predef
               <tr *ngFor="let store of filteredStores">
                 <td class="store-name-cell">{{ store.storeName }}</td>
                 <td class="store-code-cell">{{ store.storeCode }}</td>
-                <td class="invoice-no-cell">
-                  <span class="invoice-number" [class.default-value]="store.invoiceNo === 'INV-0000-000000'">
-                    {{ store.invoiceNo || 'INV-0000-000000' }}
+                <td class="branch-name-cell">{{ store.branchName || '-' }}</td>
+                <td class="store-type-cell">{{ store.storeType }}</td>
+                <td class="bir-status-cell">
+                  <span class="status-badge" [class]="store.isBirAccredited ? 'status-active' : 'status-inactive'">
+                    {{ store.isBirAccredited ? 'BIR Accredited' : 'Not Accredited' }}
                   </span>
                 </td>
-                <td class="store-type-cell">{{ store.storeType }}</td>
-                <td class="address-cell">{{ store.address }}</td>
+                <td class="subscription-cell">
+                  <span class="subscription-badge" [class]="'subscription-' + (store.subscription.tier || 'freemium')">
+                    {{ (store.subscription.tier || 'freemium') | titlecase }}
+                  </span>
+                </td>
                 <td class="status-cell">
                   <span class="status-badge" [class]="'status-' + store.status">
                     {{ store.status | titlecase }}
@@ -157,7 +163,153 @@ import { PredefinedTypesService, PredefinedType } from '../../../services/predef
               </div>
 
               <div class="form-group">
-                <label for="invoiceNo">Invoice Number</label>
+                <label for="branchName">Branch Name</label>
+                <input 
+                  type="text" 
+                  id="branchName"
+                  formControlName="branchName"
+                  placeholder="e.g., Main Branch, Cebu Branch"
+                  class="form-input">
+              </div>
+
+              <div class="form-group">
+                <label for="uid">User ID</label>
+                <input 
+                  type="text" 
+                  id="uid"
+                  formControlName="uid"
+                  placeholder="Associated user ID"
+                  class="form-input">
+              </div>
+
+              <div class="form-group">
+                <label for="logoUrl">Logo URL</label>
+                <input 
+                  type="text" 
+                  id="logoUrl"
+                  formControlName="logoUrl"
+                  placeholder="https://..."
+                  class="form-input">
+              </div>
+
+              <!-- BIR Compliance Section -->
+              <div class="form-section-header">
+                <h4>BIR Compliance</h4>
+              </div>
+
+              <div class="form-group">
+                <label class="checkbox-label">
+                  <input 
+                    type="checkbox" 
+                    formControlName="isBirAccredited"
+                    class="form-checkbox">
+                  <span>BIR Accredited</span>
+                </label>
+              </div>
+
+              <div class="form-group">
+                <label for="tempInvoiceNumber">Temporary Invoice Number</label>
+                <input 
+                  type="text" 
+                  id="tempInvoiceNumber"
+                  formControlName="tempInvoiceNumber"
+                  placeholder="INV-2025-000001"
+                  class="form-input">
+              </div>
+
+              <div class="form-group">
+                <label for="tinNumber">TIN Number</label>
+                <input 
+                  type="text" 
+                  id="tinNumber"
+                  formControlName="tinNumber"
+                  placeholder="000-000-000-000"
+                  class="form-input">
+              </div>
+
+              <div class="form-group">
+                <label for="birPermitNo">BIR Permit Number</label>
+                <input 
+                  type="text" 
+                  id="birPermitNo"
+                  formControlName="birPermitNo"
+                  placeholder="BIR Permit #"
+                  class="form-input">
+              </div>
+
+              <div class="form-group">
+                <label for="atpOrOcn">ATP/OCN Number</label>
+                <input 
+                  type="text" 
+                  id="atpOrOcn"
+                  formControlName="atpOrOcn"
+                  placeholder="ATP/OCN #"
+                  class="form-input">
+              </div>
+
+              <div class="form-group">
+                <label for="inclusiveSerialNumber">Inclusive Serial Number</label>
+                <input 
+                  type="text" 
+                  id="inclusiveSerialNumber"
+                  formControlName="inclusiveSerialNumber"
+                  placeholder="e.g., 0001-9999"
+                  class="form-input">
+              </div>
+
+              <div class="form-group">
+                <label for="serialNumber">Serial Number</label>
+                <input 
+                  type="text" 
+                  id="serialNumber"
+                  formControlName="serialNumber"
+                  placeholder="Serial #"
+                  class="form-input">
+              </div>
+
+              <div class="form-group">
+                <label for="minNumber">Minimum Number</label>
+                <input 
+                  type="text" 
+                  id="minNumber"
+                  formControlName="minNumber"
+                  placeholder="Min #"
+                  class="form-input">
+              </div>
+
+              <!-- Subscription Section -->
+              <div class="form-section-header">
+                <h4>Subscription</h4>
+              </div>
+
+              <div class="form-group">
+                <label for="subscriptionTier">Subscription Tier</label>
+                <select 
+                  id="subscriptionTier"
+                  formControlName="subscriptionTier"
+                  class="form-select">
+                  <option value="free">Free</option>
+                  <option value="freemium">Freemium</option>
+                  <option value="premium">Premium</option>
+                  <option value="enterprise">Enterprise</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label for="subscriptionStatus">Subscription Status</label>
+                <select 
+                  id="subscriptionStatus"
+                  formControlName="subscriptionStatus"
+                  class="form-select">
+                  <option value="trial">Trial</option>
+                  <option value="active">Active</option>
+                  <option value="cancelled">Cancelled</option>
+                  <option value="expired">Expired</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label for="invoiceNo">Invoice Number (Legacy)</label>
                 <input 
                   type="text" 
                   id="invoiceNo"
@@ -619,6 +771,64 @@ import { PredefinedTypesService, PredefinedType } from '../../../services/predef
       font-style: italic;
     }
 
+    .form-section-header {
+      margin: 2rem 0 1rem 0;
+      padding-bottom: 0.5rem;
+      border-bottom: 2px solid #e2e8f0;
+    }
+
+    .form-section-header h4 {
+      margin: 0;
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: #2d3748;
+    }
+
+    .checkbox-label {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      cursor: pointer;
+    }
+
+    .form-checkbox {
+      width: 1.25rem;
+      height: 1.25rem;
+      border-radius: 4px;
+      border: 1px solid #e2e8f0;
+      cursor: pointer;
+    }
+
+    .subscription-badge {
+      padding: 0.25rem 0.75rem;
+      border-radius: 9999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.025em;
+    }
+
+    .subscription-badge.subscription-free,
+    .subscription-badge.subscription-freemium {
+      background: #e6fffa;
+      color: #234e52;
+    }
+
+    .subscription-badge.subscription-standard {
+      background: #bee3f8;
+      color: #2c5282;
+    }
+
+    .subscription-badge.subscription-premium {
+      background: #fbd38d;
+      color: #7c2d12;
+    }
+
+    .subscription-badge.subscription-enterprise {
+      background: #d6bcfa;
+      color: #44337a;
+    }
+
     .modal-footer {
       display: flex;
       gap: 0.75rem;
@@ -681,13 +891,31 @@ export class StoresManagementComponent implements OnInit {
     this.storeForm = this.fb.group({
       storeName: ['', [Validators.required]],
       storeCode: ['', [Validators.required]],
-      invoiceNo: ['INV-0000-000000'],
       storeType: ['', [Validators.required]],
+      branchName: [''],
       address: ['', [Validators.required]],
       phoneNumber: [''],
       email: ['', [Validators.email]],
-      managerName: [''],
-      status: ['active', [Validators.required]]
+      uid: [''],
+      status: ['active', [Validators.required]],
+      logoUrl: [''],
+      // BIR Compliance fields
+      isBirAccredited: [false],
+      tempInvoiceNumber: [''],
+      tinNumber: [''],
+      birPermitNo: [''],
+      atpOrOcn: [''],
+      inclusiveSerialNumber: [''],
+      serialNumber: [''],
+      minNumber: [''],
+      invoiceType: [''],
+      invoiceNumber: [''],
+      permitDateIssued: [''],
+      validityNotice: [''],
+      // Subscription fields
+      subscriptionTier: ['freemium'],
+      subscriptionStatus: ['active'],
+      subscriptionPopupShown: [false]
     });
   }
 
@@ -760,30 +988,44 @@ export class StoresManagementComponent implements OnInit {
 
   editStore(store: Store) {
     console.log('📝 editStore called with store:', store);
-    console.log('📝 Original store.invoiceNo:', store.invoiceNo);
     
     this.editingStore = store;
     
     const formValues = {
       storeName: store.storeName,
       storeCode: store.storeCode,
-      invoiceNo: store.invoiceNo || 'INV-0000-000000',
       storeType: store.storeType,
+      branchName: store.branchName || '',
       address: store.address,
       phoneNumber: store.phoneNumber || '',
       email: store.email || '',
-      managerName: store.managerName || '',
-      status: store.status
+      uid: store.uid || '',
+      status: store.status,
+      logoUrl: store.logoUrl || '',
+      // BIR Compliance
+      isBirAccredited: store.isBirAccredited || false,
+      tempInvoiceNumber: store.tempInvoiceNumber || '',
+      tinNumber: store.tinNumber || '',
+      birPermitNo: store.birDetails?.birPermitNo || '',
+      atpOrOcn: store.birDetails?.atpOrOcn || '',
+      inclusiveSerialNumber: store.birDetails?.inclusiveSerialNumber || '',
+      serialNumber: store.birDetails?.serialNumber || '',
+      minNumber: store.birDetails?.minNumber || '',
+      invoiceType: store.birDetails?.invoiceType || '',
+      invoiceNumber: store.birDetails?.invoiceNumber || '',
+      permitDateIssued: store.birDetails?.permitDateIssued || '',
+      validityNotice: store.birDetails?.validityNotice || '',
+      // Subscription
+      subscriptionTier: store.subscription?.tier || 'freemium',
+      subscriptionStatus: store.subscription?.status || 'active',
+      subscriptionPopupShown: store.subscriptionPopupShown || false
     };
     
     console.log('📝 Form values being patched:', formValues);
-    console.log('📝 invoiceNo being set to:', formValues.invoiceNo);
     
     this.storeForm.patchValue(formValues);
     
-    // Log form state after patching
     console.log('📝 Form value after patch:', this.storeForm.value);
-    console.log('📝 invoiceNo form control value:', this.storeForm.get('invoiceNo')?.value);
     
     this.showStoreModal = true;
   }
@@ -794,13 +1036,29 @@ export class StoresManagementComponent implements OnInit {
     this.storeForm.reset({
       storeName: '',
       storeCode: '',
-      invoiceNo: 'INV-0000-000000',
       storeType: '',
+      branchName: '',
       address: '',
       phoneNumber: '',
       email: '',
-      managerName: '',
-      status: 'active'
+      uid: '',
+      status: 'active',
+      logoUrl: '',
+      isBirAccredited: false,
+      tempInvoiceNumber: '',
+      tinNumber: '',
+      birPermitNo: '',
+      atpOrOcn: '',
+      inclusiveSerialNumber: '',
+      serialNumber: '',
+      minNumber: '',
+      invoiceType: '',
+      invoiceNumber: '',
+      permitDateIssued: '',
+      validityNotice: '',
+      subscriptionTier: 'freemium',
+      subscriptionStatus: 'active',
+      subscriptionPopupShown: false
     });
   }
 
@@ -820,16 +1078,61 @@ export class StoresManagementComponent implements OnInit {
       }
 
       const formData = this.storeForm.value;
+      
+      // Build the BIR details object
+      const birDetails = {
+        birPermitNo: formData.birPermitNo || '',
+        atpOrOcn: formData.atpOrOcn || '',
+        inclusiveSerialNumber: formData.inclusiveSerialNumber || '',
+        serialNumber: formData.serialNumber || '',
+        minNumber: formData.minNumber || '',
+        invoiceType: formData.invoiceType || '',
+        invoiceNumber: formData.invoiceNumber || '',
+        permitDateIssued: formData.permitDateIssued ? new Date(formData.permitDateIssued) : new Date(),
+        validityNotice: formData.validityNotice || ''
+      };
+
+      // Build the subscription object
+      const subscription = {
+        tier: formData.subscriptionTier || 'freemium',
+        status: formData.subscriptionStatus || 'active',
+        subscribedAt: new Date(),
+        expiresAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000), // 1 year from now
+        billingCycle: 'monthly' as const,
+        durationMonths: 12,
+        amountPaid: 0,
+        discountPercent: 0,
+        finalAmount: 0,
+        paymentMethod: 'gcash' as const,
+        lastPaymentDate: new Date()
+      };
+
       const storeData: Omit<Store, 'id' | 'createdAt' | 'updatedAt'> = {
-        ...formData,
-        companyId: currentPermission.companyId
+        companyId: currentPermission.companyId,
+        storeName: formData.storeName,
+        storeCode: formData.storeCode,
+        storeType: formData.storeType,
+        branchName: formData.branchName || '',
+        address: formData.address,
+        phoneNumber: formData.phoneNumber || '',
+        email: formData.email || '',
+        uid: formData.uid || '',
+        status: formData.status,
+        logoUrl: formData.logoUrl || '',
+        // BIR Compliance
+        isBirAccredited: formData.isBirAccredited || false,
+        tempInvoiceNumber: formData.tempInvoiceNumber || '',
+        birDetails: birDetails,
+        tinNumber: formData.tinNumber || '',
+        // Subscription
+        subscription: subscription,
+        subscriptionPopupShown: formData.subscriptionPopupShown || false
       };
 
       console.log('💾 Saving store data:', {
         formData,
         storeData,
-        editingStore: this.editingStore?.id,
-        invoiceNoFromForm: formData.invoiceNo
+        editingStore: this.editingStore?.id
       });
 
       if (this.editingStore) {
@@ -837,11 +1140,13 @@ export class StoresManagementComponent implements OnInit {
         console.log('📝 Updating store:', this.editingStore.id, 'with data:', storeData);
         await this.storeService.updateStore(this.editingStore.id!, storeData);
         console.log('✅ Store updated successfully');
+        this.toastService.success('Store updated successfully');
       } else {
         // Create new store
         console.log('➕ Creating new store with data:', storeData);
         await this.storeService.createStore(storeData);
         console.log('✅ Store created successfully');
+        this.toastService.success('Store created successfully');
       }
 
       await this.loadStores();

@@ -16,34 +16,9 @@ import {
 import { AuthService } from './auth.service';
 import { FirestoreSecurityService } from '../core/services/firestore-security.service';
 import { OfflineDocumentService } from '../core/services/offline-document.service';
+import { Store } from '../interfaces/store.interface';
 
-export interface Store {
-  id?: string;
-  companyId: string;
-  storeName: string;
-  storeCode: string;
-  storeType: string;
-  branchName?: string;
-  address: string;
-  phoneNumber?: string;
-  email?: string;
-  managerName?: string;
-  status: 'active' | 'inactive';
-  createdAt: Date;
-  invoiceNo?: string; // Format: INV-YYYY-XXXXXX (e.g., INV-2025-000001)
-  updatedAt?: Date;
-  taxId?: string;
-  tinNumber?: string;
-  invoiceNumber?: string;
-  invoiceType?: string;
-  logoUrl?: string;
-  atpOrOcn?: string;
-  birPermitNo?: string;
-  inclusiveSerialNumber?: string;
-  serialNumber?: string;
-  minNumber?: string;
-  message?: string;
-}
+export type { Store } from '../interfaces/store.interface';
 
 @Injectable({
   providedIn: 'root'
@@ -107,7 +82,7 @@ export class StoreService {
       
       const stores = querySnapshot.docs.map(doc => {
         const data = doc.data() as any;
-        const store = {
+        const store: Store = {
           id: doc.id,
           companyId: data.companyId || '',
           storeName: data.storeName || '',
@@ -117,23 +92,33 @@ export class StoreService {
           address: data.address || '',
           phoneNumber: data.phoneNumber || '',
           email: data.email || '',
-          managerName: data.managerName || '',
+          uid: data.uid || '',
           status: data.status || 'inactive',
           createdAt: data.createdAt?.toDate() || new Date(),
           updatedAt: data.updatedAt?.toDate() || new Date(),
-          invoiceNo: data.invoiceNo || 'INV-0000-000000',
-          taxId: data.taxId || '',
-          tinNumber: data.tinNumber || '',
-          invoiceNumber: data.invoiceNumber || '',
-          invoiceType: data.invoiceType || '',
           logoUrl: data.logoUrl || '',
-          atpOrOcn: data.atpOrOcn || '',
-          birPermitNo: data.birPermitNo || '',
-          inclusiveSerialNumber: data.inclusiveSerialNumber || '',
-          serialNumber: data.serialNumber || '',
-          minNumber: data.minNumber || '',
-          message: data.message || ''
-        } as Store;
+          // BIR Compliance
+          isBirAccredited: data.isBirAccredited || false,
+          tempInvoiceNumber: data.tempInvoiceNumber || '',
+          birDetails: data.birDetails || {
+            birPermitNo: '',
+            atpOrOcn: '',
+            inclusiveSerialNumber: '',
+            serialNumber: '',
+            minNumber: '',
+            maxNumber: ''
+          },
+          tinNumber: data.tinNumber || '',
+          // Subscription
+          subscription: data.subscription || {
+            tier: 'free',
+            status: 'trial',
+            startDate: new Date(),
+            billingCycle: 'monthly'
+          },
+          promoUsage: data.promoUsage || undefined,
+          subscriptionPopupShown: data.subscriptionPopupShown || false
+        };
         
         console.log('🏪 Mapped store:', store.storeName, 'ID:', store.id, 'CompanyId:', store.companyId);
         return store;
@@ -180,7 +165,7 @@ export class StoreService {
       
       const stores = querySnapshot.docs.map(doc => {
         const data = doc.data() as any;
-        const store = {
+        const store: Store = {
           id: doc.id,
           companyId: data.companyId || '',
           storeName: data.storeName || '',
@@ -190,23 +175,33 @@ export class StoreService {
           address: data.address || '',
           phoneNumber: data.phoneNumber || '',
           email: data.email || '',
-          managerName: data.managerName || '',
+          uid: data.uid || '',
           status: data.status || 'inactive',
           createdAt: data.createdAt?.toDate() || new Date(),
           updatedAt: data.updatedAt?.toDate() || new Date(),
-          invoiceNo: data.invoiceNo || 'INV-0000-000000',
-          taxId: data.taxId || '',
-          tinNumber: data.tinNumber || '',
-          invoiceNumber: data.invoiceNumber || '',
-          invoiceType: data.invoiceType || '',
           logoUrl: data.logoUrl || '',
-          atpOrOcn: data.atpOrOcn || '',
-          birPermitNo: data.birPermitNo || '',
-          inclusiveSerialNumber: data.inclusiveSerialNumber || '',
-          serialNumber: data.serialNumber || '',
-          minNumber: data.minNumber || '',
-          message: data.message || ''
-        } as Store;
+          // BIR Compliance
+          isBirAccredited: data.isBirAccredited || false,
+          tempInvoiceNumber: data.tempInvoiceNumber || '',
+          birDetails: data.birDetails || {
+            birPermitNo: '',
+            atpOrOcn: '',
+            inclusiveSerialNumber: '',
+            serialNumber: '',
+            minNumber: '',
+            maxNumber: ''
+          },
+          tinNumber: data.tinNumber || '',
+          // Subscription
+          subscription: data.subscription || {
+            tier: 'free',
+            status: 'trial',
+            startDate: new Date(),
+            billingCycle: 'monthly'
+          },
+          promoUsage: data.promoUsage || undefined,
+          subscriptionPopupShown: data.subscriptionPopupShown || false
+        };
         
         console.log('🏪 Mapped store:', store.storeName, 'ID:', store.id, 'CompanyId:', store.companyId);
         return store;
@@ -230,8 +225,7 @@ export class StoreService {
       const newStore: Omit<Store, 'id'> = {
         ...store,
         createdAt: new Date(),
-        updatedAt: new Date(),
-        invoiceNo: store.invoiceNo || this.generateDefaultInvoiceNo() // Add default invoice number
+        updatedAt: new Date()
       };
       
       // 🔥 NEW APPROACH: Use OfflineDocumentService for offline-safe creation
@@ -267,7 +261,6 @@ export class StoreService {
       console.log('🔥 Firestore updateStore - Store ID:', storeId);
       console.log('🔥 Firestore updateStore - Updates:', updates);
       console.log('🔥 Firestore updateStore - Final data to save:', updateData);
-      console.log('🔥 Firestore updateStore - Invoice number in updates:', updates.invoiceNo);
       
       await updateDoc(storeRef, updateData);
       console.log('✅ Firestore document updated successfully');
@@ -370,18 +363,18 @@ export class StoreService {
   }
 
   /**
-   * Initialize invoice number for existing stores that don't have one
+   * Initialize temp invoice number for existing stores that don't have one
    */
   async initializeInvoiceNoForStore(storeId: string): Promise<void> {
     try {
       const store = this.getStore(storeId);
-      if (store && !store.invoiceNo) {
+      if (store && !store.tempInvoiceNumber) {
         const defaultInvoiceNo = this.generateDefaultInvoiceNo();
-        await this.updateStore(storeId, { invoiceNo: defaultInvoiceNo });
-        console.log(`✅ Initialized invoice number for store ${store.storeName}: ${defaultInvoiceNo}`);
+        await this.updateStore(storeId, { tempInvoiceNumber: defaultInvoiceNo });
+        console.log(`✅ Initialized temp invoice number for store ${store.storeName}: ${defaultInvoiceNo}`);
       }
     } catch (error) {
-      console.error('❌ Error initializing invoice number:', error);
+      console.error('❌ Error initializing temp invoice number:', error);
       throw error;
     }
   }
@@ -393,7 +386,150 @@ export class StoreService {
     console.log('  - Total stores:', stores.length);
     console.log('  - Last load time:', this.loadTimestamp ? new Date(this.loadTimestamp).toLocaleTimeString() : 'Never');
     console.log('  - Is loading:', this.isLoading);
-    console.log('  - Stores:', stores.map(s => ({ id: s.id, name: s.storeName, companyId: s.companyId, invoiceNo: s.invoiceNo })));
+    console.log('  - Stores:', stores.map(s => ({ id: s.id, name: s.storeName, companyId: s.companyId, tempInvoice: s.tempInvoiceNumber })));
     return { stores, count: stores.length, lastLoad: this.loadTimestamp, isLoading: this.isLoading };
+  }
+
+  /**
+   * Submit BIR accreditation for a store
+   * Sets status to 'pending' and saves submission timestamp
+   */
+  async submitBirAccreditation(
+    storeId: string,
+    birData: {
+      tinNumber: string;
+      businessName: string;
+      address: string;
+      // Add other BIR-related fields as needed
+    }
+  ): Promise<void> {
+    try {
+      console.log('📄 Submitting BIR accreditation for store:', storeId);
+
+      const storeRef = doc(this.firestore, 'stores', storeId);
+      await updateDoc(storeRef, {
+        isBirAccredited: false, // Not yet accredited until approved
+        birAccreditationStatus: 'pending',
+        birAccreditationSubmittedAt: new Date(),
+        'birDetails.tinNumber': birData.tinNumber,
+        'birDetails.businessName': birData.businessName,
+        'birDetails.address': birData.address,
+        updatedAt: new Date()
+      });
+
+      console.log('✅ BIR accreditation submitted, awaiting admin approval');
+    } catch (error) {
+      console.error('❌ Error submitting BIR accreditation:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Update BIR accreditation status
+   * Called by admin after review
+   */
+  async updateBirAccreditationStatus(
+    storeId: string,
+    status: 'approved' | 'rejected',
+    rejectionReason?: string
+  ): Promise<void> {
+    try {
+      console.log('🔄 Updating BIR accreditation status:', storeId, '→', status);
+
+      const updateData: any = {
+        birAccreditationStatus: status,
+        updatedAt: new Date()
+      };
+
+      if (status === 'approved') {
+        updateData.isBirAccredited = true;
+        updateData.birAccreditationApprovedAt = new Date();
+      } else if (status === 'rejected' && rejectionReason) {
+        updateData.birAccreditationRejectedReason = rejectionReason;
+      }
+
+      const storeRef = doc(this.firestore, 'stores', storeId);
+      await updateDoc(storeRef, updateData);
+
+      console.log('✅ BIR accreditation status updated');
+    } catch (error) {
+      console.error('❌ Error updating BIR accreditation status:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get stores pending BIR accreditation (for admin)
+   */
+  async getStoresPendingBirAccreditation(): Promise<Store[]> {
+    try {
+      console.log('📋 Loading stores pending BIR accreditation');
+
+      const storesRef = collection(this.firestore, 'stores');
+      const storesQuery = query(
+        storesRef,
+        where('birAccreditationStatus', '==', 'pending')
+      );
+
+      const querySnapshot = await getDocs(storesQuery);
+      const stores = querySnapshot.docs.map(doc => {
+        const data = doc.data() as any;
+        const store: Store = {
+          id: doc.id,
+          companyId: data.companyId || '',
+          storeName: data.storeName || '',
+          storeCode: data.storeCode || '',
+          storeType: data.storeType || '',
+          branchName: data.branchName || '',
+          address: data.address || '',
+          phoneNumber: data.phoneNumber || '',
+          email: data.email || '',
+          uid: data.uid || '',
+          status: data.status || 'inactive',
+          createdAt: data.createdAt?.toDate() || new Date(),
+          updatedAt: data.updatedAt?.toDate() || new Date(),
+          logoUrl: data.logoUrl || '',
+          isBirAccredited: data.isBirAccredited || false,
+          birAccreditationStatus: data.birAccreditationStatus,
+          birAccreditationSubmittedAt: data.birAccreditationSubmittedAt?.toDate(),
+          birAccreditationApprovedAt: data.birAccreditationApprovedAt?.toDate(),
+          birAccreditationRejectedReason: data.birAccreditationRejectedReason,
+          tinNumber: data.tinNumber || '',
+          birDetails: data.birDetails || {
+            birPermitNo: '',
+            atpOrOcn: '',
+            inclusiveSerialNumber: '',
+            serialNumber: '',
+            minNumber: '',
+            invoiceType: '',
+            invoiceNumber: '',
+            permitDateIssued: new Date(),
+            validityNotice: ''
+          },
+          subscription: data.subscription || {
+            tier: 'freemium',
+            status: 'inactive',
+            subscribedAt: new Date(),
+            expiresAt: new Date(),
+            billingCycle: 'monthly',
+            durationMonths: 0,
+            amountPaid: 0,
+            discountPercent: 0,
+            finalAmount: 0,
+            paymentMethod: 'credit_card',
+            lastPaymentDate: new Date()
+          },
+          subscriptionPopupShown: data.subscriptionPopupShown || false,
+          tempInvoiceNumber: data.tempInvoiceNumber
+        };
+        return store;
+      });
+
+      console.log('✅ Found', stores.length, 'stores pending BIR accreditation');
+      return stores;
+    } catch (error) {
+      console.error('❌ Error loading pending BIR stores:', error);
+      throw error;
+    }
   }
 }

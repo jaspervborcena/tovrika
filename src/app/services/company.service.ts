@@ -14,7 +14,9 @@ import {
   Timestamp,
   DocumentReference
 } from '@angular/fire/firestore';
-import { Company, Store, Branch } from '../interfaces/company.interface';
+import { Company } from '../interfaces/company.interface';
+import { Branch } from '../interfaces/branch.interface';
+import { Store } from '../interfaces/store.interface';
 import { AuthService } from './auth.service';
 import { FirestoreSecurityService } from '../core/services/firestore-security.service';
 import { OfflineDocumentService } from '../core/services/offline-document.service';
@@ -88,30 +90,9 @@ export class CompanyService {
           const company: Company = {
             ...companyData,
             id: companyDoc.id,
-            createdAt: this.toDate(companyData['createdAt']),
-            stores: []
+            createdAt: this.toDate(companyData['createdAt'])
           };
 
-          // Load stores for this company
-          const storesRef = collection(this.firestore, 'stores');
-          const storesQuery = query(storesRef, where('companyId', '==', company.id));
-          const storesSnapshot = await getDocs(storesQuery);
-          const stores: Store[] = [];
-
-          for (const storeDoc of storesSnapshot.docs) {
-            const storeData = storeDoc.data() as Omit<Store, 'id' | 'branches'>;
-            const store: Store = {
-              ...storeData,
-              id: storeDoc.id,
-              createdAt: this.toDate(storeData['createdAt']),
-              updatedAt: storeData['updatedAt'] ? this.toDate(storeData['updatedAt']) : undefined,
-              branches: []
-            };
-
-            stores.push(store);
-          }
-
-          company.stores = stores;
           companies.push(company);
         }
       }
@@ -163,13 +144,9 @@ export class CompanyService {
       // Ensure we have a valid company object
       const company = companyInput || {};
       
-      // Extract stores if they exist, otherwise use empty array
-      const stores = company.stores || [];
-      
-      // Remove stores and clean up undefined values from company data before saving
-      const { stores: _, ...rawCompanyData } = company;
+      // Clean up undefined values from company data before saving
       const companyData = Object.fromEntries(
-        Object.entries(rawCompanyData)
+        Object.entries(company)
           .filter(([_, value]) => value !== undefined)
       );
       
@@ -211,11 +188,6 @@ export class CompanyService {
           currentCompanyId: documentId // Set this as the current company
         });
       }
-      
-      // Add stores if we have any
-      if (stores.length > 0) {
-        await this.addStoresAndBranches(documentId, stores);
-      }
 
       await this.loadCompanies(); // Reload to get fresh data
       console.log('✅ Company created with ID:', documentId, navigator.onLine ? '(online)' : '(offline)');
@@ -232,12 +204,11 @@ export class CompanyService {
   ) {
     for (const store of stores) {
       const storesRef = collection(this.firestore, 'stores');
-      const { branches, ...rawStoreData } = store;
       
       // Clean up undefined values from store data
       const storeData = Object.fromEntries(
-        Object.entries(rawStoreData)
-          .filter(([_, value]) => value !== undefined)
+        Object.entries(store)
+          .filter(([key, value]) => value !== undefined && key !== 'id' && key !== 'branches')
       );
       
       const newStore = {
@@ -249,7 +220,9 @@ export class CompanyService {
       // 🔥 NEW APPROACH: Use OfflineDocumentService for offline-safe creation
       const storeId = await this.offlineDocService.createDocument('stores', newStore);
 
-      if (branches && branches.length > 0) {
+      // Handle branches if they exist (optional UI property)
+      const branches = (store as any).branches;
+      if (branches && Array.isArray(branches) && branches.length > 0) {
         for (const branch of branches) {
           const newBranch = {
             ...branch,

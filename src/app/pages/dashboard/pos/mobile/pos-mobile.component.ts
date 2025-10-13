@@ -687,15 +687,15 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
       receiptDate: order.date || order.createdAt,
       storeInfo: {
         storeName: company?.name || (storeInfo as any)?.storeName || 'Unknown Store',
-        address: company?.address || (storeInfo as any)?.address || 'Store Address',
+        address: (storeInfo as any)?.address || 'Store Address',
         phone: company?.phone || (storeInfo as any)?.phone || 'N/A', // Use company phone
         email: company?.email || storeInfo?.email || 'N/A', // Use company email
-        tin: company?.taxId || company?.tin || (storeInfo as any)?.tinNumber || 'N/A', // Use company tax ID/TIN
+        tin: (storeInfo as any)?.tinNumber || 'N/A', // Use store TIN
         invoiceType: (storeInfo as any)?.invoiceType || 'SALES INVOICE',
-        birPermitNo: company?.birPermitNo || (storeInfo as any)?.birPermitNo || null,
+        birPermitNo: (storeInfo as any)?.birPermitNo || null,
         minNumber: (storeInfo as any)?.minNumber || null,
         serialNumber: (storeInfo as any)?.serialNumber || null,
-        inclusiveSerialNumber: company?.inclusiveSerialNumber || (storeInfo as any)?.inclusiveSerialNumber || null
+        inclusiveSerialNumber: (storeInfo as any)?.inclusiveSerialNumber || null
       },
       customerName: customerName,
       customerAddress: customerName ? (order.businessAddress || 'N/A') : null,
@@ -944,15 +944,15 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
       receiptDate: new Date(),
       storeInfo: {
         storeName: company?.name || (storeInfo as any)?.storeName || 'Unknown Store',
-        address: company?.address || (storeInfo as any)?.address || 'Store Address',
+        address: (storeInfo as any)?.address || 'Store Address',
         phone: company?.phone || (storeInfo as any)?.phone || 'N/A', // Use company phone
         email: company?.email || storeInfo?.email || 'N/A', // Use company email
-        tin: company?.taxId || company?.tin || (storeInfo as any)?.tinNumber || 'N/A', // Use company tax ID/TIN
+        tin: (storeInfo as any)?.tinNumber || 'N/A', // Use store TIN
         invoiceType: (storeInfo as any)?.invoiceType || 'SALES INVOICE',
-        birPermitNo: company?.birPermitNo || (storeInfo as any)?.birPermitNo || null,
+        birPermitNo: (storeInfo as any)?.birPermitNo || null,
         minNumber: (storeInfo as any)?.minNumber || null,
         serialNumber: (storeInfo as any)?.serialNumber || null,
-        inclusiveSerialNumber: company?.inclusiveSerialNumber || (storeInfo as any)?.inclusiveSerialNumber || null
+        inclusiveSerialNumber: (storeInfo as any)?.inclusiveSerialNumber || null
       },
       customerName: customerName,
       customerAddress: customerName ? (this.customerInfo.businessAddress || 'N/A') : null,

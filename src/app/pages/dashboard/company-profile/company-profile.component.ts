@@ -6,13 +6,18 @@ import { CompanyService } from '../../../services/company.service';
 import { AuthService } from '../../../services/auth.service';
 import { Company } from '../../../interfaces/company.interface';
 import { AccessService } from '../../../core/services/access.service';
-
+import { StoreService } from '../../../services/store.service';
+import { Store } from '../../../interfaces/store.interface';
+import { SubscriptionModalComponent } from '../subscriptions/subscription-modal.component';
+import { SubscriptionDetailsModalComponent } from './subscription-details-modal.component';
 import { RoleDefinitionService } from '../../../services/role-definition.service';
+import { ToastService } from '../../../shared/services/toast.service';
+import { BillingService } from '../../../services/billing.service';
 
 @Component({
   selector: 'app-company-profile',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule],
+  imports: [CommonModule, ReactiveFormsModule, SubscriptionModalComponent, SubscriptionDetailsModalComponent],
   template: `
     <div class="company-profile-container">
       <!-- Header with Products style -->
@@ -62,8 +67,32 @@ import { RoleDefinitionService } from '../../../services/role-definition.service
         </div>
       </div>
 
+      <!-- Tab Navigation -->
+      <div class="content-container" *ngIf="!isCreatingCompany()">
+        <div class="tab-navigation">
+          <button 
+            class="tab-button"
+            [class.active]="activeTab() === 'profile'"
+            (click)="setActiveTab('profile')">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" class="tab-icon">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+            </svg>
+            Company Profile
+          </button>
+          <button 
+            class="tab-button"
+            [class.active]="activeTab() === 'subscriptions'"
+            (click)="setActiveTab('subscriptions')">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" class="tab-icon">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            Store Subscriptions
+          </button>
+        </div>
+      </div>
+
       <!-- Company Form -->
-      <div class="content-container">
+      <div class="content-container" *ngIf="activeTab() === 'profile'">
         <div class="form-card">
           <div class="form-header">
             <h2 class="form-title">{{ isCreatingCompany() ? 'Create Company Profile' : 'Company Information' }}</h2>
@@ -115,54 +144,6 @@ import { RoleDefinitionService } from '../../../services/role-definition.service
                 [disabled]="loading()">
             </div>
 
-            <!-- Address -->
-            <div class="form-group">
-              <label for="address" class="form-label">Address</label>
-              <textarea 
-                id="address"
-                formControlName="address"
-                class="form-textarea"
-                placeholder="Enter company address"
-                rows="3"
-                [disabled]="loading()"></textarea>
-            </div>
-
-            <!-- Logo URL -->
-            <div class="form-group">
-              <label for="logoUrl" class="form-label">Logo URL</label>
-              <input 
-                id="logoUrl"
-                type="url" 
-                formControlName="logoUrl"
-                class="form-input"
-                placeholder="Enter logo URL"
-                [disabled]="loading()">
-            </div>
-
-            <!-- Tax ID -->
-            <div class="form-group">
-              <label for="taxId" class="form-label">Tax ID</label>
-              <input 
-                id="taxId"
-                type="text" 
-                formControlName="taxId"
-                class="form-input"
-                placeholder="Enter tax identification number"
-                [disabled]="loading()">
-            </div>
-
-            <!-- Website -->
-            <div class="form-group">
-              <label for="website" class="form-label">Website</label>
-              <input 
-                id="website"
-                type="url" 
-                formControlName="website"
-                class="form-input"
-                placeholder="Enter company website"
-                [disabled]="loading()">
-            </div>
-
             <!-- Form Actions -->
             <div class="form-actions">
               <button 
@@ -183,6 +164,94 @@ import { RoleDefinitionService } from '../../../services/role-definition.service
           </form>
         </div>
       </div>
+
+      <!-- Subscription Management Tab -->
+      <div class="content-container" *ngIf="activeTab() === 'subscriptions' && !isCreatingCompany()">
+        <div class="subscription-section">
+          <div class="section-header">
+            <h2>Store Subscriptions</h2>
+            <button (click)="openSubscriptionModal()" class="btn-add-subscription" *ngIf="stores().length > 0">
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" class="btn-icon">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+              </svg>
+              Add Subscription
+            </button>
+          </div>
+
+          <!-- Subscription Grid -->
+          <div class="subscription-grid" *ngIf="stores().length > 0">
+            <table class="subscription-table">
+              <thead>
+                <tr>
+                  <th>Store Name</th>
+                  <th>Tier</th>
+                  <th>Subscribed At</th>
+                  <th>Expires At</th>
+                  <th>Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let store of stores()">
+                  <td>
+                    <div class="store-info">
+                      <span class="store-name">{{ store.storeName }}</span>
+                      <span class="store-code">{{ store.storeCode }}</span>
+                    </div>
+                  </td>
+                  <td>
+                    <span [class]="getTierBadgeClass(store.subscription ? store.subscription.tier : 'freemium')">
+                      {{ (store.subscription ? store.subscription.tier : 'freemium') | titlecase }}
+                    </span>
+                  </td>
+                  <td>{{ formatDate(store.subscription ? store.subscription.subscribedAt : undefined) }}</td>
+                  <td [class.expiring]="isExpiringSoon(store.subscription ? store.subscription.expiresAt : undefined)">
+                    {{ formatDate(store.subscription ? store.subscription.expiresAt : undefined) }}
+                  </td>
+                  <td>
+                    <span [class]="getStatusBadgeClass(store.subscription ? store.subscription.status : 'inactive')">
+                      {{ (store.subscription ? store.subscription.status : 'inactive') | titlecase }}
+                    </span>
+                  </td>
+                  <td>
+                    <div class="action-buttons">
+                      <button (click)="upgradeSubscription(store)" class="btn-action btn-upgrade">
+                        Upgrade
+                      </button>
+                      <button (click)="viewSubscriptionDetails(store)" class="btn-action btn-view">
+                        View
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Empty State -->
+          <div class="empty-state" *ngIf="stores().length === 0">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" class="empty-icon">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+            </svg>
+            <p>No stores yet. Create a store to add subscriptions.</p>
+          </div>
+        </div>
+      </div><!-- End content-container -->
+
+      <!-- Subscription Modal -->
+      <app-subscription-modal
+        [isOpen]="showSubscriptionModal()"
+        [store]="selectedStore()"
+        (closeModal)="closeSubscriptionModal()"
+        (subscriptionSubmitted)="handleSubscription($event)"
+      ></app-subscription-modal>
+
+      <!-- Subscription Details Modal -->
+      <app-subscription-details-modal
+        [isOpen]="showSubscriptionDialog()"
+        [store]="selectedStoreForDetails()"
+        (closed)="closeSubscriptionDialog()"
+      ></app-subscription-details-modal>
     </div>
   `,
   styles: [`
@@ -313,6 +382,50 @@ import { RoleDefinitionService } from '../../../services/role-definition.service
       max-width: 800px;
       margin: 0 auto;
       padding: 2rem;
+    }
+
+    /* Tab Navigation Styles */
+    .tab-navigation {
+      display: flex;
+      gap: 0;
+      background: white;
+      border-radius: 12px;
+      padding: 0.5rem;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+      margin-bottom: 0;
+    }
+
+    .tab-button {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      padding: 0.875rem 1.5rem;
+      background: transparent;
+      border: none;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 0.9rem;
+      color: #6b7280;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .tab-button:hover {
+      background: #f3f4f6;
+      color: #374151;
+    }
+
+    .tab-button.active {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+    }
+
+    .tab-icon {
+      width: 1.25rem;
+      height: 1.25rem;
     }
 
     .error-alert, .success-alert {
@@ -510,6 +623,237 @@ import { RoleDefinitionService } from '../../../services/role-definition.service
         flex-direction: column;
       }
     }
+
+    /* Subscription Section */
+    .subscription-section {
+      background: white;
+      border-radius: 12px;
+      padding: 2rem;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    }
+
+    .section-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 2rem;
+    }
+
+    .section-header h2 {
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: #1f2937;
+      margin: 0;
+    }
+
+    .btn-add-subscription {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.75rem 1.5rem;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      border-radius: 0.5rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-size: 0.875rem;
+    }
+
+    .btn-add-subscription:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 25px rgba(102, 126, 234, 0.4);
+    }
+
+    /* Subscription Table */
+    .subscription-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .subscription-table thead {
+      background: #f9fafb;
+    }
+
+    .subscription-table th {
+      padding: 1rem;
+      text-align: left;
+      font-weight: 600;
+      color: #6b7280;
+      font-size: 0.875rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      border-bottom: 2px solid #e5e7eb;
+    }
+
+    .subscription-table td {
+      padding: 1rem;
+      border-bottom: 1px solid #f3f4f6;
+    }
+
+    .subscription-table tbody tr:hover {
+      background: #f9fafb;
+    }
+
+    .store-info {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+
+    .store-name {
+      font-weight: 600;
+      color: #1f2937;
+    }
+
+    .store-code {
+      font-size: 0.75rem;
+      color: #6b7280;
+    }
+
+    /* Badges */
+    .tier-badge,
+    .status-badge {
+      display: inline-block;
+      padding: 0.375rem 0.75rem;
+      border-radius: 9999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .tier-freemium {
+      background: #dbeafe;
+      color: #1e40af;
+    }
+
+    .tier-standard {
+      background: #e0e7ff;
+      color: #5b21b6;
+    }
+
+    .tier-premium {
+      background: #fef3c7;
+      color: #92400e;
+    }
+
+    .tier-enterprise {
+      background: #f3e8ff;
+      color: #6b21a8;
+    }
+
+    .status-active {
+      background: #d1fae5;
+      color: #065f46;
+    }
+
+    .status-inactive {
+      background: #f3f4f6;
+      color: #6b7280;
+    }
+
+    .status-expired {
+      background: #fee2e2;
+      color: #991b1b;
+    }
+
+    .status-cancelled {
+      background: #fed7aa;
+      color: #9a3412;
+    }
+
+    /* Expiring Soon */
+    td.expiring {
+      color: #dc2626;
+      font-weight: 600;
+    }
+
+    /* Action Buttons */
+    .action-buttons {
+      display: flex;
+      gap: 0.5rem;
+    }
+
+    .btn-action {
+      padding: 0.5rem 1rem;
+      border: 1px solid #d1d5db;
+      background: white;
+      border-radius: 0.375rem;
+      font-size: 0.875rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .btn-action:hover {
+      background: #f9fafb;
+      border-color: #9ca3af;
+    }
+
+    .btn-upgrade {
+      color: #667eea;
+      border-color: #667eea;
+    }
+
+    .btn-upgrade:hover {
+      background: #eef2ff;
+    }
+
+    .btn-view {
+      color: #6b7280;
+    }
+
+    /* Empty State */
+    .empty-state {
+      text-align: center;
+      padding: 3rem;
+      color: #6b7280;
+    }
+
+    .empty-icon {
+      width: 4rem;
+      height: 4rem;
+      margin: 0 auto 1rem;
+      color: #d1d5db;
+    }
+
+    .empty-state p {
+      font-size: 1rem;
+      margin: 0;
+    }
+
+    /* Responsive - Subscription Section */
+    @media (max-width: 768px) {
+      .section-header {
+        flex-direction: column;
+        gap: 1rem;
+        align-items: flex-start;
+      }
+
+      .btn-add-subscription {
+        width: 100%;
+        justify-content: center;
+      }
+
+      .subscription-table {
+        font-size: 0.875rem;
+      }
+
+      .subscription-table th,
+      .subscription-table td {
+        padding: 0.75rem 0.5rem;
+      }
+
+      .action-buttons {
+        flex-direction: column;
+      }
+
+      .btn-action {
+        width: 100%;
+      }
+    }
   `]
 })
 export class CompanyProfileComponent {
@@ -518,11 +862,26 @@ export class CompanyProfileComponent {
   private authService = inject(AuthService);
   private router = inject(Router);
   private accessService = inject(AccessService);
+  private storeService = inject(StoreService);
+  private toastService = inject(ToastService);
+  private billingService = inject(BillingService);
 
   protected profileForm: FormGroup;
   protected loading = signal(false);
   protected error = signal<string | null>(null);
   protected showSuccessMessage = signal(false);
+  
+  // Tab management
+  protected activeTab = signal<'profile' | 'subscriptions'>('profile');
+  
+  // Subscription-related signals
+  protected showSubscriptionModal = signal(false);
+  protected selectedStore = signal<Store | undefined>(undefined);
+  protected stores = signal<Store[]>([]);
+  
+  // Subscription details modal
+  protected showSubscriptionDialog = signal(false);
+  protected selectedStoreForDetails = signal<Store | undefined>(undefined);
 
   // Computed values
   protected currentCompany = computed(() => this.companyService.companies()[0]);
@@ -537,12 +896,8 @@ export class CompanyProfileComponent {
   constructor() {
     this.profileForm = this.fb.group({
       name: ['', Validators.required],
-      logoUrl: [''],
       phone: [''],
-      address: [''],
-      email: ['', [Validators.required, Validators.email]],
-      taxId: [''],
-      website: ['']
+      email: ['', [Validators.required, Validators.email]]
     });
 
     // Load companies and set up form subscription
@@ -587,26 +942,33 @@ export class CompanyProfileComponent {
         // Existing company - populate form
         this.profileForm.patchValue({
           name: company.name || '',
-          logoUrl: company.logoUrl || '',
           phone: company.phone || '',
-          address: company.address || '',
-          email: company.email || '',
-          taxId: company.taxId || '',
-          website: company.website || ''
+          email: company.email || ''
         });
+        
+        // Load stores when company exists
+        this.loadStores();
       } else if (user && !this.authService.getCurrentPermission()?.companyId) {
         // New company creation - pre-populate with user email if available
         this.profileForm.patchValue({
           name: '',
-          logoUrl: '',
           phone: '',
-          address: '',
-          email: user.email || '',
-          taxId: '',
-          website: ''
+          email: user.email || ''
         });
       }
     });
+  }
+
+  private async loadStores() {
+    const permission = this.authService.getCurrentPermission();
+    if (!permission?.companyId) return;
+    
+    try {
+      const storesData = await this.storeService.getStoresByCompany(permission.companyId);
+      this.stores.set(storesData);
+    } catch (error) {
+      console.error('Error loading stores:', error);
+    }
   }
 
   protected async onSubmit() {
@@ -625,26 +987,8 @@ export class CompanyProfileComponent {
             name: formData.name,
             slug: formData.name.toLowerCase().replace(/[^a-z0-9]/g, '-'),
             ownerUid: this.currentUser()?.uid || '',
-            plan: 'basic' as const,
-            onboardingStatus: {
-              profileCompleted: true,
-              storesCreated: false,
-              productsAdded: false,
-              firstSaleCompleted: false,
-              currentStep: 'store_creation'
-            },
-            logoUrl: formData.logoUrl || '',
             email: formData.email,
-            phone: formData.phone || '',
-            address: formData.address || '',
-            taxId: formData.taxId || '',
-            website: formData.website || '',
-            settings: {
-              currency: 'USD',
-              timezone: 'America/New_York',
-              enableMultiStore: false,
-              defaultBusinessType: 'retail'
-            }
+            phone: formData.phone || ''
           };
 
           await this.companyService.createCompany(companyData);
@@ -662,12 +1006,8 @@ export class CompanyProfileComponent {
           if (company) {
             const updateData: Partial<Company> = {
               name: formData.name,
-              logoUrl: formData.logoUrl,
               email: formData.email,
               phone: formData.phone,
-              address: formData.address,
-              taxId: formData.taxId,
-              website: formData.website,
               updatedAt: new Date()
             };
 
@@ -700,23 +1040,15 @@ export class CompanyProfileComponent {
       // Reset to existing company data
       this.profileForm.patchValue({
         name: company.name || '',
-        logoUrl: company.logoUrl || '',
         phone: company.phone || '',
-        address: company.address || '',
-        email: company.email || '',
-        taxId: company.taxId || '',
-        website: company.website || ''
+        email: company.email || ''
       });
     } else if (user) {
       // Reset to initial state for new company
       this.profileForm.patchValue({
         name: '',
-        logoUrl: '',
         phone: '',
-        address: '',
-        email: user.email || '',
-        taxId: '',
-        website: ''
+        email: user.email || ''
       });
     }
   }
@@ -732,5 +1064,225 @@ export class CompanyProfileComponent {
         block: 'start'
       });
     }
+  }
+
+  // Subscription Management Methods
+  protected openSubscriptionModal(store?: Store) {
+    // If no store is passed but we have stores available
+    if (!store && this.stores().length > 0) {
+      // If there's only one store, use it automatically
+      if (this.stores().length === 1) {
+        store = this.stores()[0];
+      } else {
+        // Multiple stores - should not happen with current button logic
+        // but handle gracefully
+        this.toastService.warning('Please select a store from the table');
+        return;
+      }
+    }
+    
+    this.selectedStore.set(store);
+    this.showSubscriptionModal.set(true);
+  }
+
+  protected closeSubscriptionModal() {
+    this.showSubscriptionModal.set(false);
+    this.selectedStore.set(undefined);
+  }
+
+  protected async handleSubscription(data: any) {
+    try {
+      const store = this.selectedStore();
+      if (!store || !store.id) {
+        this.toastService.error('Store information is missing. Please try again.');
+        return;
+      }
+
+      // Validate required fields
+      if (!data.tier || !data.billingCycle) {
+        this.toastService.error('Missing subscription details. Please try again.');
+        console.error('Missing subscription data:', data);
+        return;
+      }
+
+      this.loading.set(true);
+
+      // Calculate duration in months
+      let durationMonths = 1;
+      switch (data.billingCycle) {
+        case 'monthly':
+          durationMonths = 1;
+          break;
+        case 'quarterly':
+          durationMonths = 3;
+          break;
+        case 'yearly':
+          durationMonths = 12;
+          break;
+      }
+
+      // Calculate expiry date based on billing cycle
+      const expiresAt = this.calculateExpiryDate(data.billingCycle);
+
+      // Create subscription data
+      const subscriptionData: Partial<Store> = {
+        subscription: {
+          tier: data.tier,
+          status: 'active',
+          subscribedAt: new Date(),
+          expiresAt: expiresAt,
+          billingCycle: data.billingCycle,
+          durationMonths: durationMonths,
+          amountPaid: data.amountPaid || 0,
+          discountPercent: data.discountPercent || 0,
+          finalAmount: data.finalAmount || data.amountPaid || 0,
+          promoCode: data.promoCode || '',
+          referralCodeUsed: data.referralCode || '',
+          paymentMethod: data.paymentMethod || 'gcash',
+          lastPaymentDate: new Date()
+        }
+      };
+
+      console.log('Updating store subscription:', {
+        storeId: store.id,
+        subscriptionData
+      });
+
+      // Update store subscription
+      await this.storeService.updateStore(store.id!, subscriptionData);
+
+      // Create billing history record
+      const companyId = this.currentCompany()?.id;
+      if (companyId) {
+        await this.billingService.createBillingHistory({
+          companyId: companyId,
+          storeId: store.id!,
+          tier: data.tier,
+          cycle: data.billingCycle,
+          durationMonths: durationMonths,
+          amount: data.amountPaid || 0,
+          discountPercent: data.discountPercent || 0,
+          finalAmount: data.finalAmount || data.amountPaid || 0,
+          promoCode: data.promoCode || '',
+          referralCode: data.referralCode || '',
+          paymentMethod: data.paymentMethod || 'gcash',
+          paidAt: new Date()
+        });
+        console.log('✅ Billing history record created');
+      }
+
+      this.toastService.success('Subscription activated successfully! 🎉');
+      this.closeSubscriptionModal();
+      await this.loadStores(); // Reload stores to show updated subscription
+    } catch (error: any) {
+      console.error('Error activating subscription:', error);
+      
+      // Show specific error message
+      let errorMessage = 'Failed to activate subscription. Please try again.';
+      
+      if (error?.code === 'permission-denied') {
+        errorMessage = 'Permission denied. Please check your access rights.';
+      } else if (error?.code === 'unavailable') {
+        errorMessage = 'Network error. Please check your connection and try again.';
+      } else if (error?.message) {
+        errorMessage = `Error: ${error.message}`;
+      }
+      
+      this.toastService.error(errorMessage);
+    } finally {
+      this.loading.set(false);
+    }
+  }
+
+  protected upgradeSubscription(store: Store) {
+    this.openSubscriptionModal(store);
+  }
+
+  protected viewSubscriptionDetails(store: Store) {
+    // Show detailed subscription information
+    const sub = store.subscription;
+    if (!sub) {
+      this.toastService.info('No subscription found for this store.');
+      return;
+    }
+
+    // Set the store and show the modal
+    this.selectedStoreForDetails.set(store);
+    this.showSubscriptionDialog.set(true);
+  }
+
+  protected closeSubscriptionDialog() {
+    this.showSubscriptionDialog.set(false);
+    this.selectedStoreForDetails.set(undefined);
+  }
+
+  protected getTierBadgeClass(tier: string): string {
+    const baseClasses = 'tier-badge';
+    switch (tier) {
+      case 'freemium': return `${baseClasses} tier-freemium`;
+      case 'standard': return `${baseClasses} tier-standard`;
+      case 'premium': return `${baseClasses} tier-premium`;
+      case 'enterprise': return `${baseClasses} tier-enterprise`;
+      default: return baseClasses;
+    }
+  }
+
+  protected getStatusBadgeClass(status: string): string {
+    const baseClasses = 'status-badge';
+    switch (status) {
+      case 'active': return `${baseClasses} status-active`;
+      case 'inactive': return `${baseClasses} status-inactive`;
+      case 'expired': return `${baseClasses} status-expired`;
+      case 'cancelled': return `${baseClasses} status-cancelled`;
+      default: return baseClasses;
+    }
+  }
+
+  protected formatDate(date: Date | undefined): string {
+    if (!date) return 'N/A';
+    
+    // Handle Firestore Timestamp
+    let dateObj: Date;
+    if (date && typeof date === 'object' && 'toDate' in date) {
+      dateObj = (date as any).toDate();
+    } else {
+      dateObj = new Date(date);
+    }
+    
+    // Check if date is valid
+    if (isNaN(dateObj.getTime())) return 'N/A';
+    
+    return dateObj.toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
+    });
+  }
+
+  protected isExpiringSoon(expiresAt: Date | undefined): boolean {
+    if (!expiresAt) return false;
+    const daysUntilExpiry = Math.ceil((new Date(expiresAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+    return daysUntilExpiry <= 7 && daysUntilExpiry > 0;
+  }
+
+  private calculateExpiryDate(billingCycle: 'monthly' | 'quarterly' | 'yearly'): Date {
+    const expiresAt = new Date();
+    switch (billingCycle) {
+      case 'monthly':
+        expiresAt.setMonth(expiresAt.getMonth() + 1);
+        break;
+      case 'quarterly':
+        expiresAt.setMonth(expiresAt.getMonth() + 3);
+        break;
+      case 'yearly':
+        expiresAt.setFullYear(expiresAt.getFullYear() + 1);
+        break;
+    }
+    return expiresAt;
+  }
+
+  // Tab management
+  protected setActiveTab(tab: 'profile' | 'subscriptions') {
+    this.activeTab.set(tab);
   }
 }

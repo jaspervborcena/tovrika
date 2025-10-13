@@ -262,9 +262,9 @@ export class PosService {
         
         // Company Information
         companyName: company.name || '',
-        companyAddress: company.address || '',
+        companyAddress: '', // Store address - loaded from store settings
         companyPhone: company.phone || '',
-        companyTaxId: company.taxId || company.tin || '',
+        companyTaxId: '', // Store TIN - loaded from store settings
         companyEmail: company.email || '',
         
         // Financial Calculations
@@ -280,10 +280,10 @@ export class PosService {
         // Order Items
         items: orderItems,
         
-        // BIR Required Fields
-        atpOrOcn: company.atpOrOcn || 'OCN-2025-001234',
-        birPermitNo: company.birPermitNo || 'BIR-PERMIT-2025-56789',
-        inclusiveSerialNumber: company.inclusiveSerialNumber || '000001-000999',
+        // BIR Required Fields - loaded from store settings
+        atpOrOcn: 'OCN-2025-001234',
+        birPermitNo: 'BIR-PERMIT-2025-56789',
+        inclusiveSerialNumber: '000001-000999',
         
         // System Fields
         message: 'Thank you! See you again!'
@@ -389,9 +389,9 @@ export class PosService {
         
         // Company Information
         companyName: company.name || '',
-        companyAddress: company.address || '',
+        companyAddress: '', // Store address - loaded from store settings
         companyPhone: company.phone || '',
-        companyTaxId: company.taxId || company.tin || '',
+        companyTaxId: '', // Store TIN - loaded from store settings
         companyEmail: company.email || '',
         
         // Financial Information
@@ -510,9 +510,9 @@ export class PosService {
         
         // Company Information
         companyName: company.name || '',
-        companyAddress: company.address || '',
+        companyAddress: '', // Store address - loaded from store settings
         companyPhone: company.phone || '',
-        companyTaxId: company.taxId || company.tin || '',
+        companyTaxId: '', // Store TIN - loaded from store settings
         companyEmail: company.email || '',
         
         // Financial Information
@@ -579,10 +579,11 @@ export class PosService {
   async generateReceiptData(orderId?: string): Promise<ReceiptData> {
     const user = this.authService.getCurrentUser();
     const company = await this.companyService.getActiveCompany();
-    const stores = this.companyService.companies()[0]?.stores || [];
-    const currentStore = stores.find(s => s.id === this.selectedStoreId());
+    // Note: stores are now managed separately from company
+    // For now, use selectedStoreId directly
+    const storeId = this.selectedStoreId();
 
-    if (!user || !company || !currentStore) {
+    if (!user || !company || !storeId) {
       throw new Error('Required data not found');
     }
 
@@ -590,8 +591,8 @@ export class PosService {
 
     return {
       companyName: company.name,
-      storeName: currentStore.storeName,
-      storeAddress: currentStore.address,
+      storeName: '', // Store name - to be loaded from store settings
+      storeAddress: '', // Store address - to be loaded from store settings
       companyPhone: company.phone || '',
       companyEmail: company.email || '',
       date: new Date(),

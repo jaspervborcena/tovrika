@@ -1,0 +1,216 @@
+<div class="subscriptions-container">
+  <!-- Header -->
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Subscriptions Management</h1>
+      <p class="page-subtitle">Manage subscription plans for all your stores</p>
+    </div>
+    <button class="btn-export" (click)="exportToCSV()" [disabled]="filteredStores().length === 0">
+      <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+              d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+      </svg>
+      Export CSV
+    </button>
+  </div>
+
+  <!-- Stats Cards -->
+  <div class="stats-grid">
+    <div class="stat-card">
+      <div class="stat-icon bg-blue-100 text-blue-600">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+        </svg>
+      </div>
+      <div>
+        <p class="stat-label">Total Stores</p>
+        <p class="stat-value">{{ totalStores() }}</p>
+      </div>
+    </div>
+
+    <div class="stat-card">
+      <div class="stat-icon bg-green-100 text-green-600">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+      </div>
+      <div>
+        <p class="stat-label">Active Subscriptions</p>
+        <p class="stat-value">{{ activeSubscriptions() }}</p>
+      </div>
+    </div>
+
+    <div class="stat-card">
+      <div class="stat-icon bg-purple-100 text-purple-600">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+      </div>
+      <div>
+        <p class="stat-label">Total Revenue</p>
+        <p class="stat-value">{{ formatCurrency(totalRevenue()) }}</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Filters -->
+  <div class="filters-section">
+    <div class="search-box">
+      <svg class="search-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+              d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+      </svg>
+      <input 
+        type="text" 
+        placeholder="Search stores..." 
+        [value]="searchTerm()"
+        (input)="onSearchChange($any($event.target).value)"
+        class="search-input"
+      />
+    </div>
+
+    <select 
+      [value]="filterStatus()"
+      (change)="onFilterStatusChange($any($event.target).value)"
+      class="filter-select"
+    >
+      <option value="all">All Status</option>
+      <option value="active">Active</option>
+      <option value="inactive">Inactive</option>
+      <option value="expired">Expired</option>
+      <option value="cancelled">Cancelled</option>
+    </select>
+
+    <select 
+      [value]="filterTier()"
+      (change)="onFilterTierChange($any($event.target).value)"
+      class="filter-select"
+    >
+      <option value="all">All Tiers</option>
+      <option value="freemium">Freemium</option>
+      <option value="standard">Standard</option>
+      <option value="premium">Premium</option>
+    </select>
+  </div>
+
+  <!-- Loading State -->
+  @if (loading()) {
+    <div class="loading-state">
+      <div class="spinner"></div>
+      <p>Loading subscriptions...</p>
+    </div>
+  }
+
+  <!-- Empty State -->
+  @else if (filteredStores().length === 0) {
+    <div class="empty-state">
+      <svg class="empty-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+              d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
+      </svg>
+      <h3>No subscriptions found</h3>
+      <p>No stores match your current filters</p>
+    </div>
+  }
+
+  <!-- Subscriptions Grid -->
+  @else {
+    <div class="subscriptions-grid">
+      @for (store of filteredStores(); track store.id) {
+        <div class="subscription-card">
+          <!-- Card Header -->
+          <div class="card-header">
+            <div>
+              <h3 class="store-name">{{ store.storeName }}</h3>
+              <p class="store-code">{{ store.storeCode }}</p>
+            </div>
+            <div class="badges">
+              <span [class]="getTierBadgeClass(store.subscription.tier)">
+                {{ store.subscription.tier | titlecase }}
+              </span>
+              <span [class]="getStatusBadgeClass(store.subscription.status)">
+                {{ store.subscription.status | titlecase }}
+              </span>
+            </div>
+          </div>
+
+          <!-- Subscription Details -->
+          <div class="card-body">
+            <div class="detail-grid">
+              <div class="detail-item">
+                <span class="detail-label">Subscribed</span>
+                <span class="detail-value">{{ formatDate(store.subscription.subscribedAt) }}</span>
+              </div>
+
+              <div class="detail-item">
+                <span class="detail-label">Expires</span>
+                <span class="detail-value" [class.text-red-600]="isExpiringSoon(store.subscription.expiresAt)">
+                  {{ formatDate(store.subscription.expiresAt) }}
+                  @if (isExpiringSoon(store.subscription.expiresAt)) {
+                    <span class="expiry-warning">
+                      ({{ getDaysUntilExpiry(store.subscription.expiresAt) }} days left)
+                    </span>
+                  }
+                </span>
+              </div>
+
+              <div class="detail-item">
+                <span class="detail-label">Amount Paid</span>
+                <span class="detail-value">{{ formatCurrency(store.subscription.amountPaid) }}</span>
+              </div>
+
+              <div class="detail-item">
+                <span class="detail-label">Discount</span>
+                <span class="detail-value text-green-600">{{ store.subscription.discountPercent }}%</span>
+              </div>
+
+              <div class="detail-item">
+                <span class="detail-label">Final Amount</span>
+                <span class="detail-value font-semibold">{{ formatCurrency(store.subscription.finalAmount) }}</span>
+              </div>
+
+              <div class="detail-item">
+                <span class="detail-label">Billing Cycle</span>
+                <span class="detail-value">{{ store.subscription.billingCycle | titlecase }}</span>
+              </div>
+
+              @if (store.subscription.promoCode) {
+                <div class="detail-item">
+                  <span class="detail-label">Promo Code</span>
+                  <span class="detail-value text-purple-600">{{ store.subscription.promoCode }}</span>
+                </div>
+              }
+
+              @if (store.subscription.referralCodeUsed) {
+                <div class="detail-item">
+                  <span class="detail-label">Referral Code</span>
+                  <span class="detail-value text-blue-600">{{ store.subscription.referralCodeUsed }}</span>
+                </div>
+              }
+            </div>
+          </div>
+
+          <!-- Card Actions -->
+          <div class="card-actions">
+            <button class="btn-secondary" (click)="viewStoreDetails(store)">
+              View Details
+            </button>
+            @if (store.subscription.status === 'active' && store.subscription.tier !== 'premium') {
+              <button class="btn-primary" (click)="upgradeSubscription(store)">
+                Upgrade
+              </button>
+            }
+            @if (store.subscription.status === 'expired' || isExpiringSoon(store.subscription.expiresAt)) {
+              <button class="btn-success" (click)="renewSubscription(store)">
+                Renew
+              </button>
+            }
+          </div>
+        </div>
+      }
+    </div>
+  }
+</div>
