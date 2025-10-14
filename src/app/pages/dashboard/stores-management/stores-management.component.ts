@@ -1270,7 +1270,8 @@ export class StoresManagementComponent implements OnInit {
     private fb: FormBuilder,
     private cdr: ChangeDetectorRef,
     private toastService: ToastService,
-    private predefinedTypesService: PredefinedTypesService
+    private predefinedTypesService: PredefinedTypesService,
+    private deviceService: DeviceService
   ) {
     this.storeForm = this.fb.group({
       storeName: ['', [Validators.required]],
@@ -1309,6 +1310,17 @@ export class StoresManagementComponent implements OnInit {
       vatRegistrationType: ['VAT-registered', [Validators.required]],
       vatRate: [12.0, [Validators.required]],
       receiptType: ['POS Receipt', [Validators.required]]
+    });
+
+    this.deviceForm = this.fb.group({
+      terminalId: ['', [Validators.required]],
+      deviceLabel: ['', [Validators.required]],
+      invoicePrefix: ['', [Validators.required]],
+      invoiceSeriesStart: [100001, [Validators.required, Validators.min(1)]],
+      invoiceSeriesEnd: [199999, [Validators.required, Validators.min(1)]],
+      currentInvoiceNumber: [100001, [Validators.required, Validators.min(1)]],
+      minNumber: ['', [Validators.required]],
+      serialNumber: ['', [Validators.required]]
     });
   }
 
@@ -1651,14 +1663,139 @@ export class StoresManagementComponent implements OnInit {
   }
 
   // Devices Modal Methods
-  openDevicesModal(store: Store) {
+  async openDevicesModal(store: Store) {
     this.selectedStore = store;
     this.showDevicesModal = true;
+    this.showDeviceForm = false;
+    this.isLoadingDevices = true;
+    this.editingDevice = null;
+    
+    try {
+      // Load devices for this store
+      this.storeDevices = await this.deviceService.getDevicesByStore(store.id!);
+    } catch (error) {
+      console.error('Error loading devices:', error);
+      this.toastService.error('Failed to load devices');
+      this.storeDevices = [];
+    } finally {
+      this.isLoadingDevices = false;
+    }
   }
 
   closeDevicesModal() {
     this.showDevicesModal = false;
+    this.showDeviceForm = false;
     this.selectedStore = null;
+    this.editingDevice = null;
+    this.storeDevices = [];
+    this.deviceForm.reset();
+  }
+
+  showAddDeviceForm() {
+    this.editingDevice = null;
+    this.showDeviceForm = true;
+    
+    // Generate default terminal ID
+    const nextTerminalNumber = this.storeDevices.length + 1;
+    const terminalId = `TERM${String(nextTerminalNumber).padStart(3, '0')}`;
+    
+    this.deviceForm.reset({
+      terminalId: terminalId,
+      deviceLabel: '',
+      invoicePrefix: '',
+      invoiceSeriesStart: 100001,
+      invoiceSeriesEnd: 199999,
+      currentInvoiceNumber: 100001,
+      minNumber: '',
+      serialNumber: ''
+    });
+  }
+
+  editDevice(device: Device) {
+    this.editingDevice = device;
+    this.showDeviceForm = true;
+    
+    this.deviceForm.patchValue({
+      terminalId: device.terminalId,
+      deviceLabel: device.deviceLabel,
+      invoicePrefix: device.invoicePrefix,
+      invoiceSeriesStart: device.invoiceSeriesStart,
+      invoiceSeriesEnd: device.invoiceSeriesEnd,
+      currentInvoiceNumber: device.currentInvoiceNumber,
+      minNumber: device.minNumber,
+      serialNumber: device.serialNumber
+    });
+  }
+
+  async saveDevice() {
+    if (!this.deviceForm.valid || !this.selectedStore) {
+      this.toastService.error('Please fill in all required fields');
+      return;
+    }
+
+    this.isLoadingDevices = true;
+    
+    try {
+      const currentPermission = this.authService.getCurrentPermission();
+      if (!currentPermission) {
+        this.toastService.error('User permission not found');
+        return;
+      }
+
+      const deviceData = {
+        ...this.deviceForm.value,
+        storeId: this.selectedStore.id!,
+        companyId: currentPermission.companyId
+      };
+
+      if (this.editingDevice) {
+        // Update existing device
+        await this.deviceService.updateDevice(this.editingDevice.id!, deviceData);
+        this.toastService.success('Device updated successfully!');
+      } else {
+        // Create new device
+        await this.deviceService.createDevice(deviceData);
+        this.toastService.success('Device created successfully!');
+      }
+
+      // Reload devices list
+      this.storeDevices = await this.deviceService.getDevicesByStore(this.selectedStore.id!);
+      this.cancelDeviceForm();
+    } catch (error) {
+      console.error('Error saving device:', error);
+      this.toastService.error('Error saving device. Please try again.');
+    } finally {
+      this.isLoadingDevices = false;
+    }
+  }
+
+  async deleteDevice(device: Device) {
+    if (!confirm(`Are you sure you want to delete device "${device.deviceLabel}"?`)) {
+      return;
+    }
+
+    this.isLoadingDevices = true;
+    
+    try {
+      await this.deviceService.deleteDevice(device.id!);
+      this.toastService.success('Device deleted successfully!');
+      
+      // Reload devices list
+      if (this.selectedStore) {
+        this.storeDevices = await this.deviceService.getDevicesByStore(this.selectedStore.id!);
+      }
+    } catch (error) {
+      console.error('Error deleting device:', error);
+      this.toastService.error('Error deleting device. Please try again.');
+    } finally {
+      this.isLoadingDevices = false;
+    }
+  }
+
+  cancelDeviceForm() {
+    this.showDeviceForm = false;
+    this.editingDevice = null;
+    this.deviceForm.reset();
   }
 
   // Helper method to format date for input
