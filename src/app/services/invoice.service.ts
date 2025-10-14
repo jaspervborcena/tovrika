@@ -102,7 +102,7 @@ export class InvoiceService {
         }
 
         const storeData = storeDoc.data();
-        const currentInvoiceNo = storeData['invoiceNo'] || this.storeService.generateDefaultInvoiceNo();
+        const currentInvoiceNo = storeData['tempInvoiceNumber'] || this.storeService.generateDefaultInvoiceNo();
         
         console.log('🧾 Current invoice number:', currentInvoiceNo);
         
@@ -123,7 +123,7 @@ export class InvoiceService {
         
         // 3. Update store with new invoice number
         transaction.update(storeDocRef, { 
-          invoiceNo: nextInvoiceNo,
+          tempInvoiceNumber: nextInvoiceNo,
           updatedAt: new Date()
         });
         
@@ -243,7 +243,7 @@ export class InvoiceService {
       }
       
       const storeData = storeDoc.data();
-      const currentInvoiceNo = storeData['invoiceNo'] || this.storeService.generateDefaultInvoiceNo();
+      const currentInvoiceNo = storeData['tempInvoiceNumber'] || this.storeService.generateDefaultInvoiceNo();
       
       return this.storeService.generateNextInvoiceNo(currentInvoiceNo);
     } catch (error) {
@@ -263,7 +263,7 @@ export class InvoiceService {
       console.log(`🧾 Initializing invoice numbers for ${companyStores.length} stores...`);
       
       for (const store of companyStores) {
-        if (!store.invoiceNo && store.id) {
+        if (!store.tempInvoiceNumber && store.id) {
           await this.storeService.initializeInvoiceNoForStore(store.id);
         }
       }
@@ -283,7 +283,7 @@ export class InvoiceService {
       // Update the store service cache
       const store = this.storeService.getStore(storeId);
       if (store) {
-        store.invoiceNo = newInvoiceNo;
+        store.tempInvoiceNumber = newInvoiceNo;
         console.log(`🧾 Updated store cache for ${store.storeName}: ${newInvoiceNo}`);
       }
     } catch (error) {
@@ -310,9 +310,9 @@ export class InvoiceService {
       return {
         storeId,
         storeName: store?.storeName || 'Unknown',
-        currentInvoiceNo: store?.invoiceNo || 'Not set',
+        currentInvoiceNo: store?.tempInvoiceNumber || 'Not set',
         nextInvoiceNo: nextInvoice,
-        isValidFormat: store?.invoiceNo ? this.validateInvoiceNumberFormat(store.invoiceNo) : false
+        isValidFormat: store?.tempInvoiceNumber ? this.validateInvoiceNumberFormat(store.tempInvoiceNumber) : false
       };
     } catch (error) {
       return {

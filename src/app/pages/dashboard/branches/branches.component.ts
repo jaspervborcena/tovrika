@@ -5,7 +5,7 @@ import { ButtonComponent } from '../../../shared/ui/button.component';
 import { ModalComponent } from '../../../shared/ui/modal.component';
 import { AuthService } from '../../../services/auth.service';
 import { Branch } from '../../../interfaces/branch.interface';
-import { Store } from '../../../interfaces/company.interface';
+import { Store } from '../../../interfaces/store.interface';
 
 @Component({
   selector: 'app-branches',

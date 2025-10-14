@@ -4,7 +4,7 @@ import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ButtonComponent } from '../../shared/ui/button.component';
 import { TableComponent } from '../../shared/ui/table.component';
 import { ModalComponent } from '../../shared/ui/modal.component';
-import { StoreService } from '../../services/store.service';
+import { StoreService, Store } from '../../services/store.service';
 import { CompanySetupService } from '../../services/companySetup.service';
 import { AuthService } from '../../services/auth.service';
 
@@ -273,16 +273,43 @@ export class StoresComponent implements OnInit {
           );
         } else {
           // Convert to new Store interface format
-          const newStoreData = {
+          const newStoreData: Omit<Store, 'id' | 'createdAt' | 'updatedAt'> = {
             companyId: storeData.companyId,
             storeName: storeData.name,
-            storeCode: 'AUTO-' + Date.now(), // Auto-generated
             storeType: 'General', // Default
+            branchName: storeData.name, // Use store name as branch name
             address: `${storeData.address.street}, ${storeData.address.city}, ${storeData.address.state} ${storeData.address.zipCode}`,
             phoneNumber: storeData.phone || '',
             email: '',
-            managerName: '',
-            status: storeData.status
+            uid: this.authService.getCurrentUser()?.uid || '',
+            status: storeData.status as 'active' | 'inactive' | 'suspended',
+            isBirAccredited: false,
+            tinNumber: '',
+            birDetails: {
+              birPermitNo: '',
+              atpOrOcn: '',
+              inclusiveSerialNumber: '',
+              serialNumber: '',
+              minNumber: '',
+              invoiceType: '',
+              invoiceNumber: '',
+              permitDateIssued: new Date(),
+              validityNotice: ''
+            },
+            subscription: {
+              tier: 'freemium',
+              status: 'inactive',
+              subscribedAt: new Date(),
+              expiresAt: new Date(),
+              billingCycle: 'monthly',
+              durationMonths: 0,
+              amountPaid: 0,
+              discountPercent: 0,
+              finalAmount: 0,
+              paymentMethod: 'credit_card',
+              lastPaymentDate: new Date()
+            },
+            subscriptionPopupShown: false
           };
           await this.storeService.createStore(newStoreData);
         }

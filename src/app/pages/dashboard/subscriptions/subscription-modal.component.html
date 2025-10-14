@@ -1,0 +1,474 @@
+<div class="modal-overlay" *ngIf="isOpen" (click)="close()">
+  <div class="modal-container" (click)="$event.stopPropagation()">
+    <!-- Header -->
+    <div class="modal-header">
+      <div>
+        <h2 class="modal-title">
+          {{ store ? 'Upgrade Subscription' : 'Choose Your Plan' }}
+        </h2>
+        <p class="modal-subtitle">
+          {{ store ? 'Unlock more features for ' + store.storeName : 'Select the perfect plan for your business' }}
+        </p>
+      </div>
+      <button class="btn-close" (click)="close()">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
+    </div>
+
+    <div class="modal-body">
+      <!-- Plan Selection View -->
+      <div *ngIf="!showPaymentForm()" class="plans-view">
+        <!-- Billing Cycle Selector -->
+        <div class="billing-cycle-selector">
+          <button 
+            [class.active]="billingCycle() === 'monthly'"
+            (click)="selectBillingCycle('monthly')"
+            class="cycle-btn"
+          >
+            Monthly
+          </button>
+          <button 
+            [class.active]="billingCycle() === 'quarterly'"
+            (click)="selectBillingCycle('quarterly')"
+            class="cycle-btn"
+          >
+            Quarterly
+            <span class="badge">Save 10%</span>
+          </button>
+          <button 
+            [class.active]="billingCycle() === 'yearly'"
+            (click)="selectBillingCycle('yearly')"
+            class="cycle-btn"
+          >
+            Yearly
+            <span class="badge">Save 20%</span>
+          </button>
+        </div>
+
+        <!-- Plans Grid - Show 4 boxes -->
+        <div class="plans-grid plans-grid-4">
+          @for (plan of plans; track plan.tier) {
+            <div 
+              [class.selected]="selectedTier() === plan.tier"
+              [class.popular]="plan.popular"
+              [class.enterprise-card]="plan.tier === 'enterprise'"
+              (click)="selectTier(plan.tier)"
+              class="plan-card"
+            >
+              @if (plan.popular) {
+                <div class="popular-badge">Most Popular</div>
+              }
+              @if (plan.tier === 'enterprise') {
+                <div class="enterprise-badge">Custom Solution</div>
+              }
+
+              <div class="plan-header">
+                <h3 class="plan-name">{{ plan.name }}</h3>
+                @if (plan.tier !== 'enterprise') {
+                  <div class="plan-price">
+                    <span class="currency">₱</span>
+                    <span class="amount">{{ plan.price }}</span>
+                    <span class="period">/month</span>
+                  </div>
+                  @if (billingCycle() !== 'monthly') {
+                    <p class="billing-note">
+                      Billed {{ billingCycle() }}
+                    </p>
+                  }
+                } @else {
+                  <div class="plan-price">
+                    <span class="custom-pricing">Contact us for pricing</span>
+                  </div>
+                  <p class="billing-note">Custom requirements</p>
+                }
+              </div>
+
+              <ul class="plan-features">
+                @for (feature of plan.features; track feature) {
+                  <li>
+                    <svg class="check-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                    </svg>
+                    {{ feature }}
+                  </li>
+                }
+              </ul>
+
+              <button 
+                [class.btn-selected]="selectedTier() === plan.tier"
+                [class.btn-request]="plan.tier === 'enterprise'"
+                class="btn-select-plan"
+              >
+                @if (plan.tier === 'enterprise') {
+                  {{ selectedTier() === plan.tier ? 'Selected - Request ✓' : 'Request Enterprise' }}
+                } @else {
+                  {{ selectedTier() === plan.tier ? 'Selected ✓' : 'Select Plan' }}
+                }
+              </button>
+            </div>
+          }
+        </div>
+
+        <!-- Feature Comparison Toggle -->
+        <div class="feature-comparison-toggle">
+          <button (click)="toggleShowFeatures()" class="toggle-btn">
+            {{ showFeatures() ? 'Hide' : 'Show' }} Detailed Feature Comparison
+            <svg class="toggle-icon" [class.rotated]="showFeatures()" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+        </div>
+
+        <!-- Feature Comparison Table -->
+        @if (showFeatures()) {
+          <div class="feature-comparison-table">
+            <table>
+              <thead>
+                <tr>
+                  <th class="feature-col">Feature</th>
+                  <th class="tier-col">Freemium</th>
+                  <th class="tier-col popular-col">Standard</th>
+                  <th class="tier-col">Premium</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (feature of features; track feature.name) {
+                  <tr>
+                    <td class="feature-name">
+                      <strong>{{ feature.name }}</strong>
+                      <p class="feature-desc">{{ feature.description }}</p>
+                    </td>
+                    <td class="feature-value">
+                      @if (isBoolean(getFeatureValue('freemium', feature))) {
+                        @if (getFeatureValue('freemium', feature)) {
+                          <svg class="check-icon-green" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                          </svg>
+                        } @else {
+                          <svg class="x-icon-red" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        }
+                      } @else {
+                        <span>{{ getFeatureValue('freemium', feature) }}</span>
+                      }
+                    </td>
+                    <td class="feature-value popular-col">
+                      @if (isBoolean(getFeatureValue('standard', feature))) {
+                        @if (getFeatureValue('standard', feature)) {
+                          <svg class="check-icon-green" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                          </svg>
+                        } @else {
+                          <svg class="x-icon-red" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        }
+                      } @else {
+                        <span>{{ getFeatureValue('standard', feature) }}</span>
+                      }
+                    </td>
+                    <td class="feature-value">
+                      @if (isBoolean(getFeatureValue('premium', feature))) {
+                        @if (getFeatureValue('premium', feature)) {
+                          <svg class="check-icon-green" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                          </svg>
+                        } @else {
+                          <svg class="x-icon-red" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        }
+                      } @else {
+                        <span>{{ getFeatureValue('premium', feature) }}</span>
+                      }
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        }
+
+        <!-- Promo Code Section -->
+        <div class="promo-section">
+          <div class="promo-inputs">
+            <div class="input-group">
+              <label>Promo Code (Optional)</label>
+              <div class="input-with-button">
+                <input 
+                  type="text" 
+                  [(ngModel)]="promoCode"
+                  (ngModelChange)="promoCode.set($event)"
+                  placeholder="Enter promo code"
+                  class="promo-input"
+                />
+                <button (click)="applyPromoCode()" class="btn-apply">
+                  Apply
+                </button>
+              </div>
+              @if (promoMessage()) {
+                <p [class.text-green]="promoValid()" [class.text-red]="!promoValid()" class="promo-message">
+                  {{ promoMessage() }}
+                </p>
+              }
+            </div>
+
+            <div class="input-group">
+              <label>Referral Code (Optional)</label>
+              <input 
+                type="text" 
+                [(ngModel)]="referralCode"
+                (ngModelChange)="referralCode.set($event)"
+                placeholder="Enter referral code"
+                class="promo-input"
+              />
+            </div>
+          </div>
+        </div>
+
+        <!-- Summary Box -->
+        <div class="summary-box">
+          <h4>Order Summary</h4>
+          <div class="summary-row">
+            <span>{{ selectedPlan()?.name }} Plan</span>
+            <span>{{ formatCurrency(basePrice()) }}/month</span>
+          </div>
+          <div class="summary-row">
+            <span>Duration</span>
+            <span>{{ durationMonths() }} month{{ durationMonths() > 1 ? 's' : '' }}</span>
+          </div>
+          <div class="summary-row">
+            <span>Subtotal</span>
+            <span>{{ formatCurrency(totalBeforeDiscount()) }}</span>
+          </div>
+          @if (totalDiscount() > 0) {
+            <div class="summary-row discount">
+              <span>Discount ({{ totalDiscount() }}%)</span>
+              <span>-{{ formatCurrency(savings()) }}</span>
+            </div>
+          }
+          <div class="summary-row total">
+            <span>Total</span>
+            <span>{{ formatCurrency(finalAmount()) }}</span>
+          </div>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="modal-actions">
+          <button (click)="close()" class="btn-cancel">
+            Cancel
+          </button>
+          <button (click)="proceedToPayment()" class="btn-proceed">
+            @if (selectedTier() === 'freemium') {
+              Activate Free Plan
+            } @else if (selectedTier() === 'enterprise') {
+              Request Enterprise
+            } @else {
+              Proceed to Payment
+            }
+          </button>
+        </div>
+      </div>
+
+      <!-- Payment Form View -->
+      <div *ngIf="showPaymentForm()" class="payment-view">
+        <h3 class="payment-title">Payment Details</h3>
+        
+        <div class="payment-method-selector">
+          <label>
+            <input 
+              type="radio" 
+              name="paymentMethod" 
+              value="gcash" 
+              [checked]="paymentMethod() === 'gcash'"
+              (change)="paymentMethod.set('gcash')"
+            />
+            <span>GCash</span>
+          </label>
+          <label>
+            <input 
+              type="radio" 
+              name="paymentMethod" 
+              value="paymaya" 
+              [checked]="paymentMethod() === 'paymaya'"
+              (change)="paymentMethod.set('paymaya')"
+            />
+            <span>PayMaya</span>
+          </label>
+          <label>
+            <input 
+              type="radio" 
+              name="paymentMethod" 
+              value="bank_transfer" 
+              [checked]="paymentMethod() === 'bank_transfer'"
+              (change)="paymentMethod.set('bank_transfer')"
+            />
+            <span>Bank Transfer</span>
+          </label>
+        </div>
+
+        <div class="payment-form">
+          <div class="form-group">
+            <label>Account Number / Mobile Number</label>
+            <input 
+              type="text" 
+              [(ngModel)]="accountNumber"
+              (ngModelChange)="accountNumber.set($event)"
+              placeholder="09XX XXX XXXX"
+              class="form-input"
+            />
+          </div>
+
+          <div class="form-group">
+            <label>Account Name</label>
+            <input 
+              type="text" 
+              [(ngModel)]="accountName"
+              (ngModelChange)="accountName.set($event)"
+              placeholder="Juan Dela Cruz"
+              class="form-input"
+            />
+          </div>
+        </div>
+
+        <div class="payment-summary">
+          <h4>Amount to Pay</h4>
+          <p class="amount-to-pay">{{ formatCurrency(finalAmount()) }}</p>
+          <p class="payment-note">
+            You will be charged {{ formatCurrency(finalAmount()) }} for {{ durationMonths() }} month(s) of {{ selectedPlan()?.name }} plan.
+          </p>
+        </div>
+
+        <div class="modal-actions">
+          <button (click)="backToPlans()" class="btn-cancel">
+            Back
+          </button>
+          <button (click)="submitSubscription()" class="btn-submit">
+            Confirm Payment
+          </button>
+        </div>
+      </div>
+
+      <!-- Enterprise Request Form View -->
+      <div *ngIf="showEnterpriseRequest()" class="enterprise-request-view">
+        <div class="enterprise-header">
+          <svg class="enterprise-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+          </svg>
+          <h3 class="enterprise-title">Request Enterprise Plan</h3>
+          <p class="enterprise-subtitle">
+            Tell us about your business needs and our team will create a custom solution for you.
+          </p>
+        </div>
+
+        <div class="enterprise-info-grid">
+          <div class="info-item">
+            <label>Company</label>
+            <p>{{ currentCompanyName() }}</p>
+          </div>
+          <div class="info-item">
+            <label>Email</label>
+            <p>{{ currentUserEmail() }}</p>
+          </div>
+          <div class="info-item">
+            <label>Phone</label>
+            <p>{{ currentCompanyPhone() }}</p>
+          </div>
+          <div class="info-item">
+            <label>Request Date</label>
+            <p>{{ currentDate() }}</p>
+          </div>
+        </div>
+
+        <div class="enterprise-form">
+          <div class="form-group">
+            <label class="required-label">
+              What are your specific requirements?
+              <span class="required-mark">*</span>
+            </label>
+            <textarea 
+              [(ngModel)]="enterpriseNotes"
+              (ngModelChange)="enterpriseNotes.set($event)"
+              placeholder="Please describe your needs:
+• Number of stores and devices
+• Custom domain requirements
+• Integration needs (accounting, inventory, etc.)
+• Special features or customizations
+• Expected transaction volume
+• Any other specific requirements"
+              class="enterprise-textarea"
+              rows="8"
+            ></textarea>
+            <p class="helper-text">
+              💡 The more details you provide, the better we can tailor a solution for your business.
+            </p>
+          </div>
+        </div>
+
+        <div class="enterprise-benefits">
+          <h4>What You Get with Enterprise:</h4>
+          <ul class="benefits-list">
+            <li>
+              <svg class="benefit-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+              </svg>
+              Unlimited stores, devices, and transactions
+            </li>
+            <li>
+              <svg class="benefit-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+              </svg>
+              Custom domain (yourcompany.tovrika.com)
+            </li>
+            <li>
+              <svg class="benefit-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+              </svg>
+              White-label branding options
+            </li>
+            <li>
+              <svg class="benefit-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+              </svg>
+              Priority 24/7 dedicated support
+            </li>
+            <li>
+              <svg class="benefit-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+              </svg>
+              API access for custom integrations
+            </li>
+            <li>
+              <svg class="benefit-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+              </svg>
+              Advanced security and compliance features
+            </li>
+          </ul>
+        </div>
+
+        <div class="contact-info">
+          <p class="contact-text">
+            📞 Our team will contact you within <strong>24 hours</strong> to discuss your requirements.
+          </p>
+        </div>
+
+        <div class="modal-actions">
+          <button (click)="backToPlans()" class="btn-cancel">
+            Back
+          </button>
+          <button 
+            (click)="submitEnterpriseRequest()" 
+            [disabled]="!enterpriseNotes().trim()"
+            class="btn-submit btn-enterprise"
+          >
+            Submit Request
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

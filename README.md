@@ -1,10 +1,25 @@
 # 🏪 Tovrika Modern POS System
 
-A comprehensive **Enterprise-Grade Point of Sale (POS) system** built with Angular 19 and Firebase, featuring advanced multi-tenant security, offline-first architecture, and seamless online/offline operations for retail businesses.
+A comprehensive **Enterprise-Grade Point of Sale (POS) system** built with Angular 19 and Firebase, featuring advanced multi-tenant security, offline-first architecture, subscription management, and seamless online/offline operations for retail businesses.
 
-## 🌟 Latest Features & Security Enhancements
+## 🌟 Latest Features & Updates
 
-### 🔐 **Enterprise Multi-Tenant Security (NEW!)**
+### 💳 **Subscription Management System (NEW!)**
+- **Multi-Tier Plans** - Freemium, Standard, Premium, and Enterprise subscription tiers
+- **Billing Dashboard** - Comprehensive subscription management interface with filtering and CSV export
+- **Payment Integration** - Support for GCash, PayMaya, and bank transfers
+- **Promo Codes** - Flexible discount system with validation
+- **Billing History** - Complete payment tracking and transaction records
+- **Enterprise Requests** - Custom enterprise plan request system
+- **Subscription Details Modal** - Professional display of subscription information in textbox format
+
+### 🔧 **IndexedDB Corruption Handling (NEW!)**
+- **Permanent Failure Detection** - Smart detection of corrupted IndexedDB with `isPermanentlyBroken` flag
+- **Graceful Degradation** - App continues to function even with database corruption
+- **Signal-First Pattern** - In-memory state updates before database operations
+- **Offline Mode Compatibility** - Enhanced offline functionality with better error handling
+
+### 🔐 **Enterprise Multi-Tenant Security**
 - **UID-Based Data Isolation** - Complete user data segregation using Firestore security rules
 - **IndexedDB UID Integration** - Seamless UID injection from cached user data for offline operations
 - **Comprehensive Security Fields** - Enhanced document tracking with `createdBy`, `updatedBy`, and offline operation flags
@@ -15,12 +30,24 @@ A comprehensive **Enterprise-Grade Point of Sale (POS) system** built with Angul
 
 ### 💼 **Business Operations**
 - ✅ **Multi-Store Management** - Manage multiple stores and branches with complete data isolation
+- ✅ **Subscription Management** - Flexible subscription plans with billing tracking and payment processing
 - ✅ **Product Catalog** - Comprehensive product management with inventory tracking and UID security
 - ✅ **Cart & Checkout** - Intuitive shopping cart with VAT calculations and secure transactions
 - ✅ **Transaction Management** - Automatic transaction saving with complete audit trail
 - ✅ **Advanced Order Management** - Real-time order processing with item-level actions (return, damage, refund, cancel)
 - ✅ **Sales Analytics Dashboard** - Comprehensive reporting with date filtering and store selection
 - ✅ **Customer Management** - Complete customer database with transaction history
+- ✅ **Billing History** - Track all subscription payments and transactions per store
+
+### 💳 **Subscription & Billing**
+- ✅ **Multi-Tier Subscription Plans** - Freemium (trial), Standard, Premium, and Enterprise tiers
+- ✅ **Flexible Billing Cycles** - Monthly, quarterly, and yearly subscription options
+- ✅ **Payment Method Support** - GCash, PayMaya, bank transfer, and credit card integration
+- ✅ **Promo Code System** - Discount codes with automatic validation and application
+- ✅ **Subscription Dashboard** - Manage all store subscriptions with advanced filtering
+- ✅ **Billing History Tracking** - Complete payment records with CSV export
+- ✅ **Enterprise Requests** - Custom enterprise plan request submission system
+- ✅ **Automatic Expiry Tracking** - Alerts for expiring subscriptions with renewal options
 
 ### 🧾 **Receipt & Printing System**
 - ✅ **Professional Receipt System** - BIR-compliant receipt printing with thermal printer support
@@ -29,11 +56,22 @@ A comprehensive **Enterprise-Grade Point of Sale (POS) system** built with Angul
 - ✅ **Thermal Printer Integration** - ESC/POS commands for receipt printers
 - ✅ **Receipt Customization** - Branded receipts with company details
 
+### 🇵🇭 **BIR Compliance & Device Management**
+- ✅ **BIR-Compliant Receipts** - Sales invoice template meeting Philippine tax requirements
+- ✅ **Device Registration** - BIR-compliant device/terminal registration system
+- ✅ **VAT Management** - Automated VAT calculations and exemptions
+- ✅ **Invoice Series Tracking** - Sequential numbering with locked BIR fields after approval
+- ✅ **Dynamic Invoice Types** - Support for different invoice types as required by BIR
+- ✅ **Store BIR Settings** - Configurable store parameters and BIR information
+- ✅ **Device Approval Workflow** - Admin review and approval process for BIR-registered devices
+- ✅ **Receipt Numbering** - Sequential invoice numbering with store-specific prefixes
+
 ### 👥 **User Management & Security**
 - ✅ **Role-Based Access Control** - Creator, Store Manager, Cashier roles with specific permissions
-- ✅ **User Authentication** - Hybrid online/offline authentication system
+- ✅ **User Authentication** - Hybrid online/offline authentication system with corruption handling
 - ✅ **Permission Management** - Granular permissions for different user roles
 - ✅ **Secure User Sessions** - Complete session management with offline support
+- ✅ **IndexedDB Corruption Recovery** - Automatic detection and graceful degradation
 
 ### 📱 **Interface & User Experience**
 - ✅ **Standalone POS Interface** - Dedicated cashier interface accessible at `/pos`
@@ -60,15 +98,19 @@ A comprehensive **Enterprise-Grade Point of Sale (POS) system** built with Angul
 
 ### 🌐 **Hybrid Online/Offline Operations**
 - **Seamless Authentication** - Automatic fallback from Firebase Auth to IndexedDB credentials
+- **IndexedDB Corruption Handling** - Permanent failure detection with graceful degradation
+- **Signal-First Pattern** - In-memory state updates before attempting database operations
 - **Complete Offline POS** - Full point-of-sale functionality without internet connectivity
 - **Smart Data Sync** - Automatic synchronization when connectivity returns
 - **Offline Order Processing** - Create and process orders completely offline
 
 ### 💾 **Local Data Management**
 - **IndexedDB Integration** - Robust local database for offline data and session management
+- **Corruption Detection** - `isPermanentlyBroken` flag for identifying corrupt databases
 - **Secure Credential Storage** - SHA-256 hashed password storage with salt encryption
 - **Cached User Data** - User profiles and permissions stored locally for offline access
 - **Offline Product Catalog** - Complete product information available offline
+- **Graceful Fallbacks** - App continues to function even with database issues
 
 ### 🔒 **Security in Offline Mode**
 - **Encrypted Local Storage** - All sensitive data encrypted using Web Crypto API
@@ -149,48 +191,69 @@ npm start
 ## 📁 Project Structure
 
 ```
-├── docs/                           # 📚 Complete documentation
+├── docs/                           # 📚 Complete documentation (35+ files)
+│   ├── subscription-*.md          # Subscription system documentation
+│   ├── billing-history-integration.md
+│   ├── indexeddb-*.md             # IndexedDB and offline mode docs
 │   ├── firestore-security-current-status.md
-│   ├── indexeddb-uid-integration-status.md
-│   ├── app-header-usage.md
-│   └── offline-mode-fixes-summary.md
+│   ├── company-profile-*.md       # Company and profile features
+│   ├── offline-*.md               # Offline functionality guides
+│   └── TESTING-CHECKLIST.md       # Comprehensive testing guide
 ├── src/app/
 │   ├── pages/                      # 📄 Page components
 │   │   ├── auth/                   # Authentication pages
 │   │   ├── dashboard/              # Main dashboard with POS
+│   │   │   ├── subscriptions/      # Subscription management
+│   │   │   ├── company-profile/    # Company & subscription details
+│   │   │   └── pos/                # POS interface
 │   │   ├── company-selection/      # Company/store selection
 │   │   └── customer-view/          # Customer-facing display
 │   ├── services/                   # 🔧 Business logic services
 │   │   ├── auth.service.ts         # Authentication & user management
+│   │   ├── billing.service.ts      # Billing history tracking (NEW)
+│   │   ├── device.service.ts       # BIR device management (NEW)
 │   │   ├── product.service.ts      # Product catalog management
 │   │   ├── invoice.service.ts      # Transaction processing
 │   │   ├── customer.service.ts     # Customer management
 │   │   └── pos.service.ts          # POS operations
 │   ├── core/services/             # 🛠️ Core system services
 │   │   ├── firestore-security.service.ts    # UID security management
-│   │   ├── indexeddb.service.ts             # Local database operations
+│   │   ├── indexeddb.service.ts             # Local database with corruption handling
 │   │   ├── offline-storage.service.ts       # Offline data management
-│   │   └── uid-integration-test.service.ts  # Security testing
+│   │   └── network.service.ts               # Network status monitoring
 │   ├── shared/                    # 🔄 Shared components
+│   │   └── config/
+│   │       └── subscription-plans.config.ts # Subscription plan definitions (NEW)
 │   ├── interfaces/               # 📋 TypeScript interfaces
+│   │   ├── billing.interface.ts  # Billing types (NEW)
+│   │   ├── device.interface.ts   # Device/BIR types (NEW)
+│   │   ├── store.interface.ts    # Store with subscription support
+│   │   └── subscription-request.interface.ts # Enterprise requests (NEW)
 │   └── guards/                   # 🛡️ Route protection
 └── firestore.rules               # 🔒 Database security rules
 ```
 
 ## 📚 Documentation
 
-### **Complete Documentation**
+### **Complete Documentation (35+ Files)**
 - **[Main Documentation](docs/README.md)** - Comprehensive system documentation
 - **[Security Implementation](docs/firestore-security-current-status.md)** - Multi-tenant security details
+- **[Subscription System](docs/subscriptions-implementation.md)** - Complete subscription feature guide
+- **[Billing Integration](docs/billing-history-integration.md)** - Payment tracking and billing history
 - **[IndexedDB Integration](docs/indexeddb-uid-integration-status.md)** - Offline UID management
-- **[App Header Guide](docs/app-header-usage.md)** - Component usage guidelines
+- **[IndexedDB Corruption Fix](docs/indexeddb-permanent-corruption-fix.md)** - Handling database corruption
 - **[Offline Mode Guide](docs/offline-mode-fixes-summary.md)** - Offline functionality overview
+- **[Testing Checklist](docs/TESTING-CHECKLIST.md)** - Comprehensive testing guide
+- **[Company Profile Integration](docs/company-profile-subscription-integration.md)** - Subscription management UI
 
 ### **Testing & Validation**
-- **Security Testing** - Use `UidIntegrationTestService` to validate UID integration
+- **Subscription Testing** - Test all subscription tiers and payment flows
+- **Security Testing** - Validate UID integration and data isolation
 - **Offline Testing** - Test complete POS functionality without internet
+- **Corruption Recovery** - Validate IndexedDB corruption handling
 - **Multi-User Testing** - Verify data isolation between different users
 - **Receipt Testing** - Validate thermal printer compatibility
+- **BIR Compliance** - Test device registration and invoice generation
 
 ## 🔧 Development & Deployment
 
@@ -226,23 +289,30 @@ npm run lint
 
 ### **For Business Owners**
 - ✅ **Complete Offline Operations** - Never lose sales due to internet outages
+- ✅ **Flexible Subscription Plans** - Choose the right plan for your business size
 - ✅ **Multi-Store Management** - Manage multiple locations from one system
-- ✅ **BIR Compliance** - Meet Philippine tax requirements automatically
+- ✅ **BIR Compliance** - Meet Philippine tax requirements automatically with device registration
 - ✅ **Professional Receipts** - Branded, professional-looking receipts
 - ✅ **Comprehensive Analytics** - Make data-driven business decisions
+- ✅ **Transparent Billing** - Track all subscription payments and history
+- ✅ **Scalable Growth** - Easy upgrade path from Freemium to Enterprise
 
 ### **For Developers**
 - ✅ **Enterprise Security** - Built-in multi-tenant architecture with UID-based isolation
-- ✅ **Offline-First Design** - Robust offline functionality with automatic sync
-- ✅ **Modern Tech Stack** - Latest Angular 19 with TypeScript and Firebase
-- ✅ **Comprehensive Documentation** - Well-documented codebase with examples
+- ✅ **Offline-First Design** - Robust offline functionality with automatic sync and corruption handling
+- ✅ **Modern Tech Stack** - Latest Angular 19 with signals, TypeScript, and Firebase
+- ✅ **Comprehensive Documentation** - 35+ documentation files with implementation guides
 - ✅ **Scalable Architecture** - Designed for enterprise-level deployments
+- ✅ **Clean Code** - Well-organized codebase with TypeScript interfaces
+- ✅ **Error Recovery** - Graceful degradation with IndexedDB corruption handling
 
 ### **For IT Administrators**
 - ✅ **Secure by Design** - Multi-layered security with database-level protection
 - ✅ **Easy Deployment** - Simple setup with comprehensive configuration options
 - ✅ **Hardware Integration** - Support for various thermal printers and devices
 - ✅ **Monitoring & Analytics** - Built-in logging and performance monitoring
+- ✅ **Subscription Management** - Centralized billing and subscription tracking
+- ✅ **BIR Device Management** - Complete device registration and approval workflow
 
 ## 📞 Support & Community
 
@@ -267,12 +337,50 @@ npm run lint
 - **Database-Level Protection** - Firestore security rules prevent unauthorized access
 - **Encrypted Local Storage** - Secure offline credential and data storage
 - **Complete Audit Trail** - Track who created/modified every piece of data
+- **Corruption Recovery** - Graceful handling of IndexedDB corruption with permanent failure detection
+- **Signal-First Pattern** - In-memory state updates ensure app continues functioning
 
 **Perfect for businesses requiring secure, scalable, and reliable POS operations with full offline capabilities.**
 
 ---
 
-*Built with ❤️ for modern retail businesses requiring enterprise-grade security and reliability.*
+## 💳 Subscription Plans
+
+### **Freemium (Trial)**
+- **Price**: Free for 30 days
+- **Stores**: 1 location
+- **Devices**: 1 POS terminal
+- **Users**: 2 (Admin + 1 Cashier)
+- **Products**: 50 maximum
+- **Transactions**: 100 per month
+- **Best For**: Testing the system
+
+### **Standard** - ₱599/month
+- **Stores**: 2 locations
+- **Devices**: 4 per store
+- **Users**: 5 + custom roles
+- **Products**: 500
+- **Transactions**: 100,000/month
+- **Features**: Cloud sync, email receipts, basic inventory, BIR compliance
+- **Best For**: Small to medium businesses
+
+### **Premium** - ₱1,499/month ⭐ Most Popular
+- **Stores**: 5 locations
+- **Devices**: 10 per store
+- **Users**: 15 + unlimited custom roles
+- **Products**: Unlimited
+- **Transactions**: 20,000/month
+- **Features**: Everything in Standard + advanced inventory, CRM (1,000 customers), loyalty program, custom reports
+- **Best For**: Growing businesses
+
+### **Enterprise** - Custom Pricing
+- **Everything**: Unlimited stores, devices, users, products, transactions
+- **Features**: Custom domain, white-label app, API access, dedicated support, SLA guarantee
+- **Best For**: Large enterprises with custom requirements
+
+---
+
+*Built with ❤️ for modern retail businesses requiring enterprise-grade security, reliability, and flexible subscription options.*
 
 ### Advanced Features
 

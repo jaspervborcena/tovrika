@@ -7,6 +7,7 @@ export interface ConfirmationDialogData {
   confirmText?: string;
   cancelText?: string;
   type?: 'warning' | 'danger' | 'info';
+  isHtml?: boolean; // Flag to indicate if message contains HTML
 }
 
 @Component({
@@ -34,7 +35,8 @@ export interface ConfirmationDialogData {
         
         <!-- Message -->
         <div class="confirmation-body">
-          <p class="confirmation-message">{{ dialogData().message }}</p>
+          <p class="confirmation-message" *ngIf="!dialogData().isHtml">{{ dialogData().message }}</p>
+          <div class="confirmation-message" *ngIf="dialogData().isHtml" [innerHTML]="dialogData().message"></div>
         </div>
         
         <!-- Action Buttons -->
@@ -147,6 +149,155 @@ export interface ConfirmationDialogData {
       color: #6b7280;
       font-size: 0.95rem;
       line-height: 1.5;
+    }
+
+    /* Professional label-value styling for subscription details */
+    .confirmation-message .details-grid {
+      display: grid;
+      gap: 1rem;
+      text-align: left;
+    }
+
+    .confirmation-message .details-section {
+      background: #f9fafb;
+      border-radius: 8px;
+      padding: 1rem;
+      border: 1px solid #e5e7eb;
+    }
+
+    .confirmation-message .section-title {
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: #374151;
+      margin: 0 0 0.75rem 0;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .confirmation-message .detail-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.5rem 0;
+      border-bottom: 1px solid #e5e7eb;
+    }
+
+    .confirmation-message .detail-row:last-child {
+      border-bottom: none;
+    }
+
+    .confirmation-message .detail-label {
+      font-size: 0.875rem;
+      font-weight: 500;
+      color: #6b7280;
+      display: flex;
+      align-items: center;
+      gap: 0.375rem;
+    }
+
+    .confirmation-message .detail-value {
+      font-size: 0.875rem;
+      font-weight: 500;
+      color: #1f2937;
+      text-align: right;
+      background: white;
+      padding: 0.5rem 0.75rem;
+      border-radius: 0.375rem;
+      border: 1px solid #d1d5db;
+      min-width: 200px;
+      cursor: text;
+      user-select: text;
+    }
+
+    .confirmation-message .detail-value.readonly {
+      background: #f9fafb;
+      color: #6b7280;
+      cursor: default;
+    }
+
+    /* Input-style textbox appearance for detail values */
+    .confirmation-message .detail-input-style {
+      font-size: 0.875rem;
+      font-weight: 500;
+      color: #1f2937;
+      text-align: right;
+      background: white;
+      padding: 0.5rem 0.75rem;
+      border-radius: 0.375rem;
+      border: 1px solid #d1d5db;
+      min-width: 200px;
+      flex: 1;
+      max-width: 300px;
+      font-family: inherit;
+      cursor: text;
+      user-select: text;
+      word-break: break-word;
+    }
+
+    .confirmation-message .detail-input-style.readonly {
+      background: #f9fafb;
+      color: #6b7280;
+      cursor: default;
+    }
+
+    /* Input field styling for editable subscription details */
+    .confirmation-message .detail-input {
+      font-size: 0.875rem;
+      font-weight: 500;
+      color: #1f2937;
+      text-align: right;
+      background: white;
+      padding: 0.5rem 0.75rem;
+      border-radius: 0.375rem;
+      border: 1px solid #d1d5db;
+      min-width: 200px;
+      flex: 1;
+      max-width: 300px;
+      outline: none;
+      transition: all 0.2s ease;
+      font-family: inherit;
+    }
+
+    .confirmation-message .detail-input:focus {
+      border-color: #667eea;
+      box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+    }
+
+    .confirmation-message .detail-input:hover {
+      border-color: #9ca3af;
+    }
+
+    .confirmation-message .detail-input[readonly] {
+      background: #f9fafb;
+      cursor: not-allowed;
+      color: #6b7280;
+    }
+
+    .confirmation-message .status-active {
+      color: #10b981;
+      background: #ecfdf5;
+      border-color: #10b981;
+    }
+
+    .confirmation-message .status-inactive {
+      color: #6b7280;
+      background: #f3f4f6;
+      border-color: #9ca3af;
+    }
+
+    .confirmation-message .status-expired {
+      color: #ef4444;
+      background: #fef2f2;
+      border-color: #ef4444;
+    }
+
+    .confirmation-message .amount-highlight {
+      color: #667eea;
+      font-size: 1rem;
+      font-weight: 600;
+      background: #eef2ff;
+      border-color: #667eea;
     }
     
     .confirmation-footer {

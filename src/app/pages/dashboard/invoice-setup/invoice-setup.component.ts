@@ -24,7 +24,7 @@ import { AuthService } from '../../../services/auth.service';
             <div class="store-card" *ngFor="let store of stores">
               <div class="store-info">
                 <h4>{{ store.storeName }}</h4>
-                <p class="store-code">{{ store.storeCode }}</p>
+                <p class="store-code">{{ store.id }}</p>
                 <div class="invoice-status">
                   <span class="label">Current Invoice:</span>
                   <span class="invoice-number" [class.not-set]="!store.invoiceNo">
