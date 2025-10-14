@@ -220,6 +220,65 @@ export class DeviceService {
   }
 
   /**
+   * Get device by terminal ID and store ID
+   */
+  async getDeviceByTerminalId(terminalId: string, storeId: string): Promise<Device | null> {
+    try {
+      console.log('🔍 Looking for device with terminalId:', terminalId, 'storeId:', storeId);
+
+      const devicesRef = collection(this.firestore, 'devices');
+      const deviceQuery = query(
+        devicesRef,
+        where('terminalId', '==', terminalId),
+        where('storeId', '==', storeId),
+        where('status', '==', 'active')
+      );
+
+      const querySnapshot = await getDocs(deviceQuery);
+      
+      if (querySnapshot.empty) {
+        console.log('⚠️ No active device found for terminalId:', terminalId);
+        return null;
+      }
+
+      const deviceDoc = querySnapshot.docs[0];
+      const data = deviceDoc.data();
+      
+      return {
+        id: deviceDoc.id,
+        storeId: data['storeId'],
+        companyId: data['companyId'],
+        deviceLabel: data['deviceLabel'],
+        terminalId: data['terminalId'],
+        invoicePrefix: data['invoicePrefix'],
+        invoiceSeriesStart: data['invoiceSeriesStart'],
+        invoiceSeriesEnd: data['invoiceSeriesEnd'],
+        currentInvoiceNumber: data['currentInvoiceNumber'],
+        serialNumber: data['serialNumber'],
+        minNumber: data['minNumber'],
+        birPermitNo: data['birPermitNo'],
+        atpOrOcn: data['atpOrOcn'],
+        permitDateIssued: data['permitDateIssued']?.toDate() || new Date(),
+        vatRegistrationType: data['vatRegistrationType'] || 'VAT-registered',
+        vatRate: data['vatRate'] || 12.0,
+        receiptType: data['receiptType'] || 'POS Receipt',
+        validityNotice: data['validityNotice'] || 'This invoice/receipt shall be valid for five (5) years from the date of the permit to use.',
+        status: data['status'] || 'pending',
+        lastUsedAt: data['lastUsedAt']?.toDate(),
+        isOnline: data['isOnline'],
+        isLocked: data['isLocked'] || false,
+        approvedBy: data['approvedBy'],
+        approvedAt: data['approvedAt']?.toDate(),
+        createdAt: data['createdAt']?.toDate() || new Date(),
+        updatedAt: data['updatedAt']?.toDate() || new Date()
+      } as Device;
+    } catch (error) {
+      console.error('❌ Error getting device by terminalId:', error);
+      return null;
+    }
+  }
+
+  /**
    * Update device status
    */
   async updateDeviceStatus(
@@ -393,6 +452,7 @@ export class DeviceService {
       const deviceRef = doc(this.firestore, 'devices', deviceId);
       await updateDoc(deviceRef, {
         currentInvoiceNumber: nextNumber,
+        lastUsedAt: Timestamp.now(),
         updatedAt: Timestamp.now()
       });
 
@@ -402,6 +462,14 @@ export class DeviceService {
       console.error('❌ Error incrementing invoice number:', error);
       throw error;
     }
+  }
+
+  /**
+   * Get next invoice number for a device (formatted with prefix)
+   */
+  getFormattedInvoiceNumber(device: Device): string {
+    const invoiceNumber = device.currentInvoiceNumber.toString().padStart(6, '0');
+    return `${device.invoicePrefix}-${invoiceNumber}`;
   }
 
   /**

@@ -125,7 +125,7 @@
           <div class="card-header">
             <div>
               <h3 class="store-name">{{ store.storeName }}</h3>
-              <p class="store-code">{{ store.storeCode }}</p>
+              <p class="store-code">{{ store.id }}</p>
             </div>
             <div class="badges">
               <span [class]="getTierBadgeClass(store.subscription.tier)">
@@ -198,6 +198,9 @@
             <button class="btn-secondary" (click)="viewStoreDetails(store)">
               View Details
             </button>
+            <button class="btn-info" (click)="openBillingHistory(store)">
+              Billing History
+            </button>
             @if (store.subscription.status === 'active' && store.subscription.tier !== 'premium') {
               <button class="btn-primary" (click)="upgradeSubscription(store)">
                 Upgrade
@@ -214,3 +217,11 @@
     </div>
   }
 </div>
+
+<!-- Billing History Modal -->
+<app-billing-history-modal
+  [isOpen]="billingHistoryModalOpen()"
+  [storeId]="selectedStore()?.id || ''"
+  [storeName]="selectedStore()?.storeName || ''"
+  (closeModal)="closeBillingHistoryModal()"
+></app-billing-history-modal>

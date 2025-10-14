@@ -4,17 +4,22 @@ import { FormsModule } from '@angular/forms';
 import { Store, Subscription } from '../../../interfaces/store.interface';
 import { StoreService } from '../../../services/store.service';
 import { AuthService } from '../../../services/auth.service';
+import { BillingHistoryModalComponent } from './billing-history-modal.component';
 
 @Component({
   selector: 'app-subscriptions',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, BillingHistoryModalComponent],
   templateUrl: './subscriptions.component.html',
   styleUrls: ['./subscriptions.component.css']
 })
 export class SubscriptionsComponent implements OnInit {
   private storeService = inject(StoreService);
   private authService = inject(AuthService);
+
+  // Billing History Modal State
+  billingHistoryModalOpen = signal(false);
+  selectedStore = signal<Store | null>(null);
 
   stores = signal<Store[]>([]);
   loading = signal(false);
@@ -31,7 +36,7 @@ export class SubscriptionsComponent implements OnInit {
     if (search) {
       filtered = filtered.filter(store => 
         store.storeName.toLowerCase().includes(search) ||
-        store.storeCode.toLowerCase().includes(search)
+        (store.id && store.id.toLowerCase().includes(search))
       );
     }
 
@@ -170,7 +175,7 @@ export class SubscriptionsComponent implements OnInit {
   exportToCSV() {
     const csvData = this.filteredStores().map(store => ({
       'Store Name': store.storeName,
-      'Store Code': store.storeCode,
+      'Store ID': store.id || '',
       'Tier': store.subscription.tier,
       'Status': store.subscription.status,
       'Subscribed At': this.formatDate(store.subscription.subscribedAt),
@@ -196,5 +201,16 @@ export class SubscriptionsComponent implements OnInit {
     a.href = url;
     a.download = `subscriptions_${new Date().toISOString().split('T')[0]}.csv`;
     a.click();
+  }
+
+  // Billing History Modal Methods
+  openBillingHistory(store: Store) {
+    this.selectedStore.set(store);
+    this.billingHistoryModalOpen.set(true);
+  }
+
+  closeBillingHistoryModal() {
+    this.billingHistoryModalOpen.set(false);
+    this.selectedStore.set(null);
   }
 }

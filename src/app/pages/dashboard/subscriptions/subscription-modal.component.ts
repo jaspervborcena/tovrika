@@ -97,7 +97,7 @@ export class SubscriptionModalComponent implements OnInit {
   // Enterprise request computed values
   currentCompanyName = computed(() => this.companyService.companies()[0]?.name || 'N/A');
   currentUserEmail = computed(() => this.authService.getCurrentUser()?.email || 'N/A');
-  currentCompanyPhone = computed(() => this.companyService.companies()[0]?.phone || 'Not provided');
+  currentCompanyPhone = computed(() => this.store?.phoneNumber || 'Not provided');
   currentDate = computed(() => new Date().toLocaleDateString());
 
   ngOnInit() {
@@ -183,7 +183,7 @@ export class SubscriptionModalComponent implements OnInit {
         companyId: permission.companyId,
         companyName: company.name,
         ownerEmail: user.email || '',
-        contactPhone: company.phone || '',
+        contactPhone: this.store?.phoneNumber || '',
         requestedAt: new Date(),
         requestedTier: 'enterprise',
         notes: notes,

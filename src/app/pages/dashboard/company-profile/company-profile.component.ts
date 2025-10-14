@@ -10,6 +10,7 @@ import { StoreService } from '../../../services/store.service';
 import { Store } from '../../../interfaces/store.interface';
 import { SubscriptionModalComponent } from '../subscriptions/subscription-modal.component';
 import { SubscriptionDetailsModalComponent } from './subscription-details-modal.component';
+import { BillingHistoryModalComponent } from '../subscriptions/billing-history-modal.component';
 import { RoleDefinitionService } from '../../../services/role-definition.service';
 import { ToastService } from '../../../shared/services/toast.service';
 import { BillingService } from '../../../services/billing.service';
@@ -17,7 +18,7 @@ import { BillingService } from '../../../services/billing.service';
 @Component({
   selector: 'app-company-profile',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule, SubscriptionModalComponent, SubscriptionDetailsModalComponent],
+  imports: [CommonModule, ReactiveFormsModule, SubscriptionModalComponent, SubscriptionDetailsModalComponent, BillingHistoryModalComponent],
   template: `
     <div class="company-profile-container">
       <!-- Header with Products style -->
@@ -132,18 +133,6 @@ import { BillingService } from '../../../services/billing.service';
               </div>
             </div>
 
-            <!-- Phone -->
-            <div class="form-group">
-              <label for="phone" class="form-label">Phone Number</label>
-              <input 
-                id="phone"
-                type="tel" 
-                formControlName="phone"
-                class="form-input"
-                placeholder="Enter phone number"
-                [disabled]="loading()">
-            </div>
-
             <!-- Form Actions -->
             <div class="form-actions">
               <button 
@@ -196,7 +185,6 @@ import { BillingService } from '../../../services/billing.service';
                   <td>
                     <div class="store-info">
                       <span class="store-name">{{ store.storeName }}</span>
-                      <span class="store-code">{{ store.storeCode }}</span>
                     </div>
                   </td>
                   <td>
@@ -215,11 +203,21 @@ import { BillingService } from '../../../services/billing.service';
                   </td>
                   <td>
                     <div class="action-buttons">
-                      <button (click)="upgradeSubscription(store)" class="btn-action btn-upgrade">
-                        Upgrade
+                      <button (click)="upgradeSubscription(store)" class="btn-icon-action btn-upgrade" title="Upgrade Subscription">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" class="icon">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                        </svg>
                       </button>
-                      <button (click)="viewSubscriptionDetails(store)" class="btn-action btn-view">
-                        View
+                      <button (click)="viewSubscriptionDetails(store)" class="btn-icon-action btn-view" title="View Details">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" class="icon">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                        </svg>
+                      </button>
+                      <button (click)="openBillingHistory(store)" class="btn-icon-action btn-billing" title="Billing History">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" class="icon">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
                       </button>
                     </div>
                   </td>
@@ -252,6 +250,14 @@ import { BillingService } from '../../../services/billing.service';
         [store]="selectedStoreForDetails()"
         (closed)="closeSubscriptionDialog()"
       ></app-subscription-details-modal>
+
+      <!-- Billing History Modal -->
+      <app-billing-history-modal
+        [isOpen]="showBillingHistoryModal()"
+        [storeId]="selectedStoreForBillingHistory()?.id || ''"
+        [storeName]="selectedStoreForBillingHistory()?.storeName || ''"
+        (closeModal)="closeBillingHistoryModal()"
+      ></app-billing-history-modal>
     </div>
   `,
   styles: [`
@@ -670,6 +676,7 @@ import { BillingService } from '../../../services/billing.service';
     .subscription-table {
       width: 100%;
       border-collapse: collapse;
+      font-size: 0.8125rem;
     }
 
     .subscription-table thead {
@@ -677,18 +684,18 @@ import { BillingService } from '../../../services/billing.service';
     }
 
     .subscription-table th {
-      padding: 1rem;
+      padding: 0.75rem 0.5rem;
       text-align: left;
       font-weight: 600;
       color: #6b7280;
-      font-size: 0.875rem;
+      font-size: 0.75rem;
       text-transform: uppercase;
       letter-spacing: 0.05em;
       border-bottom: 2px solid #e5e7eb;
     }
 
     .subscription-table td {
-      padding: 1rem;
+      padding: 0.75rem 0.5rem;
       border-bottom: 1px solid #f3f4f6;
     }
 
@@ -705,6 +712,7 @@ import { BillingService } from '../../../services/billing.service';
     .store-name {
       font-weight: 600;
       color: #1f2937;
+      font-size: 0.875rem;
     }
 
     .store-code {
@@ -716,9 +724,9 @@ import { BillingService } from '../../../services/billing.service';
     .tier-badge,
     .status-badge {
       display: inline-block;
-      padding: 0.375rem 0.75rem;
+      padding: 0.25rem 0.5rem;
       border-radius: 9999px;
-      font-size: 0.75rem;
+      font-size: 0.6875rem;
       font-weight: 600;
       text-transform: uppercase;
       letter-spacing: 0.05em;
@@ -773,23 +781,62 @@ import { BillingService } from '../../../services/billing.service';
     /* Action Buttons */
     .action-buttons {
       display: flex;
-      gap: 0.5rem;
+      gap: 0.375rem;
+      flex-wrap: nowrap;
+      align-items: center;
     }
 
-    .btn-action {
-      padding: 0.5rem 1rem;
+    .btn-icon-action {
+      padding: 0.375rem;
       border: 1px solid #d1d5db;
       background: white;
       border-radius: 0.375rem;
-      font-size: 0.875rem;
-      font-weight: 500;
       cursor: pointer;
       transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
     }
 
-    .btn-action:hover {
-      background: #f9fafb;
-      border-color: #9ca3af;
+    .btn-icon-action .icon {
+      width: 1rem;
+      height: 1rem;
+    }
+
+    .btn-icon-action:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    }
+
+    .btn-icon-action[title]:hover::after {
+      content: attr(title);
+      position: absolute;
+      bottom: 100%;
+      left: 50%;
+      transform: translateX(-50%);
+      margin-bottom: 0.5rem;
+      padding: 0.375rem 0.75rem;
+      background: #1f2937;
+      color: white;
+      font-size: 0.75rem;
+      border-radius: 0.375rem;
+      white-space: nowrap;
+      z-index: 10;
+      pointer-events: none;
+    }
+
+    .btn-icon-action[title]:hover::before {
+      content: '';
+      position: absolute;
+      bottom: 100%;
+      left: 50%;
+      transform: translateX(-50%);
+      margin-bottom: 0.25rem;
+      border: 4px solid transparent;
+      border-top-color: #1f2937;
+      z-index: 10;
+      pointer-events: none;
     }
 
     .btn-upgrade {
@@ -799,10 +846,27 @@ import { BillingService } from '../../../services/billing.service';
 
     .btn-upgrade:hover {
       background: #eef2ff;
+      border-color: #667eea;
     }
 
     .btn-view {
-      color: #6b7280;
+      color: #10b981;
+      border-color: #10b981;
+    }
+
+    .btn-view:hover {
+      background: #d1fae5;
+      border-color: #10b981;
+    }
+
+    .btn-billing {
+      color: #8b5cf6;
+      border-color: #8b5cf6;
+    }
+
+    .btn-billing:hover {
+      background: #f5f3ff;
+      border-color: #8b5cf6;
     }
 
     /* Empty State */
@@ -847,11 +911,15 @@ import { BillingService } from '../../../services/billing.service';
       }
 
       .action-buttons {
-        flex-direction: column;
+        justify-content: center;
       }
 
-      .btn-action {
-        width: 100%;
+      .btn-icon-action[title]:hover::after {
+        display: none;
+      }
+
+      .btn-icon-action[title]:hover::before {
+        display: none;
       }
     }
   `]
@@ -883,6 +951,10 @@ export class CompanyProfileComponent {
   protected showSubscriptionDialog = signal(false);
   protected selectedStoreForDetails = signal<Store | undefined>(undefined);
 
+  // Billing history modal
+  protected showBillingHistoryModal = signal(false);
+  protected selectedStoreForBillingHistory = signal<Store | undefined>(undefined);
+
   // Computed values
   protected currentCompany = computed(() => this.companyService.companies()[0]);
   protected isCreatingCompany = computed(() => !this.authService.getCurrentPermission()?.companyId);
@@ -896,7 +968,6 @@ export class CompanyProfileComponent {
   constructor() {
     this.profileForm = this.fb.group({
       name: ['', Validators.required],
-      phone: [''],
       email: ['', [Validators.required, Validators.email]]
     });
 
@@ -942,7 +1013,6 @@ export class CompanyProfileComponent {
         // Existing company - populate form
         this.profileForm.patchValue({
           name: company.name || '',
-          phone: company.phone || '',
           email: company.email || ''
         });
         
@@ -952,7 +1022,6 @@ export class CompanyProfileComponent {
         // New company creation - pre-populate with user email if available
         this.profileForm.patchValue({
           name: '',
-          phone: '',
           email: user.email || ''
         });
       }
@@ -987,8 +1056,7 @@ export class CompanyProfileComponent {
             name: formData.name,
             slug: formData.name.toLowerCase().replace(/[^a-z0-9]/g, '-'),
             ownerUid: this.currentUser()?.uid || '',
-            email: formData.email,
-            phone: formData.phone || ''
+            email: formData.email
           };
 
           await this.companyService.createCompany(companyData);
@@ -1007,7 +1075,6 @@ export class CompanyProfileComponent {
             const updateData: Partial<Company> = {
               name: formData.name,
               email: formData.email,
-              phone: formData.phone,
               updatedAt: new Date()
             };
 
@@ -1040,14 +1107,12 @@ export class CompanyProfileComponent {
       // Reset to existing company data
       this.profileForm.patchValue({
         name: company.name || '',
-        phone: company.phone || '',
         email: company.email || ''
       });
     } else if (user) {
       // Reset to initial state for new company
       this.profileForm.patchValue({
         name: '',
-        phone: '',
         email: user.email || ''
       });
     }
@@ -1214,6 +1279,16 @@ export class CompanyProfileComponent {
   protected closeSubscriptionDialog() {
     this.showSubscriptionDialog.set(false);
     this.selectedStoreForDetails.set(undefined);
+  }
+
+  protected openBillingHistory(store: Store) {
+    this.selectedStoreForBillingHistory.set(store);
+    this.showBillingHistoryModal.set(true);
+  }
+
+  protected closeBillingHistoryModal() {
+    this.showBillingHistoryModal.set(false);
+    this.selectedStoreForBillingHistory.set(undefined);
   }
 
   protected getTierBadgeClass(tier: string): string {

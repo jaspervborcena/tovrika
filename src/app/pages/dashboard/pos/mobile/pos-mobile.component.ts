@@ -28,7 +28,7 @@ import { CurrencyService } from '../../../../services/currency.service';
 import { TranslationService } from '../../../../services/translation.service';
 import { TranslateModule } from '@ngx-translate/core';
 import { Product } from '../../../../interfaces/product.interface';
-import { ProductViewType } from '../../../../interfaces/pos.interface';
+import { ProductViewType, ReceiptValidityNotice } from '../../../../interfaces/pos.interface';
 
 @Component({
   selector: 'app-pos-mobile',
@@ -688,7 +688,7 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
       storeInfo: {
         storeName: company?.name || (storeInfo as any)?.storeName || 'Unknown Store',
         address: (storeInfo as any)?.address || 'Store Address',
-        phone: company?.phone || (storeInfo as any)?.phone || 'N/A', // Use company phone
+        phone: (storeInfo as any)?.phoneNumber || (storeInfo as any)?.phone || 'N/A',
         email: company?.email || storeInfo?.email || 'N/A', // Use company email
         tin: (storeInfo as any)?.tinNumber || 'N/A', // Use store TIN
         invoiceType: (storeInfo as any)?.invoiceType || 'SALES INVOICE',
@@ -720,6 +720,10 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
       discount: order.discountAmount || 0,
       totalAmount: order.totalAmount || order.netAmount,
       vatRate: 12,
+      // Validity notice based on store BIR accreditation
+      validityNotice: (storeInfo as any)?.isBirAccredited 
+        ? ReceiptValidityNotice.BIR_ACCREDITED 
+        : ReceiptValidityNotice.NON_ACCREDITED,
       // Enhanced order discount handling - check for both exemptionId and full discount object
       orderDiscount: order.orderDiscount || (order.exemptionId ? {
         type: 'CUSTOM',
@@ -945,7 +949,7 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
       storeInfo: {
         storeName: company?.name || (storeInfo as any)?.storeName || 'Unknown Store',
         address: (storeInfo as any)?.address || 'Store Address',
-        phone: company?.phone || (storeInfo as any)?.phone || 'N/A', // Use company phone
+        phone: (storeInfo as any)?.phoneNumber || (storeInfo as any)?.phone || 'N/A',
         email: company?.email || storeInfo?.email || 'N/A', // Use company email
         tin: (storeInfo as any)?.tinNumber || 'N/A', // Use store TIN
         invoiceType: (storeInfo as any)?.invoiceType || 'SALES INVOICE',
@@ -977,6 +981,10 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
       discount: cartSummary.productDiscountAmount + cartSummary.orderDiscountAmount,
       totalAmount: cartSummary.netAmount,
       vatRate: 12,
+      // Validity notice based on store BIR accreditation
+      validityNotice: (storeInfo as any)?.isBirAccredited 
+        ? ReceiptValidityNotice.BIR_ACCREDITED 
+        : ReceiptValidityNotice.NON_ACCREDITED,
       // Enhanced order discount handling
       orderDiscount: this.orderDiscount()
     };

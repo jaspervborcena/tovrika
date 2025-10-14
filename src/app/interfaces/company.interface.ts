@@ -4,14 +4,12 @@ export interface Company {
   slug: string;
   logoUrl?: string;
   email?: string;
-  phone?: string;
   website?: string;
   ownerUid: string;
   createdAt: Date;
   updatedAt?: Date;
   
   // Optional settings (for legacy compatibility)
-  address?: string;
   settings?: {
     currency?: string;
     timezone?: string;

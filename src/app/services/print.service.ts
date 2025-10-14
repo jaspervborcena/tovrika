@@ -635,6 +635,15 @@ export class PrintService {
       commands += '================================\n';
     }
     
+    // Validity Notice - CENTERED
+    if (receiptData?.validityNotice) {
+      commands += '\x1B\x61\x01'; // Center alignment
+      commands += '\n';
+      commands += receiptData.validityNotice + '\n';
+      commands += '\x1B\x61\x00'; // Reset alignment
+      commands += '\n';
+    }
+    
     // Thank you message - CENTERED for Xprinter
     commands += '\x1B\x61\x01'; // Center alignment
     commands += 'Thank you for your purchase!\n';
@@ -1217,6 +1226,15 @@ export class PrintService {
         html += `</div>`;
       }
       html += `</div>`;
+    }
+
+    // Validity Notice
+    if (receiptData?.validityNotice) {
+      html += `
+        <div style="text-align: center; margin-top: 15px; font-size: 10px; border-top: 1px dashed #ccc; padding-top: 10px;">
+          <div>${receiptData.validityNotice}</div>
+        </div>
+      `;
     }
 
     html += `

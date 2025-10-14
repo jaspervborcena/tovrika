@@ -318,7 +318,8 @@
 
 .btn-secondary,
 .btn-primary,
-.btn-success {
+.btn-success,
+.btn-info {
   flex: 1;
   padding: 0.625rem 1rem;
   border: none;
@@ -357,6 +358,16 @@
 
 .btn-success:hover {
   background: #059669;
+  transform: translateY(-1px);
+}
+
+.btn-info {
+  background: #8b5cf6;
+  color: white;
+}
+
+.btn-info:hover {
+  background: #7c3aed;
   transform: translateY(-1px);
 }
 

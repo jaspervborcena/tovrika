@@ -1,7 +1,6 @@
 export interface Store {
   id?: string;
   storeName: string;
-  storeCode: string;
   storeType: string;
   branchName: string;
   address: string;

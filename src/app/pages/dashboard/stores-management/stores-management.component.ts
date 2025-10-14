@@ -68,7 +68,7 @@ import { PredefinedTypesService, PredefinedType } from '../../../services/predef
             <tbody>
               <tr *ngFor="let store of filteredStores">
                 <td class="store-name-cell">{{ store.storeName }}</td>
-                <td class="store-code-cell">{{ store.storeCode }}</td>
+                <td class="store-code-cell">{{ store.id }}</td>
                 <td class="branch-name-cell">{{ store.branchName || '-' }}</td>
                 <td class="store-type-cell">{{ store.storeType }}</td>
                 <td class="bir-status-cell">
@@ -146,19 +146,6 @@ import { PredefinedTypesService, PredefinedType } from '../../../services/predef
                   class="form-input">
                 <div class="error-message" *ngIf="storeForm.get('storeName')?.invalid && storeForm.get('storeName')?.touched">
                   Store name is required
-                </div>
-              </div>
-
-              <div class="form-group">
-                <label for="storeCode">Store Code *</label>
-                <input 
-                  type="text" 
-                  id="storeCode"
-                  formControlName="storeCode"
-                  placeholder="e.g., MAIN-01, BRANCH-02"
-                  class="form-input">
-                <div class="error-message" *ngIf="storeForm.get('storeCode')?.invalid && storeForm.get('storeCode')?.touched">
-                  Store code is required
                 </div>
               </div>
 
@@ -890,7 +877,6 @@ export class StoresManagementComponent implements OnInit {
   ) {
     this.storeForm = this.fb.group({
       storeName: ['', [Validators.required]],
-      storeCode: ['', [Validators.required]],
       storeType: ['', [Validators.required]],
       branchName: [''],
       address: ['', [Validators.required]],
@@ -959,7 +945,7 @@ export class StoresManagementComponent implements OnInit {
     const term = this.searchTerm?.toLowerCase() || '';
     this.filteredStores = (this.stores || []).filter(store => 
       store.storeName?.toLowerCase().includes(term) ||
-      store.storeCode?.toLowerCase().includes(term) ||
+      store.id?.toLowerCase().includes(term) ||
       store.storeType?.toLowerCase().includes(term) ||
       store.address?.toLowerCase().includes(term)
     );
@@ -993,7 +979,6 @@ export class StoresManagementComponent implements OnInit {
     
     const formValues = {
       storeName: store.storeName,
-      storeCode: store.storeCode,
       storeType: store.storeType,
       branchName: store.branchName || '',
       address: store.address,
@@ -1035,7 +1020,6 @@ export class StoresManagementComponent implements OnInit {
     this.editingStore = null;
     this.storeForm.reset({
       storeName: '',
-      storeCode: '',
       storeType: '',
       branchName: '',
       address: '',
@@ -1110,7 +1094,6 @@ export class StoresManagementComponent implements OnInit {
       const storeData: Omit<Store, 'id' | 'createdAt' | 'updatedAt'> = {
         companyId: currentPermission.companyId,
         storeName: formData.storeName,
-        storeCode: formData.storeCode,
         storeType: formData.storeType,
         branchName: formData.branchName || '',
         address: formData.address,

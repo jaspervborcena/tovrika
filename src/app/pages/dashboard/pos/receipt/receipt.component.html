@@ -25,12 +25,16 @@
       <div class="store-header">
         <div class="company-info">
           <h1 class="company-name">{{ receiptData?.storeInfo?.storeName || 'Store Name' }}</h1>
-          <p class="company-address">{{ receiptData?.storeInfo?.address || 'Store Address' }}</p>
-          <p class="company-contact">
-            Tel: {{ receiptData?.storeInfo?.phone || 'N/A' }} | 
-            Email: {{ receiptData?.storeInfo?.email || 'N/A' }}
+          <p *ngIf="receiptData?.storeInfo?.address && receiptData?.storeInfo?.address !== 'N/A'" class="company-address">{{ receiptData.storeInfo.address }}</p>
+          
+          <!-- Contact Information - Only show if values exist -->
+          <p *ngIf="receiptData?.storeInfo?.phone || receiptData?.storeInfo?.email" class="company-contact">
+            <span *ngIf="receiptData?.storeInfo?.phone && receiptData?.storeInfo?.phone !== 'N/A'">Tel: {{ receiptData.storeInfo.phone }}</span>
+            <span *ngIf="receiptData?.storeInfo?.phone && receiptData?.storeInfo?.phone !== 'N/A' && receiptData?.storeInfo?.email && receiptData?.storeInfo?.email !== 'N/A'"> | </span>
+            <span *ngIf="receiptData?.storeInfo?.email && receiptData?.storeInfo?.email !== 'N/A'">Email: {{ receiptData.storeInfo.email }}</span>
           </p>
-          <p class="tin-number">TIN: {{ receiptData?.storeInfo?.tin || 'N/A' }}</p>
+          
+          <p *ngIf="receiptData?.storeInfo?.tin && receiptData?.storeInfo?.tin !== 'N/A'" class="tin-number">TIN: {{ receiptData.storeInfo.tin }}</p>
           
           <!-- BIR Information -->
           <div class="bir-info">
@@ -49,7 +53,8 @@
           <p class="invoice-number"><strong>Invoice #: {{ receiptData?.invoiceNumber || 'Auto-generated' }}</strong></p>
           
           <!-- Dynamic Invoice Type Label -->
-          <p class="sales-invoice-label">{{ receiptData?.storeInfo?.invoiceType || 'SALES INVOICE' }}</p>
+          <p *ngIf="receiptData?.storeInfo?.invoiceType && receiptData?.storeInfo?.invoiceType !== 'SALES INVOICE'" class="sales-invoice-label">{{ receiptData.storeInfo.invoiceType }}</p>
+          <p *ngIf="!receiptData?.storeInfo?.invoiceType || receiptData?.storeInfo?.invoiceType === 'SALES INVOICE'" class="sales-invoice-label">SALES INVOICE</p>
         </div>
       </div>
 
@@ -180,7 +185,7 @@
       <!-- Footer -->
       <div class="receipt-footer">
         <p class="thank-you">Thank you for your business!</p>
-        <p class="footer-note">This serves as your official receipt.</p>
+        <p class="footer-note">{{ receiptData?.validityNotice || 'This serves as your official receipt.' }}</p>
         <p class="date-printed">Printed on: {{ receiptData?.receiptDate | date:'medium' }}</p>
       </div>
 

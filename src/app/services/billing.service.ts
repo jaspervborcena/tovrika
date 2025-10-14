@@ -65,6 +65,7 @@ export class BillingService {
   async getBillingHistoryByStore(storeId: string): Promise<CompanyBillingHistory[]> {
     try {
       console.log('📊 Loading billing history for store:', storeId);
+      console.log('📊 StoreId type:', typeof storeId, 'Value:', storeId);
 
       const billingRef = collection(this.firestore, 'companyBillingHistory');
       const billingQuery = query(
@@ -74,8 +75,16 @@ export class BillingService {
       );
 
       const querySnapshot = await getDocs(billingQuery);
+      console.log('📊 Query returned', querySnapshot.size, 'documents');
+      
       const history = querySnapshot.docs.map(doc => {
         const data = doc.data();
+        console.log('📄 Document data:', {
+          id: doc.id,
+          storeId: data['storeId'],
+          companyId: data['companyId'],
+          tier: data['tier']
+        });
         return {
           id: doc.id,
           companyId: data['companyId'],
@@ -86,17 +95,16 @@ export class BillingService {
           amount: data['amount'],
           discountPercent: data['discountPercent'] || 0,
           finalAmount: data['finalAmount'],
-          promoCode: data['promoCode'],
-          referralCode: data['referralCode'],
+          promoCode: data['promoCode'] || '',
+          referralCode: data['referralCode'] || '',
           paymentMethod: data['paymentMethod'],
-          transactionId: data['transactionId'],
           paidAt: data['paidAt']?.toDate() || new Date(),
           createdAt: data['createdAt']?.toDate() || new Date()
         } as CompanyBillingHistory;
       });
 
       this.billingHistorySignal.set(history);
-      console.log('✅ Loaded', history.length, 'billing records');
+      console.log('✅ Loaded', history.length, 'billing records for store:', storeId);
       return history;
     } catch (error) {
       console.error('❌ Error loading billing history:', error);

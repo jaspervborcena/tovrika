@@ -28,8 +28,8 @@ import { Store } from '../../../interfaces/store.interface';
             </div>
             
             <div class="form-group">
-              <label>Store Code</label>
-              <input type="text" class="form-input readonly" [value]="store()?.storeCode" readonly />
+              <label>Store ID</label>
+              <input type="text" class="form-input readonly" [value]="store()?.id" readonly />
             </div>
           </div>
 

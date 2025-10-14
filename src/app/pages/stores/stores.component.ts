@@ -276,7 +276,6 @@ export class StoresComponent implements OnInit {
           const newStoreData: Omit<Store, 'id' | 'createdAt' | 'updatedAt'> = {
             companyId: storeData.companyId,
             storeName: storeData.name,
-            storeCode: 'AUTO-' + Date.now(), // Auto-generated
             storeType: 'General', // Default
             branchName: storeData.name, // Use store name as branch name
             address: `${storeData.address.street}, ${storeData.address.city}, ${storeData.address.state} ${storeData.address.zipCode}`,
