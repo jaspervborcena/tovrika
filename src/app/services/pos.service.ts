@@ -8,11 +8,15 @@ import { AuthService } from './auth.service';
 import { CompanyService } from './company.service';
 import { ProductService } from './product.service';
 import { InvoiceService } from './invoice.service';
+import { StoreService } from './store.service';
+import { DeviceService } from './device.service';
 import { IndexedDBService } from '../core/services/indexeddb.service';
 import { FirestoreSecurityService } from '../core/services/firestore-security.service';
 import { OfflineDocumentService } from '../core/services/offline-document.service';
-import { Order, OrderDetail, OrderItem, CartItem, ReceiptData, OrderDiscount, CartSummary } from '../interfaces/pos.interface';
+import { Order, OrderDetail, OrderItem, CartItem, ReceiptData, OrderDiscount, CartSummary, ReceiptValidityNotice } from '../interfaces/pos.interface';
 import { Product } from '../interfaces/product.interface';
+import { Store } from '../interfaces/store.interface';
+import { Device } from '../interfaces/device.interface';
 
 @Injectable({
   providedIn: 'root'
@@ -78,6 +82,8 @@ export class PosService {
   });
 
   private invoiceService = inject(InvoiceService);
+  private storeService = inject(StoreService);
+  private deviceService = inject(DeviceService);
 
   constructor(
     private firestore: Firestore,
@@ -222,6 +228,12 @@ export class PosService {
         throw new Error('No store selected');
       }
 
+      // Load store data
+      const store = this.storeService.getStore(storeId);
+      if (!store) {
+        throw new Error('Store not found');
+      }
+
       const cartItems = this.cartItems();
       if (cartItems.length === 0) {
         throw new Error('Cart is empty');
@@ -260,11 +272,11 @@ export class PosService {
         date: customerInfo?.date || new Date(),
         logoUrl: company.logoUrl || '',
         
-        // Company Information
+        // Company Information (using STORE data)
         companyName: company.name || '',
-        companyAddress: company.address || '',
-        companyPhone: company.phone || '',
-        companyTaxId: company.taxId || company.tin || '',
+        companyAddress: store.address || '',
+        companyPhone: store.phoneNumber || '',
+        companyTaxId: store.tinNumber || '',
         companyEmail: company.email || '',
         
         // Financial Calculations
@@ -280,13 +292,16 @@ export class PosService {
         // Order Items
         items: orderItems,
         
-        // BIR Required Fields
-        atpOrOcn: company.atpOrOcn || 'OCN-2025-001234',
-        birPermitNo: company.birPermitNo || 'BIR-PERMIT-2025-56789',
-        inclusiveSerialNumber: company.inclusiveSerialNumber || '000001-000999',
+        // BIR Required Fields - from store BIR details
+        atpOrOcn: store.birDetails?.atpOrOcn || 'OCN-2025-001234',
+        birPermitNo: store.birDetails?.birPermitNo || 'BIR-PERMIT-2025-56789',
+        inclusiveSerialNumber: store.birDetails?.inclusiveSerialNumber || '000001-000999',
         
         // System Fields
-        message: 'Thank you! See you again!'
+        message: 'Thank you! See you again!',
+        
+        // Store reference for BIR device lookup
+        isBirAccredited: store.isBirAccredited
       };
 
       // 🧾 Execute invoice transaction (stores + orders atomically)
@@ -347,6 +362,12 @@ export class PosService {
         throw new Error('No store selected');
       }
 
+      // Load store data
+      const store = this.storeService.getStore(storeId);
+      if (!store) {
+        throw new Error('Store not found');
+      }
+
       const cartItems = this.cartItems();
       if (cartItems.length === 0) {
         throw new Error('Cart is empty');
@@ -387,11 +408,11 @@ export class PosService {
         invoiceNumber: '',  // Will be filled by transaction
         date: new Date(),
         
-        // Company Information
+        // Company Information (using STORE data)
         companyName: company.name || '',
-        companyAddress: company.address || '',
-        companyPhone: company.phone || '',
-        companyTaxId: company.taxId || company.tin || '',
+        companyAddress: store.address || '',
+        companyPhone: store.phoneNumber || '',
+        companyTaxId: store.tinNumber || '',
         companyEmail: company.email || '',
         
         // Financial Information
@@ -481,6 +502,12 @@ export class PosService {
         throw new Error('No store selected');
       }
 
+      // Load store data
+      const store = this.storeService.getStore(storeId);
+      if (!store) {
+        throw new Error('Store not found');
+      }
+
       const cartItems = this.cartItems();
       if (cartItems.length === 0) {
         throw new Error('Cart is empty');
@@ -508,11 +535,11 @@ export class PosService {
         invoiceNumber: '',  // Will be filled by transaction
         date: new Date(),
         
-        // Company Information
+        // Company Information (using STORE data)
         companyName: company.name || '',
-        companyAddress: company.address || '',
-        companyPhone: company.phone || '',
-        companyTaxId: company.taxId || company.tin || '',
+        companyAddress: store.address || '',
+        companyPhone: store.phoneNumber || '',
+        companyTaxId: store.tinNumber || '',
         companyEmail: company.email || '',
         
         // Financial Information
@@ -579,20 +606,32 @@ export class PosService {
   async generateReceiptData(orderId?: string): Promise<ReceiptData> {
     const user = this.authService.getCurrentUser();
     const company = await this.companyService.getActiveCompany();
-    const stores = this.companyService.companies()[0]?.stores || [];
-    const currentStore = stores.find(s => s.id === this.selectedStoreId());
+    // Note: stores are now managed separately from company
+    // For now, use selectedStoreId directly
+    const storeId = this.selectedStoreId();
 
-    if (!user || !company || !currentStore) {
+    if (!user || !company || !storeId) {
       throw new Error('Required data not found');
+    }
+
+    // Load store data
+    const store = this.storeService.getStore(storeId);
+    if (!store) {
+      throw new Error('Store not found');
     }
 
     const summary = this.cartSummary();
 
+    // Determine validity notice based on BIR accreditation status
+    const validityNotice = store.isBirAccredited 
+      ? ReceiptValidityNotice.BIR_ACCREDITED 
+      : ReceiptValidityNotice.NON_ACCREDITED;
+
     return {
       companyName: company.name,
-      storeName: currentStore.storeName,
-      storeAddress: currentStore.address,
-      companyPhone: company.phone || '',
+      storeName: store.storeName || '',
+      storeAddress: store.address || '',
+      companyPhone: store.phoneNumber || '',
       companyEmail: company.email || '',
       date: new Date(),
       orderId: orderId || 'TEMP',
@@ -602,7 +641,8 @@ export class PosService {
       discountAmount: summary.productDiscountAmount + summary.orderDiscountAmount,
       grossAmount: summary.grossAmount,
       netAmount: summary.netAmount,
-      message: 'Thank you! See you again!'
+      message: 'Thank you! See you again!',
+      validityNotice: validityNotice
     };
   }
 

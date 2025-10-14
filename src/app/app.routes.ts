@@ -117,6 +117,12 @@ export const routes: Routes = [
   loadComponent: () => import('./pages/dashboard/user-roles/user-roles.component').then(m => m.UserRolesComponent)
       },
       {
+  path: 'subscriptions',
+  loadComponent: () => import('./pages/dashboard/subscriptions/subscriptions.component').then(m => m.SubscriptionsComponent),
+  canActivate: [onboardingGuard],
+  data: { roles: ['creator'] }
+      },
+      {
   path: 'invoice-setup',
   loadComponent: () => import('./pages/dashboard/invoice-setup/invoice-setup.component').then(m => m.InvoiceSetupComponent),
   data: { roles: ['creator', 'store_manager'] }

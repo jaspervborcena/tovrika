@@ -14,7 +14,9 @@ import {
 } from '@angular/fire/firestore';
 import { AuthService } from './auth.service';
 import { OfflineDocumentService } from '../core/services/offline-document.service';
-import { Company, Store, Branch } from '../interfaces/company.interface';
+import { Company } from '../interfaces/company.interface';
+import { Branch } from '../interfaces/branch.interface';
+import { Store } from '../interfaces/store.interface';
 
 @Injectable({
   providedIn: 'root'
@@ -55,37 +57,9 @@ export class NewCompanyService {
         const company: Company = {
           ...companyData,
           id: doc.id,
-          createdAt: companyData.createdAt,
-          stores: []
+          createdAt: companyData.createdAt
         };
 
-        // Load stores for this company
-        const storesRef = collection(this.firestore, this.storesCollection);
-        const storesQuery = query(storesRef, where('companyId', '==', company.id));
-        const storesSnapshot = await getDocs(storesQuery);
-        const stores: Store[] = [];
-
-        for (const storeDoc of storesSnapshot.docs) {
-          const storeData = storeDoc.data() as Omit<Store, 'id' | 'branches'>;
-          const store: Store = {
-            ...storeData,
-            id: storeDoc.id,
-            branches: []
-          };
-
-          // Load branches for this store
-          const branchesRef = collection(this.firestore, this.branchesCollection);
-          const branchesQuery = query(branchesRef, where('storeId', '==', store.id));
-          const branchesSnapshot = await getDocs(branchesQuery);
-          store.branches = branchesSnapshot.docs.map(branchDoc => ({
-            ...branchDoc.data(),
-            id: branchDoc.id
-          } as Branch));
-
-          stores.push(store);
-        }
-
-        company.stores = stores;
         companies.push(company);
       }
 
@@ -105,8 +79,7 @@ export class NewCompanyService {
   async createCompany(company: Omit<Company, 'id' | 'createdAt' | 'updatedAt'>) {
     try {
       const companiesRef = collection(this.firestore, this.companiesCollection);
-      const { stores, ...companyData } = company;
-      const cleanCompany = this.removeUndefinedValues(companyData);
+      const cleanCompany = this.removeUndefinedValues(company);
       
       const newCompany = {
         ...cleanCompany,
@@ -116,11 +89,6 @@ export class NewCompanyService {
 
       // 🔥 NEW APPROACH: Use OfflineDocumentService for offline-safe creation
       const documentId = await this.offlineDocService.createDocument(this.companiesCollection, newCompany);
-      
-      // Add stores if any
-      if (company.stores && company.stores.length > 0) {
-        await this.addStoresAndBranches(documentId, company.stores);
-      }
 
       await this.loadCompanies(); // Reload to get fresh data
       console.log('✅ Company created with ID:', documentId, navigator.onLine ? '(online)' : '(offline)');
@@ -137,7 +105,8 @@ export class NewCompanyService {
   ) {
     for (const store of stores) {
       const storesRef = collection(this.firestore, this.storesCollection);
-      const { branches, id, ...storeData } = store;
+      // Filter out id and branches (UI-only property)
+      const { id, branches, ...storeData } = store as any;
       const cleanStore = this.removeUndefinedValues(storeData);
       const newStore = {
         ...cleanStore,
@@ -148,8 +117,9 @@ export class NewCompanyService {
       // 🔥 NEW APPROACH: Use OfflineDocumentService for offline-safe creation
       const storeId = await this.offlineDocService.createDocument(this.storesCollection, newStore);
 
-      if (store.branches && store.branches.length > 0) {
-        for (const branch of store.branches) {
+      // Handle branches if they exist (optional UI property)
+      if (branches && Array.isArray(branches) && branches.length > 0) {
+        for (const branch of branches) {
           const newBranch = {
             ...branch,
             companyId,
@@ -175,18 +145,6 @@ export class NewCompanyService {
         updatedAt: new Date()
       };
       await updateDoc(companyRef, updateData);
-
-      // Update stores if included in updates
-      if (updates.stores) {
-        // Delete existing stores and branches
-        const existingStores = await this.getStoresForCompany(companyId);
-        for (const store of existingStores) {
-          await this.deleteStoreAndBranches(store.id!);
-        }
-
-        // Add new stores and branches
-        await this.addStoresAndBranches(companyId, updates.stores);
-      }
 
       await this.loadCompanies(); // Reload to get fresh data
     } catch (error) {

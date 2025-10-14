@@ -11,19 +11,7 @@ import {
   getDocs 
 } from '@angular/fire/firestore';
 import { AuthService } from './auth.service';
-
-export interface Company {
-  id?: string;
-  name: string;
-  address: string;
-  logoUrl?: string;
-  settings: {
-    currency: string;
-    timezone: string;
-  };
-  createdAt: Date;
-  updatedAt: Date;
-}
+import { Company } from '../interfaces/company.interface';
 
 @Injectable({
   providedIn: 'root'

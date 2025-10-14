@@ -28,11 +28,27 @@ export class OfflineStorageService {
 
   private async initOfflineStorage(): Promise<void> {
     try {
+      console.log('💾 OfflineStorage: Initializing...');
       await this.indexedDBService.initDB();
       await this.loadOfflineData();
       console.log('💾 OfflineStorage: Initialization complete');
-    } catch (error) {
+    } catch (error: any) {
       console.error('💾 OfflineStorage: Initialization failed:', error);
+      
+      // Show user-friendly error message based on error type
+      if (error.message?.includes('permanently unavailable')) {
+        console.warn('⚠️ OfflineStorage: IndexedDB is permanently unavailable');
+        console.warn('📝 To restore offline functionality: Clear browser data (Ctrl+Shift+Delete) and refresh');
+        console.warn('📱 App will continue in online-only mode');
+      } else if (error.message?.includes('corrupted')) {
+        console.warn('💾 OfflineStorage: Database corrupted - please refresh page to recreate');
+      } else if (error.message?.includes('not supported')) {
+        console.warn('💾 OfflineStorage: IndexedDB not supported in this browser - offline features disabled');
+      } else if (error.message?.includes('other tabs')) {
+        console.warn('💾 OfflineStorage: Close other tabs and refresh to enable offline features');
+      }
+      
+      // Don't throw - allow app to continue without offline storage
     }
   }
 
@@ -69,9 +85,15 @@ export class OfflineStorageService {
       }
 
       console.log('💾 OfflineStorage: Data loaded successfully');
-    } catch (error) {
+    } catch (error: any) {
       console.error('💾 OfflineStorage: Failed to load data:', error);
-      throw error;
+      // Check if permanently broken
+      if (error.message?.includes('permanently unavailable')) {
+        console.warn('⚠️ OfflineStorage: IndexedDB permanently unavailable - skipping data load');
+        return; // Don't throw - allow app to continue
+      }
+      // For other errors, still don't throw - graceful degradation
+      console.warn('⚠️ OfflineStorage: Continuing without cached data');
     }
   }
 
@@ -81,6 +103,8 @@ export class OfflineStorageService {
     currentStoreId?: string;
   }): Promise<void> {
     try {
+      console.log('💾 OfflineStorage: Saving user session for:', userData.email);
+      
       // Get the current store ID from permissions or passed parameter
       const currentStoreId = userData.currentStoreId || 
                            userData.permissions?.[0]?.storeId || 
@@ -101,14 +125,48 @@ export class OfflineStorageService {
         currentStoreId: currentStoreId,
         lastSync: new Date()
       };
-
-      await this.indexedDBService.saveUserData(offlineUserData);
+      
+      // Always set the signal first (so user data is available even if IndexedDB fails)
       this.currentUserSignal.set(offlineUserData);
       
-      console.log('💾 OfflineStorage: User session saved');
-    } catch (error) {
+      // Try to save to IndexedDB (optional)
+      try {
+        await this.indexedDBService.initDB();
+        await this.indexedDBService.saveUserData(offlineUserData);
+        console.log('💾 OfflineStorage: User session saved to IndexedDB successfully');
+      } catch (dbError: any) {
+        // Check if IndexedDB is permanently broken
+        if (dbError.message?.includes('permanently unavailable')) {
+          console.warn('⚠️ OfflineStorage: IndexedDB permanently unavailable - user data saved in memory only');
+          console.warn('📝 To restore offline functionality: Clear browser data (Ctrl+Shift+Delete) and refresh');
+          return; // Don't throw - signal already set
+        }
+        
+        console.warn('💾 OfflineStorage: Database init failed, attempting recovery:', dbError);
+        // Try one more time
+        try {
+          await this.indexedDBService.initDB();
+          await this.indexedDBService.saveUserData(offlineUserData);
+          console.log('💾 OfflineStorage: User session saved to IndexedDB after retry');
+        } catch (retryError: any) {
+          if (retryError.message?.includes('permanently unavailable')) {
+            console.warn('⚠️ OfflineStorage: IndexedDB permanently unavailable after retry - user data in memory only');
+            return; // Don't throw - signal already set
+          }
+          throw retryError; // Re-throw other errors
+        }
+      }
+      
+      console.log('💾 OfflineStorage: User session saved successfully', {
+        uid: offlineUserData.uid,
+        email: offlineUserData.email,
+        currentStoreId: offlineUserData.currentStoreId,
+        isAgreedToPolicy: offlineUserData.isAgreedToPolicy
+      });
+    } catch (error: any) {
       console.error('💾 OfflineStorage: Failed to save user session:', error);
-      throw error;
+      // Don't throw error - allow app to continue without offline storage
+      console.warn('⚠️ Continuing without offline storage capabilities');
     }
   }
 
@@ -137,8 +195,17 @@ export class OfflineStorageService {
         email: updatedUser.email,
         isAgreedToPolicy: updatedUser.isAgreedToPolicy
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error('💾 OfflineStorage: Failed to update policy agreement:', error);
+      // Check if permanently broken
+      if (error.message?.includes('permanently unavailable')) {
+        console.warn('⚠️ OfflineStorage: IndexedDB permanently unavailable - updating in-memory state only');
+        // Update in-memory state even if IndexedDB fails
+        const updatedUser = { ...currentUser, isAgreedToPolicy: agreed, lastSync: new Date() };
+        this.currentUserSignal.set(updatedUser);
+        console.log('✅ OfflineStorage: Policy agreement updated in memory only');
+        return; // Don't throw - allow app to continue
+      }
       throw error;
     }
   }
@@ -155,8 +222,13 @@ export class OfflineStorageService {
         uid: currentUser?.uid,
         isAgreedToPolicy: currentUser?.isAgreedToPolicy
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error('💾 OfflineStorage: Failed to refresh user data:', error);
+      // Check if permanently broken
+      if (error.message?.includes('permanently unavailable')) {
+        console.warn('⚠️ OfflineStorage: IndexedDB permanently unavailable - cannot refresh from cache');
+        return; // Don't throw - allow app to continue
+      }
       throw error;
     }
   }

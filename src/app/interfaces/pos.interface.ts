@@ -1,5 +1,10 @@
 import { Product } from './product.interface';
 
+export enum ReceiptValidityNotice {
+  BIR_ACCREDITED = 'This serves as your official receipt.',
+  NON_ACCREDITED = 'This receipt serves as a sales acknowledgment and is not valid for BIR audit purposes.'
+}
+
 export interface Order {
   id?: string;
   companyId: string;
@@ -129,6 +134,7 @@ export interface ReceiptData {
   grossAmount: number;
   netAmount: number;
   message: string;
+  validityNotice?: string; // BIR validity notice based on accreditation status
   orderDiscount?: OrderDiscount; // Added order discount information
   customerName?: string; // Added customer name
   customerAddress?: string; // Added customer address

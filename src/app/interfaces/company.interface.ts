@@ -1,54 +1,24 @@
-export interface Branch {
-  id?: string;
-  companyId: string;
-  storeId: string;
-  branchName: string;
-  address: string;
-  businessType: BusinessType;
-  isActive: boolean;
-  createdAt: Date;
-  updatedAt?: Date;
-}
-
-export interface Store {
-  id?: string;
-  companyId: string;
-  storeName: string;
-  address: string;
-  businessType: BusinessType;
-  isActive: boolean;
-  settings: StoreSettings;
-  createdAt: Date;
-  updatedAt?: Date;
-  isExpanded?: boolean;
-  branches?: Branch[];
-}
-
 export interface Company {
   id?: string;
   name: string;
   slug: string;
-  ownerUid: string;
-  plan: PlanType;
-  address?: string;
   logoUrl?: string;
   email?: string;
-  phone?: string;
-  taxId?: string;
   website?: string;
-  
-  // BIR Compliance Fields (for Philippines)
-  atpOrOcn?: string; // Authority to Print or Official Control Number
-  birPermitNo?: string; // BIR Permit Number
-  inclusiveSerialNumber?: string; // Inclusive Serial Number Range
-  tin?: string; // Tax Identification Number
-  
-  onboardingStatus: OnboardingStatus;
-  settings?: CompanySettings;
+  ownerUid: string;
   createdAt: Date;
   updatedAt?: Date;
-  stores?: Store[];
+  
+  // Optional settings (for legacy compatibility)
+  settings?: {
+    currency?: string;
+    timezone?: string;
+  };
+  
+  // UI state (optional) - for displaying nested data
+  stores?: any[]; // Import from store.interface.ts when needed
 }
+
 
 export interface StoreSettings {
   currency: string;
@@ -77,13 +47,6 @@ export interface ReceiptSettings {
   };
 }
 
-export interface OnboardingStatus {
-  profileCompleted: boolean;
-  storesCreated: boolean;
-  productsAdded: boolean;
-  firstSaleCompleted: boolean;
-  currentStep: OnboardingStep;
-}
 
 export type BusinessType = 
   | 'restaurant' 

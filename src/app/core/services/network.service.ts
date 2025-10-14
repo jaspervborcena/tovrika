@@ -40,23 +40,38 @@ export class NetworkService {
     try {
       // Try to fetch a small resource to verify actual connectivity
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // Increased to 10 second timeout
       
-      const response = await fetch('/favicon.ico', {
-        method: 'HEAD',
-        signal: controller.signal,
-        cache: 'no-cache'
-      });
+      // Try multiple endpoints for better reliability
+      const endpoints = [
+        '/favicon.ico',
+        'https://www.google.com/favicon.ico'
+      ];
+      
+      let connected = false;
+      for (const endpoint of endpoints) {
+        try {
+          const response = await fetch(endpoint, {
+            method: 'HEAD',
+            signal: controller.signal,
+            cache: 'no-cache',
+            mode: endpoint.startsWith('http') ? 'no-cors' : 'same-origin'
+          });
+          
+          // If we get here without error, we're connected
+          connected = true;
+          console.log(`Network: Connectivity verified via ${endpoint}`);
+          break;
+        } catch (err) {
+          console.log(`Network: Check failed for ${endpoint}`);
+          // Continue to next endpoint
+        }
+      }
       
       clearTimeout(timeoutId);
-      
-      if (response.ok) {
-        this.updateNetworkStatus(true);
-      } else {
-        this.updateNetworkStatus(false);
-      }
+      this.updateNetworkStatus(connected);
     } catch (error) {
-      console.log('Network: Connectivity check failed:', error);
+      console.log('Network: All connectivity checks failed:', error);
       this.updateNetworkStatus(false);
     }
   }

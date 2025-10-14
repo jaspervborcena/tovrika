@@ -49,20 +49,67 @@ export class IndexedDBService {
   private dbName = 'TovrikaOfflineDB';
   private dbVersion = 1;
   private db: IDBDatabase | null = null;
+  private isPermanentlyBroken = false; // Flag to stop retrying corrupted DB
 
   async initDB(): Promise<void> {
+    // Check if IndexedDB is permanently broken
+    if (this.isPermanentlyBroken) {
+      throw new Error('IndexedDB is permanently unavailable. Please clear browser data and refresh.');
+    }
+
+    // Check if IndexedDB is available
+    if (!window.indexedDB) {
+      console.warn('📦 IndexedDB: Not available in this browser');
+      this.isPermanentlyBroken = true;
+      throw new Error('IndexedDB is not supported in this browser');
+    }
+
     return new Promise((resolve, reject) => {
       const request = indexedDB.open(this.dbName, this.dbVersion);
 
-      request.onerror = () => reject(request.error);
+      request.onerror = (event) => {
+        const error = request.error;
+        console.error('📦 IndexedDB: Failed to open database:', error);
+        
+        // Check for specific errors
+        if (error?.name === 'UnknownError') {
+          console.error('📦 IndexedDB: UnknownError - Database may be corrupted. Attempting to delete and recreate...');
+          // Attempt to delete the corrupted database
+          this.deleteDatabase()
+            .then(() => {
+              console.log('📦 IndexedDB: Corrupted database deleted. Please refresh the page to recreate.');
+              reject(new Error('IndexedDB was corrupted and has been reset. Please refresh the page.'));
+            })
+            .catch((deleteError) => {
+              console.error('📦 IndexedDB: Failed to delete corrupted database:', deleteError);
+              // Mark as permanently broken to stop retry attempts
+              this.isPermanentlyBroken = true;
+              reject(new Error('IndexedDB is corrupted and cannot be reset. Please clear browser data manually (Ctrl+Shift+Delete) and refresh.'));
+            });
+        } else if (error?.name === 'VersionError') {
+          console.error('📦 IndexedDB: Version error - attempting to recover...');
+          reject(new Error('IndexedDB version mismatch. Please refresh the page.'));
+        } else {
+          reject(error);
+        }
+      };
+      
       request.onsuccess = () => {
         this.db = request.result;
         console.log('📦 IndexedDB: Database opened successfully');
+        
+        // Set up error handler for the database
+        this.db.onerror = (event) => {
+          console.error('📦 IndexedDB: Database error:', event);
+        };
+        
         resolve();
       };
 
       request.onupgradeneeded = (event) => {
         const db = (event.target as IDBOpenDBRequest).result;
+        
+        console.log('📦 IndexedDB: Upgrading database schema...');
 
         // User data store
         if (!db.objectStoreNames.contains('userData')) {
@@ -94,6 +141,41 @@ export class IndexedDBService {
           const settingsStore = db.createObjectStore('settings', { keyPath: 'key' });
           console.log('📦 IndexedDB: Created settings store');
         }
+        
+        console.log('📦 IndexedDB: Database schema upgrade complete');
+      };
+      
+      request.onblocked = () => {
+        console.warn('📦 IndexedDB: Database opening blocked. Please close other tabs using this app.');
+        reject(new Error('Database is being used by another tab. Please close other tabs and try again.'));
+      };
+    });
+  }
+
+  // Delete the entire database (for recovery from corruption)
+  async deleteDatabase(): Promise<void> {
+    return new Promise((resolve, reject) => {
+      // Close existing connection
+      if (this.db) {
+        this.db.close();
+        this.db = null;
+      }
+
+      const deleteRequest = indexedDB.deleteDatabase(this.dbName);
+      
+      deleteRequest.onsuccess = () => {
+        console.log('📦 IndexedDB: Database deleted successfully');
+        resolve();
+      };
+      
+      deleteRequest.onerror = (event) => {
+        console.error('📦 IndexedDB: Failed to delete database:', deleteRequest.error);
+        reject(deleteRequest.error);
+      };
+      
+      deleteRequest.onblocked = () => {
+        console.warn('📦 IndexedDB: Delete blocked. Please close all tabs using this app.');
+        reject(new Error('Database deletion blocked by other tabs'));
       };
     });
   }

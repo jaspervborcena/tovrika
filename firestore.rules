@@ -105,6 +105,19 @@ service cloud.firestore {
                         (request.resource == null || isCreatingOwnDocument());
     }
     
+    // ===== BILLING HISTORY COLLECTION =====
+    
+    // Company Billing History - Users can read their company's billing history
+    match /companyBillingHistory/{historyId} {
+      allow read: if isAuthenticated() &&
+                  exists(/databases/$(database)/documents/permissions/$(request.auth.uid)) &&
+                  get(/databases/$(database)/documents/permissions/$(request.auth.uid)).data.companyId == resource.data.companyId;
+      allow write: if isAuthenticated() &&
+                   exists(/databases/$(database)/documents/permissions/$(request.auth.uid)) &&
+                   get(/databases/$(database)/documents/permissions/$(request.auth.uid)).data.companyId == request.resource.data.companyId &&
+                   get(/databases/$(database)/documents/permissions/$(request.auth.uid)).data.role in ['owner', 'admin'];
+    }
+    
     // ===== USER PROFILE COLLECTION =====
     
     // Users Collection - Users can only access their own profile
