@@ -43,6 +43,9 @@ export interface BirDetails {
   invoiceNumber: string;
   permitDateIssued: Date;
   validityNotice: string;
+  vatRegistrationType?: string;
+  vatRate?: number;
+  receiptType?: string;
 }
 
 export interface Subscription {

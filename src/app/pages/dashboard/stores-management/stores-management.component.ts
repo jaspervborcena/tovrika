@@ -5,6 +5,7 @@ import { StoreService, Store } from '../../../services/store.service';
 import { AuthService } from '../../../services/auth.service';
 import { ToastService } from '../../../shared/services/toast.service';
 import { PredefinedTypesService, PredefinedType } from '../../../services/predefined-types.service';
+import { DeviceService, Device } from '../../../services/device.service';
 
 @Component({
   selector: 'app-stores-management',
@@ -56,7 +57,6 @@ import { PredefinedTypesService, PredefinedType } from '../../../services/predef
             <thead>
               <tr>
                 <th>Store Name</th>
-                <th>Store Code</th>
                 <th>Branch Name</th>
                 <th>Store Type</th>
                 <th>BIR Status</th>
@@ -68,7 +68,6 @@ import { PredefinedTypesService, PredefinedType } from '../../../services/predef
             <tbody>
               <tr *ngFor="let store of filteredStores">
                 <td class="store-name-cell">{{ store.storeName }}</td>
-                <td class="store-code-cell">{{ store.id }}</td>
                 <td class="branch-name-cell">{{ store.branchName || '-' }}</td>
                 <td class="store-type-cell">{{ store.storeType }}</td>
                 <td class="bir-status-cell">
@@ -87,16 +86,32 @@ import { PredefinedTypesService, PredefinedType } from '../../../services/predef
                   </span>
                 </td>
                 <td class="actions-cell">
-                  <button 
-                    class="btn btn-sm btn-secondary"
-                    (click)="editStore(store)">
-                    Edit
-                  </button>
-                  <button 
-                    class="btn btn-sm btn-danger"
-                    (click)="deleteStore(store)">
-                    Delete
-                  </button>
+                  <div class="action-buttons">
+                    <button 
+                      class="btn-icon-action btn-edit"
+                      (click)="editStore(store)"
+                      title="Edit Store">
+                      ✏️
+                    </button>
+                    <button 
+                      class="btn-icon-action btn-bir"
+                      (click)="openBirComplianceModal(store)"
+                      title="BIR Compliance">
+                      📋
+                    </button>
+                    <button 
+                      class="btn-icon-action btn-devices"
+                      (click)="openDevicesModal(store)"
+                      title="Manage Devices">
+                      💻
+                    </button>
+                    <button 
+                      class="btn-icon-action btn-delete"
+                      (click)="deleteStore(store)"
+                      title="Delete Store">
+                      🗑️
+                    </button>
+                  </div>
                 </td>
               </tr>
             </tbody>
@@ -158,176 +173,7 @@ import { PredefinedTypesService, PredefinedType } from '../../../services/predef
                   placeholder="e.g., Main Branch, Cebu Branch"
                   class="form-input">
               </div>
-
-              <div class="form-group">
-                <label for="uid">User ID</label>
-                <input 
-                  type="text" 
-                  id="uid"
-                  formControlName="uid"
-                  placeholder="Associated user ID"
-                  class="form-input">
-              </div>
-
-              <div class="form-group">
-                <label for="logoUrl">Logo URL</label>
-                <input 
-                  type="text" 
-                  id="logoUrl"
-                  formControlName="logoUrl"
-                  placeholder="https://..."
-                  class="form-input">
-              </div>
-
-              <!-- BIR Compliance Section -->
-              <div class="form-section-header">
-                <h4>BIR Compliance</h4>
-              </div>
-
-              <div class="form-group">
-                <label class="checkbox-label">
-                  <input 
-                    type="checkbox" 
-                    formControlName="isBirAccredited"
-                    class="form-checkbox">
-                  <span>BIR Accredited</span>
-                </label>
-              </div>
-
-              <div class="form-group">
-                <label for="tempInvoiceNumber">Temporary Invoice Number</label>
-                <input 
-                  type="text" 
-                  id="tempInvoiceNumber"
-                  formControlName="tempInvoiceNumber"
-                  placeholder="INV-2025-000001"
-                  class="form-input">
-              </div>
-
-              <div class="form-group">
-                <label for="tinNumber">TIN Number</label>
-                <input 
-                  type="text" 
-                  id="tinNumber"
-                  formControlName="tinNumber"
-                  placeholder="000-000-000-000"
-                  class="form-input">
-              </div>
-
-              <div class="form-group">
-                <label for="birPermitNo">BIR Permit Number</label>
-                <input 
-                  type="text" 
-                  id="birPermitNo"
-                  formControlName="birPermitNo"
-                  placeholder="BIR Permit #"
-                  class="form-input">
-              </div>
-
-              <div class="form-group">
-                <label for="atpOrOcn">ATP/OCN Number</label>
-                <input 
-                  type="text" 
-                  id="atpOrOcn"
-                  formControlName="atpOrOcn"
-                  placeholder="ATP/OCN #"
-                  class="form-input">
-              </div>
-
-              <div class="form-group">
-                <label for="inclusiveSerialNumber">Inclusive Serial Number</label>
-                <input 
-                  type="text" 
-                  id="inclusiveSerialNumber"
-                  formControlName="inclusiveSerialNumber"
-                  placeholder="e.g., 0001-9999"
-                  class="form-input">
-              </div>
-
-              <div class="form-group">
-                <label for="serialNumber">Serial Number</label>
-                <input 
-                  type="text" 
-                  id="serialNumber"
-                  formControlName="serialNumber"
-                  placeholder="Serial #"
-                  class="form-input">
-              </div>
-
-              <div class="form-group">
-                <label for="minNumber">Minimum Number</label>
-                <input 
-                  type="text" 
-                  id="minNumber"
-                  formControlName="minNumber"
-                  placeholder="Min #"
-                  class="form-input">
-              </div>
-
-              <!-- Subscription Section -->
-              <div class="form-section-header">
-                <h4>Subscription</h4>
-              </div>
-
-              <div class="form-group">
-                <label for="subscriptionTier">Subscription Tier</label>
-                <select 
-                  id="subscriptionTier"
-                  formControlName="subscriptionTier"
-                  class="form-select">
-                  <option value="free">Free</option>
-                  <option value="freemium">Freemium</option>
-                  <option value="premium">Premium</option>
-                  <option value="enterprise">Enterprise</option>
-                </select>
-              </div>
-
-              <div class="form-group">
-                <label for="subscriptionStatus">Subscription Status</label>
-                <select 
-                  id="subscriptionStatus"
-                  formControlName="subscriptionStatus"
-                  class="form-select">
-                  <option value="trial">Trial</option>
-                  <option value="active">Active</option>
-                  <option value="cancelled">Cancelled</option>
-                  <option value="expired">Expired</option>
-                </select>
-              </div>
-
-              <div class="form-group">
-                <label for="invoiceNo">Invoice Number (Legacy)</label>
-                <input 
-                  type="text" 
-                  id="invoiceNo"
-                  formControlName="invoiceNo"
-                  placeholder="INV-0000-000000"
-                  class="form-input">
-                <div class="form-help">
-                  Format: INV-YYYY-XXXXXX (e.g., INV-2025-000001)
-                </div>
-              </div>
-
-              <div class="form-group">
-                <label for="storeType">Store Type *</label>
-                <select 
-                  id="storeType"
-                  formControlName="storeType"
-                  class="form-select">
-                  <option value="">Select store type</option>
-                  <option 
-                    *ngFor="let storeType of storeTypes" 
-                    [value]="storeType.typeLabel"
-                    [title]="storeType.typeDescription">
-                    {{ storeType.typeLabel }}
-                  </option>
-                </select>
-                <div class="error-message" *ngIf="storeForm.get('storeType')?.invalid && storeForm.get('storeType')?.touched">
-                  Store type is required
-                </div>
-              </div>
-
-              <div class="form-group">
+               <div class="form-group">
                 <label for="address">Address *</label>
                 <textarea 
                   id="address"
@@ -359,7 +205,46 @@ import { PredefinedTypesService, PredefinedType } from '../../../services/predef
                   placeholder="Enter email address"
                   class="form-input">
               </div>
+<div class="form-group">
+                <label for="tinNumber">TIN Number</label>
+                <input 
+                  type="text" 
+                  id="tinNumber"
+                  formControlName="tinNumber"
+                  placeholder="000-000-000-000"
+                  class="form-input">
+              </div>
 
+              
+              <div class="form-group">
+                <label for="storeType">Store Type *</label>
+                <select 
+                  id="storeType"
+                  formControlName="storeType"
+                  class="form-select">
+                  <option value="">Select store type</option>
+                  <option 
+                    *ngFor="let storeType of storeTypes" 
+                    [value]="storeType.typeLabel"
+                    [title]="storeType.typeDescription">
+                    {{ storeType.typeLabel }}
+                  </option>
+                </select>
+                <div class="error-message" *ngIf="storeForm.get('storeType')?.invalid && storeForm.get('storeType')?.touched">
+                  Store type is required
+                </div>
+              </div>
+
+
+              <div class="form-group">
+                <label for="logoUrl">Logo URL</label>
+                <input 
+                  type="text" 
+                  id="logoUrl"
+                  formControlName="logoUrl"
+                  placeholder="https://..."
+                  class="form-input">
+              </div>
               <div class="form-group">
                 <label for="status">Status *</label>
                 <select 
@@ -380,6 +265,282 @@ import { PredefinedTypesService, PredefinedType } from '../../../services/predef
               [disabled]="!storeForm.valid || isLoading">
               {{ isLoading ? 'Saving...' : (editingStore ? 'Update Store' : 'Create Store') }}
             </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- BIR Compliance Modal -->
+      <div class="modal-overlay" 
+           *ngIf="showBirModal" 
+           (click)="closeBirModal()"
+           style="position: fixed !important; z-index: 9999 !important; background: rgba(0, 0, 0, 0.8) !important;">
+        <div class="modal" (click)="$event.stopPropagation()">
+          <div class="modal-header">
+            <h3>📋 BIR Compliance - {{ selectedStore?.storeName }}</h3>
+            <button class="close-btn" (click)="closeBirModal()">×</button>
+          </div>
+          <div class="modal-body">
+            <form [formGroup]="birForm">
+              <div class="form-group">
+                <label for="birPermitNo">BIR Permit Number *</label>
+                <input 
+                  type="text" 
+                  id="birPermitNo"
+                  formControlName="birPermitNo"
+                  placeholder="BIR-PERMIT-2025-XXXXX"
+                  class="form-input">
+              </div>
+
+              <div class="form-group">
+                <label for="atpOrOcn">ATP / OCN Number *</label>
+                <input 
+                  type="text" 
+                  id="atpOrOcn"
+                  formControlName="atpOrOcn"
+                  placeholder="OCN-2025-XXXXXX"
+                  class="form-input">
+              </div>
+
+              <div class="form-group">
+                <label for="permitDateIssued">Permit Date Issued *</label>
+                <input 
+                  type="date" 
+                  id="permitDateIssued"
+                  formControlName="permitDateIssued"
+                  class="form-input">
+              </div>
+
+              <div class="form-group">
+                <label for="validityNotice">Validity Notice</label>
+                <textarea 
+                  id="validityNotice"
+                  formControlName="validityNotice"
+                  placeholder="e.g., Valid for 5 years from permit date"
+                  class="form-textarea"
+                  rows="2"></textarea>
+              </div>
+
+              <div class="form-group">
+                <label for="vatRegistrationType">VAT Registration Type *</label>
+                <select 
+                  id="vatRegistrationType"
+                  formControlName="vatRegistrationType"
+                  class="form-select">
+                  <option value="VAT-registered">VAT Registered</option>
+                  <option value="Non-VAT">Non-VAT</option>
+                  <option value="VAT-exempt">VAT Exempt</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label for="vatRate">VAT Rate (%)</label>
+                <input 
+                  type="number" 
+                  id="vatRate"
+                  formControlName="vatRate"
+                  placeholder="12.0"
+                  step="0.1"
+                  class="form-input">
+              </div>
+
+              <div class="form-group">
+                <label for="receiptType">Receipt Type *</label>
+                <select 
+                  id="receiptType"
+                  formControlName="receiptType"
+                  class="form-select">
+                  <option value="POS Receipt">POS Receipt</option>
+                  <option value="Sales Invoice">Sales Invoice</option>
+                  <option value="Official Receipt">Official Receipt</option>
+                </select>
+              </div>
+            </form>
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-secondary" (click)="closeBirModal()">Cancel</button>
+            <button 
+              class="btn btn-primary" 
+              (click)="saveBirCompliance()"
+              [disabled]="!birForm.valid || isLoading">
+              {{ isLoading ? 'Saving...' : 'Save BIR Compliance' }}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Devices Modal -->
+      <div class="modal-overlay" 
+           *ngIf="showDevicesModal" 
+           (click)="closeDevicesModal()"
+           style="position: fixed !important; z-index: 9999 !important; background: rgba(0, 0, 0, 0.8) !important;">
+        <div class="modal modal-large" (click)="$event.stopPropagation()">
+          <div class="modal-header">
+            <h3>💻 Manage Devices - {{ selectedStore?.storeName }}</h3>
+            <button class="close-btn" (click)="closeDevicesModal()">×</button>
+          </div>
+          <div class="modal-body">
+            <!-- Add Device Button -->
+            <div class="devices-header" *ngIf="!showDeviceForm">
+              <button class="btn btn-primary btn-sm" (click)="showAddDeviceForm()">
+                ➕ Add New Device
+              </button>
+            </div>
+
+            <!-- Device Form (Add/Edit) -->
+            <div class="device-form-container" *ngIf="showDeviceForm">
+              <h4>{{ editingDevice ? 'Edit Device' : 'Add New Device' }}</h4>
+              <form [formGroup]="deviceForm">
+                <div class="form-row">
+                  <div class="form-group">
+                    <label for="terminalId">Terminal ID *</label>
+                    <input 
+                      type="text" 
+                      id="terminalId"
+                      formControlName="terminalId"
+                      placeholder="TERM001"
+                      class="form-input">
+                  </div>
+
+                  <div class="form-group">
+                    <label for="deviceLabel">Device Label *</label>
+                    <input 
+                      type="text" 
+                      id="deviceLabel"
+                      formControlName="deviceLabel"
+                      placeholder="TechMart Terminal 1"
+                      class="form-input">
+                  </div>
+                </div>
+
+                <div class="form-row">
+                  <div class="form-group">
+                    <label for="invoicePrefix">Invoice Prefix *</label>
+                    <input 
+                      type="text" 
+                      id="invoicePrefix"
+                      formControlName="invoicePrefix"
+                      placeholder="INV-MKT-001"
+                      class="form-input">
+                  </div>
+
+                  <div class="form-group">
+                    <label for="currentInvoiceNumber">Current Invoice Number *</label>
+                    <input 
+                      type="number" 
+                      id="currentInvoiceNumber"
+                      formControlName="currentInvoiceNumber"
+                      placeholder="100123"
+                      class="form-input">
+                  </div>
+                </div>
+
+                <div class="form-row">
+                  <div class="form-group">
+                    <label for="invoiceSeriesStart">Series Start *</label>
+                    <input 
+                      type="number" 
+                      id="invoiceSeriesStart"
+                      formControlName="invoiceSeriesStart"
+                      placeholder="100001"
+                      class="form-input">
+                  </div>
+
+                  <div class="form-group">
+                    <label for="invoiceSeriesEnd">Series End *</label>
+                    <input 
+                      type="number" 
+                      id="invoiceSeriesEnd"
+                      formControlName="invoiceSeriesEnd"
+                      placeholder="199999"
+                      class="form-input">
+                  </div>
+                </div>
+
+                <div class="form-row">
+                  <div class="form-group">
+                    <label for="minNumber">MIN Number *</label>
+                    <input 
+                      type="text" 
+                      id="minNumber"
+                      formControlName="minNumber"
+                      placeholder="MIN-2025-456789012"
+                      class="form-input">
+                  </div>
+
+                  <div class="form-group">
+                    <label for="serialNumber">Serial Number *</label>
+                    <input 
+                      type="text" 
+                      id="serialNumber"
+                      formControlName="serialNumber"
+                      placeholder="SN-2025-000888"
+                      class="form-input">
+                  </div>
+                </div>
+
+                <div class="form-actions">
+                  <button type="button" class="btn btn-secondary btn-sm" (click)="cancelDeviceForm()">Cancel</button>
+                  <button 
+                    type="button" 
+                    class="btn btn-primary btn-sm" 
+                    (click)="saveDevice()"
+                    [disabled]="!deviceForm.valid || isLoadingDevices">
+                    {{ isLoadingDevices ? 'Saving...' : (editingDevice ? 'Update Device' : 'Add Device') }}
+                  </button>
+                </div>
+              </form>
+            </div>
+
+            <!-- Devices List -->
+            <div class="devices-list" *ngIf="!showDeviceForm">
+              <div *ngIf="isLoadingDevices" class="loading-text">Loading devices...</div>
+              
+              <div *ngIf="!isLoadingDevices && storeDevices.length === 0" class="empty-devices">
+                <p>No devices configured for this store yet.</p>
+                <p class="hint">Click "Add New Device" to configure your first device.</p>
+              </div>
+
+              <div *ngIf="!isLoadingDevices && storeDevices.length > 0" class="devices-grid">
+                <div *ngFor="let device of storeDevices" class="device-card">
+                  <div class="device-card-header">
+                    <h5>{{ device.deviceLabel }}</h5>
+                    <div class="device-actions">
+                      <button class="btn-icon-sm" (click)="editDevice(device)" title="Edit">✏️</button>
+                      <button class="btn-icon-sm" (click)="deleteDevice(device)" title="Delete">🗑️</button>
+                    </div>
+                  </div>
+                  <div class="device-card-body">
+                    <div class="device-info-row">
+                      <span class="label">Terminal ID:</span>
+                      <span class="value">{{ device.terminalId }}</span>
+                    </div>
+                    <div class="device-info-row">
+                      <span class="label">Invoice Prefix:</span>
+                      <span class="value">{{ device.invoicePrefix }}</span>
+                    </div>
+                    <div class="device-info-row">
+                      <span class="label">Current Invoice:</span>
+                      <span class="value">{{ device.currentInvoiceNumber }}</span>
+                    </div>
+                    <div class="device-info-row">
+                      <span class="label">Series Range:</span>
+                      <span class="value">{{ device.invoiceSeriesStart }} - {{ device.invoiceSeriesEnd }}</span>
+                    </div>
+                    <div class="device-info-row">
+                      <span class="label">MIN:</span>
+                      <span class="value">{{ device.minNumber }}</span>
+                    </div>
+                    <div class="device-info-row">
+                      <span class="label">Serial:</span>
+                      <span class="value">{{ device.serialNumber }}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer" *ngIf="!showDeviceForm">
+            <button class="btn btn-secondary" (click)="closeDevicesModal()">Close</button>
           </div>
         </div>
       </div>
@@ -853,6 +1014,233 @@ import { PredefinedTypesService, PredefinedType } from '../../../services/predef
         width: auto;
       }
     }
+
+    /* Action Buttons */
+    .action-buttons {
+      display: flex;
+      gap: 0.375rem;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .btn-icon-action {
+      padding: 0.5rem;
+      border: 1px solid #d1d5db;
+      background: white;
+      border-radius: 0.375rem;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-size: 1.25rem;
+      line-height: 1;
+      position: relative;
+    }
+
+    .btn-icon-action:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    }
+
+    .btn-icon-action[title]:hover::after {
+      content: attr(title);
+      position: absolute;
+      bottom: 100%;
+      left: 50%;
+      transform: translateX(-50%);
+      margin-bottom: 0.5rem;
+      padding: 0.375rem 0.75rem;
+      background: #1f2937;
+      color: white;
+      font-size: 0.75rem;
+      border-radius: 0.375rem;
+      white-space: nowrap;
+      z-index: 10;
+      pointer-events: none;
+    }
+
+    .btn-icon-action[title]:hover::before {
+      content: '';
+      position: absolute;
+      bottom: 100%;
+      left: 50%;
+      transform: translateX(-50%);
+      margin-bottom: 0.25rem;
+      border: 4px solid transparent;
+      border-top-color: #1f2937;
+      z-index: 10;
+      pointer-events: none;
+    }
+
+    .btn-edit:hover {
+      background: #eff6ff;
+      border-color: #3b82f6;
+    }
+
+    .btn-bir:hover {
+      background: #f0fdf4;
+      border-color: #10b981;
+    }
+
+    .btn-devices:hover {
+      background: #faf5ff;
+      border-color: #8b5cf6;
+    }
+
+    .btn-delete:hover {
+      background: #fef2f2;
+      border-color: #ef4444;
+    }
+
+    .modal-large {
+      max-width: 900px;
+    }
+
+    .info-text {
+      text-align: center;
+      color: #6b7280;
+      padding: 2rem;
+      font-size: 1rem;
+    }
+
+    /* Device Modal Styles */
+    .devices-header {
+      margin-bottom: 1.5rem;
+      display: flex;
+      justify-content: flex-end;
+    }
+
+    .device-form-container {
+      background: #f9fafb;
+      padding: 1.5rem;
+      border-radius: 8px;
+      margin-bottom: 1.5rem;
+    }
+
+    .device-form-container h4 {
+      margin: 0 0 1rem 0;
+      color: #1f2937;
+      font-size: 1.125rem;
+    }
+
+    .form-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+      margin-bottom: 1rem;
+    }
+
+    .form-actions {
+      display: flex;
+      gap: 0.75rem;
+      justify-content: flex-end;
+      margin-top: 1.5rem;
+    }
+
+    .devices-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 1rem;
+    }
+
+    .device-card {
+      background: white;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      padding: 1rem;
+      transition: all 0.2s;
+    }
+
+    .device-card:hover {
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+      transform: translateY(-2px);
+    }
+
+    .device-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1rem;
+      padding-bottom: 0.75rem;
+      border-bottom: 2px solid #f3f4f6;
+    }
+
+    .device-card-header h5 {
+      margin: 0;
+      font-size: 1rem;
+      font-weight: 600;
+      color: #1f2937;
+    }
+
+    .device-actions {
+      display: flex;
+      gap: 0.375rem;
+    }
+
+    .btn-icon-sm {
+      padding: 0.25rem 0.5rem;
+      border: 1px solid #d1d5db;
+      background: white;
+      border-radius: 0.25rem;
+      cursor: pointer;
+      font-size: 1rem;
+      transition: all 0.2s;
+    }
+
+    .btn-icon-sm:hover {
+      transform: scale(1.1);
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+
+    .device-card-body {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .device-info-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.875rem;
+    }
+
+    .device-info-row .label {
+      color: #6b7280;
+      font-weight: 500;
+    }
+
+    .device-info-row .value {
+      color: #1f2937;
+      font-family: monospace;
+      background: #f3f4f6;
+      padding: 0.125rem 0.5rem;
+      border-radius: 0.25rem;
+    }
+
+    .loading-text {
+      text-align: center;
+      color: #6b7280;
+      padding: 2rem;
+    }
+
+    .empty-devices {
+      text-align: center;
+      color: #6b7280;
+      padding: 3rem 2rem;
+    }
+
+    .empty-devices p {
+      margin: 0.5rem 0;
+    }
+
+    .empty-devices .hint {
+      font-size: 0.875rem;
+      opacity: 0.8;
+    }
+
+    .btn-sm {
+      padding: 0.5rem 1rem;
+      font-size: 0.875rem;
+    }
   `]
 })
 export class StoresManagementComponent implements OnInit {
@@ -863,9 +1251,18 @@ export class StoresManagementComponent implements OnInit {
   searchTerm: string = '';
   isLoading: boolean = false;
   showStoreModal: boolean = false;
+  showBirModal: boolean = false;
+  showDevicesModal: boolean = false;
+  showDeviceForm: boolean = false;
+  isLoadingDevices: boolean = false;
   editingStore: Store | null = null;
+  selectedStore: Store | null = null;
+  editingDevice: Device | null = null;
+  storeDevices: Device[] = [];
 
   storeForm: FormGroup;
+  birForm: FormGroup;
+  deviceForm: FormGroup;
 
   constructor(
     private storeService: StoreService,
@@ -902,6 +1299,16 @@ export class StoresManagementComponent implements OnInit {
       subscriptionTier: ['freemium'],
       subscriptionStatus: ['active'],
       subscriptionPopupShown: [false]
+    });
+
+    this.birForm = this.fb.group({
+      birPermitNo: ['', [Validators.required]],
+      atpOrOcn: ['', [Validators.required]],
+      permitDateIssued: ['', [Validators.required]],
+      validityNotice: ['Valid for 5 years from permit date'],
+      vatRegistrationType: ['VAT-registered', [Validators.required]],
+      vatRate: [12.0, [Validators.required]],
+      receiptType: ['POS Receipt', [Validators.required]]
     });
   }
 
@@ -1158,4 +1565,111 @@ export class StoresManagementComponent implements OnInit {
     }
   }
 
+  // BIR Compliance Modal Methods
+  openBirComplianceModal(store: Store) {
+    this.selectedStore = store;
+    
+    // Check if BIR details exist, if not create default structure
+    if (store.birDetails && store.birDetails.birPermitNo) {
+      // BIR details exist, populate form
+      this.birForm.patchValue({
+        birPermitNo: store.birDetails.birPermitNo || '',
+        atpOrOcn: store.birDetails.atpOrOcn || '',
+        permitDateIssued: store.birDetails.permitDateIssued ? 
+          this.formatDateForInput(store.birDetails.permitDateIssued) : '',
+        validityNotice: store.birDetails.validityNotice || 'Valid for 5 years from permit date',
+        vatRegistrationType: (store.birDetails as any).vatRegistrationType || 'VAT-registered',
+        vatRate: (store.birDetails as any).vatRate || 12.0,
+        receiptType: (store.birDetails as any).receiptType || 'POS Receipt'
+      });
+    } else {
+      // No BIR details, set default values
+      this.birForm.reset({
+        birPermitNo: `BIR-PERMIT-2025-${Math.floor(10000 + Math.random() * 90000)}`,
+        atpOrOcn: `OCN-2025-${Math.floor(100000 + Math.random() * 900000)}`,
+        permitDateIssued: '',
+        validityNotice: 'Valid for 5 years from permit date',
+        vatRegistrationType: 'VAT-registered',
+        vatRate: 12.0,
+        receiptType: 'POS Receipt'
+      });
+    }
+    
+    this.showBirModal = true;
+  }
+
+  closeBirModal() {
+    this.showBirModal = false;
+    this.selectedStore = null;
+    this.birForm.reset();
+  }
+
+  async saveBirCompliance() {
+    if (!this.birForm.valid || !this.selectedStore) {
+      this.toastService.error('Please fill in all required fields');
+      return;
+    }
+
+    this.isLoading = true;
+
+    try {
+      const formData = this.birForm.value;
+      const permitDate = formData.permitDateIssued ? new Date(formData.permitDateIssued) : new Date();
+      
+      // Update the store's BIR details
+      const updatedBirDetails = {
+        birPermitNo: formData.birPermitNo,
+        atpOrOcn: formData.atpOrOcn,
+        permitDateIssued: permitDate,
+        validityNotice: formData.validityNotice,
+        vatRegistrationType: formData.vatRegistrationType,
+        vatRate: formData.vatRate,
+        receiptType: formData.receiptType,
+        // Keep existing fields if they exist
+        inclusiveSerialNumber: this.selectedStore.birDetails?.inclusiveSerialNumber || '',
+        serialNumber: this.selectedStore.birDetails?.serialNumber || '',
+        minNumber: this.selectedStore.birDetails?.minNumber || '',
+        invoiceType: this.selectedStore.birDetails?.invoiceType || '',
+        invoiceNumber: this.selectedStore.birDetails?.invoiceNumber || ''
+      };
+
+      await this.storeService.updateStore(this.selectedStore.id!, {
+        birDetails: updatedBirDetails as any,
+        isBirAccredited: true,
+        updatedAt: new Date()
+      });
+
+      this.toastService.success('BIR Compliance information saved successfully!');
+      await this.loadStores();
+      this.closeBirModal();
+    } catch (error) {
+      console.error('Error saving BIR compliance:', error);
+      this.toastService.error('Error saving BIR compliance. Please try again.');
+    } finally {
+      this.isLoading = false;
+    }
+  }
+
+  // Devices Modal Methods
+  openDevicesModal(store: Store) {
+    this.selectedStore = store;
+    this.showDevicesModal = true;
+  }
+
+  closeDevicesModal() {
+    this.showDevicesModal = false;
+    this.selectedStore = null;
+  }
+
+  // Helper method to format date for input
+  private formatDateForInput(date: Date | any): string {
+    if (!date) return '';
+    const d = date instanceof Date ? date : date.toDate ? date.toDate() : new Date(date);
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
 }
+
