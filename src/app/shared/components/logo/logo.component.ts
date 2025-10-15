@@ -1,6 +1,8 @@
-import { Component, Input } from '@angular/core';
+import { Component, Input, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { Router } from '@angular/router';
 import { AppConstants } from '../../enums';
+import { AuthService } from '../../../services/auth.service';
 
 export type LogoSize = 'sm' | 'md' | 'lg' | 'xl' | 'custom';
 export type LogoVariant = 'full' | 'icon' | 'text';
@@ -11,7 +13,7 @@ export type LogoBackground = 'none' | 'white' | 'light' | 'rounded' | 'circle';
   standalone: true,
   imports: [CommonModule],
   template: `
-    <div class="logo-container" [ngClass]="containerClasses">
+    <div class="logo-container" [ngClass]="containerClasses" (click)="handleClick()">
       <img 
         [src]="logoSrc" 
         [alt]="altText"
@@ -29,6 +31,15 @@ export type LogoBackground = 'none' | 'white' | 'light' | 'rounded' | 'circle';
       display: flex;
       align-items: center;
       gap: 0.5rem;
+      transition: opacity 0.2s ease;
+    }
+
+    .logo-container.clickable {
+      cursor: pointer;
+    }
+
+    .logo-container.clickable:hover {
+      opacity: 0.8;
     }
 
     .logo-container.center {
@@ -168,6 +179,9 @@ export type LogoBackground = 'none' | 'white' | 'light' | 'rounded' | 'circle';
   `]
 })
 export class LogoComponent {
+  private router = inject(Router);
+  private authService = inject(AuthService);
+
   @Input() size: LogoSize = 'md';
   @Input() variant: LogoVariant = 'full';
   @Input() theme: 'light' | 'dark' | 'primary' = 'light';
@@ -197,6 +211,10 @@ export class LogoComponent {
     
     if (this.responsive) {
       classes.push('responsive');
+    }
+
+    if (this.clickable) {
+      classes.push('clickable');
     }
 
     return classes.join(' ');
@@ -229,5 +247,20 @@ export class LogoComponent {
     classes.push(`theme-${this.theme}`);
 
     return classes.join(' ');
+  }
+
+  async handleClick(): Promise<void> {
+    if (!this.clickable) return;
+
+    // Check if user is authenticated
+    const isAuthenticated = this.authService.isAuthenticated();
+    
+    if (isAuthenticated) {
+      // Navigate to dashboard if authenticated
+      this.router.navigate(['/dashboard']);
+    } else {
+      // Navigate to home/login page if not authenticated
+      this.router.navigate(['/']);
+    }
   }
 }

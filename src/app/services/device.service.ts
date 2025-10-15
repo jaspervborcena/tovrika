@@ -77,8 +77,7 @@ export class DeviceService {
       const devicesRef = collection(this.firestore, 'devices');
       const devicesQuery = query(
         devicesRef,
-        where('storeId', '==', storeId),
-        orderBy('createdAt', 'desc')
+        where('storeId', '==', storeId)
       );
 
       const querySnapshot = await getDocs(devicesQuery);
@@ -86,6 +85,7 @@ export class DeviceService {
         const data = doc.data();
         return {
           id: doc.id,
+          uid: data['uid'],
           storeId: data['storeId'],
           companyId: data['companyId'],
           deviceLabel: data['deviceLabel'],
@@ -131,8 +131,7 @@ export class DeviceService {
       const devicesRef = collection(this.firestore, 'devices');
       const devicesQuery = query(
         devicesRef,
-        where('companyId', '==', companyId),
-        orderBy('createdAt', 'desc')
+        where('companyId', '==', companyId)
       );
 
       const querySnapshot = await getDocs(devicesQuery);
@@ -140,6 +139,7 @@ export class DeviceService {
         const data = doc.data();
         return {
           id: doc.id,
+          uid: data['uid'],
           storeId: data['storeId'],
           companyId: data['companyId'],
           deviceLabel: data['deviceLabel'],
@@ -393,6 +393,32 @@ export class DeviceService {
       console.log('✅ Device updated');
     } catch (error) {
       console.error('❌ Error updating device:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Fix old devices that are missing the uid field
+   * This adds the current user's uid to devices that don't have it
+   */
+  async fixDeviceWithoutUid(deviceId: string): Promise<void> {
+    try {
+      const currentUser = this.authService.getCurrentUser();
+      if (!currentUser) {
+        throw new Error('No authenticated user');
+      }
+
+      console.log('🔧 Fixing device without uid:', deviceId);
+
+      const deviceRef = doc(this.firestore, 'devices', deviceId);
+      await updateDoc(deviceRef, {
+        uid: currentUser.uid,
+        updatedAt: Timestamp.now()
+      });
+
+      console.log('✅ Device fixed with uid:', currentUser.uid);
+    } catch (error) {
+      console.error('❌ Error fixing device:', error);
       throw error;
     }
   }

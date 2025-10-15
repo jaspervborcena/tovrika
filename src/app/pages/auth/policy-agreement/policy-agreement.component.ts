@@ -1,4 +1,4 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, inject, signal, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
@@ -13,7 +13,7 @@ import { AppConstants } from '../../../shared/enums';
   templateUrl: './policy-agreement.component.html',
   styleUrls: ['./policy-agreement.component.css']
 })
-export class PolicyAgreementComponent {
+export class PolicyAgreementComponent implements OnInit {
   private offlineStorageService = inject(OfflineStorageService);
   private authService = inject(AuthService);
   private router = inject(Router);
@@ -31,6 +31,27 @@ export class PolicyAgreementComponent {
 
   // Computed
   canProceed = () => this.agreedToTerms() && this.agreedToPrivacy() && !this.isLoading();
+
+  async ngOnInit() {
+    // Check if user is authenticated
+    if (!this.authService.isAuthenticated()) {
+      console.warn('⚠️ Policy Agreement: User not authenticated, redirecting to login');
+      await this.router.navigate(['/login']);
+      return;
+    }
+
+    // Check if already agreed to policies
+    const currentUser = this.offlineStorageService.currentUser();
+    if (currentUser?.isAgreedToPolicy) {
+      console.log('✅ Policy Agreement: User already agreed, redirecting...');
+      // Redirect to appropriate page
+      if (this.authService.hasMultipleCompanies()) {
+        await this.router.navigate(['/company-selection']);
+      } else {
+        await this.router.navigate(['/dashboard']);
+      }
+    }
+  }
 
   async acceptPolicies() {
     if (!this.canProceed()) return;
