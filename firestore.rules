@@ -20,80 +20,136 @@ service cloud.firestore {
     // ===== MAIN COLLECTIONS WITH UID SECURITY =====
     
     // Products Collection - Users can only access their own products
+    // Allow migration: if uid doesn't exist, allow authenticated users to read
     match /products/{productId} {
-      allow read, write: if isAuthenticated() && 
-                        (resource == null || isOwner(resource)) &&
-                        (request.resource == null || isCreatingOwnDocument());
+      allow read: if isAuthenticated() && 
+                  (resource == null || resource.data.uid == request.auth.uid || !('uid' in resource.data));
+      allow create: if isAuthenticated() && isCreatingOwnDocument();
+      allow update: if isAuthenticated() && 
+                    (isOwner(resource) || (!('uid' in resource.data) && request.resource.data.uid == request.auth.uid));
+      allow delete: if isAuthenticated() && isOwner(resource);
     }
     
     // Orders Collection - Users can only access their own orders
+    // Allow migration: if uid doesn't exist, allow authenticated users to read
     match /orders/{orderId} {
-      allow read, write: if isAuthenticated() && 
-                        (resource == null || isOwner(resource)) &&
-                        (request.resource == null || isCreatingOwnDocument());
+      allow read: if isAuthenticated() && 
+                  (resource == null || resource.data.uid == request.auth.uid || !('uid' in resource.data));
+      allow create: if isAuthenticated() && isCreatingOwnDocument();
+      allow update: if isAuthenticated() && 
+                    (isOwner(resource) || (!('uid' in resource.data) && request.resource.data.uid == request.auth.uid));
+      allow delete: if isAuthenticated() && isOwner(resource);
     }
     
     // Order Details Collection - Users can only access their own order details
+    // Allow migration: if uid doesn't exist, allow authenticated users to read
     match /orderDetails/{orderDetailId} {
-      allow read, write: if isAuthenticated() && 
-                        (resource == null || isOwner(resource)) &&
-                        (request.resource == null || isCreatingOwnDocument());
+      allow read: if isAuthenticated() && 
+                  (resource == null || resource.data.uid == request.auth.uid || !('uid' in resource.data));
+      allow create: if isAuthenticated() && isCreatingOwnDocument();
+      allow update: if isAuthenticated() && 
+                    (isOwner(resource) || (!('uid' in resource.data) && request.resource.data.uid == request.auth.uid));
+      allow delete: if isAuthenticated() && isOwner(resource);
     }
     
     // Customers Collection - Users can only access their own customers
+    // Allow migration: if uid doesn't exist, allow authenticated users to read
     match /customers/{customerId} {
-      allow read, write: if isAuthenticated() && 
-                        (resource == null || isOwner(resource)) &&
-                        (request.resource == null || isCreatingOwnDocument());
+      allow read: if isAuthenticated() && 
+                  (resource == null || resource.data.uid == request.auth.uid || !('uid' in resource.data));
+      allow create: if isAuthenticated() && isCreatingOwnDocument();
+      allow update: if isAuthenticated() && 
+                    (isOwner(resource) || (!('uid' in resource.data) && request.resource.data.uid == request.auth.uid));
+      allow delete: if isAuthenticated() && isOwner(resource);
     }
     
     // Stores Collection - Users can only access their own stores
+    // Allow migration: if uid doesn't exist, allow authenticated users to add it
     match /stores/{storeId} {
-      allow read, write: if isAuthenticated() && 
-                        (resource == null || isOwner(resource)) &&
-                        (request.resource == null || isCreatingOwnDocument());
+      allow read: if isAuthenticated() && 
+                  (resource == null || !exists(/databases/$(database)/documents/stores/$(storeId)) || 
+                   resource.data.uid == request.auth.uid || !('uid' in resource.data));
+      allow create: if isAuthenticated() && isCreatingOwnDocument();
+      allow update: if isAuthenticated() && 
+                    (isOwner(resource) || 
+                     (!('uid' in resource.data) && request.resource.data.uid == request.auth.uid));
+      allow delete: if isAuthenticated() && isOwner(resource);
+    }
+    
+    // Devices Collection - Authenticated users can access devices
+    // TODO: Add proper security based on companyId/storeId in the future
+    match /devices/{deviceId} {
+      allow read, create, update, delete: if isAuthenticated();
     }
     
     // Companies Collection - Users can only access their own companies
+    // Allow migration: if uid doesn't exist, allow authenticated users to read
     match /companies/{companyId} {
-      allow read, write: if isAuthenticated() && 
-                        (resource == null || isOwner(resource)) &&
-                        (request.resource == null || isCreatingOwnDocument());
+      allow read: if isAuthenticated() && 
+                  (resource == null || resource.data.uid == request.auth.uid || !('uid' in resource.data));
+      allow create: if isAuthenticated() && isCreatingOwnDocument();
+      allow update: if isAuthenticated() && 
+                    (isOwner(resource) || (!('uid' in resource.data) && request.resource.data.uid == request.auth.uid));
+      allow delete: if isAuthenticated() && isOwner(resource);
     }
     
     // Branches Collection - Users can only access their own branches
+    // Allow migration: if uid doesn't exist, allow authenticated users to read
     match /branches/{branchId} {
-      allow read, write: if isAuthenticated() && 
-                        (resource == null || isOwner(resource)) &&
-                        (request.resource == null || isCreatingOwnDocument());
+      allow read: if isAuthenticated() && 
+                  (resource == null || resource.data.uid == request.auth.uid || !('uid' in resource.data));
+      allow create: if isAuthenticated() && isCreatingOwnDocument();
+      allow update: if isAuthenticated() && 
+                    (isOwner(resource) || (!('uid' in resource.data) && request.resource.data.uid == request.auth.uid));
+      allow delete: if isAuthenticated() && isOwner(resource);
     }
     
     // Categories Collection - Users can only access their own categories
+    // Allow migration: if uid doesn't exist, allow authenticated users to read
     match /categories/{categoryId} {
-      allow read, write: if isAuthenticated() && 
-                        (resource == null || isOwner(resource)) &&
-                        (request.resource == null || isCreatingOwnDocument());
+      allow read: if isAuthenticated() && 
+                  (resource == null || resource.data.uid == request.auth.uid || !('uid' in resource.data));
+      allow create: if isAuthenticated() && isCreatingOwnDocument();
+      allow update: if isAuthenticated() && 
+                    (isOwner(resource) || (!('uid' in resource.data) && request.resource.data.uid == request.auth.uid));
+      allow delete: if isAuthenticated() && isOwner(resource);
     }
     
     // User Roles Collection - Users can only access their own user roles
+    // Allow migration: if uid doesn't exist, allow authenticated users to add it
     match /userRoles/{userRoleId} {
-      allow read, write: if isAuthenticated() && 
-                        (resource == null || isOwner(resource)) &&
-                        (request.resource == null || isCreatingOwnDocument());
+      allow read: if isAuthenticated() && 
+                  (resource == null || !exists(/databases/$(database)/documents/userRoles/$(userRoleId)) || 
+                   resource.data.uid == request.auth.uid || !('uid' in resource.data));
+      allow create: if isAuthenticated() && isCreatingOwnDocument();
+      allow update: if isAuthenticated() && 
+                    (isOwner(resource) || 
+                     (!('uid' in resource.data) && request.resource.data.uid == request.auth.uid));
+      allow delete: if isAuthenticated() && isOwner(resource);
     }
     
     // Role Definitions Collection - Users can only access their own role definitions
+    // Allow migration: if uid doesn't exist, allow authenticated users to add it
     match /roledefinition/{roleDefId} {
-      allow read, write: if isAuthenticated() && 
-                        (resource == null || isOwner(resource)) &&
-                        (request.resource == null || isCreatingOwnDocument());
+      allow read: if isAuthenticated() && 
+                  (resource == null || !exists(/databases/$(database)/documents/roledefinition/$(roleDefId)) || 
+                   resource.data.uid == request.auth.uid || !('uid' in resource.data));
+      allow create: if isAuthenticated() && isCreatingOwnDocument();
+      allow update: if isAuthenticated() && 
+                    (isOwner(resource) || 
+                     (!('uid' in resource.data) && request.resource.data.uid == request.auth.uid));
+      allow delete: if isAuthenticated() && isOwner(resource);
     }
     
     // Notifications Collection - Users can only access their own notifications
+    // Allow migration: if uid doesn't exist, allow authenticated users to read
     match /notifications/{notificationId} {
-      allow read, write: if isAuthenticated() && 
-                        (resource == null || isOwner(resource)) &&
-                        (request.resource == null || isCreatingOwnDocument());
+      allow read: if isAuthenticated() && 
+                  (resource == null || resource.data.uid == request.auth.uid || !('uid' in resource.data));
+      allow create: if isAuthenticated() && isCreatingOwnDocument();
+      allow update: if isAuthenticated() && 
+                    (isOwner(resource) || (!('uid' in resource.data) && request.resource.data.uid == request.auth.uid));
+      allow delete: if isAuthenticated() && isOwner(resource);
     }
     
     // ===== NESTED COLLECTIONS =====

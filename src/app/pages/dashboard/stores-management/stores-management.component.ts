@@ -1,4 +1,4 @@
-import { Component, OnInit, ChangeDetectorRef } from '@angular/core';
+import { Component, OnInit, ChangeDetectorRef, signal, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { StoreService, Store } from '../../../services/store.service';
@@ -6,11 +6,12 @@ import { AuthService } from '../../../services/auth.service';
 import { ToastService } from '../../../shared/services/toast.service';
 import { PredefinedTypesService, PredefinedType } from '../../../services/predefined-types.service';
 import { DeviceService, Device } from '../../../services/device.service';
+import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../shared/components/confirmation-dialog/confirmation-dialog.component';
 
 @Component({
   selector: 'app-stores-management',
   standalone: true,
-  imports: [CommonModule, FormsModule, ReactiveFormsModule],
+  imports: [CommonModule, FormsModule, ReactiveFormsModule, ConfirmationDialogComponent],
   template: `
     <div class="stores-management">
       <!-- Header -->
@@ -81,9 +82,13 @@ import { DeviceService, Device } from '../../../services/device.service';
                   </span>
                 </td>
                 <td class="status-cell">
-                  <span class="status-badge" [class]="'status-' + store.status">
-                    {{ store.status | titlecase }}
-                  </span>
+                  <label class="toggle-switch" [title]="store.status === 'active' ? 'Deactivate Store' : 'Activate Store'">
+                    <input 
+                      type="checkbox" 
+                      [checked]="store.status === 'active'"
+                      (change)="toggleStoreStatus(store)">
+                    <span class="toggle-slider"></span>
+                  </label>
                 </td>
                 <td class="actions-cell">
                   <div class="action-buttons">
@@ -104,12 +109,6 @@ import { DeviceService, Device } from '../../../services/device.service';
                       (click)="openDevicesModal(store)"
                       title="Manage Devices">
                       💻
-                    </button>
-                    <button 
-                      class="btn-icon-action btn-delete"
-                      (click)="deleteStore(store)"
-                      title="Delete Store">
-                      🗑️
                     </button>
                   </div>
                 </td>
@@ -144,116 +143,151 @@ import { DeviceService, Device } from '../../../services/device.service';
            *ngIf="showStoreModal" 
            (click)="cancelStoreModal()"
            style="position: fixed !important; z-index: 9999 !important; background: rgba(0, 0, 0, 0.8) !important;">
-        <div class="modal" (click)="$event.stopPropagation()">
+        <div class="modal store-modal" (click)="$event.stopPropagation()">
           <div class="modal-header">
-            <h3>{{ editingStore ? 'Edit Store' : 'Add New Store' }}</h3>
+            <h3>{{ editingStore ? '✏️ Edit Store' : '🏪 Add New Store' }}</h3>
             <button class="close-btn" (click)="cancelStoreModal()">×</button>
           </div>
           <div class="modal-body">
             <form [formGroup]="storeForm">
-              <div class="form-group">
-                <label for="storeName">Store Name *</label>
-                <input 
-                  type="text" 
-                  id="storeName"
-                  formControlName="storeName"
-                  placeholder="Enter store name"
-                  class="form-input">
-                <div class="error-message" *ngIf="storeForm.get('storeName')?.invalid && storeForm.get('storeName')?.touched">
-                  Store name is required
+              <!-- Basic Information Section -->
+              <div class="form-section">
+                <h4 class="section-title">
+                  <span>📋</span>
+                  <span>Basic Information</span>
+                </h4>
+                
+                <div class="form-group">
+                  <label for="storeName">Store Name</label>
+                  <input 
+                    type="text" 
+                    id="storeName"
+                    formControlName="storeName"
+                    placeholder="Enter store name"
+                    class="form-input">
+                  <div class="error-message" *ngIf="storeForm.get('storeName')?.invalid && storeForm.get('storeName')?.touched">
+                    Store name is required
+                  </div>
+                </div>
+
+                <div class="form-group">
+                  <label for="branchName">Branch Name</label>
+                  <input 
+                    type="text" 
+                    id="branchName"
+                    formControlName="branchName"
+                    placeholder="e.g., Main Branch, Cebu Branch"
+                    class="form-input">
+                </div>
+
+                <div class="form-group">
+                  <label for="storeType">Store Type</label>
+                  <select 
+                    id="storeType"
+                    formControlName="storeType"
+                    class="form-input">
+                    <option value="">Select store type</option>
+                    <option 
+                      *ngFor="let storeType of storeTypes" 
+                      [value]="storeType.typeLabel"
+                      [title]="storeType.typeDescription">
+                      {{ storeType.typeLabel }}
+                    </option>
+                  </select>
+                  <div class="error-message" *ngIf="storeForm.get('storeType')?.invalid && storeForm.get('storeType')?.touched">
+                    Store type is required
+                  </div>
+                </div>
+
+                <div class="form-group">
+                  <label for="status">Status</label>
+                  <select 
+                    id="status"
+                    formControlName="status"
+                    class="form-input"
+                    [class.status-active]="storeForm.get('status')?.value === 'active'"
+                    [class.status-inactive]="storeForm.get('status')?.value === 'inactive'">
+                    <option value="active">Active</option>
+                    <option value="inactive">Inactive</option>
+                  </select>
                 </div>
               </div>
 
-              <div class="form-group">
-                <label for="branchName">Branch Name</label>
-                <input 
-                  type="text" 
-                  id="branchName"
-                  formControlName="branchName"
-                  placeholder="e.g., Main Branch, Cebu Branch"
-                  class="form-input">
-              </div>
-               <div class="form-group">
-                <label for="address">Address *</label>
-                <textarea 
-                  id="address"
-                  formControlName="address"
-                  placeholder="Enter complete address"
-                  class="form-textarea"
-                  rows="3"></textarea>
-                <div class="error-message" *ngIf="storeForm.get('address')?.invalid && storeForm.get('address')?.touched">
-                  Address is required
+              <!-- Location Information Section -->
+              <div class="form-section">
+                <h4 class="section-title">
+                  <span>📍</span>
+                  <span>Location Information</span>
+                </h4>
+                
+                <div class="form-group">
+                  <label for="address">Address</label>
+                  <textarea 
+                    id="address"
+                    formControlName="address"
+                    placeholder="Enter complete address"
+                    class="form-input"
+                    rows="3"></textarea>
+                  <div class="error-message" *ngIf="storeForm.get('address')?.invalid && storeForm.get('address')?.touched">
+                    Address is required
+                  </div>
                 </div>
               </div>
 
-              <div class="form-group">
-                <label for="phoneNumber">Phone Number</label>
-                <input 
-                  type="tel" 
-                  id="phoneNumber"
-                  formControlName="phoneNumber"
-                  placeholder="Enter phone number"
-                  class="form-input">
-              </div>
+              <!-- Contact Information Section -->
+              <div class="form-section">
+                <h4 class="section-title">
+                  <span>📞</span>
+                  <span>Contact Information</span>
+                </h4>
+                
+                <div class="form-group">
+                  <label for="phoneNumber">Phone Number</label>
+                  <input 
+                    type="tel" 
+                    id="phoneNumber"
+                    formControlName="phoneNumber"
+                    placeholder="Enter phone number"
+                    class="form-input">
+                </div>
 
-              <div class="form-group">
-                <label for="email">Email</label>
-                <input 
-                  type="email" 
-                  id="email"
-                  formControlName="email"
-                  placeholder="Enter email address"
-                  class="form-input">
-              </div>
-<div class="form-group">
-                <label for="tinNumber">TIN Number</label>
-                <input 
-                  type="text" 
-                  id="tinNumber"
-                  formControlName="tinNumber"
-                  placeholder="000-000-000-000"
-                  class="form-input">
-              </div>
-
-              
-              <div class="form-group">
-                <label for="storeType">Store Type *</label>
-                <select 
-                  id="storeType"
-                  formControlName="storeType"
-                  class="form-select">
-                  <option value="">Select store type</option>
-                  <option 
-                    *ngFor="let storeType of storeTypes" 
-                    [value]="storeType.typeLabel"
-                    [title]="storeType.typeDescription">
-                    {{ storeType.typeLabel }}
-                  </option>
-                </select>
-                <div class="error-message" *ngIf="storeForm.get('storeType')?.invalid && storeForm.get('storeType')?.touched">
-                  Store type is required
+                <div class="form-group">
+                  <label for="email">Email</label>
+                  <input 
+                    type="email" 
+                    id="email"
+                    formControlName="email"
+                    placeholder="Enter email address"
+                    class="form-input">
                 </div>
               </div>
 
+              <!-- Business Information Section -->
+              <div class="form-section">
+                <h4 class="section-title">
+                  <span>💼</span>
+                  <span>Business Information</span>
+                </h4>
+                
+                <div class="form-group">
+                  <label for="tinNumber">TIN Number</label>
+                  <input 
+                    type="text" 
+                    id="tinNumber"
+                    formControlName="tinNumber"
+                    placeholder="000-000-000-000"
+                    class="form-input">
+                </div>
 
-              <div class="form-group">
-                <label for="logoUrl">Logo URL</label>
-                <input 
-                  type="text" 
-                  id="logoUrl"
-                  formControlName="logoUrl"
-                  placeholder="https://..."
-                  class="form-input">
-              </div>
-              <div class="form-group">
-                <label for="status">Status *</label>
-                <select 
-                  id="status"
-                  formControlName="status"
-                  class="form-select">
-                  <option value="active">Active</option>
-                  <option value="inactive">Inactive</option>
-                </select>
+                <div class="form-group">
+                  <label for="logoUrl">Logo URL</label>
+                  <input 
+                    type="text" 
+                    id="logoUrl"
+                    formControlName="logoUrl"
+                    placeholder="https://..."
+                    class="form-input">
+                </div>
               </div>
             </form>
           </div>
@@ -545,6 +579,14 @@ import { DeviceService, Device } from '../../../services/device.service';
         </div>
       </div>
     </div>
+
+    <!-- Confirmation Dialog -->
+    <app-confirmation-dialog
+      *ngIf="isConfirmationDialogVisible() && confirmationDialogData()"
+      [dialogData]="confirmationDialogData()!"
+      (confirmed)="onConfirmationConfirmed()"
+      (cancelled)="onConfirmationCancelled()">
+    </app-confirmation-dialog>
   `,
   styles: [`
     .stores-management {
@@ -730,6 +772,10 @@ import { DeviceService, Device } from '../../../services/device.service';
       color: #c53030;
     }
 
+    .status-cell {
+      text-align: center;
+    }
+
     .actions-cell {
       display: flex;
       gap: 0.5rem;
@@ -815,90 +861,141 @@ import { DeviceService, Device } from '../../../services/device.service';
     }
 
     .modal-overlay {
-      position: fixed;
+      position: fixed !important;
       top: 0;
       left: 0;
-      right: 0;
-      bottom: 0;
+      width: 100%;
+      height: 100%;
       background: rgba(0, 0, 0, 0.5);
       display: flex;
       align-items: center;
       justify-content: center;
-      z-index: 1000;
+      z-index: 9999 !important;
+      backdrop-filter: blur(2px);
       padding: 1rem;
     }
 
     .modal {
       background: white;
       border-radius: 12px;
+      width: 90%;
       max-width: 600px;
-      width: 100%;
       max-height: 90vh;
-      overflow-y: auto;
-      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
     }
 
     .modal-header {
+      padding: 1.5rem 2rem;
+      border-bottom: 1px solid #e5e7eb;
       display: flex;
-      align-items: center;
       justify-content: space-between;
-      padding: 1.5rem;
-      border-bottom: 1px solid #e2e8f0;
+      align-items: center;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      border-radius: 12px 12px 0 0;
     }
 
     .modal-header h3 {
       margin: 0;
       font-size: 1.25rem;
       font-weight: 600;
-      color: #2d3748;
+      color: white;
     }
 
     .close-btn {
-      background: none;
+      background: rgba(255, 255, 255, 0.2);
       border: none;
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
       font-size: 1.5rem;
+      color: white;
       cursor: pointer;
-      color: #718096;
-      padding: 0.25rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s ease;
       line-height: 1;
     }
 
     .close-btn:hover {
-      color: #4a5568;
+      background: rgba(255, 255, 255, 0.3);
+      transform: scale(1.1);
     }
 
     .modal-body {
+      padding: 2rem;
+      overflow-y: auto;
+      flex: 1;
+    }
+
+    .form-section {
+      margin-bottom: 2rem;
       padding: 1.5rem;
+      background: #f9fafb;
+      border-radius: 8px;
+      border: 1px solid #e5e7eb;
+    }
+
+    .form-section:last-child {
+      margin-bottom: 0;
+    }
+
+    .section-title {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 1rem;
+      font-weight: 600;
+      color: #374151;
+      margin: 0 0 1rem 0;
+      padding-bottom: 0.75rem;
+      border-bottom: 2px solid #e5e7eb;
+    }
+
+    .section-title span:first-child {
+      font-size: 1.25rem;
     }
 
     .form-group {
-      margin-bottom: 1.5rem;
+      margin-bottom: 1rem;
+    }
+
+    .form-group:last-child {
+      margin-bottom: 0;
     }
 
     .form-group label {
       display: block;
       margin-bottom: 0.5rem;
       font-weight: 500;
-      color: #2d3748;
+      color: #6b7280;
+      font-size: 0.875rem;
     }
 
     .form-input,
     .form-select,
     .form-textarea {
       width: 100%;
-      padding: 0.75rem;
-      border: 1px solid #e2e8f0;
-      border-radius: 6px;
-      font-size: 1rem;
-      transition: border-color 0.2s;
+      max-width: 100%;
+      padding: 0.75rem 1rem;
+      border: 1px solid #d1d5db;
+      border-radius: 8px;
+      font-size: 0.875rem;
+      font-weight: 500;
+      color: #1f2937;
+      background: white;
+      transition: all 0.2s ease;
+      box-sizing: border-box;
     }
 
     .form-input:focus,
     .form-select:focus,
     .form-textarea:focus {
       outline: none;
-      border-color: #059669;
-      box-shadow: 0 0 0 3px rgba(5, 150, 105, 0.1);
+      border-color: #667eea;
+      box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
     }
 
     .form-textarea {
@@ -906,10 +1003,79 @@ import { DeviceService, Device } from '../../../services/device.service';
       min-height: 80px;
     }
 
+    .form-input.readonly {
+      background: #f3f4f6;
+      color: #6b7280;
+      cursor: not-allowed;
+    }
+
+    .form-input.status-active,
+    .form-select.status-active {
+      background: #d1fae5;
+      color: #065f46;
+      border-color: #10b981;
+      font-weight: 600;
+    }
+
+    .form-input.status-inactive,
+    .form-select.status-inactive {
+      background: #f3f4f6;
+      color: #6b7280;
+      border-color: #9ca3af;
+    }
+
     .error-message {
       margin-top: 0.5rem;
       font-size: 0.875rem;
-      color: #f56565;
+      color: #ef4444;
+      font-weight: 500;
+    }
+
+    .modal-footer {
+      padding: 1.5rem 2rem;
+      border-top: 1px solid #e5e7eb;
+      display: flex;
+      justify-content: flex-end;
+      gap: 1rem;
+      background: #f9fafb;
+      border-radius: 0 0 12px 12px;
+    }
+
+    .btn {
+      padding: 0.75rem 1.5rem;
+      border-radius: 8px;
+      font-size: 0.875rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      border: none;
+    }
+
+    .btn-secondary {
+      background: #f1f5f9;
+      color: #64748b;
+      border: 1px solid #e2e8f0;
+    }
+
+    .btn-secondary:hover {
+      background: #e2e8f0;
+      transform: translateY(-1px);
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+    }
+
+    .btn-primary:hover:not(:disabled) {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+    }
+
+    .btn-primary:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
     }
 
     .form-help {
@@ -1009,9 +1175,24 @@ import { DeviceService, Device } from '../../../services/device.service';
       }
 
       .modal {
-        margin: 1rem;
-        max-width: none;
-        width: auto;
+        width: 95%;
+        max-height: 95vh;
+      }
+
+      .modal-header {
+        padding: 1rem 1.5rem;
+      }
+
+      .modal-body {
+        padding: 1rem;
+      }
+
+      .form-section {
+        padding: 1rem;
+      }
+
+      .modal-footer {
+        padding: 1rem 1.5rem;
       }
     }
 
@@ -1085,9 +1266,55 @@ import { DeviceService, Device } from '../../../services/device.service';
       border-color: #8b5cf6;
     }
 
-    .btn-delete:hover {
-      background: #fef2f2;
-      border-color: #ef4444;
+    /* Toggle Switch Styles */
+    .toggle-switch {
+      position: relative;
+      display: inline-block;
+      width: 48px;
+      height: 24px;
+      cursor: pointer;
+    }
+
+    .toggle-switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .toggle-slider {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: #cbd5e1;
+      border-radius: 24px;
+      transition: all 0.3s ease;
+    }
+
+    .toggle-slider:before {
+      position: absolute;
+      content: "";
+      height: 18px;
+      width: 18px;
+      left: 3px;
+      bottom: 3px;
+      background-color: white;
+      border-radius: 50%;
+      transition: all 0.3s ease;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    }
+
+    .toggle-switch input:checked + .toggle-slider {
+      background-color: #10b981;
+    }
+
+    .toggle-switch input:checked + .toggle-slider:before {
+      transform: translateX(24px);
+    }
+
+    .toggle-switch:hover .toggle-slider {
+      box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1);
     }
 
     .modal-large {
@@ -1263,6 +1490,13 @@ export class StoresManagementComponent implements OnInit {
   storeForm: FormGroup;
   birForm: FormGroup;
   deviceForm: FormGroup;
+
+  // Confirmation dialog
+  private isConfirmationDialogVisibleSignal = signal<boolean>(false);
+  readonly isConfirmationDialogVisible = computed(() => this.isConfirmationDialogVisibleSignal());
+  
+  private confirmationDialogDataSignal = signal<ConfirmationDialogData | null>(null);
+  readonly confirmationDialogData = computed(() => this.confirmationDialogDataSignal());
 
   constructor(
     private storeService: StoreService,
@@ -1561,16 +1795,28 @@ export class StoresManagementComponent implements OnInit {
     }
   }
 
-  async deleteStore(store: Store) {
-    if (confirm(`Are you sure you want to delete "${store.storeName}"?`)) {
+  async toggleStoreStatus(store: Store) {
+    const newStatus = store.status === 'active' ? 'inactive' : 'active';
+    const action = newStatus === 'active' ? 'activate' : 'deactivate';
+    
+    const confirmed = await this.showConfirmationDialog({
+      title: `${action.charAt(0).toUpperCase() + action.slice(1)} Store`,
+      message: `Are you sure you want to ${action} "${store.storeName}"?`,
+      confirmText: action.charAt(0).toUpperCase() + action.slice(1),
+      cancelText: 'Cancel',
+      type: 'warning'
+    });
+
+    if (confirmed) {
       this.isLoading = true;
       
       try {
-        await this.storeService.deleteStore(store.id!);
+        await this.storeService.updateStore(store.id!, { status: newStatus });
         await this.loadStores();
+        this.toastService.success(`Store ${action}d successfully!`);
       } catch (error) {
-        console.error('Error deleting store:', error);
-        this.toastService.error('Error deleting store. Please try again.');
+        console.error('Error updating store status:', error);
+        this.toastService.error(`Error ${action}ing store. Please try again.`);
       } finally {
         this.isLoading = false;
       }
@@ -1664,6 +1910,7 @@ export class StoresManagementComponent implements OnInit {
 
   // Devices Modal Methods
   async openDevicesModal(store: Store) {
+    console.log('🔵 Opening devices modal for store:', store.id, store.storeName);
     this.selectedStore = store;
     this.showDevicesModal = true;
     this.showDeviceForm = false;
@@ -1672,13 +1919,24 @@ export class StoresManagementComponent implements OnInit {
     
     try {
       // Load devices for this store
+      console.log('🔵 Calling getDevicesByStore for storeId:', store.id);
       this.storeDevices = await this.deviceService.getDevicesByStore(store.id!);
-    } catch (error) {
-      console.error('Error loading devices:', error);
-      this.toastService.error('Failed to load devices');
+      console.log('🔵 Loaded devices:', this.storeDevices.length, this.storeDevices);
+    } catch (error: any) {
+      console.error('❌ Error loading devices:', error);
+      
+      // Check if it's a permission error (likely due to missing uid field)
+      if (error?.code === 'permission-denied' || error?.message?.includes('permission')) {
+        console.warn('⚠️ Permission error detected - you may have old devices without uid field');
+        this.toastService.error('Cannot load devices. Please fix old devices in Firebase Console by adding your uid field.');
+      } else {
+        this.toastService.error('Failed to load devices');
+      }
+      
       this.storeDevices = [];
     } finally {
       this.isLoadingDevices = false;
+      console.log('🔵 Final storeDevices state:', this.storeDevices);
     }
   }
 
@@ -1742,10 +2000,17 @@ export class StoresManagementComponent implements OnInit {
         return;
       }
 
+      const currentUser = this.authService.currentUser();
+      if (!currentUser) {
+        this.toastService.error('User not authenticated');
+        return;
+      }
+
       const deviceData = {
         ...this.deviceForm.value,
         storeId: this.selectedStore.id!,
-        companyId: currentPermission.companyId
+        companyId: currentPermission.companyId,
+        uid: currentUser.uid // Add uid for Firestore security rules
       };
 
       if (this.editingDevice) {
@@ -1770,7 +2035,15 @@ export class StoresManagementComponent implements OnInit {
   }
 
   async deleteDevice(device: Device) {
-    if (!confirm(`Are you sure you want to delete device "${device.deviceLabel}"?`)) {
+    const confirmed = await this.showConfirmationDialog({
+      title: 'Delete Device',
+      message: `Are you sure you want to delete device "${device.deviceLabel}"?`,
+      confirmText: 'Delete',
+      cancelText: 'Cancel',
+      type: 'danger'
+    });
+
+    if (!confirmed) {
       return;
     }
 
@@ -1806,6 +2079,39 @@ export class StoresManagementComponent implements OnInit {
     const month = String(d.getMonth() + 1).padStart(2, '0');
     const day = String(d.getDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
+  }
+
+  // Confirmation dialog methods
+  showConfirmationDialog(data: ConfirmationDialogData): Promise<boolean> {
+    return new Promise((resolve) => {
+      this.confirmationDialogDataSignal.set(data);
+      this.isConfirmationDialogVisibleSignal.set(true);
+      
+      // Store the resolve function for use in dialog action handlers
+      (this as any)._confirmationResolve = resolve;
+    });
+  }
+
+  onConfirmationConfirmed(): void {
+    this.isConfirmationDialogVisibleSignal.set(false);
+    this.confirmationDialogDataSignal.set(null);
+    
+    // Resolve with true (confirmed)
+    if ((this as any)._confirmationResolve) {
+      (this as any)._confirmationResolve(true);
+      (this as any)._confirmationResolve = null;
+    }
+  }
+
+  onConfirmationCancelled(): void {
+    this.isConfirmationDialogVisibleSignal.set(false);
+    this.confirmationDialogDataSignal.set(null);
+    
+    // Resolve with false (cancelled)
+    if ((this as any)._confirmationResolve) {
+      (this as any)._confirmationResolve(false);
+      (this as any)._confirmationResolve = null;
+    }
   }
 
 }
