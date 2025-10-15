@@ -1,5 +1,6 @@
 export interface Device {
   id?: string;
+  uid: string; // User ID for security rules
   companyId: string;
   storeId: string;
   

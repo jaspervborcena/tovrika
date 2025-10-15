@@ -19,7 +19,6 @@ export interface ToastMessage {
         *ngFor="let toast of visibleToasts(); trackBy: trackByToastId"
         class="toast"
         [class]="'toast-' + toast.type"
-        [@slideIn]
       >
         <div class="toast-content">
           <div class="toast-icon">
