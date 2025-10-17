@@ -52,6 +52,7 @@ export class ProductService {
     const data = doc.data();
     return {
       id: doc.id,
+      uid: data['uid'] || '',  // Include UID field
       productName: data['productName'] || '',
       description: data['description'] || undefined,
       skuId: data['skuId'] || '',
@@ -61,7 +62,6 @@ export class ProductService {
       sellingPrice: data['sellingPrice'] || 0,
       companyId: data['companyId'] || '',
       storeId: data['storeId'] || '',
-      isMultipleInventory: data['isMultipleInventory'] || false,
       barcodeId: data['barcodeId'] || '',
       imageUrl: data['imageUrl'] || '',
       inventory: this.transformInventoryArray(data['inventory'] || []),
@@ -73,10 +73,46 @@ export class ProductService {
       discountType: data['discountType'] || 'percentage',
       discountValue: data['discountValue'] || 0,
       
+      // Price and Quantity Tracking
+      priceHistory: this.transformPriceHistory(data['priceHistory'] || []),
+      quantityAdjustments: this.transformQuantityAdjustments(data['quantityAdjustments'] || []),
+      
       status: data['status'] || 'active',
       createdAt: data['createdAt']?.toDate() || new Date(),
-      updatedAt: data['updatedAt']?.toDate() || new Date()
+      updatedAt: data['updatedAt']?.toDate() || new Date(),
+      lastUpdated: data['lastUpdated']?.toDate() || new Date()
     };
+  }
+
+  private transformPriceHistory(historyData: any[]): any[] {
+    if (!Array.isArray(historyData)) return [];
+    return historyData.map(item => ({
+      oldPrice: item.oldPrice || 0,
+      newPrice: item.newPrice || 0,
+      changeType: item.changeType || 'initial',
+      changeAmount: item.changeAmount || 0,
+      changePercentage: item.changePercentage || 0,
+      changedAt: item.changedAt?.toDate() || new Date(),
+      changedBy: item.changedBy || '',
+      changedByName: item.changedByName || '',
+      reason: item.reason || '',
+      batchId: item.batchId || undefined
+    }));
+  }
+
+  private transformQuantityAdjustments(adjustmentsData: any[]): any[] {
+    if (!Array.isArray(adjustmentsData)) return [];
+    return adjustmentsData.map(item => ({
+      batchId: item.batchId || '',
+      oldQuantity: item.oldQuantity || 0,
+      newQuantity: item.newQuantity || 0,
+      adjustmentType: item.adjustmentType || 'manual',
+      adjustedAt: item.adjustedAt?.toDate() || new Date(),
+      adjustedBy: item.adjustedBy || '',
+      adjustedByName: item.adjustedByName || '',
+      reason: item.reason || '',
+      notes: item.notes || ''
+    }));
   }
 
   private transformInventoryArray(inventoryData: any[]): ProductInventory[] {
@@ -88,7 +124,8 @@ export class ProductService {
       receivedAt: item.receivedAt?.toDate() || new Date(),
       expiryDate: item.expiryDate?.toDate() || undefined,
       supplier: item.supplier || undefined,
-      status: item.status || 'active'
+      status: item.status || 'active',
+      unitType: item.unitType || 'pieces'
     }));
   }
 
@@ -222,28 +259,38 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
   }
   async createProduct(productData: Omit<Product, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> {
     try {
+      // Get current user for UID
+      const currentUser = this.authService.getCurrentUser();
+      if (!currentUser) {
+        throw new Error('User not authenticated');
+      }
+
       const companyId = await this.waitForAuth();
       
-      // Prepare product data with required fields
-      const productToCreate = {
+      // Clean undefined values that Firestore doesn't accept
+      const cleanedProductData = this.cleanUndefinedValues({
         ...productData,
+        uid: currentUser.uid,  // Add UID for security rules
         companyId,
         status: productData.status || 'active',
         inventory: productData.inventory.map(inv => ({
-          ...inv,
+          ...this.cleanUndefinedValues(inv),
           receivedAt: Timestamp.fromDate(inv.receivedAt)
         }))
-      };
+      });
+
+      console.log('Creating product with cleaned data:', cleanedProductData);
 
       // 🔥 NEW APPROACH: Pre-generate documentId, then create with that ID
-      const documentId = await this.offlineDocService.createDocument('products', productToCreate);
+      const documentId = await this.offlineDocService.createDocument('products', cleanedProductData);
 
       // Update the signal with the new product (works with both real and temp IDs)
       this.products.update(products => [
         ...products, 
         { 
           ...productData, 
-          id: documentId, 
+          id: documentId,
+          uid: currentUser.uid,  // Include UID in local state
           companyId, 
           createdAt: new Date(), 
           updatedAt: new Date(),
@@ -262,19 +309,41 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
 
   async updateProduct(productId: string, updates: Partial<Product>): Promise<void> {
     try {
+      // Get current user ID
+      const currentUser = this.authService.getCurrentUser();
+      if (!currentUser) {
+        throw new Error('User not authenticated');
+      }
+
       // Prepare update data with proper Timestamp conversion
       const updateData: any = { ...updates };
+
+      // Ensure UID is maintained for security rules
+      updateData.uid = currentUser.uid;
 
       // Handle inventory array updates
       if (updates.inventory) {
         updateData.inventory = updates.inventory.map(inv => ({
-          ...inv,
-          receivedAt: Timestamp.fromDate(inv.receivedAt)
+          batchId: inv.batchId,
+          quantity: inv.quantity,
+          unitPrice: inv.unitPrice,
+          costPrice: inv.costPrice || 0,
+          receivedAt: Timestamp.fromDate(inv.receivedAt instanceof Date ? inv.receivedAt : new Date(inv.receivedAt)),
+          expiryDate: inv.expiryDate ? Timestamp.fromDate(inv.expiryDate instanceof Date ? inv.expiryDate : new Date(inv.expiryDate)) : null,
+          supplier: inv.supplier || null,
+          status: inv.status,
+          unitType: inv.unitType || 'pieces'
         }));
       }
 
+      // Clean undefined values to prevent Firestore errors
+      const cleanedUpdateData = this.cleanUndefinedValues(updateData);
+
+      console.log('Updating product with cleaned data:', cleanedUpdateData);
+      console.log('User UID:', currentUser.uid);
+
       // 🔥 NEW APPROACH: Use OfflineDocumentService for consistent online/offline updates
-      await this.offlineDocService.updateDocument('products', productId, updateData);
+      await this.offlineDocService.updateDocument('products', productId, cleanedUpdateData);
 
       // Update the signal
       this.products.update(products =>
@@ -313,32 +382,128 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
   }
 
   async addInventoryBatch(productId: string, batch: ProductInventory): Promise<void> {
-    const product = this.getProduct(productId);
-    if (product) {
-      // Insert new batch at the top
-      let updatedInventory: ProductInventory[] = [batch, ...product.inventory];
-      // If the new batch is active, mark other batches inactive so only one active exists
-      if (batch.status === 'active') {
-        updatedInventory = updatedInventory.map((inv, idx) => idx === 0 ? inv : { ...inv, status: 'inactive' });
+    try {
+      console.log('=== ADD INVENTORY BATCH DEBUG ===');
+      console.log('Product ID:', productId);
+      console.log('Batch data:', batch);
+      
+      // Check authentication
+      const currentUser = this.authService.getCurrentUser();
+      console.log('Current user:', currentUser);
+      
+      if (!currentUser) {
+        throw new Error('User not authenticated');
       }
-      // totalStock should be calculated from active batches only
+
+      const product = this.getProduct(productId);
+      if (!product) {
+        throw new Error(`Product with ID ${productId} not found`);
+      }
+
+      console.log('Current product:', {
+        id: product.id,
+        uid: (product as any).uid,
+        name: product.productName
+      });
+
+      // Simply append the new batch to existing inventory
+      const updatedInventory: ProductInventory[] = [...(product.inventory || []), batch];
+      
+      // Calculate total stock from all active batches
       const totalStock = updatedInventory.reduce((sum, inv) => sum + ((inv.status === 'active') ? inv.quantity : 0), 0);
+      
+      // Get selling price from most recent batch (sort by receivedAt descending)
+      const sortedInventory = updatedInventory.slice().sort((a, b) => 
+        new Date(b.receivedAt).getTime() - new Date(a.receivedAt).getTime()
+      );
+      const sellingPrice = sortedInventory.length > 0 ? sortedInventory[0].unitPrice : 0;
+      
+      console.log('Updated inventory count:', updatedInventory.length);
+      console.log('Updated total stock:', totalStock);
+      console.log('Updated selling price:', sellingPrice);
+      
       await this.updateProduct(productId, { 
         inventory: updatedInventory,
-        totalStock 
+        totalStock,
+        sellingPrice
       });
+      
+      console.log('=== INVENTORY BATCH ADDED SUCCESSFULLY ===');
+    } catch (error) {
+      console.error('=== ERROR IN ADD INVENTORY BATCH ===');
+      console.error('Error details:', error);
+      throw error;
+    }
+  }
+
+  async updateInventoryBatch(productId: string, batchId: string, updatedBatch: ProductInventory): Promise<void> {
+    try {
+      console.log('=== UPDATE INVENTORY BATCH DEBUG ===');
+      console.log('Product ID:', productId);
+      console.log('Batch ID:', batchId);
+      console.log('Updated batch data:', updatedBatch);
+      
+      // Check authentication
+      const currentUser = this.authService.getCurrentUser();
+      if (!currentUser) {
+        throw new Error('User not authenticated');
+      }
+
+      const product = this.getProduct(productId);
+      if (!product) {
+        throw new Error(`Product with ID ${productId} not found`);
+      }
+
+      // Find and update the specific batch
+      const updatedInventory = product.inventory.map(inv => 
+        inv.batchId === batchId ? updatedBatch : inv
+      );
+      
+      // Calculate total stock from all active batches
+      const totalStock = updatedInventory.reduce((sum, inv) => sum + ((inv.status === 'active') ? inv.quantity : 0), 0);
+      
+      // Get selling price from most recent batch (sort by receivedAt descending)
+      const sortedInventory = updatedInventory.slice().sort((a, b) => 
+        new Date(b.receivedAt).getTime() - new Date(a.receivedAt).getTime()
+      );
+      const sellingPrice = sortedInventory.length > 0 ? sortedInventory[0].unitPrice : 0;
+      
+      console.log('Updated inventory count:', updatedInventory.length);
+      console.log('Updated total stock:', totalStock);
+      console.log('Updated selling price:', sellingPrice);
+      
+      await this.updateProduct(productId, { 
+        inventory: updatedInventory,
+        totalStock,
+        sellingPrice
+      });
+      
+      console.log('=== INVENTORY BATCH UPDATED SUCCESSFULLY ===');
+    } catch (error) {
+      console.error('=== ERROR IN UPDATE INVENTORY BATCH ===');
+      console.error('Error details:', error);
+      throw error;
     }
   }
 
   async removeInventoryBatch(productId: string, batchId: string): Promise<void> {
     const product = this.getProduct(productId);
     if (product) {
-  const updatedInventory = product.inventory.filter(inv => inv.batchId !== batchId);
-  // totalStock from active batches only
-  const totalStock = updatedInventory.reduce((sum, inv) => sum + ((inv.status === 'active') ? inv.quantity : 0), 0);
+      const updatedInventory = product.inventory.filter(inv => inv.batchId !== batchId);
+      
+      // Calculate total stock from active batches only
+      const totalStock = updatedInventory.reduce((sum, inv) => sum + ((inv.status === 'active') ? inv.quantity : 0), 0);
+      
+      // Get selling price from most recent batch (sort by receivedAt descending)
+      const sortedInventory = updatedInventory.slice().sort((a, b) => 
+        new Date(b.receivedAt).getTime() - new Date(a.receivedAt).getTime()
+      );
+      const sellingPrice = sortedInventory.length > 0 ? sortedInventory[0].unitPrice : 0;
+      
       await this.updateProduct(productId, { 
         inventory: updatedInventory,
-        totalStock 
+        totalStock,
+        sellingPrice
       });
     }
   }
@@ -377,5 +542,248 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
   getCategories(): string[] {
     const categories = new Set(this.products().map(p => p.category));
     return Array.from(categories).sort();
+  }
+
+  // ============================================
+  // PRICE AND QUANTITY TRACKING METHODS
+  // ============================================
+
+  /**
+   * Update product price and log the change
+   */
+  async updateProductPrice(
+    productId: string, 
+    newPrice: number, 
+    reason?: string, 
+    batchId?: string
+  ): Promise<void> {
+    try {
+      const product = this.getProduct(productId);
+      if (!product) throw new Error('Product not found');
+
+      const currentUser = this.authService.getCurrentUser();
+      if (!currentUser) throw new Error('User not authenticated');
+
+      const oldPrice = batchId 
+        ? product.inventory.find(inv => inv.batchId === batchId)?.unitPrice || 0
+        : product.sellingPrice;
+
+      const changeAmount = newPrice - oldPrice;
+      const changePercentage = oldPrice > 0 ? (changeAmount / oldPrice) * 100 : 0;
+      const changeType = changeAmount > 0 ? 'increase' : changeAmount < 0 ? 'decrease' : 'initial';
+
+      const priceChange = {
+        oldPrice,
+        newPrice,
+        changeType: changeType as 'increase' | 'decrease' | 'initial',
+        changeAmount,
+        changePercentage,
+        changedAt: new Date(),
+        changedBy: currentUser.uid,
+        changedByName: currentUser.displayName || currentUser.email || 'Unknown',
+        reason: reason || 'Manual price update',
+        batchId: batchId || undefined
+      };
+
+      const currentHistory = product.priceHistory || [];
+      const updatedHistory = [...currentHistory, priceChange];
+
+      if (batchId) {
+        // Update batch price
+        const updatedInventory = product.inventory.map(inv => 
+          inv.batchId === batchId ? { ...inv, unitPrice: newPrice } : inv
+        );
+        await this.updateProduct(productId, {
+          inventory: updatedInventory,
+          priceHistory: updatedHistory,
+          lastUpdated: new Date()
+        });
+      } else {
+        // Update main selling price
+        await this.updateProduct(productId, {
+          sellingPrice: newPrice,
+          priceHistory: updatedHistory,
+          lastUpdated: new Date()
+        });
+      }
+
+      console.log('✅ Price updated and logged:', priceChange);
+    } catch (error) {
+      console.error('❌ Error updating price:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Adjust batch quantity and log the change
+   */
+  async adjustBatchQuantity(
+    productId: string,
+    batchId: string,
+    newQuantity: number,
+    adjustmentType: 'manual' | 'sale' | 'return' | 'damage' | 'restock' | 'transfer',
+    reason?: string,
+    notes?: string
+  ): Promise<void> {
+    try {
+      const product = this.getProduct(productId);
+      if (!product) throw new Error('Product not found');
+
+      const currentUser = this.authService.getCurrentUser();
+      if (!currentUser) throw new Error('User not authenticated');
+
+      const batch = product.inventory.find(inv => inv.batchId === batchId);
+      if (!batch) throw new Error('Batch not found');
+
+      const oldQuantity = batch.quantity;
+
+      const quantityAdjustment = {
+        batchId,
+        oldQuantity,
+        newQuantity,
+        adjustmentType: adjustmentType as 'manual' | 'sale' | 'return' | 'damage' | 'restock' | 'transfer',
+        adjustedAt: new Date(),
+        adjustedBy: currentUser.uid,
+        adjustedByName: currentUser.displayName || currentUser.email || 'Unknown',
+        reason: reason || `${adjustmentType} adjustment`,
+        notes: notes || ''
+      };
+
+      const currentAdjustments = product.quantityAdjustments || [];
+      const updatedAdjustments = [...currentAdjustments, quantityAdjustment];
+
+      // Update batch quantity
+      const updatedInventory = product.inventory.map(inv =>
+        inv.batchId === batchId ? { ...inv, quantity: newQuantity } : inv
+      );
+
+      // Recalculate total stock from active batches
+      const totalStock = updatedInventory.reduce(
+        (sum, inv) => sum + (inv.status === 'active' ? inv.quantity : 0), 
+        0
+      );
+
+      await this.updateProduct(productId, {
+        inventory: updatedInventory,
+        totalStock,
+        quantityAdjustments: updatedAdjustments,
+        lastUpdated: new Date()
+      });
+
+      console.log('✅ Quantity adjusted and logged:', quantityAdjustment);
+    } catch (error) {
+      console.error('❌ Error adjusting quantity:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Split batch: reduce quantity from existing batch and create new batch
+   * Example: "Move 40 units from batch A to new batch B at new price"
+   */
+  async splitBatch(
+    productId: string,
+    sourceBatchId: string,
+    quantityToMove: number,
+    newBatchPrice: number,
+    reason?: string
+  ): Promise<void> {
+    try {
+      const product = this.getProduct(productId);
+      if (!product) throw new Error('Product not found');
+
+      const sourceBatch = product.inventory.find(inv => inv.batchId === sourceBatchId);
+      if (!sourceBatch) throw new Error('Source batch not found');
+
+      if (quantityToMove > sourceBatch.quantity) {
+        throw new Error('Cannot move more quantity than available in source batch');
+      }
+
+      // Step 1: Reduce quantity in source batch
+      const newSourceQuantity = sourceBatch.quantity - quantityToMove;
+      await this.adjustBatchQuantity(
+        productId,
+        sourceBatchId,
+        newSourceQuantity,
+        'transfer',
+        reason || `Moved ${quantityToMove} units to new batch at updated price`,
+        `Split from batch ${sourceBatchId}`
+      );
+
+      // Step 2: Create new batch
+      const newBatchId = `${new Date().toISOString().slice(2, 10).replace(/-/g, '')}-${Date.now().toString().slice(-2)}`;
+      const newBatch: ProductInventory = {
+        batchId: newBatchId,
+        quantity: quantityToMove,
+        unitPrice: newBatchPrice,
+        costPrice: sourceBatch.costPrice, // Keep same cost price
+        receivedAt: new Date(),
+        expiryDate: sourceBatch.expiryDate,
+        supplier: sourceBatch.supplier,
+        status: 'active'
+      };
+
+      await this.addInventoryBatch(productId, newBatch);
+
+      // Step 3: Log price change for new batch
+      if (newBatchPrice !== sourceBatch.unitPrice) {
+        await this.updateProductPrice(
+          productId,
+          newBatchPrice,
+          reason || `New batch created from split with updated price`,
+          newBatchId
+        );
+      }
+
+      console.log(`✅ Batch split: ${quantityToMove} units moved from ${sourceBatchId} to ${newBatchId}`);
+    } catch (error) {
+      console.error('❌ Error splitting batch:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get price history for a product
+   */
+  getPriceHistory(productId: string) {
+    const product = this.getProduct(productId);
+    return product?.priceHistory || [];
+  }
+
+  /**
+   * Get quantity adjustment history for a product
+   */
+  getQuantityAdjustments(productId: string) {
+    const product = this.getProduct(productId);
+    return product?.quantityAdjustments || [];
+  }
+
+  /**
+   * Get quantity adjustments for a specific batch
+   */
+  getBatchAdjustments(productId: string, batchId: string) {
+    const adjustments = this.getQuantityAdjustments(productId);
+    return adjustments.filter(adj => adj.batchId === batchId);
+  }
+
+  /**
+   * Clean undefined values from an object to make it Firestore-compatible
+   */
+  private cleanUndefinedValues(obj: any): any {
+    if (obj === null || typeof obj !== 'object') {
+      return obj;
+    }
+    
+    if (Array.isArray(obj)) {
+      return obj.map(item => this.cleanUndefinedValues(item));
+    }
+    
+    const cleaned: any = {};
+    for (const [key, value] of Object.entries(obj)) {
+      if (value !== undefined) {
+        cleaned[key] = this.cleanUndefinedValues(value);
+      }
+    }
+    return cleaned;
   }
 }

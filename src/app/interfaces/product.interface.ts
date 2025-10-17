@@ -2,16 +2,17 @@ import { BusinessType } from './company.interface';
 
 export interface Product {
   id?: string;
+  uid: string;  // User ID for security rules
   productName: string;
   description?: string;
   skuId: string;
+  productCode?: string;  // Additional product identifier
   unitType: string;
   category: string;
   totalStock: number;
   sellingPrice: number;
   companyId: string;
   storeId: string;
-  isMultipleInventory: boolean;
   barcodeId?: string;
   imageUrl?: string;
   inventory: ProductInventory[];
@@ -23,9 +24,39 @@ export interface Product {
   discountType: 'percentage' | 'fixed';
   discountValue: number;
   
+  // Price and Quantity Tracking
+  priceHistory?: PriceChange[];
+  quantityAdjustments?: QuantityAdjustment[];
+  
   status?: 'active' | 'inactive';
   createdAt?: Date;
   updatedAt?: Date;
+  lastUpdated?: Date;
+}
+
+export interface PriceChange {
+  oldPrice: number;
+  newPrice: number;
+  changeType: 'increase' | 'decrease' | 'initial';
+  changeAmount: number;
+  changePercentage: number;
+  changedAt: Date;
+  changedBy: string;  // uid
+  changedByName: string;
+  reason?: string;
+  batchId?: string;  // If price change is for specific batch
+}
+
+export interface QuantityAdjustment {
+  batchId: string;
+  oldQuantity: number;
+  newQuantity: number;
+  adjustmentType: 'manual' | 'sale' | 'return' | 'damage' | 'restock' | 'transfer';
+  adjustedAt: Date;
+  adjustedBy: string;  // uid
+  adjustedByName: string;
+  reason?: string;
+  notes?: string;
 }
 
 export interface ProductInventory {
@@ -37,6 +68,7 @@ export interface ProductInventory {
   expiryDate?: Date;
   supplier?: string;
   status: 'active' | 'inactive' | 'expired';
+  unitType?: string;  // Added to match Firestore structure
 }
 
 // Legacy interfaces for backward compatibility
