@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { inject } from '@angular/core';
 import { OfflineDocumentService } from '../core/services/offline-document.service';
 import { ProductService } from '../services/product.service';
+import { AuthService } from '../services/auth.service';
 
 @Component({
   selector: 'app-offline-document-test',
@@ -87,6 +88,7 @@ import { ProductService } from '../services/product.service';
 export class OfflineDocumentTestComponent {
   private offlineDocService = inject(OfflineDocumentService);
   private productService = inject(ProductService);
+  private authService = inject(AuthService);
 
   isOnline = navigator.onLine;
   testResults: any[] = [];
@@ -100,7 +102,14 @@ export class OfflineDocumentTestComponent {
 
   async createTestProduct() {
     try {
+      // Get current user for UID
+      const currentUser = this.authService.getCurrentUser();
+      if (!currentUser) {
+        throw new Error('User not authenticated');
+      }
+
       const testProduct = {
+        uid: currentUser.uid,  // Add UID for security rules
         productName: `Test Product ${Date.now()}`,
         description: 'Test product created with pre-generated ID',
         skuId: `SKU-${Date.now()}`,
@@ -110,7 +119,6 @@ export class OfflineDocumentTestComponent {
         sellingPrice: 25.99,
         companyId: 'test-company-id', // Required field
         storeId: 'test-store-id',
-        isMultipleInventory: false,
         barcodeId: `BAR-${Date.now()}`,
         imageUrl: '',
         inventory: [],

@@ -20,13 +20,13 @@ service cloud.firestore {
     // ===== MAIN COLLECTIONS WITH UID SECURITY =====
     
     // Products Collection - Users can only access their own products
-    // Allow migration: if uid doesn't exist, allow authenticated users to read
     match /products/{productId} {
       allow read: if isAuthenticated() && 
-                  (resource == null || resource.data.uid == request.auth.uid || !('uid' in resource.data));
+                  (resource == null || resource.data.uid == request.auth.uid);
       allow create: if isAuthenticated() && isCreatingOwnDocument();
       allow update: if isAuthenticated() && 
-                    (isOwner(resource) || (!('uid' in resource.data) && request.resource.data.uid == request.auth.uid));
+                    resource.data.uid == request.auth.uid && 
+                    request.resource.data.uid == request.auth.uid;
       allow delete: if isAuthenticated() && isOwner(resource);
     }
     

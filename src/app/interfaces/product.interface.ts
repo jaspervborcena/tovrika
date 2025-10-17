@@ -2,16 +2,17 @@ import { BusinessType } from './company.interface';
 
 export interface Product {
   id?: string;
+  uid: string;  // User ID for security rules
   productName: string;
   description?: string;
   skuId: string;
+  productCode?: string;  // Additional product identifier
   unitType: string;
   category: string;
   totalStock: number;
   sellingPrice: number;
   companyId: string;
   storeId: string;
-  isMultipleInventory: boolean;
   barcodeId?: string;
   imageUrl?: string;
   inventory: ProductInventory[];
@@ -67,6 +68,7 @@ export interface ProductInventory {
   expiryDate?: Date;
   supplier?: string;
   status: 'active' | 'inactive' | 'expired';
+  unitType?: string;  // Added to match Firestore structure
 }
 
 // Legacy interfaces for backward compatibility

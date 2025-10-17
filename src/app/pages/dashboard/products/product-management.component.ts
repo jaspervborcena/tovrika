@@ -15,11 +15,12 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
   selector: 'app-product-management',
   standalone: true,
   imports: [CommonModule, FormsModule, ReactiveFormsModule, ConfirmationDialogComponent],
-  styles: [`
-    .products-management {
-      padding: 0;
-      min-height: 100vh;
-      background: #f8fafc;
+  styles: [
+    `
+    .products-management { 
+      padding: 0; 
+      min-height: 100vh; 
+      background: #f8fafc; 
     }
 
     .header {
@@ -57,6 +58,60 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
       gap: 0.75rem;
     }
 
+    .btn {
+      border: none;
+      border-radius: 6px;
+      padding: 0.5rem 1rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      text-decoration: none;
+      font-size: 0.875rem;
+    }
+
+    .btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .btn-primary {
+      background: #059669;
+      color: white;
+    }
+
+    .btn-primary:hover:not(:disabled) {
+      background: #047857;
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+    }
+
+    .btn-secondary {
+      background: #e2e8f0;
+      color: #4a5568;
+    }
+
+    .btn-secondary:hover:not(:disabled) {
+      background: #cbd5e0;
+      transform: translateY(-1px);
+    }
+
+    .btn-danger {
+      background: #f56565;
+      color: white;
+    }
+
+    .btn-danger:hover:not(:disabled) {
+      background: #e53e3e;
+    }
+
+    .btn-sm {
+      padding: 0.25rem 0.5rem;
+      font-size: 0.75rem;
+    }
+
     .filters-section {
       max-width: 1200px;
       margin: 0 auto 2rem auto;
@@ -67,11 +122,13 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
       display: flex;
       gap: 0.75rem;
       align-items: center;
-      max-width: 500px;
+      max-width: 100%;
+      flex-wrap: wrap;
     }
 
     .search-input {
       flex: 1;
+      min-width: 200px;
       padding: 0.75rem;
       border: 1px solid #e2e8f0;
       border-radius: 6px;
@@ -79,6 +136,21 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
     }
 
     .search-input:focus {
+      outline: none;
+      border-color: #059669;
+      box-shadow: 0 0 0 3px rgba(5, 150, 105, 0.1);
+    }
+
+    .filter-select {
+      padding: 0.75rem;
+      border: 1px solid #e2e8f0;
+      border-radius: 6px;
+      font-size: 1rem;
+      background: white;
+      min-width: 150px;
+    }
+
+    .filter-select:focus {
       outline: none;
       border-color: #059669;
       box-shadow: 0 0 0 3px rgba(5, 150, 105, 0.1);
@@ -153,109 +225,27 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
     }
 
     .product-stock-cell {
-      color: #718096;
+      color: #4a5568;
+      font-weight: 500;
     }
 
     .product-price-cell {
-      font-weight: 500;
       color: #2d3748;
-    }
-
-    .status-badge {
-      padding: 0.25rem 0.75rem;
-      border-radius: 9999px;
-      font-size: 0.75rem;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.025em;
-    }
-
-    .status-badge.status-active {
-      background: #c6f6d5;
-      color: #2f855a;
-    }
-
-    .status-badge.status-inactive {
-      background: #fed7d7;
-      color: #c53030;
-    }
-
-    .stock-badge {
-      padding: 0.25rem 0.75rem;
-      border-radius: 9999px;
-      font-size: 0.75rem;
       font-weight: 600;
     }
 
-    .stock-high {
-      background: #c6f6d5;
-      color: #2f855a;
-    }
-
-    .stock-medium {
-      background: #faf089;
-      color: #d69e2e;
-    }
-
-    .stock-low {
-      background: #fed7d7;
-      color: #c53030;
+    .product-store-cell {
+      color: #718096;
     }
 
     .actions-cell {
+      text-align: center;
+    }
+
+    .action-buttons {
       display: flex;
       gap: 0.5rem;
-    }
-
-    .btn {
-      border: none;
-      border-radius: 6px;
-      padding: 0.5rem 1rem;
-      font-weight: 500;
-      cursor: pointer;
-      transition: all 0.2s;
-      display: inline-flex;
-      align-items: center;
-      gap: 0.5rem;
-      text-decoration: none;
-      font-size: 0.875rem;
-    }
-
-    .btn:disabled {
-      opacity: 0.6;
-      cursor: not-allowed;
-    }
-
-    .btn-primary {
-      background: #059669;
-      color: white;
-    }
-
-    .btn-primary:hover:not(:disabled) {
-      background: #047857;
-    }
-
-    .btn-secondary {
-      background: #e2e8f0;
-      color: #4a5568;
-    }
-
-    .btn-secondary:hover:not(:disabled) {
-      background: #cbd5e0;
-    }
-
-    .btn-danger {
-      background: #f56565;
-      color: white;
-    }
-
-    .btn-danger:hover:not(:disabled) {
-      background: #e53e3e;
-    }
-
-    .btn-sm {
-      padding: 0.25rem 0.5rem;
-      font-size: 0.75rem;
+      justify-content: center;
     }
 
     .empty-state, .loading-state {
@@ -286,390 +276,490 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
       to { transform: rotate(360deg); }
     }
 
+    /* Tab Navigation Styles */
+    .tab-navigation {
+      display: flex;
+      gap: 0;
+      background: white;
+      border-radius: 12px;
+      padding: 0.5rem;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+      margin-bottom: 1.5rem;
+    }
+
+    .tab-button {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      padding: 0.875rem 1.5rem;
+      background: transparent;
+      border: none;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 0.9rem;
+      color: #6b7280;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .tab-button:hover {
+      background: #f3f4f6;
+      color: #374151;
+    }
+
+    .tab-button.active {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+    }
+
+    .tab-icon {
+      width: 1.25rem;
+      height: 1.25rem;
+    }
+
+    /* Search Section */
+    .search-section {
+      margin-bottom: 1.5rem;
+    }
+
+    .search-section .search-input {
+      width: 100%;
+      padding: 0.75rem 1rem;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      font-size: 0.875rem;
+      color: #374151;
+      background: white;
+      transition: all 0.2s ease;
+    }
+
+    .search-section .search-input:focus {
+      outline: none;
+      border-color: #667eea;
+      box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+    }
+
+    /* Tab Content */
+    .tab-content {
+      min-height: 300px;
+    }
+
+    /* Inventory Table Styles */
+    .inventory-table-container {
+      background: white;
+      border-radius: 8px;
+      overflow: hidden;
+      border: 1px solid #e2e8f0;
+    }
+
+    .inventory-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .inventory-table th,
+    .inventory-table td {
+      padding: 0.875rem 1rem;
+      text-align: left;
+      border-bottom: 1px solid #e2e8f0;
+    }
+
+    .inventory-table th {
+      background: #f8fafc;
+      font-weight: 600;
+      color: #374151;
+      font-size: 0.875rem;
+      text-transform: uppercase;
+      letter-spacing: 0.025em;
+    }
+
+    .inventory-row {
+      cursor: pointer;
+      transition: background-color 0.2s ease;
+    }
+
+    .inventory-row:hover {
+      background: #f8fafc;
+    }
+
+    .batch-id-cell {
+      font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+      font-size: 0.875rem;
+      color: #059669;
+      font-weight: 600;
+    }
+
+    .quantity-cell {
+      font-weight: 500;
+      color: #374151;
+    }
+
+    .price-cell {
+      font-weight: 600;
+      color: #059669;
+    }
+
+    .date-cell {
+      color: #6b7280;
+      font-size: 0.875rem;
+    }
+
+    .status-cell .status-badge {
+      padding: 0.25rem 0.75rem;
+      border-radius: 9999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.025em;
+    }
+
+    .status-badge.status-active {
+      background: #c6f6d5;
+      color: #2f855a;
+    }
+
+    .status-badge.status-inactive {
+      background: #fed7d7;
+      color: #c53030;
+    }
+
+    /* Empty Inventory State */
+    .empty-inventory {
+      text-align: center;
+      padding: 3rem 1.5rem;
+      color: #6b7280;
+    }
+
+    .empty-content {
+      max-width: 300px;
+      margin: 0 auto;
+    }
+
+    .empty-icon {
+      width: 3rem;
+      height: 3rem;
+      margin: 0 auto 1rem auto;
+      color: #9ca3af;
+    }
+
+    .empty-content h3 {
+      margin: 0 0 0.5rem 0;
+      font-size: 1.125rem;
+      font-weight: 600;
+      color: #374151;
+    }
+
+    .empty-content p {
+      margin: 0 0 1.5rem 0;
+      font-size: 0.875rem;
+      color: #6b7280;
+    }
+
+    /* Form Card Styles */
+    .form-card {
+      background: white;
+      border-radius: 8px;
+      border: 1px solid #e2e8f0;
+      overflow: hidden;
+    }
+
+    .form-header {
+      padding: 1.5rem;
+      border-bottom: 1px solid #e2e8f0;
+      background: #f8fafc;
+    }
+
+    .form-title {
+      font-size: 1.125rem;
+      font-weight: 600;
+      color: #374151;
+      margin: 0 0 0.5rem 0;
+    }
+
+    .form-subtitle {
+      color: #6b7280;
+      font-size: 0.875rem;
+      margin: 0;
+    }
+
+    .inventory-form {
+      padding: 1.5rem;
+    }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 1rem;
+      margin-bottom: 2rem;
+    }
+
+    @media (max-width: 768px) {
+      .form-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+
+    @media (max-width: 480px) {
+      .form-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .form-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 1rem;
+      padding-top: 1rem;
+      border-top: 1px solid #e2e8f0;
+    }
+
+    .loading-spinner {
+      width: 1rem;
+      height: 1rem;
+      border: 2px solid transparent;
+      border-top-color: currentColor;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin-right: 0.5rem;
+    }
+
+    /* Batch ID Display */
+    .batch-id-display {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 6px;
+      padding: 0.75rem 1rem;
+      font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+      font-size: 0.875rem;
+      color: #059669;
+      font-weight: 600;
+      letter-spacing: 0.025em;
+    }
+
     .modal-overlay {
-      position: fixed;
+      position: fixed !important;
       top: 0;
       left: 0;
-      right: 0;
-      bottom: 0;
+      width: 100%;
+      height: 100%;
       background: rgba(0, 0, 0, 0.5);
       display: flex;
       align-items: center;
       justify-content: center;
-      z-index: 1000;
+      z-index: 9999 !important;
+      backdrop-filter: blur(2px);
       padding: 1rem;
     }
 
     .modal {
       background: white;
       border-radius: 12px;
+      width: 90%;
       max-width: 600px;
-      width: 100%;
       max-height: 90vh;
-      overflow-y: auto;
-      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
     }
 
-    .modal-header {
+    .modal.store-modal { 
+      background: #fff; 
+      border-radius: 12px; 
+    }
+
+    .modal-header { 
+      padding: 1.5rem 2rem;
+      border-bottom: 1px solid #e5e7eb;
       display: flex;
-      align-items: center;
       justify-content: space-between;
-      padding: 1.5rem;
-      border-bottom: 1px solid #e2e8f0;
+      align-items: center;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      border-radius: 12px 12px 0 0;
     }
 
     .modal-header h3 {
       margin: 0;
       font-size: 1.25rem;
       font-weight: 600;
-      color: #2d3748;
+      color: white;
     }
 
-    .close-btn {
-      background: none;
+    .close-btn { 
+      background: rgba(255, 255, 255, 0.2);
       border: none;
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
       font-size: 1.5rem;
+      color: white;
       cursor: pointer;
-      color: #718096;
-      padding: 0.25rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s ease;
       line-height: 1;
     }
 
     .close-btn:hover {
-      color: #4a5568;
+      background: rgba(255, 255, 255, 0.3);
+      transform: scale(1.1);
     }
 
-    .modal-body {
+    .modal-body { 
+      padding: 2rem;
+      overflow-y: auto;
+      flex: 1;
+    }
+
+    .form-section {
+      margin-bottom: 2rem;
       padding: 1.5rem;
+      background: #f9fafb;
+      border-radius: 8px;
+      border: 1px solid #e5e7eb;
+    }
+
+    .form-section:last-child {
+      margin-bottom: 0;
+    }
+
+    .section-title {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 1rem;
+      font-weight: 600;
+      color: #374151;
+      margin: 0 0 1rem 0;
+      padding-bottom: 0.75rem;
+      border-bottom: 2px solid #e5e7eb;
+    }
+
+    .section-title span:first-child {
+      font-size: 1.25rem;
     }
 
     .form-group {
-      margin-bottom: 1.5rem;
+      margin-bottom: 1rem;
+    }
+
+    .form-group:last-child {
+      margin-bottom: 0;
     }
 
     .form-group label {
       display: block;
       margin-bottom: 0.5rem;
       font-weight: 500;
-      color: #2d3748;
+      color: #6b7280;
+      font-size: 0.875rem;
     }
 
     .form-input,
     .form-select,
     .form-textarea {
       width: 100%;
-      padding: 0.75rem;
-      border: 1px solid #e2e8f0;
-      border-radius: 6px;
-      font-size: 1rem;
-      transition: border-color 0.2s;
+      max-width: 100%;
+      padding: 0.75rem 1rem;
+      border: 1px solid #d1d5db;
+      border-radius: 8px;
+      font-size: 0.875rem;
+      font-weight: 500;
+      color: #1f2937;
+      background: white;
+      transition: all 0.2s ease;
+      box-sizing: border-box;
     }
 
     .form-input:focus,
     .form-select:focus,
     .form-textarea:focus {
       outline: none;
-      border-color: #059669;
-      box-shadow: 0 0 0 3px rgba(5, 150, 105, 0.1);
-    }
-
-    .form-textarea {
-      resize: vertical;
-      min-height: 80px;
-    }
-
-    .checkbox-label {
-      display: flex;
-      align-items: center;
-      cursor: pointer;
-      font-weight: normal;
-    }
-
-    .checkbox-input {
-      margin-right: 0.5rem;
-      width: auto;
-    }
-
-    .checkbox-text {
-      font-size: 1rem;
-      color: #2d3748;
-    }
-
-    .inventory-section {
-      margin-top: 1.5rem;
-      padding-top: 1.5rem;
-      border-top: 1px solid #e2e8f0;
-    }
-
-    .inventory-section h4 {
-      margin: 0 0 1rem 0;
-      font-size: 1.125rem;
-      font-weight: 600;
-      color: #1f2937;
-    }
-
-    /* Tax & Discount Section Styles */
-    .form-section {
-      box-sizing: border-box;
-      overflow: hidden;
-    }
-
-    .form-section .form-group {
-      margin-bottom: 1rem;
-    }
-
-    .form-section .form-group:last-child {
-      margin-bottom: 0;
-    }
-
-    .form-section .form-input,
-    .form-section .form-select {
-      box-sizing: border-box;
-      min-width: 0; /* Prevents input overflow */
-    }
-
-    /* Grid layout for discount fields */
-    .form-section [style*="grid-template-columns"] {
-      box-sizing: border-box;
-    }
-
-    .form-section [style*="grid-template-columns"] > * {
-      min-width: 0; /* Prevents grid items from overflowing */
-    }
-
-    /* Responsive adjustments */
-    @media (max-width: 768px) {
-      .form-section [style*="grid-template-columns"] {
-        grid-template-columns: 1fr !important;
-        gap: 0.5rem !important;
-      }
-      
-      /* Mobile inventory form adjustments */
-      form[style*="grid-template-columns"] {
-        grid-template-columns: 1fr 1fr !important;
-      }
-    }
-
-    @media (max-width: 480px) {
-      form[style*="grid-template-columns"] {
-        grid-template-columns: 1fr !important;
-      }
+      border-color: #667eea;
+      box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
     }
 
     .error-message {
       margin-top: 0.5rem;
       font-size: 0.875rem;
-      color: #f56565;
+      color: #ef4444;
+      font-weight: 500;
     }
 
     .modal-footer {
+      padding: 1.5rem 2rem;
+      border-top: 1px solid #e5e7eb;
       display: flex;
-      gap: 0.75rem;
       justify-content: flex-end;
-      padding: 1.5rem;
-      border-top: 1px solid #e2e8f0;
-      background: #f8fafc;
-    }
-
-    .filters-row {
-      display: flex;
       gap: 1rem;
-      margin-bottom: 1rem;
-      flex-wrap: wrap;
+      background: #f9fafb;
+      border-radius: 0 0 12px 12px;
     }
 
-    .filter-group {
-      flex: 1;
-      min-width: 200px;
-    }
-
-    .filter-group label {
-      display: block;
-      margin-bottom: 0.25rem;
-      font-weight: 500;
-      color: #4a5568;
+    .modal-footer .btn {
+      padding: 0.75rem 1.5rem;
+      border-radius: 8px;
       font-size: 0.875rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      border: none;
     }
 
-    .filter-select {
-      width: 100%;
-      padding: 0.5rem;
+    .modal-footer .btn-secondary {
+      background: #f1f5f9;
+      color: #64748b;
       border: 1px solid #e2e8f0;
-      border-radius: 6px;
-      font-size: 0.875rem;
-      transition: border-color 0.2s;
     }
 
-    .filter-select:focus {
-      outline: none;
-      border-color: #059669;
-      box-shadow: 0 0 0 3px rgba(5, 150, 105, 0.1);
+    .modal-footer .btn-secondary:hover {
+      background: #e2e8f0;
+      transform: translateY(-1px);
+    }
+
+    .modal-footer .btn-primary {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+    }
+
+    .modal-footer .btn-primary:hover:not(:disabled) {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+    }
+
+    .modal-footer .btn-primary:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
     }
 
     @media (max-width: 768px) {
-      .header-content {
-        flex-direction: column;
-        align-items: flex-start;
-      }
-
-      .page-title {
-        font-size: 2rem;
-      }
-
-      .search-container {
-        max-width: 100%;
-      }
-
-      .table-wrapper {
-        overflow-x: auto;
-      }
-
-      .products-table {
-        min-width: 800px;
-      }
-
       .modal {
-        margin: 1rem;
-        max-width: none;
-        width: auto;
+        width: 95%;
+        max-height: 95vh;
       }
 
-      .filters-row {
-        flex-direction: column;
+      .modal-header {
+        padding: 1rem 1.5rem;
+      }
+
+      .modal-body {
+        padding: 1rem;
+      }
+
+      .form-section {
+        padding: 1rem;
+      }
+
+      .modal-footer {
+        padding: 1rem 1.5rem;
       }
     }
-
-    /* Category Input with Inline Icon */
-    .category-input-container {
-      position: relative;
-    }
-
-    .add-category-icon-btn {
-      position: absolute;
-      right: 0.5rem;
-      top: 50%;
-      transform: translateY(-50%);
-      background: none;
-      border: none;
-      color: #059669;
-      font-size: 1.2rem;
-      cursor: pointer;
-      padding: 0.25rem;
-      border-radius: 4px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      width: 2rem;
-      height: 2rem;
-      transition: all 0.2s ease;
-    }
-
-    .add-category-icon-btn:hover {
-      background-color: #f0f9ff;
-      color: #047857;
-      transform: translateY(-50%) scale(1.1);
-    }
-
-    .add-category-icon-btn:active {
-      transform: translateY(-50%) scale(0.95);
-    }
-
-    .category-autocomplete {
-      padding-right: 3rem !important;
-    }
-
-    .category-suggestions {
-      position: absolute;
-      top: 100%;
-      left: 0;
-      right: 0;
-      background: white;
-      border: 1px solid #e2e8f0;
-      border-top: none;
-      border-radius: 0 0 6px 6px;
-      max-height: 200px;
-      overflow-y: auto;
-      z-index: 1000;
-      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-    }
-
-    .category-suggestion-item {
-      padding: 0.75rem;
-      cursor: pointer;
-      border-bottom: 1px solid #f3f4f6;
-      transition: background-color 0.2s;
-    }
-
-    .category-suggestion-item:hover {
-      background-color: #f8fafc;
-    }
-
-    .category-suggestion-item:last-child {
-      border-bottom: none;
-    }
-
-    .category-label {
-      font-weight: 500;
-      color: #2d3748;
-    }
-
-    /* Enhanced Empty State Styles */
-    .empty-icon {
-      font-size: 4rem;
-      margin-bottom: 1rem;
-      opacity: 0.7;
-    }
-
-    .empty-content h3 {
-      font-size: 1.5rem;
-      font-weight: 600;
-      color: #2d3748;
-      margin-bottom: 0.5rem;
-    }
-
-    .empty-content p {
-      color: #718096;
-      margin-bottom: 1.5rem;
-      font-size: 1rem;
-    }
-
-    /* Professional Refresh Button */
-    .refresh-btn {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-      color: white;
-      border: none;
-      padding: 12px 24px;
-      border-radius: 10px;
-      font-size: 14px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: all 0.2s ease;
-      box-shadow: 0 3px 6px rgba(16, 185, 129, 0.2);
-    }
-
-    .refresh-btn:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 6px 20px rgba(16, 185, 129, 0.3);
-      background: linear-gradient(135deg, #059669 0%, #047857 100%);
-    }
-
-    .refresh-btn:active {
-      transform: translateY(0);
-      box-shadow: 0 3px 6px rgba(16, 185, 129, 0.2);
-    }
-
-    .refresh-btn svg {
-      animation: none;
-      transition: transform 0.3s ease;
-    }
-
-    .refresh-btn:hover svg {
-      animation: spin 1s linear infinite;
-    }
-  `],
+    `
+  ],
   template: `
     <div class="products-management">
       <!-- Header -->
@@ -677,12 +767,10 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
         <div class="header-content">
           <div class="header-text">
             <h1 class="page-title">Product Management</h1>
-            <p class="page-subtitle">Manage your company products and inventory</p>
+            <p class="page-subtitle">Manage your product catalog and inventory</p>
           </div>
           <div class="header-actions">
-            <button class="btn btn-primary" (click)="openAddModal()" style="background: #007bff !important; color: white !important; padding: 8px 16px !important;">
-              Add New Product
-            </button>
+            <button class="btn btn-primary" (click)="openAddModal()">📦 Add New Product</button>
           </div>
         </div>
       </div>
@@ -693,34 +781,24 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
           <input 
             type="text" 
             [(ngModel)]="searchTerm"
-            (input)="filterProducts()"
+            (ngModelChange)="filterProducts()"
             placeholder="Search products by name, SKU, or category..."
             class="search-input">
-          <button class="btn btn-secondary" (click)="clearSearch()">
-            Clear
-          </button>
-        </div>
-        <div class="filters-row">
-          <div class="filter-group">
-            <label>Category</label>
-            <select 
-              [(ngModel)]="selectedCategory"
-              (change)="filterProducts()"
-              class="filter-select">
-              <option value="">All Categories</option>
-              <option *ngFor="let category of categories()" [value]="category">{{ category }}</option>
-            </select>
-          </div>
-          <div class="filter-group">
-            <label>Store</label>
-            <select 
-              [(ngModel)]="selectedStore"
-              (change)="filterProducts()"
-              class="filter-select">
-              <option value="">All Stores</option>
-              <option *ngFor="let store of stores()" [value]="store.id">{{ store.storeName }}</option>
-            </select>
-          </div>
+          <select 
+            [(ngModel)]="selectedCategory" 
+            (change)="filterProducts()" 
+            class="filter-select">
+            <option value="">All Categories</option>
+            <option *ngFor="let category of categories()" [value]="category">{{ category }}</option>
+          </select>
+          <select 
+            [(ngModel)]="selectedStore" 
+            (change)="filterProducts()" 
+            class="filter-select">
+            <option value="">All Stores</option>
+            <option *ngFor="let store of stores()" [value]="store.id">{{ store.storeName }}</option>
+          </select>
+          <button class="btn btn-secondary" (click)="clearSearch()">Clear</button>
         </div>
       </div>
 
@@ -728,71 +806,36 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
       <div class="table-container">
         <div class="table-header">
           <h3>Products ({{ filteredProducts().length }})</h3>
+          <button class="btn btn-secondary" (click)="refreshProducts()">Refresh</button>
         </div>
 
-      <div class="table-wrapper" *ngIf="filteredProducts().length > 0">
+        <div class="table-wrapper" *ngIf="filteredProducts().length > 0">
           <table class="products-table">
             <thead>
               <tr>
                 <th>Product Name</th>
-                <th>SKU ID</th>
+                <th>SKU</th>
                 <th>Category</th>
-                <th>Unit Type</th>
                 <th>Stock</th>
                 <th>Price</th>
                 <th>Store</th>
-                <th>Status</th>
                 <th>Actions</th>
               </tr>
             </thead>
             <tbody>
               <tr *ngFor="let product of filteredProducts()">
-                <td class="product-name-cell">
-                  <div style="display: flex; align-items: center; gap: 0.75rem;">
-                    <img *ngIf="product.imageUrl" [src]="product.imageUrl" [alt]="product.productName" style="width: 40px; height: 40px; border-radius: 6px; object-fit: cover;">
-                    <div *ngIf="!product.imageUrl" style="width: 40px; height: 40px; border-radius: 6px; background: #f3f4f6; display: flex; align-items: center; justify-content: center;">
-                      <svg style="width: 20px; height: 20px; color: #9ca3af;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 4V2a1 1 0 011-1h8a1 1 0 011 1v2h4a1 1 0 110 2h-1v12a2 2 0 01-2 2H6a2 2 0 01-2-2V6H3a1 1 0 110-2h4z"></path>
-                      </svg>
-                    </div>
-                    <div>
-                      <div style="font-weight: 500; color: #2d3748;">{{ product.productName }}</div>
-                      <div *ngIf="product.barcodeId" style="font-size: 0.75rem; color: #718096;">{{ product.barcodeId }}</div>
-                    </div>
-                  </div>
-                </td>
+                <td class="product-name-cell">{{ product.productName }}</td>
                 <td class="product-sku-cell">{{ product.skuId }}</td>
                 <td class="product-category-cell">{{ product.category }}</td>
-                <td class="product-unit-cell">{{ product.unitType || 'pieces' }}</td>
-                <td class="product-stock-cell">
-                  <span class="stock-badge" [class]="getStockBadgeClass(product.totalStock)">
-                    {{ product.totalStock }}
-                  </span>
-                </td>
+                <td class="product-stock-cell">{{ product.totalStock }}</td>
                 <td class="product-price-cell">\${{ displayPrice(product).toFixed(2) }}</td>
                 <td class="product-store-cell">{{ getStoreName(product.storeId) }}</td>
-                <td class="status-cell">
-                  <span class="status-badge" [class]="'status-' + (product.status || 'active')">
-                    {{ (product.status || 'active') | titlecase }}
-                  </span>
-                </td>
-                  <td class="actions-cell">
-                  <button 
-                    class="btn btn-sm btn-secondary"
-                    (click)="openEditModal(product)">
-                    Edit
-                  </button>
-                  <button 
-                    *ngIf="product.isMultipleInventory"
-                    class="btn btn-sm btn-secondary"
-                    (click)="openInventoryModal(product)">
-                    Inventory
-                  </button>
-                  <button 
-                    class="btn btn-sm btn-danger"
-                    (click)="deleteProduct(product)">
-                    Delete
-                  </button>
+                <td class="actions-cell">
+                  <div class="action-buttons">
+                    <button class="btn btn-sm btn-secondary" (click)="openEditModal(product)">Edit</button>
+                    <button class="btn btn-sm btn-secondary" (click)="openInventoryModal(product)">Inventory</button>
+                    <button class="btn btn-sm btn-danger" (click)="deleteProduct(product)">Delete</button>
+                  </div>
                 </td>
               </tr>
             </tbody>
@@ -802,15 +845,11 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
         <!-- Empty State -->
         <div class="empty-state" *ngIf="filteredProducts().length === 0 && !loading">
           <div class="empty-content">
-            <div class="empty-icon">📦</div>
+            <h3>No products found</h3>
             <p *ngIf="searchTerm">No products match your search criteria.</p>
-            <p *ngIf="!searchTerm">No product found.</p>
-            <button class="refresh-btn" (click)="refreshProducts()">
-              <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M4 12a8 8 0 0 1 8-8V2.5L16 6l-4 3.5V8a6 6 0 1 0 6 6h1.5A7.5 7.5 0 1 1 4 12Z"/>
-              </svg>
-              Refresh Products
-            </button>
+            <p *ngIf="!searchTerm">No products have been added yet.</p>
+            <button class="btn btn-primary" (click)="openAddModal()" *ngIf="!searchTerm">📦 Add Your First Product</button>
+            <button class="btn btn-secondary" (click)="clearSearch()" *ngIf="searchTerm">Clear Search</button>
           </div>
         </div>
 
@@ -822,616 +861,386 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
           </div>
         </div>
       </div>
-    </div>
 
-    <!-- Add/Edit Product Modal -->
-  <div class="modal-overlay" 
-     *ngIf="showModal" 
-     style="position: fixed !important; z-index: 9999 !important; background: rgba(0, 0, 0, 0.8) !important;">
-      <div class="modal" (click)="$event.stopPropagation()">
-        <div class="modal-header">
-          <h3>{{ modalTitle }}</h3>
-          <button class="close-btn" 
-                  (click)="closeModal()"
-                  [style.display]="isCategoryMode ? 'none' : 'block'">×</button>
-        </div>
-        <div class="modal-body">
-          
-          <!-- Product Form Fields -->
-          <div class="product-fields" [style.display]="isProductMode ? 'block' : 'none'">
+      <!-- Add/Edit Product Modal -->
+      <div class="modal-overlay" 
+           *ngIf="showModal" 
+           (click)="closeModal()"
+           style="position: fixed !important; z-index: 9999 !important; background: rgba(0, 0, 0, 0.8) !important;">
+        <div class="modal store-modal" (click)="$event.stopPropagation()">
+          <div class="modal-header">
+            <h3>{{ isEditMode ? '✏️ Edit Product' : '📦 Add New Product' }}</h3>
+            <button class="close-btn" (click)="closeModal()">×</button>
+          </div>
+          <div class="modal-body">
             <form [formGroup]="productForm" (ngSubmit)="submitProduct()">
-            <div class="form-group">
-              <label for="category">Category *</label>
-              <div class="category-input-container">
-                <input
-                  type="text"
-                  id="category"
-                  formControlName="category"
-                  class="form-input category-autocomplete"
-                  placeholder="Type category name..."
-                  (input)="onCategoryInput($event)"
-                  (focus)="showCategorySuggestions = true"
-                  (blur)="hideCategorySuggestions()"
-                  autocomplete="off">
-                <button
-                  type="button"
-                  class="add-category-icon-btn"
-                  (click)="openAddCategoryModal()"
-                  title="Add new category">
-                  +
-                </button>
-              </div>
-              
-              <!-- Category Suggestions -->
-              <div class="category-suggestions" *ngIf="showCategorySuggestions && filteredCategories.length > 0">
-                <div
-                  *ngFor="let category of filteredCategories"
-                  class="category-suggestion-item"
-                  (mousedown)="selectCategory(category)"
-                  [title]="category">
-                  <span class="category-label">{{ category }}</span>
-                </div>
-              </div>
-              
-              <div class="error-message" *ngIf="productForm.get('category')?.invalid && productForm.get('category')?.touched">
-                Category is required
-              </div>
-            </div>
-
-            <div class="form-group">
-              <label for="skuId">SKU ID *</label>
-              <input
-                type="text"
-                id="skuId"
-                formControlName="skuId"
-                class="form-input"
-                placeholder="Enter SKU ID">
-              <div class="error-message" *ngIf="productForm.get('skuId')?.invalid && productForm.get('skuId')?.touched">
-                SKU ID is required
-              </div>
-            </div>
-
-            <div class="form-group">
-              <label for="barcodeId">Barcode ID</label>
-              <input
-                type="text"
-                id="barcodeId"
-                formControlName="barcodeId"
-                class="form-input"
-                placeholder="Enter barcode">
-            </div>
-
-            <div class="form-group">
-              <label for="productName">Product Name *</label>
-              <input
-                type="text"
-                id="productName"
-                formControlName="productName"
-                class="form-input"
-                placeholder="Enter product name">
-              <div class="error-message" *ngIf="productForm.get('productName')?.invalid && productForm.get('productName')?.touched">
-                Product name is required
-              </div>
-            </div>
-
-            <div class="form-group">
-              <label for="description">Description</label>
-              <textarea
-                id="description"
-                formControlName="description"
-                class="form-input"
-                rows="3"
-                placeholder="Enter product description (optional)"
-                maxlength="500"></textarea>
-            </div>
-
-            <div class="form-group">
-              <label for="unitType">Unit Type *</label>
-              <select
-                id="unitType"
-                formControlName="unitType"
-                class="form-input">
-                <option *ngFor="let unit of unitTypes" [value]="unit.value">
-                  {{unit.label}}
-                </option>
-              </select>
-              <div class="error-message" *ngIf="productForm.get('unitType')?.invalid && productForm.get('unitType')?.touched">
-                Unit type is required
-              </div>
-            </div>
-
-            <div class="form-group">
-              <label for="totalStock">Total Stock</label>
-              <input
-                type="number"
-                id="totalStock"
-                formControlName="totalStock"
-                class="form-input"
-                placeholder="0"
-                [readonly]="productForm.get('totalStock')?.disabled">
-            </div>
-
-            <div class="form-group">
-              <label for="sellingPrice">Selling Price *</label>
-              <input
-                type="number"
-                id="sellingPrice"
-                step="0.01"
-                formControlName="sellingPrice"
-                class="form-input"
-                placeholder="0.00"
-                [readonly]="productForm.get('sellingPrice')?.disabled">
-              <div class="error-message" *ngIf="productForm.get('sellingPrice')?.invalid && productForm.get('sellingPrice')?.touched">
-                Selling price is required
-              </div>
-            </div>
-
-            <div class="form-group">
-              <label for="storeId">Store *</label>
-              <select
-                id="storeId"
-                formControlName="storeId"
-                class="form-select">
-                <option value="">Select Store</option>
-                <option *ngFor="let store of stores()" [value]="store.id">{{ store.storeName }}</option>
-              </select>
-              <div class="error-message" *ngIf="productForm.get('storeId')?.invalid && productForm.get('storeId')?.touched">
-                Store selection is required
-              </div>
-            </div>
-
-            <div class="form-group">
-              <label for="imageUrl">Image URL</label>
-              <div style="display:flex; gap:0.5rem; align-items:center;">
-                <input
-                  type="url"
-                  id="imageUrl"
-                  formControlName="imageUrl"
-                  class="form-input"
-                  placeholder="Enter image URL">
-                <button type="button" class="btn btn-sm btn-secondary" (click)="triggerImageUpload()">
-                  <svg style="width:16px;height:16px;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7h4l3-3h4l3 3h4v11a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"></path></svg>
-                  <span *ngIf="!productForm.get('imageUrl')?.value"> Upload Image</span>
-                  <span *ngIf="productForm.get('imageUrl')?.value"> Replace Image</span>
-                </button>
-                <input id="hiddenImageFile" type="file" accept="image/*" style="display:none" (change)="onImageFileChange($event)" />
-              </div>
-            </div>
-
-            <!-- Tax and Discount Section -->
-            <div class="form-section" style="border: 1px solid #e5e7eb; border-radius: 8px; padding: 1rem; margin-bottom: 1rem; background-color: #f9fafb;">
-              <h4 style="margin: 0 0 1rem 0; color: #374151; font-size: 14px; font-weight: 600;">Tax & Discount Settings</h4>
-              
-              <div class="form-group">
-                <label class="checkbox-label">
-                  <input
-                    type="checkbox"
-                    formControlName="isVatApplicable"
-                    class="checkbox-input">
-                  <span class="checkbox-text">VAT Applicable</span>
-                </label>
-              </div>
-
-              <div class="form-group" *ngIf="productForm.get('isVatApplicable')?.value">
-                <label for="vatRate">VAT Rate (%)</label>
-                <input
-                  type="number"
-                  id="vatRate"
-                  formControlName="vatRate"
-                  class="form-input"
-                  style="width: 100%; max-width: 200px;"
-                  step="0.1"
-                  min="0"
-                  max="100"
-                  placeholder="12.0">
-                <div class="error-message" *ngIf="productForm.get('vatRate')?.invalid && productForm.get('vatRate')?.touched">
-                  VAT rate must be between 0 and 100
-                </div>
-              </div>
-
-              <div class="form-group">
-                <label class="checkbox-label">
-                  <input
-                    type="checkbox"
-                    formControlName="hasDiscount"
-                    class="checkbox-input">
-                  <span class="checkbox-text">Has Discount</span>
-                </label>
-              </div>
-
-              <div *ngIf="productForm.get('hasDiscount')?.value" style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
-                <div class="form-group" style="margin-bottom: 0;">
-                  <label for="discountType">Discount Type</label>
-                  <select
-                    id="discountType"
-                    formControlName="discountType"
-                    class="form-input"
-                    style="width: 100%;">
-                    <option value="percentage">Percentage (%)</option>
-                    <option value="fixed">Fixed Amount</option>
-                  </select>
-                </div>
+              <!-- Basic Information Section -->
+              <div class="form-section">
+                <h4 class="section-title">
+                  <span>📋</span>
+                  <span>Basic Information</span>
+                </h4>
                 
-                <div class="form-group" style="margin-bottom: 0;">
-                  <label for="discountValue">Discount Value</label>
-                  <input
-                    type="number"
-                    id="discountValue"
-                    formControlName="discountValue"
-                    class="form-input"
-                    style="width: 100%;"
-                    step="0.01"
-                    min="0"
-                    [placeholder]="productForm.get('discountType')?.value === 'percentage' ? '10.0' : '50.00'">
-                  <div class="error-message" *ngIf="productForm.get('discountValue')?.invalid && productForm.get('discountValue')?.touched">
-                    Discount value must be greater than 0
+                <div class="form-group">
+                  <label for="category">Category</label>
+                  <div class="category-input-wrapper" style="display: flex; gap: 8px; align-items: center;">
+                    <select 
+                      id="category"
+                      formControlName="category"
+                      class="form-input"
+                      style="flex: 1;">
+                      <option value="">Select Category</option>
+                      <option *ngFor="let category of categories()" [value]="category">{{ category }}</option>
+                    </select>
+                    <button 
+                      type="button" 
+                      class="btn btn-sm btn-outline-primary"
+                      (click)="openAddCategoryModal()"
+                      title="Add new category">
+                      <i class="fas fa-plus"></i>
+                    </button>
+                  </div>
+                  <div class="error-message" *ngIf="productForm.get('category')?.invalid && productForm.get('category')?.touched">
+                    Category is required
                   </div>
                 </div>
-              </div>
-            </div>
 
-            <div class="form-group">
-              <label class="checkbox-label">
-                <input
-                  type="checkbox"
-                  formControlName="isMultipleInventory"
-                  class="checkbox-input">
-                <span class="checkbox-text">Enable Multiple Inventory Batches</span>
-              </label>
-            </div>
+                <div class="form-group">
+                  <label for="skuId">SKU ID</label>
+                  <input 
+                    type="text" 
+                    id="skuId"
+                    formControlName="skuId"
+                    placeholder="Enter SKU identifier"
+                    class="form-input">
+                  <div class="error-message" *ngIf="productForm.get('skuId')?.invalid && productForm.get('skuId')?.touched">
+                    SKU ID is required
+                  </div>
+                </div>
 
-            <!-- Inventory section: only visible when isMultipleInventory is checked -->
-            <div *ngIf="productForm.get('isMultipleInventory')?.value" class="inventory-section">
-              <h4 *ngIf="!isEditMode">Initial Inventory</h4>
-              <ng-container *ngIf="!isEditMode">
                 <div class="form-group">
-                  <label for="initialBatchId">Batch ID</label>
-                  <input
-                    type="text"
-                    id="initialBatchId"
-                    formControlName="initialBatchId"
-                    class="form-input"
-                    placeholder="Enter batch ID">
-                </div>
-                <div class="form-group">
-                  <label for="initialQuantity">Quantity</label>
-                  <input
-                    type="number"
-                    id="initialQuantity"
-                    formControlName="initialQuantity"
-                    class="form-input"
-                    placeholder="0">
-                </div>
-                <div class="form-group">
-                  <label for="initialUnitPrice">Unit Price</label>
-                  <input
-                    type="number"
-                    id="initialUnitPrice"
-                    step="0.01"
-                    formControlName="initialUnitPrice"
-                    class="form-input"
-                    placeholder="0.00">
-                </div>
-                <div class="form-group">
-                  <label for="initialCostPrice">Cost Price</label>
-                  <input
-                    type="number"
-                    id="initialCostPrice"
-                    step="0.01"
-                    formControlName="initialCostPrice"
-                    class="form-input"
-                    placeholder="0.00">
-                </div>
-                <div class="form-group">
-                  <label for="initialExpiryDate">Expiry Date (Optional)</label>
-                  <input
-                    type="date"
-                    id="initialExpiryDate"
-                    formControlName="initialExpiryDate"
+                  <label for="productCode">Product Code</label>
+                  <input 
+                    type="text" 
+                    id="productCode"
+                    formControlName="productCode"
+                    placeholder="Enter product code (optional)"
                     class="form-input">
                 </div>
+
                 <div class="form-group">
-                  <label for="initialSupplier">Supplier (Optional)</label>
-                  <input
-                    type="text"
-                    id="initialSupplier"
-                    formControlName="initialSupplier"
-                    class="form-input"
-                    placeholder="Enter supplier name">
-                </div>
-                <div class="form-group">
-                  <label for="initialReceivedAt">Received Date</label>
-                  <input
-                    type="date"
-                    id="initialReceivedAt"
-                    formControlName="initialReceivedAt"
+                  <label for="barcodeId">Barcode ID</label>
+                  <input 
+                    type="text" 
+                    id="barcodeId"
+                    formControlName="barcodeId"
+                    placeholder="Enter barcode identifier (optional)"
                     class="form-input">
                 </div>
-              </ng-container>
 
-              <ng-container *ngIf="isEditMode">
-                <h4 style="margin:0 0 1rem 0;">Current Inventory</h4>
-                <div style="display:flex; gap:0.5rem; align-items:center; margin-bottom:0.75rem;">
-                  <div style="flex:1">
-                    <small style="color:#6b7280;">Add a new batch below — new batches are added on top and only one batch can be active.</small>
+                <div class="form-group">
+                  <label for="productName">Product Name</label>
+                  <input 
+                    type="text" 
+                    id="productName"
+                    formControlName="productName"
+                    placeholder="Enter product name"
+                    class="form-input">
+                  <div class="error-message" *ngIf="productForm.get('productName')?.invalid && productForm.get('productName')?.touched">
+                    Product name is required
                   </div>
-                  <button class="btn btn-sm btn-primary" (click)="showAddBatchFromInventory()">＋ Add Batch</button>
                 </div>
 
-                <!-- Inline add batch form -->
-                <form [formGroup]="inventoryForm" (ngSubmit)="addInventoryBatch()" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap:0.5rem; margin-bottom:1rem; align-items:end;">
-                  <div>
-                    <input id="batchId" type="text" formControlName="batchId" class="form-input" placeholder="Batch ID" style="width:100%;" />
+                <!-- Product Image Upload -->
+                <div class="form-group">
+                  <label for="productImage">Product Image</label>
+                  <div class="image-upload-section" style="display: flex; align-items: center; gap: 12px;">
+                    <div class="image-preview" style="width: 80px; height: 80px; border: 2px dashed #ddd; border-radius: 8px; display: flex; align-items: center; justify-content: center; overflow: hidden;">
+                      <img 
+                        *ngIf="productForm.get('imageUrl')?.value" 
+                        [src]="productForm.get('imageUrl')?.value" 
+                        alt="Product preview"
+                        style="width: 100%; height: 100%; object-fit: cover;">
+                      <i *ngIf="!productForm.get('imageUrl')?.value" class="fas fa-image" style="color: #ccc; font-size: 24px;"></i>
+                    </div>
+                    <button 
+                      type="button" 
+                      class="btn btn-outline-primary"
+                      (click)="triggerImageUpload()"
+                      [disabled]="loading">
+                      <i *ngIf="!loading" class="fas fa-camera"></i>
+                      <i *ngIf="loading" class="fas fa-spinner fa-spin"></i>
+                      {{ loading ? 'Uploading...' : 'Upload Image' }}
+                    </button>
+                    <button 
+                      *ngIf="productForm.get('imageUrl')?.value"
+                      type="button" 
+                      class="btn btn-outline-danger"
+                      (click)="productForm.get('imageUrl')?.setValue('')">
+                      <i class="fas fa-trash"></i> Remove
+                    </button>
                   </div>
-                  <div>
-                    <input type="number" formControlName="quantity" class="form-input" placeholder="Quantity" style="width:100%;" />
-                  </div>
-                  <div>
-                    <input type="number" formControlName="unitPrice" step="0.01" class="form-input" placeholder="Unit Price" style="width:100%;" />
-                  </div>
-                  <div>
-                    <input type="number" formControlName="costPrice" step="0.01" class="form-input" placeholder="Cost Price" style="width:100%;" />
-                  </div>
-                  <div>
-                    <input type="date" formControlName="receivedAt" class="form-input" style="width:100%;" />
-                  </div>
-                  <div>
-                    <input type="date" formControlName="expiryDate" class="form-input" placeholder="Expiry Date" style="width:100%;" />
-                  </div>
-                  <div>
-                    <input type="text" formControlName="supplier" class="form-input" placeholder="Supplier" style="width:100%;" />
-                  </div>
-                  <div>
-                    <button type="submit" class="btn btn-primary" [disabled]="inventoryForm.invalid" style="width:100%;">Add</button>
-                  </div>
-                </form>
-
-                <!-- Current batches table (same as inventory modal) -->
-                <div style="border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden;" *ngIf="selectedProduct?.inventory?.length">
-                  <table style="width:100%; border-collapse:collapse;">
-                    <thead style="background:#f8fafc;"><tr>
-                      <th style="padding:0.5rem">Batch ID</th>
-                      <th style="padding:0.5rem">Quantity</th>
-                      <th style="padding:0.5rem">Unit Price</th>
-                      <th style="padding:0.5rem">Cost Price</th>
-                      <th style="padding:0.5rem">Supplier</th>
-                      <th style="padding:0.5rem">Expiry</th>
-                      <th style="padding:0.5rem">Received</th>
-                      <th style="padding:0.5rem">Active</th>
-                      <th style="padding:0.5rem">Actions</th>
-                    </tr></thead>
-                    <tbody>
-                      <tr *ngFor="let b of selectedProduct?.inventory">
-                        <td style="padding:0.5rem">{{ b.batchId }}</td>
-                        <td style="padding:0.5rem">{{ b.quantity }}</td>
-                        <td style="padding:0.5rem">\${{ b.unitPrice.toFixed(2) }}</td>
-                        <td style="padding:0.5rem">\${{ b.costPrice.toFixed(2) }}</td>
-                        <td style="padding:0.5rem">{{ b.supplier || '-' }}</td>
-                        <td style="padding:0.5rem">{{ b.expiryDate ? (b.expiryDate | date:'shortDate') : '-' }}</td>
-                        <td style="padding:0.5rem">{{ b.receivedAt | date }}</td>
-                        <td style="padding:0.5rem">
-                          <input type="checkbox" [checked]="b.status === 'active'" [disabled]="(b.quantity || 0) <= 0" (change)="setActiveBatch(b.batchId, $any($event.target).checked)" />
-                        </td>
-                        <td style="padding:0.5rem"><button class="btn btn-sm btn-danger" (click)="removeInventoryBatch(b.batchId)">Remove</button></td>
-                      </tr>
-                    </tbody>
-                  </table>
+                  <input 
+                    type="file" 
+                    id="hiddenImageFile" 
+                    accept="image/*" 
+                    (change)="onImageFileChange($event)"
+                    style="display: none;">
                 </div>
 
-                <div *ngIf="!selectedProduct?.inventory?.length" style="padding:1rem; color:#6b7280;">No inventory batches found for this product.</div>
-              </ng-container>
-            </div>
-            </form>
-          </div>
-          
-          <!-- Category Form Fields -->
-          <div class="category-fields" [style.display]="isCategoryMode ? 'block' : 'none'">
-            <form [formGroup]="categoryForm" (ngSubmit)="saveCategory()">
-              <div class="form-group">
-                <label for="categoryLabel">Category Name *</label>
-                <input
-                  type="text"
-                  id="categoryLabel"
-                  formControlName="categoryLabel"
-                  class="form-input"
-                  placeholder="Enter category name">
-                <div class="error-message" *ngIf="categoryForm.get('categoryLabel')?.invalid && categoryForm.get('categoryLabel')?.touched">
-                  Category name is required
+                <div class="form-group">
+                  <label for="description">Description</label>
+                  <textarea 
+                    id="description"
+                    formControlName="description"
+                    placeholder="Enter product description (optional)"
+                    class="form-input"
+                    rows="3"></textarea>
                 </div>
               </div>
 
-              <div class="form-group">
-                <label for="categoryDescription">Description</label>
-                <textarea
-                  id="categoryDescription"
-                  formControlName="categoryDescription"
-                  class="form-input"
-                  rows="3"
-                  placeholder="Enter category description (optional)"
-                  maxlength="200"></textarea>
-              </div>
+              <!-- Pricing & Inventory Section -->
+              <div class="form-section">
+                <h4 class="section-title">
+                  <span>💲</span>
+                  <span>Pricing & Inventory</span>
+                </h4>
+                
+                <div class="form-group">
+                  <label for="totalStock">Total Stock</label>
+                  <input 
+                    type="text" 
+                    id="totalStock"
+                    [value]="selectedProduct?.totalStock || 0"
+                    placeholder="0"
+                    class="form-input"
+                    readonly
+                    style="background-color: #f8f9fa; color: #6c757d;">
+                  <small class="text-muted">Calculated from all inventory batches</small>
+                </div>
 
-              <div class="form-group">
-                <label for="categoryGroup">Category Group *</label>
-                <select
-                  id="categoryGroup"
-                  formControlName="categoryGroup"
-                  class="form-input">
-                  <option value="">Select Category Group</option>
-                  <option value="food">Food & Beverages</option>
-                  <option value="retail">Retail & Shopping</option>
-                  <option value="services">Services</option>
-                  <option value="electronics">Electronics</option>
-                  <option value="health">Health & Beauty</option>
-                  <option value="automotive">Automotive</option>
-                  <option value="other">Other</option>
-                </select>
-                <div class="error-message" *ngIf="categoryForm.get('categoryGroup')?.invalid && categoryForm.get('categoryGroup')?.touched">
-                  Category group is required
+                <div class="form-group">
+                  <label for="sellingPrice">Selling Price</label>
+                  <input 
+                    type="text" 
+                    id="sellingPrice"
+                    [value]="selectedProduct?.sellingPrice || 0"
+                    placeholder="0.00"
+                    class="form-input"
+                    readonly
+                    style="background-color: #f8f9fa; color: #6c757d;">
+                  <small class="text-muted">Price from most recent inventory batch</small>
                 </div>
               </div>
             </form>
           </div>
-        </div>
-        <div class="modal-footer">
-          <!-- Product Mode Buttons -->
-          <ng-container *ngIf="isProductMode">
+          <div class="modal-footer">
             <button class="btn btn-secondary" (click)="closeModal()">Cancel</button>
             <button 
               class="btn btn-primary" 
               (click)="submitProduct()"
-              [disabled]="productForm.invalid || loading">
+              [disabled]="!productForm.valid || loading">
               {{ loading ? 'Saving...' : (isEditMode ? 'Update Product' : 'Create Product') }}
             </button>
-          </ng-container>
-          
-          <!-- Category Mode Buttons -->
-          <ng-container *ngIf="isCategoryMode">
-            <button class="btn btn-secondary" (click)="cancelCategoryCreation()">Cancel</button>
-            <button 
-              class="btn btn-primary" 
-              (click)="saveCategory()"
-              [disabled]="categoryForm.invalid || loading">
-              {{ loading ? 'Saving...' : 'Save Category' }}
-            </button>
-          </ng-container>
+          </div>
         </div>
       </div>
-    </div>
 
-    <!-- Inventory Modal -->
-  <div class="modal-overlay" 
-     *ngIf="showInventoryModal" 
-     style="position: fixed !important; z-index: 9999 !important; background: rgba(0, 0, 0, 0.8) !important;">
-      <div class="modal" (click)="$event.stopPropagation()" style="max-width: 800px;">
-        <div class="modal-header">
-          <div>
-            <h3>Inventory Management</h3>
-            <p style="margin: 0.25rem 0 0 0; font-size: 0.875rem; color: #6b7280;">{{ selectedProduct?.productName }} ({{ selectedProduct?.skuId }})</p>
+      <!-- Inventory Modal -->
+      <div class="modal-overlay" *ngIf="showInventoryModal">
+        <div class="modal store-modal" (click)="$event.stopPropagation()" style="max-width:800px;">
+          <div class="modal-header">
+            <h3>📦 Inventory Management - {{ selectedProduct?.productName }}</h3>
+            <button class="close-btn" (click)="closeInventoryModal()">×</button>
           </div>
-          <button class="close-btn" (click)="closeInventoryModal()">×</button>
-        </div>
-        <div class="modal-body">
-          <!-- Add Inventory Batch -->
-          <div style="background: #f8fafc; padding: 1.5rem; border-radius: 8px; margin-bottom: 1.5rem;">
-            <h4 style="margin: 0 0 1rem 0; font-size: 1.125rem; font-weight: 600;">Add New Batch</h4>
-            <form [formGroup]="inventoryForm" (ngSubmit)="addInventoryBatch()">
-              <div class="form-group">
-                <label for="batchId">Batch ID *</label>
-                <input
-                  type="text"
-                  id="batchId"
-                  formControlName="batchId"
-                  class="form-input"
-                  placeholder="Enter batch ID">
-                <div class="error-message" *ngIf="inventoryForm.get('batchId')?.invalid && inventoryForm.get('batchId')?.touched">
-                  Batch ID is required
-                </div>
-              </div>
-              <div class="form-group">
-                <label for="quantity">Quantity *</label>
-                <input
-                  type="number"
-                  id="quantity"
-                  formControlName="quantity"
-                  class="form-input"
-                  placeholder="0">
-                <div class="error-message" *ngIf="inventoryForm.get('quantity')?.invalid && inventoryForm.get('quantity')?.touched">
-                  Quantity is required
-                </div>
-              </div>
-              <div class="form-group">
-                <label for="unitPrice">Unit Price *</label>
-                <input
-                  type="number"
-                  id="unitPrice"
-                  step="0.01"
-                  formControlName="unitPrice"
-                  class="form-input"
-                  placeholder="0.00">
-                <div class="error-message" *ngIf="inventoryForm.get('unitPrice')?.invalid && inventoryForm.get('unitPrice')?.touched">
-                  Unit price is required
-                </div>
-              </div>
-              <div class="form-group">
-                <label for="receivedAt">Received Date *</label>
-                <input
-                  type="date"
-                  id="receivedAt"
-                  formControlName="receivedAt"
-                  class="form-input">
-                <div class="error-message" *ngIf="inventoryForm.get('receivedAt')?.invalid && inventoryForm.get('receivedAt')?.touched">
-                  Received date is required
-                </div>
-              </div>
-              <button
-                type="submit"
-                class="btn btn-primary"
-                [disabled]="inventoryForm.invalid">
+          <div class="modal-body">
+            <!-- Tab Navigation -->
+            <div class="tab-navigation">
+              <button 
+                class="tab-button"
+                [class.active]="inventoryTab === 'list'"
+                (click)="inventoryTab='list'">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" class="tab-icon">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+                </svg>
+                Inventory List
+              </button>
+              <button 
+                class="tab-button"
+                [class.active]="inventoryTab === 'edit'"
+                (click)="switchToEditTab()">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" class="tab-icon">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                </svg>
                 Add Batch
               </button>
-            </form>
-          </div>
-
-          <!-- Inventory Batches Table -->
-          <div style="margin-top: 1.5rem;" *ngIf="selectedProduct?.isMultipleInventory">
-            <h4 style="margin: 0 0 1rem 0; font-size: 1.125rem; font-weight: 600;">Current Inventory Batches</h4>
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem;">
-              <h4 style="margin:0; font-size:1rem; font-weight:600;">Current Inventory Batches</h4>
-              <button class="btn btn-sm btn-primary" (click)="showAddBatchFromInventory()">＋ Add Batch</button>
-            </div>
-            <div style="border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden;" *ngIf="selectedProduct?.inventory?.length">
-              <table style="width: 100%; border-collapse: collapse;">
-                <thead style="background: #f8fafc;">
-                  <tr>
-                    <th style="padding: 0.75rem 1rem; text-align: left; font-size: 0.75rem; font-weight: 500; color: #6b7280; text-transform: uppercase; border-bottom: 1px solid #e2e8f0;">Batch ID</th>
-                    <th style="padding: 0.75rem 1rem; text-align: left; font-size: 0.75rem; font-weight: 500; color: #6b7280; text-transform: uppercase; border-bottom: 1px solid #e2e8f0;">Quantity</th>
-                    <th style="padding: 0.75rem 1rem; text-align: left; font-size: 0.75rem; font-weight: 500; color: #6b7280; text-transform: uppercase; border-bottom: 1px solid #e2e8f0;">Unit Price</th>
-                    <th style="padding: 0.75rem 1rem; text-align: left; font-size: 0.75rem; font-weight: 500; color: #6b7280; text-transform: uppercase; border-bottom: 1px solid #e2e8f0;">Received Date</th>
-                    <th style="padding: 0.75rem 1rem; text-align: left; font-size: 0.75rem; font-weight: 500; color: #6b7280; text-transform: uppercase; border-bottom: 1px solid #e2e8f0;">Status</th>
-                    <th style="padding: 0.75rem 1rem; text-align: left; font-size: 0.75rem; font-weight: 500; color: #6b7280; text-transform: uppercase; border-bottom: 1px solid #e2e8f0;">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr *ngFor="let batch of selectedProduct?.inventory" style="border-bottom: 1px solid #f3f4f6;">
-                    <td style="padding: 0.875rem 1rem; font-size: 0.875rem; color: #1f2937;">{{ batch.batchId }}</td>
-                    <td style="padding: 0.875rem 1rem; font-size: 0.875rem; color: #1f2937;">{{ batch.quantity }}</td>
-                    <td style="padding: 0.875rem 1rem; font-size: 0.875rem; color: #1f2937;">\${{ batch.unitPrice.toFixed(2) }}</td>
-                    <td style="padding: 0.875rem 1rem; font-size: 0.875rem; color: #1f2937;">{{ batch.receivedAt | date }}</td>
-                    <td style="padding: 0.875rem 1rem; font-size: 0.875rem; color: #1f2937;">
-                      <label style="display:flex; align-items:center; gap:0.5rem;">
-                        <input type="checkbox" [checked]="batch.status === 'active'" [disabled]="(batch.quantity || 0) <= 0" (change)="setActiveBatch(batch.batchId, $any($event.target).checked)" />
-                        <span>{{ batch.status | titlecase }}</span>
-                      </label>
-                    </td>
-                    <td style="padding: 0.875rem 1rem; font-size: 0.875rem; color: #1f2937;">
-                      <button
-                        class="btn btn-sm btn-danger"
-                        (click)="removeInventoryBatch(batch.batchId)">
-                        Remove
-                      </button>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
             </div>
 
-            <div *ngIf="!selectedProduct?.inventory?.length" style="padding: 2rem; text-align: center; color: #6b7280; background: white; border: 1px solid #e2e8f0; border-radius: 8px;">
-              <p style="margin: 0;">No inventory batches found</p>
+            <!-- Search Bar (only show on list tab) -->
+            <div class="search-section" *ngIf="inventoryTab === 'list'">
+              <input 
+                type="text" 
+                class="search-input" 
+                placeholder="Search by batch ID or product details..." 
+                [(ngModel)]="inventorySearch" 
+                (ngModelChange)="filterInventory()" />
+            </div>
+
+            <!-- List Tab Content -->
+            <div class="tab-content" *ngIf="inventoryTab==='list'">
+              <div class="inventory-table-container" *ngIf="filteredInventory && filteredInventory.length>0">
+                <table class="inventory-table">
+                  <thead>
+                    <tr>
+                      <th>Batch ID</th>
+                      <th>Quantity</th>
+                      <th>Unit Price</th>
+                      <th>Received Date</th>
+                      <th>Status</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr *ngFor="let batch of filteredInventory; let i = index" (click)="openEditBatch(batch)" class="inventory-row">
+                      <td class="batch-id-cell">{{ batch.batchId }}</td>
+                      <td class="quantity-cell">{{ batch.quantity }}</td>
+                      <td class="price-cell">\${{ batch.unitPrice.toFixed(2) }}</td>
+                      <td class="date-cell">{{ batch.receivedAt | date:'short' }}</td>
+                      <td class="status-cell">
+                        <span class="status-badge" [class]="'status-' + batch.status">
+                          {{ batch.status | titlecase }}
+                        </span>
+                      </td>
+                      <td class="actions-cell">
+                        <!-- Edit button only for the most recent (first) item -->
+                        <button 
+                          *ngIf="i === 0"
+                          class="btn btn-sm btn-primary me-2" 
+                          (click)="$event.stopPropagation(); openEditBatch(batch)"
+                          title="Edit quantity and price">
+                          Edit
+                        </button>
+                        <!-- Remove button only for the most recent (first) item -->
+                        <button 
+                          *ngIf="i === 0"
+                          class="btn btn-sm btn-danger" 
+                          (click)="$event.stopPropagation(); removeInventoryBatch(batch.batchId)"
+                          title="Remove batch">
+                          Remove
+                        </button>
+                        <!-- Show disabled state for older items -->
+                        <span *ngIf="i > 0" class="text-muted small">
+                          (Previous batch)
+                        </span>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              
+              <div class="empty-inventory" *ngIf="!filteredInventory || filteredInventory.length===0">
+                <div class="empty-content">
+                  <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" class="empty-icon">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
+                  </svg>
+                  <h3>No inventory batches found</h3>
+                  <p>This product doesn't have any inventory batches yet.</p>
+                  <button class="btn btn-primary" (click)="switchToEditTab()">
+                    Add First Batch
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Add/Edit Tab Content -->
+            <div class="tab-content" *ngIf="inventoryTab==='edit'">
+              <div class="form-card">
+                <div class="form-header">
+                  <h4 class="form-title">Add New Batch</h4>
+                  <p class="form-subtitle">Add new inventory to your product stock</p>
+                </div>
+                
+                <form [formGroup]="inventoryForm" (ngSubmit)="saveBatch()" class="inventory-form">
+                  <div class="form-grid">
+                    <div class="form-group">
+                      <label for="quantity" class="form-label">Quantity *</label>
+                      <input 
+                        type="number" 
+                        id="quantity"
+                        class="form-input" 
+                        formControlName="quantity" 
+                        placeholder="0"
+                        min="1"
+                        [class.error]="inventoryForm.get('quantity')?.invalid && inventoryForm.get('quantity')?.touched" />
+                      <div class="error-message" *ngIf="inventoryForm.get('quantity')?.invalid && inventoryForm.get('quantity')?.touched">
+                        Quantity must be at least 1
+                      </div>
+                    </div>
+                    
+                    <div class="form-group">
+                      <label for="costPrice" class="form-label">Cost Price</label>
+                      <input 
+                        type="number" 
+                        id="costPrice"
+                        step="0.01" 
+                        class="form-input" 
+                        formControlName="costPrice" 
+                        placeholder="0.00"
+                        min="0" />
+                    </div>
+                    
+                    <div class="form-group">
+                      <label for="unitPrice" class="form-label">Unit Price *</label>
+                      <input 
+                        type="number" 
+                        id="unitPrice"
+                        step="0.01" 
+                        class="form-input" 
+                        formControlName="unitPrice" 
+                        placeholder="0.00"
+                        min="0"
+                        [class.error]="inventoryForm.get('unitPrice')?.invalid && inventoryForm.get('unitPrice')?.touched" />
+                      <div class="error-message" *ngIf="inventoryForm.get('unitPrice')?.invalid && inventoryForm.get('unitPrice')?.touched">
+                        Unit price is required
+                      </div>
+                    </div>
+                    
+                    <div class="form-group">
+                      <label for="receivedAt" class="form-label">Received Date *</label>
+                      <input 
+                        type="date" 
+                        id="receivedAt"
+                        class="form-input" 
+                        formControlName="receivedAt"
+                        [class.error]="inventoryForm.get('receivedAt')?.invalid && inventoryForm.get('receivedAt')?.touched" />
+                      <div class="error-message" *ngIf="inventoryForm.get('receivedAt')?.invalid && inventoryForm.get('receivedAt')?.touched">
+                        Received date is required
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" (click)="cancelEdit()">
+                      Cancel
+                    </button>
+                    <button 
+                      type="submit" 
+                      class="btn btn-primary" 
+                      [disabled]="inventoryForm.invalid || loading">
+                      <span *ngIf="loading" class="loading-spinner"></span>
+                      {{ loading ? 'Adding...' : 'Add Batch' }}
+                    </button>
+                  </div>
+                </form>
+              </div>
             </div>
           </div>
         </div>
       </div>
-    </div>
 
-    <!-- Confirmation Dialog -->
-    @if (showDeleteConfirmation() && deleteConfirmationData()) {
-      <app-confirmation-dialog
-        [dialogData]="deleteConfirmationData()!"
-        (confirmed)="onDeleteConfirmed()"
-        (cancelled)="closeDeleteConfirmation()">
-      </app-confirmation-dialog>
-    }
+      <!-- Confirmation dialog placeholder -->
+      <app-confirmation-dialog *ngIf="showDeleteConfirmation() && deleteConfirmationData()" [dialogData]="deleteConfirmationData()!" (confirmed)="onDeleteConfirmed()" (cancelled)="closeDeleteConfirmation()"></app-confirmation-dialog>
+    </div>
   `
 })
 export class ProductManagementComponent implements OnInit {
@@ -1452,12 +1261,20 @@ export class ProductManagementComponent implements OnInit {
   isEditMode = false;
   loading = false;
   selectedProduct: Product | null = null;
+  // Inventory UI state
+  inventoryTab: 'list' | 'edit' = 'list';
+  inventorySearch = '';
+  filteredInventory: ProductInventory[] | null = null;
+  isEditingBatch = false;
+  editingBatchOriginalId: string | null = null;
+  generatedBatchId = '';
 
   // Confirmation dialog state
   showDeleteConfirmation = signal<boolean>(false);
   deleteConfirmationData = signal<ConfirmationDialogData | null>(null);
   productToDelete: Product | null = null;
   pendingBatchId: string | null = null;
+  pendingNewBatchConfirmation: ((value: boolean) => void) | null = null;
 
   // Modal mode management
   modalMode: 'product' | 'category' = 'product';
@@ -1487,18 +1304,13 @@ export class ProductManagementComponent implements OnInit {
     this.productForm = this.createProductForm();
     this.inventoryForm = this.createInventoryForm();
     this.categoryForm = this.createCategoryForm();
-    // subscribe once to isMultipleInventory changes to toggle related controls
-    const isMultiCtrl = this.productForm.get('isMultipleInventory');
-    if (isMultiCtrl) {
-      isMultiCtrl.valueChanges.subscribe(v => this.toggleControlsForInventory(v));
-    }
     
     // Subscribe to initial quantity changes to update total stock for new products
     const initialQuantityCtrl = this.productForm.get('initialQuantity');
     if (initialQuantityCtrl) {
       initialQuantityCtrl.valueChanges.subscribe(quantity => {
-        if (this.productForm.get('isMultipleInventory')?.value && !this.selectedProduct) {
-          // For new products with multiple inventory, update total stock
+        if (!this.selectedProduct) {
+          // For new products, update total stock
           this.productForm.get('totalStock')?.setValue(quantity || 0, { emitEvent: false });
         }
       });
@@ -1530,12 +1342,10 @@ export class ProductManagementComponent implements OnInit {
       productName: ['', Validators.required],
       description: [''],
       skuId: ['', Validators.required],
+      productCode: [''],
+      barcodeId: [''],
       unitType: ['pieces', Validators.required],
       category: ['', Validators.required],
-      totalStock: [0, [Validators.min(0)]],
-      sellingPrice: [0, [Validators.required, Validators.min(0)]],
-      storeId: ['', Validators.required],
-      barcodeId: [''],
       imageUrl: [''],
       // Tax and Discount Fields
       isVatApplicable: [true],
@@ -1543,7 +1353,6 @@ export class ProductManagementComponent implements OnInit {
       hasDiscount: [true],
       discountType: ['percentage'],
       discountValue: [10.0, [Validators.min(0)]],
-      isMultipleInventory: [false],
       // Initial inventory fields (for new products)
       initialBatchId: [''],
       initialQuantity: [0, Validators.min(0)],
@@ -1557,7 +1366,6 @@ export class ProductManagementComponent implements OnInit {
 
   private createInventoryForm(): FormGroup {
     return this.fb.group({
-      batchId: ['', Validators.required],
       quantity: [0, [Validators.required, Validators.min(1)]],
       unitPrice: [0, [Validators.required, Validators.min(0)]],
       costPrice: [0, [Validators.required, Validators.min(0)]],
@@ -1565,6 +1373,22 @@ export class ProductManagementComponent implements OnInit {
       expiryDate: [''],
       supplier: ['']
     });
+  }
+
+  /**
+   * Generates a batch ID using the format: 25MMDD######
+   * Where 25 = year 2025, MM = month, DD = day, ###### = 6 random digits
+   */
+  private generateBatchId(): string {
+    const now = new Date();
+    const year = '25'; // 2025 as 25
+    const month = String(now.getMonth() + 1).padStart(2, '0'); // 01-12
+    const day = String(now.getDate()).padStart(2, '0'); // 01-31
+    
+    // Generate 6 random digits
+    const randomSuffix = Math.floor(Math.random() * 1000000).toString().padStart(6, '0');
+    
+    return `${year}${month}${day}${randomSuffix}`;
   }
 
   private createCategoryForm(): FormGroup {
@@ -1625,20 +1449,18 @@ export class ProductManagementComponent implements OnInit {
     this.selectedProduct = product;
     this.productForm.patchValue(product);
     
-    // Set total stock based on inventory mode
-    if (product.isMultipleInventory) {
-      // For multiple inventory, calculate from active batches
-      const total = (product.inventory || []).reduce((s, b) => s + ((b.status === 'active') ? (b.quantity || 0) : 0), 0);
-      this.productForm.get('totalStock')?.setValue(total);
-      // set sellingPrice to active batch unitPrice if multiple inventory
-      const active = (product.inventory || []).find(b => b.status === 'active');
-      if (active) this.productForm.get('sellingPrice')?.setValue(active.unitPrice || 0);
-    } else {
-      // For single inventory, use the stored totalStock value
-      this.productForm.get('totalStock')?.setValue(product.totalStock || 0);
+    // Calculate total stock from active batches
+    const total = (product.inventory || []).reduce((s, b) => s + ((b.status === 'active') ? (b.quantity || 0) : 0), 0);
+    this.productForm.get('totalStock')?.setValue(total);
+    
+    // Set selling price to active batch unit price if available
+    const active = (product.inventory || []).find(b => b.status === 'active');
+    if (active) {
+      this.productForm.get('sellingPrice')?.setValue(active.unitPrice || 0);
     }
     
-    this.toggleControlsForInventory(product.isMultipleInventory);
+    // Always enable inventory controls since we removed isMultipleInventory
+    this.toggleControlsForInventory(true);
     this.showModal = true;
   }
 
@@ -1666,12 +1488,27 @@ export class ProductManagementComponent implements OnInit {
     }
   }
 
+  switchToEditTab(): void {
+    this.inventoryTab = 'edit';
+    this.generatedBatchId = this.generateBatchId(); // Generate new ID when switching to edit tab
+    this.isEditingBatch = false; // Ensure it's in add mode, not edit mode
+    this.editingBatchOriginalId = null;
+  }
+
   openInventoryModal(product: Product): void {
     this.selectedProduct = product;
     this.inventoryForm.reset();
     this.inventoryForm.patchValue({
       receivedAt: new Date().toISOString().split('T')[0]
     });
+    this.generatedBatchId = this.generateBatchId();
+    this.inventoryTab = 'list';
+    this.inventorySearch = '';
+    // Sort inventory by receivedAt descending (most recent first)
+    this.filteredInventory = (product.inventory || []).slice().sort((a, b) => 
+      new Date(b.receivedAt).getTime() - new Date(a.receivedAt).getTime()
+    );
+    this.isEditingBatch = false;
     this.showInventoryModal = true;
   }
 
@@ -1692,20 +1529,34 @@ export class ProductManagementComponent implements OnInit {
 
     this.loading = true;
     try {
-      const formValue = this.productForm.value;
-      console.log('🔍 Form value:', formValue);
+      const rawFormValue = this.productForm.value;
+      
+      // Clean undefined values before processing
+      const formValue = this.cleanFormData(rawFormValue);
+      console.log('🔍 Raw form value:', rawFormValue);
+      console.log('🔍 Cleaned form value:', formValue);
       console.log('🔍 Category from form:', formValue.category);
       
-      // Auto-save category if it doesn't exist
+      // Get storeId and companyId from current permission since Store section was removed
       const currentUser = this.authService.currentUser();
       const currentPermission = this.authService.getCurrentPermission();
       const companyId = currentPermission?.companyId || 
                        currentUser?.currentCompanyId || 
                        currentUser?.permissions?.[0]?.companyId || '';
-      const storeId = formValue.storeId;
+      const storeId = currentPermission?.storeId || 
+                     currentUser?.permissions?.[0]?.storeId || '';
       
       console.log('🔍 Company ID:', companyId);
       console.log('🔍 Store ID:', storeId);
+      
+      // Validate required fields
+      if (!companyId) {
+        throw new Error('Company ID is required but not found in user permissions');
+      }
+      if (!storeId) {
+        throw new Error('Store ID is required but not found in user permissions');
+      }
+      
       console.log('🔍 Will save category?', !!(formValue.category && storeId));
       
       if (formValue.category && storeId) {
@@ -1719,9 +1570,10 @@ export class ProductManagementComponent implements OnInit {
       }
       
       // normalize sellingPrice to avoid undefined being written to Firestore
-      const computedSellingPrice = formValue.isMultipleInventory
-        ? (formValue.initialUnitPrice || (this.selectedProduct ? (this.selectedProduct.inventory || []).find((b: any) => b.status === 'active')?.unitPrice : 0) || 0)
-        : (formValue.sellingPrice ?? 0);
+      // Calculate selling price from active batch or form value
+      const computedSellingPrice = formValue.initialUnitPrice || 
+        (this.selectedProduct ? (this.selectedProduct.inventory || []).find((b: any) => b.status === 'active')?.unitPrice : 0) || 
+        formValue.sellingPrice || 0;
 
       if (this.isEditMode && this.selectedProduct) {
         // Update existing product
@@ -1729,13 +1581,13 @@ export class ProductManagementComponent implements OnInit {
           productName: formValue.productName,
           description: formValue.description,
           skuId: formValue.skuId,
+          productCode: formValue.productCode,
           unitType: formValue.unitType,
           category: formValue.category,
           sellingPrice: computedSellingPrice,
-          storeId: formValue.storeId,
+          storeId: storeId,  // Use storeId from permission
           barcodeId: formValue.barcodeId,
           imageUrl: formValue.imageUrl,
-          isMultipleInventory: formValue.isMultipleInventory,
           // Tax and Discount Fields
           isVatApplicable: formValue.isVatApplicable || false,
           vatRate: formValue.vatRate || 0,
@@ -1744,8 +1596,8 @@ export class ProductManagementComponent implements OnInit {
           discountValue: formValue.discountValue || 0
         };
 
-        // compute totalStock for multiple inventory from active batches
-        if (formValue.isMultipleInventory && this.selectedProduct?.inventory) {
+        // Calculate totalStock from active batches
+        if (this.selectedProduct?.inventory) {
           const total = this.selectedProduct.inventory.reduce((s, b) => s + ((b.status === 'active') ? (b.quantity || 0) : 0), 0);
           updates.totalStock = total;
         } else {
@@ -1757,7 +1609,8 @@ export class ProductManagementComponent implements OnInit {
         // Create new product
         let inventory: ProductInventory[] = [];
         let totalStock = 0;
-        if (formValue.isMultipleInventory) {
+        // Always create initial inventory if values provided
+        if (formValue.initialQuantity && formValue.initialQuantity > 0) {
           const initialInventory: ProductInventory = {
             batchId: formValue.initialBatchId || `BATCH-${Date.now()}`,
             quantity: formValue.initialQuantity || 0,
@@ -1771,20 +1624,26 @@ export class ProductManagementComponent implements OnInit {
           inventory = [initialInventory];
           totalStock = initialInventory.quantity;
         } else {
-          // single inventory: use totalStock from form
           totalStock = formValue.totalStock || 0;
         }
 
+        // Get current user for UID
+        const currentUser = this.authService.getCurrentUser();
+        if (!currentUser) {
+          throw new Error('User not authenticated');
+        }
+
         const newProduct: Omit<Product, 'id' | 'createdAt' | 'updatedAt'> = {
+          uid: currentUser.uid,  // Add UID for security rules
           productName: formValue.productName,
           description: formValue.description,
           skuId: formValue.skuId,
+          productCode: formValue.productCode,
           unitType: formValue.unitType,
           category: formValue.category,
           sellingPrice: computedSellingPrice,
           companyId: '', // Will be set by service
-          storeId: formValue.storeId,
-          isMultipleInventory: formValue.isMultipleInventory,
+          storeId: storeId,  // Use storeId from permission
           barcodeId: formValue.barcodeId,
           imageUrl: formValue.imageUrl,
           inventory,
@@ -1814,38 +1673,156 @@ export class ProductManagementComponent implements OnInit {
   }
 
   async addInventoryBatch(): Promise<void> {
+    // Deprecated: use saveBatch which handles add & update in the tabbed modal
+    return this.saveBatch();
+  }
+
+  filterInventory(): void {
+    if (!this.selectedProduct) { this.filteredInventory = []; return; }
+    const term = (this.inventorySearch || '').toLowerCase();
+    if (!term) { 
+      // Sort by receivedAt descending when no search term
+      this.filteredInventory = (this.selectedProduct.inventory || []).slice().sort((a, b) => 
+        new Date(b.receivedAt).getTime() - new Date(a.receivedAt).getTime()
+      ); 
+      return; 
+    }
+    // Filter and sort the results
+    this.filteredInventory = (this.selectedProduct.inventory || [])
+      .filter(b => b.batchId.toLowerCase().includes(term))
+      .sort((a, b) => new Date(b.receivedAt).getTime() - new Date(a.receivedAt).getTime());
+  }
+
+  openEditBatch(batch: ProductInventory): void {
+    if (!this.selectedProduct) return;
+    
+    // Check if this is the most recent batch (first in sorted array)
+    const sortedInventory = (this.selectedProduct.inventory || []).slice().sort((a, b) => 
+      new Date(b.receivedAt).getTime() - new Date(a.receivedAt).getTime()
+    );
+    
+    const isLatestBatch = sortedInventory.length > 0 && sortedInventory[0].batchId === batch.batchId;
+    
+    if (!isLatestBatch) {
+      this.toastService.error('You can only edit the most recent inventory batch.');
+      return;
+    }
+    
+    this.inventoryTab = 'edit';
+    this.isEditingBatch = true;
+    this.editingBatchOriginalId = batch.batchId || null;
+    this.inventoryForm.patchValue({
+      batchId: batch.batchId,
+      quantity: batch.quantity,
+      unitPrice: batch.unitPrice,
+      costPrice: batch.costPrice || 0,
+      receivedAt: batch.receivedAt ? new Date(batch.receivedAt).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+      expiryDate: batch.expiryDate ? new Date(batch.expiryDate).toISOString().split('T')[0] : '',
+      supplier: batch.supplier || ''
+    });
+  }
+
+  cancelEdit(): void {
+    this.isEditingBatch = false;
+    this.inventoryForm.reset();
+    this.inventoryForm.patchValue({ receivedAt: new Date().toISOString().split('T')[0] });
+    this.generatedBatchId = this.generateBatchId(); // Generate new ID when canceling
+    this.inventoryTab = 'list';
+    this.editingBatchOriginalId = null;
+  }
+
+  async saveBatch(): Promise<void> {
     if (this.inventoryForm.invalid || !this.selectedProduct) return;
-
+    
+    this.loading = true;
+    
+    const formValue = this.inventoryForm.value;
+    
     try {
-      const formValue = this.inventoryForm.value;
-      const newBatch: ProductInventory = {
-        batchId: formValue.batchId,
-        quantity: formValue.quantity,
-        unitPrice: formValue.unitPrice,
-        costPrice: formValue.costPrice,
-        receivedAt: new Date(formValue.receivedAt),
-        expiryDate: formValue.expiryDate ? new Date(formValue.expiryDate) : undefined,
-        supplier: formValue.supplier || undefined,
-        status: 'active'
-      };
+      if (this.isEditingBatch && this.editingBatchOriginalId) {
+        // Edit existing batch (only quantity and price allowed)
+        const batch: ProductInventory = {
+          batchId: this.editingBatchOriginalId,
+          quantity: Number(formValue.quantity),
+          unitPrice: Number(formValue.unitPrice),
+          costPrice: Number(formValue.costPrice || 0),
+          receivedAt: new Date(formValue.receivedAt),
+          expiryDate: formValue.expiryDate ? new Date(formValue.expiryDate) : undefined,
+          supplier: formValue.supplier || undefined,
+          status: 'active',
+          unitType: this.selectedProduct?.unitType || 'pieces'
+        };
+        
+        await this.productService.updateInventoryBatch(this.selectedProduct.id!, this.editingBatchOriginalId, batch);
+      } else {
+        // Add new batch - check if previous batch has remaining stock
+        const sortedInventory = (this.selectedProduct.inventory || []).slice().sort((a, b) => 
+          new Date(b.receivedAt).getTime() - new Date(a.receivedAt).getTime()
+        );
+        
+        if (sortedInventory.length > 0 && sortedInventory[0].quantity > 0) {
+          const confirmed = await this.confirmNewBatchWithExistingStock();
+          if (!confirmed) {
+            this.loading = false;
+            return;
+          }
+        }
+        
+        const batch: ProductInventory = {
+          batchId: this.generatedBatchId,
+          quantity: Number(formValue.quantity),
+          unitPrice: Number(formValue.unitPrice),
+          costPrice: Number(formValue.costPrice || 0),
+          receivedAt: new Date(formValue.receivedAt),
+          expiryDate: formValue.expiryDate ? new Date(formValue.expiryDate) : undefined,
+          supplier: formValue.supplier || undefined,
+          status: 'active',
+          unitType: this.selectedProduct?.unitType || 'pieces'
+        };
+        
+        await this.productService.addInventoryBatch(this.selectedProduct.id!, batch);
+      }
 
-      await this.productService.addInventoryBatch(this.selectedProduct.id!, newBatch);
+      // Refresh state and generate new batch ID for next entry
+      this.selectedProduct = this.productService.getProduct(this.selectedProduct.id!) || null;
+      // Sort by receivedAt descending after refresh
+      this.filteredInventory = (this.selectedProduct?.inventory || []).slice().sort((a, b) => 
+        new Date(b.receivedAt).getTime() - new Date(a.receivedAt).getTime()
+      );
       this.inventoryForm.reset();
-      this.inventoryForm.patchValue({
-        receivedAt: new Date().toISOString().split('T')[0]
+      this.inventoryForm.patchValue({ receivedAt: new Date().toISOString().split('T')[0] });
+      this.generatedBatchId = this.generateBatchId();
+      this.isEditingBatch = false;
+      this.inventoryTab = 'list';
+      this.editingBatchOriginalId = null;
+    } catch (err: any) {
+      console.error('Error saving batch:', err);
+      
+      let errorMessage = 'Error saving inventory batch.';
+      if (err?.message) {
+        errorMessage += ` Details: ${err.message}`;
+      }
+      
+      this.toastService.error(errorMessage);
+    } finally {
+      this.loading = false;
+    }
+  }
+
+  private async confirmNewBatchWithExistingStock(): Promise<boolean> {
+    return new Promise((resolve) => {
+      // Use the existing confirmation dialog system
+      this.deleteConfirmationData.set({
+        title: 'Existing Stock Detected',
+        message: 'You still have some stock in the previous batch that is not sold. Would you like to add another entry with a new price?',
+        confirmText: 'Add New Batch',
+        cancelText: 'Cancel'
       });
       
-      // Refresh the selected product
-      this.selectedProduct = this.productService.getProduct(this.selectedProduct.id!) || null;
-      
-      // Update total stock from inventory if product uses multiple inventory
-      if (this.selectedProduct?.isMultipleInventory) {
-        this.updateTotalStockFromInventory();
-      }
-    } catch (error) {
-      console.error('Error adding inventory batch:', error);
-      this.toastService.error(ErrorMessages.INVENTORY_BATCH_ADD_ERROR);
-    }
+      // Set a flag to indicate this is for new batch confirmation
+      this.pendingNewBatchConfirmation = resolve;
+      this.showDeleteConfirmation.set(true);
+    });
   }
 
   async removeInventoryBatch(batchId: string): Promise<void> {
@@ -1872,8 +1849,8 @@ export class ProductManagementComponent implements OnInit {
       // Refresh the selected product
       this.selectedProduct = this.productService.getProduct(this.selectedProduct.id!) || null;
       
-      // Update total stock from inventory if product uses multiple inventory
-      if (this.selectedProduct?.isMultipleInventory) {
+      // Update total stock from inventory
+      if (this.selectedProduct) {
         this.updateTotalStockFromInventory();
       }
     } catch (error) {
@@ -1931,19 +1908,61 @@ export class ProductManagementComponent implements OnInit {
   async onImageFileChange(ev: Event): Promise<void> {
     const input = ev.target as HTMLInputElement;
     if (!input.files || input.files.length === 0) return;
+    
     const file = input.files[0];
+    console.log('📸 Starting image upload process:', {
+      fileName: file.name,
+      fileSize: file.size,
+      fileType: file.type
+    });
+    
     try {
-      const compressed = await this.compressImage(file, 1024 * 1024);
+      // Show loading state
+      this.loading = true;
+      this.toastService.info('Compressing and uploading image...');
+      
+      // Compress the image
+      console.log('🔄 Compressing image...');
+      const compressed = await this.compressImage(file, 1024 * 1024); // 1MB max
+      console.log('✅ Image compressed:', {
+        originalSize: file.size,
+        compressedSize: compressed.size,
+        compression: Math.round((1 - compressed.size / file.size) * 100) + '%'
+      });
+      
+      // Upload to Firebase Storage
+      console.log('☁️ Uploading to Firebase Storage...');
       const url = await this.uploadFileToStorage(compressed);
+      console.log('✅ Image uploaded successfully:', url);
+      
+      // Set the URL in the form
       this.productForm.get('imageUrl')?.setValue(url);
-    } catch (err) {
-      console.error(err);
-      this.toastService.error(ErrorMessages.IMAGE_UPLOAD_ERROR);
+      this.toastService.success('Image uploaded successfully!');
+      
+    } catch (err: any) {
+      console.error('❌ Image upload error:', err);
+      this.toastService.error(`Image upload failed: ${err.message || 'Unknown error'}`);
+    } finally {
+      this.loading = false;
+      // Clear the file input so the same file can be selected again if needed
+      input.value = '';
     }
   }
 
   async compressImage(file: File, maxBytes: number): Promise<File> {
+    console.log('🔄 Starting image compression:', {
+      inputType: file.type,
+      inputSize: file.size,
+      maxBytes
+    });
+    
     const img = await this.loadImage(URL.createObjectURL(file));
+    console.log('📐 Original image dimensions:', {
+      width: img.width,
+      height: img.height
+    });
+    
+    // Calculate target size (2 inches at 96 DPI = 192px)
     const targetInches = 2;
     const dpi = 96;
     const targetPx = Math.round(targetInches * dpi);
@@ -1952,22 +1971,56 @@ export class ProductManagementComponent implements OnInit {
     canvas.width = targetPx;
     canvas.height = targetPx;
     const ctx = canvas.getContext('2d');
-    if (!ctx) throw new Error('Canvas not supported');
+    if (!ctx) throw new Error('Canvas context not supported');
+    
+    // Fill with white background for PNG transparency
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    
+    // Draw image maintaining aspect ratio
     ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
 
+    // Try different quality levels to achieve target size
     for (let q = 0.9; q >= 0.4; q -= 0.1) {
-      const blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, 'image/jpeg', q));
+      const blob = await new Promise<Blob | null>((res) => 
+        canvas.toBlob(res, 'image/jpeg', q)
+      );
       if (!blob) continue;
-      if (blob.size <= maxBytes) return new File([blob], file.name, { type: 'image/jpeg' });
+      
+      console.log(`🔍 Quality ${q}: ${blob.size} bytes`);
+      if (blob.size <= maxBytes) {
+        const compressedFile = new File([blob], file.name.replace(/\.(png|webp|gif)$/i, '.jpg'), { 
+          type: 'image/jpeg' 
+        });
+        console.log('✅ Compression successful:', {
+          finalSize: compressedFile.size,
+          quality: q
+        });
+        return compressedFile;
+      }
     }
 
+    // If still too large, reduce dimensions further
+    console.log('⚠️ Still too large, reducing dimensions...');
     canvas.width = Math.round(targetPx / 1.5);
     canvas.height = Math.round(targetPx / 1.5);
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-    const blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, 'image/jpeg', 0.7));
-    if (!blob) throw new Error('Compression failed');
-    if (blob.size > maxBytes) throw new Error('Too large');
-    return new File([blob], file.name, { type: 'image/jpeg' });
+    
+    const blob = await new Promise<Blob | null>((res) => 
+      canvas.toBlob(res, 'image/jpeg', 0.7)
+    );
+    if (!blob) throw new Error('Image compression failed');
+    if (blob.size > maxBytes) throw new Error(`Image still too large: ${blob.size} bytes (max: ${maxBytes})`);
+    
+    const finalFile = new File([blob], file.name.replace(/\.(png|webp|gif)$/i, '.jpg'), { 
+      type: 'image/jpeg' 
+    });
+    console.log('✅ Final compression:', {
+      finalSize: finalFile.size
+    });
+    return finalFile;
   }
 
   loadImage(src: string): Promise<HTMLImageElement> {
@@ -1980,15 +2033,34 @@ export class ProductManagementComponent implements OnInit {
   }
 
   async uploadFileToStorage(file: File): Promise<string> {
-    // use firebase storage via firebase.config (getStorage/app already available in other components)
-    // dynamic import to avoid top-level SDK usage here
-    const { getStorage, ref, uploadBytes, getDownloadURL } = await import('firebase/storage');
-  const { app } = await import('../../../firebase.config');
-    const storage = getStorage(app);
-    const storageRef = ref(storage, `products/${Date.now()}_${file.name}`);
-    const snap = await uploadBytes(storageRef, file);
-    const url = await getDownloadURL(snap.ref);
-    return url;
+    try {
+      console.log('☁️ Starting Firebase Storage upload...');
+      
+      // Dynamic import to avoid top-level SDK usage
+      const { getStorage, ref, uploadBytes, getDownloadURL } = await import('firebase/storage');
+      const { app } = await import('../../../firebase.config');
+      
+      const storage = getStorage(app);
+      const fileName = `products/${Date.now()}_${file.name}`;
+      const storageRef = ref(storage, fileName);
+      
+      console.log('📤 Uploading file:', {
+        fileName,
+        fileSize: file.size,
+        fileType: file.type
+      });
+      
+      const snapshot = await uploadBytes(storageRef, file);
+      console.log('✅ Upload complete, getting download URL...');
+      
+      const downloadURL = await getDownloadURL(snapshot.ref);
+      console.log('✅ Download URL obtained:', downloadURL);
+      
+      return downloadURL;
+    } catch (error: any) {
+      console.error('❌ Firebase Storage upload error:', error);
+      throw new Error(`Upload failed: ${error.message || 'Unknown error'}`);
+    }
   }
 
   async deleteProduct(product: Product): Promise<void> {
@@ -2019,6 +2091,9 @@ export class ProductManagementComponent implements OnInit {
     } else if (this.pendingBatchId) {
       // Handle batch removal
       await this.performBatchRemoval();
+    } else if (this.pendingNewBatchConfirmation) {
+      // Handle new batch confirmation
+      this.pendingNewBatchConfirmation(true);
     }
     
     this.closeDeleteConfirmation();
@@ -2029,6 +2104,11 @@ export class ProductManagementComponent implements OnInit {
     this.deleteConfirmationData.set(null);
     this.productToDelete = null;
     this.pendingBatchId = null;
+    // Handle cancellation of new batch confirmation
+    if (this.pendingNewBatchConfirmation) {
+      this.pendingNewBatchConfirmation(false);
+      this.pendingNewBatchConfirmation = null;
+    }
   }
 
   // Utility methods
@@ -2056,6 +2136,28 @@ export class ProductManagementComponent implements OnInit {
     return store?.storeName || 'Unknown Store';
   }
 
+  getComputedTotalStock(): number {
+    if (!this.selectedProduct?.inventory || this.selectedProduct.inventory.length === 0) {
+      return 0;
+    }
+    // Sum all active inventory batches
+    return this.selectedProduct.inventory.reduce((total, batch) => {
+      return total + (batch.status === 'active' ? batch.quantity : 0);
+    }, 0);
+  }
+
+  getComputedSellingPrice(): number {
+    if (!this.selectedProduct?.inventory || this.selectedProduct.inventory.length === 0) {
+      return 0;
+    }
+    // Get price from most recent batch (sorted by receivedAt descending)
+    const sortedInventory = this.selectedProduct.inventory
+      .slice()
+      .sort((a, b) => new Date(b.receivedAt).getTime() - new Date(a.receivedAt).getTime());
+    
+    return sortedInventory.length > 0 ? sortedInventory[0].unitPrice : 0;
+  }
+
   getStockBadgeClass(stock: number): string {
     if (stock <= 5) return 'px-2 py-1 text-xs rounded-full bg-red-100 text-red-800';
     if (stock <= 10) return 'px-2 py-1 text-xs rounded-full bg-orange-100 text-orange-800';
@@ -2076,7 +2178,7 @@ export class ProductManagementComponent implements OnInit {
   }
 
   displayPrice(product: Product): number {
-    if (product.isMultipleInventory && product.inventory && product.inventory.length) {
+    if (product.inventory && product.inventory.length) {
       const active = product.inventory.find(b => b.status === 'active');
       if (active) return active.unitPrice || product.sellingPrice;
     }
@@ -2232,6 +2334,32 @@ export class ProductManagementComponent implements OnInit {
     } finally {
       this.loading = false;
     }
+  }
+
+  /**
+   * Clean form data by removing undefined values and converting empty strings to null where appropriate
+   */
+  private cleanFormData(formData: any): any {
+    const cleaned: any = {};
+    
+    for (const [key, value] of Object.entries(formData)) {
+      if (value === undefined) {
+        // Skip undefined values entirely
+        continue;
+      } else if (value === '') {
+        // Convert empty strings to null for optional fields
+        if (key === 'description' || key === 'productCode' || key === 'barcodeId' || 
+            key === 'imageUrl' || key === 'initialSupplier' || key === 'initialExpiryDate') {
+          cleaned[key] = null;
+        } else {
+          cleaned[key] = value;
+        }
+      } else {
+        cleaned[key] = value;
+      }
+    }
+    
+    return cleaned;
   }
 
 }

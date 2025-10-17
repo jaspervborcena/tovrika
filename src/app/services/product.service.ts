@@ -52,6 +52,7 @@ export class ProductService {
     const data = doc.data();
     return {
       id: doc.id,
+      uid: data['uid'] || '',  // Include UID field
       productName: data['productName'] || '',
       description: data['description'] || undefined,
       skuId: data['skuId'] || '',
@@ -61,7 +62,6 @@ export class ProductService {
       sellingPrice: data['sellingPrice'] || 0,
       companyId: data['companyId'] || '',
       storeId: data['storeId'] || '',
-      isMultipleInventory: data['isMultipleInventory'] || false,
       barcodeId: data['barcodeId'] || '',
       imageUrl: data['imageUrl'] || '',
       inventory: this.transformInventoryArray(data['inventory'] || []),
@@ -124,7 +124,8 @@ export class ProductService {
       receivedAt: item.receivedAt?.toDate() || new Date(),
       expiryDate: item.expiryDate?.toDate() || undefined,
       supplier: item.supplier || undefined,
-      status: item.status || 'active'
+      status: item.status || 'active',
+      unitType: item.unitType || 'pieces'
     }));
   }
 
@@ -258,28 +259,38 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
   }
   async createProduct(productData: Omit<Product, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> {
     try {
+      // Get current user for UID
+      const currentUser = this.authService.getCurrentUser();
+      if (!currentUser) {
+        throw new Error('User not authenticated');
+      }
+
       const companyId = await this.waitForAuth();
       
-      // Prepare product data with required fields
-      const productToCreate = {
+      // Clean undefined values that Firestore doesn't accept
+      const cleanedProductData = this.cleanUndefinedValues({
         ...productData,
+        uid: currentUser.uid,  // Add UID for security rules
         companyId,
         status: productData.status || 'active',
         inventory: productData.inventory.map(inv => ({
-          ...inv,
+          ...this.cleanUndefinedValues(inv),
           receivedAt: Timestamp.fromDate(inv.receivedAt)
         }))
-      };
+      });
+
+      console.log('Creating product with cleaned data:', cleanedProductData);
 
       // 🔥 NEW APPROACH: Pre-generate documentId, then create with that ID
-      const documentId = await this.offlineDocService.createDocument('products', productToCreate);
+      const documentId = await this.offlineDocService.createDocument('products', cleanedProductData);
 
       // Update the signal with the new product (works with both real and temp IDs)
       this.products.update(products => [
         ...products, 
         { 
           ...productData, 
-          id: documentId, 
+          id: documentId,
+          uid: currentUser.uid,  // Include UID in local state
           companyId, 
           createdAt: new Date(), 
           updatedAt: new Date(),
@@ -298,19 +309,41 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
 
   async updateProduct(productId: string, updates: Partial<Product>): Promise<void> {
     try {
+      // Get current user ID
+      const currentUser = this.authService.getCurrentUser();
+      if (!currentUser) {
+        throw new Error('User not authenticated');
+      }
+
       // Prepare update data with proper Timestamp conversion
       const updateData: any = { ...updates };
+
+      // Ensure UID is maintained for security rules
+      updateData.uid = currentUser.uid;
 
       // Handle inventory array updates
       if (updates.inventory) {
         updateData.inventory = updates.inventory.map(inv => ({
-          ...inv,
-          receivedAt: Timestamp.fromDate(inv.receivedAt)
+          batchId: inv.batchId,
+          quantity: inv.quantity,
+          unitPrice: inv.unitPrice,
+          costPrice: inv.costPrice || 0,
+          receivedAt: Timestamp.fromDate(inv.receivedAt instanceof Date ? inv.receivedAt : new Date(inv.receivedAt)),
+          expiryDate: inv.expiryDate ? Timestamp.fromDate(inv.expiryDate instanceof Date ? inv.expiryDate : new Date(inv.expiryDate)) : null,
+          supplier: inv.supplier || null,
+          status: inv.status,
+          unitType: inv.unitType || 'pieces'
         }));
       }
 
+      // Clean undefined values to prevent Firestore errors
+      const cleanedUpdateData = this.cleanUndefinedValues(updateData);
+
+      console.log('Updating product with cleaned data:', cleanedUpdateData);
+      console.log('User UID:', currentUser.uid);
+
       // 🔥 NEW APPROACH: Use OfflineDocumentService for consistent online/offline updates
-      await this.offlineDocService.updateDocument('products', productId, updateData);
+      await this.offlineDocService.updateDocument('products', productId, cleanedUpdateData);
 
       // Update the signal
       this.products.update(products =>
@@ -349,32 +382,128 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
   }
 
   async addInventoryBatch(productId: string, batch: ProductInventory): Promise<void> {
-    const product = this.getProduct(productId);
-    if (product) {
-      // Insert new batch at the top
-      let updatedInventory: ProductInventory[] = [batch, ...product.inventory];
-      // If the new batch is active, mark other batches inactive so only one active exists
-      if (batch.status === 'active') {
-        updatedInventory = updatedInventory.map((inv, idx) => idx === 0 ? inv : { ...inv, status: 'inactive' });
+    try {
+      console.log('=== ADD INVENTORY BATCH DEBUG ===');
+      console.log('Product ID:', productId);
+      console.log('Batch data:', batch);
+      
+      // Check authentication
+      const currentUser = this.authService.getCurrentUser();
+      console.log('Current user:', currentUser);
+      
+      if (!currentUser) {
+        throw new Error('User not authenticated');
       }
-      // totalStock should be calculated from active batches only
+
+      const product = this.getProduct(productId);
+      if (!product) {
+        throw new Error(`Product with ID ${productId} not found`);
+      }
+
+      console.log('Current product:', {
+        id: product.id,
+        uid: (product as any).uid,
+        name: product.productName
+      });
+
+      // Simply append the new batch to existing inventory
+      const updatedInventory: ProductInventory[] = [...(product.inventory || []), batch];
+      
+      // Calculate total stock from all active batches
       const totalStock = updatedInventory.reduce((sum, inv) => sum + ((inv.status === 'active') ? inv.quantity : 0), 0);
+      
+      // Get selling price from most recent batch (sort by receivedAt descending)
+      const sortedInventory = updatedInventory.slice().sort((a, b) => 
+        new Date(b.receivedAt).getTime() - new Date(a.receivedAt).getTime()
+      );
+      const sellingPrice = sortedInventory.length > 0 ? sortedInventory[0].unitPrice : 0;
+      
+      console.log('Updated inventory count:', updatedInventory.length);
+      console.log('Updated total stock:', totalStock);
+      console.log('Updated selling price:', sellingPrice);
+      
       await this.updateProduct(productId, { 
         inventory: updatedInventory,
-        totalStock 
+        totalStock,
+        sellingPrice
       });
+      
+      console.log('=== INVENTORY BATCH ADDED SUCCESSFULLY ===');
+    } catch (error) {
+      console.error('=== ERROR IN ADD INVENTORY BATCH ===');
+      console.error('Error details:', error);
+      throw error;
+    }
+  }
+
+  async updateInventoryBatch(productId: string, batchId: string, updatedBatch: ProductInventory): Promise<void> {
+    try {
+      console.log('=== UPDATE INVENTORY BATCH DEBUG ===');
+      console.log('Product ID:', productId);
+      console.log('Batch ID:', batchId);
+      console.log('Updated batch data:', updatedBatch);
+      
+      // Check authentication
+      const currentUser = this.authService.getCurrentUser();
+      if (!currentUser) {
+        throw new Error('User not authenticated');
+      }
+
+      const product = this.getProduct(productId);
+      if (!product) {
+        throw new Error(`Product with ID ${productId} not found`);
+      }
+
+      // Find and update the specific batch
+      const updatedInventory = product.inventory.map(inv => 
+        inv.batchId === batchId ? updatedBatch : inv
+      );
+      
+      // Calculate total stock from all active batches
+      const totalStock = updatedInventory.reduce((sum, inv) => sum + ((inv.status === 'active') ? inv.quantity : 0), 0);
+      
+      // Get selling price from most recent batch (sort by receivedAt descending)
+      const sortedInventory = updatedInventory.slice().sort((a, b) => 
+        new Date(b.receivedAt).getTime() - new Date(a.receivedAt).getTime()
+      );
+      const sellingPrice = sortedInventory.length > 0 ? sortedInventory[0].unitPrice : 0;
+      
+      console.log('Updated inventory count:', updatedInventory.length);
+      console.log('Updated total stock:', totalStock);
+      console.log('Updated selling price:', sellingPrice);
+      
+      await this.updateProduct(productId, { 
+        inventory: updatedInventory,
+        totalStock,
+        sellingPrice
+      });
+      
+      console.log('=== INVENTORY BATCH UPDATED SUCCESSFULLY ===');
+    } catch (error) {
+      console.error('=== ERROR IN UPDATE INVENTORY BATCH ===');
+      console.error('Error details:', error);
+      throw error;
     }
   }
 
   async removeInventoryBatch(productId: string, batchId: string): Promise<void> {
     const product = this.getProduct(productId);
     if (product) {
-  const updatedInventory = product.inventory.filter(inv => inv.batchId !== batchId);
-  // totalStock from active batches only
-  const totalStock = updatedInventory.reduce((sum, inv) => sum + ((inv.status === 'active') ? inv.quantity : 0), 0);
+      const updatedInventory = product.inventory.filter(inv => inv.batchId !== batchId);
+      
+      // Calculate total stock from active batches only
+      const totalStock = updatedInventory.reduce((sum, inv) => sum + ((inv.status === 'active') ? inv.quantity : 0), 0);
+      
+      // Get selling price from most recent batch (sort by receivedAt descending)
+      const sortedInventory = updatedInventory.slice().sort((a, b) => 
+        new Date(b.receivedAt).getTime() - new Date(a.receivedAt).getTime()
+      );
+      const sellingPrice = sortedInventory.length > 0 ? sortedInventory[0].unitPrice : 0;
+      
       await this.updateProduct(productId, { 
         inventory: updatedInventory,
-        totalStock 
+        totalStock,
+        sellingPrice
       });
     }
   }
@@ -635,5 +764,26 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
   getBatchAdjustments(productId: string, batchId: string) {
     const adjustments = this.getQuantityAdjustments(productId);
     return adjustments.filter(adj => adj.batchId === batchId);
+  }
+
+  /**
+   * Clean undefined values from an object to make it Firestore-compatible
+   */
+  private cleanUndefinedValues(obj: any): any {
+    if (obj === null || typeof obj !== 'object') {
+      return obj;
+    }
+    
+    if (Array.isArray(obj)) {
+      return obj.map(item => this.cleanUndefinedValues(item));
+    }
+    
+    const cleaned: any = {};
+    for (const [key, value] of Object.entries(obj)) {
+      if (value !== undefined) {
+        cleaned[key] = this.cleanUndefinedValues(value);
+      }
+    }
+    return cleaned;
   }
 }
