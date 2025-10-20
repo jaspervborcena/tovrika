@@ -163,7 +163,18 @@ export class ProductService {
 
   async loadProducts(storeId?: string): Promise<void> {
     try {
+      // Only check authentication, no UID filtering needed for reading
+      const currentUser = this.authService.getCurrentUser();
+      if (!currentUser) {
+        throw new Error('User not authenticated');
+      }
+
       const companyId = await this.waitForAuth();
+      console.log('📦 Loading products with companyId query:', {
+        companyId,
+        storeId: storeId || 'all stores'
+      });
+
       const productsRef = collection(this.firestore, 'products');
       
       let q;
@@ -179,6 +190,7 @@ export class ProductService {
       const querySnapshot = await getDocs(q);
       const products = querySnapshot.docs.map(doc => this.transformFirestoreDoc(doc));
       
+      console.log(`✅ Loaded ${products.length} products for company ${companyId}`);
       this.products.set(products);
     } catch (error) {
       console.error('Error loading products:', error);
@@ -187,25 +199,19 @@ export class ProductService {
   }
 async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promise<void> {
     try {
-      // Validate required companyId
-      if (!companyId) {
-        console.error('❌ CompanyId is required for loading products');
-        return;
+      // Only check authentication, no UID filtering needed for reading
+      const currentUser = this.authService.getCurrentUser();
+      if (!currentUser) {
+        throw new Error('User not authenticated');
       }
 
-      console.log('📦 Loading products for:', { companyId, storeId });
+      // Use provided companyId or get from auth
+      const targetCompanyId = companyId || await this.waitForAuth();
       
-      // Debug: Check current UID context for security
-      try {
-        const currentUID = await this.securityService.getCurrentUserUID();
-        console.log('🔐 Current UID for product loading:', currentUID);
-        
-        // Check if we have offline UID available
-        const offlineUID = await this.securityService.getCurrentUserUID();
-        console.log('💾 UID from security service (includes IndexedDB):', offlineUID);
-      } catch (uidError) {
-        console.warn('⚠️ Could not get UID for product loading:', uidError);
-      }
+      console.log('� Loading products with companyId query:', { 
+        companyId: targetCompanyId, 
+        storeId: storeId || 'all stores'
+      });
       
       const productsRef = collection(this.firestore, 'products');
       
@@ -213,29 +219,27 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
       if (storeId) {
         // Load products for specific company and store
         q = query(productsRef, 
-          where('companyId', '==', companyId),
+          where('companyId', '==', targetCompanyId),
           where('storeId', '==', storeId)
         );
-        console.log('🎯 Querying products for company + store:', { companyId, storeId });
+        console.log('🎯 Querying products for company + store:', { companyId: targetCompanyId, storeId });
       } else {
         // Load all products for the company
-        q = query(productsRef, where('companyId', '==', companyId));
-        console.log('🎯 Querying all products for company:', companyId);
+        q = query(productsRef, where('companyId', '==', targetCompanyId));
+        console.log('🎯 Querying all products for company:', targetCompanyId);
       }
       
       const querySnapshot = await getDocs(q);
       const products = querySnapshot.docs.map(doc => this.transformFirestoreDoc(doc));
       
       console.log(`✅ Loaded ${products.length} products:`, {
-        companyId,
+        companyId: targetCompanyId,
         storeId,
         productsFound: products.length,
         productNames: products.map(p => p.productName).slice(0, 5), // Show first 5 product names
-        hasUID: products.map(p => !!(p as any).uid).slice(0, 5), // Check if products have UID fields
         sampleProduct: products.length > 0 ? {
           id: products[0].id,
           name: products[0].productName,
-          hasUID: !!(products[0] as any).uid,
           companyId: products[0].companyId,
           storeId: products[0].storeId
         } : null
@@ -243,17 +247,20 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
       
       // Validate that we actually have products before setting
       if (products.length === 0) {
-        console.warn('⚠️ No products found for query:', { companyId, storeId });
+        console.warn('⚠️ No products found for company-based query:', { companyId: targetCompanyId, storeId });
         console.warn('⚠️ This could be due to:');
         console.warn('   1. No products exist for this company/store');
-        console.warn('   2. Products lack proper UID fields (security filtering)');
-        console.warn('   3. Firestore security rules blocking access');
+        console.warn('   2. Company/store IDs do not match database records');
+        console.warn('   3. User needs to create products first');
       }
       
       this.products.set(products);
     } catch (error) {
       console.error('❌ Error loading products:', error);
-      console.error('Query parameters:', { companyId, storeId });
+      console.error('Query parameters:', { 
+        companyId: companyId || 'from auth', 
+        storeId 
+      });
       throw error;
     }
   }

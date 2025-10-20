@@ -739,6 +739,19 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
       cursor: not-allowed;
     }
 
+    /* Ensure confirmation dialog appears above modals */
+    ::ng-deep app-confirmation-dialog {
+      z-index: 10001 !important;
+    }
+
+    ::ng-deep app-confirmation-dialog .modal-overlay {
+      z-index: 10001 !important;
+    }
+
+    ::ng-deep app-confirmation-dialog .modal {
+      z-index: 10002 !important;
+    }
+
     @media (max-width: 768px) {
       .modal {
         width: 95%;

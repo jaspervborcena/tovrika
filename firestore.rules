@@ -19,10 +19,9 @@ service cloud.firestore {
 
     // ===== MAIN COLLECTIONS WITH UID SECURITY =====
     
-    // Products Collection - Users can only access their own products
+    // Products Collection - Read allowed for authenticated users, write requires UID
     match /products/{productId} {
-      allow read: if isAuthenticated() && 
-                  (resource == null || resource.data.uid == request.auth.uid);
+      allow read: if isAuthenticated();  // Allow reading for any authenticated user
       allow create: if isAuthenticated() && isCreatingOwnDocument();
       allow update: if isAuthenticated() && 
                     resource.data.uid == request.auth.uid && 
@@ -30,26 +29,17 @@ service cloud.firestore {
       allow delete: if isAuthenticated() && isOwner(resource);
     }
 
-    // Product Inventory Collection - separate collection to track batches
+    // Product Inventory Collection - Read allowed for authenticated users, write requires UID
     match /productInventory/{batchDocId} {
-      function productExistsAndOwned(productId) {
-        return exists(/databases/$(database)/documents/products/$(productId)) &&
-               get(/databases/$(database)/documents/products/$(productId)).data.uid == request.auth.uid;
-      }
-      allow read: if isAuthenticated() && (
-        resource == null || resource.data.uid == request.auth.uid
-      );
+      allow read: if isAuthenticated();  // Allow reading for any authenticated user
       allow create: if isAuthenticated() &&
         request.resource.data.uid == request.auth.uid &&
-        request.resource.data.productId is string &&
-        productExistsAndOwned(request.resource.data.productId);
+        request.resource.data.productId is string;
       allow update: if isAuthenticated() &&
         resource.data.uid == request.auth.uid &&
-        request.resource.data.uid == request.auth.uid &&
-        // productId cannot change
-        request.resource.data.productId == resource.data.productId &&
-        productExistsAndOwned(resource.data.productId);
-      allow delete: if isAuthenticated() && resource.data.uid == request.auth.uid && productExistsAndOwned(resource.data.productId);
+        request.resource.data.uid == request.auth.uid;
+      allow delete: if isAuthenticated() && 
+        resource.data.uid == request.auth.uid;
     }
     
     // Orders Collection - Users can only access their own orders
