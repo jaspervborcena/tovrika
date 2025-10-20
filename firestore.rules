@@ -29,6 +29,28 @@ service cloud.firestore {
                     request.resource.data.uid == request.auth.uid;
       allow delete: if isAuthenticated() && isOwner(resource);
     }
+
+    // Product Inventory Collection - separate collection to track batches
+    match /productInventory/{batchDocId} {
+      function productExistsAndOwned(productId) {
+        return exists(/databases/$(database)/documents/products/$(productId)) &&
+               get(/databases/$(database)/documents/products/$(productId)).data.uid == request.auth.uid;
+      }
+      allow read: if isAuthenticated() && (
+        resource == null || resource.data.uid == request.auth.uid
+      );
+      allow create: if isAuthenticated() &&
+        request.resource.data.uid == request.auth.uid &&
+        request.resource.data.productId is string &&
+        productExistsAndOwned(request.resource.data.productId);
+      allow update: if isAuthenticated() &&
+        resource.data.uid == request.auth.uid &&
+        request.resource.data.uid == request.auth.uid &&
+        // productId cannot change
+        request.resource.data.productId == resource.data.productId &&
+        productExistsAndOwned(resource.data.productId);
+      allow delete: if isAuthenticated() && resource.data.uid == request.auth.uid && productExistsAndOwned(resource.data.productId);
+    }
     
     // Orders Collection - Users can only access their own orders
     // Allow migration: if uid doesn't exist, allow authenticated users to read

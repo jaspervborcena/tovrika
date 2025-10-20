@@ -1,7 +1,8 @@
 import { Component, OnInit, computed, signal, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
-import { Product, ProductInventory, UNIT_TYPES } from '../../../interfaces/product.interface';
+import { Product, ProductInventory } from '../../../interfaces/product.interface';
+import { ProductInventoryEntry } from '../../../interfaces/product-inventory-entry.interface';
 import { ProductService } from '../../../services/product.service';
 import { StoreService } from '../../../services/store.service';
 
@@ -9,6 +10,8 @@ import { AuthService } from '../../../services/auth.service';
 import { ToastService } from '../../../shared/services/toast.service';
 import { ErrorMessages } from '../../../shared/enums';
 import { CategoryService, ProductCategory } from '../../../services/category.service';
+import { InventoryDataService } from '../../../services/inventory-data.service';
+import { PredefinedTypesService, UnitTypeOption, PredefinedType } from '../../../services/predefined-types.service';
 import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../shared/components/confirmation-dialog/confirmation-dialog.component';
 
 @Component({
@@ -951,6 +954,19 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
                   </div>
                 </div>
 
+                <div class="form-group">
+                  <label for="unitType">Unit Type</label>
+                  <select 
+                    id="unitType"
+                    formControlName="unitType"
+                    class="form-input">
+                    <option *ngFor="let unit of unitTypes" [value]="unit.value">{{ unit.label }}</option>
+                  </select>
+                  <div class="error-message" *ngIf="productForm.get('unitType')?.invalid && productForm.get('unitType')?.touched">
+                    Unit type is required
+                  </div>
+                </div>
+
                 <!-- Product Image Upload -->
                 <div class="form-group">
                   <label for="productImage">Product Image</label>
@@ -1264,7 +1280,10 @@ export class ProductManagementComponent implements OnInit {
   // Inventory UI state
   inventoryTab: 'list' | 'edit' = 'list';
   inventorySearch = '';
-  filteredInventory: ProductInventory[] | null = null;
+  filteredInventory: ProductInventoryEntry[] | null = null;
+  private currentBatches: ProductInventoryEntry[] = [];
+  private editingBatchDocId: string | null = null;
+  private pendingBatchDocId: string | null = null;
   isEditingBatch = false;
   editingBatchOriginalId: string | null = null;
   generatedBatchId = '';
@@ -1289,8 +1308,8 @@ export class ProductManagementComponent implements OnInit {
   inventoryForm: FormGroup;
   categoryForm: FormGroup;
   
-  // Unit types for dropdown
-  unitTypes = UNIT_TYPES;
+  // Unit types from predefined types
+  unitTypes: UnitTypeOption[] = []; // Will be loaded from predefinedTypes
 
   constructor(
     public productService: ProductService,
@@ -1299,7 +1318,9 @@ export class ProductManagementComponent implements OnInit {
     private fb: FormBuilder,
     private cdr: ChangeDetectorRef,
     private toastService: ToastService,
-    private categoryService: CategoryService
+    private categoryService: CategoryService,
+    private inventoryDataService: InventoryDataService,
+    private predefinedTypesService: PredefinedTypesService
   ) {
     this.productForm = this.createProductForm();
     this.inventoryForm = this.createInventoryForm();
@@ -1331,6 +1352,10 @@ export class ProductManagementComponent implements OnInit {
           this.productService['products'].set([]);
         }
       }
+      
+      // Load unit types from predefined types
+      await this.loadUnitTypes();
+      
       this.filterProducts();
     } catch (error) {
       console.error('Error loading data:', error);
@@ -1345,7 +1370,8 @@ export class ProductManagementComponent implements OnInit {
       productCode: [''],
       barcodeId: [''],
       unitType: ['pieces', Validators.required],
-      category: ['', Validators.required],
+      // Default to 'General' so the form is valid even if categories haven't loaded yet
+      category: ['General', Validators.required],
       imageUrl: [''],
       // Tax and Discount Fields
       isVatApplicable: [true],
@@ -1434,6 +1460,11 @@ export class ProductManagementComponent implements OnInit {
   initialQuantity: 0,
   initialUnitPrice: 0
     });
+    // Ensure required defaults after reset
+    this.productForm.patchValue({
+      unitType: 'pieces',
+      category: 'General'
+    });
     // set totalStock from initial fields if provided
     const initialQty = this.productForm.get('initialQuantity')?.value || 0;
     this.productForm.get('totalStock')?.setValue(initialQty);
@@ -1449,15 +1480,11 @@ export class ProductManagementComponent implements OnInit {
     this.selectedProduct = product;
     this.productForm.patchValue(product);
     
-    // Calculate total stock from active batches
-    const total = (product.inventory || []).reduce((s, b) => s + ((b.status === 'active') ? (b.quantity || 0) : 0), 0);
-    this.productForm.get('totalStock')?.setValue(total);
+    // Use denormalized totalStock from product (no longer calculate from embedded inventory)
+    this.productForm.get('totalStock')?.setValue(product.totalStock || 0);
     
-    // Set selling price to active batch unit price if available
-    const active = (product.inventory || []).find(b => b.status === 'active');
-    if (active) {
-      this.productForm.get('sellingPrice')?.setValue(active.unitPrice || 0);
-    }
+    // Set selling price from product summary (denormalized)
+    this.productForm.get('sellingPrice')?.setValue(product.sellingPrice || 0);
     
     // Always enable inventory controls since we removed isMultipleInventory
     this.toggleControlsForInventory(true);
@@ -1477,10 +1504,9 @@ export class ProductManagementComponent implements OnInit {
   }
 
   updateTotalStockFromInventory() {
-    if (this.selectedProduct?.inventory) {
-      // For existing product, calculate from current inventory
-      const total = this.selectedProduct.inventory.reduce((s, b) => s + ((b.status === 'active') ? (b.quantity || 0) : 0), 0);
-      this.productForm.get('totalStock')?.setValue(total, { emitEvent: false });
+    if (this.selectedProduct) {
+      // For existing product, use denormalized totalStock summary
+      this.productForm.get('totalStock')?.setValue(this.selectedProduct.totalStock || 0, { emitEvent: false });
     } else {
       // For new product, use initial inventory values
       const initialQuantity = this.productForm.get('initialQuantity')?.value || 0;
@@ -1495,7 +1521,7 @@ export class ProductManagementComponent implements OnInit {
     this.editingBatchOriginalId = null;
   }
 
-  openInventoryModal(product: Product): void {
+  async openInventoryModal(product: Product): Promise<void> {
     this.selectedProduct = product;
     this.inventoryForm.reset();
     this.inventoryForm.patchValue({
@@ -1504,10 +1530,13 @@ export class ProductManagementComponent implements OnInit {
     this.generatedBatchId = this.generateBatchId();
     this.inventoryTab = 'list';
     this.inventorySearch = '';
-    // Sort inventory by receivedAt descending (most recent first)
-    this.filteredInventory = (product.inventory || []).slice().sort((a, b) => 
-      new Date(b.receivedAt).getTime() - new Date(a.receivedAt).getTime()
-    );
+    try {
+      this.currentBatches = await this.inventoryDataService.listBatches(product.id!);
+      this.filteredInventory = this.currentBatches.slice();
+    } catch (e) {
+      console.error('Failed to load inventory batches:', e);
+      this.filteredInventory = [];
+    }
     this.isEditingBatch = false;
     this.showInventoryModal = true;
   }
@@ -1572,7 +1601,7 @@ export class ProductManagementComponent implements OnInit {
       // normalize sellingPrice to avoid undefined being written to Firestore
       // Calculate selling price from active batch or form value
       const computedSellingPrice = formValue.initialUnitPrice || 
-        (this.selectedProduct ? (this.selectedProduct.inventory || []).find((b: any) => b.status === 'active')?.unitPrice : 0) || 
+        (this.selectedProduct ? (this.selectedProduct.sellingPrice || 0) : 0) || 
         formValue.sellingPrice || 0;
 
       if (this.isEditMode && this.selectedProduct) {
@@ -1596,36 +1625,23 @@ export class ProductManagementComponent implements OnInit {
           discountValue: formValue.discountValue || 0
         };
 
-        // Calculate totalStock from active batches
-        if (this.selectedProduct?.inventory) {
-          const total = this.selectedProduct.inventory.reduce((s, b) => s + ((b.status === 'active') ? (b.quantity || 0) : 0), 0);
-          updates.totalStock = total;
-        } else {
-          updates.totalStock = formValue.totalStock || 0;
-        }
+        // Use denormalized totalStock from product for existing items
+        updates.totalStock = this.selectedProduct.totalStock || 0;
 
         await this.productService.updateProduct(this.selectedProduct.id!, updates);
         } else {
-        // Create new product
-        let inventory: ProductInventory[] = [];
-        let totalStock = 0;
-        // Always create initial inventory if values provided
-        if (formValue.initialQuantity && formValue.initialQuantity > 0) {
-          const initialInventory: ProductInventory = {
-            batchId: formValue.initialBatchId || `BATCH-${Date.now()}`,
-            quantity: formValue.initialQuantity || 0,
-            unitPrice: formValue.initialUnitPrice || 0,
-            costPrice: formValue.initialCostPrice || 0,
-            receivedAt: new Date(formValue.initialReceivedAt),
-            expiryDate: formValue.initialExpiryDate ? new Date(formValue.initialExpiryDate) : undefined,
-            supplier: formValue.initialSupplier || undefined,
-            status: 'active'
-          };
-          inventory = [initialInventory];
-          totalStock = initialInventory.quantity;
-        } else {
-          totalStock = formValue.totalStock || 0;
-        }
+        // Create new product (no embedded inventory)
+        const hasInitial = !!(formValue.initialQuantity && formValue.initialQuantity > 0);
+        const initialBatch = hasInitial ? {
+          batchId: formValue.initialBatchId || `BATCH-${Date.now()}`,
+          quantity: Number(formValue.initialQuantity || 0),
+          unitPrice: Number(formValue.initialUnitPrice || 0),
+          costPrice: Number(formValue.initialCostPrice || 0),
+          receivedAt: new Date(formValue.initialReceivedAt),
+          expiryDate: formValue.initialExpiryDate ? new Date(formValue.initialExpiryDate) : undefined,
+          supplier: formValue.initialSupplier || undefined,
+          status: 'active' as const
+        } : null;
 
         // Get current user for UID
         const currentUser = this.authService.getCurrentUser();
@@ -1646,8 +1662,8 @@ export class ProductManagementComponent implements OnInit {
           storeId: storeId,  // Use storeId from permission
           barcodeId: formValue.barcodeId,
           imageUrl: formValue.imageUrl,
-          inventory,
-          totalStock,
+          inventory: [],
+          totalStock: hasInitial ? Number(formValue.initialQuantity || 0) : Number(formValue.totalStock || 0),
           
           // Tax and Discount Fields from form
           isVatApplicable: formValue.isVatApplicable || false,
@@ -1659,7 +1675,24 @@ export class ProductManagementComponent implements OnInit {
           status: 'active'
         };
 
-        await this.productService.createProduct(newProduct);
+        const productId = await this.productService.createProduct(newProduct);
+        // If initial batch exists, create it in separate collection and recompute summary
+        if (hasInitial && productId) {
+          await this.inventoryDataService.addBatch(productId, {
+            batchId: initialBatch!.batchId,
+            quantity: initialBatch!.quantity,
+            unitPrice: initialBatch!.unitPrice,
+            costPrice: initialBatch!.costPrice,
+            receivedAt: initialBatch!.receivedAt,
+            expiryDate: initialBatch!.expiryDate,
+            supplier: initialBatch!.supplier,
+            status: 'active',
+            unitType: formValue.unitType || 'pieces',
+            companyId: companyId,
+            storeId: storeId,
+            productId: productId
+          });
+        }
       }
 
       this.closeModal();
@@ -1680,28 +1713,14 @@ export class ProductManagementComponent implements OnInit {
   filterInventory(): void {
     if (!this.selectedProduct) { this.filteredInventory = []; return; }
     const term = (this.inventorySearch || '').toLowerCase();
-    if (!term) { 
-      // Sort by receivedAt descending when no search term
-      this.filteredInventory = (this.selectedProduct.inventory || []).slice().sort((a, b) => 
-        new Date(b.receivedAt).getTime() - new Date(a.receivedAt).getTime()
-      ); 
-      return; 
-    }
-    // Filter and sort the results
-    this.filteredInventory = (this.selectedProduct.inventory || [])
-      .filter(b => b.batchId.toLowerCase().includes(term))
-      .sort((a, b) => new Date(b.receivedAt).getTime() - new Date(a.receivedAt).getTime());
+    const list = this.currentBatches || [];
+    if (!term) { this.filteredInventory = list.slice(); return; }
+    this.filteredInventory = list.filter(b => (b.batchId || '').toLowerCase().includes(term));
   }
 
-  openEditBatch(batch: ProductInventory): void {
+  openEditBatch(batch: ProductInventoryEntry): void {
     if (!this.selectedProduct) return;
-    
-    // Check if this is the most recent batch (first in sorted array)
-    const sortedInventory = (this.selectedProduct.inventory || []).slice().sort((a, b) => 
-      new Date(b.receivedAt).getTime() - new Date(a.receivedAt).getTime()
-    );
-    
-    const isLatestBatch = sortedInventory.length > 0 && sortedInventory[0].batchId === batch.batchId;
+    const isLatestBatch = this.currentBatches.length > 0 && this.currentBatches[0].batchId === batch.batchId;
     
     if (!isLatestBatch) {
       this.toastService.error('You can only edit the most recent inventory batch.');
@@ -1711,6 +1730,7 @@ export class ProductManagementComponent implements OnInit {
     this.inventoryTab = 'edit';
     this.isEditingBatch = true;
     this.editingBatchOriginalId = batch.batchId || null;
+    this.editingBatchDocId = batch.id || null;
     this.inventoryForm.patchValue({
       batchId: batch.batchId,
       quantity: batch.quantity,
@@ -1741,8 +1761,8 @@ export class ProductManagementComponent implements OnInit {
     try {
       if (this.isEditingBatch && this.editingBatchOriginalId) {
         // Edit existing batch (only quantity and price allowed)
-        const batch: ProductInventory = {
-          batchId: this.editingBatchOriginalId,
+        if (!this.editingBatchDocId) throw new Error('Missing batch document ID');
+        await this.inventoryDataService.updateBatch(this.selectedProduct.id!, this.editingBatchDocId, {
           quantity: Number(formValue.quantity),
           unitPrice: Number(formValue.unitPrice),
           costPrice: Number(formValue.costPrice || 0),
@@ -1751,24 +1771,18 @@ export class ProductManagementComponent implements OnInit {
           supplier: formValue.supplier || undefined,
           status: 'active',
           unitType: this.selectedProduct?.unitType || 'pieces'
-        };
-        
-        await this.productService.updateInventoryBatch(this.selectedProduct.id!, this.editingBatchOriginalId, batch);
+        });
       } else {
         // Add new batch - check if previous batch has remaining stock
-        const sortedInventory = (this.selectedProduct.inventory || []).slice().sort((a, b) => 
-          new Date(b.receivedAt).getTime() - new Date(a.receivedAt).getTime()
-        );
-        
-        if (sortedInventory.length > 0 && sortedInventory[0].quantity > 0) {
+        const latest = this.currentBatches[0];
+        if (latest && latest.quantity > 0) {
           const confirmed = await this.confirmNewBatchWithExistingStock();
           if (!confirmed) {
             this.loading = false;
             return;
           }
         }
-        
-        const batch: ProductInventory = {
+        await this.inventoryDataService.addBatch(this.selectedProduct.id!, {
           batchId: this.generatedBatchId,
           quantity: Number(formValue.quantity),
           unitPrice: Number(formValue.unitPrice),
@@ -1777,24 +1791,24 @@ export class ProductManagementComponent implements OnInit {
           expiryDate: formValue.expiryDate ? new Date(formValue.expiryDate) : undefined,
           supplier: formValue.supplier || undefined,
           status: 'active',
-          unitType: this.selectedProduct?.unitType || 'pieces'
-        };
-        
-        await this.productService.addInventoryBatch(this.selectedProduct.id!, batch);
+          unitType: this.selectedProduct?.unitType || 'pieces',
+          companyId: this.selectedProduct.companyId,
+          storeId: this.selectedProduct.storeId,
+          productId: this.selectedProduct.id!
+        });
       }
 
       // Refresh state and generate new batch ID for next entry
+      this.currentBatches = await this.inventoryDataService.listBatches(this.selectedProduct.id!);
+      this.filteredInventory = this.currentBatches.slice();
       this.selectedProduct = this.productService.getProduct(this.selectedProduct.id!) || null;
-      // Sort by receivedAt descending after refresh
-      this.filteredInventory = (this.selectedProduct?.inventory || []).slice().sort((a, b) => 
-        new Date(b.receivedAt).getTime() - new Date(a.receivedAt).getTime()
-      );
       this.inventoryForm.reset();
       this.inventoryForm.patchValue({ receivedAt: new Date().toISOString().split('T')[0] });
       this.generatedBatchId = this.generateBatchId();
       this.isEditingBatch = false;
       this.inventoryTab = 'list';
       this.editingBatchOriginalId = null;
+      this.editingBatchDocId = null;
     } catch (err: any) {
       console.error('Error saving batch:', err);
       
@@ -1845,19 +1859,18 @@ export class ProductManagementComponent implements OnInit {
     if (!this.selectedProduct || !this.pendingBatchId) return;
 
     try {
-      await this.productService.removeInventoryBatch(this.selectedProduct.id!, this.pendingBatchId);
-      // Refresh the selected product
+      if (!this.pendingBatchDocId) throw new Error('Missing batch document ID');
+      await this.inventoryDataService.removeBatch(this.selectedProduct.id!, this.pendingBatchDocId);
+      // Refresh collections
+      this.currentBatches = await this.inventoryDataService.listBatches(this.selectedProduct.id!);
+      this.filteredInventory = this.currentBatches.slice();
       this.selectedProduct = this.productService.getProduct(this.selectedProduct.id!) || null;
-      
-      // Update total stock from inventory
-      if (this.selectedProduct) {
-        this.updateTotalStockFromInventory();
-      }
     } catch (error) {
       console.error('Error removing inventory batch:', error);
       this.toastService.error(ErrorMessages.INVENTORY_BATCH_REMOVE_ERROR);
     } finally {
-      this.pendingBatchId = null;
+  this.pendingBatchId = null;
+  this.pendingBatchDocId = null;
     }
   }
 
@@ -1868,36 +1881,6 @@ export class ProductManagementComponent implements OnInit {
       const el = document.getElementById('batchId');
       el?.focus();
     }, 100);
-  }
-
-  async setActiveBatch(batchId: string, active: boolean): Promise<void> {
-    if (!this.selectedProduct) return;
-    try {
-      const product = this.productService.getProduct(this.selectedProduct.id!);
-      if (!product) return;
-
-      const updatedInventory = product.inventory.map(inv => ({
-        ...inv,
-        status: inv.batchId === batchId ? (active ? 'active' : 'inactive') : (active ? 'inactive' : inv.status)
-      }));
-
-      // Enforce only one active batch: if active=true set others inactive
-      if (active) {
-        for (const inv of updatedInventory) {
-          if (inv.batchId !== batchId) inv.status = 'inactive';
-        }
-      }
-
-      // compute totalStock from active batches only
-      const totalStock = updatedInventory.reduce((s, b) => s + ((b.status === 'active') ? (b.quantity || 0) : 0), 0);
-
-      await this.productService.updateProduct(product.id!, { inventory: updatedInventory, totalStock });
-      // refresh selectedProduct
-      this.selectedProduct = this.productService.getProduct(product.id!) || null;
-    } catch (err) {
-      console.error(err);
-      this.toastService.error(ErrorMessages.ACTIVE_BATCH_SET_ERROR);
-    }
   }
 
   triggerImageUpload(): void {
@@ -2137,25 +2120,11 @@ export class ProductManagementComponent implements OnInit {
   }
 
   getComputedTotalStock(): number {
-    if (!this.selectedProduct?.inventory || this.selectedProduct.inventory.length === 0) {
-      return 0;
-    }
-    // Sum all active inventory batches
-    return this.selectedProduct.inventory.reduce((total, batch) => {
-      return total + (batch.status === 'active' ? batch.quantity : 0);
-    }, 0);
+    return this.selectedProduct?.totalStock || 0;
   }
 
   getComputedSellingPrice(): number {
-    if (!this.selectedProduct?.inventory || this.selectedProduct.inventory.length === 0) {
-      return 0;
-    }
-    // Get price from most recent batch (sorted by receivedAt descending)
-    const sortedInventory = this.selectedProduct.inventory
-      .slice()
-      .sort((a, b) => new Date(b.receivedAt).getTime() - new Date(a.receivedAt).getTime());
-    
-    return sortedInventory.length > 0 ? sortedInventory[0].unitPrice : 0;
+    return this.selectedProduct?.sellingPrice || 0;
   }
 
   getStockBadgeClass(stock: number): string {
@@ -2178,10 +2147,6 @@ export class ProductManagementComponent implements OnInit {
   }
 
   displayPrice(product: Product): number {
-    if (product.inventory && product.inventory.length) {
-      const active = product.inventory.find(b => b.status === 'active');
-      if (active) return active.unitPrice || product.sellingPrice;
-    }
     return product.sellingPrice;
   }
 
@@ -2205,6 +2170,43 @@ export class ProductManagementComponent implements OnInit {
       }
     } catch (error) {
       console.error('❌ Error loading categories:', error);
+    }
+  }
+
+  async loadUnitTypes(): Promise<void> {
+    try {
+      console.log('🔍 Loading unit types from predefined types...');
+      this.unitTypes = await this.predefinedTypesService.getUnitTypes();
+      console.log('✅ Unit types loaded:', this.unitTypes.length);
+      
+      // If no unit types found in database, seed them
+      if (this.unitTypes.length === 0) {
+        console.log('🌱 No unit types found, seeding default unit types...');
+        await this.predefinedTypesService.seedUnitTypes();
+        this.unitTypes = await this.predefinedTypesService.getUnitTypes();
+        console.log('✅ Unit types seeded and loaded:', this.unitTypes.length);
+      }
+    } catch (error) {
+      console.error('❌ Error loading unit types:', error);
+      // Fallback to default unit types
+      this.unitTypes = [
+        { value: 'pieces', label: 'Pieces' },
+        { value: 'kg', label: 'Kilograms' },
+        { value: 'liters', label: 'Liters' },
+        { value: 'boxes', label: 'Boxes' }
+      ];
+    }
+  }
+
+  // Utility method to seed comprehensive unit types (can be called from browser console)
+  async seedComprehensiveUnitTypes(): Promise<void> {
+    try {
+      console.log('🌱 Seeding comprehensive unit types...');
+      await this.predefinedTypesService.seedComprehensiveUnitTypes();
+      await this.loadUnitTypes();
+      console.log('✅ Comprehensive unit types seeded successfully!');
+    } catch (error) {
+      console.error('❌ Error seeding comprehensive unit types:', error);
     }
   }
 
@@ -2303,8 +2305,8 @@ export class ProductManagementComponent implements OnInit {
         throw new Error('No company ID found. User must be associated with a company to create categories.');
       }
       
-      // Get storeId from the product form if available
-      const storeId = this.productForm.value.storeId;
+      // Get storeId from the product form if available, otherwise fallback to current permission
+      const storeId = this.productForm.value.storeId || currentPermission?.storeId;
       console.log('🔍 Store ID from product form:', storeId);
       
       const categoryData: Omit<ProductCategory, 'id' | 'createdAt' | 'updatedAt'> = {
@@ -2333,6 +2335,21 @@ export class ProductManagementComponent implements OnInit {
       this.toastService.error('Failed to add category');
     } finally {
       this.loading = false;
+    }
+  }
+
+  /**
+   * Utility method to add a new unit type
+   * Can be called from browser console: window['addUnitType']('cubic_meters', 'Cubic Meters', 'Volume in cubic meters')
+   */
+  async addNewUnitType(value: string, label: string, description?: string): Promise<void> {
+    try {
+      await this.predefinedTypesService.addUnitType(value, label, description);
+      await this.loadUnitTypes(); // Refresh the list
+      this.toastService.success(`Unit type "${label}" added successfully!`);
+    } catch (error) {
+      console.error('❌ Error adding unit type:', error);
+      this.toastService.error('Failed to add unit type');
     }
   }
 
