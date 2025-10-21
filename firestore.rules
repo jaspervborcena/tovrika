@@ -41,6 +41,20 @@ service cloud.firestore {
       allow delete: if isAuthenticated() && 
         resource.data.uid == request.auth.uid;
     }
+
+    // Product Inventory Entries Collection - New enhanced inventory tracking
+    match /productInventoryEntries/{entryId} {
+      allow read: if isAuthenticated();  // Allow reading for any authenticated user
+      allow create: if isAuthenticated() &&
+        request.resource.data.uid == request.auth.uid &&
+        request.resource.data.productId is string &&
+        request.resource.data.companyId is string;
+      allow update: if isAuthenticated() &&
+        resource.data.uid == request.auth.uid &&
+        request.resource.data.uid == request.auth.uid;
+      allow delete: if isAuthenticated() && 
+        resource.data.uid == request.auth.uid;
+    }
     
     // Orders Collection - Users can only access their own orders
     // Allow migration: if uid doesn't exist, allow authenticated users to read
@@ -78,14 +92,16 @@ service cloud.firestore {
     // Stores Collection - Users can only access their own stores
     // Allow migration: if uid doesn't exist, allow authenticated users to add it
     match /stores/{storeId} {
-      allow read: if isAuthenticated() && 
-                  (resource == null || !exists(/databases/$(database)/documents/stores/$(storeId)) || 
-                   resource.data.uid == request.auth.uid || !('uid' in resource.data));
-      allow create: if isAuthenticated() && isCreatingOwnDocument();
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && 
+                    (isCreatingOwnDocument() || 
+                     !('uid' in request.resource.data));
       allow update: if isAuthenticated() && 
                     (isOwner(resource) || 
-                     (!('uid' in resource.data) && request.resource.data.uid == request.auth.uid));
-      allow delete: if isAuthenticated() && isOwner(resource);
+                     (!('uid' in resource.data) && request.resource.data.uid == request.auth.uid) ||
+                     !('uid' in request.resource.data));
+      allow delete: if isAuthenticated() && 
+                    (isOwner(resource) || !('uid' in resource.data));
     }
     
     // Devices Collection - Authenticated users can access devices
@@ -178,12 +194,16 @@ service cloud.firestore {
     // Company Billing History - Users can read their company's billing history
     match /companyBillingHistory/{historyId} {
       allow read: if isAuthenticated() &&
-                  exists(/databases/$(database)/documents/permissions/$(request.auth.uid)) &&
-                  get(/databases/$(database)/documents/permissions/$(request.auth.uid)).data.companyId == resource.data.companyId;
+                  resource.data.companyId is string;
       allow write: if isAuthenticated() &&
-                   exists(/databases/$(database)/documents/permissions/$(request.auth.uid)) &&
-                   get(/databases/$(database)/documents/permissions/$(request.auth.uid)).data.companyId == request.resource.data.companyId &&
-                   get(/databases/$(database)/documents/permissions/$(request.auth.uid)).data.role in ['owner', 'admin'];
+                   request.resource.data.companyId is string;
+    }
+
+    // ===== PERMISSIONS COLLECTION =====
+    
+    // User Permissions - Users can access their own permissions
+    match /permissions/{userId} {
+      allow read, write: if isAuthenticated() && userId == request.auth.uid;
     }
     
     // ===== USER PROFILE COLLECTION =====
@@ -208,14 +228,35 @@ service cloud.firestore {
       allow read: if isAuthenticated();
       allow write: if false; // System managed only
     }
+
+    // Invoices Collection - Users can access their own invoices
+    match /invoices/{invoiceId} {
+      allow read: if isAuthenticated() && 
+                  (resource == null || resource.data.uid == request.auth.uid || !('uid' in resource.data));
+      allow create: if isAuthenticated() && 
+                    (isCreatingOwnDocument() || !('uid' in request.resource.data));
+      allow update: if isAuthenticated() && 
+                    (isOwner(resource) || (!('uid' in resource.data) && request.resource.data.uid == request.auth.uid) ||
+                     !('uid' in request.resource.data));
+      allow delete: if isAuthenticated() && 
+                    (isOwner(resource) || !('uid' in resource.data));
+    }
+
+    // Invoice Numbers Collection - For tracking invoice sequences
+    match /invoiceNumbers/{docId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // Counters Collection - For managing sequential numbers
+    match /counters/{counterId} {
+      allow read, write: if isAuthenticated();
+    }
     
     // ===== CATCH-ALL SECURITY =====
     
-    // Any other collection requires UID-based security
+    // Any other collection requires authentication only (temporary permissive rule)
     match /{document=**} {
-      allow read, write: if isAuthenticated() && 
-                        (resource == null || isOwner(resource)) &&
-                        (request.resource == null || isCreatingOwnDocument());
+      allow read, write: if isAuthenticated();
     }
   }
 }

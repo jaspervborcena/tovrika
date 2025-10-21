@@ -3,9 +3,15 @@
     <div class="policy-card">
       <!-- Header -->
       <div class="policy-header">
-        <div class="app-logo">
-          <div class="logo-icon">T</div>
-          <h1 class="logo-text">{{ appName }}</h1>
+        <div class="app-logo" (click)="handleLogoClick()">
+          <app-logo 
+            size="lg" 
+            [showText]="true" 
+            theme="primary" 
+            background="white"
+            [clickable]="false"
+            [companyName]="appName">
+          </app-logo>
         </div>
         <h2 class="policy-title">Terms & Privacy Agreement</h2>
         <p class="policy-subtitle">

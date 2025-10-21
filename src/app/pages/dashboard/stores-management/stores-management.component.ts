@@ -86,7 +86,7 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
                     <input 
                       type="checkbox" 
                       [checked]="store.status === 'active'"
-                      (change)="toggleStoreStatus(store)">
+                      (click)="onToggleClick($event, store)">
                     <span class="toggle-slider"></span>
                   </label>
                 </td>
@@ -101,13 +101,13 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
                     <button 
                       class="btn-icon-action btn-bir"
                       (click)="openBirComplianceModal(store)"
-                      title="BIR Compliance">
+                      [title]="canManageBirCompliance() ? 'BIR Compliance' : 'BIR Compliance (View Only)'">
                       📋
                     </button>
                     <button 
                       class="btn-icon-action btn-devices"
                       (click)="openDevicesModal(store)"
-                      title="Manage Devices">
+                      [title]="canManageDevices() ? 'Manage Devices' : 'Device Management (View Only)'">
                       💻
                     </button>
                   </div>
@@ -310,10 +310,13 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
            style="position: fixed !important; z-index: 9999 !important; background: rgba(0, 0, 0, 0.8) !important;">
         <div class="modal" (click)="$event.stopPropagation()">
           <div class="modal-header">
-            <h3>📋 BIR Compliance - {{ selectedStore?.storeName }}</h3>
+            <h3>📋 BIR Compliance{{ !canManageBirCompliance() ? ' (View Only)' : '' }} - {{ selectedStore?.storeName }}</h3>
             <button class="close-btn" (click)="closeBirModal()">×</button>
           </div>
           <div class="modal-body">
+            <div *ngIf="!canManageBirCompliance()" class="view-only-notice">
+              <p><strong>View Only Mode:</strong> You can view BIR compliance information but cannot make changes. Contact your administrator to modify these settings.</p>
+            </div>
             <form [formGroup]="birForm">
               <div class="form-group">
                 <label for="birPermitNo">BIR Permit Number *</label>
@@ -322,7 +325,9 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
                   id="birPermitNo"
                   formControlName="birPermitNo"
                   placeholder="BIR-PERMIT-2025-XXXXX"
-                  class="form-input">
+                  class="form-input"
+                  [readonly]="!canManageBirCompliance()"
+                  [class.readonly]="!canManageBirCompliance()">
               </div>
 
               <div class="form-group">
@@ -332,7 +337,9 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
                   id="atpOrOcn"
                   formControlName="atpOrOcn"
                   placeholder="OCN-2025-XXXXXX"
-                  class="form-input">
+                  class="form-input"
+                  [readonly]="!canManageBirCompliance()"
+                  [class.readonly]="!canManageBirCompliance()">
               </div>
 
               <div class="form-group">
@@ -341,7 +348,9 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
                   type="date" 
                   id="permitDateIssued"
                   formControlName="permitDateIssued"
-                  class="form-input">
+                  class="form-input"
+                  [readonly]="!canManageBirCompliance()"
+                  [class.readonly]="!canManageBirCompliance()">
               </div>
 
               <div class="form-group">
@@ -351,7 +360,9 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
                   formControlName="validityNotice"
                   placeholder="e.g., Valid for 5 years from permit date"
                   class="form-textarea"
-                  rows="2"></textarea>
+                  rows="2"
+                  [readonly]="!canManageBirCompliance()"
+                  [class.readonly]="!canManageBirCompliance()"></textarea>
               </div>
 
               <div class="form-group">
@@ -359,7 +370,9 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
                 <select 
                   id="vatRegistrationType"
                   formControlName="vatRegistrationType"
-                  class="form-select">
+                  class="form-select"
+                  [disabled]="!canManageBirCompliance()"
+                  [class.readonly]="!canManageBirCompliance()">
                   <option value="VAT-registered">VAT Registered</option>
                   <option value="Non-VAT">Non-VAT</option>
                   <option value="VAT-exempt">VAT Exempt</option>
@@ -374,7 +387,9 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
                   formControlName="vatRate"
                   placeholder="12.0"
                   step="0.1"
-                  class="form-input">
+                  class="form-input"
+                  [readonly]="!canManageBirCompliance()"
+                  [class.readonly]="!canManageBirCompliance()">
               </div>
 
               <div class="form-group">
@@ -382,7 +397,9 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
                 <select 
                   id="receiptType"
                   formControlName="receiptType"
-                  class="form-select">
+                  class="form-select"
+                  [disabled]="!canManageBirCompliance()"
+                  [class.readonly]="!canManageBirCompliance()">
                   <option value="POS Receipt">POS Receipt</option>
                   <option value="Sales Invoice">Sales Invoice</option>
                   <option value="Official Receipt">Official Receipt</option>
@@ -391,8 +408,9 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
             </form>
           </div>
           <div class="modal-footer">
-            <button class="btn btn-secondary" (click)="closeBirModal()">Cancel</button>
+            <button class="btn btn-secondary" (click)="closeBirModal()">{{ canManageBirCompliance() ? 'Cancel' : 'Close' }}</button>
             <button 
+              *ngIf="canManageBirCompliance()"
               class="btn btn-primary" 
               (click)="saveBirCompliance()"
               [disabled]="!birForm.valid || isLoading">
@@ -409,19 +427,22 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
            style="position: fixed !important; z-index: 9999 !important; background: rgba(0, 0, 0, 0.8) !important;">
         <div class="modal modal-large" (click)="$event.stopPropagation()">
           <div class="modal-header">
-            <h3>💻 Manage Devices - {{ selectedStore?.storeName }}</h3>
+            <h3>💻 {{ canManageDevices() ? 'Manage Devices' : 'View Devices (View Only)' }} - {{ selectedStore?.storeName }}</h3>
             <button class="close-btn" (click)="closeDevicesModal()">×</button>
           </div>
           <div class="modal-body">
+            <div *ngIf="!canManageDevices()" class="view-only-notice">
+              <p><strong>View Only Mode:</strong> You can view device information but cannot make changes. Contact your administrator to modify device settings.</p>
+            </div>
             <!-- Add Device Button -->
-            <div class="devices-header" *ngIf="!showDeviceForm">
+            <div class="devices-header" *ngIf="!showDeviceForm && canManageDevices()">
               <button class="btn btn-primary btn-sm" (click)="showAddDeviceForm()">
                 ➕ Add New Device
               </button>
             </div>
 
             <!-- Device Form (Add/Edit) -->
-            <div class="device-form-container" *ngIf="showDeviceForm">
+            <div class="device-form-container" *ngIf="showDeviceForm && canManageDevices()">
               <h4>{{ editingDevice ? 'Edit Device' : 'Add New Device' }}</h4>
               <form [formGroup]="deviceForm">
                 <div class="form-row">
@@ -538,9 +559,12 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
                 <div *ngFor="let device of storeDevices" class="device-card">
                   <div class="device-card-header">
                     <h5>{{ device.deviceLabel }}</h5>
-                    <div class="device-actions">
+                    <div class="device-actions" *ngIf="canManageDevices()">
                       <button class="btn-icon-sm" (click)="editDevice(device)" title="Edit">✏️</button>
                       <button class="btn-icon-sm" (click)="deleteDevice(device)" title="Delete">🗑️</button>
+                    </div>
+                    <div class="device-actions" *ngIf="!canManageDevices()">
+                      <span class="view-only-badge">View Only</span>
                     </div>
                   </div>
                   <div class="device-card-body">
@@ -1266,6 +1290,21 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
       border-color: #8b5cf6;
     }
 
+    .btn-icon-action.disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+      background: #f3f4f6 !important;
+      border-color: #d1d5db !important;
+      color: #9ca3af !important;
+    }
+
+    .btn-icon-action.disabled:hover {
+      transform: none !important;
+      box-shadow: none !important;
+      background: #f3f4f6 !important;
+      border-color: #d1d5db !important;
+    }
+
     /* Toggle Switch Styles */
     .toggle-switch {
       position: relative;
@@ -1468,6 +1507,48 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
       padding: 0.5rem 1rem;
       font-size: 0.875rem;
     }
+
+    /* View Only Styles */
+    .view-only-notice {
+      background: #fff3cd;
+      border: 1px solid #ffeaa7;
+      border-radius: 8px;
+      padding: 1rem;
+      margin-bottom: 1.5rem;
+      color: #856404;
+    }
+
+    .view-only-notice p {
+      margin: 0;
+      font-size: 0.875rem;
+    }
+
+    .view-only-badge {
+      background: #e2e8f0;
+      color: #64748b;
+      padding: 0.25rem 0.75rem;
+      border-radius: 9999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.025em;
+    }
+
+    .form-input.readonly,
+    .form-select.readonly,
+    .form-textarea.readonly {
+      background: #f8f9fa !important;
+      color: #6c757d !important;
+      cursor: not-allowed !important;
+      border-color: #e9ecef !important;
+    }
+
+    .form-select[disabled] {
+      background: #f8f9fa !important;
+      color: #6c757d !important;
+      cursor: not-allowed !important;
+      border-color: #e9ecef !important;
+    }
   `]
 })
 export class StoresManagementComponent implements OnInit {
@@ -1561,6 +1642,29 @@ export class StoresManagementComponent implements OnInit {
   async ngOnInit() {
     await this.loadStores();
     await this.loadStoreTypes();
+  }
+
+  // Role-based access control methods
+  isAdminUser(): boolean {
+    const currentPermission = this.authService.getCurrentPermission();
+    return currentPermission?.roleId === 'creator';
+  }
+
+  isStoreManagerUser(): boolean {
+    const currentPermission = this.authService.getCurrentPermission();
+    return currentPermission?.roleId === 'store_manager';
+  }
+
+  canManageBirCompliance(): boolean {
+    return this.isAdminUser(); // Only admin can manage BIR compliance
+  }
+
+  canManageDevices(): boolean {
+    return this.isAdminUser(); // Only admin can manage devices
+  }
+
+  showAccessDeniedMessage(feature: string): void {
+    this.toastService.error(`Access denied: ${feature} is only available for administrators.`);
   }
 
   async loadStoreTypes() {
@@ -1795,31 +1899,61 @@ export class StoresManagementComponent implements OnInit {
     }
   }
 
-  async toggleStoreStatus(store: Store) {
-    const newStatus = store.status === 'active' ? 'inactive' : 'active';
-    const action = newStatus === 'active' ? 'activate' : 'deactivate';
+  onToggleClick(event: Event, store: Store) {
+    // Prevent the checkbox from changing state
+    event.preventDefault();
+    event.stopPropagation();
     
+    // Call the toggle method
+    this.toggleStoreStatus(store);
+  }
+
+  async toggleStoreStatus(store: Store) {
+    // Determine the intended status and readable action
+    const intendedStatus = store.status === 'active' ? 'inactive' : 'active';
+    const actionTitle = intendedStatus === 'active' ? 'Activate' : 'Deactivate';
+
     const confirmed = await this.showConfirmationDialog({
-      title: `${action.charAt(0).toUpperCase() + action.slice(1)} Store`,
-      message: `Are you sure you want to ${action} "${store.storeName}"?`,
-      confirmText: action.charAt(0).toUpperCase() + action.slice(1),
+      title: `${actionTitle} Store`,
+      message: `Are you sure you want to ${actionTitle.toLowerCase()} "${store.storeName}"?`,
+      confirmText: actionTitle,
       cancelText: 'Cancel',
       type: 'warning'
     });
 
-    if (confirmed) {
-      this.isLoading = true;
-      
-      try {
-        await this.storeService.updateStore(store.id!, { status: newStatus });
-        await this.loadStores();
-        this.toastService.success(`Store ${action}d successfully!`);
-      } catch (error) {
-        console.error('Error updating store status:', error);
-        this.toastService.error(`Error ${action}ing store. Please try again.`);
-      } finally {
-        this.isLoading = false;
+    if (!confirmed) return;
+
+    // Store original status in case we need to revert
+    const originalStatus = store.status;
+    
+    this.isLoading = true;
+    try {
+      // Attempt update
+      await this.storeService.updateStore(store.id!, { status: intendedStatus });
+
+      // Update the local store status only on success
+      store.status = intendedStatus;
+
+      // Show success message based on the new status
+      const pastTense = intendedStatus === 'active' ? 'activated' : 'deactivated';
+      this.toastService.success(`Store ${pastTense} successfully!`);
+
+      // Reload stores to ensure consistency with backend
+      await this.loadStores();
+    } catch (error: any) {
+      console.error('Error updating store status:', error);
+
+      // Ensure the store status remains unchanged in the UI
+      store.status = originalStatus;
+
+      // Handle permission-related errors explicitly
+      if (error?.code === 'permission-denied' || (error?.message && error.message.toLowerCase().includes('permission'))) {
+        this.toastService.error('You do not have permission to change the store status. Contact your administrator.');
+      } else {
+        this.toastService.error(`${actionTitle} failed. Please try again.`);
       }
+    } finally {
+      this.isLoading = false;
     }
   }
 

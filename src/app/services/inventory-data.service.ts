@@ -268,18 +268,31 @@ export class InventoryDataService {
   }
 
   async recomputeAndUpdateProductSummary(productId: string): Promise<void> {
+    console.log('📊 Recomputing product summary for:', productId);
+    
     // Load all active batches for product
     const batches = await this.listBatches(productId);
     const active = batches.filter((b) => b.status === 'active');
+    
+    // Calculate total stock from all active batches
     const totalStock = active.reduce((s, b) => s + (b.quantity || 0), 0);
+    console.log('📦 Total stock calculated:', totalStock, 'from', active.length, 'active batches');
+    
+    // Get latest batch for selling price (most recent first)
     const latest = active.sort((a, b) => new Date(b.receivedAt).getTime() - new Date(a.receivedAt).getTime())[0] || null;
     const sellingPrice = latest ? latest.unitPrice : 0;
+    console.log('💰 Selling price from latest batch:', sellingPrice, latest ? `(batch: ${latest.batchId})` : '(no active batches)');
 
-    await this.productService.updateProduct(productId, {
+    // Update product with calculated values
+    const updateData = {
       totalStock,
       sellingPrice,
       lastUpdated: new Date(),
-    } as any);
+    };
+    
+    console.log('🔄 Updating product with:', updateData);
+    await this.productService.updateProduct(productId, updateData as any);
+    console.log('✅ Product summary updated successfully');
   }
 
   /**

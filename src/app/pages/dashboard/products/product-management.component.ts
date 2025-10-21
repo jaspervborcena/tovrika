@@ -552,9 +552,13 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
       display: flex;
       align-items: center;
       justify-content: center;
-      z-index: 9999 !important;
+      z-index: 9000 !important;
       backdrop-filter: blur(2px);
       padding: 1rem;
+    }
+
+    .inventory-modal-overlay {
+      z-index: 8000 !important;
     }
 
     .modal {
@@ -741,15 +745,15 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
 
     /* Ensure confirmation dialog appears above modals */
     ::ng-deep app-confirmation-dialog {
-      z-index: 10001 !important;
+      z-index: 99999 !important;
     }
 
     ::ng-deep app-confirmation-dialog .modal-overlay {
-      z-index: 10001 !important;
+      z-index: 99999 !important;
     }
 
     ::ng-deep app-confirmation-dialog .modal {
-      z-index: 10002 !important;
+      z-index: 100000 !important;
     }
 
     @media (max-width: 768px) {
@@ -1076,7 +1080,7 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
       </div>
 
       <!-- Inventory Modal -->
-      <div class="modal-overlay" *ngIf="showInventoryModal">
+      <div class="modal-overlay inventory-modal-overlay" *ngIf="showInventoryModal">
         <div class="modal store-modal" (click)="$event.stopPropagation()" style="max-width:800px;">
           <div class="modal-header">
             <h3>📦 Inventory Management - {{ selectedProduct?.productName }}</h3>
@@ -1099,9 +1103,9 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
                 [class.active]="inventoryTab === 'edit'"
                 (click)="switchToEditTab()">
                 <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" class="tab-icon">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
                 </svg>
-                Add Batch
+                Edit
               </button>
             </div>
 
@@ -1147,15 +1151,15 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
                           class="btn btn-sm btn-primary me-2" 
                           (click)="$event.stopPropagation(); openEditBatch(batch)"
                           title="Edit quantity and price">
-                          Edit
+                          ✏️ Edit
                         </button>
                         <!-- Remove button only for the most recent (first) item -->
                         <button 
-                          *ngIf="i === 0"
+                          *ngIf="i === 0 && batch.id"
                           class="btn btn-sm btn-danger" 
-                          (click)="$event.stopPropagation(); removeInventoryBatch(batch.batchId)"
+                          (click)="$event.stopPropagation(); removeInventoryBatch(batch.batchId, batch.id!)"
                           title="Remove batch">
-                          Remove
+                          🗑️ Remove
                         </button>
                         <!-- Show disabled state for older items -->
                         <span *ngIf="i > 0" class="text-muted small">
@@ -1175,7 +1179,7 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
                   <h3>No inventory batches found</h3>
                   <p>This product doesn't have any inventory batches yet.</p>
                   <button class="btn btn-primary" (click)="switchToEditTab()">
-                    Add First Batch
+                    Add New Batch
                   </button>
                 </div>
               </div>
@@ -1185,8 +1189,8 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
             <div class="tab-content" *ngIf="inventoryTab==='edit'">
               <div class="form-card">
                 <div class="form-header">
-                  <h4 class="form-title">Add New Batch</h4>
-                  <p class="form-subtitle">Add new inventory to your product stock</p>
+                  <h4 class="form-title">{{ isEditingBatch ? 'Edit Batch' : 'Add New Batch' }}</h4>
+                  <p class="form-subtitle">{{ isEditingBatch ? 'Update inventory batch details' : 'Add new inventory to your product stock' }}</p>
                 </div>
                 
                 <form [formGroup]="inventoryForm" (ngSubmit)="saveBatch()" class="inventory-form">
@@ -1257,7 +1261,7 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
                       class="btn btn-primary" 
                       [disabled]="inventoryForm.invalid || loading">
                       <span *ngIf="loading" class="loading-spinner"></span>
-                      {{ loading ? 'Adding...' : 'Add Batch' }}
+                      {{ loading ? 'Saving...' : 'Save' }}
                     </button>
                   </div>
                 </form>
@@ -1268,7 +1272,12 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
       </div>
 
       <!-- Confirmation dialog placeholder -->
-      <app-confirmation-dialog *ngIf="showDeleteConfirmation() && deleteConfirmationData()" [dialogData]="deleteConfirmationData()!" (confirmed)="onDeleteConfirmed()" (cancelled)="closeDeleteConfirmation()"></app-confirmation-dialog>
+      <app-confirmation-dialog 
+        *ngIf="showDeleteConfirmation() && deleteConfirmationData()" 
+        [dialogData]="deleteConfirmationData()!" 
+        (confirmed)="onDeleteConfirmed()" 
+        (cancelled)="closeDeleteConfirmation()">
+      </app-confirmation-dialog>
     </div>
   `
 })
@@ -1296,7 +1305,6 @@ export class ProductManagementComponent implements OnInit {
   filteredInventory: ProductInventoryEntry[] | null = null;
   private currentBatches: ProductInventoryEntry[] = [];
   private editingBatchDocId: string | null = null;
-  private pendingBatchDocId: string | null = null;
   isEditingBatch = false;
   editingBatchOriginalId: string | null = null;
   generatedBatchId = '';
@@ -1306,6 +1314,7 @@ export class ProductManagementComponent implements OnInit {
   deleteConfirmationData = signal<ConfirmationDialogData | null>(null);
   productToDelete: Product | null = null;
   pendingBatchId: string | null = null;
+  pendingBatchDocId: string | null = null;
   pendingNewBatchConfirmation: ((value: boolean) => void) | null = null;
 
   // Modal mode management
@@ -1532,6 +1541,13 @@ export class ProductManagementComponent implements OnInit {
     this.generatedBatchId = this.generateBatchId(); // Generate new ID when switching to edit tab
     this.isEditingBatch = false; // Ensure it's in add mode, not edit mode
     this.editingBatchOriginalId = null;
+    this.editingBatchDocId = null;
+    
+    // Reset form for new batch
+    this.inventoryForm.reset();
+    this.inventoryForm.patchValue({
+      receivedAt: new Date().toISOString().split('T')[0]
+    });
   }
 
   async openInventoryModal(product: Product): Promise<void> {
@@ -1723,6 +1739,60 @@ export class ProductManagementComponent implements OnInit {
     return this.saveBatch();
   }
 
+  async removeInventoryBatch(batchId: string, batchDocId: string): Promise<void> {
+    if (!this.selectedProduct) return;
+
+    console.log('removeInventoryBatch called for batch:', batchId, batchDocId);
+
+    // Reset everything first
+    this.showDeleteConfirmation.set(false);
+    this.deleteConfirmationData.set(null);
+    this.productToDelete = null;
+    this.pendingBatchId = null;
+    this.pendingBatchDocId = null;
+    
+    // Set the data immediately
+    this.deleteConfirmationData.set({
+      title: 'Remove Inventory Batch',
+      message: 'Are you sure you want to remove this inventory batch? This action cannot be undone.',
+      confirmText: 'Remove',
+      cancelText: 'Cancel',
+      type: 'danger'
+    });
+    
+    // Store the batchId and docId for use in confirmation
+    this.pendingBatchId = batchId;
+    this.pendingBatchDocId = batchDocId;
+    
+    // Show the dialog immediately
+    this.showDeleteConfirmation.set(true);
+    
+    console.log('Dialog state:', {
+      showDeleteConfirmation: this.showDeleteConfirmation(),
+      deleteConfirmationData: this.deleteConfirmationData(),
+      pendingBatchId: this.pendingBatchId,
+      pendingBatchDocId: this.pendingBatchDocId
+    });
+  }
+
+  async performBatchRemoval(): Promise<void> {
+    if (!this.selectedProduct || !this.pendingBatchId || !this.pendingBatchDocId) return;
+
+    try {
+      await this.inventoryDataService.removeBatch(this.selectedProduct.id!, this.pendingBatchDocId);
+      // Refresh collections
+      this.currentBatches = await this.inventoryDataService.listBatches(this.selectedProduct.id!);
+      this.filteredInventory = this.currentBatches.slice();
+      this.selectedProduct = this.productService.getProduct(this.selectedProduct.id!) || null;
+    } catch (error) {
+      console.error('Error removing inventory batch:', error);
+      this.toastService.error(ErrorMessages.INVENTORY_BATCH_REMOVE_ERROR);
+    } finally {
+      this.pendingBatchId = null;
+      this.pendingBatchDocId = null;
+    }
+  }
+
   filterInventory(): void {
     if (!this.selectedProduct) { this.filteredInventory = []; return; }
     const term = (this.inventorySearch || '').toLowerCase();
@@ -1852,40 +1922,7 @@ export class ProductManagementComponent implements OnInit {
     });
   }
 
-  async removeInventoryBatch(batchId: string): Promise<void> {
-    if (!this.selectedProduct) return;
 
-    // Set up confirmation dialog for inventory batch removal
-    this.deleteConfirmationData.set({
-      title: 'Remove Inventory Batch',
-      message: 'Are you sure you want to remove this inventory batch? This action cannot be undone.',
-      confirmText: 'Remove',
-      cancelText: 'Cancel'
-    });
-    
-    // Store the batchId for use in confirmation
-    this.pendingBatchId = batchId;
-    this.showDeleteConfirmation.set(true);
-  }
-
-  async performBatchRemoval(): Promise<void> {
-    if (!this.selectedProduct || !this.pendingBatchId) return;
-
-    try {
-      if (!this.pendingBatchDocId) throw new Error('Missing batch document ID');
-      await this.inventoryDataService.removeBatch(this.selectedProduct.id!, this.pendingBatchDocId);
-      // Refresh collections
-      this.currentBatches = await this.inventoryDataService.listBatches(this.selectedProduct.id!);
-      this.filteredInventory = this.currentBatches.slice();
-      this.selectedProduct = this.productService.getProduct(this.selectedProduct.id!) || null;
-    } catch (error) {
-      console.error('Error removing inventory batch:', error);
-      this.toastService.error(ErrorMessages.INVENTORY_BATCH_REMOVE_ERROR);
-    } finally {
-  this.pendingBatchId = null;
-  this.pendingBatchDocId = null;
-    }
-  }
 
   showAddBatchFromInventory(): void {
     // open the inventory add section by focusing the batch form — we reuse inventoryForm
@@ -2084,7 +2121,7 @@ export class ProductManagementComponent implements OnInit {
         console.error('Error deleting product:', error);
         this.toastService.error(ErrorMessages.PRODUCT_DELETE_ERROR);
       }
-    } else if (this.pendingBatchId) {
+    } else if (this.pendingBatchId && this.pendingBatchDocId) {
       // Handle batch removal
       await this.performBatchRemoval();
     } else if (this.pendingNewBatchConfirmation) {
@@ -2100,6 +2137,7 @@ export class ProductManagementComponent implements OnInit {
     this.deleteConfirmationData.set(null);
     this.productToDelete = null;
     this.pendingBatchId = null;
+    this.pendingBatchDocId = null;
     // Handle cancellation of new batch confirmation
     if (this.pendingNewBatchConfirmation) {
       this.pendingNewBatchConfirmation(false);

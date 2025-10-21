@@ -62,6 +62,28 @@
           </div>
         </div>
         
+        <!-- Role Selection Field -->
+        <div class="form-group">
+          <label for="role" class="form-label">I am a</label>
+          <select
+            id="role"
+            name="roleId"
+            formControlName="roleId"
+            [ngClass]="{'error': registerForm.get('roleId')?.invalid && registerForm.get('roleId')?.touched}"
+            class="form-input"
+          >
+            <option *ngFor="let role of roleOptions" [value]="role.id">
+              {{ role.label }}
+            </option>
+          </select>
+          <div class="role-description" *ngIf="registerForm.get('roleId')?.value">
+            {{ selectedRoleDescription }}
+          </div>
+          <div *ngIf="registerForm.get('roleId')?.invalid && registerForm.get('roleId')?.touched" class="error-message">
+            Please select your role
+          </div>
+        </div>
+        
         <!-- Password Field -->
         <div class="form-group">
           <label for="password" class="form-label">Password</label>

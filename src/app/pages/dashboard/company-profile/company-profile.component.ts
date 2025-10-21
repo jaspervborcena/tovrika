@@ -133,6 +133,18 @@ import { BillingService } from '../../../services/billing.service';
               </div>
             </div>
 
+            <!-- Phone Number -->
+            <div class="form-group">
+              <label for="phone" class="form-label">Phone Number</label>
+              <input 
+                id="phone"
+                type="tel" 
+                formControlName="phone"
+                class="form-input"
+                placeholder="Enter phone number"
+                [disabled]="loading()">
+            </div>
+
             <!-- Form Actions -->
             <div class="form-actions">
               <button 
@@ -968,7 +980,8 @@ export class CompanyProfileComponent {
   constructor() {
     this.profileForm = this.fb.group({
       name: ['', Validators.required],
-      email: ['', [Validators.required, Validators.email]]
+      email: ['', [Validators.required, Validators.email]],
+      phone: ['']
     });
 
     // Load companies and set up form subscription
@@ -1013,7 +1026,8 @@ export class CompanyProfileComponent {
         // Existing company - populate form
         this.profileForm.patchValue({
           name: company.name || '',
-          email: company.email || ''
+          email: company.email || '',
+          phone: company.phone || ''
         });
         
         // Load stores when company exists
@@ -1022,7 +1036,8 @@ export class CompanyProfileComponent {
         // New company creation - pre-populate with user email if available
         this.profileForm.patchValue({
           name: '',
-          email: user.email || ''
+          email: user.email || '',
+          phone: ''
         });
       }
     });
@@ -1056,7 +1071,8 @@ export class CompanyProfileComponent {
             name: formData.name,
             slug: formData.name.toLowerCase().replace(/[^a-z0-9]/g, '-'),
             ownerUid: this.currentUser()?.uid || '',
-            email: formData.email
+            email: formData.email,
+            phone: formData.phone
           };
 
           await this.companyService.createCompany(companyData);
@@ -1075,6 +1091,7 @@ export class CompanyProfileComponent {
             const updateData: Partial<Company> = {
               name: formData.name,
               email: formData.email,
+              phone: formData.phone,
               updatedAt: new Date()
             };
 
@@ -1107,13 +1124,15 @@ export class CompanyProfileComponent {
       // Reset to existing company data
       this.profileForm.patchValue({
         name: company.name || '',
-        email: company.email || ''
+        email: company.email || '',
+        phone: company.phone || ''
       });
     } else if (user) {
       // Reset to initial state for new company
       this.profileForm.patchValue({
         name: '',
-        email: user.email || ''
+        email: user.email || '',
+        phone: ''
       });
     }
   }
