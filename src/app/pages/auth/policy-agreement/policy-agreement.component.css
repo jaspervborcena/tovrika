@@ -39,30 +39,17 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 0.75rem;
   margin-bottom: 1.5rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border-radius: 8px;
+  padding: 0.5rem;
 }
 
-.logo-icon {
-  width: 3rem;
-  height: 3rem;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  border-radius: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: white;
-  font-weight: bold;
-  font-size: 1.5rem;
-  font-family: 'Poppins', sans-serif;
-}
-
-.logo-text {
-  font-size: 1.5rem;
-  font-weight: 700;
-  color: #1f2937;
-  margin: 0;
-  font-family: 'Poppins', sans-serif;
+.app-logo:hover {
+  transform: scale(1.05);
+  opacity: 0.8;
+  background: rgba(102, 126, 234, 0.05);
 }
 
 .policy-title {

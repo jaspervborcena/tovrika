@@ -1,7 +1,8 @@
 import { Component, OnInit, computed, signal, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
-import { Product, ProductInventory, UNIT_TYPES } from '../../../interfaces/product.interface';
+import { Product, ProductInventory } from '../../../interfaces/product.interface';
+import { ProductInventoryEntry } from '../../../interfaces/product-inventory-entry.interface';
 import { ProductService } from '../../../services/product.service';
 import { StoreService } from '../../../services/store.service';
 
@@ -9,6 +10,8 @@ import { AuthService } from '../../../services/auth.service';
 import { ToastService } from '../../../shared/services/toast.service';
 import { ErrorMessages } from '../../../shared/enums';
 import { CategoryService, ProductCategory } from '../../../services/category.service';
+import { InventoryDataService } from '../../../services/inventory-data.service';
+import { PredefinedTypesService, UnitTypeOption, PredefinedType } from '../../../services/predefined-types.service';
 import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../shared/components/confirmation-dialog/confirmation-dialog.component';
 
 @Component({
@@ -549,9 +552,13 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
       display: flex;
       align-items: center;
       justify-content: center;
-      z-index: 9999 !important;
+      z-index: 9000 !important;
       backdrop-filter: blur(2px);
       padding: 1rem;
+    }
+
+    .inventory-modal-overlay {
+      z-index: 8000 !important;
     }
 
     .modal {
@@ -736,6 +743,19 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
       cursor: not-allowed;
     }
 
+    /* Ensure confirmation dialog appears above modals */
+    ::ng-deep app-confirmation-dialog {
+      z-index: 99999 !important;
+    }
+
+    ::ng-deep app-confirmation-dialog .modal-overlay {
+      z-index: 99999 !important;
+    }
+
+    ::ng-deep app-confirmation-dialog .modal {
+      z-index: 100000 !important;
+    }
+
     @media (max-width: 768px) {
       .modal {
         width: 95%;
@@ -757,6 +777,137 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
       .modal-footer {
         padding: 1rem 1.5rem;
       }
+    }
+
+    /* VAT Notice Styles */
+    .vat-notice {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.75rem 1rem;
+      background: #fef3cd;
+      border: 1px solid #ffeaa7;
+      border-radius: 6px;
+      margin-bottom: 1.5rem;
+      color: #856404;
+      font-size: 0.875rem;
+    }
+
+    .notice-icon {
+      width: 20px;
+      height: 20px;
+      flex-shrink: 0;
+    }
+
+    /* Inventory Summary Styles */
+    .inventory-summary {
+      background: #f8f9fa;
+      border: 1px solid #e9ecef;
+      border-radius: 8px;
+      padding: 1.5rem;
+    }
+
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .summary-item label {
+      display: block;
+      font-weight: 500;
+      color: #495057;
+      margin-bottom: 0.5rem;
+    }
+
+    .calculated-value {
+      font-size: 1.125rem;
+      font-weight: 600;
+      color: #007bff;
+      margin-bottom: 0.25rem;
+    }
+
+    .calculated-value small {
+      display: block;
+      font-size: 0.75rem;
+      font-weight: 400;
+      color: #6c757d;
+    }
+
+    /* New Product Inventory Styles */
+    .new-product-inventory {
+      border: 2px dashed #28a745;
+      border-radius: 8px;
+      padding: 1.5rem;
+      background: #f8fff9;
+    }
+
+    .form-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1rem;
+      margin-bottom: 1rem;
+    }
+
+    /* Inventory Management Button */
+    .inventory-actions {
+      text-align: center;
+    }
+
+    .btn-inventory {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.75rem 1.5rem;
+      background: #007bff;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .btn-inventory:hover {
+      background: #0056b3;
+      transform: translateY(-1px);
+    }
+
+    .btn-icon {
+      width: 18px;
+      height: 18px;
+    }
+
+    /* Unauthorized Message Styles */
+    .unauthorized-message {
+      display: flex;
+      align-items: flex-start;
+      gap: 1rem;
+      padding: 1.5rem;
+      background: #fff3cd;
+      border: 1px solid #ffeaa7;
+      border-radius: 8px;
+      color: #856404;
+    }
+
+    .warning-icon {
+      width: 24px;
+      height: 24px;
+      flex-shrink: 0;
+      color: #f0ad4e;
+    }
+
+    .unauthorized-message h5 {
+      margin: 0 0 0.5rem 0;
+      font-size: 1rem;
+      font-weight: 600;
+    }
+
+    .unauthorized-message p {
+      margin: 0;
+      font-size: 0.875rem;
+      line-height: 1.4;
     }
     `
   ],
@@ -951,6 +1102,19 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
                   </div>
                 </div>
 
+                <div class="form-group">
+                  <label for="unitType">Unit Type</label>
+                  <select 
+                    id="unitType"
+                    formControlName="unitType"
+                    class="form-input">
+                    <option *ngFor="let unit of unitTypes" [value]="unit.value">{{ unit.label }}</option>
+                  </select>
+                  <div class="error-message" *ngIf="productForm.get('unitType')?.invalid && productForm.get('unitType')?.touched">
+                    Unit type is required
+                  </div>
+                </div>
+
                 <!-- Product Image Upload -->
                 <div class="form-group">
                   <label for="productImage">Product Image</label>
@@ -1001,36 +1165,136 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
 
               <!-- Pricing & Inventory Section -->
               <div class="form-section">
+                <!-- VAT Notice -->
+                <div class="vat-notice">
+                  <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" class="notice-icon">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                  </svg>
+                  <span>Default 12% VAT applied. Some items may not be VATable - please double check tax settings.</span>
+                </div>
+
                 <h4 class="section-title">
                   <span>💲</span>
                   <span>Pricing & Inventory</span>
                 </h4>
-                
-                <div class="form-group">
-                  <label for="totalStock">Total Stock</label>
-                  <input 
-                    type="text" 
-                    id="totalStock"
-                    [value]="selectedProduct?.totalStock || 0"
-                    placeholder="0"
-                    class="form-input"
-                    readonly
-                    style="background-color: #f8f9fa; color: #6c757d;">
-                  <small class="text-muted">Calculated from all inventory batches</small>
+
+                <!-- Check if product has existing inventory -->
+                <div *ngIf="hasExistingInventory(); else newProductInventory">
+                  <!-- Existing Product - Show calculated values and manage button -->
+                  <div class="inventory-summary">
+                    <div class="summary-grid">
+                      <div class="summary-item">
+                        <label>Total Stock</label>
+                        <div class="calculated-value">
+                          {{ selectedProduct?.totalStock || 0 }}
+                          <small>Calculated from all inventory batches</small>
+                        </div>
+                      </div>
+                      
+                      <div class="summary-item">
+                        <label>Selling Price</label>
+                        <div class="calculated-value">
+                          ₱{{ (selectedProduct?.sellingPrice || 0) | number:'1.2-2' }}
+                          <small>Price from most recent inventory batch</small>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="inventory-actions" *ngIf="canManageInventory()">
+                      <button 
+                        type="button" 
+                        class="btn btn-inventory" 
+                        (click)="openInventoryManagement()">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" class="btn-icon">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"></path>
+                        </svg>
+                        Manage Inventory Batches
+                      </button>
+                    </div>
+                  </div>
                 </div>
 
-                <div class="form-group">
-                  <label for="sellingPrice">Selling Price</label>
-                  <input 
-                    type="text" 
-                    id="sellingPrice"
-                    [value]="selectedProduct?.sellingPrice || 0"
-                    placeholder="0.00"
-                    class="form-input"
-                    readonly
-                    style="background-color: #f8f9fa; color: #6c757d;">
-                  <small class="text-muted">Price from most recent inventory batch</small>
-                </div>
+                <!-- New Product - Enable direct entry for authorized roles -->
+                <ng-template #newProductInventory>
+                  <div class="new-product-inventory" *ngIf="canCreateInitialInventory(); else unauthorizedInventory">
+                    <div class="form-row">
+                      <div class="form-group">
+                        <label for="totalStock">Total Stock</label>
+                        <input 
+                          type="number" 
+                          id="totalStock"
+                          formControlName="initialQuantity"
+                          placeholder="Enter initial stock quantity"
+                          class="form-input"
+                          min="0">
+                        <small class="text-muted">Initial stock for this product</small>
+                      </div>
+
+                      <div class="form-group">
+                        <label for="costPrice">Cost Price</label>
+                        <input 
+                          type="number" 
+                          id="costPrice"
+                          formControlName="initialCostPrice"
+                          placeholder="0.00"
+                          class="form-input"
+                          min="0"
+                          step="0.01">
+                        <small class="text-muted">Cost per unit</small>
+                      </div>
+                    </div>
+
+                    <div class="form-group">
+                      <label for="sellingPrice">Selling Price</label>
+                      <input 
+                        type="number" 
+                        id="sellingPrice"
+                        formControlName="initialUnitPrice"
+                        placeholder="0.00"
+                        class="form-input"
+                        min="0"
+                        step="0.01">
+                      <small class="text-muted">Price per unit (will be used for initial batch)</small>
+                    </div>
+
+                    <!-- Additional initial batch fields -->
+                    <div class="form-row">
+                      <div class="form-group">
+                        <label for="batchId">Batch ID</label>
+                        <input 
+                          type="text" 
+                          id="batchId"
+                          formControlName="initialBatchId"
+                          placeholder="AUTO-GENERATED"
+                          class="form-input">
+                        <small class="text-muted">Leave empty for auto-generation</small>
+                      </div>
+
+                      <div class="form-group">
+                        <label for="supplier">Supplier (Optional)</label>
+                        <input 
+                          type="text" 
+                          id="supplier"
+                          formControlName="initialSupplier"
+                          placeholder="Enter supplier name"
+                          class="form-input">
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Unauthorized message for cashiers -->
+                  <ng-template #unauthorizedInventory>
+                    <div class="unauthorized-message">
+                      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" class="warning-icon">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z"></path>
+                      </svg>
+                      <div>
+                        <h5>Limited Access</h5>
+                        <p>Only store managers and creators can set initial inventory. Contact your manager to create products with inventory.</p>
+                      </div>
+                    </div>
+                  </ng-template>
+                </ng-template>
               </div>
             </form>
           </div>
@@ -1047,7 +1311,7 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
       </div>
 
       <!-- Inventory Modal -->
-      <div class="modal-overlay" *ngIf="showInventoryModal">
+      <div class="modal-overlay inventory-modal-overlay" *ngIf="showInventoryModal">
         <div class="modal store-modal" (click)="$event.stopPropagation()" style="max-width:800px;">
           <div class="modal-header">
             <h3>📦 Inventory Management - {{ selectedProduct?.productName }}</h3>
@@ -1070,9 +1334,9 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
                 [class.active]="inventoryTab === 'edit'"
                 (click)="switchToEditTab()">
                 <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" class="tab-icon">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
                 </svg>
-                Add Batch
+                Edit
               </button>
             </div>
 
@@ -1118,15 +1382,15 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
                           class="btn btn-sm btn-primary me-2" 
                           (click)="$event.stopPropagation(); openEditBatch(batch)"
                           title="Edit quantity and price">
-                          Edit
+                          ✏️ Edit
                         </button>
                         <!-- Remove button only for the most recent (first) item -->
                         <button 
-                          *ngIf="i === 0"
+                          *ngIf="i === 0 && batch.id"
                           class="btn btn-sm btn-danger" 
-                          (click)="$event.stopPropagation(); removeInventoryBatch(batch.batchId)"
+                          (click)="$event.stopPropagation(); removeInventoryBatch(batch.batchId, batch.id!)"
                           title="Remove batch">
-                          Remove
+                          🗑️ Remove
                         </button>
                         <!-- Show disabled state for older items -->
                         <span *ngIf="i > 0" class="text-muted small">
@@ -1146,7 +1410,7 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
                   <h3>No inventory batches found</h3>
                   <p>This product doesn't have any inventory batches yet.</p>
                   <button class="btn btn-primary" (click)="switchToEditTab()">
-                    Add First Batch
+                    Add New Batch
                   </button>
                 </div>
               </div>
@@ -1156,8 +1420,8 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
             <div class="tab-content" *ngIf="inventoryTab==='edit'">
               <div class="form-card">
                 <div class="form-header">
-                  <h4 class="form-title">Add New Batch</h4>
-                  <p class="form-subtitle">Add new inventory to your product stock</p>
+                  <h4 class="form-title">{{ isEditingBatch ? 'Edit Batch' : 'Add New Batch' }}</h4>
+                  <p class="form-subtitle">{{ isEditingBatch ? 'Update inventory batch details' : 'Add new inventory to your product stock' }}</p>
                 </div>
                 
                 <form [formGroup]="inventoryForm" (ngSubmit)="saveBatch()" class="inventory-form">
@@ -1228,7 +1492,7 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
                       class="btn btn-primary" 
                       [disabled]="inventoryForm.invalid || loading">
                       <span *ngIf="loading" class="loading-spinner"></span>
-                      {{ loading ? 'Adding...' : 'Add Batch' }}
+                      {{ loading ? 'Saving...' : 'Save' }}
                     </button>
                   </div>
                 </form>
@@ -1239,7 +1503,12 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
       </div>
 
       <!-- Confirmation dialog placeholder -->
-      <app-confirmation-dialog *ngIf="showDeleteConfirmation() && deleteConfirmationData()" [dialogData]="deleteConfirmationData()!" (confirmed)="onDeleteConfirmed()" (cancelled)="closeDeleteConfirmation()"></app-confirmation-dialog>
+      <app-confirmation-dialog 
+        *ngIf="showDeleteConfirmation() && deleteConfirmationData()" 
+        [dialogData]="deleteConfirmationData()!" 
+        (confirmed)="onDeleteConfirmed()" 
+        (cancelled)="closeDeleteConfirmation()">
+      </app-confirmation-dialog>
     </div>
   `
 })
@@ -1264,7 +1533,9 @@ export class ProductManagementComponent implements OnInit {
   // Inventory UI state
   inventoryTab: 'list' | 'edit' = 'list';
   inventorySearch = '';
-  filteredInventory: ProductInventory[] | null = null;
+  filteredInventory: ProductInventoryEntry[] | null = null;
+  private currentBatches: ProductInventoryEntry[] = [];
+  private editingBatchDocId: string | null = null;
   isEditingBatch = false;
   editingBatchOriginalId: string | null = null;
   generatedBatchId = '';
@@ -1274,6 +1545,7 @@ export class ProductManagementComponent implements OnInit {
   deleteConfirmationData = signal<ConfirmationDialogData | null>(null);
   productToDelete: Product | null = null;
   pendingBatchId: string | null = null;
+  pendingBatchDocId: string | null = null;
   pendingNewBatchConfirmation: ((value: boolean) => void) | null = null;
 
   // Modal mode management
@@ -1289,8 +1561,8 @@ export class ProductManagementComponent implements OnInit {
   inventoryForm: FormGroup;
   categoryForm: FormGroup;
   
-  // Unit types for dropdown
-  unitTypes = UNIT_TYPES;
+  // Unit types from predefined types
+  unitTypes: UnitTypeOption[] = []; // Will be loaded from predefinedTypes
 
   constructor(
     public productService: ProductService,
@@ -1299,7 +1571,9 @@ export class ProductManagementComponent implements OnInit {
     private fb: FormBuilder,
     private cdr: ChangeDetectorRef,
     private toastService: ToastService,
-    private categoryService: CategoryService
+    private categoryService: CategoryService,
+    private inventoryDataService: InventoryDataService,
+    private predefinedTypesService: PredefinedTypesService
   ) {
     this.productForm = this.createProductForm();
     this.inventoryForm = this.createInventoryForm();
@@ -1331,6 +1605,10 @@ export class ProductManagementComponent implements OnInit {
           this.productService['products'].set([]);
         }
       }
+      
+      // Load unit types from predefined types
+      await this.loadUnitTypes();
+      
       this.filterProducts();
     } catch (error) {
       console.error('Error loading data:', error);
@@ -1345,7 +1623,8 @@ export class ProductManagementComponent implements OnInit {
       productCode: [''],
       barcodeId: [''],
       unitType: ['pieces', Validators.required],
-      category: ['', Validators.required],
+      // Default to 'General' so the form is valid even if categories haven't loaded yet
+      category: ['General', Validators.required],
       imageUrl: [''],
       // Tax and Discount Fields
       isVatApplicable: [true],
@@ -1434,6 +1713,11 @@ export class ProductManagementComponent implements OnInit {
   initialQuantity: 0,
   initialUnitPrice: 0
     });
+    // Ensure required defaults after reset
+    this.productForm.patchValue({
+      unitType: 'pieces',
+      category: 'General'
+    });
     // set totalStock from initial fields if provided
     const initialQty = this.productForm.get('initialQuantity')?.value || 0;
     this.productForm.get('totalStock')?.setValue(initialQty);
@@ -1449,15 +1733,11 @@ export class ProductManagementComponent implements OnInit {
     this.selectedProduct = product;
     this.productForm.patchValue(product);
     
-    // Calculate total stock from active batches
-    const total = (product.inventory || []).reduce((s, b) => s + ((b.status === 'active') ? (b.quantity || 0) : 0), 0);
-    this.productForm.get('totalStock')?.setValue(total);
+    // Use denormalized totalStock from product (no longer calculate from embedded inventory)
+    this.productForm.get('totalStock')?.setValue(product.totalStock || 0);
     
-    // Set selling price to active batch unit price if available
-    const active = (product.inventory || []).find(b => b.status === 'active');
-    if (active) {
-      this.productForm.get('sellingPrice')?.setValue(active.unitPrice || 0);
-    }
+    // Set selling price from product summary (denormalized)
+    this.productForm.get('sellingPrice')?.setValue(product.sellingPrice || 0);
     
     // Always enable inventory controls since we removed isMultipleInventory
     this.toggleControlsForInventory(true);
@@ -1477,10 +1757,9 @@ export class ProductManagementComponent implements OnInit {
   }
 
   updateTotalStockFromInventory() {
-    if (this.selectedProduct?.inventory) {
-      // For existing product, calculate from current inventory
-      const total = this.selectedProduct.inventory.reduce((s, b) => s + ((b.status === 'active') ? (b.quantity || 0) : 0), 0);
-      this.productForm.get('totalStock')?.setValue(total, { emitEvent: false });
+    if (this.selectedProduct) {
+      // For existing product, use denormalized totalStock summary
+      this.productForm.get('totalStock')?.setValue(this.selectedProduct.totalStock || 0, { emitEvent: false });
     } else {
       // For new product, use initial inventory values
       const initialQuantity = this.productForm.get('initialQuantity')?.value || 0;
@@ -1493,9 +1772,16 @@ export class ProductManagementComponent implements OnInit {
     this.generatedBatchId = this.generateBatchId(); // Generate new ID when switching to edit tab
     this.isEditingBatch = false; // Ensure it's in add mode, not edit mode
     this.editingBatchOriginalId = null;
+    this.editingBatchDocId = null;
+    
+    // Reset form for new batch
+    this.inventoryForm.reset();
+    this.inventoryForm.patchValue({
+      receivedAt: new Date().toISOString().split('T')[0]
+    });
   }
 
-  openInventoryModal(product: Product): void {
+  async openInventoryModal(product: Product): Promise<void> {
     this.selectedProduct = product;
     this.inventoryForm.reset();
     this.inventoryForm.patchValue({
@@ -1504,10 +1790,13 @@ export class ProductManagementComponent implements OnInit {
     this.generatedBatchId = this.generateBatchId();
     this.inventoryTab = 'list';
     this.inventorySearch = '';
-    // Sort inventory by receivedAt descending (most recent first)
-    this.filteredInventory = (product.inventory || []).slice().sort((a, b) => 
-      new Date(b.receivedAt).getTime() - new Date(a.receivedAt).getTime()
-    );
+    try {
+      this.currentBatches = await this.inventoryDataService.listBatches(product.id!);
+      this.filteredInventory = this.currentBatches.slice();
+    } catch (e) {
+      console.error('Failed to load inventory batches:', e);
+      this.filteredInventory = [];
+    }
     this.isEditingBatch = false;
     this.showInventoryModal = true;
   }
@@ -1572,7 +1861,7 @@ export class ProductManagementComponent implements OnInit {
       // normalize sellingPrice to avoid undefined being written to Firestore
       // Calculate selling price from active batch or form value
       const computedSellingPrice = formValue.initialUnitPrice || 
-        (this.selectedProduct ? (this.selectedProduct.inventory || []).find((b: any) => b.status === 'active')?.unitPrice : 0) || 
+        (this.selectedProduct ? (this.selectedProduct.sellingPrice || 0) : 0) || 
         formValue.sellingPrice || 0;
 
       if (this.isEditMode && this.selectedProduct) {
@@ -1596,36 +1885,23 @@ export class ProductManagementComponent implements OnInit {
           discountValue: formValue.discountValue || 0
         };
 
-        // Calculate totalStock from active batches
-        if (this.selectedProduct?.inventory) {
-          const total = this.selectedProduct.inventory.reduce((s, b) => s + ((b.status === 'active') ? (b.quantity || 0) : 0), 0);
-          updates.totalStock = total;
-        } else {
-          updates.totalStock = formValue.totalStock || 0;
-        }
+        // Use denormalized totalStock from product for existing items
+        updates.totalStock = this.selectedProduct.totalStock || 0;
 
         await this.productService.updateProduct(this.selectedProduct.id!, updates);
         } else {
-        // Create new product
-        let inventory: ProductInventory[] = [];
-        let totalStock = 0;
-        // Always create initial inventory if values provided
-        if (formValue.initialQuantity && formValue.initialQuantity > 0) {
-          const initialInventory: ProductInventory = {
-            batchId: formValue.initialBatchId || `BATCH-${Date.now()}`,
-            quantity: formValue.initialQuantity || 0,
-            unitPrice: formValue.initialUnitPrice || 0,
-            costPrice: formValue.initialCostPrice || 0,
-            receivedAt: new Date(formValue.initialReceivedAt),
-            expiryDate: formValue.initialExpiryDate ? new Date(formValue.initialExpiryDate) : undefined,
-            supplier: formValue.initialSupplier || undefined,
-            status: 'active'
-          };
-          inventory = [initialInventory];
-          totalStock = initialInventory.quantity;
-        } else {
-          totalStock = formValue.totalStock || 0;
-        }
+        // Create new product (no embedded inventory)
+        const hasInitial = !!(formValue.initialQuantity && formValue.initialQuantity > 0);
+        const initialBatch = hasInitial ? {
+          batchId: formValue.initialBatchId || `BATCH-${Date.now()}`,
+          quantity: Number(formValue.initialQuantity || 0),
+          unitPrice: Number(formValue.initialUnitPrice || 0),
+          costPrice: Number(formValue.initialCostPrice || 0),
+          receivedAt: new Date(formValue.initialReceivedAt),
+          expiryDate: formValue.initialExpiryDate ? new Date(formValue.initialExpiryDate) : undefined,
+          supplier: formValue.initialSupplier || undefined,
+          status: 'active' as const
+        } : null;
 
         // Get current user for UID
         const currentUser = this.authService.getCurrentUser();
@@ -1646,8 +1922,8 @@ export class ProductManagementComponent implements OnInit {
           storeId: storeId,  // Use storeId from permission
           barcodeId: formValue.barcodeId,
           imageUrl: formValue.imageUrl,
-          inventory,
-          totalStock,
+          inventory: [],
+          totalStock: hasInitial ? Number(formValue.initialQuantity || 0) : Number(formValue.totalStock || 0),
           
           // Tax and Discount Fields from form
           isVatApplicable: formValue.isVatApplicable || false,
@@ -1659,7 +1935,24 @@ export class ProductManagementComponent implements OnInit {
           status: 'active'
         };
 
-        await this.productService.createProduct(newProduct);
+        const productId = await this.productService.createProduct(newProduct);
+        // If initial batch exists, create it in separate collection and recompute summary
+        if (hasInitial && productId) {
+          await this.inventoryDataService.addBatch(productId, {
+            batchId: initialBatch!.batchId,
+            quantity: initialBatch!.quantity,
+            unitPrice: initialBatch!.unitPrice,
+            costPrice: initialBatch!.costPrice,
+            receivedAt: initialBatch!.receivedAt,
+            expiryDate: initialBatch!.expiryDate,
+            supplier: initialBatch!.supplier,
+            status: 'active',
+            unitType: formValue.unitType || 'pieces',
+            companyId: companyId,
+            storeId: storeId,
+            productId: productId
+          });
+        }
       }
 
       this.closeModal();
@@ -1677,31 +1970,71 @@ export class ProductManagementComponent implements OnInit {
     return this.saveBatch();
   }
 
+  async removeInventoryBatch(batchId: string, batchDocId: string): Promise<void> {
+    if (!this.selectedProduct) return;
+
+    console.log('removeInventoryBatch called for batch:', batchId, batchDocId);
+
+    // Reset everything first
+    this.showDeleteConfirmation.set(false);
+    this.deleteConfirmationData.set(null);
+    this.productToDelete = null;
+    this.pendingBatchId = null;
+    this.pendingBatchDocId = null;
+    
+    // Set the data immediately
+    this.deleteConfirmationData.set({
+      title: 'Remove Inventory Batch',
+      message: 'Are you sure you want to remove this inventory batch? This action cannot be undone.',
+      confirmText: 'Remove',
+      cancelText: 'Cancel',
+      type: 'danger'
+    });
+    
+    // Store the batchId and docId for use in confirmation
+    this.pendingBatchId = batchId;
+    this.pendingBatchDocId = batchDocId;
+    
+    // Show the dialog immediately
+    this.showDeleteConfirmation.set(true);
+    
+    console.log('Dialog state:', {
+      showDeleteConfirmation: this.showDeleteConfirmation(),
+      deleteConfirmationData: this.deleteConfirmationData(),
+      pendingBatchId: this.pendingBatchId,
+      pendingBatchDocId: this.pendingBatchDocId
+    });
+  }
+
+  async performBatchRemoval(): Promise<void> {
+    if (!this.selectedProduct || !this.pendingBatchId || !this.pendingBatchDocId) return;
+
+    try {
+      await this.inventoryDataService.removeBatch(this.selectedProduct.id!, this.pendingBatchDocId);
+      // Refresh collections
+      this.currentBatches = await this.inventoryDataService.listBatches(this.selectedProduct.id!);
+      this.filteredInventory = this.currentBatches.slice();
+      this.selectedProduct = this.productService.getProduct(this.selectedProduct.id!) || null;
+    } catch (error) {
+      console.error('Error removing inventory batch:', error);
+      this.toastService.error(ErrorMessages.INVENTORY_BATCH_REMOVE_ERROR);
+    } finally {
+      this.pendingBatchId = null;
+      this.pendingBatchDocId = null;
+    }
+  }
+
   filterInventory(): void {
     if (!this.selectedProduct) { this.filteredInventory = []; return; }
     const term = (this.inventorySearch || '').toLowerCase();
-    if (!term) { 
-      // Sort by receivedAt descending when no search term
-      this.filteredInventory = (this.selectedProduct.inventory || []).slice().sort((a, b) => 
-        new Date(b.receivedAt).getTime() - new Date(a.receivedAt).getTime()
-      ); 
-      return; 
-    }
-    // Filter and sort the results
-    this.filteredInventory = (this.selectedProduct.inventory || [])
-      .filter(b => b.batchId.toLowerCase().includes(term))
-      .sort((a, b) => new Date(b.receivedAt).getTime() - new Date(a.receivedAt).getTime());
+    const list = this.currentBatches || [];
+    if (!term) { this.filteredInventory = list.slice(); return; }
+    this.filteredInventory = list.filter(b => (b.batchId || '').toLowerCase().includes(term));
   }
 
-  openEditBatch(batch: ProductInventory): void {
+  openEditBatch(batch: ProductInventoryEntry): void {
     if (!this.selectedProduct) return;
-    
-    // Check if this is the most recent batch (first in sorted array)
-    const sortedInventory = (this.selectedProduct.inventory || []).slice().sort((a, b) => 
-      new Date(b.receivedAt).getTime() - new Date(a.receivedAt).getTime()
-    );
-    
-    const isLatestBatch = sortedInventory.length > 0 && sortedInventory[0].batchId === batch.batchId;
+    const isLatestBatch = this.currentBatches.length > 0 && this.currentBatches[0].batchId === batch.batchId;
     
     if (!isLatestBatch) {
       this.toastService.error('You can only edit the most recent inventory batch.');
@@ -1711,6 +2044,7 @@ export class ProductManagementComponent implements OnInit {
     this.inventoryTab = 'edit';
     this.isEditingBatch = true;
     this.editingBatchOriginalId = batch.batchId || null;
+    this.editingBatchDocId = batch.id || null;
     this.inventoryForm.patchValue({
       batchId: batch.batchId,
       quantity: batch.quantity,
@@ -1741,8 +2075,8 @@ export class ProductManagementComponent implements OnInit {
     try {
       if (this.isEditingBatch && this.editingBatchOriginalId) {
         // Edit existing batch (only quantity and price allowed)
-        const batch: ProductInventory = {
-          batchId: this.editingBatchOriginalId,
+        if (!this.editingBatchDocId) throw new Error('Missing batch document ID');
+        await this.inventoryDataService.updateBatch(this.selectedProduct.id!, this.editingBatchDocId, {
           quantity: Number(formValue.quantity),
           unitPrice: Number(formValue.unitPrice),
           costPrice: Number(formValue.costPrice || 0),
@@ -1751,24 +2085,18 @@ export class ProductManagementComponent implements OnInit {
           supplier: formValue.supplier || undefined,
           status: 'active',
           unitType: this.selectedProduct?.unitType || 'pieces'
-        };
-        
-        await this.productService.updateInventoryBatch(this.selectedProduct.id!, this.editingBatchOriginalId, batch);
+        });
       } else {
         // Add new batch - check if previous batch has remaining stock
-        const sortedInventory = (this.selectedProduct.inventory || []).slice().sort((a, b) => 
-          new Date(b.receivedAt).getTime() - new Date(a.receivedAt).getTime()
-        );
-        
-        if (sortedInventory.length > 0 && sortedInventory[0].quantity > 0) {
+        const latest = this.currentBatches[0];
+        if (latest && latest.quantity > 0) {
           const confirmed = await this.confirmNewBatchWithExistingStock();
           if (!confirmed) {
             this.loading = false;
             return;
           }
         }
-        
-        const batch: ProductInventory = {
+        await this.inventoryDataService.addBatch(this.selectedProduct.id!, {
           batchId: this.generatedBatchId,
           quantity: Number(formValue.quantity),
           unitPrice: Number(formValue.unitPrice),
@@ -1777,24 +2105,24 @@ export class ProductManagementComponent implements OnInit {
           expiryDate: formValue.expiryDate ? new Date(formValue.expiryDate) : undefined,
           supplier: formValue.supplier || undefined,
           status: 'active',
-          unitType: this.selectedProduct?.unitType || 'pieces'
-        };
-        
-        await this.productService.addInventoryBatch(this.selectedProduct.id!, batch);
+          unitType: this.selectedProduct?.unitType || 'pieces',
+          companyId: this.selectedProduct.companyId,
+          storeId: this.selectedProduct.storeId,
+          productId: this.selectedProduct.id!
+        });
       }
 
       // Refresh state and generate new batch ID for next entry
+      this.currentBatches = await this.inventoryDataService.listBatches(this.selectedProduct.id!);
+      this.filteredInventory = this.currentBatches.slice();
       this.selectedProduct = this.productService.getProduct(this.selectedProduct.id!) || null;
-      // Sort by receivedAt descending after refresh
-      this.filteredInventory = (this.selectedProduct?.inventory || []).slice().sort((a, b) => 
-        new Date(b.receivedAt).getTime() - new Date(a.receivedAt).getTime()
-      );
       this.inventoryForm.reset();
       this.inventoryForm.patchValue({ receivedAt: new Date().toISOString().split('T')[0] });
       this.generatedBatchId = this.generateBatchId();
       this.isEditingBatch = false;
       this.inventoryTab = 'list';
       this.editingBatchOriginalId = null;
+      this.editingBatchDocId = null;
     } catch (err: any) {
       console.error('Error saving batch:', err);
       
@@ -1825,41 +2153,7 @@ export class ProductManagementComponent implements OnInit {
     });
   }
 
-  async removeInventoryBatch(batchId: string): Promise<void> {
-    if (!this.selectedProduct) return;
 
-    // Set up confirmation dialog for inventory batch removal
-    this.deleteConfirmationData.set({
-      title: 'Remove Inventory Batch',
-      message: 'Are you sure you want to remove this inventory batch? This action cannot be undone.',
-      confirmText: 'Remove',
-      cancelText: 'Cancel'
-    });
-    
-    // Store the batchId for use in confirmation
-    this.pendingBatchId = batchId;
-    this.showDeleteConfirmation.set(true);
-  }
-
-  async performBatchRemoval(): Promise<void> {
-    if (!this.selectedProduct || !this.pendingBatchId) return;
-
-    try {
-      await this.productService.removeInventoryBatch(this.selectedProduct.id!, this.pendingBatchId);
-      // Refresh the selected product
-      this.selectedProduct = this.productService.getProduct(this.selectedProduct.id!) || null;
-      
-      // Update total stock from inventory
-      if (this.selectedProduct) {
-        this.updateTotalStockFromInventory();
-      }
-    } catch (error) {
-      console.error('Error removing inventory batch:', error);
-      this.toastService.error(ErrorMessages.INVENTORY_BATCH_REMOVE_ERROR);
-    } finally {
-      this.pendingBatchId = null;
-    }
-  }
 
   showAddBatchFromInventory(): void {
     // open the inventory add section by focusing the batch form — we reuse inventoryForm
@@ -1868,36 +2162,6 @@ export class ProductManagementComponent implements OnInit {
       const el = document.getElementById('batchId');
       el?.focus();
     }, 100);
-  }
-
-  async setActiveBatch(batchId: string, active: boolean): Promise<void> {
-    if (!this.selectedProduct) return;
-    try {
-      const product = this.productService.getProduct(this.selectedProduct.id!);
-      if (!product) return;
-
-      const updatedInventory = product.inventory.map(inv => ({
-        ...inv,
-        status: inv.batchId === batchId ? (active ? 'active' : 'inactive') : (active ? 'inactive' : inv.status)
-      }));
-
-      // Enforce only one active batch: if active=true set others inactive
-      if (active) {
-        for (const inv of updatedInventory) {
-          if (inv.batchId !== batchId) inv.status = 'inactive';
-        }
-      }
-
-      // compute totalStock from active batches only
-      const totalStock = updatedInventory.reduce((s, b) => s + ((b.status === 'active') ? (b.quantity || 0) : 0), 0);
-
-      await this.productService.updateProduct(product.id!, { inventory: updatedInventory, totalStock });
-      // refresh selectedProduct
-      this.selectedProduct = this.productService.getProduct(product.id!) || null;
-    } catch (err) {
-      console.error(err);
-      this.toastService.error(ErrorMessages.ACTIVE_BATCH_SET_ERROR);
-    }
   }
 
   triggerImageUpload(): void {
@@ -2034,31 +2298,61 @@ export class ProductManagementComponent implements OnInit {
 
   async uploadFileToStorage(file: File): Promise<string> {
     try {
-      console.log('☁️ Starting Firebase Storage upload...');
+      console.log('☁️ Starting structured image upload...');
+      
+      // Get current store ID from permission
+      const currentPermission = this.authService.getCurrentPermission();
+      const storeId = currentPermission?.storeId || 'default-store';
+      
+      // Generate product ID if not available (for new products)
+      const productId = this.selectedProduct?.id || `temp_${Date.now()}`;
+      
+      // Get file extension
+      const extension = file.name.split('.').pop()?.toLowerCase() || 'png';
+      
+      // Create structured path: storeId/products/productId.extension
+      const fileName = `${storeId}/products/${productId}.${extension}`;
+      
+      console.log('📤 Uploading file with structure:', {
+        storeId,
+        productId,
+        fileName: file.name,
+        fileSize: file.size,
+        fileType: file.type,
+        storagePath: fileName
+      });
       
       // Dynamic import to avoid top-level SDK usage
       const { getStorage, ref, uploadBytes, getDownloadURL } = await import('firebase/storage');
       const { app } = await import('../../../firebase.config');
       
       const storage = getStorage(app);
-      const fileName = `products/${Date.now()}_${file.name}`;
       const storageRef = ref(storage, fileName);
       
-      console.log('📤 Uploading file:', {
-        fileName,
-        fileSize: file.size,
-        fileType: file.type
+      // Upload with metadata
+      const snapshot = await uploadBytes(storageRef, file, {
+        contentType: file.type,
+        customMetadata: {
+          uploadedBy: this.authService.currentUser()?.uid || 'unknown',
+          uploadedAt: new Date().toISOString(),
+          storeId: storeId,
+          productId: productId,
+          imageType: 'product'
+        }
       });
       
-      const snapshot = await uploadBytes(storageRef, file);
       console.log('✅ Upload complete, getting download URL...');
-      
       const downloadURL = await getDownloadURL(snapshot.ref);
-      console.log('✅ Download URL obtained:', downloadURL);
+      
+      console.log('✅ Upload complete with structured path:', {
+        downloadURL,
+        fullPath: fileName,
+        size: snapshot.metadata.size || 0
+      });
       
       return downloadURL;
     } catch (error: any) {
-      console.error('❌ Firebase Storage upload error:', error);
+      console.error('❌ Structured image upload error:', error);
       throw new Error(`Upload failed: ${error.message || 'Unknown error'}`);
     }
   }
@@ -2088,7 +2382,7 @@ export class ProductManagementComponent implements OnInit {
         console.error('Error deleting product:', error);
         this.toastService.error(ErrorMessages.PRODUCT_DELETE_ERROR);
       }
-    } else if (this.pendingBatchId) {
+    } else if (this.pendingBatchId && this.pendingBatchDocId) {
       // Handle batch removal
       await this.performBatchRemoval();
     } else if (this.pendingNewBatchConfirmation) {
@@ -2104,6 +2398,7 @@ export class ProductManagementComponent implements OnInit {
     this.deleteConfirmationData.set(null);
     this.productToDelete = null;
     this.pendingBatchId = null;
+    this.pendingBatchDocId = null;
     // Handle cancellation of new batch confirmation
     if (this.pendingNewBatchConfirmation) {
       this.pendingNewBatchConfirmation(false);
@@ -2137,25 +2432,11 @@ export class ProductManagementComponent implements OnInit {
   }
 
   getComputedTotalStock(): number {
-    if (!this.selectedProduct?.inventory || this.selectedProduct.inventory.length === 0) {
-      return 0;
-    }
-    // Sum all active inventory batches
-    return this.selectedProduct.inventory.reduce((total, batch) => {
-      return total + (batch.status === 'active' ? batch.quantity : 0);
-    }, 0);
+    return this.selectedProduct?.totalStock || 0;
   }
 
   getComputedSellingPrice(): number {
-    if (!this.selectedProduct?.inventory || this.selectedProduct.inventory.length === 0) {
-      return 0;
-    }
-    // Get price from most recent batch (sorted by receivedAt descending)
-    const sortedInventory = this.selectedProduct.inventory
-      .slice()
-      .sort((a, b) => new Date(b.receivedAt).getTime() - new Date(a.receivedAt).getTime());
-    
-    return sortedInventory.length > 0 ? sortedInventory[0].unitPrice : 0;
+    return this.selectedProduct?.sellingPrice || 0;
   }
 
   getStockBadgeClass(stock: number): string {
@@ -2178,10 +2459,6 @@ export class ProductManagementComponent implements OnInit {
   }
 
   displayPrice(product: Product): number {
-    if (product.inventory && product.inventory.length) {
-      const active = product.inventory.find(b => b.status === 'active');
-      if (active) return active.unitPrice || product.sellingPrice;
-    }
     return product.sellingPrice;
   }
 
@@ -2205,6 +2482,43 @@ export class ProductManagementComponent implements OnInit {
       }
     } catch (error) {
       console.error('❌ Error loading categories:', error);
+    }
+  }
+
+  async loadUnitTypes(): Promise<void> {
+    try {
+      console.log('🔍 Loading unit types from predefined types...');
+      this.unitTypes = await this.predefinedTypesService.getUnitTypes();
+      console.log('✅ Unit types loaded:', this.unitTypes.length);
+      
+      // If no unit types found in database, seed them
+      if (this.unitTypes.length === 0) {
+        console.log('🌱 No unit types found, seeding default unit types...');
+        await this.predefinedTypesService.seedUnitTypes();
+        this.unitTypes = await this.predefinedTypesService.getUnitTypes();
+        console.log('✅ Unit types seeded and loaded:', this.unitTypes.length);
+      }
+    } catch (error) {
+      console.error('❌ Error loading unit types:', error);
+      // Fallback to default unit types
+      this.unitTypes = [
+        { value: 'pieces', label: 'Pieces' },
+        { value: 'kg', label: 'Kilograms' },
+        { value: 'liters', label: 'Liters' },
+        { value: 'boxes', label: 'Boxes' }
+      ];
+    }
+  }
+
+  // Utility method to seed comprehensive unit types (can be called from browser console)
+  async seedComprehensiveUnitTypes(): Promise<void> {
+    try {
+      console.log('🌱 Seeding comprehensive unit types...');
+      await this.predefinedTypesService.seedComprehensiveUnitTypes();
+      await this.loadUnitTypes();
+      console.log('✅ Comprehensive unit types seeded successfully!');
+    } catch (error) {
+      console.error('❌ Error seeding comprehensive unit types:', error);
     }
   }
 
@@ -2303,8 +2617,8 @@ export class ProductManagementComponent implements OnInit {
         throw new Error('No company ID found. User must be associated with a company to create categories.');
       }
       
-      // Get storeId from the product form if available
-      const storeId = this.productForm.value.storeId;
+      // Get storeId from the product form if available, otherwise fallback to current permission
+      const storeId = this.productForm.value.storeId || currentPermission?.storeId;
       console.log('🔍 Store ID from product form:', storeId);
       
       const categoryData: Omit<ProductCategory, 'id' | 'createdAt' | 'updatedAt'> = {
@@ -2337,6 +2651,21 @@ export class ProductManagementComponent implements OnInit {
   }
 
   /**
+   * Utility method to add a new unit type
+   * Can be called from browser console: window['addUnitType']('cubic_meters', 'Cubic Meters', 'Volume in cubic meters')
+   */
+  async addNewUnitType(value: string, label: string, description?: string): Promise<void> {
+    try {
+      await this.predefinedTypesService.addUnitType(value, label, description);
+      await this.loadUnitTypes(); // Refresh the list
+      this.toastService.success(`Unit type "${label}" added successfully!`);
+    } catch (error) {
+      console.error('❌ Error adding unit type:', error);
+      this.toastService.error('Failed to add unit type');
+    }
+  }
+
+  /**
    * Clean form data by removing undefined values and converting empty strings to null where appropriate
    */
   private cleanFormData(formData: any): any {
@@ -2360,6 +2689,78 @@ export class ProductManagementComponent implements OnInit {
     }
     
     return cleaned;
+  }
+
+  // ===== INVENTORY MANAGEMENT METHODS =====
+
+  /**
+   * Check if the current product has existing inventory batches
+   */
+  hasExistingInventory(): boolean {
+    if (!this.selectedProduct?.id) {
+      return false; // New product, no existing inventory
+    }
+    
+    // Check if product has inventory entries or legacy inventory
+    return (this.selectedProduct.inventory && this.selectedProduct.inventory.length > 0) ||
+           (this.currentBatches && this.currentBatches.length > 0) ||
+           !!(this.selectedProduct.totalStock && this.selectedProduct.totalStock > 0);
+  }
+
+  /**
+   * Check if current user can manage inventory (not cashier)
+   */
+  canManageInventory(): boolean {
+    const userRole = this.authService.userRole();
+    return userRole !== 'cashier';
+  }
+
+  /**
+   * Check if current user can create initial inventory (creator, store_manager)
+   */
+  canCreateInitialInventory(): boolean {
+    const userRole = this.authService.userRole();
+    return userRole === 'creator' || userRole === 'store_manager';
+  }
+
+  /**
+   * Open inventory management dialog
+   */
+  openInventoryManagement(): void {
+    if (!this.selectedProduct?.id) {
+      this.toastService.error('Please save the product first before managing inventory.');
+      return;
+    }
+    
+    // Set the selected product and open inventory modal
+    this.showInventoryModal = true;
+    this.inventoryTab = 'list';
+    
+    // Load current inventory batches
+    this.loadProductInventory(this.selectedProduct.id);
+  }
+
+  /**
+   * Load product inventory batches
+   */
+  private async loadProductInventory(productId: string): Promise<void> {
+    try {
+      this.loading = true;
+      
+      // Load inventory entries for this product using the existing method
+      const inventoryEntries = await this.inventoryDataService.listBatches(productId);
+      this.currentBatches = inventoryEntries || [];
+      this.filteredInventory = [...this.currentBatches];
+      
+      console.log(`Loaded ${this.currentBatches.length} inventory batches for product ${productId}`);
+    } catch (error) {
+      console.error('Error loading product inventory:', error);
+      this.toastService.error('Failed to load product inventory');
+      this.currentBatches = [];
+      this.filteredInventory = [];
+    } finally {
+      this.loading = false;
+    }
   }
 
 }

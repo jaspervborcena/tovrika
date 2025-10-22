@@ -1,0 +1,233 @@
+/* Shared POS Component Styles */
+/* This file contains common styles used across POS components to reduce duplication */
+
+:root {
+  /* POS Color Palette */
+  --pos-primary: #007bff;
+  --pos-primary-dark: #0056b3;
+  --pos-primary-light: #b3d7ff;
+  --pos-secondary: #6c757d;
+  --pos-success: #28a745;
+  --pos-warning: #ffc107;
+  --pos-danger: #dc3545;
+  --pos-info: #17a2b8;
+  
+  /* POS Layout */
+  --pos-sidebar-width: 280px;
+  --pos-header-height: 60px;
+  --pos-border-radius: 8px;
+  --pos-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  --pos-shadow-lg: 0 4px 6px rgba(0, 0, 0, 0.1);
+  
+  /* POS Typography */
+  --pos-font-sm: 0.75rem;
+  --pos-font-base: 0.875rem;
+  --pos-font-lg: 1rem;
+  --pos-font-xl: 1.125rem;
+  --pos-font-weight-normal: 400;
+  --pos-font-weight-medium: 500;
+  --pos-font-weight-bold: 600;
+}
+
+/* Common POS Button Styles */
+.pos-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  border: none;
+  border-radius: var(--pos-border-radius);
+  font-size: var(--pos-font-base);
+  font-weight: var(--pos-font-weight-medium);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-decoration: none;
+}
+
+.pos-btn-primary {
+  background-color: var(--pos-primary);
+  color: white;
+}
+
+.pos-btn-primary:hover {
+  background-color: var(--pos-primary-dark);
+}
+
+.pos-btn-secondary {
+  background-color: var(--pos-secondary);
+  color: white;
+}
+
+.pos-btn-success {
+  background-color: var(--pos-success);
+  color: white;
+}
+
+.pos-btn-sm {
+  padding: 0.25rem 0.75rem;
+  font-size: var(--pos-font-sm);
+}
+
+.pos-btn-lg {
+  padding: 0.75rem 1.5rem;
+  font-size: var(--pos-font-lg);
+}
+
+/* Common POS Card Styles */
+.pos-card {
+  background: white;
+  border-radius: var(--pos-border-radius);
+  box-shadow: var(--pos-shadow);
+  overflow: hidden;
+}
+
+.pos-card-header {
+  padding: 1rem;
+  border-bottom: 1px solid #e9ecef;
+  background: #f8f9fa;
+}
+
+.pos-card-body {
+  padding: 1rem;
+}
+
+.pos-card-footer {
+  padding: 1rem;
+  border-top: 1px solid #e9ecef;
+  background: #f8f9fa;
+}
+
+/* Common POS Form Styles */
+.pos-form-group {
+  margin-bottom: 1rem;
+}
+
+.pos-form-label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-weight: var(--pos-font-weight-medium);
+  color: #495057;
+}
+
+.pos-form-control {
+  display: block;
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  font-size: var(--pos-font-base);
+  border: 1px solid #ced4da;
+  border-radius: var(--pos-border-radius);
+  transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+}
+
+.pos-form-control:focus {
+  border-color: var(--pos-primary);
+  box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+  outline: 0;
+}
+
+/* Common POS Grid Layouts */
+.pos-grid-2 {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1rem;
+}
+
+.pos-grid-3 {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+}
+
+.pos-grid-4 {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1rem;
+}
+
+.pos-grid-responsive {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 1rem;
+}
+
+/* Common POS Utilities */
+.pos-text-center { text-align: center; }
+.pos-text-right { text-align: right; }
+.pos-text-left { text-align: left; }
+
+.pos-mb-1 { margin-bottom: 0.25rem; }
+.pos-mb-2 { margin-bottom: 0.5rem; }
+.pos-mb-3 { margin-bottom: 1rem; }
+.pos-mb-4 { margin-bottom: 1.5rem; }
+
+.pos-mt-1 { margin-top: 0.25rem; }
+.pos-mt-2 { margin-top: 0.5rem; }
+.pos-mt-3 { margin-top: 1rem; }
+.pos-mt-4 { margin-top: 1.5rem; }
+
+.pos-p-1 { padding: 0.25rem; }
+.pos-p-2 { padding: 0.5rem; }
+.pos-p-3 { padding: 1rem; }
+.pos-p-4 { padding: 1.5rem; }
+
+/* Common POS Flexbox Utilities */
+.pos-flex { display: flex; }
+.pos-flex-column { flex-direction: column; }
+.pos-flex-wrap { flex-wrap: wrap; }
+.pos-justify-center { justify-content: center; }
+.pos-justify-between { justify-content: space-between; }
+.pos-align-center { align-items: center; }
+.pos-align-start { align-items: flex-start; }
+
+/* Common POS Table Styles */
+.pos-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--pos-font-base);
+}
+
+.pos-table th,
+.pos-table td {
+  padding: 0.75rem;
+  text-align: left;
+  border-bottom: 1px solid #dee2e6;
+}
+
+.pos-table th {
+  font-weight: var(--pos-font-weight-bold);
+  background: #f8f9fa;
+  border-bottom: 2px solid #dee2e6;
+}
+
+.pos-table tbody tr:hover {
+  background: #f8f9fa;
+}
+
+/* Responsive Design for POS */
+@media (max-width: 768px) {
+  .pos-grid-4 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
+  .pos-grid-3 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
+  .pos-grid-2 {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 480px) {
+  .pos-grid-4,
+  .pos-grid-3,
+  .pos-grid-2 {
+    grid-template-columns: 1fr;
+  }
+  
+  .pos-btn {
+    padding: 0.75rem 1rem;
+    font-size: var(--pos-font-base);
+  }
+}

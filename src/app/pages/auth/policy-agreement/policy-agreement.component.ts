@@ -5,11 +5,12 @@ import { Router } from '@angular/router';
 import { OfflineStorageService } from '../../../core/services/offline-storage.service';
 import { AuthService } from '../../../services/auth.service';
 import { AppConstants } from '../../../shared/enums';
+import { LogoComponent } from '../../../shared/components/logo/logo.component';
 
 @Component({
   selector: 'app-policy-agreement',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, LogoComponent],
   templateUrl: './policy-agreement.component.html',
   styleUrls: ['./policy-agreement.component.css']
 })
@@ -145,5 +146,32 @@ export class PolicyAgreementComponent implements OnInit {
   onPrivacyChange(event: Event) {
     const checkbox = event.target as HTMLInputElement;
     this.agreedToPrivacy.set(checkbox?.checked || false);
+  }
+
+  async handleLogoClick() {
+    try {
+      console.log('🏠 Policy Agreement: Logo clicked - navigating to home');
+      
+      // If user hasn't agreed to policies, set policy agreement to false in IndexedDB
+      if (!this.agreedToTerms() || !this.agreedToPrivacy()) {
+        console.log('📝 Policy Agreement: User has not agreed to policies, setting policy agreement to false');
+        
+        // Ensure offline storage is initialized
+        await this.offlineStorageService.loadOfflineData();
+        
+        // Set policy agreement to false
+        await this.offlineStorageService.updatePolicyAgreement(false);
+        
+        console.log('📝 Policy Agreement: Policy agreement set to false in IndexedDB');
+      }
+      
+      // Navigate to home page without logging in
+      await this.router.navigate(['/']);
+      
+    } catch (error: any) {
+      console.error('❌ Policy Agreement: Error handling logo click:', error);
+      // Still navigate even if there's an error with storage
+      await this.router.navigate(['/']);
+    }
   }
 }

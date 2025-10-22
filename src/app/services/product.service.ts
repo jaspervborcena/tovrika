@@ -163,7 +163,18 @@ export class ProductService {
 
   async loadProducts(storeId?: string): Promise<void> {
     try {
+      // Only check authentication, no UID filtering needed for reading
+      const currentUser = this.authService.getCurrentUser();
+      if (!currentUser) {
+        throw new Error('User not authenticated');
+      }
+
       const companyId = await this.waitForAuth();
+      console.log('📦 Loading products with companyId query:', {
+        companyId,
+        storeId: storeId || 'all stores'
+      });
+
       const productsRef = collection(this.firestore, 'products');
       
       let q;
@@ -179,6 +190,7 @@ export class ProductService {
       const querySnapshot = await getDocs(q);
       const products = querySnapshot.docs.map(doc => this.transformFirestoreDoc(doc));
       
+      console.log(`✅ Loaded ${products.length} products for company ${companyId}`);
       this.products.set(products);
     } catch (error) {
       console.error('Error loading products:', error);
@@ -187,25 +199,19 @@ export class ProductService {
   }
 async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promise<void> {
     try {
-      // Validate required companyId
-      if (!companyId) {
-        console.error('❌ CompanyId is required for loading products');
-        return;
+      // Only check authentication, no UID filtering needed for reading
+      const currentUser = this.authService.getCurrentUser();
+      if (!currentUser) {
+        throw new Error('User not authenticated');
       }
 
-      console.log('📦 Loading products for:', { companyId, storeId });
+      // Use provided companyId or get from auth
+      const targetCompanyId = companyId || await this.waitForAuth();
       
-      // Debug: Check current UID context for security
-      try {
-        const currentUID = await this.securityService.getCurrentUserUID();
-        console.log('🔐 Current UID for product loading:', currentUID);
-        
-        // Check if we have offline UID available
-        const offlineUID = await this.securityService.getCurrentUserUID();
-        console.log('💾 UID from security service (includes IndexedDB):', offlineUID);
-      } catch (uidError) {
-        console.warn('⚠️ Could not get UID for product loading:', uidError);
-      }
+      console.log('� Loading products with companyId query:', { 
+        companyId: targetCompanyId, 
+        storeId: storeId || 'all stores'
+      });
       
       const productsRef = collection(this.firestore, 'products');
       
@@ -213,29 +219,27 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
       if (storeId) {
         // Load products for specific company and store
         q = query(productsRef, 
-          where('companyId', '==', companyId),
+          where('companyId', '==', targetCompanyId),
           where('storeId', '==', storeId)
         );
-        console.log('🎯 Querying products for company + store:', { companyId, storeId });
+        console.log('🎯 Querying products for company + store:', { companyId: targetCompanyId, storeId });
       } else {
         // Load all products for the company
-        q = query(productsRef, where('companyId', '==', companyId));
-        console.log('🎯 Querying all products for company:', companyId);
+        q = query(productsRef, where('companyId', '==', targetCompanyId));
+        console.log('🎯 Querying all products for company:', targetCompanyId);
       }
       
       const querySnapshot = await getDocs(q);
       const products = querySnapshot.docs.map(doc => this.transformFirestoreDoc(doc));
       
       console.log(`✅ Loaded ${products.length} products:`, {
-        companyId,
+        companyId: targetCompanyId,
         storeId,
         productsFound: products.length,
         productNames: products.map(p => p.productName).slice(0, 5), // Show first 5 product names
-        hasUID: products.map(p => !!(p as any).uid).slice(0, 5), // Check if products have UID fields
         sampleProduct: products.length > 0 ? {
           id: products[0].id,
           name: products[0].productName,
-          hasUID: !!(products[0] as any).uid,
           companyId: products[0].companyId,
           storeId: products[0].storeId
         } : null
@@ -243,17 +247,20 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
       
       // Validate that we actually have products before setting
       if (products.length === 0) {
-        console.warn('⚠️ No products found for query:', { companyId, storeId });
+        console.warn('⚠️ No products found for company-based query:', { companyId: targetCompanyId, storeId });
         console.warn('⚠️ This could be due to:');
         console.warn('   1. No products exist for this company/store');
-        console.warn('   2. Products lack proper UID fields (security filtering)');
-        console.warn('   3. Firestore security rules blocking access');
+        console.warn('   2. Company/store IDs do not match database records');
+        console.warn('   3. User needs to create products first');
       }
       
       this.products.set(products);
     } catch (error) {
       console.error('❌ Error loading products:', error);
-      console.error('Query parameters:', { companyId, storeId });
+      console.error('Query parameters:', { 
+        companyId: companyId || 'from auth', 
+        storeId 
+      });
       throw error;
     }
   }
@@ -381,132 +388,7 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
     await this.updateProduct(productId, { totalStock: newStock });
   }
 
-  async addInventoryBatch(productId: string, batch: ProductInventory): Promise<void> {
-    try {
-      console.log('=== ADD INVENTORY BATCH DEBUG ===');
-      console.log('Product ID:', productId);
-      console.log('Batch data:', batch);
-      
-      // Check authentication
-      const currentUser = this.authService.getCurrentUser();
-      console.log('Current user:', currentUser);
-      
-      if (!currentUser) {
-        throw new Error('User not authenticated');
-      }
-
-      const product = this.getProduct(productId);
-      if (!product) {
-        throw new Error(`Product with ID ${productId} not found`);
-      }
-
-      console.log('Current product:', {
-        id: product.id,
-        uid: (product as any).uid,
-        name: product.productName
-      });
-
-      // Simply append the new batch to existing inventory
-      const updatedInventory: ProductInventory[] = [...(product.inventory || []), batch];
-      
-      // Calculate total stock from all active batches
-      const totalStock = updatedInventory.reduce((sum, inv) => sum + ((inv.status === 'active') ? inv.quantity : 0), 0);
-      
-      // Get selling price from most recent batch (sort by receivedAt descending)
-      const sortedInventory = updatedInventory.slice().sort((a, b) => 
-        new Date(b.receivedAt).getTime() - new Date(a.receivedAt).getTime()
-      );
-      const sellingPrice = sortedInventory.length > 0 ? sortedInventory[0].unitPrice : 0;
-      
-      console.log('Updated inventory count:', updatedInventory.length);
-      console.log('Updated total stock:', totalStock);
-      console.log('Updated selling price:', sellingPrice);
-      
-      await this.updateProduct(productId, { 
-        inventory: updatedInventory,
-        totalStock,
-        sellingPrice
-      });
-      
-      console.log('=== INVENTORY BATCH ADDED SUCCESSFULLY ===');
-    } catch (error) {
-      console.error('=== ERROR IN ADD INVENTORY BATCH ===');
-      console.error('Error details:', error);
-      throw error;
-    }
-  }
-
-  async updateInventoryBatch(productId: string, batchId: string, updatedBatch: ProductInventory): Promise<void> {
-    try {
-      console.log('=== UPDATE INVENTORY BATCH DEBUG ===');
-      console.log('Product ID:', productId);
-      console.log('Batch ID:', batchId);
-      console.log('Updated batch data:', updatedBatch);
-      
-      // Check authentication
-      const currentUser = this.authService.getCurrentUser();
-      if (!currentUser) {
-        throw new Error('User not authenticated');
-      }
-
-      const product = this.getProduct(productId);
-      if (!product) {
-        throw new Error(`Product with ID ${productId} not found`);
-      }
-
-      // Find and update the specific batch
-      const updatedInventory = product.inventory.map(inv => 
-        inv.batchId === batchId ? updatedBatch : inv
-      );
-      
-      // Calculate total stock from all active batches
-      const totalStock = updatedInventory.reduce((sum, inv) => sum + ((inv.status === 'active') ? inv.quantity : 0), 0);
-      
-      // Get selling price from most recent batch (sort by receivedAt descending)
-      const sortedInventory = updatedInventory.slice().sort((a, b) => 
-        new Date(b.receivedAt).getTime() - new Date(a.receivedAt).getTime()
-      );
-      const sellingPrice = sortedInventory.length > 0 ? sortedInventory[0].unitPrice : 0;
-      
-      console.log('Updated inventory count:', updatedInventory.length);
-      console.log('Updated total stock:', totalStock);
-      console.log('Updated selling price:', sellingPrice);
-      
-      await this.updateProduct(productId, { 
-        inventory: updatedInventory,
-        totalStock,
-        sellingPrice
-      });
-      
-      console.log('=== INVENTORY BATCH UPDATED SUCCESSFULLY ===');
-    } catch (error) {
-      console.error('=== ERROR IN UPDATE INVENTORY BATCH ===');
-      console.error('Error details:', error);
-      throw error;
-    }
-  }
-
-  async removeInventoryBatch(productId: string, batchId: string): Promise<void> {
-    const product = this.getProduct(productId);
-    if (product) {
-      const updatedInventory = product.inventory.filter(inv => inv.batchId !== batchId);
-      
-      // Calculate total stock from active batches only
-      const totalStock = updatedInventory.reduce((sum, inv) => sum + ((inv.status === 'active') ? inv.quantity : 0), 0);
-      
-      // Get selling price from most recent batch (sort by receivedAt descending)
-      const sortedInventory = updatedInventory.slice().sort((a, b) => 
-        new Date(b.receivedAt).getTime() - new Date(a.receivedAt).getTime()
-      );
-      const sellingPrice = sortedInventory.length > 0 ? sortedInventory[0].unitPrice : 0;
-      
-      await this.updateProduct(productId, { 
-        inventory: updatedInventory,
-        totalStock,
-        sellingPrice
-      });
-    }
-  }
+  // (Removed) Embedded inventory add/update/remove methods — replaced by InventoryDataService in separate collection
 
   // Getter methods
   getProducts(): Product[] {
@@ -723,17 +605,9 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
         status: 'active'
       };
 
-      await this.addInventoryBatch(productId, newBatch);
-
-      // Step 3: Log price change for new batch
-      if (newBatchPrice !== sourceBatch.unitPrice) {
-        await this.updateProductPrice(
-          productId,
-          newBatchPrice,
-          reason || `New batch created from split with updated price`,
-          newBatchId
-        );
-      }
+      // This method still references old embedded inventory - needs refactoring to use InventoryDataService
+      console.warn('splitBatch method needs to be refactored to use InventoryDataService');
+      throw new Error('splitBatch method is deprecated and needs refactoring for separate inventory collection');
 
       console.log(`✅ Batch split: ${quantityToMove} units moved from ${sourceBatchId} to ${newBatchId}`);
     } catch (error) {
@@ -769,21 +643,38 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
   /**
    * Clean undefined values from an object to make it Firestore-compatible
    */
-  private cleanUndefinedValues(obj: any): any {
-    if (obj === null || typeof obj !== 'object') {
-      return obj;
-    }
-    
-    if (Array.isArray(obj)) {
-      return obj.map(item => this.cleanUndefinedValues(item));
-    }
-    
-    const cleaned: any = {};
-    for (const [key, value] of Object.entries(obj)) {
-      if (value !== undefined) {
-        cleaned[key] = this.cleanUndefinedValues(value);
+  private cleanUndefinedValues<T extends Record<string, any>>(obj: T): T {
+    if (!obj || typeof obj !== 'object') return obj;
+    const out: any = Array.isArray(obj) ? [] : {};
+    Object.keys(obj).forEach((k) => {
+      const v = (obj as any)[k];
+      if (v === undefined) return;
+      if (v && typeof v === 'object' && !(v instanceof Date)) {
+        out[k] = this.cleanUndefinedValues(v);
+      } else {
+        out[k] = v;
       }
-    }
-    return cleaned;
+    });
+    return out;
+  }
+  // Inventory is now managed in productInventory collection. Keep a helper for summary updates if needed by other services.
+  async setInventorySummary(productId: string, totalStock: number, sellingPrice: number): Promise<void> {
+    await this.updateProduct(productId, { totalStock, sellingPrice });
+  }
+
+  // Legacy no-op implementations to avoid breaking callers; will be removed after UI refactor.
+  async addInventoryBatch(productId: string, _batch: ProductInventory): Promise<void> {
+    console.warn('addInventoryBatch is deprecated. Use InventoryDataService.addBatch instead.');
+    // No-op
+  }
+
+  async updateInventoryBatch(productId: string, _batchId: string, _updatedBatch: ProductInventory): Promise<void> {
+    console.warn('updateInventoryBatch is deprecated. Use InventoryDataService.updateBatch instead.');
+    // No-op
+  }
+
+  async removeInventoryBatch(productId: string, _batchId: string): Promise<void> {
+    console.warn('removeInventoryBatch is deprecated. Use InventoryDataService.removeBatch instead.');
+    // No-op
   }
 }
