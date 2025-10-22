@@ -6,6 +6,9 @@
 @tailwind components; 
 @tailwind utilities;
 
+/* POS Common Styles */
+@import './app/shared/styles/pos-common.css';
+
 /* Global font styling for professional appearance */
 * {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;

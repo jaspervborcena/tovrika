@@ -778,6 +778,137 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
         padding: 1rem 1.5rem;
       }
     }
+
+    /* VAT Notice Styles */
+    .vat-notice {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.75rem 1rem;
+      background: #fef3cd;
+      border: 1px solid #ffeaa7;
+      border-radius: 6px;
+      margin-bottom: 1.5rem;
+      color: #856404;
+      font-size: 0.875rem;
+    }
+
+    .notice-icon {
+      width: 20px;
+      height: 20px;
+      flex-shrink: 0;
+    }
+
+    /* Inventory Summary Styles */
+    .inventory-summary {
+      background: #f8f9fa;
+      border: 1px solid #e9ecef;
+      border-radius: 8px;
+      padding: 1.5rem;
+    }
+
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .summary-item label {
+      display: block;
+      font-weight: 500;
+      color: #495057;
+      margin-bottom: 0.5rem;
+    }
+
+    .calculated-value {
+      font-size: 1.125rem;
+      font-weight: 600;
+      color: #007bff;
+      margin-bottom: 0.25rem;
+    }
+
+    .calculated-value small {
+      display: block;
+      font-size: 0.75rem;
+      font-weight: 400;
+      color: #6c757d;
+    }
+
+    /* New Product Inventory Styles */
+    .new-product-inventory {
+      border: 2px dashed #28a745;
+      border-radius: 8px;
+      padding: 1.5rem;
+      background: #f8fff9;
+    }
+
+    .form-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1rem;
+      margin-bottom: 1rem;
+    }
+
+    /* Inventory Management Button */
+    .inventory-actions {
+      text-align: center;
+    }
+
+    .btn-inventory {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.75rem 1.5rem;
+      background: #007bff;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .btn-inventory:hover {
+      background: #0056b3;
+      transform: translateY(-1px);
+    }
+
+    .btn-icon {
+      width: 18px;
+      height: 18px;
+    }
+
+    /* Unauthorized Message Styles */
+    .unauthorized-message {
+      display: flex;
+      align-items: flex-start;
+      gap: 1rem;
+      padding: 1.5rem;
+      background: #fff3cd;
+      border: 1px solid #ffeaa7;
+      border-radius: 8px;
+      color: #856404;
+    }
+
+    .warning-icon {
+      width: 24px;
+      height: 24px;
+      flex-shrink: 0;
+      color: #f0ad4e;
+    }
+
+    .unauthorized-message h5 {
+      margin: 0 0 0.5rem 0;
+      font-size: 1rem;
+      font-weight: 600;
+    }
+
+    .unauthorized-message p {
+      margin: 0;
+      font-size: 0.875rem;
+      line-height: 1.4;
+    }
     `
   ],
   template: `
@@ -1034,36 +1165,136 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
 
               <!-- Pricing & Inventory Section -->
               <div class="form-section">
+                <!-- VAT Notice -->
+                <div class="vat-notice">
+                  <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" class="notice-icon">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                  </svg>
+                  <span>Default 12% VAT applied. Some items may not be VATable - please double check tax settings.</span>
+                </div>
+
                 <h4 class="section-title">
                   <span>💲</span>
                   <span>Pricing & Inventory</span>
                 </h4>
-                
-                <div class="form-group">
-                  <label for="totalStock">Total Stock</label>
-                  <input 
-                    type="text" 
-                    id="totalStock"
-                    [value]="selectedProduct?.totalStock || 0"
-                    placeholder="0"
-                    class="form-input"
-                    readonly
-                    style="background-color: #f8f9fa; color: #6c757d;">
-                  <small class="text-muted">Calculated from all inventory batches</small>
+
+                <!-- Check if product has existing inventory -->
+                <div *ngIf="hasExistingInventory(); else newProductInventory">
+                  <!-- Existing Product - Show calculated values and manage button -->
+                  <div class="inventory-summary">
+                    <div class="summary-grid">
+                      <div class="summary-item">
+                        <label>Total Stock</label>
+                        <div class="calculated-value">
+                          {{ selectedProduct?.totalStock || 0 }}
+                          <small>Calculated from all inventory batches</small>
+                        </div>
+                      </div>
+                      
+                      <div class="summary-item">
+                        <label>Selling Price</label>
+                        <div class="calculated-value">
+                          ₱{{ (selectedProduct?.sellingPrice || 0) | number:'1.2-2' }}
+                          <small>Price from most recent inventory batch</small>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="inventory-actions" *ngIf="canManageInventory()">
+                      <button 
+                        type="button" 
+                        class="btn btn-inventory" 
+                        (click)="openInventoryManagement()">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" class="btn-icon">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"></path>
+                        </svg>
+                        Manage Inventory Batches
+                      </button>
+                    </div>
+                  </div>
                 </div>
 
-                <div class="form-group">
-                  <label for="sellingPrice">Selling Price</label>
-                  <input 
-                    type="text" 
-                    id="sellingPrice"
-                    [value]="selectedProduct?.sellingPrice || 0"
-                    placeholder="0.00"
-                    class="form-input"
-                    readonly
-                    style="background-color: #f8f9fa; color: #6c757d;">
-                  <small class="text-muted">Price from most recent inventory batch</small>
-                </div>
+                <!-- New Product - Enable direct entry for authorized roles -->
+                <ng-template #newProductInventory>
+                  <div class="new-product-inventory" *ngIf="canCreateInitialInventory(); else unauthorizedInventory">
+                    <div class="form-row">
+                      <div class="form-group">
+                        <label for="totalStock">Total Stock</label>
+                        <input 
+                          type="number" 
+                          id="totalStock"
+                          formControlName="initialQuantity"
+                          placeholder="Enter initial stock quantity"
+                          class="form-input"
+                          min="0">
+                        <small class="text-muted">Initial stock for this product</small>
+                      </div>
+
+                      <div class="form-group">
+                        <label for="costPrice">Cost Price</label>
+                        <input 
+                          type="number" 
+                          id="costPrice"
+                          formControlName="initialCostPrice"
+                          placeholder="0.00"
+                          class="form-input"
+                          min="0"
+                          step="0.01">
+                        <small class="text-muted">Cost per unit</small>
+                      </div>
+                    </div>
+
+                    <div class="form-group">
+                      <label for="sellingPrice">Selling Price</label>
+                      <input 
+                        type="number" 
+                        id="sellingPrice"
+                        formControlName="initialUnitPrice"
+                        placeholder="0.00"
+                        class="form-input"
+                        min="0"
+                        step="0.01">
+                      <small class="text-muted">Price per unit (will be used for initial batch)</small>
+                    </div>
+
+                    <!-- Additional initial batch fields -->
+                    <div class="form-row">
+                      <div class="form-group">
+                        <label for="batchId">Batch ID</label>
+                        <input 
+                          type="text" 
+                          id="batchId"
+                          formControlName="initialBatchId"
+                          placeholder="AUTO-GENERATED"
+                          class="form-input">
+                        <small class="text-muted">Leave empty for auto-generation</small>
+                      </div>
+
+                      <div class="form-group">
+                        <label for="supplier">Supplier (Optional)</label>
+                        <input 
+                          type="text" 
+                          id="supplier"
+                          formControlName="initialSupplier"
+                          placeholder="Enter supplier name"
+                          class="form-input">
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Unauthorized message for cashiers -->
+                  <ng-template #unauthorizedInventory>
+                    <div class="unauthorized-message">
+                      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" class="warning-icon">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z"></path>
+                      </svg>
+                      <div>
+                        <h5>Limited Access</h5>
+                        <p>Only store managers and creators can set initial inventory. Contact your manager to create products with inventory.</p>
+                      </div>
+                    </div>
+                  </ng-template>
+                </ng-template>
               </div>
             </form>
           </div>
@@ -2067,31 +2298,61 @@ export class ProductManagementComponent implements OnInit {
 
   async uploadFileToStorage(file: File): Promise<string> {
     try {
-      console.log('☁️ Starting Firebase Storage upload...');
+      console.log('☁️ Starting structured image upload...');
+      
+      // Get current store ID from permission
+      const currentPermission = this.authService.getCurrentPermission();
+      const storeId = currentPermission?.storeId || 'default-store';
+      
+      // Generate product ID if not available (for new products)
+      const productId = this.selectedProduct?.id || `temp_${Date.now()}`;
+      
+      // Get file extension
+      const extension = file.name.split('.').pop()?.toLowerCase() || 'png';
+      
+      // Create structured path: storeId/products/productId.extension
+      const fileName = `${storeId}/products/${productId}.${extension}`;
+      
+      console.log('📤 Uploading file with structure:', {
+        storeId,
+        productId,
+        fileName: file.name,
+        fileSize: file.size,
+        fileType: file.type,
+        storagePath: fileName
+      });
       
       // Dynamic import to avoid top-level SDK usage
       const { getStorage, ref, uploadBytes, getDownloadURL } = await import('firebase/storage');
       const { app } = await import('../../../firebase.config');
       
       const storage = getStorage(app);
-      const fileName = `products/${Date.now()}_${file.name}`;
       const storageRef = ref(storage, fileName);
       
-      console.log('📤 Uploading file:', {
-        fileName,
-        fileSize: file.size,
-        fileType: file.type
+      // Upload with metadata
+      const snapshot = await uploadBytes(storageRef, file, {
+        contentType: file.type,
+        customMetadata: {
+          uploadedBy: this.authService.currentUser()?.uid || 'unknown',
+          uploadedAt: new Date().toISOString(),
+          storeId: storeId,
+          productId: productId,
+          imageType: 'product'
+        }
       });
       
-      const snapshot = await uploadBytes(storageRef, file);
       console.log('✅ Upload complete, getting download URL...');
-      
       const downloadURL = await getDownloadURL(snapshot.ref);
-      console.log('✅ Download URL obtained:', downloadURL);
+      
+      console.log('✅ Upload complete with structured path:', {
+        downloadURL,
+        fullPath: fileName,
+        size: snapshot.metadata.size || 0
+      });
       
       return downloadURL;
     } catch (error: any) {
-      console.error('❌ Firebase Storage upload error:', error);
+      console.error('❌ Structured image upload error:', error);
       throw new Error(`Upload failed: ${error.message || 'Unknown error'}`);
     }
   }
@@ -2428,6 +2689,78 @@ export class ProductManagementComponent implements OnInit {
     }
     
     return cleaned;
+  }
+
+  // ===== INVENTORY MANAGEMENT METHODS =====
+
+  /**
+   * Check if the current product has existing inventory batches
+   */
+  hasExistingInventory(): boolean {
+    if (!this.selectedProduct?.id) {
+      return false; // New product, no existing inventory
+    }
+    
+    // Check if product has inventory entries or legacy inventory
+    return (this.selectedProduct.inventory && this.selectedProduct.inventory.length > 0) ||
+           (this.currentBatches && this.currentBatches.length > 0) ||
+           !!(this.selectedProduct.totalStock && this.selectedProduct.totalStock > 0);
+  }
+
+  /**
+   * Check if current user can manage inventory (not cashier)
+   */
+  canManageInventory(): boolean {
+    const userRole = this.authService.userRole();
+    return userRole !== 'cashier';
+  }
+
+  /**
+   * Check if current user can create initial inventory (creator, store_manager)
+   */
+  canCreateInitialInventory(): boolean {
+    const userRole = this.authService.userRole();
+    return userRole === 'creator' || userRole === 'store_manager';
+  }
+
+  /**
+   * Open inventory management dialog
+   */
+  openInventoryManagement(): void {
+    if (!this.selectedProduct?.id) {
+      this.toastService.error('Please save the product first before managing inventory.');
+      return;
+    }
+    
+    // Set the selected product and open inventory modal
+    this.showInventoryModal = true;
+    this.inventoryTab = 'list';
+    
+    // Load current inventory batches
+    this.loadProductInventory(this.selectedProduct.id);
+  }
+
+  /**
+   * Load product inventory batches
+   */
+  private async loadProductInventory(productId: string): Promise<void> {
+    try {
+      this.loading = true;
+      
+      // Load inventory entries for this product using the existing method
+      const inventoryEntries = await this.inventoryDataService.listBatches(productId);
+      this.currentBatches = inventoryEntries || [];
+      this.filteredInventory = [...this.currentBatches];
+      
+      console.log(`Loaded ${this.currentBatches.length} inventory batches for product ${productId}`);
+    } catch (error) {
+      console.error('Error loading product inventory:', error);
+      this.toastService.error('Failed to load product inventory');
+      this.currentBatches = [];
+      this.filteredInventory = [];
+    } finally {
+      this.loading = false;
+    }
   }
 
 }

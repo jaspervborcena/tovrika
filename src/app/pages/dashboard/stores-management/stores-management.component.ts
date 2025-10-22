@@ -279,14 +279,61 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
                     class="form-input">
                 </div>
 
+                <!-- Store Logo Upload -->
                 <div class="form-group">
-                  <label for="logoUrl">Logo URL</label>
-                  <input 
-                    type="text" 
-                    id="logoUrl"
-                    formControlName="logoUrl"
-                    placeholder="https://..."
-                    class="form-input">
+                  <label for="logoUrl">Store Logo</label>
+                  <div class="logo-upload-section" style="display: flex; align-items: center; gap: 12px;">
+                    <!-- Logo Preview -->
+                    <div class="logo-preview" style="width: 60px; height: 60px; border: 2px dashed #ddd; border-radius: 8px; display: flex; align-items: center; justify-content: center; background: #f8f9fa;">
+                      <img *ngIf="storeForm.get('logoUrl')?.value" 
+                           [src]="storeForm.get('logoUrl')?.value" 
+                           style="width: 56px; height: 56px; object-fit: cover; border-radius: 6px;"
+                           alt="Store Logo">
+                      <span *ngIf="!storeForm.get('logoUrl')?.value" style="color: #666; font-size: 12px;">No Logo</span>
+                    </div>
+                    
+                    <!-- Upload Controls -->
+                    <div style="flex: 1;">
+                      <button 
+                        type="button" 
+                        class="btn btn-primary btn-sm"
+                        (click)="triggerLogoUpload()"
+                        [disabled]="isLoading">
+                        📷 Upload Logo
+                      </button>
+                      <button 
+                        type="button" 
+                        class="btn btn-secondary btn-sm"
+                        (click)="clearLogo()"
+                        *ngIf="storeForm.get('logoUrl')?.value"
+                        style="margin-left: 8px;">
+                        🗑️ Remove
+                      </button>
+                      <div style="font-size: 12px; color: #666; margin-top: 4px;">
+                        Recommended: 400x400px, max 2MB (PNG, JPG, WebP)
+                      </div>
+                    </div>
+                    
+                    <!-- Hidden File Input -->
+                    <input 
+                      type="file" 
+                      id="hiddenLogoFile"
+                      accept="image/png,image/jpeg,image/jpg,image/webp"
+                      (change)="onLogoFileChange($event)"
+                      style="display: none;">
+                  </div>
+                  
+                  <!-- URL Input (for manual entry if needed) -->
+                  <details style="margin-top: 8px;">
+                    <summary style="cursor: pointer; color: #666; font-size: 12px;">Enter URL manually</summary>
+                    <input 
+                      type="text" 
+                      id="logoUrl"
+                      formControlName="logoUrl"
+                      placeholder="https://..."
+                      class="form-input"
+                      style="margin-top: 8px; font-size: 12px;">
+                  </details>
                 </div>
               </div>
             </form>
@@ -1829,7 +1876,7 @@ export class StoresManagementComponent implements OnInit {
         minNumber: formData.minNumber || '',
         invoiceType: formData.invoiceType || '',
         invoiceNumber: formData.invoiceNumber || '',
-        permitDateIssued: formData.permitDateIssued ? new Date(formData.permitDateIssued) : new Date(),
+        permitDateIssued: this.validateAndCreateDate(formData.permitDateIssued),
         validityNotice: formData.validityNotice || ''
       };
 
@@ -1884,8 +1931,23 @@ export class StoresManagementComponent implements OnInit {
       } else {
         // Create new store
         console.log('➕ Creating new store with data:', storeData);
-        await this.storeService.createStore(storeData);
-        console.log('✅ Store created successfully');
+        const newStoreId = await this.storeService.createStore(storeData);
+        console.log('✅ Store created successfully with ID:', newStoreId);
+        
+        // If there's a logo URL from temp upload, move it to final location
+        if (storeData.logoUrl && storeData.logoUrl.includes('/temp/logo/')) {
+          console.log('🔄 Moving logo from temp to final location...');
+          try {
+            const finalLogoUrl = await this.moveLogoToFinalLocation(storeData.logoUrl, newStoreId);
+            // Update the store with the final logo URL
+            await this.storeService.updateStore(newStoreId, { logoUrl: finalLogoUrl });
+            console.log('✅ Logo moved and store updated with final URL');
+          } catch (logoError) {
+            console.warn('⚠️ Failed to move logo, but store was created successfully:', logoError);
+            this.toastService.warning('Store created, but logo upload needs to be redone');
+          }
+        }
+        
         this.toastService.success('Store created successfully');
       }
 
@@ -2246,6 +2308,286 @@ export class StoresManagementComponent implements OnInit {
       (this as any)._confirmationResolve(false);
       (this as any)._confirmationResolve = null;
     }
+  }
+
+  // ===== LOGO UPLOAD METHODS =====
+
+  /**
+   * Trigger logo file upload
+   */
+  triggerLogoUpload(): void {
+    const el = document.getElementById('hiddenLogoFile') as HTMLInputElement | null;
+    el?.click();
+  }
+
+  /**
+   * Handle logo file selection and upload
+   */
+  async onLogoFileChange(ev: Event): Promise<void> {
+    const input = ev.target as HTMLInputElement;
+    if (!input.files || input.files.length === 0) return;
+    
+    const file = input.files[0];
+    console.log('📷 Starting store logo upload:', {
+      fileName: file.name,
+      fileSize: file.size,
+      fileType: file.type
+    });
+    
+    try {
+      // Show loading state
+      this.isLoading = true;
+      this.toastService.info('Compressing and uploading logo...');
+      
+      // Compress the image
+      console.log('🔄 Compressing logo...');
+      const compressed = await this.compressImage(file, 800 * 800); // 800x800 max for logos
+      console.log('✅ Logo compressed:', {
+        originalSize: file.size,
+        compressedSize: compressed.size,
+        compression: Math.round((1 - compressed.size / file.size) * 100) + '%'
+      });
+      
+      // Upload to Firebase Storage with structured path
+      console.log('☁️ Uploading logo to Firebase Storage...');
+      const url = await this.uploadLogoToStorage(compressed);
+      console.log('✅ Logo uploaded successfully:', url);
+      
+      // Set the URL in the form
+      this.storeForm.get('logoUrl')?.setValue(url);
+      this.toastService.success('Logo uploaded successfully!');
+      
+    } catch (err: any) {
+      console.error('❌ Logo upload error:', err);
+      this.toastService.error(`Logo upload failed: ${err.message || 'Unknown error'}`);
+    } finally {
+      this.isLoading = false;
+      // Reset the file input
+      if (input) input.value = '';
+    }
+  }
+
+  /**
+   * Clear the logo URL
+   */
+  clearLogo(): void {
+    this.storeForm.get('logoUrl')?.setValue('');
+    this.toastService.info('Logo removed');
+  }
+
+  /**
+   * Upload logo to Firebase Storage with structured path
+   * Path: {storeId}/logo/logo_{storeId}.{extension}
+   */
+  async uploadLogoToStorage(file: File): Promise<string> {
+    try {
+      console.log('☁️ Starting structured logo upload...');
+      
+      // For new stores, use a temporary path that will be updated after store creation
+      // For existing stores, use the actual store ID
+      const storeId = this.editingStore?.id || `temp_${Date.now()}`;
+      const isNewStore = !this.editingStore?.id;
+      
+      // Get file extension
+      const extension = file.name.split('.').pop()?.toLowerCase() || 'png';
+      
+      // Create structured path
+      const fileName = isNewStore 
+        ? `temp/logo/logo_${storeId}.${extension}`
+        : `${storeId}/logo/logo_${storeId}.${extension}`;
+      
+      console.log('📤 Uploading logo with structure:', {
+        storeId,
+        isNewStore,
+        fileName: file.name,
+        fileSize: file.size,
+        fileType: file.type,
+        storagePath: fileName
+      });
+      
+      // Dynamic import to avoid top-level SDK usage
+      const { getStorage, ref, uploadBytes, getDownloadURL } = await import('firebase/storage');
+      const { app } = await import('../../../firebase.config');
+      
+      const storage = getStorage(app);
+      const storageRef = ref(storage, fileName);
+      
+      // Upload with metadata
+      const snapshot = await uploadBytes(storageRef, file, {
+        contentType: file.type,
+        customMetadata: {
+          uploadedBy: this.authService.currentUser()?.uid || 'unknown',
+          uploadedAt: new Date().toISOString(),
+          storeId: storeId,
+          imageType: 'logo'
+        }
+      });
+      
+      console.log('✅ Upload complete, getting download URL...');
+      const downloadURL = await getDownloadURL(snapshot.ref);
+      
+      console.log('✅ Logo upload complete with structured path:', {
+        downloadURL,
+        fullPath: fileName,
+        size: snapshot.metadata.size || 0
+      });
+      
+      return downloadURL;
+    } catch (error: any) {
+      console.error('❌ Structured logo upload error:', error);
+      throw new Error(`Logo upload failed: ${error.message || 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Move logo from temporary location to final store location
+   */
+  async moveLogoToFinalLocation(tempUrl: string, finalStoreId: string): Promise<string> {
+    try {
+      console.log('🔄 Moving logo from temp to final location...');
+      
+      // Dynamic import Firebase Storage
+      const { getStorage, ref, getDownloadURL, uploadBytes, deleteObject } = await import('firebase/storage');
+      const { app } = await import('../../../firebase.config');
+      
+      const storage = getStorage(app);
+      
+      // Parse temp URL to get the file
+      const tempRef = ref(storage, this.extractStoragePathFromUrl(tempUrl));
+      
+      // Download the file from temp location
+      const response = await fetch(tempUrl);
+      const blob = await response.blob();
+      
+      // Get file extension from the temp URL
+      const extension = tempUrl.split('.').pop()?.split('?')[0] || 'png';
+      
+      // Create final path
+      const finalPath = `${finalStoreId}/logo/logo_${finalStoreId}.${extension}`;
+      const finalRef = ref(storage, finalPath);
+      
+      // Upload to final location
+      await uploadBytes(finalRef, blob, {
+        contentType: blob.type,
+        customMetadata: {
+          uploadedBy: this.authService.currentUser()?.uid || 'unknown',
+          uploadedAt: new Date().toISOString(),
+          storeId: finalStoreId,
+          imageType: 'logo',
+          movedFromTemp: 'true'
+        }
+      });
+      
+      // Get final download URL
+      const finalUrl = await getDownloadURL(finalRef);
+      
+      // Delete temp file
+      try {
+        await deleteObject(tempRef);
+        console.log('🗑️ Temp logo file deleted');
+      } catch (deleteError) {
+        console.warn('⚠️ Could not delete temp logo file:', deleteError);
+      }
+      
+      console.log('✅ Logo moved successfully:', {
+        from: tempUrl,
+        to: finalUrl,
+        finalPath
+      });
+      
+      return finalUrl;
+    } catch (error: any) {
+      console.error('❌ Error moving logo to final location:', error);
+      throw new Error(`Failed to move logo: ${error.message || 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Extract storage path from Firebase Storage URL
+   */
+  private extractStoragePathFromUrl(url: string): string {
+    try {
+      const urlParts = url.split('/o/')[1];
+      const path = urlParts.split('?')[0];
+      return decodeURIComponent(path);
+    } catch (error) {
+      console.error('❌ Error extracting storage path:', error);
+      throw new Error('Invalid storage URL');
+    }
+  }
+
+  /**
+   * Compress image before upload
+   */
+  async compressImage(file: File, maxSize: number = 800 * 800): Promise<File> {
+    return new Promise((resolve) => {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d')!;
+      const img = new Image();
+
+      img.onload = () => {
+        // Calculate new dimensions maintaining aspect ratio
+        let { width, height } = img;
+        const maxDimension = Math.sqrt(maxSize);
+        
+        if (width > height) {
+          if (width > maxDimension) {
+            height = height * (maxDimension / width);
+            width = maxDimension;
+          }
+        } else {
+          if (height > maxDimension) {
+            width = width * (maxDimension / height);
+            height = maxDimension;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+
+        // Draw and compress
+        ctx.drawImage(img, 0, 0, width, height);
+        
+        canvas.toBlob(
+          (blob) => {
+            if (blob) {
+              const compressedFile = new File([blob], file.name, {
+                type: file.type,
+                lastModified: Date.now()
+              });
+              resolve(compressedFile);
+            } else {
+              resolve(file); // Fallback to original
+            }
+          },
+          file.type,
+          0.8 // 80% quality
+        );
+      };
+
+      img.src = URL.createObjectURL(file);
+    });
+  }
+
+  /**
+   * Validate and create a Date object, returning current date if invalid
+   */
+  private validateAndCreateDate(dateValue: any): Date {
+    // Handle null, undefined, or empty string
+    if (!dateValue || dateValue === '') {
+      return new Date();
+    }
+
+    // Try to create date
+    const date = new Date(dateValue);
+    
+    // Check if date is valid
+    if (isNaN(date.getTime())) {
+      console.warn('⚠️ Invalid date value provided:', dateValue, 'Using current date instead');
+      return new Date();
+    }
+
+    return date;
   }
 
 }
