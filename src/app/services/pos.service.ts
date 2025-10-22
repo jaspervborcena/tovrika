@@ -1,4 +1,4 @@
-import { Injectable, signal, computed, inject } from '@angular/core';
+import { Injectable, signal, computed, inject, Injector } from '@angular/core';
 import {
   Firestore,
   collection,
@@ -27,6 +27,7 @@ export class PosService {
   private readonly isProcessingSignal = signal<boolean>(false);
   private readonly orderDiscountSignal = signal<OrderDiscount | null>(null);
   private readonly offlineDocService = inject(OfflineDocumentService);
+  private readonly injector = inject(Injector);
 
   // Computed values
   readonly cartItems = computed(() => this.cartItemsSignal());
@@ -714,12 +715,87 @@ export class PosService {
   }
 
   private async updateProductInventory(cartItems: CartItem[]): Promise<void> {
-    // This would typically update the product inventory
-    // For now, we'll just log it
-    console.log('Updating inventory for items:', cartItems);
+    console.log('🔄 Starting FIFO inventory deduction for cart items:', cartItems.length);
     
-    // TODO: Implement actual inventory updates
-    // This would involve updating the product quantities in Firestore
+    // Import InventoryDataService dynamically to avoid circular dependency
+    const { InventoryDataService } = await import('./inventory-data.service');
+    const inventoryService = this.injector.get(InventoryDataService);
+    
+    for (const cartItem of cartItems) {
+      try {
+        await this.deductInventoryFifo(cartItem.productId, cartItem.quantity, inventoryService);
+        console.log(`✅ Inventory deducted for ${cartItem.productName}: ${cartItem.quantity} units`);
+      } catch (error) {
+        console.error(`❌ Failed to deduct inventory for ${cartItem.productName}:`, error);
+        // Continue with other items even if one fails
+      }
+    }
+    
+    console.log('✅ FIFO inventory deduction completed for all items');
+  }
+
+  /**
+   * Deduct inventory using FIFO (First In, First Out) method
+   * Oldest batches are depleted first
+   */
+  private async deductInventoryFifo(productId: string, quantityToDeduct: number, inventoryService: any): Promise<void> {
+    if (quantityToDeduct <= 0) return;
+    
+    console.log(`🔄 FIFO deduction for product ${productId}: ${quantityToDeduct} units`);
+    
+    // Get all active batches sorted by receivedAt ascending (oldest first)
+    const batches = await inventoryService.listBatches(productId);
+    const activeBatches = batches
+      .filter((batch: any) => batch.status === 'active' && batch.quantity > 0)
+      .sort((a: any, b: any) => new Date(a.receivedAt).getTime() - new Date(b.receivedAt).getTime()); // Oldest first
+    
+    if (activeBatches.length === 0) {
+      throw new Error(`No active inventory batches found for product ${productId}`);
+    }
+    
+    let remainingToDeduct = quantityToDeduct;
+    const batchUpdates: Array<{batchId: string, docId: string, newQuantity: number}> = [];
+    
+    // Process batches in FIFO order (oldest first)
+    for (const batch of activeBatches) {
+      if (remainingToDeduct <= 0) break;
+      
+      const batchQuantity = batch.quantity;
+      const deductFromThisBatch = Math.min(remainingToDeduct, batchQuantity);
+      const newQuantity = batchQuantity - deductFromThisBatch;
+      
+      batchUpdates.push({
+        batchId: batch.batchId,
+        docId: batch.id,
+        newQuantity: newQuantity
+      });
+      
+      remainingToDeduct -= deductFromThisBatch;
+      
+      console.log(`📦 Batch ${batch.batchId} (${new Date(batch.receivedAt).toLocaleDateString()}): ${batchQuantity} → ${newQuantity} (deducted: ${deductFromThisBatch})`);
+    }
+    
+    if (remainingToDeduct > 0) {
+      throw new Error(`Insufficient inventory for product ${productId}. Need ${quantityToDeduct}, but only ${quantityToDeduct - remainingToDeduct} available.`);
+    }
+    
+    // Apply all batch updates
+    for (const update of batchUpdates) {
+      const updateData: any = {
+        quantity: update.newQuantity,
+        updatedAt: new Date()
+      };
+      
+      // If quantity becomes zero, mark as inactive
+      if (update.newQuantity === 0) {
+        updateData.status = 'inactive';
+      }
+      
+      await inventoryService.updateBatch(productId, update.docId, updateData);
+      console.log(`✅ Updated batch ${update.batchId} quantity to ${update.newQuantity}`);
+    }
+    
+    console.log(`✅ FIFO deduction completed for product ${productId}`);
   }
 
   // Invoice Methods

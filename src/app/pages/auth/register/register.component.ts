@@ -7,6 +7,7 @@ import { HeaderComponent } from '../../../shared/components/header/header.compon
 import { LogoComponent } from '../../../shared/components/logo/logo.component';
 import { AppConstants } from '../../../shared/enums';
 import { NetworkService } from '../../../core/services/network.service';
+import { ROLE_OPTIONS, UserRolesEnum } from '../../../shared/enums/user-roles.enum';
 
 @Component({
   selector: 'app-register',
@@ -27,14 +28,25 @@ export class RegisterComponent {
     this.isOnline() ? AppConstants.APP_NAME : AppConstants.APP_NAME_OFFLINE
   );
 
+  // Role options for dropdown
+  readonly roleOptions = ROLE_OPTIONS;
+
   registerForm = this.fb.group({
     displayName: ['', [Validators.required]],
     email: ['', [Validators.required, Validators.email]],
-    password: ['', [Validators.required, Validators.minLength(6)]]
+    password: ['', [Validators.required, Validators.minLength(6)]],
+    roleId: [UserRolesEnum.CREATOR, [Validators.required]]
   });
 
   isLoading = false;
   error = '';
+
+  // Get role description for selected role
+  get selectedRoleDescription(): string {
+    const selectedRoleId = this.registerForm.get('roleId')?.value;
+    const selectedRole = this.roleOptions.find(role => role.id === selectedRoleId);
+    return selectedRole?.description || '';
+  }
 
   async onSubmit() {
     if (this.registerForm.valid) {
@@ -42,11 +54,12 @@ export class RegisterComponent {
       this.error = '';
 
       try {
-        const { email, password, displayName } = this.registerForm.value;
+        const { email, password, displayName, roleId } = this.registerForm.value;
         await this.authService.registerUser(email!, password!, {
           email: email!,
           displayName: displayName!,
-          status: 'active'
+          status: 'active',
+          roleId: roleId! // Store the selected role for later use
           // permission will be set when company/store access is granted
         });
         

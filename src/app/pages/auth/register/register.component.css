@@ -137,6 +137,20 @@
   box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.1);
 }
 
+/* Role Description Styling */
+.role-description {
+  color: #6b7280;
+  font-size: 0.8rem;
+  margin-top: 0.5rem;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-style: italic;
+  line-height: 1.4;
+  padding: 0.5rem 0.75rem;
+  background: #f9fafb;
+  border-radius: 8px;
+  border-left: 3px solid #667eea;
+}
+
 /* Error Message Styling */
 .error-message {
   color: #ef4444;

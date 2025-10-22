@@ -86,7 +86,7 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
                     <input 
                       type="checkbox" 
                       [checked]="store.status === 'active'"
-                      (change)="toggleStoreStatus(store)">
+                      (click)="onToggleClick($event, store)">
                     <span class="toggle-slider"></span>
                   </label>
                 </td>
@@ -101,13 +101,13 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
                     <button 
                       class="btn-icon-action btn-bir"
                       (click)="openBirComplianceModal(store)"
-                      title="BIR Compliance">
+                      [title]="canManageBirCompliance() ? 'BIR Compliance' : 'BIR Compliance (View Only)'">
                       📋
                     </button>
                     <button 
                       class="btn-icon-action btn-devices"
                       (click)="openDevicesModal(store)"
-                      title="Manage Devices">
+                      [title]="canManageDevices() ? 'Manage Devices' : 'Device Management (View Only)'">
                       💻
                     </button>
                   </div>
@@ -279,14 +279,61 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
                     class="form-input">
                 </div>
 
+                <!-- Store Logo Upload -->
                 <div class="form-group">
-                  <label for="logoUrl">Logo URL</label>
-                  <input 
-                    type="text" 
-                    id="logoUrl"
-                    formControlName="logoUrl"
-                    placeholder="https://..."
-                    class="form-input">
+                  <label for="logoUrl">Store Logo</label>
+                  <div class="logo-upload-section" style="display: flex; align-items: center; gap: 12px;">
+                    <!-- Logo Preview -->
+                    <div class="logo-preview" style="width: 60px; height: 60px; border: 2px dashed #ddd; border-radius: 8px; display: flex; align-items: center; justify-content: center; background: #f8f9fa;">
+                      <img *ngIf="storeForm.get('logoUrl')?.value" 
+                           [src]="storeForm.get('logoUrl')?.value" 
+                           style="width: 56px; height: 56px; object-fit: cover; border-radius: 6px;"
+                           alt="Store Logo">
+                      <span *ngIf="!storeForm.get('logoUrl')?.value" style="color: #666; font-size: 12px;">No Logo</span>
+                    </div>
+                    
+                    <!-- Upload Controls -->
+                    <div style="flex: 1;">
+                      <button 
+                        type="button" 
+                        class="btn btn-primary btn-sm"
+                        (click)="triggerLogoUpload()"
+                        [disabled]="isLoading">
+                        📷 Upload Logo
+                      </button>
+                      <button 
+                        type="button" 
+                        class="btn btn-secondary btn-sm"
+                        (click)="clearLogo()"
+                        *ngIf="storeForm.get('logoUrl')?.value"
+                        style="margin-left: 8px;">
+                        🗑️ Remove
+                      </button>
+                      <div style="font-size: 12px; color: #666; margin-top: 4px;">
+                        Recommended: 400x400px, max 2MB (PNG, JPG, WebP)
+                      </div>
+                    </div>
+                    
+                    <!-- Hidden File Input -->
+                    <input 
+                      type="file" 
+                      id="hiddenLogoFile"
+                      accept="image/png,image/jpeg,image/jpg,image/webp"
+                      (change)="onLogoFileChange($event)"
+                      style="display: none;">
+                  </div>
+                  
+                  <!-- URL Input (for manual entry if needed) -->
+                  <details style="margin-top: 8px;">
+                    <summary style="cursor: pointer; color: #666; font-size: 12px;">Enter URL manually</summary>
+                    <input 
+                      type="text" 
+                      id="logoUrl"
+                      formControlName="logoUrl"
+                      placeholder="https://..."
+                      class="form-input"
+                      style="margin-top: 8px; font-size: 12px;">
+                  </details>
                 </div>
               </div>
             </form>
@@ -310,10 +357,13 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
            style="position: fixed !important; z-index: 9999 !important; background: rgba(0, 0, 0, 0.8) !important;">
         <div class="modal" (click)="$event.stopPropagation()">
           <div class="modal-header">
-            <h3>📋 BIR Compliance - {{ selectedStore?.storeName }}</h3>
+            <h3>📋 BIR Compliance{{ !canManageBirCompliance() ? ' (View Only)' : '' }} - {{ selectedStore?.storeName }}</h3>
             <button class="close-btn" (click)="closeBirModal()">×</button>
           </div>
           <div class="modal-body">
+            <div *ngIf="!canManageBirCompliance()" class="view-only-notice">
+              <p><strong>View Only Mode:</strong> You can view BIR compliance information but cannot make changes. Contact your administrator to modify these settings.</p>
+            </div>
             <form [formGroup]="birForm">
               <div class="form-group">
                 <label for="birPermitNo">BIR Permit Number *</label>
@@ -322,7 +372,9 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
                   id="birPermitNo"
                   formControlName="birPermitNo"
                   placeholder="BIR-PERMIT-2025-XXXXX"
-                  class="form-input">
+                  class="form-input"
+                  [readonly]="!canManageBirCompliance()"
+                  [class.readonly]="!canManageBirCompliance()">
               </div>
 
               <div class="form-group">
@@ -332,7 +384,9 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
                   id="atpOrOcn"
                   formControlName="atpOrOcn"
                   placeholder="OCN-2025-XXXXXX"
-                  class="form-input">
+                  class="form-input"
+                  [readonly]="!canManageBirCompliance()"
+                  [class.readonly]="!canManageBirCompliance()">
               </div>
 
               <div class="form-group">
@@ -341,7 +395,9 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
                   type="date" 
                   id="permitDateIssued"
                   formControlName="permitDateIssued"
-                  class="form-input">
+                  class="form-input"
+                  [readonly]="!canManageBirCompliance()"
+                  [class.readonly]="!canManageBirCompliance()">
               </div>
 
               <div class="form-group">
@@ -351,7 +407,9 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
                   formControlName="validityNotice"
                   placeholder="e.g., Valid for 5 years from permit date"
                   class="form-textarea"
-                  rows="2"></textarea>
+                  rows="2"
+                  [readonly]="!canManageBirCompliance()"
+                  [class.readonly]="!canManageBirCompliance()"></textarea>
               </div>
 
               <div class="form-group">
@@ -359,7 +417,9 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
                 <select 
                   id="vatRegistrationType"
                   formControlName="vatRegistrationType"
-                  class="form-select">
+                  class="form-select"
+                  [disabled]="!canManageBirCompliance()"
+                  [class.readonly]="!canManageBirCompliance()">
                   <option value="VAT-registered">VAT Registered</option>
                   <option value="Non-VAT">Non-VAT</option>
                   <option value="VAT-exempt">VAT Exempt</option>
@@ -374,7 +434,9 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
                   formControlName="vatRate"
                   placeholder="12.0"
                   step="0.1"
-                  class="form-input">
+                  class="form-input"
+                  [readonly]="!canManageBirCompliance()"
+                  [class.readonly]="!canManageBirCompliance()">
               </div>
 
               <div class="form-group">
@@ -382,7 +444,9 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
                 <select 
                   id="receiptType"
                   formControlName="receiptType"
-                  class="form-select">
+                  class="form-select"
+                  [disabled]="!canManageBirCompliance()"
+                  [class.readonly]="!canManageBirCompliance()">
                   <option value="POS Receipt">POS Receipt</option>
                   <option value="Sales Invoice">Sales Invoice</option>
                   <option value="Official Receipt">Official Receipt</option>
@@ -391,8 +455,9 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
             </form>
           </div>
           <div class="modal-footer">
-            <button class="btn btn-secondary" (click)="closeBirModal()">Cancel</button>
+            <button class="btn btn-secondary" (click)="closeBirModal()">{{ canManageBirCompliance() ? 'Cancel' : 'Close' }}</button>
             <button 
+              *ngIf="canManageBirCompliance()"
               class="btn btn-primary" 
               (click)="saveBirCompliance()"
               [disabled]="!birForm.valid || isLoading">
@@ -409,19 +474,22 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
            style="position: fixed !important; z-index: 9999 !important; background: rgba(0, 0, 0, 0.8) !important;">
         <div class="modal modal-large" (click)="$event.stopPropagation()">
           <div class="modal-header">
-            <h3>💻 Manage Devices - {{ selectedStore?.storeName }}</h3>
+            <h3>💻 {{ canManageDevices() ? 'Manage Devices' : 'View Devices (View Only)' }} - {{ selectedStore?.storeName }}</h3>
             <button class="close-btn" (click)="closeDevicesModal()">×</button>
           </div>
           <div class="modal-body">
+            <div *ngIf="!canManageDevices()" class="view-only-notice">
+              <p><strong>View Only Mode:</strong> You can view device information but cannot make changes. Contact your administrator to modify device settings.</p>
+            </div>
             <!-- Add Device Button -->
-            <div class="devices-header" *ngIf="!showDeviceForm">
+            <div class="devices-header" *ngIf="!showDeviceForm && canManageDevices()">
               <button class="btn btn-primary btn-sm" (click)="showAddDeviceForm()">
                 ➕ Add New Device
               </button>
             </div>
 
             <!-- Device Form (Add/Edit) -->
-            <div class="device-form-container" *ngIf="showDeviceForm">
+            <div class="device-form-container" *ngIf="showDeviceForm && canManageDevices()">
               <h4>{{ editingDevice ? 'Edit Device' : 'Add New Device' }}</h4>
               <form [formGroup]="deviceForm">
                 <div class="form-row">
@@ -538,9 +606,12 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
                 <div *ngFor="let device of storeDevices" class="device-card">
                   <div class="device-card-header">
                     <h5>{{ device.deviceLabel }}</h5>
-                    <div class="device-actions">
+                    <div class="device-actions" *ngIf="canManageDevices()">
                       <button class="btn-icon-sm" (click)="editDevice(device)" title="Edit">✏️</button>
                       <button class="btn-icon-sm" (click)="deleteDevice(device)" title="Delete">🗑️</button>
+                    </div>
+                    <div class="device-actions" *ngIf="!canManageDevices()">
+                      <span class="view-only-badge">View Only</span>
                     </div>
                   </div>
                   <div class="device-card-body">
@@ -1266,6 +1337,21 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
       border-color: #8b5cf6;
     }
 
+    .btn-icon-action.disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+      background: #f3f4f6 !important;
+      border-color: #d1d5db !important;
+      color: #9ca3af !important;
+    }
+
+    .btn-icon-action.disabled:hover {
+      transform: none !important;
+      box-shadow: none !important;
+      background: #f3f4f6 !important;
+      border-color: #d1d5db !important;
+    }
+
     /* Toggle Switch Styles */
     .toggle-switch {
       position: relative;
@@ -1468,6 +1554,48 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
       padding: 0.5rem 1rem;
       font-size: 0.875rem;
     }
+
+    /* View Only Styles */
+    .view-only-notice {
+      background: #fff3cd;
+      border: 1px solid #ffeaa7;
+      border-radius: 8px;
+      padding: 1rem;
+      margin-bottom: 1.5rem;
+      color: #856404;
+    }
+
+    .view-only-notice p {
+      margin: 0;
+      font-size: 0.875rem;
+    }
+
+    .view-only-badge {
+      background: #e2e8f0;
+      color: #64748b;
+      padding: 0.25rem 0.75rem;
+      border-radius: 9999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.025em;
+    }
+
+    .form-input.readonly,
+    .form-select.readonly,
+    .form-textarea.readonly {
+      background: #f8f9fa !important;
+      color: #6c757d !important;
+      cursor: not-allowed !important;
+      border-color: #e9ecef !important;
+    }
+
+    .form-select[disabled] {
+      background: #f8f9fa !important;
+      color: #6c757d !important;
+      cursor: not-allowed !important;
+      border-color: #e9ecef !important;
+    }
   `]
 })
 export class StoresManagementComponent implements OnInit {
@@ -1561,6 +1689,29 @@ export class StoresManagementComponent implements OnInit {
   async ngOnInit() {
     await this.loadStores();
     await this.loadStoreTypes();
+  }
+
+  // Role-based access control methods
+  isAdminUser(): boolean {
+    const currentPermission = this.authService.getCurrentPermission();
+    return currentPermission?.roleId === 'creator';
+  }
+
+  isStoreManagerUser(): boolean {
+    const currentPermission = this.authService.getCurrentPermission();
+    return currentPermission?.roleId === 'store_manager';
+  }
+
+  canManageBirCompliance(): boolean {
+    return this.isAdminUser(); // Only admin can manage BIR compliance
+  }
+
+  canManageDevices(): boolean {
+    return this.isAdminUser(); // Only admin can manage devices
+  }
+
+  showAccessDeniedMessage(feature: string): void {
+    this.toastService.error(`Access denied: ${feature} is only available for administrators.`);
   }
 
   async loadStoreTypes() {
@@ -1725,7 +1876,7 @@ export class StoresManagementComponent implements OnInit {
         minNumber: formData.minNumber || '',
         invoiceType: formData.invoiceType || '',
         invoiceNumber: formData.invoiceNumber || '',
-        permitDateIssued: formData.permitDateIssued ? new Date(formData.permitDateIssued) : new Date(),
+        permitDateIssued: this.validateAndCreateDate(formData.permitDateIssued),
         validityNotice: formData.validityNotice || ''
       };
 
@@ -1780,8 +1931,23 @@ export class StoresManagementComponent implements OnInit {
       } else {
         // Create new store
         console.log('➕ Creating new store with data:', storeData);
-        await this.storeService.createStore(storeData);
-        console.log('✅ Store created successfully');
+        const newStoreId = await this.storeService.createStore(storeData);
+        console.log('✅ Store created successfully with ID:', newStoreId);
+        
+        // If there's a logo URL from temp upload, move it to final location
+        if (storeData.logoUrl && storeData.logoUrl.includes('/temp/logo/')) {
+          console.log('🔄 Moving logo from temp to final location...');
+          try {
+            const finalLogoUrl = await this.moveLogoToFinalLocation(storeData.logoUrl, newStoreId);
+            // Update the store with the final logo URL
+            await this.storeService.updateStore(newStoreId, { logoUrl: finalLogoUrl });
+            console.log('✅ Logo moved and store updated with final URL');
+          } catch (logoError) {
+            console.warn('⚠️ Failed to move logo, but store was created successfully:', logoError);
+            this.toastService.warning('Store created, but logo upload needs to be redone');
+          }
+        }
+        
         this.toastService.success('Store created successfully');
       }
 
@@ -1795,31 +1961,61 @@ export class StoresManagementComponent implements OnInit {
     }
   }
 
-  async toggleStoreStatus(store: Store) {
-    const newStatus = store.status === 'active' ? 'inactive' : 'active';
-    const action = newStatus === 'active' ? 'activate' : 'deactivate';
+  onToggleClick(event: Event, store: Store) {
+    // Prevent the checkbox from changing state
+    event.preventDefault();
+    event.stopPropagation();
     
+    // Call the toggle method
+    this.toggleStoreStatus(store);
+  }
+
+  async toggleStoreStatus(store: Store) {
+    // Determine the intended status and readable action
+    const intendedStatus = store.status === 'active' ? 'inactive' : 'active';
+    const actionTitle = intendedStatus === 'active' ? 'Activate' : 'Deactivate';
+
     const confirmed = await this.showConfirmationDialog({
-      title: `${action.charAt(0).toUpperCase() + action.slice(1)} Store`,
-      message: `Are you sure you want to ${action} "${store.storeName}"?`,
-      confirmText: action.charAt(0).toUpperCase() + action.slice(1),
+      title: `${actionTitle} Store`,
+      message: `Are you sure you want to ${actionTitle.toLowerCase()} "${store.storeName}"?`,
+      confirmText: actionTitle,
       cancelText: 'Cancel',
       type: 'warning'
     });
 
-    if (confirmed) {
-      this.isLoading = true;
-      
-      try {
-        await this.storeService.updateStore(store.id!, { status: newStatus });
-        await this.loadStores();
-        this.toastService.success(`Store ${action}d successfully!`);
-      } catch (error) {
-        console.error('Error updating store status:', error);
-        this.toastService.error(`Error ${action}ing store. Please try again.`);
-      } finally {
-        this.isLoading = false;
+    if (!confirmed) return;
+
+    // Store original status in case we need to revert
+    const originalStatus = store.status;
+    
+    this.isLoading = true;
+    try {
+      // Attempt update
+      await this.storeService.updateStore(store.id!, { status: intendedStatus });
+
+      // Update the local store status only on success
+      store.status = intendedStatus;
+
+      // Show success message based on the new status
+      const pastTense = intendedStatus === 'active' ? 'activated' : 'deactivated';
+      this.toastService.success(`Store ${pastTense} successfully!`);
+
+      // Reload stores to ensure consistency with backend
+      await this.loadStores();
+    } catch (error: any) {
+      console.error('Error updating store status:', error);
+
+      // Ensure the store status remains unchanged in the UI
+      store.status = originalStatus;
+
+      // Handle permission-related errors explicitly
+      if (error?.code === 'permission-denied' || (error?.message && error.message.toLowerCase().includes('permission'))) {
+        this.toastService.error('You do not have permission to change the store status. Contact your administrator.');
+      } else {
+        this.toastService.error(`${actionTitle} failed. Please try again.`);
       }
+    } finally {
+      this.isLoading = false;
     }
   }
 
@@ -2112,6 +2308,286 @@ export class StoresManagementComponent implements OnInit {
       (this as any)._confirmationResolve(false);
       (this as any)._confirmationResolve = null;
     }
+  }
+
+  // ===== LOGO UPLOAD METHODS =====
+
+  /**
+   * Trigger logo file upload
+   */
+  triggerLogoUpload(): void {
+    const el = document.getElementById('hiddenLogoFile') as HTMLInputElement | null;
+    el?.click();
+  }
+
+  /**
+   * Handle logo file selection and upload
+   */
+  async onLogoFileChange(ev: Event): Promise<void> {
+    const input = ev.target as HTMLInputElement;
+    if (!input.files || input.files.length === 0) return;
+    
+    const file = input.files[0];
+    console.log('📷 Starting store logo upload:', {
+      fileName: file.name,
+      fileSize: file.size,
+      fileType: file.type
+    });
+    
+    try {
+      // Show loading state
+      this.isLoading = true;
+      this.toastService.info('Compressing and uploading logo...');
+      
+      // Compress the image
+      console.log('🔄 Compressing logo...');
+      const compressed = await this.compressImage(file, 800 * 800); // 800x800 max for logos
+      console.log('✅ Logo compressed:', {
+        originalSize: file.size,
+        compressedSize: compressed.size,
+        compression: Math.round((1 - compressed.size / file.size) * 100) + '%'
+      });
+      
+      // Upload to Firebase Storage with structured path
+      console.log('☁️ Uploading logo to Firebase Storage...');
+      const url = await this.uploadLogoToStorage(compressed);
+      console.log('✅ Logo uploaded successfully:', url);
+      
+      // Set the URL in the form
+      this.storeForm.get('logoUrl')?.setValue(url);
+      this.toastService.success('Logo uploaded successfully!');
+      
+    } catch (err: any) {
+      console.error('❌ Logo upload error:', err);
+      this.toastService.error(`Logo upload failed: ${err.message || 'Unknown error'}`);
+    } finally {
+      this.isLoading = false;
+      // Reset the file input
+      if (input) input.value = '';
+    }
+  }
+
+  /**
+   * Clear the logo URL
+   */
+  clearLogo(): void {
+    this.storeForm.get('logoUrl')?.setValue('');
+    this.toastService.info('Logo removed');
+  }
+
+  /**
+   * Upload logo to Firebase Storage with structured path
+   * Path: {storeId}/logo/logo_{storeId}.{extension}
+   */
+  async uploadLogoToStorage(file: File): Promise<string> {
+    try {
+      console.log('☁️ Starting structured logo upload...');
+      
+      // For new stores, use a temporary path that will be updated after store creation
+      // For existing stores, use the actual store ID
+      const storeId = this.editingStore?.id || `temp_${Date.now()}`;
+      const isNewStore = !this.editingStore?.id;
+      
+      // Get file extension
+      const extension = file.name.split('.').pop()?.toLowerCase() || 'png';
+      
+      // Create structured path
+      const fileName = isNewStore 
+        ? `temp/logo/logo_${storeId}.${extension}`
+        : `${storeId}/logo/logo_${storeId}.${extension}`;
+      
+      console.log('📤 Uploading logo with structure:', {
+        storeId,
+        isNewStore,
+        fileName: file.name,
+        fileSize: file.size,
+        fileType: file.type,
+        storagePath: fileName
+      });
+      
+      // Dynamic import to avoid top-level SDK usage
+      const { getStorage, ref, uploadBytes, getDownloadURL } = await import('firebase/storage');
+      const { app } = await import('../../../firebase.config');
+      
+      const storage = getStorage(app);
+      const storageRef = ref(storage, fileName);
+      
+      // Upload with metadata
+      const snapshot = await uploadBytes(storageRef, file, {
+        contentType: file.type,
+        customMetadata: {
+          uploadedBy: this.authService.currentUser()?.uid || 'unknown',
+          uploadedAt: new Date().toISOString(),
+          storeId: storeId,
+          imageType: 'logo'
+        }
+      });
+      
+      console.log('✅ Upload complete, getting download URL...');
+      const downloadURL = await getDownloadURL(snapshot.ref);
+      
+      console.log('✅ Logo upload complete with structured path:', {
+        downloadURL,
+        fullPath: fileName,
+        size: snapshot.metadata.size || 0
+      });
+      
+      return downloadURL;
+    } catch (error: any) {
+      console.error('❌ Structured logo upload error:', error);
+      throw new Error(`Logo upload failed: ${error.message || 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Move logo from temporary location to final store location
+   */
+  async moveLogoToFinalLocation(tempUrl: string, finalStoreId: string): Promise<string> {
+    try {
+      console.log('🔄 Moving logo from temp to final location...');
+      
+      // Dynamic import Firebase Storage
+      const { getStorage, ref, getDownloadURL, uploadBytes, deleteObject } = await import('firebase/storage');
+      const { app } = await import('../../../firebase.config');
+      
+      const storage = getStorage(app);
+      
+      // Parse temp URL to get the file
+      const tempRef = ref(storage, this.extractStoragePathFromUrl(tempUrl));
+      
+      // Download the file from temp location
+      const response = await fetch(tempUrl);
+      const blob = await response.blob();
+      
+      // Get file extension from the temp URL
+      const extension = tempUrl.split('.').pop()?.split('?')[0] || 'png';
+      
+      // Create final path
+      const finalPath = `${finalStoreId}/logo/logo_${finalStoreId}.${extension}`;
+      const finalRef = ref(storage, finalPath);
+      
+      // Upload to final location
+      await uploadBytes(finalRef, blob, {
+        contentType: blob.type,
+        customMetadata: {
+          uploadedBy: this.authService.currentUser()?.uid || 'unknown',
+          uploadedAt: new Date().toISOString(),
+          storeId: finalStoreId,
+          imageType: 'logo',
+          movedFromTemp: 'true'
+        }
+      });
+      
+      // Get final download URL
+      const finalUrl = await getDownloadURL(finalRef);
+      
+      // Delete temp file
+      try {
+        await deleteObject(tempRef);
+        console.log('🗑️ Temp logo file deleted');
+      } catch (deleteError) {
+        console.warn('⚠️ Could not delete temp logo file:', deleteError);
+      }
+      
+      console.log('✅ Logo moved successfully:', {
+        from: tempUrl,
+        to: finalUrl,
+        finalPath
+      });
+      
+      return finalUrl;
+    } catch (error: any) {
+      console.error('❌ Error moving logo to final location:', error);
+      throw new Error(`Failed to move logo: ${error.message || 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Extract storage path from Firebase Storage URL
+   */
+  private extractStoragePathFromUrl(url: string): string {
+    try {
+      const urlParts = url.split('/o/')[1];
+      const path = urlParts.split('?')[0];
+      return decodeURIComponent(path);
+    } catch (error) {
+      console.error('❌ Error extracting storage path:', error);
+      throw new Error('Invalid storage URL');
+    }
+  }
+
+  /**
+   * Compress image before upload
+   */
+  async compressImage(file: File, maxSize: number = 800 * 800): Promise<File> {
+    return new Promise((resolve) => {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d')!;
+      const img = new Image();
+
+      img.onload = () => {
+        // Calculate new dimensions maintaining aspect ratio
+        let { width, height } = img;
+        const maxDimension = Math.sqrt(maxSize);
+        
+        if (width > height) {
+          if (width > maxDimension) {
+            height = height * (maxDimension / width);
+            width = maxDimension;
+          }
+        } else {
+          if (height > maxDimension) {
+            width = width * (maxDimension / height);
+            height = maxDimension;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+
+        // Draw and compress
+        ctx.drawImage(img, 0, 0, width, height);
+        
+        canvas.toBlob(
+          (blob) => {
+            if (blob) {
+              const compressedFile = new File([blob], file.name, {
+                type: file.type,
+                lastModified: Date.now()
+              });
+              resolve(compressedFile);
+            } else {
+              resolve(file); // Fallback to original
+            }
+          },
+          file.type,
+          0.8 // 80% quality
+        );
+      };
+
+      img.src = URL.createObjectURL(file);
+    });
+  }
+
+  /**
+   * Validate and create a Date object, returning current date if invalid
+   */
+  private validateAndCreateDate(dateValue: any): Date {
+    // Handle null, undefined, or empty string
+    if (!dateValue || dateValue === '') {
+      return new Date();
+    }
+
+    // Try to create date
+    const date = new Date(dateValue);
+    
+    // Check if date is valid
+    if (isNaN(date.getTime())) {
+      console.warn('⚠️ Invalid date value provided:', dateValue, 'Using current date instead');
+      return new Date();
+    }
+
+    return date;
   }
 
 }

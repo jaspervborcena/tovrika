@@ -15,28 +15,28 @@ export interface ConfirmationDialogData {
   standalone: true,
   imports: [CommonModule],
   template: `
-    <div class="confirmation-overlay" (click)="onCancel()">
-      <div class="confirmation-content" (click)="$event.stopPropagation()" [class]="'type-' + dialogData().type">
+    <div class="confirmation-overlay" (click)="onCancel()" *ngIf="dialogData()">
+      <div class="confirmation-content" (click)="$event.stopPropagation()" [class]="'type-' + (dialogData().type || 'info')">
         <!-- Header with Icon -->
         <div class="confirmation-header">
-          <div class="confirmation-icon" [class]="'icon-' + dialogData().type">
-            <svg *ngIf="dialogData().type === 'warning'" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div class="confirmation-icon" [class]="'icon-' + (dialogData().type || 'info')">
+            <svg *ngIf="(dialogData().type || 'info') === 'warning'" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.732-.833-2.5 0L4.314 18.5c-.77.833.192 2.5 1.732 2.5z"></path>
             </svg>
-            <svg *ngIf="dialogData().type === 'danger'" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg *ngIf="(dialogData().type || 'info') === 'danger'" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
             </svg>
-            <svg *ngIf="dialogData().type === 'info'" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg *ngIf="(dialogData().type || 'info') === 'info'" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
             </svg>
           </div>
-          <h3 class="confirmation-title">{{ dialogData().title }}</h3>
+          <h3 class="confirmation-title">{{ dialogData().title || 'Confirmation' }}</h3>
         </div>
         
         <!-- Message -->
         <div class="confirmation-body">
-          <p class="confirmation-message" *ngIf="!dialogData().isHtml">{{ dialogData().message }}</p>
-          <div class="confirmation-message" *ngIf="dialogData().isHtml" [innerHTML]="dialogData().message"></div>
+          <p class="confirmation-message" *ngIf="!dialogData().isHtml">{{ dialogData().message || 'Are you sure?' }}</p>
+          <div class="confirmation-message" *ngIf="dialogData().isHtml" [innerHTML]="dialogData().message || 'Are you sure?'"></div>
         </div>
         
         <!-- Action Buttons -->
@@ -46,12 +46,12 @@ export interface ConfirmationDialogData {
             type="button" 
             class="btn btn-secondary" 
             (click)="onCancel()">
-            {{ dialogData().cancelText }}
+            {{ dialogData().cancelText || 'Cancel' }}
           </button>
           <button 
             type="button" 
             class="btn btn-confirm" 
-            [class]="'btn-' + dialogData().type"
+            [class]="'btn-' + (dialogData().type || 'info')"
             (click)="onConfirm()">
             {{ dialogData().confirmText || 'Confirm' }}
           </button>
@@ -66,12 +66,11 @@ export interface ConfirmationDialogData {
       left: 0;
       width: 100%;
       height: 100%;
-      background: rgba(0, 0, 0, 0.5);
+      background: rgba(0, 0, 0, 0.6);
       display: flex;
       align-items: center;
       justify-content: center;
-      z-index: 1000;
-      backdrop-filter: blur(2px);
+      z-index: 999999;
     }
     
     .confirmation-content {
@@ -82,6 +81,8 @@ export interface ConfirmationDialogData {
       box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
       overflow: hidden;
       animation: slideIn 0.3s ease-out;
+      position: relative;
+      z-index: 1000000;
     }
     
     @keyframes slideIn {
@@ -100,6 +101,8 @@ export interface ConfirmationDialogData {
       display: flex;
       align-items: center;
       gap: 1rem;
+      position: relative;
+      z-index: 1;
     }
     
     .confirmation-icon {
@@ -142,6 +145,8 @@ export interface ConfirmationDialogData {
     
     .confirmation-body {
       padding: 0 1.5rem 1rem;
+      position: relative;
+      z-index: 1;
     }
     
     .confirmation-message {
@@ -307,6 +312,8 @@ export interface ConfirmationDialogData {
       gap: 0.75rem;
       background: #f9fafb;
       border-top: 1px solid #e5e7eb;
+      position: relative;
+      z-index: 1;
     }
     
     .confirmation-footer:has(.btn:only-child) {
