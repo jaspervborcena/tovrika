@@ -13,5 +13,12 @@ export const environment = {
     baseUrl: "https://asia-east1-jasperpos-1dfd5.cloudfunctions.net",
     ordersApi: "/api", // Uses proxy in development
     directOrdersApi: "https://get-orders-by-date-7bpeqovfmq-de.a.run.app"
+  },
+  cloudLogging: {
+    projectId: 'jasperpos-1dfd5',
+    logName: 'pos-application-logs',
+    enabled: true, // Set to false to disable logging in development
+    offlineStorageKey: 'pos_offline_logs',
+    maxOfflineLogs: 1000
   }
 };

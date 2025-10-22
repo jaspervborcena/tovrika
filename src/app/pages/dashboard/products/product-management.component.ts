@@ -13,6 +13,7 @@ import { CategoryService, ProductCategory } from '../../../services/category.ser
 import { InventoryDataService } from '../../../services/inventory-data.service';
 import { PredefinedTypesService, UnitTypeOption, PredefinedType } from '../../../services/predefined-types.service';
 import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../shared/components/confirmation-dialog/confirmation-dialog.component';
+import { CloudLoggingService } from '../../../services/cloud-logging.service';
 
 @Component({
   selector: 'app-product-management',
@@ -1573,7 +1574,8 @@ export class ProductManagementComponent implements OnInit {
     private toastService: ToastService,
     private categoryService: CategoryService,
     private inventoryDataService: InventoryDataService,
-    private predefinedTypesService: PredefinedTypesService
+    private predefinedTypesService: PredefinedTypesService,
+    private cloudLoggingService: CloudLoggingService
   ) {
     this.productForm = this.createProductForm();
     this.inventoryForm = this.createInventoryForm();
@@ -1889,6 +1891,14 @@ export class ProductManagementComponent implements OnInit {
         updates.totalStock = this.selectedProduct.totalStock || 0;
 
         await this.productService.updateProduct(this.selectedProduct.id!, updates);
+        
+        // Log product update
+        await this.cloudLoggingService.logProductUpdated(
+          this.selectedProduct.id!,
+          formValue.productName,
+          storeId,
+          { updates, previousValues: this.selectedProduct }
+        );
         } else {
         // Create new product (no embedded inventory)
         const hasInitial = !!(formValue.initialQuantity && formValue.initialQuantity > 0);
@@ -1936,6 +1946,15 @@ export class ProductManagementComponent implements OnInit {
         };
 
         const productId = await this.productService.createProduct(newProduct);
+        
+        // Log product creation
+        await this.cloudLoggingService.logProductCreated(
+          productId,
+          formValue.productName,
+          storeId,
+          { newProduct, hasInitialBatch: hasInitial }
+        );
+        
         // If initial batch exists, create it in separate collection and recompute summary
         if (hasInitial && productId) {
           await this.inventoryDataService.addBatch(productId, {
@@ -1959,6 +1978,20 @@ export class ProductManagementComponent implements OnInit {
       this.filterProducts();
     } catch (error) {
       console.error('Error saving product:', error);
+      
+      // Log the error
+      const currentPermission = this.authService.getCurrentPermission();
+      const storeId = currentPermission?.storeId || '';
+      const action = this.isEditMode ? 'UPDATE' : 'CREATE';
+      const productName = this.productForm.get('productName')?.value || 'Unknown Product';
+      
+      await this.cloudLoggingService.logProductError(
+        this.selectedProduct?.id || 'new-product',
+        action,
+        error instanceof Error ? error.message : 'Unknown error',
+        storeId
+      );
+      
       this.toastService.error('Error saving product. Please try again.');
     } finally {
       this.loading = false;
@@ -2199,12 +2232,35 @@ export class ProductManagementComponent implements OnInit {
       const url = await this.uploadFileToStorage(compressed);
       console.log('✅ Image uploaded successfully:', url);
       
+      // Log image upload
+      const currentPermission = this.authService.getCurrentPermission();
+      const storeId = currentPermission?.storeId || '';
+      const productId = this.selectedProduct?.id || 'new-product';
+      await this.cloudLoggingService.logProductImageUpload(
+        productId,
+        url,
+        storeId,
+        compressed.size
+      );
+      
       // Set the URL in the form
       this.productForm.get('imageUrl')?.setValue(url);
       this.toastService.success('Image uploaded successfully!');
       
     } catch (err: any) {
       console.error('❌ Image upload error:', err);
+      
+      // Log image upload error
+      const currentPermission = this.authService.getCurrentPermission();
+      const storeId = currentPermission?.storeId || '';
+      const productId = this.selectedProduct?.id || 'new-product';
+      await this.cloudLoggingService.logProductError(
+        productId,
+        'IMAGE_UPLOAD',
+        err.message || 'Unknown error',
+        storeId
+      );
+      
       this.toastService.error(`Image upload failed: ${err.message || 'Unknown error'}`);
     } finally {
       this.loading = false;
@@ -2375,11 +2431,33 @@ export class ProductManagementComponent implements OnInit {
     if (this.productToDelete) {
       // Handle product deletion
       try {
+        const productToDelete = this.productToDelete;
         await this.productService.deleteProduct(this.productToDelete.id!);
+        
+        // Log product deletion
+        const currentPermission = this.authService.getCurrentPermission();
+        const storeId = currentPermission?.storeId || '';
+        await this.cloudLoggingService.logProductDeleted(
+          productToDelete.id!,
+          productToDelete.productName,
+          storeId
+        );
+        
         this.filterProducts();
         this.toastService.success(`Product "${this.productToDelete.productName}" deleted successfully`);
       } catch (error) {
         console.error('Error deleting product:', error);
+        
+        // Log the deletion error
+        const currentPermission = this.authService.getCurrentPermission();
+        const storeId = currentPermission?.storeId || '';
+        await this.cloudLoggingService.logProductError(
+          this.productToDelete.id!,
+          'DELETE',
+          error instanceof Error ? error.message : 'Unknown error',
+          storeId
+        );
+        
         this.toastService.error(ErrorMessages.PRODUCT_DELETE_ERROR);
       }
     } else if (this.pendingBatchId && this.pendingBatchDocId) {
