@@ -13,10 +13,12 @@ import {
   collectionGroup,
   documentId
 } from '@angular/fire/firestore';
+import { runTransaction, getFirestore } from 'firebase/firestore';
 import { AuthService } from './auth.service';
 import { FirestoreSecurityService } from '../core/services/firestore-security.service';
 import { OfflineDocumentService } from '../core/services/offline-document.service';
 import { Store } from '../interfaces/store.interface';
+import { FEATURE_FLAGS } from '../shared/config/feature-flags';
 
 export type { Store } from '../interfaces/store.interface';
 
@@ -220,8 +222,19 @@ export class StoreService {
 
   async createStore(store: Omit<Store, 'id' | 'createdAt' | 'updatedAt'>) {
     try {
+      // Optionally generate an auto store code (disabled by default via feature flag)
+      let storeCode: string | undefined = undefined;
+      if (FEATURE_FLAGS.AUTO_STORE_CODE) {
+        try {
+          storeCode = await this.generateStoreCode();
+        } catch (e) {
+          console.warn('⚠️ Failed to generate store code, continuing without it:', e);
+        }
+      }
+
       const newStore: Omit<Store, 'id'> = {
         ...store,
+        ...(storeCode ? { storeCode } : {}),
         createdAt: new Date(),
         updatedAt: new Date()
       };
@@ -528,5 +541,61 @@ export class StoreService {
       console.error('❌ Error loading pending BIR stores:', error);
       throw error;
     }
+  }
+
+  /**
+   * Generate a unique store code per spec:
+   * - Increment a Firestore counter (counters/storeCode.value)
+   * - Encode in base36 (uppercase)
+   * - Prefix with 'TOV'
+   * - Pad to 8 characters total after prefix
+   * - Ensure uniqueness by checking 'stores' collection
+   */
+  async generateStoreCode(): Promise<string> {
+    const MAX_ATTEMPTS = 5;
+    let attempt = 0;
+    while (attempt < MAX_ATTEMPTS) {
+      attempt++;
+      // 1) Atomically increment a global counter
+      const nextValue = await this.incrementStoreCodeCounter();
+
+      // 2) Base36 encode and format
+      const base36 = nextValue.toString(36).toUpperCase();
+      // We want total length 8 including 'TOV' prefix => 5 chars after prefix
+      const padded = base36.padStart(5, '0');
+      const candidate = `TOV${padded}`;
+
+      // 3) Ensure uniqueness in 'stores' collection
+      const isUnique = await this.isStoreCodeUnique(candidate);
+      if (isUnique) {
+        return candidate;
+      }
+      console.warn(`🔁 Collision on storeCode ${candidate}, retrying (attempt ${attempt}/${MAX_ATTEMPTS})`);
+    }
+    throw new Error('Unable to generate a unique store code after multiple attempts');
+  }
+
+  private async incrementStoreCodeCounter(): Promise<number> {
+    const firestore = getFirestore();
+    const counterRef = doc(firestore, 'counters', 'storeCode');
+    const value = await runTransaction(firestore, async (tx) => {
+      const snap = await tx.get(counterRef);
+      let current = 1000; // seed starting value
+      if (snap.exists()) {
+        const data = snap.data() as any;
+        current = typeof data.value === 'number' ? data.value : current;
+      }
+      const next = current + 1;
+      tx.set(counterRef, { value: next, updatedAt: new Date() }, { merge: true });
+      return next;
+    });
+    return value;
+  }
+
+  private async isStoreCodeUnique(code: string): Promise<boolean> {
+    const storesRef = collection(this.firestore, 'stores');
+    const q = query(storesRef, where('storeCode', '==', code));
+    const snap = await getDocs(q);
+    return snap.empty;
   }
 }

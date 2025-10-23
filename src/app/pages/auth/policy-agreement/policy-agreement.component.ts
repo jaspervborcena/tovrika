@@ -73,13 +73,8 @@ export class PolicyAgreementComponent implements OnInit {
 
       // Check if already agreed to policies
       if (offlineUser.isAgreedToPolicy) {
-        console.log('✅ Policy Agreement: User already agreed, redirecting...');
-        // Redirect to appropriate page
-        if (this.authService.hasMultipleCompanies()) {
-          await this.router.navigate(['/company-selection']);
-        } else {
-          await this.router.navigate(['/dashboard']);
-        }
+        console.log('✅ Policy Agreement: User already agreed, redirecting to onboarding...');
+        await this.router.navigate(['/onboarding']);
         return;
       }
       
@@ -119,27 +114,9 @@ export class PolicyAgreementComponent implements OnInit {
         throw new Error('Policy agreement was not saved properly');
       }
       
-      // Redirect based on user's authentication state
-      const currentPermission = this.authService.getCurrentPermission();
-      
-      console.log('📍 Policy Agreement: Redirecting user...');
-      console.log('📍 User:', currentAuthUser?.email);
-      console.log('📍 User permissions:', currentPermission);
-      console.log('📍 User has multiple companies:', this.authService.hasMultipleCompanies());
-      
-      // Determine redirect destination
-      if (this.authService.hasMultipleCompanies()) {
-        console.log('📍 Redirecting to company selection (multiple companies)');
-        await this.router.navigate(['/company-selection']);
-      } else if (currentPermission?.companyId) {
-        // User has a company, redirect to dashboard
-        console.log('📍 Redirecting to dashboard (has company)');
-        await this.router.navigate(['/dashboard']);
-      } else {
-        // User needs to select/create company
-        console.log('📍 Redirecting to company selection (no company)');
-        await this.router.navigate(['/company-selection']);
-      }
+      // Redirect to onboarding after accepting policies
+      console.log('📍 Policy Agreement: Redirecting to onboarding...');
+      await this.router.navigate(['/onboarding']);
     } catch (error: any) {
       console.error('❌ Policy Agreement: Failed to save agreement:', error);
       this.error.set(error.message || 'Failed to save policy agreement. Please try again.');
