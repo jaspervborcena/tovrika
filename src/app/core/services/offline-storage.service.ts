@@ -115,7 +115,8 @@ export class OfflineStorageService {
         email: userData.email,
         displayName: userData.displayName,
         status: userData.status,
-        roleId: userData.roleId, // Make sure to copy the roleId from Firestore
+        // Prefer roleId from permissions when root-level roleId is not present
+        roleId: (userData as any).roleId ?? userData.permissions?.[0]?.roleId,
         createdAt: userData.createdAt,
         updatedAt: userData.updatedAt,
         branchId: userData.branchId,

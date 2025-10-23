@@ -1,0 +1,125 @@
+<div class="join-store-page">
+  <!-- Header copied to match HomeComponent -->
+  <header [class]="headerClass()" 
+          [style.background]="isOnline() ? null : 'linear-gradient(135deg, #dc2626 0%, #b91c1c 100%)'">
+    <div class="header-content">
+      <div class="header-left">
+        <div class="logo-section">
+          <app-logo 
+            size="md" 
+            [showText]="true" 
+            theme="light" 
+            background="white"
+            [clickable]="true"
+            [companyName]="appName()">
+          </app-logo>
+        </div>
+      </div>
+      
+      <div class="header-right">
+        <!-- Header actions (Help, Notifications) -->
+        <div class="header-actions">
+          <a routerLink="/help" class="header-btn" title="Help & Support">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </a>
+          <a *ngIf="isAuthenticated()" routerLink="/notifications" class="header-btn" title="Notifications">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+            </svg>
+          </a>
+        </div>
+        
+        <!-- User menu when authenticated -->
+        <div *ngIf="isAuthenticated(); else guestMenu" class="user-menu">
+          <div class="user-info">
+            <span class="user-name">{{ currentUser()?.displayName || currentUser()?.email }}</span>
+            <span class="user-role">{{ userRole() }}</span>
+          </div>
+          
+          <!-- Dashboard button only for business users (not visitors) -->
+          <button *ngIf="userRole() !== 'visitor'" 
+                  (click)="navigateToDashboard()" 
+                  class="dashboard-btn">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" class="btn-icon">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+            </svg>
+            Dashboard
+          </button>
+          
+          <!-- Visitor welcome message -->
+          <div *ngIf="userRole() === 'visitor'" class="visitor-welcome">
+            <span class="welcome-text">Welcome! You're browsing as a visitor.</span>
+          </div>
+          
+          <button (click)="logout()" class="logout-btn">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" class="btn-icon">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 0v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
+            </svg>
+            Sign Out
+          </button>
+        </div>
+        
+        <!-- Guest menu template -->
+        <ng-template #guestMenu>
+          <a routerLink="/login" class="signin-btn">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" class="signin-icon">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+            </svg>
+            Sign In
+          </a>
+        </ng-template>
+      </div>
+    </div>
+  </header>
+
+  <main class="join-main">
+    <section class="join-card" *ngIf="!submittedId; else successTpl">
+      <h1 class="title">Request Store Access</h1>
+      <p class="subtitle">Enter the store code and select your role. We'll notify the store owner of your request.</p>
+
+      <form [formGroup]="form" (ngSubmit)="submitRequest()" class="join-form">
+        <div class="form-group">
+          <label for="email">Your Email</label>
+          <input id="email" type="email" [value]="userEmail()" readonly class="input readonly" />
+        </div>
+
+        <div class="form-group">
+          <label for="storeCode">Store Code</label>
+          <input id="storeCode" type="text" formControlName="storeCode" class="input" placeholder="e.g. ABCD1234" (input)="onStoreCodeInput($event)" />
+          <div class="error" *ngIf="form.controls.storeCode.touched && form.controls.storeCode.invalid">
+            Store code is required.
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="roleId">Role</label>
+          <select id="roleId" formControlName="roleId" class="input">
+            <option *ngFor="let r of roleOptions" [value]="r.id">{{ r.label }}</option>
+          </select>
+        </div>
+
+        <div class="actions">
+          <button type="submit" class="cta-button primary" [disabled]="isSubmitting || form.invalid">
+            {{ isSubmitting ? 'Sending...' : 'Request Access' }}
+          </button>
+          <a routerLink="/" class="cta-button secondary">Cancel</a>
+        </div>
+
+        <div class="form-error" *ngIf="error">{{ error }}</div>
+      </form>
+    </section>
+
+    <ng-template #successTpl>
+      <section class="join-card success">
+        <h1 class="title">Request Sent</h1>
+        <p class="subtitle">Your access request has been submitted. You'll receive an email when it's approved.</p>
+        <div class="success-actions">
+          <a routerLink="/onboarding" class="cta-button primary">Back to Onboarding</a>
+          <a routerLink="/" class="cta-button secondary">Go to Home</a>
+        </div>
+      </section>
+    </ng-template>
+  </main>
+</div>

@@ -2,7 +2,6 @@ import { Component, Input, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
 import { AppConstants } from '../../enums';
-import { AuthService } from '../../../services/auth.service';
 
 export type LogoSize = 'sm' | 'md' | 'lg' | 'xl' | 'custom';
 export type LogoVariant = 'full' | 'icon' | 'text';
@@ -180,7 +179,6 @@ export type LogoBackground = 'none' | 'white' | 'light' | 'rounded' | 'circle';
 })
 export class LogoComponent {
   private router = inject(Router);
-  private authService = inject(AuthService);
 
   @Input() size: LogoSize = 'md';
   @Input() variant: LogoVariant = 'full';
@@ -251,16 +249,7 @@ export class LogoComponent {
 
   async handleClick(): Promise<void> {
     if (!this.clickable) return;
-
-    // Check if user is authenticated
-    const isAuthenticated = this.authService.isAuthenticated();
-    
-    if (isAuthenticated) {
-      // Navigate to dashboard if authenticated
-      this.router.navigate(['/dashboard']);
-    } else {
-      // Navigate to home/login page if not authenticated
-      this.router.navigate(['/']);
-    }
+    // Always navigate to home when logo is clicked
+    this.router.navigate(['/']);
   }
 }
