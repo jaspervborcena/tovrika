@@ -115,6 +115,7 @@ export class OfflineStorageService {
         email: userData.email,
         displayName: userData.displayName,
         status: userData.status,
+        roleId: userData.roleId, // Make sure to copy the roleId from Firestore
         createdAt: userData.createdAt,
         updatedAt: userData.updatedAt,
         branchId: userData.branchId,
@@ -126,14 +127,22 @@ export class OfflineStorageService {
         lastSync: new Date()
       };
       
+      // Debug: Log what we're saving to IndexedDB
+      console.log('💾 OfflineStorage: Saving user data to IndexedDB:', {
+        email: offlineUserData.email,
+        roleId: offlineUserData.roleId,
+        permissions: offlineUserData.permissions
+      });
+      
       // Always set the signal first (so user data is available even if IndexedDB fails)
       this.currentUserSignal.set(offlineUserData);
       
       // Try to save to IndexedDB (optional)
       try {
         await this.indexedDBService.initDB();
-        await this.indexedDBService.saveUserData(offlineUserData);
-        console.log('💾 OfflineStorage: User session saved to IndexedDB successfully');
+        // Use the new method that clears all previous users and saves only the current one
+        await this.indexedDBService.saveUserDataAsOnlyUser(offlineUserData);
+        console.log('💾 OfflineStorage: User session saved to IndexedDB as only user');
       } catch (dbError: any) {
         // Check if IndexedDB is permanently broken
         if (dbError.message?.includes('permanently unavailable')) {
@@ -146,8 +155,8 @@ export class OfflineStorageService {
         // Try one more time
         try {
           await this.indexedDBService.initDB();
-          await this.indexedDBService.saveUserData(offlineUserData);
-          console.log('💾 OfflineStorage: User session saved to IndexedDB after retry');
+          await this.indexedDBService.saveUserDataAsOnlyUser(offlineUserData);
+          console.log('💾 OfflineStorage: User session saved to IndexedDB as only user after retry');
         } catch (retryError: any) {
           if (retryError.message?.includes('permanently unavailable')) {
             console.warn('⚠️ OfflineStorage: IndexedDB permanently unavailable after retry - user data in memory only');
@@ -229,6 +238,42 @@ export class OfflineStorageService {
         console.warn('⚠️ OfflineStorage: IndexedDB permanently unavailable - cannot refresh from cache');
         return; // Don't throw - allow app to continue
       }
+      throw error;
+    }
+  }
+
+  // Set active user by UID (useful when switching between users in the same browser)
+  async setActiveUser(uid: string): Promise<void> {
+    try {
+      console.log('💾 OfflineStorage: Setting active user:', uid);
+      
+      // Set the user as active in IndexedDB
+      await this.indexedDBService.setActiveUser(uid);
+      
+      // Refresh user data to update the signal
+      await this.refreshUserData();
+      
+      console.log('💾 OfflineStorage: Active user set successfully');
+    } catch (error: any) {
+      console.error('💾 OfflineStorage: Failed to set active user:', error);
+      throw error;
+    }
+  }
+
+  // Clear all user data (for switching accounts)
+  async clearAllUserData(): Promise<void> {
+    try {
+      console.log('💾 OfflineStorage: Clearing all user data...');
+      
+      // Clear the signal
+      this.currentUserSignal.set(null);
+      
+      // Clear IndexedDB user data
+      await this.indexedDBService.clearAllUserData();
+      
+      console.log('💾 OfflineStorage: All user data cleared successfully');
+    } catch (error: any) {
+      console.error('💾 OfflineStorage: Failed to clear user data:', error);
       throw error;
     }
   }
