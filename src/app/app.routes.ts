@@ -18,6 +18,18 @@ export const routes: Routes = [
     loadComponent: () => import('./pages/auth/register/register.component').then(m => m.RegisterComponent)
   },
   {
+    path: 'verify-email',
+    loadComponent: () => import('./pages/auth/verify-email/verify-email.component').then(m => m.VerifyEmailComponent)
+  },
+  {
+    path: 'reset-password',
+    loadComponent: () => import('./pages/auth/reset-password/reset-password.component').then(m => m.ResetPasswordComponent)
+  },
+  {
+    path: 'onboarding',
+    loadComponent: () => import('./pages/onboarding/onboarding.component').then(m => m.OnboardingComponent)
+  },
+  {
     path: 'policy-agreement',
     // Remove authGuard to prevent circular dependencies during chunk errors
     loadComponent: () => import('./pages/auth/policy-agreement/policy-agreement.component')

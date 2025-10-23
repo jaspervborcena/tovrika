@@ -17,6 +17,13 @@ export const authGuard: CanActivateFn = (route, state) => {
 
   const currentUser = authService.currentUser();
 
+  // Check if user is a visitor - visitors should only access public pages
+  if (currentUser?.roleId === 'visitor') {
+    console.log('AuthGuard: Visitor user attempting to access protected route, redirecting to onboarding');
+    router.navigate(['/onboarding']);
+    return false;
+  }
+
   // Check if user has multiple companies and hasn't selected one
   if (authService.hasMultipleCompanies() && !authService.getCurrentPermission()?.companyId) {
     if (state.url !== '/company-selection') {

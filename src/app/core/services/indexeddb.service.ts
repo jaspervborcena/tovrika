@@ -184,17 +184,145 @@ export class IndexedDBService {
   async saveUserData(userData: OfflineUserData): Promise<void> {
     if (!this.db) await this.initDB();
     
+    // First, set all other users as inactive (logged out)
+    await this.setAllUsersInactive();
+    
+    // Then save the current user as active
+    const activeUserData = { ...userData, isLoggedIn: true };
+    
     return new Promise((resolve, reject) => {
       const transaction = this.db!.transaction(['userData'], 'readwrite');
       const store = transaction.objectStore('userData');
-      const request = store.put(userData);
+      const request = store.put(activeUserData);
 
       request.onsuccess = () => {
-        console.log('📦 IndexedDB: User data saved successfully');
+        console.log('📦 IndexedDB: User data saved successfully as active user');
         resolve();
       };
       request.onerror = () => reject(request.error);
     });
+  }
+
+  // Set all users as inactive (logged out)
+  async setAllUsersInactive(): Promise<void> {
+    if (!this.db) await this.initDB();
+
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction(['userData'], 'readwrite');
+      const store = transaction.objectStore('userData');
+      const getAllRequest = store.getAll();
+
+      getAllRequest.onsuccess = () => {
+        const users = getAllRequest.result;
+        let completed = 0;
+        const total = users.length;
+
+        if (total === 0) {
+          resolve();
+          return;
+        }
+
+        users.forEach((user: OfflineUserData) => {
+          const updatedUser = { ...user, isLoggedIn: false };
+          const updateRequest = store.put(updatedUser);
+          
+          updateRequest.onsuccess = () => {
+            completed++;
+            if (completed === total) {
+              console.log('📦 IndexedDB: All users set to inactive');
+              resolve();
+            }
+          };
+          updateRequest.onerror = () => reject(updateRequest.error);
+        });
+      };
+      getAllRequest.onerror = () => reject(getAllRequest.error);
+    });
+  }
+
+  // Set a specific user as active and all others as inactive
+  async setActiveUser(uid: string): Promise<void> {
+    if (!this.db) await this.initDB();
+
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction(['userData'], 'readwrite');
+      const store = transaction.objectStore('userData');
+      const getAllRequest = store.getAll();
+
+      getAllRequest.onsuccess = () => {
+        const users = getAllRequest.result;
+        let completed = 0;
+        const total = users.length;
+
+        if (total === 0) {
+          resolve();
+          return;
+        }
+
+        users.forEach((user: OfflineUserData) => {
+          const updatedUser = { 
+            ...user, 
+            isLoggedIn: user.uid === uid 
+          };
+          const updateRequest = store.put(updatedUser);
+          
+          updateRequest.onsuccess = () => {
+            completed++;
+            if (completed === total) {
+              console.log(`📦 IndexedDB: User ${uid} set as active, others set inactive`);
+              resolve();
+            }
+          };
+          updateRequest.onerror = () => reject(updateRequest.error);
+        });
+      };
+      getAllRequest.onerror = () => reject(getAllRequest.error);
+    });
+  }
+
+  // Clear all user data from IndexedDB (useful when switching accounts)
+  async clearAllUserData(): Promise<void> {
+    if (!this.db) await this.initDB();
+
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction(['userData'], 'readwrite');
+      const store = transaction.objectStore('userData');
+      const request = store.clear();
+
+      request.onsuccess = () => {
+        console.log('📦 IndexedDB: All user data cleared');
+        resolve();
+      };
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  // Save user data as the only active user (removes all other users)
+  async saveUserDataAsOnlyUser(userData: OfflineUserData): Promise<void> {
+    if (!this.db) await this.initDB();
+    
+    try {
+      // First, clear all existing user data
+      await this.clearAllUserData();
+      
+      // Then save the new user as the only active user
+      const activeUserData = { ...userData, isLoggedIn: true };
+      
+      return new Promise((resolve, reject) => {
+        const transaction = this.db!.transaction(['userData'], 'readwrite');
+        const store = transaction.objectStore('userData');
+        const request = store.put(activeUserData);
+
+        request.onsuccess = () => {
+          console.log('📦 IndexedDB: User data saved as only active user:', userData.email);
+          resolve();
+        };
+        request.onerror = () => reject(request.error);
+      });
+    } catch (error) {
+      console.error('📦 IndexedDB: Failed to save user as only user:', error);
+      throw error;
+    }
   }
 
   async getUserData(uid: string): Promise<OfflineUserData | null> {

@@ -27,6 +27,13 @@ export const policyGuard: CanActivateFn = async (route, state) => {
     return false;
   }
 
+  // If user is a visitor, redirect to homepage (visitors don't need policy agreement)
+  if (currentUser.roleId === 'visitor') {
+    console.log('🛡️ PolicyGuard: Visitor user attempting to access protected route, redirecting to homepage');
+    router.navigate(['/']);
+    return false;
+  }
+
   // If trying to access policy-agreement page, allow it
   if (state.url === '/policy-agreement') {
     console.log('🛡️ PolicyGuard: Allowing access to policy-agreement page');
