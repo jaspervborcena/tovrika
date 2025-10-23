@@ -44,7 +44,7 @@
           </div>
           
           <!-- Dashboard button only for business users (not visitors) -->
-          <button *ngIf="currentUser()?.roleId !== 'visitor'" 
+    <button *ngIf="userRole() !== 'visitor'" 
                   (click)="navigateToDashboard()" 
                   class="dashboard-btn">
             <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" class="btn-icon">
@@ -54,7 +54,7 @@
           </button>
           
           <!-- Visitor welcome message -->
-          <div *ngIf="currentUser()?.roleId === 'visitor'" class="visitor-welcome">
+          <div *ngIf="userRole() === 'visitor'" class="visitor-welcome">
             <span class="welcome-text">Welcome! You're browsing as a visitor.</span>
           </div>
           
@@ -86,7 +86,7 @@
       <div class="hero-container">
         <div class="hero-content">
           <!-- Content for authenticated business users (not visitors) -->
-          <div *ngIf="isAuthenticated() && currentUser()?.roleId !== 'visitor'; else guestHero">
+          <div *ngIf="isAuthenticated() && userRole() !== 'visitor'; else guestHero">
             <h2 class="hero-title">
               <span class="block">Welcome back,</span>
               <span class="block">{{ currentUser()?.displayName || 'User' }}!</span>
@@ -123,7 +123,15 @@
               <a routerLink="/register" class="cta-button primary">
                 Get Started Free
               </a>
-              <a routerLink="/login" class="cta-button secondary">
+              <!-- Join/Proceed button: label depends on visitor-authenticated state -->
+              <a routerLink="/onboarding" class="cta-button secondary" *ngIf="!(isAuthenticated() && userRole() === 'visitor')">
+                Join a Store
+              </a>
+              <a routerLink="/onboarding" class="cta-button secondary" *ngIf="isAuthenticated() && userRole() === 'visitor'">
+                Proceed to Store
+              </a>
+              <!-- Hide Sign In when a visitor is already logged in -->
+              <a routerLink="/login" class="cta-button secondary" *ngIf="!isAuthenticated()">
                 Sign In
               </a>
             </div>

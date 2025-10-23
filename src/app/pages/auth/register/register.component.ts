@@ -48,38 +48,12 @@ export class RegisterComponent {
         await this.authService.registerUser(email!, password!, {
           email: email!,
           displayName: displayName!,
-          status: 'active',
-          roleId: UserRolesEnum.VISITOR // All new users start as visitors
-          // permission will be set when company/store access is granted
+          status: 'active'
+          // permissions will be initialized in the service (default visitor)
         });
         
-        // Send email verification after successful registration
-        try {
-          console.log('📧 Attempting to send email verification to:', email);
-          await this.authService.sendEmailVerification();
-          console.log('✅ Email verification sent successfully to:', email);
-        } catch (verificationError: any) {
-          console.error('❌ Failed to send verification email:', verificationError);
-          console.error('❌ Error code:', verificationError.code);
-          console.error('❌ Error message:', verificationError.message);
-          
-          // Show error to user
-          this.error = `Registration successful, but failed to send verification email: ${verificationError.message}. You can try to resend it after logging in.`;
-          this.isLoading = false;
-          return; // Don't proceed with logout and redirect
-        }
-        
-        // Log out the user since they need to verify their email first
-        await this.authService.logout();
-        console.log('🔐 User logged out after registration - email verification required');
-        
-        // Redirect to verify-email page with a pending state
-        this.router.navigate(['/verify-email'], { 
-          queryParams: { 
-            email: email,
-            registered: 'true'
-          } 
-        });
+        // TEMP: Email verification flow disabled — keep user logged in and proceed to onboarding
+        await this.router.navigate(['/onboarding']);
       } catch (err: any) {
         // Handle Firebase auth errors more gracefully
         if (err.code === 'auth/email-already-in-use') {

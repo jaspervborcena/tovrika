@@ -64,15 +64,7 @@ export class LoginComponent implements OnInit {
         
         console.log('🔐 Login: User authenticated successfully:', user.email);
         
-        // Check email verification status
-        const isEmailVerified = this.authService.isEmailVerified();
-        if (!isEmailVerified && this.isOnline()) {
-          console.log('⚠️ Login: Email not verified, showing warning');
-          this.showEmailVerificationWarning = true;
-          this.canResendVerification = true;
-          this.error = 'Please verify your email address. We\'ve sent a verification link to your inbox.';
-          return; // Don't proceed with login until email is verified
-        }
+        // TEMP: Skip email verification enforcement (will be re-enabled later)
         
         // Check if offline access was used
         const hasOfflineAccess = await this.authService.hasOfflineAccess(email!);
@@ -99,20 +91,14 @@ export class LoginComponent implements OnInit {
             await this.router.navigate(['/pos']);
           }
         } else {
-          // Online mode - redirect based on user role
-          if (userRole === 'visitor') {
-            console.log('🔐 Login: Visitor user - redirecting to onboarding...');
+          // Online mode - always go to policy agreement after successful login
+          try {
+            console.log('🔐 Login: Redirecting to policy agreement (all users)...');
+            await this.router.navigate(['/policy-agreement']);
+          } catch (navError) {
+            console.warn('🔐 Login: Policy agreement navigation failed, falling back to onboarding...', navError);
+            // Fallback to onboarding if policy-agreement chunk fails
             await this.router.navigate(['/onboarding']);
-          } else {
-            // Business users (creator, store_manager, cashier) go to policy agreement first
-            try {
-              console.log('🔐 Login: Business user - redirecting to policy agreement...');
-              await this.router.navigate(['/policy-agreement']);
-            } catch (navError) {
-              console.warn('🔐 Login: Policy agreement navigation failed, going to dashboard...', navError);
-              // If policy-agreement fails (chunk error), go to dashboard
-              await this.router.navigate(['/dashboard']);
-            }
           }
         }
       } catch (err: any) {

@@ -47,6 +47,7 @@ export class HeaderComponent implements OnInit {
   
   // User-related signals
   protected currentUser = computed(() => this.authService.getCurrentUser());
+  protected isAuthenticated = computed(() => !!this.currentUser());
   protected isUserMenuOpen = signal<boolean>(false);
   
   // Translation signals
@@ -97,6 +98,8 @@ export class HeaderComponent implements OnInit {
   });
 
   protected toggleUserMenu() {
+    // Prevent opening the dropdown if not authenticated
+    if (!this.currentUser()) return;
     this.isUserMenuOpen.set(!this.isUserMenuOpen());
   }
 

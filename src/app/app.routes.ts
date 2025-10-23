@@ -30,6 +30,10 @@ export const routes: Routes = [
     loadComponent: () => import('./pages/onboarding/onboarding.component').then(m => m.OnboardingComponent)
   },
   {
+    path: 'join-store',
+    loadComponent: () => import('./pages/join-store/join-store.component').then(m => m.JoinStoreComponent)
+  },
+  {
     path: 'policy-agreement',
     // Remove authGuard to prevent circular dependencies during chunk errors
     loadComponent: () => import('./pages/auth/policy-agreement/policy-agreement.component')
