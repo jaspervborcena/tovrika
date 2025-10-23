@@ -35,6 +35,16 @@ export class HomeComponent {
   navigateToDashboard() {
     // Navigate based on user role
     const role = this.userRole();
+    const currentUser = this.currentUser();
+    
+    // If user is a visitor, they don't have access to dashboard
+    if (currentUser?.roleId === 'visitor') {
+      console.log('🏠 Home: Visitor user cannot access dashboard');
+      // Could show a message or upgrade prompt here
+      return;
+    }
+    
+    // Navigate based on role for business users
     if (role === 'cashier') {
       this.router.navigate(['/pos']);
     } else {

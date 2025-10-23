@@ -34,23 +34,60 @@ export class PolicyAgreementComponent implements OnInit {
   canProceed = () => this.agreedToTerms() && this.agreedToPrivacy() && !this.isLoading();
 
   async ngOnInit() {
+    console.log('📝 Policy Agreement: Initializing...');
+    
     // Check if user is authenticated
-    if (!this.authService.isAuthenticated()) {
+    const currentAuthUser = this.authService.getCurrentUser();
+    console.log('📝 Policy Agreement: Current auth user:', currentAuthUser?.email);
+    
+    // If no current auth user at all, redirect to login
+    if (!currentAuthUser) {
       console.warn('⚠️ Policy Agreement: User not authenticated, redirecting to login');
       await this.router.navigate(['/login']);
       return;
     }
 
-    // Check if already agreed to policies
-    const currentUser = this.offlineStorageService.currentUser();
-    if (currentUser?.isAgreedToPolicy) {
-      console.log('✅ Policy Agreement: User already agreed, redirecting...');
-      // Redirect to appropriate page
-      if (this.authService.hasMultipleCompanies()) {
-        await this.router.navigate(['/company-selection']);
-      } else {
-        await this.router.navigate(['/dashboard']);
+    // User is authenticated, now ensure IndexedDB is synchronized
+    try {
+      console.log('📝 Policy Agreement: Ensuring offline storage is synchronized...');
+      console.log('📝 Policy Agreement: Current auth user:', currentAuthUser.email);
+      
+      // Clear all existing user data and save only the current authenticated user
+      console.log('📝 Policy Agreement: Clearing old user data and saving current user...');
+      await this.offlineStorageService.saveUserSession({
+        ...currentAuthUser,
+        isAgreedToPolicy: false
+      });
+      
+      // Verify the user was saved correctly
+      const offlineUser = this.offlineStorageService.currentUser();
+      console.log('📝 Policy Agreement: Saved offline user:', offlineUser?.email);
+      
+      if (!offlineUser) {
+        throw new Error('Failed to save user data to IndexedDB');
       }
+      
+      if (offlineUser.uid !== currentAuthUser.uid) {
+        throw new Error(`User UID mismatch: auth=${currentAuthUser.uid}, offline=${offlineUser.uid}`);
+      }
+
+      // Check if already agreed to policies
+      if (offlineUser.isAgreedToPolicy) {
+        console.log('✅ Policy Agreement: User already agreed, redirecting...');
+        // Redirect to appropriate page
+        if (this.authService.hasMultipleCompanies()) {
+          await this.router.navigate(['/company-selection']);
+        } else {
+          await this.router.navigate(['/dashboard']);
+        }
+        return;
+      }
+      
+      console.log('📝 Policy Agreement: Ready for user to accept policies');
+      
+    } catch (error: any) {
+      console.error('❌ Policy Agreement: Failed to initialize offline storage:', error);
+      this.error.set(`Failed to initialize user session: ${error?.message || error}. Please try refreshing the page.`);
     }
   }
 
@@ -63,26 +100,13 @@ export class PolicyAgreementComponent implements OnInit {
     try {
       console.log('📝 Policy Agreement: Starting policy acceptance process...');
       
-      // Check current user state before proceeding
+      // Verify we still have an authenticated user
       const currentAuthUser = this.authService.getCurrentUser();
-      const offlineUser = this.offlineStorageService.currentUser();
-      console.log('📝 Policy Agreement: Auth user:', currentAuthUser?.email);
-      console.log('📝 Policy Agreement: Offline user:', offlineUser?.email);
-      
       if (!currentAuthUser) {
-        throw new Error('No current user found in AuthService');
+        throw new Error('No current user found - please log in again');
       }
       
-      // Ensure offline storage is initialized
-      await this.offlineStorageService.loadOfflineData();
-      
-      // If still no offline user, try refreshing user data
-      if (!this.offlineStorageService.currentUser()) {
-        console.log('📝 Policy Agreement: No offline user found, refreshing user data...');
-        await this.offlineStorageService.refreshUserData();
-      }
-      
-      // Update policy agreement
+      // Update policy agreement (offline user should already exist from ngOnInit)
       await this.offlineStorageService.updatePolicyAgreement(true);
       console.log('✅ Policy Agreement: User accepted policies');
       
@@ -96,11 +120,10 @@ export class PolicyAgreementComponent implements OnInit {
       }
       
       // Redirect based on user's authentication state
-      const redirectAuthUser = this.authService.getCurrentUser();
       const currentPermission = this.authService.getCurrentPermission();
       
       console.log('📍 Policy Agreement: Redirecting user...');
-      console.log('📍 User:', redirectAuthUser?.email);
+      console.log('📍 User:', currentAuthUser?.email);
       console.log('📍 User permissions:', currentPermission);
       console.log('📍 User has multiple companies:', this.authService.hasMultipleCompanies());
       
