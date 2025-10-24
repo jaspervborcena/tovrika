@@ -1,0 +1,16 @@
+{
+  "projects": {},
+  "targets": {
+    "tovrika-aab21": {
+      "hosting": {
+        "app": [
+          "tovrika-aab21"
+        ],
+        "www": [
+          "tovrika"
+        ]
+      }
+    }
+  },
+  "etags": {}
+}
