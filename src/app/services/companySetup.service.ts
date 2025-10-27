@@ -29,6 +29,23 @@ export class CompanySetupService {
   );
 
   constructor(private firestore: Firestore, private authService: AuthService) {
+    // Only load companies if user has permissions (not a visitor)
+    this.loadCompaniesIfAuthorized();
+  }
+
+  private async loadCompaniesIfAuthorized() {
+    // Check if user is a visitor (no company permissions)
+    const currentPermission = this.authService.getCurrentPermission();
+    const isVisitor = !currentPermission || 
+                     !currentPermission.companyId || 
+                     currentPermission.companyId.trim() === '' || 
+                     currentPermission.roleId === 'visitor';
+    
+    if (isVisitor) {
+      console.log('CompanySetupService: User is visitor, skipping company loading');
+      return;
+    }
+    
     this.loadCompanies();
   }
 

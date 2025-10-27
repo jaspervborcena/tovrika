@@ -27,6 +27,19 @@ export const onboardingGuard: CanActivateFn = async (route, state) => {
 
   const currentPermission = authService.getCurrentPermission();
   
+  // NEW: Skip onboarding for users with valid company permissions
+  if (currentPermission && 
+      currentPermission.companyId && 
+      currentPermission.companyId.trim() !== '' && 
+      currentPermission.roleId !== 'visitor' &&
+      (currentPermission.roleId === 'creator' || currentPermission.roleId === 'store_manager' || currentPermission.roleId === 'cashier')) {
+    console.log('🛡️ OnboardingGuard: User has valid permissions, allowing access:', {
+      companyId: currentPermission.companyId,
+      roleId: currentPermission.roleId
+    });
+    return true;
+  }
+  
   console.log('🛡️ OnboardingGuard: Checking access for:', state.url);
   console.log('🛡️ OnboardingGuard: Current user:', user);
   console.log('🛡️ OnboardingGuard: User permissions:', user?.permissions);
@@ -324,7 +337,20 @@ export const companyProfileGuard: CanActivateFn = () => {
     return false;
   }
 
-  // Use permission-based access control
+  // Check if user is a visitor (no company permissions yet)
+  const currentPermission = authService.getCurrentPermission();
+  const isVisitor = !currentPermission || 
+                   !currentPermission.companyId || 
+                   currentPermission.companyId.trim() === '' || 
+                   currentPermission.roleId === 'visitor';
+
+  // Allow visitors to access company profile to create their first company
+  if (isVisitor) {
+    console.log('CompanyProfileGuard: Allowing visitor to access company profile for setup');
+    return true;
+  }
+
+  // Use permission-based access control for existing users
   if (!accessService.canView('canViewCompanyProfile')) {
     console.warn('CompanyProfileGuard: Insufficient permission for company profile');
     router.navigate(['/dashboard/overview']);

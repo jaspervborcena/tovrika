@@ -50,14 +50,59 @@ export class JoinStoreComponent {
 
   navigateToDashboard() {
     const role = this.userRole();
-    const user = this.currentUser();
-    if (user?.roleId === 'visitor') {
+    const currentUser = this.currentUser();
+    const currentPermission = this.authService.getCurrentPermission();
+    
+    // Check if user has valid permissions (not visitor)
+    const isVisitor = !currentPermission || 
+                     !currentPermission.companyId || 
+                     currentPermission.companyId.trim() === '' || 
+                     currentPermission.roleId === 'visitor';
+    
+    if (isVisitor) {
+      console.log('🔍 JoinStore: User is visitor, cannot navigate to dashboard');
       return;
     }
-    if (role === 'cashier') {
-      this.router.navigate(['/pos']);
+    
+    console.log('🔍 JoinStore: Navigating based on role:', role);
+    this.router.navigate(['/dashboard']);
+  }
+
+  // Handle cancel button click - visitors go to onboarding, others go home
+  async handleCancel() {
+    const currentPermission = this.authService.getCurrentPermission();
+    
+    // Check if user is a visitor
+    const isVisitor = !currentPermission || 
+                     !currentPermission.companyId || 
+                     currentPermission.companyId.trim() === '' || 
+                     currentPermission.roleId === 'visitor';
+    
+    if (isVisitor) {
+      console.log('🏠 JoinStore: Visitor canceling - going to onboarding');
+      await this.router.navigate(['/onboarding']);
     } else {
-      this.router.navigate(['/dashboard']);
+      console.log('🏠 JoinStore: User with company access canceling - going to home');
+      await this.router.navigate(['/']);
+    }
+  }
+
+  // Handle logo click - visitors go to onboarding, others go home  
+  async handleLogoClick() {
+    const currentPermission = this.authService.getCurrentPermission();
+    
+    // Check if user is a visitor
+    const isVisitor = !currentPermission || 
+                     !currentPermission.companyId || 
+                     currentPermission.companyId.trim() === '' || 
+                     currentPermission.roleId === 'visitor';
+    
+    if (isVisitor) {
+      console.log('🏠 JoinStore: Visitor clicking logo - going to onboarding');
+      await this.router.navigate(['/onboarding']);
+    } else {
+      console.log('🏠 JoinStore: User with company access clicking logo - going to home');
+      await this.router.navigate(['/']);
     }
   }
 

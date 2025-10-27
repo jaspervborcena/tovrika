@@ -6,47 +6,59 @@ export const authGuard: CanActivateFn = (route, state) => {
   const router = inject(Router);
   const authService = inject(AuthService);
 
+  console.log('🛡️ AuthGuard: Starting check for URL:', state.url);
+
   // Check if user is authenticated
   if (!authService.isAuthenticated()) {
-    console.warn(`AuthGuard: Unauthenticated access attempt to ${state.url}`);
-    router.navigate(['/login'], { 
-      queryParams: { returnUrl: state.url }
-    });
+    console.warn(`🛡️ AuthGuard: Unauthenticated access attempt to ${state.url}`);
+    router.navigate(['/login'], { queryParams: { returnUrl: state.url } });
     return false;
   }
 
   const currentUser = authService.currentUser();
+  const currentPermission = authService.getCurrentPermission();
 
-  // Check if user is a visitor - visitors should only access public pages
-  if (currentUser?.roleId === 'visitor') {
-    console.log('AuthGuard: Visitor user attempting to access protected route, redirecting to onboarding');
+  console.log('🛡️ AuthGuard: Current user:', currentUser?.email, currentUser?.uid);
+  console.log('🛡️ AuthGuard: Current permission:', currentPermission);
+
+  const isVisitor = !currentPermission?.companyId || currentPermission.roleId === 'visitor';
+  const isCompanyProfileRoute = state.url.includes('/dashboard/company-profile');
+  const isOnboardingRoute = state.url === '/onboarding';
+
+  // ✅ Allow visitors to access onboarding and company-profile
+  if (isVisitor) {
+    if (isOnboardingRoute || isCompanyProfileRoute) {
+      console.log('🛡️ AuthGuard: Visitor accessing allowed setup route - allowing');
+      return true;
+    }
+    console.warn('🛡️ AuthGuard: Visitor blocked from protected route, redirecting to onboarding');
     router.navigate(['/onboarding']);
     return false;
   }
 
-  // Check if user has multiple companies and hasn't selected one
-  if (authService.hasMultipleCompanies() && !authService.getCurrentPermission()?.companyId) {
-    if (state.url !== '/company-selection') {
-      router.navigate(['/company-selection']);
-      return false;
-    }
-    return true; // Allow access to company-selection page
+  // ✅ Allow access to company-profile if user has no companyId (onboarding)
+  if (!currentPermission?.companyId && isCompanyProfileRoute) {
+    console.log('🛡️ AuthGuard: No companyId but accessing company-profile - allowing');
+    return true;
   }
 
-  const currentPermission = authService.getCurrentPermission();
-
-  // Allow access to company-profile if user has no companyId (onboarding)
+  // 🚫 Block access if no companyId and not on company-profile
   if (!currentPermission?.companyId) {
-    if (state.url.includes('/dashboard/company-profile')) {
-      // Treat as creator for onboarding
-      return true;
-    }
-    console.warn(`AuthGuard: User missing company access for ${state.url}`);
+    console.warn(`🛡️ AuthGuard: Missing companyId for ${state.url}, redirecting to company-profile`);
     router.navigate(['/dashboard/company-profile']);
     return false;
   }
 
-  // Async role check
+  // ✅ Allow access to company-selection if user has multiple companies and none selected
+  if (authService.hasMultipleCompanies() && !currentPermission?.companyId) {
+    if (state.url !== '/company-selection') {
+      router.navigate(['/company-selection']);
+      return false;
+    }
+    return true;
+  }
+
+  // 🔒 Async role check
   const checkRole = async () => {
     let userRole: string = '';
     if (currentPermission?.companyId && currentUser?.uid && currentPermission?.storeId) {
@@ -66,38 +78,43 @@ export const authGuard: CanActivateFn = (route, state) => {
       }
     }
 
-    // Check for specific role requirements if specified in route data
+    // ✅ Role-based route restriction
     if (route.data?.['roles']) {
       const requiredRoles = route.data['roles'] as string[];
       if (!userRole || !requiredRoles.includes(userRole)) {
-        console.warn(`AuthGuard: Insufficient role access. Required: ${requiredRoles.join(', ')}, User: ${userRole}`);
-        // Redirect based on user role
+        console.warn(`🛡️ AuthGuard: Insufficient role access. Required: ${requiredRoles.join(', ')}, User: ${userRole}`);
         switch (userRole) {
+          case 'visitor':
+            router.navigate(['/onboarding']);
+            break;
           case 'cashier':
             router.navigate(['/pos']);
             break;
           case 'manager':
-            router.navigate(['/dashboard/overview']);
+            router.navigate(['/dashboard/company-profile']);
+            break;
+          case 'creator':
+            router.navigate(['/dashboard/company-profile']);
             break;
           case 'admin':
             router.navigate(['/dashboard/overview']);
             break;
           default:
-            router.navigate(['/dashboard']);
+            router.navigate(['/dashboard/overview']);
         }
         return false;
       }
     }
 
-    // Check if user account is active
+    // ✅ Check if user account is active
     if (currentUser?.status !== 'active') {
-      console.warn(`AuthGuard: Inactive user account attempted access to ${state.url}`);
+      console.warn(`🛡️ AuthGuard: Inactive user account attempted access to ${state.url}`);
       router.navigate(['/login']);
       return false;
     }
+
     return true;
   };
 
-  // Return a promise for async guard
   return checkRole();
 };
