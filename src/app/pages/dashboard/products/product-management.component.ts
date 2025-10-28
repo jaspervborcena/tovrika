@@ -355,7 +355,9 @@ import { CloudLoggingService } from '../../../services/cloud-logging.service';
     .inventory-table-container {
       background: white;
       border-radius: 8px;
-      overflow: hidden;
+      /* Keep header fixed; let rows scroll to prevent layout shift */
+      max-height: 420px;
+      overflow-y: auto;
       border: 1px solid #e2e8f0;
     }
 
@@ -378,6 +380,9 @@ import { CloudLoggingService } from '../../../services/cloud-logging.service';
       font-size: 0.875rem;
       text-transform: uppercase;
       letter-spacing: 0.025em;
+      position: sticky;
+      top: 0;
+      z-index: 1;
     }
 
     .inventory-row {
@@ -559,7 +564,8 @@ import { CloudLoggingService } from '../../../services/cloud-logging.service';
     }
 
     .inventory-modal-overlay {
-      z-index: 8000 !important;
+      /* Ensure inventory modal appears above the product modal */
+      z-index: 10001 !important;
     }
 
     .modal {
@@ -1021,10 +1027,12 @@ import { CloudLoggingService } from '../../../services/cloud-logging.service';
            style="position: fixed !important; z-index: 9999 !important; background: rgba(0, 0, 0, 0.8) !important;">
         <div class="modal store-modal" (click)="$event.stopPropagation()">
           <div class="modal-header">
-            <h3>{{ isEditMode ? '✏️ Edit Product' : '📦 Add New Product' }}</h3>
+            <h3>{{ isCategoryMode ? '➕ Add Category' : (isEditMode ? '✏️ Edit Product' : '📦 Add New Product') }}</h3>
             <button class="close-btn" (click)="closeModal()">×</button>
           </div>
           <div class="modal-body">
+            <!-- Product Mode -->
+            <ng-container *ngIf="isProductMode">
             <form [formGroup]="productForm" (ngSubmit)="submitProduct()">
               <!-- Basic Information Section -->
               <div class="form-section">
@@ -1048,8 +1056,20 @@ import { CloudLoggingService } from '../../../services/cloud-logging.service';
                       type="button" 
                       class="btn btn-sm btn-outline-primary"
                       (click)="openAddCategoryModal()"
-                      title="Add new category">
-                      <i class="fas fa-plus"></i>
+                      title="Add category"
+                      aria-label="Add category"
+                      style="display:inline-flex; align-items:center; justify-content:center; width:32px; height:32px; line-height:1;">
+                      <span aria-hidden="true">➕</span>
+                    </button>
+                    <button 
+                      type="button" 
+                      class="btn btn-sm btn-outline-danger"
+                      (click)="deleteSelectedCategory()"
+                      [disabled]="!productForm.get('category')?.value"
+                      title="Delete selected category"
+                      aria-label="Delete selected category"
+                      style="display:inline-flex; align-items:center; justify-content:center; width:32px; height:32px; line-height:1; margin-left:4px;">
+                      <span aria-hidden="true">➖</span>
                     </button>
                   </div>
                   <div class="error-message" *ngIf="productForm.get('category')?.invalid && productForm.get('category')?.touched">
@@ -1161,6 +1181,18 @@ import { CloudLoggingService } from '../../../services/cloud-logging.service';
                     placeholder="Enter product description (optional)"
                     class="form-input"
                     rows="3"></textarea>
+                </div>
+
+                <!-- Favorites Toggle -->
+                <div class="form-group" style="display:flex; align-items:center; gap:8px;">
+                  <input 
+                    type="checkbox" 
+                    id="isFavorite"
+                    formControlName="isFavorite"
+                    style="width:16px; height:16px; cursor:pointer;"/>
+                  <label for="isFavorite" style="margin:0; cursor:pointer;">
+                    ⭐ Mark as Favorite (show in POS Favorites tab)
+                  </label>
                 </div>
               </div>
 
@@ -1298,8 +1330,40 @@ import { CloudLoggingService } from '../../../services/cloud-logging.service';
                 </ng-template>
               </div>
             </form>
+            </ng-container>
+
+            <!-- Category Mode -->
+            <ng-container *ngIf="isCategoryMode">
+              <form [formGroup]="categoryForm" (ngSubmit)="saveCategory()">
+                <div class="form-section">
+                  <h4 class="section-title">
+                    <span>🏷️</span>
+                    <span>New Category</span>
+                  </h4>
+                  <div class="form-group">
+                    <label for="categoryLabel">Category Name</label>
+                    <input id="categoryLabel" class="form-input" formControlName="categoryLabel" placeholder="e.g., Beverages" />
+                    <div class="error-message" *ngIf="categoryForm.get('categoryLabel')?.invalid && categoryForm.get('categoryLabel')?.touched">
+                      Category name is required
+                    </div>
+                  </div>
+                  <div class="form-group">
+                    <label for="categoryGroup">Group</label>
+                    <input id="categoryGroup" class="form-input" formControlName="categoryGroup" placeholder="e.g., General" />
+                  </div>
+                  <div class="form-group">
+                    <label for="categoryDescription">Description</label>
+                    <textarea id="categoryDescription" class="form-input" rows="3" formControlName="categoryDescription" placeholder="Optional description"></textarea>
+                  </div>
+                </div>
+                <div class="modal-footer" style="justify-content:flex-end; gap:8px;">
+                  <button type="button" class="btn btn-secondary" (click)="cancelCategoryCreation()">Cancel</button>
+                  <button type="submit" class="btn btn-primary" [disabled]="categoryForm.invalid || loading">Save Category</button>
+                </div>
+              </form>
+            </ng-container>
           </div>
-          <div class="modal-footer">
+          <div class="modal-footer" *ngIf="isProductMode">
             <button class="btn btn-secondary" (click)="closeModal()">Cancel</button>
             <button 
               class="btn btn-primary" 
@@ -1366,7 +1430,7 @@ import { CloudLoggingService } from '../../../services/cloud-logging.service';
                     </tr>
                   </thead>
                   <tbody>
-                    <tr *ngFor="let batch of filteredInventory; let i = index" (click)="openEditBatch(batch)" class="inventory-row">
+                    <tr *ngFor="let batch of filteredInventory; let i = index; trackBy: trackByBatch" (click)="openEditBatch(batch)" class="inventory-row">
                       <td class="batch-id-cell">{{ batch.batchId }}</td>
                       <td class="quantity-cell">{{ batch.quantity }}</td>
                       <td class="price-cell">\${{ batch.unitPrice.toFixed(2) }}</td>
@@ -1548,6 +1612,9 @@ export class ProductManagementComponent implements OnInit {
   pendingBatchId: string | null = null;
   pendingBatchDocId: string | null = null;
   pendingNewBatchConfirmation: ((value: boolean) => void) | null = null;
+  // Category deletion context
+  private categoryToDeleteId: string | null = null;
+  private categoryToDeleteLabel: string | null = null;
 
   // Modal mode management
   modalMode: 'product' | 'category' = 'product';
@@ -1627,8 +1694,10 @@ export class ProductManagementComponent implements OnInit {
       unitType: ['pieces', Validators.required],
       // Default to 'General' so the form is valid even if categories haven't loaded yet
       category: ['General', Validators.required],
-      imageUrl: [''],
-      // Tax and Discount Fields
+  imageUrl: [''],
+  // Favorites
+  isFavorite: [false],
+  // Tax and Discount Fields
       isVatApplicable: [true],
       vatRate: [12.0, [Validators.min(0), Validators.max(100)]],
       hasDiscount: [true],
@@ -1794,7 +1863,7 @@ export class ProductManagementComponent implements OnInit {
     this.inventorySearch = '';
     try {
       this.currentBatches = await this.inventoryDataService.listBatches(product.id!);
-      this.filteredInventory = this.currentBatches.slice();
+      this.refreshFilteredInventory();
     } catch (e) {
       console.error('Failed to load inventory batches:', e);
       this.filteredInventory = [];
@@ -1879,9 +1948,9 @@ export class ProductManagementComponent implements OnInit {
           storeId: storeId,  // Use storeId from permission
           barcodeId: formValue.barcodeId,
           imageUrl: formValue.imageUrl,
+          isFavorite: !!formValue.isFavorite,
           // Tax and Discount Fields
           isVatApplicable: formValue.isVatApplicable || false,
-          vatRate: formValue.vatRate || 0,
           hasDiscount: formValue.hasDiscount || false,
           discountType: formValue.discountType || 'percentage',
           discountValue: formValue.discountValue || 0
@@ -1932,12 +2001,11 @@ export class ProductManagementComponent implements OnInit {
           storeId: storeId,  // Use storeId from permission
           barcodeId: formValue.barcodeId,
           imageUrl: formValue.imageUrl,
-          inventory: [],
+          isFavorite: !!formValue.isFavorite,
           totalStock: hasInitial ? Number(formValue.initialQuantity || 0) : Number(formValue.totalStock || 0),
           
           // Tax and Discount Fields from form
           isVatApplicable: formValue.isVatApplicable || false,
-          vatRate: formValue.vatRate || 0,
           hasDiscount: formValue.hasDiscount || false,
           discountType: formValue.discountType || 'percentage',
           discountValue: formValue.discountValue || 0,
@@ -1998,6 +2066,33 @@ export class ProductManagementComponent implements OnInit {
     }
   }
 
+  // Delete the currently selected category from the dropdown
+  async deleteSelectedCategory(): Promise<void> {
+    const selectedLabel: string = this.productForm.get('category')?.value;
+    if (!selectedLabel) {
+      this.toastService.error('Please select a category to delete.');
+      return;
+    }
+
+    const category = this.categoryService.getCategoryByLabel(selectedLabel);
+    if (!category || !category.id) {
+      this.toastService.error('Selected category not found.');
+      return;
+    }
+
+    // Use standard confirmation dialog
+    this.categoryToDeleteId = category.id;
+    this.categoryToDeleteLabel = selectedLabel;
+    this.deleteConfirmationData.set({
+      title: 'Delete Category',
+      message: `Delete category "${selectedLabel}"? This cannot be undone.`,
+      confirmText: 'Delete',
+      cancelText: 'Cancel',
+      type: 'danger'
+    });
+    this.showDeleteConfirmation.set(true);
+  }
+
   async addInventoryBatch(): Promise<void> {
     // Deprecated: use saveBatch which handles add & update in the tabbed modal
     return this.saveBatch();
@@ -2045,8 +2140,8 @@ export class ProductManagementComponent implements OnInit {
     try {
       await this.inventoryDataService.removeBatch(this.selectedProduct.id!, this.pendingBatchDocId);
       // Refresh collections
-      this.currentBatches = await this.inventoryDataService.listBatches(this.selectedProduct.id!);
-      this.filteredInventory = this.currentBatches.slice();
+  this.currentBatches = await this.inventoryDataService.listBatches(this.selectedProduct.id!);
+  this.refreshFilteredInventory();
       this.selectedProduct = this.productService.getProduct(this.selectedProduct.id!) || null;
     } catch (error) {
       console.error('Error removing inventory batch:', error);
@@ -2059,10 +2154,21 @@ export class ProductManagementComponent implements OnInit {
 
   filterInventory(): void {
     if (!this.selectedProduct) { this.filteredInventory = []; return; }
+    this.refreshFilteredInventory();
+  }
+
+  // Keep list stable and dedup by excluding removed entries; apply search term if present
+  private refreshFilteredInventory(): void {
     const term = (this.inventorySearch || '').toLowerCase();
-    const list = this.currentBatches || [];
-    if (!term) { this.filteredInventory = list.slice(); return; }
-    this.filteredInventory = list.filter(b => (b.batchId || '').toLowerCase().includes(term));
+    const base = (this.currentBatches || []).filter(b => b.status !== 'removed');
+    this.filteredInventory = !term
+      ? base.slice()
+      : base.filter(b => (b.batchId || '').toLowerCase().includes(term));
+  }
+
+  // Stabilize ngFor rendering to avoid perceived row movement
+  trackByBatch(index: number, batch: ProductInventoryEntry): string | number {
+    return batch.id || batch.batchId || index;
   }
 
   openEditBatch(batch: ProductInventoryEntry): void {
@@ -2146,8 +2252,8 @@ export class ProductManagementComponent implements OnInit {
       }
 
       // Refresh state and generate new batch ID for next entry
-      this.currentBatches = await this.inventoryDataService.listBatches(this.selectedProduct.id!);
-      this.filteredInventory = this.currentBatches.slice();
+  this.currentBatches = await this.inventoryDataService.listBatches(this.selectedProduct.id!);
+  this.refreshFilteredInventory();
       this.selectedProduct = this.productService.getProduct(this.selectedProduct.id!) || null;
       this.inventoryForm.reset();
       this.inventoryForm.patchValue({ receivedAt: new Date().toISOString().split('T')[0] });
@@ -2463,6 +2569,23 @@ export class ProductManagementComponent implements OnInit {
     } else if (this.pendingBatchId && this.pendingBatchDocId) {
       // Handle batch removal
       await this.performBatchRemoval();
+    } else if (this.categoryToDeleteId) {
+      // Handle category deletion
+      try {
+        const label = this.categoryToDeleteLabel || '';
+        await this.categoryService.deleteCategory(this.categoryToDeleteId);
+        await this.loadCategories();
+        if (this.productForm.get('category')?.value === label) {
+          this.productForm.patchValue({ category: '' });
+        }
+        this.toastService.success(`Category "${label}" deleted successfully`);
+      } catch (error) {
+        console.error('Error deleting category:', error);
+        this.toastService.error('Failed to delete category.');
+      } finally {
+        this.categoryToDeleteId = null;
+        this.categoryToDeleteLabel = null;
+      }
     } else if (this.pendingNewBatchConfirmation) {
       // Handle new batch confirmation
       this.pendingNewBatchConfirmation(true);
@@ -2477,6 +2600,8 @@ export class ProductManagementComponent implements OnInit {
     this.productToDelete = null;
     this.pendingBatchId = null;
     this.pendingBatchDocId = null;
+    this.categoryToDeleteId = null;
+    this.categoryToDeleteLabel = null;
     // Handle cancellation of new batch confirmation
     if (this.pendingNewBatchConfirmation) {
       this.pendingNewBatchConfirmation(false);
@@ -2826,9 +2951,9 @@ export class ProductManagementComponent implements OnInit {
       this.loading = true;
       
       // Load inventory entries for this product using the existing method
-      const inventoryEntries = await this.inventoryDataService.listBatches(productId);
-      this.currentBatches = inventoryEntries || [];
-      this.filteredInventory = [...this.currentBatches];
+  const inventoryEntries = await this.inventoryDataService.listBatches(productId);
+  this.currentBatches = inventoryEntries || [];
+  this.refreshFilteredInventory();
       
       console.log(`Loaded ${this.currentBatches.length} inventory batches for product ${productId}`);
     } catch (error) {

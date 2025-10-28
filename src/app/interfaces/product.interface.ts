@@ -15,11 +15,24 @@ export interface Product {
   storeId: string;
   barcodeId?: string;
   imageUrl?: string;
-  inventory: ProductInventory[];
+  /**
+   * Mark product as favorite for quicker access in POS Favorites tab.
+   * Optional to keep backward compatibility; defaults to false when missing.
+   */
+  isFavorite?: boolean;
+  /**
+   * Deprecated: inventory is managed in productInventory collection.
+   * Kept optional for backward compatibility during migration.
+   */
+  inventory?: ProductInventory[];
   
   // Tax and Discount Fields
   isVatApplicable: boolean;
-  vatRate: number; // percentage
+  /**
+   * Deprecated: VAT rate should come from device/store configuration.
+   * Kept optional for backward compatibility.
+   */
+  vatRate?: number; // percentage
   hasDiscount: boolean;
   discountType: 'percentage' | 'fixed';
   discountValue: number;

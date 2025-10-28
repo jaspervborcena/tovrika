@@ -189,6 +189,25 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     return all;
   });
 
+  // Favorite products derived from filtered list
+  readonly favoriteProducts = computed(() => {
+    try {
+      return this.filteredProducts().filter((p: any) => !!(p && (p as any).isFavorite));
+    } catch {
+      return [] as any[];
+    }
+  });
+
+  // Favorites grid with same pagination behavior as standard grid
+  readonly displayFavoriteGridProducts = computed(() => {
+    const allFavs = this.favoriteProducts();
+    const count = this.gridRowsVisible() * this.gridColumns;
+    if (this.accessTab() === 'New' && this.currentView() === 'favorites') {
+      return allFavs.slice(0, count);
+    }
+    return allFavs;
+  });
+
   // Invoice preview
   readonly nextInvoiceNumber = signal<string>('Loading...');
   readonly showOfflineInvoiceDialog = signal<boolean>(false);
@@ -2176,8 +2195,15 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   hasMoreGridProducts(): boolean {
-    if (!(this.accessTab() === 'New' && this.currentView() === 'grid')) return false;
-    return this.displayGridProducts().length < this.filteredProducts().length;
+    if (this.accessTab() !== 'New') return false;
+    const view = this.currentView();
+    if (view === 'grid') {
+      return this.displayGridProducts().length < this.filteredProducts().length;
+    }
+    if (view === 'favorites') {
+      return this.displayFavoriteGridProducts().length < this.favoriteProducts().length;
+    }
+    return false;
   }
 
   setSelectedCategory(category: string): void {
@@ -2189,7 +2215,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   setCurrentView(view: ProductViewType): void {
     this.posSharedService.updateCurrentView(view);
     // Reset pagination when switching views
-    if (view === 'grid') {
+    if (view === 'grid' || view === 'favorites') {
       this.gridRowsVisible.set(4);
     }
   }

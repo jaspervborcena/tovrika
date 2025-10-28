@@ -662,9 +662,10 @@ export class PosService {
 
     const discountedTotal = baseTotal - discountAmount;
     let vatAmount = 0;
+    const vatRate = Number(product.vatRate ?? 0);
     
     if (product.isVatApplicable) {
-      vatAmount = (discountedTotal * product.vatRate) / 100;
+      vatAmount = (discountedTotal * vatRate) / 100;
     }
 
     return {
@@ -676,7 +677,7 @@ export class PosService {
       sellingPrice: product.sellingPrice,
       total: discountedTotal + vatAmount,
       isVatApplicable: product.isVatApplicable,
-      vatRate: product.vatRate,
+  vatRate: vatRate,
       vatAmount,
       hasDiscount: product.hasDiscount,
       discountType: product.discountType,

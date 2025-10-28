@@ -223,6 +223,15 @@
               </svg>
               {{ 'pos.bestSellersView' | translate }}
             </button>
+            <button 
+              [class.active]="currentView() === 'favorites'"
+              (click)="setCurrentView('favorites')"
+              class="tab-btn">
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.286 3.97a1 1 0 00.95.69h4.178c.969 0 1.371 1.24.588 1.81l-3.383 2.46a1 1 0 00-.364 1.118l1.287 3.97c.3.922-.755 1.688-1.54 1.118l-3.383-2.46a1 1 0 00-1.175 0l-3.383 2.46c-.784.57-1.838-.196-1.539-1.118l1.287-3.97a1 1 0 00-.364-1.118L2.997 9.397c-.783-.57-.38-1.81.588-1.81h4.178a1 1 0 00.95-.69l1.286-3.97z"/>
+              </svg>
+              Favorites
+            </button>
           </div>
 
             <!-- Products Display (shown only for New access tab). Orders will use the same area for results -->
@@ -281,8 +290,36 @@
               </div>
             </div>
 
+            <!-- Favorites View (same as Grid but filtered by isFavorite) -->
+            <div *ngIf="currentView() === 'favorites'" class="products-grid">
+              <div 
+                *ngFor="let product of displayFavoriteGridProducts()"
+                (click)="addToCart(product)"
+                class="product-grid-item"
+                [class.disabled]="!canInteractWithProducts()">
+                <img 
+                  [src]="product.imageUrl || 'assets/noimage.png'"
+                  [alt]="product.productName"
+                  class="product-image"
+                  onerror="this.src='assets/noimage.png'">
+                <div class="product-details">
+                  <div class="product-name-price">
+                    <h4>{{ product.productName }}</h4>
+                    <span class="price">₱{{ (product.sellingPrice || 0).toFixed(2) }}</span>
+                  </div>
+                  <div class="product-category-stock">
+                    <p class="product-description">{{ product.category }}</p>
+                    <span class="product-stock">Stock: {{ product.totalStock }}</span>
+                  </div>
+                  <div *ngIf="product.hasDiscount" class="discount">
+                    {{ product.discountType === 'percentage' ? product.discountValue + '% OFF' : '$' + product.discountValue + ' OFF' }}
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <!-- Show More button for grid view -->
-            <div *ngIf="currentView() === 'grid' && hasMoreGridProducts()" class="show-more-row">
+            <div *ngIf="(currentView() === 'grid' || currentView() === 'favorites') && hasMoreGridProducts()" class="show-more-row">
               <button class="btn btn-secondary show-more-btn" (click)="showMoreGridProducts()">Show more</button>
             </div>
 
