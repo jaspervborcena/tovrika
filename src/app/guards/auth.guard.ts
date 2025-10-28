@@ -58,63 +58,13 @@ export const authGuard: CanActivateFn = (route, state) => {
     return true;
   }
 
-  // 🔒 Async role check
-  const checkRole = async () => {
-    let userRole: string = '';
-    if (currentPermission?.companyId && currentUser?.uid && currentPermission?.storeId) {
-      const { getFirestore, collection, query, where, getDocs } = await import('firebase/firestore');
-      const firestore = getFirestore();
-      const userRolesRef = collection(firestore, 'userRoles');
-      const userRolesQuery = query(
-        userRolesRef,
-        where('companyId', '==', currentPermission.companyId),
-        where('userId', '==', currentUser.uid),
-        where('storeId', '==', currentPermission.storeId)
-      );
-      const userRolesSnap = await getDocs(userRolesQuery);
-      if (!userRolesSnap.empty) {
-        const userRoleData = userRolesSnap.docs[0].data();
-        userRole = userRoleData['roleId'] || '';
-      }
-    }
+  // ✅ Final check: ensure user account is active
+  if (currentUser?.status !== 'active') {
+    console.warn(`🛡️ AuthGuard: Inactive user account attempted access to ${state.url}`);
+    router.navigate(['/login']);
+    return false;
+  }
 
-    // ✅ Role-based route restriction
-    if (route.data?.['roles']) {
-      const requiredRoles = route.data['roles'] as string[];
-      if (!userRole || !requiredRoles.includes(userRole)) {
-        console.warn(`🛡️ AuthGuard: Insufficient role access. Required: ${requiredRoles.join(', ')}, User: ${userRole}`);
-        switch (userRole) {
-          case 'visitor':
-            router.navigate(['/onboarding']);
-            break;
-          case 'cashier':
-            router.navigate(['/pos']);
-            break;
-          case 'manager':
-            router.navigate(['/dashboard/company-profile']);
-            break;
-          case 'creator':
-            router.navigate(['/dashboard/company-profile']);
-            break;
-          case 'admin':
-            router.navigate(['/dashboard/overview']);
-            break;
-          default:
-            router.navigate(['/dashboard/overview']);
-        }
-        return false;
-      }
-    }
-
-    // ✅ Check if user account is active
-    if (currentUser?.status !== 'active') {
-      console.warn(`🛡️ AuthGuard: Inactive user account attempted access to ${state.url}`);
-      router.navigate(['/login']);
-      return false;
-    }
-
-    return true;
-  };
-
-  return checkRole();
+  // Role-based checks are handled by roleGuard now
+  return true;
 };

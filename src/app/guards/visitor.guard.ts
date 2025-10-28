@@ -50,14 +50,20 @@ export const visitorGuard: CanActivateFn = (route, state) => {
     }
   }
 
-  // User is not a visitor, redirect to appropriate page based on role
-  if (currentPermission.roleId === 'cashier') {
-    console.log('👤 VisitorGuard: Cashier detected, redirecting to POS');
-    router.navigate(['/pos']);
-    return false;
-  } else {
-    console.log('👤 VisitorGuard: Non-visitor user detected, redirecting to dashboard');
+  // User is NOT a visitor
+  // Only block the onboarding route for non-visitors; allow other routes (e.g., /dashboard) to proceed
+  if (state.url === '/onboarding') {
+    if (currentPermission.roleId === 'cashier') {
+      console.log('👤 VisitorGuard: Non-visitor cashier attempting onboarding, redirecting to POS');
+      router.navigate(['/pos']);
+      return false;
+    }
+    console.log('👤 VisitorGuard: Non-visitor attempting onboarding, redirecting to dashboard');
     router.navigate(['/dashboard']);
     return false;
   }
+
+  // For all other routes, allow non-visitors to continue
+  console.log('👤 VisitorGuard: Non-visitor user, allowing access');
+  return true;
 };
