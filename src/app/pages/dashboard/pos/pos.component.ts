@@ -105,6 +105,12 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   });
   readonly selectedStoreId = computed(() => this.posService.selectedStoreId());
   readonly cartItems = computed(() => this.posService.cartItems());
+  // Show most recently added cart item at the top for display purposes
+  readonly cartItemsLatestFirst = computed(() => {
+    const items = this.posService.cartItems();
+    // Return a reversed copy to avoid mutating the original array
+    return Array.isArray(items) ? [...items].reverse() : items;
+  });
   readonly cartSummary = computed(() => this.posService.cartSummary());
   readonly isProcessing = computed(() => this.posService.isProcessing());
   
@@ -122,6 +128,66 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   readonly currentStoreInfo = computed(() => 
     this.availableStores().find(s => s.id === this.selectedStoreId())
   );
+
+  // Sorting mode for products list/grid
+  private sortModeSignal = signal<'asc' | 'desc' | 'mid'>('asc');
+  readonly sortMode = computed(() => this.sortModeSignal());
+
+  // Sort dropdown open state (for Excel-like menu)
+  private sortMenuOpenSignal = signal<boolean>(false);
+  readonly sortMenuOpen = computed(() => this.sortMenuOpenSignal());
+
+  setSortMode(mode: 'asc' | 'desc' | 'mid'): void {
+    if (this.sortModeSignal() !== mode) {
+      this.sortModeSignal.set(mode);
+      // Reset grid pagination to initial 3 rows when sort changes
+      this.gridRowsVisible.set(3);
+    }
+    // Close dropdown after a selection
+    this.sortMenuOpenSignal.set(false);
+  }
+
+  // Toggle/close sort dropdown
+  toggleSortMenu(event?: Event): void {
+    if (event) {
+      event.stopPropagation();
+    }
+    this.sortMenuOpenSignal.set(!this.sortMenuOpenSignal());
+  }
+
+  closeSortMenu(): void {
+    if (this.sortMenuOpenSignal()) {
+      this.sortMenuOpenSignal.set(false);
+    }
+  }
+
+  // Close dropdown on outside click or Escape
+  @HostListener('document:click')
+  onDocumentClick(): void {
+    this.closeSortMenu();
+  }
+
+  @HostListener('document:keydown.escape', ['$event'])
+  onEscapeKey(event: KeyboardEvent): void {
+    event.stopPropagation();
+    this.closeSortMenu();
+  }
+
+  // Grid pagination state: number of visible rows in the product grid.
+  // Each "Show more" reveals 2 more rows. With a 6-column grid, each row shows 6 items.
+  readonly gridRowsVisible = signal<number>(3); // initial rows visible (3 rows -> 18 items)
+  private readonly gridColumns = 6; // must match CSS grid columns for desktop
+
+  // Products to display in grid view based on visible rows
+  readonly displayGridProducts = computed(() => {
+    const all = this.filteredProducts();
+    const count = this.gridRowsVisible() * this.gridColumns;
+    // Only apply when in grid view under New tab
+    if (this.accessTab() === 'New' && this.currentView() === 'grid') {
+      return all.slice(0, count);
+    }
+    return all;
+  });
 
   // Invoice preview
   readonly nextInvoiceNumber = signal<string>('Loading...');
@@ -279,18 +345,34 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       });
     }
 
-    // Sort by newest (createdAt) if present, otherwise keep original
+    // Sort by name based on current sort mode (default A–Z)
     try {
-      filtered = filtered.slice().sort((a, b) => (b.createdAt?.getTime ? b.createdAt.getTime() : 0) - (a.createdAt?.getTime ? a.createdAt.getTime() : 0));
+      const mode = this.sortMode();
+      const name = (p: any) => (p.productName || '').toString().toLowerCase();
+      // Base ascending sort by name
+      let sorted = filtered.slice().sort((a, b) => name(a).localeCompare(name(b)));
+
+      if (mode === 'desc') {
+        sorted = sorted.reverse();
+      } else if (mode === 'mid') {
+        // Rotate the ascending-sorted list so it starts from the middle item
+        const n = sorted.length;
+        if (n > 1) {
+          const start = Math.floor(n / 2); // e.g., n=30 -> 15 (0-based), which is the 16th item
+          sorted = sorted.slice(start).concat(sorted.slice(0, start));
+        }
+      }
+
+      filtered = sorted;
     } catch (e) {
       console.warn('🔍 Sort error (ignored):', e);
     }
 
-    // Limit to top 20 when in list or grid view
+    // Limit list view to top 20 for performance; grid view uses Show More pagination
     const view = this.currentView();
     const finalCount = filtered.length;
     
-    if (view === 'list' || view === 'grid') {
+    if (view === 'list') {
       filtered = filtered.slice(0, 20);
     }
     
@@ -1147,18 +1229,8 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   @HostListener('document:keydown.f5', ['$event'])
   async onF5KeyPress(event: KeyboardEvent): Promise<void> {
     event.preventDefault(); // Prevent page refresh
-    
-    const confirmed = await this.showConfirmationDialog({
-      title: this.translationService.instant('pos.createNewOrder'),
-      message: this.translationService.instant('pos.createNewOrderPrompt'),
-      confirmText: this.translationService.instant('buttons.yes'),
-      cancelText: this.translationService.instant('buttons.no'),
-      type: 'info'
-    });
-    
-    if (confirmed) {
-      await this.startNewOrderDirect();
-    }
+    // Use unified flow so hotkey, button, and item-click behave the same
+    await this.requestStartNewOrder('hotkey');
   }
 
   // F6 Hotkey for Complete Order
@@ -1186,6 +1258,91 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
         await this.processOrder();
       }
     }
+  }
+
+  // F7 Hotkey for Add Discount (mirrors Add Discount button behavior)
+  @HostListener('document:keydown.f7', ['$event'])
+  async onF7KeyPress(event: KeyboardEvent): Promise<void> {
+    event.preventDefault(); // Prevent default F7 behavior
+
+    // Block on completed orders
+    if (this.isOrderCompleted()) return;
+
+    // Ensure we have an active new order; if not, prompt using the unified flow
+    if (!this.isNewOrderActive()) {
+      const started = await this.requestStartNewOrder('hotkey');
+      if (!started) return;
+    }
+
+    // If a discount already exists, do not open modal again
+    if (this.orderDiscount()) return;
+
+    // Open the same discount modal as the button
+    this.showDiscountModal();
+  }
+
+  // Clickable Hotkey handlers (same behavior as keyboard shortcuts)
+  async handleF4HotkeyClick(): Promise<void> {
+    // Mirror onF4KeyPress logic without relying on KeyboardEvent
+    if (this.isOrderCompleted()) {
+      const confirmed = await this.showConfirmationDialog({
+        title: 'Clear Cart Disabled',
+        message: 'This order is already completed. Please start a new order to clear the cart.',
+        confirmText: 'Start New Order',
+        cancelText: 'Cancel',
+        type: 'info'
+      });
+      if (confirmed) {
+        await this.startNewOrderDirect();
+      }
+      return;
+    }
+    if (!this.isNewOrderActive()) {
+      await this.showConfirmationDialog({
+        title: 'Clear Cart Disabled',
+        message: 'Please start a new order first before clearing cart data.',
+        confirmText: 'OK',
+        cancelText: '',
+        type: 'warning'
+      });
+      return;
+    }
+    if (this.cartItems().length > 0) {
+      await this.clearCart();
+    }
+  }
+
+  async handleF5HotkeyClick(): Promise<void> {
+    await this.requestStartNewOrder('hotkey');
+  }
+
+  async handleF6HotkeyClick(): Promise<void> {
+    if (this.isOrderCompleted()) {
+      await this.showCompletedOrderReceipt();
+      return;
+    }
+    if (this.cartItems().length > 0 && !this.isProcessing()) {
+      const confirmed = await this.showConfirmationDialog({
+        title: 'Complete Order',
+        message: 'Are you sure you want to complete this order?',
+        confirmText: 'Yes',
+        cancelText: 'No',
+        type: 'info'
+      });
+      if (confirmed) {
+        await this.processOrder();
+      }
+    }
+  }
+
+  async handleF7HotkeyClick(): Promise<void> {
+    if (this.isOrderCompleted()) return;
+    if (!this.isNewOrderActive()) {
+      const started = await this.requestStartNewOrder('hotkey');
+      if (!started) return;
+    }
+    if (this.orderDiscount()) return;
+    this.showDiscountModal();
   }
 
 
@@ -1303,6 +1460,44 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     this.datetime = new Date().toISOString().slice(0, 16);
     
     console.log('🆕 New order started directly - next invoice:', this.invoiceNumber);
+  }
+
+  // Unified New Order request flow used by button, hotkey, and item-click
+  async requestStartNewOrder(trigger: 'button' | 'hotkey' | 'item' = 'button'): Promise<boolean> {
+    // If order is already completed, allow starting a fresh order
+    if (this.isOrderCompleted()) {
+      const confirmed = await this.showConfirmationDialog({
+        title: this.translationService.instant('pos.createNewOrder'),
+        message: this.translationService.instant('pos.createNewOrderPrompt'),
+        confirmText: this.translationService.instant('buttons.yes'),
+        cancelText: this.translationService.instant('buttons.no'),
+        type: 'info'
+      });
+      if (confirmed) {
+        await this.startNewOrderDirect();
+        return true;
+      }
+      return false;
+    }
+
+    // If already active, do not prompt again
+    if (this.isNewOrderActive()) {
+      return true;
+    }
+
+    // Otherwise, confirm before starting new order
+    const confirmed = await this.showConfirmationDialog({
+      title: this.translationService.instant('pos.createNewOrder'),
+      message: this.translationService.instant('pos.createNewOrderPrompt'),
+      confirmText: this.translationService.instant('buttons.yes'),
+      cancelText: this.translationService.instant('buttons.no'),
+      type: 'info'
+    });
+    if (confirmed) {
+      await this.startNewOrderDirect();
+      return true;
+    }
+    return false;
   }
 
   // Payment Dialog Methods
@@ -1951,6 +2146,8 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       await this.productService.loadProductsByCompanyAndStore(companyId, storeId);
       console.log('✅ Product loading completed');
       console.log('🛍️ Total products loaded:', this.productService.getProducts().length);
+  // Reset grid pagination when store changes
+  this.gridRowsVisible.set(4);
       
       // Save selected store to IndexedDB for future sessions
       try {
@@ -1972,12 +2169,29 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     }
   }
 
+  // Show More controls for product grid
+  showMoreGridProducts(): void {
+    // Reveal two more rows in the grid
+    this.gridRowsVisible.update(v => v + 2);
+  }
+
+  hasMoreGridProducts(): boolean {
+    if (!(this.accessTab() === 'New' && this.currentView() === 'grid')) return false;
+    return this.displayGridProducts().length < this.filteredProducts().length;
+  }
+
   setSelectedCategory(category: string): void {
     this.posSharedService.updateSelectedCategory(category);
+    // Reset grid pagination when filters change
+    this.gridRowsVisible.set(4);
   }
 
   setCurrentView(view: ProductViewType): void {
     this.posSharedService.updateCurrentView(view);
+    // Reset pagination when switching views
+    if (view === 'grid') {
+      this.gridRowsVisible.set(4);
+    }
   }
 
   onSearch(): void {
@@ -2002,6 +2216,8 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   // Public setter used by the template's ngModelChange
   setSearchQuery(value: string): void {
     this.posSharedService.updateSearchQuery(value);
+    // Reset grid pagination on search change
+    this.gridRowsVisible.set(4);
   }
 
   clearSearch(): void {
@@ -2084,34 +2300,15 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   async addToCart(product: Product): Promise<void> {
     // Check if order is already completed
     if (this.isOrderCompleted()) {
-      await this.showConfirmationDialog({
-        title: 'Order Already Completed',
-        message: 'This order is already completed. Please start a new order to add more items.',
-        confirmText: 'Start New Order',
-        cancelText: 'Cancel',
-        type: 'info'
-      }).then(async (confirmed) => {
-        if (confirmed) {
-          await this.startNewOrderDirect();
-        }
-      });
+      // Use unified flow
+      const started = await this.requestStartNewOrder('item');
       return;
     }
 
     // Check if new order is active first
     if (!this.canInteractWithProducts()) {
-      const confirmed = await this.showConfirmationDialog({
-        title: this.translationService.instant('pos.createNewOrder'),
-        message: this.translationService.instant('pos.createNewOrderPrompt'),
-        confirmText: this.translationService.instant('buttons.yes'),
-        cancelText: this.translationService.instant('buttons.no'),
-        type: 'info'
-      });
-      
-      if (confirmed) {
-        // Start new order automatically (but don't add the product)
-        await this.startNewOrderDirect();
-      }
+      // Use unified flow; do not auto-add the product on the same click
+      await this.requestStartNewOrder('item');
       return;
     }
 
@@ -2393,37 +2590,8 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
 
   // New Order - clears everything for a fresh start
   async startNewOrder(): Promise<void> {
-    const confirmed = await this.showConfirmationDialog({
-      title: 'Start New Order',
-      message: 'Start a new order? This will clear the current cart and all customer information.',
-      confirmText: 'Start New Order',
-      cancelText: 'Cancel',
-      type: 'warning'
-    });
-
-    if (confirmed) {
-      // Set new order as active
-      this.isNewOrderActive.set(true);
-      
-      // Clear cart and all order-related data
-      this.posService.clearCart();
-      
-      // Reset customer information with next invoice number
-      await this.loadNextInvoicePreview();
-      const nextInvoice = this.nextInvoiceNumber();
-      
-      this.customerInfo = {
-        soldTo: '',
-        tin: '',
-        businessAddress: '',
-        customerId: ''
-      };
-      
-      this.invoiceNumber = nextInvoice === 'Loading...' ? 'INV-0000-000000' : nextInvoice;
-      this.datetime = new Date().toISOString().slice(0, 16);
-      
-      console.log('🆕 New order started - all data cleared, next invoice:', this.invoiceNumber);
-    }
+    // Delegate to unified flow to ensure consistent behavior
+    await this.requestStartNewOrder('button');
   }
 
   async printReceipt(): Promise<void> {
