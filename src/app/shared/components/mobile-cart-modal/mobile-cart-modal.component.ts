@@ -22,7 +22,7 @@ import { CartItem } from '../../../interfaces/pos.interface';
             <p>No items in cart</p>
           </div>
           
-          <div *ngFor="let item of cartItems()" class="cart-item-mobile">
+          <div *ngFor="let item of cartItemsLatestFirst()" class="cart-item-mobile">
             <!-- Item Header Row -->
             <div class="item-header-row">
               <div class="item-info">
@@ -416,6 +416,11 @@ export class MobileCartModalComponent {
   
   // Computed values
   readonly cartItems = computed(() => this.posService.cartItems());
+  // Display most recently added first in mobile cart modal
+  readonly cartItemsLatestFirst = computed(() => {
+    const items = this.posService.cartItems();
+    return Array.isArray(items) ? [...items].reverse() : items;
+  });
   readonly cartSummary = computed(() => this.posService.cartSummary());
   readonly isProcessing = computed(() => this.posService.isProcessing());
   

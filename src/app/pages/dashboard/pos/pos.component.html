@@ -134,18 +134,54 @@
           </div> <!-- End of COLLAPSIBLE NAVIGATION SECTION -->
 
           <div class="search-section">
-            <div class="search-bar">
-              <svg class="search-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
-              </svg>
-              <input 
-                type="text"
-                [ngModel]="searchQuery()"
-                (ngModelChange)="setSearchQuery($event)"
-                (input)="onSearch()"
-                [placeholder]="accessTab() === 'Orders' ? 'Search Orders (Invoice #, Customer Name, Address, Date YYYYMMDD)' : 'Search by barcode, SKU, or name...'"
-                class="search-input">
-              <button *ngIf="searchQuery()" (click)="clearSearch()" class="clear-btn">×</button>
+            <div class="search-sort-row">
+              <!-- Search Area -->
+              <div class="search-area">
+                <div class="search-input-wrap">
+                  <svg class="search-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                  </svg>
+                  <input 
+                    type="text"
+                    [ngModel]="searchQuery()"
+                    (ngModelChange)="setSearchQuery($event)"
+                    (input)="onSearch()"
+                    [placeholder]="accessTab() === 'Orders' ? 'Search Orders (Invoice #, Customer Name, Address, Date YYYYMMDD)' : 'Search by barcode, SKU, or name...'"
+                    class="search-input">
+                  <button *ngIf="searchQuery()" (click)="clearSearch()" class="clear-btn" title="Clear">×</button>
+                </div>
+                <!-- Filter button toggles the left controls for quick access -->
+                <button class="filter-btn" (click)="toggleNavigationPanel()" title="Filter / Show Controls">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <polygon points="22 3 2 3 10 12 10 19 14 21 14 12 22 3"></polygon>
+                  </svg>
+                </button>
+              </div>
+
+              <!-- Sort Area -->
+              <div class="sort-area" (click)="$event.stopPropagation()">
+                <button class="sort-menu-btn" 
+                        (click)="toggleSortMenu($event)" 
+                        [class.active]="sortMenuOpen()"
+                        [title]="sortMode() === 'asc' ? 'Alphabetical ascending' : (sortMode() === 'desc' ? 'Alphabetical descending' : 'Starts from middle letter (M) and fans outward')">
+                  <span class="sort-emoji" aria-hidden="true">{{ sortMode() === 'asc' ? '🔤' : (sortMode() === 'desc' ? '🔡' : '🔁') }}</span>
+                  <span class="sort-label">{{ sortMode() === 'asc' ? 'A–Z Sort' : (sortMode() === 'desc' ? 'Z–A Sort' : 'Midpoint Sort') }}</span>
+                </button>
+                <div class="sort-dropdown" *ngIf="sortMenuOpen()">
+                  <button class="sort-option" [class.active]="sortMode() === 'asc'" (click)="setSortMode('asc'); closeSortMenu()">
+                    <span class="label">🔤 A–Z Sort</span>
+                    <span class="desc">Alphabetical ascending</span>
+                  </button>
+                  <button class="sort-option" [class.active]="sortMode() === 'desc'" (click)="setSortMode('desc'); closeSortMenu()">
+                    <span class="label">🔡 Z–A Sort</span>
+                    <span class="desc">Alphabetical descending</span>
+                  </button>
+                  <button class="sort-option" [class.active]="sortMode() === 'mid'" (click)="setSortMode('mid'); closeSortMenu()">
+                    <span class="label">🔁 Midpoint Sort</span>
+                    <span class="desc">Starts from middle letter (M) and fans outward</span>
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -220,7 +256,7 @@
             <!-- Grid View -->
             <div *ngIf="currentView() === 'grid'" class="products-grid">
               <div 
-                *ngFor="let product of filteredProducts()"
+                *ngFor="let product of displayGridProducts()"
                 (click)="addToCart(product)"
                 class="product-grid-item"
                 [class.disabled]="!canInteractWithProducts()">
@@ -243,6 +279,11 @@
                   </div>
                 </div>
               </div>
+            </div>
+
+            <!-- Show More button for grid view -->
+            <div *ngIf="currentView() === 'grid' && hasMoreGridProducts()" class="show-more-row">
+              <button class="btn btn-secondary show-more-btn" (click)="showMoreGridProducts()">Show more</button>
             </div>
 
             <!-- Custom/Promos View -->
@@ -513,52 +554,61 @@
               </div>
             </div> -->
 
-            <!-- Hotkey Hints -->
-            <div class="hotkey-hints">
-              <div class="hotkey-item">
-                <kbd>F4</kbd>
-                <span>{{ 'pos.clearCart' | translate }}</span>
-              </div>
-              <div class="hotkey-item">
-                <kbd>F5</kbd>
-                <span>{{ 'pos.newOrder' | translate }}</span>
-              </div>
-              <div class="hotkey-item">
-                <kbd>F6</kbd>
-                <span>{{ 'pos.completeOrder' | translate }}</span>
-              </div>
-            </div>
-
-            <!-- Cart Items with Invoice Info -->
-            <div class="cart-items">
-              <!-- Invoice Info integrated into cart -->
-              <div class="cart-invoice-info">
-                <h4 class="invoice-header">📄 {{ 'pos.invoiceInformation' | translate }}</h4>
-                <div class="invoice-compact-layout">
-                  <div class="invoice-field-compact">
-                    <label>{{ 'pos.invoiceNumber' | translate }}:</label>
-                    <input type="text" [(ngModel)]="invoiceNumber" placeholder="Auto-generated">
-                  </div>
-                  <div class="invoice-field-compact">
-                    <label>{{ 'pos.dateTime' | translate }}:</label>
-                    <input type="datetime-local" [(ngModel)]="datetime">
-                  </div>
+            <!-- Hotkey Hints (clickable) -->
+            <fieldset class="hotkey-fieldset">
+              <legend>Shortcut keys</legend>
+              <div class="hotkey-hints">
+                <div class="hotkey-item" (click)="handleF4HotkeyClick()" title="F4 - {{ 'pos.clearCart' | translate }}">
+                  <kbd>F4</kbd>
+                  <span>{{ 'pos.clearCart' | translate }}</span>
+                </div>
+                <div class="hotkey-item" (click)="handleF5HotkeyClick()" title="F5 - {{ 'pos.newOrder' | translate }}">
+                  <kbd>F5</kbd>
+                  <span>{{ 'pos.newOrder' | translate }}</span>
+                </div>
+                <div class="hotkey-item" (click)="handleF6HotkeyClick()" title="F6 - {{ 'pos.completeOrder' | translate }}">
+                  <kbd>F6</kbd>
+                  <span>{{ 'pos.completeOrder' | translate }}</span>
+                </div>
+                <div class="hotkey-item" (click)="handleF7HotkeyClick()" title="F7 - {{ 'pos.addDiscount' | translate }}">
+                  <kbd>F7</kbd>
+                  <span>{{ 'pos.addDiscount' | translate }}</span>
                 </div>
               </div>
-              
-              <div class="cart-header">
-                <span>{{ 'pos.product' | translate }}</span>
-                <span>{{ 'pos.quantity' | translate }}</span>
-                <span>{{ 'pos.price' | translate }}</span>
-                <span>{{ 'pos.total' | translate }}</span>
+            </fieldset>
+
+            <!-- Invoice Info moved OUTSIDE cart scroll to stay steady -->
+            <fieldset class="invoice-fieldset">
+              <legend>{{ 'pos.invoiceInformation' | translate }}</legend>
+              <div class="invoice-compact-layout">
+                <div class="invoice-field-compact">
+                  <label>{{ 'pos.invoiceNumber' | translate }}:</label>
+                  <input type="text" [(ngModel)]="invoiceNumber" placeholder="Auto-generated">
+                </div>
+                <div class="invoice-field-compact">
+                  <label>{{ 'pos.dateTime' | translate }}:</label>
+                  <input type="datetime-local" [(ngModel)]="datetime">
+                </div>
               </div>
+            </fieldset>
+
+            <!-- Cart Header moved OUTSIDE scroll so it stays steady -->
+            <div class="cart-header">
+              <span>{{ 'pos.product' | translate }}</span>
+              <span>{{ 'pos.quantity' | translate }}</span>
+              <span>{{ 'pos.price' | translate }}</span>
+              <span>{{ 'pos.total' | translate }}</span>
+            </div>
+
+            <!-- Cart Items (scrolls independently) -->
+            <div class="cart-items">
               
               <div *ngIf="cartItems().length === 0" class="empty-cart">
                 <p>{{ 'pos.cartEmpty' | translate }}</p>
               </div>
 
               <div 
-                *ngFor="let item of cartItems()" 
+                *ngFor="let item of cartItemsLatestFirst()" 
                 class="cart-item">
                 <div class="item-details">
                   <span class="item-name">{{ item.productName }}</span>
@@ -612,8 +662,9 @@
                   <button (click)="removeOrderDiscount()" class="remove-discount-btn">×</button>
                 </div>
                 <button 
-                  *ngIf="!orderDiscount() && cartItems().length > 0" 
+                  *ngIf="!orderDiscount() && (cartItems().length > 0 || isNewOrderActive())" 
                   (click)="showDiscountModal()" 
+                  [disabled]="isOrderCompleted()"
                   class="btn btn-discount">
                   {{ 'pos.addDiscount' | translate }}
                 </button>
