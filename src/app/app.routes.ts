@@ -1,13 +1,39 @@
-import { Routes } from '@angular/router';
+import { Routes, Router, ActivatedRouteSnapshot, RouterStateSnapshot } from '@angular/router';
+import { inject } from '@angular/core';
 import { authGuard } from './guards/auth.guard';
 import { onboardingGuard, companyProfileGuard } from './guards/onboarding.guard';
 import { policyGuard } from './guards/policy.guard';
+import { cashierGuard } from './guards/cashier.guard';
+import { visitorGuard } from './guards/visitor.guard';
+import { AuthService } from './services/auth.service';
+import { roleGuard } from './guards/role.guard';
 
 export const routes: Routes = [
-  // Public Routes
+  // Public Routes - but visitors should go to onboarding
   {
     path: '',
-    loadComponent: () => import('./pages/home/home.component').then(m => m.HomeComponent)
+    loadComponent: () => import('./pages/home/home.component').then(m => m.HomeComponent),
+    canActivate: [(route: ActivatedRouteSnapshot, state: RouterStateSnapshot) => {
+      const authService = inject(AuthService);
+      const router = inject(Router);
+      
+      // If user is authenticated, check if they're a visitor
+      if (authService.isAuthenticated()) {
+        const currentPermission = authService.getCurrentPermission();
+        const isVisitor = !currentPermission || 
+                         !currentPermission.companyId || 
+                         currentPermission.companyId.trim() === '' || 
+                         currentPermission.roleId === 'visitor';
+        
+        if (isVisitor) {
+          console.log('🏠 HomeGuard: Visitor trying to access home, redirecting to onboarding');
+          router.navigate(['/onboarding']);
+          return false;
+        }
+      }
+      
+      return true;
+    }]
   },
   {
     path: 'login',
@@ -27,7 +53,8 @@ export const routes: Routes = [
   },
   {
     path: 'onboarding',
-    loadComponent: () => import('./pages/onboarding/onboarding.component').then(m => m.OnboardingComponent)
+    loadComponent: () => import('./pages/onboarding/onboarding.component').then(m => m.OnboardingComponent),
+    canActivate: [authGuard, visitorGuard]
   },
   {
     path: 'join-store',
@@ -93,11 +120,12 @@ export const routes: Routes = [
   {
     path: 'dashboard',
     loadComponent: () => import('./pages/dashboard/dashboard.component').then(m => m.DashboardComponent),
+    // Simplify parent guards; use roleGuard on children where roles are specified
     canActivate: [authGuard, policyGuard],
     children: [
       {
         path: '',
-        redirectTo: 'company-profile',
+        redirectTo: 'overview',
         pathMatch: 'full'
       },
       {
@@ -109,20 +137,20 @@ export const routes: Routes = [
       {
   path: 'overview',
   loadComponent: () => import('./pages/dashboard/overview/overview.component').then(m => m.OverviewComponent),
-  canActivate: [onboardingGuard],
-  data: { roles: ['creator', 'store_manager', 'cashier'] }
+  canActivate: [onboardingGuard, roleGuard],
+  data: { roles: ['creator', 'store_manager'] }
       },
       {
   path: 'stores',
   loadComponent: () => import('./pages/dashboard/stores-management/stores-management.component').then(m => m.StoresManagementComponent),
-  canActivate: [onboardingGuard],
-  data: { roles: ['creator', 'store_manager', 'cashier'] }
+  canActivate: [onboardingGuard, roleGuard],
+  data: { roles: ['creator', 'store_manager'] }
       },
       {
   path: 'branches',
   loadComponent: () => import('./pages/dashboard/branches/branches.component').then(m => m.BranchesComponent),
-  canActivate: [onboardingGuard],
-  data: { roles: ['creator', 'store_manager', 'cashier'] }
+  canActivate: [onboardingGuard, roleGuard],
+  data: { roles: ['creator', 'store_manager'] }
       },
       {
   path: 'access',
@@ -135,31 +163,32 @@ export const routes: Routes = [
       {
   path: 'subscriptions',
   loadComponent: () => import('./pages/dashboard/subscriptions/subscriptions.component').then(m => m.SubscriptionsComponent),
-  canActivate: [onboardingGuard],
+  canActivate: [onboardingGuard, roleGuard],
   data: { roles: ['creator'] }
       },
       {
   path: 'invoice-setup',
   loadComponent: () => import('./pages/dashboard/invoice-setup/invoice-setup.component').then(m => m.InvoiceSetupComponent),
+  canActivate: [roleGuard],
   data: { roles: ['creator', 'store_manager'] }
       },
       {
   path: 'products',
   loadComponent: () => import('./pages/dashboard/products/product-management.component').then(m => m.ProductManagementComponent),
-  canActivate: [onboardingGuard],
-  data: { roles: ['creator', 'store_manager', 'cashier'] }
+  canActivate: [onboardingGuard, roleGuard],
+  data: { roles: ['creator', 'store_manager'] }
       },
       {
   path: 'inventory',
   loadComponent: () => import('./pages/dashboard/inventory/inventory.component').then(m => m.InventoryComponent),
-  canActivate: [onboardingGuard],
-  data: { roles: ['creator', 'store_manager', 'cashier'] }
+  canActivate: [onboardingGuard, roleGuard],
+  data: { roles: ['creator', 'store_manager'] }
       },
 
       {
         path: 'sales/summary',
         loadComponent: () => import('./pages/dashboard/sales/sales-summary/sales-summary.component').then(m => m.SalesSummaryComponent),
-        canActivate: [onboardingGuard],
+        canActivate: [onboardingGuard, roleGuard],
         data: { roles: ['creator', 'store_manager'] }
       }
     ]
@@ -174,28 +203,28 @@ export const routes: Routes = [
   
   
   
-  // Standalone POS Route (originally existed) - TEMPORARILY REMOVING ALL GUARDS FOR TESTING
+  // Standalone POS Route - Accessible by creator, store_manager, and cashier
   {
     path: 'pos',
-    loadComponent: () => import('./pages/dashboard/pos/pos.component').then(m => m.PosComponent)
-    // canActivate: [authGuard, policyGuard, onboardingGuard], // TEMPORARILY DISABLED
-    // data: { roles: ['creator', 'store_manager', 'cashier'] } // TEMPORARILY DISABLED
+    loadComponent: () => import('./pages/dashboard/pos/pos.component').then(m => m.PosComponent),
+    canActivate: [authGuard, policyGuard, onboardingGuard, roleGuard],
+    data: { roles: ['creator', 'store_manager', 'cashier'] }
   },
 
-  // Mobile POS Route - TEMPORARILY REMOVING ALL GUARDS FOR TESTING
+  // Mobile POS Route - Accessible by creator, store_manager, and cashier
   {
     path: 'pos/mobile',
-    loadComponent: () => import('./pages/dashboard/pos/mobile/pos-mobile.component').then(m => m.PosMobileComponent)
-    // canActivate: [authGuard, policyGuard, onboardingGuard], // TEMPORARILY DISABLED
-    // data: { roles: ['creator', 'store_manager', 'cashier'] } // TEMPORARILY DISABLED
+    loadComponent: () => import('./pages/dashboard/pos/mobile/pos-mobile.component').then(m => m.PosMobileComponent),
+    canActivate: [authGuard, policyGuard, onboardingGuard, roleGuard],
+    data: { roles: ['creator', 'store_manager', 'cashier'] }
   },
 
-  // Mobile Receipt Preview Route - TEMPORARILY REMOVING ALL GUARDS FOR TESTING
+  // Mobile Receipt Preview Route - Accessible by creator, store_manager, and cashier
   {
     path: 'pos/mobile/receipt-preview',
-    loadComponent: () => import('./pages/dashboard/pos/mobile/mobile-receipt-preview.component').then(m => m.MobileReceiptPreviewComponent)
-    // canActivate: [authGuard, policyGuard, onboardingGuard], // TEMPORARILY DISABLED
-    // data: { roles: ['creator', 'store_manager', 'cashier'] } // TEMPORARILY DISABLED
+    loadComponent: () => import('./pages/dashboard/pos/mobile/mobile-receipt-preview.component').then(m => m.MobileReceiptPreviewComponent),
+    canActivate: [authGuard, policyGuard, onboardingGuard, roleGuard],
+    data: { roles: ['creator', 'store_manager', 'cashier'] }
   },
   
   // Fallback route

@@ -82,9 +82,9 @@
          class="product-card"
          (click)="onProductClick(product)">
       <div class="product-image">
-        <img [src]="product.imageUrl || '/assets/placeholder-product.png'" 
+        <img [src]="product.imageUrl || 'assets/noimage.png'" 
              [alt]="product.productName"
-             onerror="this.src='/assets/placeholder-product.png'">
+             onerror="this.src='assets/noimage.png'">
       </div>
       <div class="product-info">
         <h4>{{ product.productName }}</h4>
@@ -100,9 +100,9 @@
          class="product-list-item"
          (click)="onProductClick(product)">
       <div class="product-image-small">
-        <img [src]="product.imageUrl || '/assets/placeholder-product.png'" 
+        <img [src]="product.imageUrl || 'assets/noimage.png'" 
              [alt]="product.productName"
-             onerror="this.src='/assets/placeholder-product.png'">
+             onerror="this.src='assets/noimage.png'">
       </div>
       <div class="product-details">
         <div class="product-name">{{ product.productName }}</div>

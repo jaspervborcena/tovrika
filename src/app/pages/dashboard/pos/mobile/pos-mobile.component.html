@@ -167,7 +167,7 @@
           class="product-row"
           [class.disabled]="isOrderCompleted()"
           [class.out-of-stock]="product.totalStock <= 0">
-          <img [src]="product.imageUrl || '/assets/placeholder.png'" class="product-thumb">
+          <img [src]="product.imageUrl || 'assets/noimage.png'" class="product-thumb" onerror="this.src='assets/noimage.png'">
           <div class="product-details">
             <div class="product-name">{{ product.productName }}</div>
             <div class="product-sku">SKU: {{ product.skuId }}</div>
@@ -191,7 +191,7 @@
           class="product-card"
           [class.disabled]="isOrderCompleted()"
           [class.out-of-stock]="product.totalStock <= 0">
-          <img [src]="product.imageUrl || '/assets/placeholder.png'" class="product-image">
+          <img [src]="product.imageUrl || 'assets/noimage.png'" class="product-image" onerror="this.src='assets/noimage.png'">
           <div class="product-card-info">
             <div class="product-name">{{ product.productName }}</div>
             <div class="product-price">₱{{ (product.sellingPrice || 0).toFixed(2) }}</div>
@@ -215,7 +215,7 @@
             [class.disabled]="isOrderCompleted()"
             [class.out-of-stock]="product.totalStock <= 0">
             <div class="promo-flag">PROMO</div>
-            <img [src]="product.imageUrl || '/assets/placeholder.png'" class="product-image">
+            <img [src]="product.imageUrl || 'assets/noimage.png'" class="product-image" onerror="this.src='assets/noimage.png'">
             <div class="product-card-info">
               <div class="product-name">{{ product.productName }}</div>
               <div class="product-price">₱{{ (product.sellingPrice || 0).toFixed(2) }}</div>
@@ -239,7 +239,7 @@
             [class.disabled]="isOrderCompleted()"
             [class.out-of-stock]="product.totalStock <= 0">
             <div class="rank-badge">{{ i + 1 }}</div>
-            <img [src]="product.imageUrl || '/assets/placeholder.png'" class="product-thumb">
+            <img [src]="product.imageUrl || 'assets/noimage.png'" class="product-thumb" onerror="this.src='assets/noimage.png'">
             <div class="product-details">
               <div class="product-name">{{ product.productName }}</div>
               <div class="product-sku">SKU: {{ product.skuId }}</div>

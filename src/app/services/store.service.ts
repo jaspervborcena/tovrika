@@ -252,6 +252,46 @@ export class StoreService {
       const defaultRolesService = new (await import('./default-roles.service')).DefaultRolesService(this.firestore, this.offlineDocService);
       await defaultRolesService.createDefaultRoles(store.companyId, documentId);
       
+      // 🔄 Update current user's data: set creator role, link company/store, and set current selections
+      const user = this.authService.getCurrentUser();
+      if (user) {
+        const permissions = Array.isArray(user.permissions) ? [...user.permissions] : [];
+        const idx = permissions.findIndex(p => p.companyId === store.companyId);
+        if (idx >= 0) {
+          permissions[idx] = { ...permissions[idx], roleId: 'creator', storeId: documentId };
+        } else {
+          permissions.push({ companyId: store.companyId, storeId: documentId, roleId: 'creator' });
+        }
+
+        try {
+          await this.authService.updateUserData({
+            permissions,
+            currentCompanyId: store.companyId,
+            // currentStoreId is used by the app session; include it alongside permissions
+            // @ts-ignore - allow field even if not in strict interface
+            currentStoreId: documentId as any,
+            roleId: 'creator'
+          } as any);
+        } catch (e) {
+          console.warn('⚠️ Failed to update user to creator with new store context:', e);
+        }
+
+        // Also write userRoles entry for this store to make role checks pass everywhere
+        try {
+          const userRole = {
+            companyId: store.companyId,
+            storeId: documentId,
+            userId: user.uid,
+            roleId: 'creator',
+            createdAt: new Date(),
+            updatedAt: new Date()
+          };
+          await this.offlineDocService.createDocument('userRoles', userRole);
+        } catch (e) {
+          console.warn('⚠️ Failed to create userRoles entry for creator:', e);
+        }
+      }
+
       console.log('✅ Store created with ID:', documentId, navigator.onLine ? '(online)' : '(offline)');
       return documentId;
     } catch (error) {

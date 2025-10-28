@@ -1,5 +1,5 @@
 import { Injectable, inject } from '@angular/core';
-import { Firestore, collection, doc, setDoc, addDoc, query, where, getDocs, getDoc } from '@angular/fire/firestore';
+import { Firestore, collection, collectionGroup, doc, setDoc, addDoc, query, where, getDocs, getDoc } from '@angular/fire/firestore';
 import { AuthService } from './auth.service';
 import { FirestoreSecurityService } from '../core/services/firestore-security.service';
 import { OfflineDocumentService } from '../core/services/offline-document.service';
@@ -41,6 +41,10 @@ export class TransactionService {
   private offlineDocService = inject(OfflineDocumentService);
   private productService = inject(ProductService);
   private inventoryService = inject(InventoryService);
+  // NOTE: InventoryService writes to a different collection path than the newer inventory modules
+  // (InventoryDataService/FIFOInventoryService). This service currently decrements a legacy
+  // branches/{branch}/inventory subcollection. Consider refactoring to use FIFOInventoryService
+  // so batch-level inventory is updated consistently across the app.
 
   async createTransaction(transaction: Omit<Transaction, 'id' | 'transactionNumber' | 'createdAt' | 'updatedAt'>) {
     const user = this.authService.getCurrentUser();
@@ -93,14 +97,16 @@ export class TransactionService {
     // Get today's transactions count
     const startOfDay = new Date(date.setHours(0, 0, 0, 0));
     const endOfDay = new Date(date.setHours(23, 59, 59, 999));
-    
+
+    // Query across all nested branch transactions using a collection group
+    // Path: companies/{companyId}/stores/{storeId}/branches/{branchId}/transactions/{transactionId}
     const q = query(
-      collection(this.firestore, 'transactions'),
+      collectionGroup(this.firestore, 'transactions'),
       where('companyId', '==', companyId),
       where('createdAt', '>=', startOfDay),
       where('createdAt', '<=', endOfDay)
     );
-    
+
     const snapshot = await getDocs(q);
     const sequence = (snapshot.size + 1).toString().padStart(4, '0');
     
@@ -156,8 +162,9 @@ export class TransactionService {
     }
 
     try {
+      // Query across all branches using a collection group
       const q = query(
-        collection(this.firestore, 'transactions'),
+        collectionGroup(this.firestore, 'transactions'),
         where('companyId', '==', currentPermission.companyId),
         where('createdAt', '>=', startDate),
         where('createdAt', '<=', endDate)
