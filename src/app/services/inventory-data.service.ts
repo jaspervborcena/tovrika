@@ -1,5 +1,6 @@
 import { Injectable, inject } from '@angular/core';
-import { Firestore, collection, doc, getDocs, query, where, orderBy, limit, Timestamp, writeBatch, addDoc } from '@angular/fire/firestore';
+import { Firestore, collection, doc, getDocs, query, where, orderBy, limit, Timestamp, writeBatch, addDoc, getDoc, updateDoc } from '@angular/fire/firestore';
+import { deleteField } from 'firebase/firestore';
 import { OfflineDocumentService } from '../core/services/offline-document.service';
 import { AuthService } from './auth.service';
 import { ProductService } from './product.service';
@@ -304,5 +305,54 @@ export class InventoryDataService {
     const docRef = await addDoc(colRef, payload);
     console.log('✅ Direct Firestore creation successful:', docRef.id);
     return docRef.id;
+  }
+
+  /**
+   * Migration helper: Move embedded inventory arrays from product documents
+   * into the productInventory collection, then remove the embedded field.
+   * Call manually from an admin action or console.
+   */
+  async migrateEmbeddedInventoryForAllProducts(): Promise<{ migrated: number; skipped: number; errors: number; }> {
+    const productsRef = collection(this.firestore, 'products');
+    const snap = await getDocs(productsRef);
+    let migrated = 0, skipped = 0, errors = 0;
+    for (const d of snap.docs) {
+      try {
+        const data: any = d.data();
+        const inv: any[] = Array.isArray(data.inventory) ? data.inventory : [];
+        if (!inv.length) { skipped++; continue; }
+        const productId = d.id;
+        const unitType = data.unitType || 'pieces';
+        const companyId = data.companyId || '';
+        const storeId = data.storeId || '';
+        for (const item of inv) {
+          await this.addBatch(productId, {
+            batchId: item.batchId || `BATCH-${Date.now()}`,
+            quantity: Number(item.quantity || 0),
+            unitPrice: Number(item.unitPrice || 0),
+            costPrice: Number(item.costPrice || 0),
+            receivedAt: item.receivedAt?.toDate?.() || new Date(),
+            expiryDate: item.expiryDate?.toDate?.() || undefined,
+            supplier: item.supplier || undefined,
+            status: item.status || 'active',
+            unitType,
+            companyId,
+            storeId,
+            productId
+          } as any);
+        }
+        // Remove embedded inventory fields
+        await updateDoc(doc(this.firestore, 'products', productId), {
+          inventory: deleteField(),
+          isMultipleInventory: deleteField()
+        });
+        migrated++;
+      } catch (e) {
+        console.error('❌ Migration error for product:', d.id, e);
+        errors++;
+      }
+    }
+    console.log('✅ Migration complete:', { migrated, skipped, errors });
+    return { migrated, skipped, errors };
   }
 }

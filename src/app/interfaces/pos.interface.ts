@@ -117,7 +117,7 @@ export interface CartSummary {
   netAmount: number;
 }
 
-export type ProductViewType = 'list' | 'grid' | 'custom' | 'bestsellers';
+export type ProductViewType = 'list' | 'grid' | 'custom' | 'bestsellers' | 'favorites';
 
 export interface ReceiptData {
   companyName: string;
