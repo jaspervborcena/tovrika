@@ -110,21 +110,57 @@ export class OfflineStorageService {
                            userData.permissions?.[0]?.storeId || 
                            undefined;
                            
+      // Normalize permissions: select a single active permission to avoid confusion
+      let activePermission = null as any;
+      const perms = Array.isArray(userData.permissions) ? userData.permissions : (userData.permissions ? [userData.permissions] : []);
+
+      // 1) If currentCompanyId is set, prefer permission for that company
+      if (userData.currentCompanyId) {
+        activePermission = perms.find((p: any) => p.companyId === userData.currentCompanyId) || null;
+      }
+
+      // 2) Prefer first non-visitor role
+      if (!activePermission) {
+        activePermission = perms.find((p: any) => p.roleId && p.roleId !== 'visitor') || null;
+      }
+
+      // 3) Prefer first permission with a companyId
+      if (!activePermission) {
+        activePermission = perms.find((p: any) => p.companyId && String(p.companyId).trim() !== '') || null;
+      }
+
+      // 4) Fallback to first permission if exists
+      if (!activePermission && perms.length > 0) {
+        activePermission = perms[0];
+      }
+
+      // If still null, create a visitor permission placeholder
+      if (!activePermission) {
+        activePermission = { companyId: '', roleId: 'visitor' };
+      }
+
       const offlineUserData: OfflineUserData = {
         uid: userData.uid,
         email: userData.email,
         displayName: userData.displayName,
         status: userData.status,
-        // Prefer roleId from permissions when root-level roleId is not present
-        roleId: (userData as any).roleId ?? userData.permissions?.[0]?.roleId,
+        // Prefer roleId from the active permission
+        roleId: activePermission.roleId || (userData as any).roleId,
         createdAt: userData.createdAt,
         updatedAt: userData.updatedAt,
         branchId: userData.branchId,
-        permissions: userData.permissions || [],
-        currentCompanyId: userData.currentCompanyId,
+        // Store only the deduplicated active permission to avoid ambiguity
+        permissions: [
+          {
+            companyId: activePermission.companyId || '',
+            roleId: activePermission.roleId || 'visitor',
+            storeId: activePermission.storeId
+          }
+        ],
+        currentCompanyId: userData.currentCompanyId || activePermission.companyId || undefined,
         isLoggedIn: true,
         isAgreedToPolicy: userData.isAgreedToPolicy || false,
-        currentStoreId: currentStoreId,
+        currentStoreId: currentStoreId || activePermission.storeId,
         lastSync: new Date()
       };
       

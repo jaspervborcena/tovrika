@@ -4,7 +4,7 @@
           [style.background]="isOnline() ? null : 'linear-gradient(135deg, #dc2626 0%, #b91c1c 100%)'">
     <div class="header-content">
       <div class="header-left">
-        <div class="logo-section">
+        <div class="logo-section" (click)="handleLogoClick()">
           <app-logo 
             size="md" 
             [showText]="true" 
@@ -104,7 +104,7 @@
           <button type="submit" class="cta-button primary" [disabled]="isSubmitting || form.invalid">
             {{ isSubmitting ? 'Sending...' : 'Request Access' }}
           </button>
-          <a routerLink="/" class="cta-button secondary">Cancel</a>
+          <button type="button" (click)="handleCancel()" class="cta-button secondary">Cancel</button>
         </div>
 
         <div class="form-error" *ngIf="error">{{ error }}</div>

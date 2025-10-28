@@ -182,10 +182,11 @@ export class CompanyService {
             roleId: 'creator'
           });
         }
-        
+        // Promote root-level role to creator and set current company
         await this.authService.updateUserData({
           permissions,
-          currentCompanyId: documentId // Set this as the current company
+          currentCompanyId: documentId, // Set this as the current company
+          roleId: 'creator'
         });
       }
 

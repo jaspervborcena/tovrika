@@ -42,7 +42,7 @@
           </div>
           
           <!-- Visitor welcome message -->
-          <div *ngIf="userRole() === 'visitor'" class="visitor-welcome">
+          <div *ngIf="isVisitorUser()" class="visitor-welcome">
             <span class="welcome-text">Welcome! You're browsing as a visitor.</span>
           </div>
           
@@ -76,8 +76,11 @@
           <h2 class="hero-title">
             <span class="block">Welcome to Tovrika!</span>
           </h2>
-          <p class="hero-subtitle">
+          <p class="hero-subtitle" *ngIf="isVisitorUser()">
             You are currently signed in as a <strong>Visitor</strong>. Choose your path — create a store or join an existing one.
+          </p>
+          <p class="hero-subtitle" *ngIf="!isVisitorUser()">
+            Welcome back! You can continue to your dashboard or explore other features.
           </p>
           
           <!-- Path Selection -->

@@ -27,10 +27,21 @@ export const policyGuard: CanActivateFn = async (route, state) => {
     return false;
   }
 
-  // If user is a visitor, redirect to homepage (visitors don't need policy agreement)
-  if (currentUser.roleId === 'visitor') {
-    console.log('🛡️ PolicyGuard: Visitor user attempting to access protected route, redirecting to homepage');
-    router.navigate(['/']);
+  // Check if user is a visitor based on current permission (more reliable than user.roleId)
+  const currentPermission = authService.getCurrentPermission();
+  const isVisitor = !currentPermission || 
+                   !currentPermission.companyId || 
+                   currentPermission.companyId.trim() === '' || 
+                   currentPermission.roleId === 'visitor';
+
+  // Allow visitors to access company profile for initial setup
+  if (isVisitor && state.url.includes('/dashboard/company-profile')) {
+    console.log('🛡️ PolicyGuard: Visitor accessing company profile for setup - allowing');
+    return true;
+  }
+
+  if (isVisitor) {
+    console.log('🛡️ PolicyGuard: Visitor user attempting to access protected route, blocking (onboarding-only)');
     return false;
   }
 
@@ -41,12 +52,16 @@ export const policyGuard: CanActivateFn = async (route, state) => {
   }
 
   try {
-    // Ensure offline storage is loaded
-    await offlineStorageService.loadOfflineData();
-    
-    // Check if user has agreed to policy
-    const userData = offlineStorageService.currentUser();
-    const hasAgreedToPolicy = userData?.isAgreedToPolicy ?? false;
+    // Fast-path: trust in-memory acceptance first to avoid race with IndexedDB reload
+    let userData = offlineStorageService.currentUser();
+    let hasAgreedToPolicy = userData?.isAgreedToPolicy ?? false;
+
+    if (!hasAgreedToPolicy) {
+      // Slow-path: reload from IndexedDB only if needed
+      await offlineStorageService.loadOfflineData();
+      userData = offlineStorageService.currentUser();
+      hasAgreedToPolicy = userData?.isAgreedToPolicy ?? false;
+    }
 
     console.log('🛡️ PolicyGuard: User policy agreement status:', hasAgreedToPolicy);
     console.log('🛡️ PolicyGuard: User data exists:', !!userData);

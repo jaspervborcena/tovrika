@@ -35,18 +35,40 @@ export class OnboardingComponent {
   navigateToDashboard() {
     const role = this.userRole();
     const currentUser = this.currentUser();
-    if (currentUser?.roleId === 'visitor' || role === 'visitor') {
+    const currentPermission = this.authService.getCurrentPermission();
+    
+    // Check if user has valid permissions (not visitor)
+    const isVisitor = !currentPermission || 
+                     !currentPermission.companyId || 
+                     currentPermission.companyId.trim() === '' || 
+                     currentPermission.roleId === 'visitor';
+    
+    if (isVisitor) {
+      console.log('🔍 Onboarding: User is visitor, cannot navigate to dashboard');
       return;
     }
+    
+    console.log('🔍 Onboarding: Navigating based on role:', role);
     if (role === 'cashier') {
+      console.log('🔍 Onboarding: Redirecting cashier to POS');
       this.router.navigate(['/pos']);
     } else {
+      console.log('🔍 Onboarding: Redirecting to dashboard');
       this.router.navigate(['/dashboard']);
     }
   }
 
   async logout() {
     await this.authService.logout();
+  }
+
+  // Check if user is a visitor
+  isVisitorUser() {
+    const currentPermission = this.authService.getCurrentPermission();
+    return !currentPermission || 
+           !currentPermission.companyId || 
+           currentPermission.companyId.trim() === '' || 
+           currentPermission.roleId === 'visitor';
   }
 
   // Debug method to test offline mode
@@ -62,12 +84,23 @@ export class OnboardingComponent {
 
   // Onboarding actions
   async navigateToCreateStore() {
-    try {
-      await this.router.navigate(['/dashboard/company-profile']);
-    } catch {
+  try {
+    const currentPermission = this.authService.getCurrentPermission();
+    const isVisitor = !currentPermission?.companyId || currentPermission.roleId === 'visitor';
+
+    if (!isVisitor) {
+      console.warn('🏪 Onboarding: User is not a visitor, redirecting to dashboard');
       await this.router.navigate(['/dashboard']);
+      return;
     }
+
+    console.log('🏪 Onboarding: Navigating to create store (company profile)...');
+    await this.router.navigate(['/dashboard/company-profile']);
+  } catch (error) {
+    console.error('🏪 Onboarding: Error navigating to company profile:', error);
+    await this.router.navigate(['/dashboard']);
   }
+}
 
   async navigateToJoinStore() {
     try {

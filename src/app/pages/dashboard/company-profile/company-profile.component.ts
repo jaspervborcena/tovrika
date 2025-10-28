@@ -14,6 +14,7 @@ import { BillingHistoryModalComponent } from '../subscriptions/billing-history-m
 import { RoleDefinitionService } from '../../../services/role-definition.service';
 import { ToastService } from '../../../shared/services/toast.service';
 import { BillingService } from '../../../services/billing.service';
+import { OfflineDocumentService } from '../../../core/services/offline-document.service';
 
 @Component({
   selector: 'app-company-profile',
@@ -945,6 +946,7 @@ export class CompanyProfileComponent {
   private storeService = inject(StoreService);
   private toastService = inject(ToastService);
   private billingService = inject(BillingService);
+  private offlineDocService = inject(OfflineDocumentService);
 
   protected profileForm: FormGroup;
   protected loading = signal(false);
@@ -1075,13 +1077,68 @@ export class CompanyProfileComponent {
             phone: formData.phone
           };
 
-          await this.companyService.createCompany(companyData);
+          const newCompanyId = await this.companyService.createCompany(companyData);
+          // Ensure default userRoles entry (creator) exists for this user at company level
+          try {
+            const user = this.authService.getCurrentUser();
+            if (user && newCompanyId) {
+              try {
+                const { getFirestore, collection, query, where, getDocs } = await import('firebase/firestore');
+                const firestore = getFirestore();
+                const userRolesRef = collection(firestore, 'userRoles');
+                const q = query(userRolesRef, where('companyId', '==', newCompanyId), where('userId', '==', user.uid));
+                const snap = await getDocs(q);
+                if (snap.empty) {
+                  const userRole = {
+                    companyId: newCompanyId,
+                    storeId: '',
+                    userId: user.uid,
+                    email: user.email,
+                    roleId: 'creator',
+                    createdAt: new Date(),
+                    updatedAt: new Date()
+                  };
+                  await this.offlineDocService.createDocument('userRoles', userRole);
+                  console.log('✅ Created default creator userRoles entry at company level');
+                } else {
+                  console.log('ℹ️ userRoles already exists for this user & company; skipping');
+                }
+              } catch (checkErr) {
+                console.warn('⚠️ userRoles check failed; creating offline entry:', checkErr);
+                const userRole = {
+                  companyId: newCompanyId,
+                  storeId: '',
+                  userId: user.uid,
+                  email: user.email,
+                  roleId: 'creator',
+                  createdAt: new Date(),
+                  updatedAt: new Date()
+                };
+                await this.offlineDocService.createDocument('userRoles', userRole);
+              }
+            }
+          } catch (userRoleErr) {
+            console.warn('⚠️ Failed to ensure default userRoles entry:', userRoleErr);
+          }
           this.showSuccessMessage.set(true);
           
-          // Show success message and redirect to dashboard after delay
-          setTimeout(() => {
+          // Show success message and redirect based on user setup status
+          setTimeout(async () => {
             this.showSuccessMessage.set(false);
-            this.router.navigate(['/dashboard/overview']);
+            
+            // Check if user needs to create a store next
+            const currentPermission = this.authService.getCurrentPermission();
+            const hasStore = currentPermission && 
+                           currentPermission.storeId && 
+                           currentPermission.storeId.trim() !== '';
+            
+            if (!hasStore) {
+              console.log('🏪 Company Profile: Company created, user needs to create store next');
+              await this.router.navigate(['/dashboard/stores']);
+            } else {
+              console.log('🏪 Company Profile: Company created, user has store, going to overview');
+              await this.router.navigate(['/dashboard/overview']);
+            }
           }, 2000);
           
         } else {
