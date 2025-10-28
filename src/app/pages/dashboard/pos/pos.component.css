@@ -5,6 +5,7 @@
       display: flex;
       flex-direction: column;
       background: #f8fafc;
+      overflow: hidden;
     }
 
     /* Store Selector with 2-column layout */
@@ -420,8 +421,9 @@
       background: #e0f2fe;
       border: 1px solid #0284c7;
       border-radius: 6px;
-      padding: 0.75rem;
-      margin-bottom: 1rem;
+      padding: 0.5rem; /* tighter */
+      margin-bottom: 0.5rem; /* move content up */
+      flex-shrink: 0;
     }
 
     .invoice-header {
@@ -582,16 +584,28 @@
     }
 
     .search-section {
-      /* padding: 1rem; */
+      padding: 0 1rem; /* allow room for sort buttons */
       border-bottom: 1px solid #e2e8f0;
       margin-top: 10px;
     }
 
-    .search-bar {
-      position: relative;
+    /* New: separate containers for search and sort */
+    .search-sort-row {
       display: flex;
       align-items: center;
+      justify-content: space-between;
+      gap: 0.75rem;
     }
+
+    .search-area {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      gap: 5rem; /* requested wider gap between input and filter */
+      min-width: 0; /* allow input to shrink properly */
+    }
+
+    .search-input-wrap { position: relative; flex: 1; }
 
     .search-icon {
       position: absolute;
@@ -600,15 +614,18 @@
       height: 1.25rem;
       color: #6b7280;
       z-index: 1;
+      top: 50%;
+      transform: translateY(-50%);
     }
 
     .search-input {
       width: 100%;
-      padding: 0.75rem 1rem 0.75rem 3rem;
+      padding: 0.5rem 0.75rem 0.5rem 2.5rem;
       border: 1px solid #d1d5db;
       border-radius: 8px;
       font-size: 0.875rem;
       background: white;
+      height: 36px;
     }
 
     .search-input:focus {
@@ -619,17 +636,124 @@
 
     .clear-btn {
       position: absolute;
-      right: 1rem;
+      right: 0.5rem;
       background: none;
       border: none;
-      font-size: 1.25rem;
+      font-size: 1.1rem;
       color: #6b7280;
+      cursor: pointer;
+      top: 50%;
+      transform: translateY(-50%);
+    }
+
+    /* Filter button next to search */
+    .filter-btn {
+      height: 36px;
+      width: 36px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background: #ffffff;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      color: #374151;
       cursor: pointer;
     }
 
+    .filter-btn:hover { background: #f1f5f9; }
+
+    /* Sort menu area */
+    .sort-area { position: relative; display: flex; align-items: center; }
+
+    .sort-menu-btn {
+      height: 36px;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0 0.6rem;
+      background: #ffffff;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      color: #374151;
+      cursor: pointer;
+    }
+
+    .sort-menu-btn:hover,
+    .sort-menu-btn.active { background: #f8fafc; border-color: #94a3b8; }
+
+    .sort-emoji { font-size: 1rem; line-height: 1; }
+    .sort-label { font-size: 0.85rem; color: #475569; }
+
+    .sort-dropdown {
+      position: absolute;
+      top: 40px;
+      right: 0;
+      min-width: 240px;
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      box-shadow: 0 8px 20px rgba(0,0,0,0.08);
+      padding: 0.25rem;
+      z-index: 20;
+    }
+
+    .sort-option {
+      width: 100%;
+      padding: 0.5rem 0.75rem;
+      background: transparent;
+      border: none;
+      border-radius: 6px;
+      text-align: left;
+      color: #374151;
+      font-size: 0.875rem;
+      cursor: pointer;
+    }
+
+    .sort-option:hover { background: #f1f5f9; }
+    .sort-option.active { background: #eff6ff; color: #1d4ed8; }
+
+    /* Sort option label + description */
+    .sort-option .label { display: block; font-weight: 600; }
+    .sort-option .desc { display: block; font-size: 0.75rem; color: #6b7280; margin-top: 2px; }
+
     .product-tabs {
       display: flex;
+      align-items: center;
+      gap: 0.5rem;
       border-bottom: 1px solid #e2e8f0;
+      padding: 0.25rem 1rem 0.5rem;
+    }
+
+    /* Product view tabs (List/Grid/Promos/Bestsellers) */
+    .product-tabs .tab-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.5rem 0.75rem;
+      background: #ffffff;
+      border: 1px solid #e5e7eb;
+      border-radius: 6px;
+      color: #374151;
+      cursor: pointer;
+      font-size: 0.875rem;
+      line-height: 1;
+      transition: all 0.2s ease;
+    }
+
+    .product-tabs .tab-btn:hover {
+      background: #f8fafc;
+      border-color: #93c5fd;
+    }
+
+    .product-tabs .tab-btn.active {
+      background: #eff6ff;
+      color: #1d4ed8;
+      border-color: #3b82f6;
+    }
+
+    .product-tabs .tab-btn svg {
+      width: 1.1rem;
+      height: 1.1rem;
     }
 
     /* Access tabs (horizontal row above search) */
@@ -645,7 +769,6 @@
       overflow-x: auto;
       padding: 0.25rem 0.25rem;
       -webkit-overflow-scrolling: touch;
-      white-space: nowrap;
     }
 
     .tab-btn.small {
@@ -658,27 +781,10 @@
       cursor: pointer;
     }
 
-    .tab-btn.small.active,
     .tab-btn.small:hover {
       background: #3b82f6;
       color: white;
       border-color: #3b82f6;
-    }
-
-    .tab-btn {
-      flex: 1;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 0.5rem;
-      padding: 1rem;
-      border: none;
-      background: white;
-      cursor: pointer;
-      font-size: 0.875rem;
-      font-weight: 500;
-      color: #6b7280;
-      transition: all 0.2s;
     }
 
     .tab-btn svg {
@@ -694,7 +800,6 @@
 
     /* Reuse Access component's square tab header styles for consistency */
     .tab-header {
-      background: white;
       border: 1px solid #e2e8f0;
       border-radius: 8px;
       padding: 0.75rem 1rem;
@@ -821,21 +926,19 @@
 
     .products-grid {
       display: grid;
-      grid-template-columns: repeat(5, 1fr); /* 5 columns exactly */
-      gap: 0.5rem; /* Smaller gap for more compact layout */
-
-
+      grid-template-columns: repeat(6, 1fr); /* 6 columns for denser grid */
+      gap: 0.4rem 0.5rem; /* tighter row gap (0.4rem), keep column gap (0.5rem) */
     }
 
     .product-grid-item {
       border: 1px solid #e5e7eb;
       border-radius: 8px;
-      padding: 0.5rem; /* Smaller padding to make div smaller */
+      padding: 0.3rem; /* tighter padding to reduce height */
       cursor: pointer;
       transition: all 0.2s;
       background: white;
       position: relative;
-      aspect-ratio: 1; /* Makes items square */
+      aspect-ratio: 1.05; /* Slightly wider than tall -> reduces height */
       display: flex;
       flex-direction: column;
     }
@@ -863,11 +966,11 @@
 
     .product-image {
       width: 100%;
-      height: 100px; /* Bigger image */
+      height: 72px; /* reduce image height to trim vertical space */
       object-fit: cover;
       border-radius: 6px;
       background: #f3f4f6;
-      margin-bottom: 0.25rem; /* Reduce space between image and text */
+      margin-bottom: 0.2rem; /* slightly tighter */
     }
 
     .product-details {
@@ -880,13 +983,13 @@
       display: flex;
       justify-content: space-between;
       align-items: flex-start;
-      margin-bottom: 0.25rem; /* Reduce spacing between name and category */
+      margin-bottom: 0.2rem; /* tighten spacing between name and category */
       gap: 0.5rem;
     }
 
     .product-name-price h4 {
       margin: 0;
-      font-size: 0.875rem;
+      font-size: 0.8rem; /* Slightly smaller title */
       font-weight: 600;
       color: #1f2937;
       line-height: 1.2;
@@ -896,7 +999,7 @@
     .product-name-price .price {
       font-weight: 600;
       color: #059669;
-      font-size: 0.875rem;
+      font-size: 0.85rem; /* Slightly smaller price text */
       white-space: nowrap;
     }
 
@@ -959,6 +1062,17 @@
       border-left: 1px solid #e2e8f0;
     }
 
+    /* Show More button below grid */
+    .show-more-row {
+      display: flex;
+      justify-content: center;
+      margin-top: 0.5rem;
+    }
+
+    .show-more-btn {
+      max-width: 200px;
+    }
+
     .receipt-panel {
       height: 100%;
       display: flex;
@@ -997,8 +1111,11 @@
       flex: 1 1 auto;
       overflow-y: auto;
       min-height: 0; /* allow the cart to shrink inside the receipt panel */
-      /* keep a reasonable max so the footer (summary/actions) remains visible */
-      max-height: calc(100% - 200px);
+      /* scroll only inside cart; no page-level scroll */
+      padding-bottom: 0; /* remove extra bottom space */
+      margin-bottom: 0; /* ensure no container bottom margin */
+      /* Show only 5 items (rows) then scroll the rest */
+      max-height: calc(5 * (32px + 0.5rem));
     }
 
     .cart-header {
@@ -1035,6 +1152,8 @@
 
     .cart-item:last-child {
       border-bottom: none;
+      padding-bottom: 0; /* remove extra gap before summary */
+      margin-bottom: 0;  /* ensure no leftover spacing */
     }
 
     .item-details {
@@ -1126,8 +1245,9 @@
 
     .receipt-summary {
       border-top: 1px solid #e2e8f0;
-      padding-top: 1rem;
-      margin-top: 1rem;
+      padding-top: 0.5rem;
+      margin-top: 0; /* flush with last cart item */
+      flex-shrink: 0;
     }
 
     .summary-line {
@@ -1156,17 +1276,19 @@
     .action-buttons {
       display: flex;
       gap: 0.5rem;
-      margin-top: 1rem;
+      margin-top: 0.25rem; /* tighter to reduce gap */
+      flex-shrink: 0;
     }
 
     .btn {
       flex: 1;
-      padding: 0.75rem 1rem;
+      padding: 0.5rem 0.75rem;
       border: none;
-      border-radius: 8px;
+      border-radius: 6px;
       font-weight: 600;
       cursor: pointer;
       transition: all 0.2s;
+      font-size: 0.875rem;
     }
 
     .btn:disabled {
@@ -1195,9 +1317,10 @@
 
     .receipt-footer {
       border-top: 1px solid #e2e8f0;
-      padding-top: 1rem;
-      margin-top: 1rem;
+      padding-top: 0.5rem;
+      margin-top: 0.25rem; /* tighter to reduce gap */
       text-align: center;
+      flex-shrink: 0;
     }
 
     .receipt-footer p {
@@ -1681,44 +1804,102 @@
 /* Hotkey Hints Styling */
 .hotkey-hints {
   display: flex;
-  gap: 0.75rem;
-  margin-bottom: 5px;
-  padding: 0.75rem 1rem;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
+  gap: 0.5rem; /* tighter */
+  margin-bottom: 0.25rem; /* move content up */
+  padding: 0.25rem 0.25rem; /* tighter, fieldset holds padding */
+  background: transparent; /* fieldset provides background */
+  border: none; /* fieldset provides border */
   border-radius: 8px;
   justify-content: center;
-  flex-wrap: wrap;
+  flex-wrap: nowrap; /* keep in one row */
+  overflow-x: auto; /* allow horizontal scroll if needed */
+  -webkit-overflow-scrolling: touch;
+  flex-shrink: 0;
+}
+
+/* Fieldset wrapper for hotkeys */
+.hotkey-fieldset {
+  border: 1px solid #0284c7; /* match invoice fieldset border */
+  border-radius: 8px;
+  padding: 0.5rem; /* compact and consistent with invoice */
+  margin-bottom: 0.5rem;
+  background: #e0f2fe; /* match invoice fieldset background */
+}
+
+.hotkey-fieldset legend {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #0369a1; /* match invoice legend color */
+  padding: 0 0.25rem;
+}
+
+/* Invoice Info fieldset - compact with subtle background */
+.invoice-fieldset {
+  border: 1px solid #0284c7; /* match previous invoice border */
+  border-radius: 8px;
+  padding: 0.5rem; /* compact */
+  margin-bottom: 0.5rem;
+  background: #e0f2fe; /* light info background */
+}
+
+.invoice-fieldset legend {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #0369a1;
+  padding: 0 0.25rem;
+}
+
+/* Reduce potential double spacing when inside fieldset */
+.invoice-fieldset .invoice-compact-layout {
+  margin: 0;
 }
 
 .hotkey-item {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.25rem;
-  font-size: 0.875rem;
+  gap: 0.2rem;
+  font-size: 0.8rem; /* smaller */
   color: #64748b;
   flex: 1;
   min-width: fit-content;
   text-align: center;
+  cursor: pointer; /* indicate clickability */
+  padding: 0.25rem 0.5rem; /* touch target */
+  border-radius: 6px;
+  transition: background-color 0.15s ease, color 0.15s ease, transform 0.05s ease;
 }
 
 .hotkey-item span {
-  font-size: 0.75rem;
+  font-size: 0.65rem; /* smaller */
   font-weight: 500;
 }
 
 .hotkey-item kbd {
   background: #1e293b;
   color: white;
-  padding: 0.25rem 0.5rem;
+  padding: 0.15rem 0.35rem; /* tighter */
   border-radius: 4px;
   font-family: 'Courier New', monospace;
-  font-size: 0.75rem;
+  font-size: 0.6rem; /* smaller */
   font-weight: 600;
-  min-width: 2rem;
+  min-width: 1.4rem; /* smaller */
   text-align: center;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+/* Hover/active feedback for clickable hotkeys */
+.hotkey-item:hover {
+  background: #eef2ff; /* subtle highlight */
+  color: #334155; /* slightly darker text */
+}
+
+.hotkey-item:hover kbd {
+  background: #334155; /* lighten the key pill a bit on hover */
+}
+
+.hotkey-item:active {
+  transform: translateY(1px);
 }
 
 /* Product Disabled State */
@@ -1868,4 +2049,23 @@
 .dialog-actions .btn-primary:hover {
   transform: translateY(-1px);
   box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+}
+
+/* Compact overrides for New Order visuals inside the receipt panel */
+.receipt-panel .new-order-section {
+  margin-top: 0.5rem;
+  padding: 0.5rem;
+  border-radius: 6px;
+  border: 1px solid #e2e8f0;
+  gap: 0.5rem;
+}
+
+.receipt-panel .btn-new-order {
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
+  font-size: 0.9rem;
+}
+
+.receipt-panel .btn-new-order:hover {
+  transform: translateY(-1px);
 }
