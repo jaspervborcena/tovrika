@@ -64,6 +64,7 @@ export class ProductService {
       storeId: data['storeId'] || '',
       barcodeId: data['barcodeId'] || '',
       imageUrl: data['imageUrl'] || '',
+  isFavorite: !!data['isFavorite'] || false,
       inventory: this.transformInventoryArray(data['inventory'] || []),
       
       // Tax and Discount Fields with defaults
@@ -275,16 +276,23 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
       const companyId = await this.waitForAuth();
       
       // Clean undefined values that Firestore doesn't accept
-      const cleanedProductData = this.cleanUndefinedValues({
+      const invArr = Array.isArray((productData as any).inventory) ? (productData as any).inventory : [];
+      const baseData: any = this.cleanUndefinedValues({
         ...productData,
         uid: currentUser.uid,  // Add UID for security rules
         companyId,
-        status: productData.status || 'active',
-        inventory: productData.inventory.map(inv => ({
+        status: productData.status || 'active'
+      });
+
+      // Only include inventory if provided (legacy support); otherwise omit
+      if (invArr.length > 0) {
+        baseData.inventory = invArr.map((inv: any) => ({
           ...this.cleanUndefinedValues(inv),
           receivedAt: Timestamp.fromDate(inv.receivedAt)
-        }))
-      });
+        }));
+      }
+
+      const cleanedProductData = baseData;
 
       console.log('Creating product with cleaned data:', cleanedProductData);
 
@@ -447,7 +455,7 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
       if (!currentUser) throw new Error('User not authenticated');
 
       const oldPrice = batchId 
-        ? product.inventory.find(inv => inv.batchId === batchId)?.unitPrice || 0
+        ? (product.inventory?.find(inv => inv.batchId === batchId)?.unitPrice || 0)
         : product.sellingPrice;
 
       const changeAmount = newPrice - oldPrice;
@@ -472,7 +480,7 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
 
       if (batchId) {
         // Update batch price
-        const updatedInventory = product.inventory.map(inv => 
+        const updatedInventory = (product.inventory ?? []).map(inv => 
           inv.batchId === batchId ? { ...inv, unitPrice: newPrice } : inv
         );
         await this.updateProduct(productId, {
@@ -514,7 +522,7 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
       const currentUser = this.authService.getCurrentUser();
       if (!currentUser) throw new Error('User not authenticated');
 
-      const batch = product.inventory.find(inv => inv.batchId === batchId);
+  const batch = (product.inventory ?? []).find(inv => inv.batchId === batchId);
       if (!batch) throw new Error('Batch not found');
 
       const oldQuantity = batch.quantity;
@@ -535,7 +543,7 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
       const updatedAdjustments = [...currentAdjustments, quantityAdjustment];
 
       // Update batch quantity
-      const updatedInventory = product.inventory.map(inv =>
+      const updatedInventory = (product.inventory ?? []).map(inv =>
         inv.batchId === batchId ? { ...inv, quantity: newQuantity } : inv
       );
 
@@ -574,7 +582,7 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
       const product = this.getProduct(productId);
       if (!product) throw new Error('Product not found');
 
-      const sourceBatch = product.inventory.find(inv => inv.batchId === sourceBatchId);
+  const sourceBatch = (product.inventory ?? []).find(inv => inv.batchId === sourceBatchId);
       if (!sourceBatch) throw new Error('Source batch not found');
 
       if (quantityToMove > sourceBatch.quantity) {

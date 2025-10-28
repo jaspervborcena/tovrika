@@ -861,7 +861,54 @@ This project is proprietary software. All rights reserved.
 
 ### Latest Updates (October 2025)
 
-#### 🔄 Offline Authentication System Implementation (October 8, 2025)
+#### � POS UI/UX Enhancements (October 29, 2025)
+- Search and sort polished for clarity and speed:
+   - Separate containers for search and sort in the POS header
+   - Excel-style sort menu with emoji labels: 🔤 A–Z, 🔡 Z–A, 🔁 Midpoint
+   - Sort dropdown closes on outside click or Escape; button title reflects current mode
+   - Filter button next to search toggles the left controls panel (quick access to store/category/customer)
+   - Search area spacing set to a clean 5rem; compact 36px input with centered search icon and clear “×”
+- Sorting modes are client-side and fast:
+   - A–Z (default), Z–A, and Midpoint (rotates the ascending list from the middle index)
+   - Changing sort resets pagination to show initial rows
+- Product grid is denser and paginated:
+   - 6-column grid, compact product cards, and tightened spacing for a 3-row default view (18 items)
+   - “Show more” reveals 2 more rows (+12 items) per click
+   - Pagination resets on search, category, store, or view changes
+- Product tabs styling restored:
+   - List/Grid/Promos/Bestsellers tabs use consistent padding, borders, and active/hover states
+- Cart panel reflow and readability:
+   - Only the cart area scrolls; page-level scroll avoided for a steady layout
+   - Shows 5 cart rows by default, then scrolls the rest
+   - Newest cart item appears first (latest added on top)
+   - Cart header and Invoice Information moved outside the scroll region
+   - Invoice Information and Shortcut keys use compact fieldsets with matching subtle backgrounds
+- Hotkeys and unified flows:
+   - F4 Clear Cart, F5 New Order, F6 Complete Order, F7 Add Discount
+   - Clickable hotkey hints mirror the keyboard shortcuts (with hover states and tooltips)
+   - Unified new order flow via `requestStartNewOrder(trigger)` used by button, hotkeys, and product click
+- Robust image fallbacks:
+   - Product images fall back to `assets/noimage.png` across list, grid, promos, and mobile cart
+
+Developer notes (where to look):
+- Template: `src/app/pages/dashboard/pos/pos.component.html`
+- Logic: `src/app/pages/dashboard/pos/pos.component.ts`
+   - Sort state: `sortModeSignal`, `setSortMode(mode)`, `sortMenuOpenSignal`, `toggleSortMenu()`, `closeSortMenu()`
+   - Grid pagination: `gridRowsVisible` (default 3 rows), `displayGridProducts()`, `showMoreGridProducts()`
+   - Unified new order: `requestStartNewOrder('button'|'hotkey'|'item')`
+   - Clickable hotkeys: `handleF4HotkeyClick()`, `handleF5HotkeyClick()`, `handleF6HotkeyClick()`, `handleF7HotkeyClick()`
+- Styles: `src/app/pages/dashboard/pos/pos.component.css`
+   - `.search-sort-row`, `.search-area`, `.sort-area`, `.sort-menu-btn`, `.sort-dropdown`, `.sort-option`
+   - Compact 36px `.search-input`, centered `.search-icon` and `.clear-btn`
+   - `.product-tabs .tab-btn` restored; `.products-grid` set to 6 columns with compact cards
+   - Cart-only scroll, 5-row cap, fieldset styles for hotkeys and invoice
+
+Impact:
+- Faster discovery with clear sorting and tighter, information-dense grid
+- More predictable pagination and stable layout (invoice and headers don’t jump)
+- Keyboard and mouse affordances are consistent and discoverable
+
+#### �🔄 Offline Authentication System Implementation (October 8, 2025)
 - **Hybrid Authentication Architecture** - Seamless online/offline authentication with automatic fallback mechanisms
 - **Secure Credential Storage** - SHA-256 password hashing with cryptographically secure salt generation using Web Crypto API
 - **IndexedDB Integration** - Local database storage for encrypted user credentials and session management

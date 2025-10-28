@@ -151,7 +151,7 @@ export class ProductTrackingExamples {
     
     console.log('=== PRODUCT AUDIT TRAIL ===');
     console.log('\n📦 Current Inventory:');
-    product?.inventory.forEach(batch => {
+    (product?.inventory ?? []).forEach(batch => {
       console.log(`  Batch ${batch.batchId}:`);
       console.log(`    Quantity: ${batch.quantity}`);
       console.log(`    Price: ₱${batch.unitPrice}`);
