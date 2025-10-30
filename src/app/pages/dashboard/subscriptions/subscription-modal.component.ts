@@ -34,6 +34,16 @@ export class SubscriptionModalComponent implements OnInit {
     paymentMethod: 'gcash' | 'paymaya' | 'bank_transfer' | 'credit_card';
   }>();
 
+  // Notify parent to open centralized upgrade modal (passes selected plan & billing info)
+  @Output() openUpgrade = new EventEmitter<{
+    tier: 'freemium' | 'standard' | 'premium' | 'enterprise';
+    billingCycle: 'monthly' | 'quarterly' | 'yearly';
+    promoCode?: string;
+    referralCode?: string;
+    durationMonths: number;
+    basePrice: number;
+  }>();
+
   plans = SUBSCRIPTION_PLANS;
   features = SUBSCRIPTION_FEATURES;
 
@@ -152,8 +162,16 @@ export class SubscriptionModalComponent implements OnInit {
       this.showEnterpriseRequest.set(true);
       this.showPaymentForm.set(false);
     } else {
-      this.showPaymentForm.set(true);
-      this.showEnterpriseRequest.set(false);
+      // Emit an event so the parent can open the centralized upgrade modal
+      // This ensures the same payment UI (with receipt upload/payer fields) is used
+      this.openUpgrade.emit({
+        tier: this.selectedTier(),
+        billingCycle: this.billingCycle(),
+        promoCode: this.promoCode() || undefined,
+        referralCode: this.referralCode() || undefined,
+        durationMonths: this.durationMonths(),
+        basePrice: this.basePrice(),
+      });
     }
   }
 

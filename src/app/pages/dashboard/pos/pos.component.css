@@ -1917,7 +1917,9 @@
   max-width: 500px;
   width: 90%;
   max-height: 90vh;
-  overflow-y: auto;
+  /* Make dialog a flex column so content scrolls but footer stays pinned */
+  display: flex;
+  flex-direction: column;
   box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
 }
 
@@ -1926,6 +1928,7 @@
   color: white;
   padding: 1.5rem;
   border-radius: 12px 12px 0 0;
+  flex-shrink: 0; /* prevent header from shrinking */
 }
 
 .dialog-header h3 {
@@ -1942,6 +1945,9 @@
 
 .dialog-content {
   padding: 1.5rem;
+  flex: 1 1 auto;         /* fill available space */
+  overflow-y: auto;        /* scroll only content */
+  min-height: 0;           /* allow flexbox overflow */
 }
 
 .payment-amounts {
@@ -2018,6 +2024,8 @@
   gap: 1rem;
   justify-content: flex-end;
   border-top: 1px solid #f3f4f6;
+  flex-shrink: 0;          /* keep footer visible */
+  background: #fff;        /* solid surface under footer */
 }
 
 .dialog-actions .btn-secondary {

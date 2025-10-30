@@ -9,6 +9,7 @@ import { AccessService } from '../../../core/services/access.service';
 import { StoreService } from '../../../services/store.service';
 import { Store } from '../../../interfaces/store.interface';
 import { SubscriptionModalComponent } from '../subscriptions/subscription-modal.component';
+import { UpgradeSubscriptionModalComponent } from '../subscriptions/upgrade-subscription-modal.component';
 import { SubscriptionDetailsModalComponent } from './subscription-details-modal.component';
 import { BillingHistoryModalComponent } from '../subscriptions/billing-history-modal.component';
 import { RoleDefinitionService } from '../../../services/role-definition.service';
@@ -19,7 +20,7 @@ import { OfflineDocumentService } from '../../../core/services/offline-document.
 @Component({
   selector: 'app-company-profile',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule, SubscriptionModalComponent, SubscriptionDetailsModalComponent, BillingHistoryModalComponent],
+  imports: [CommonModule, ReactiveFormsModule, SubscriptionModalComponent, SubscriptionDetailsModalComponent, BillingHistoryModalComponent, UpgradeSubscriptionModalComponent],
   template: `
     <div class="company-profile-container">
       <!-- Header with Products style -->
@@ -172,12 +173,6 @@ import { OfflineDocumentService } from '../../../core/services/offline-document.
         <div class="subscription-section">
           <div class="section-header">
             <h2>Store Subscriptions</h2>
-            <button (click)="openSubscriptionModal()" class="btn-add-subscription" *ngIf="stores().length > 0">
-              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" class="btn-icon">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-              </svg>
-              Add Subscription
-            </button>
           </div>
 
           <!-- Subscription Grid -->
@@ -255,7 +250,24 @@ import { OfflineDocumentService } from '../../../core/services/offline-document.
         [store]="selectedStore()"
         (closeModal)="closeSubscriptionModal()"
         (subscriptionSubmitted)="handleSubscription($event)"
+        (openUpgrade)="openUpgradeFromModal($event)"
       ></app-subscription-modal>
+
+      <!-- Centralized Upgrade Modal (opened when subscription modal requests an upgrade flow) -->
+      <app-upgrade-subscription-modal
+        [isOpen]="showUpgradeModal()"
+        [companyId]="currentCompany().id || ''"
+        [companyName]="currentCompany().name || ''"
+        [storeId]="upgradeStoreId()"
+        [storeName]="upgradeStoreName()"
+        [storeCode]="upgradeStoreCode()"
+        [initialTier]="upgradeInitialTier()"
+        [initialDurationMonths]="upgradeInitialDurationMonths()"
+        [initialPromoCode]="upgradeInitialPromoCode()"
+        [initialReferralCode]="upgradeInitialReferralCode()"
+        (closeModal)="closeUpgradeModal()"
+        (completed)="onUpgradeCompleted()"
+      ></app-upgrade-subscription-modal>
 
       <!-- Subscription Details Modal -->
       <app-subscription-details-modal
@@ -960,6 +972,16 @@ export class CompanyProfileComponent {
   protected showSubscriptionModal = signal(false);
   protected selectedStore = signal<Store | undefined>(undefined);
   protected stores = signal<Store[]>([]);
+  // Centralized upgrade modal state
+  protected showUpgradeModal = signal(false);
+  protected upgradeStoreId = signal<string>('');
+  protected upgradeStoreName = signal<string>('');
+  protected upgradeStoreCode = signal<string>('');
+  // Initial values for the upgrade modal (forwarded from plan selection)
+  protected upgradeInitialTier = signal<'standard' | 'premium' | undefined>(undefined);
+  protected upgradeInitialDurationMonths = signal<number | undefined>(undefined);
+  protected upgradeInitialPromoCode = signal<string | undefined>(undefined);
+  protected upgradeInitialReferralCode = signal<string | undefined>(undefined);
   
   // Subscription details modal
   protected showSubscriptionDialog = signal(false);
@@ -1332,6 +1354,52 @@ export class CompanyProfileComponent {
       this.toastService.error(errorMessage);
     } finally {
       this.loading.set(false);
+    }
+  }
+
+  // Open centralized upgrade modal when subscription modal requests it
+  protected openUpgradeFromModal(payload: any) {
+    const store = this.selectedStore();
+    if (!store || !store.id) {
+      this.toastService.error('Store information is missing. Please select a store first.');
+      return;
+    }
+
+    // Close the smaller subscription modal and open the full upgrade modal
+    this.showSubscriptionModal.set(false);
+    this.upgradeStoreId.set(store.id);
+    this.upgradeStoreName.set(store.storeName || '');
+  this.upgradeStoreCode.set((store as any).storeCode || '');
+    // Prefill initial values for the upgrade modal
+    const tier = payload?.tier === 'premium' ? 'premium' : 'standard';
+    this.upgradeInitialTier.set(tier as 'standard' | 'premium');
+    const months = typeof payload?.durationMonths === 'number' && payload.durationMonths > 0 ? payload.durationMonths : 1;
+    this.upgradeInitialDurationMonths.set(months);
+    this.upgradeInitialPromoCode.set(payload?.promoCode || undefined);
+    this.upgradeInitialReferralCode.set(payload?.referralCode || undefined);
+    this.showUpgradeModal.set(true);
+  }
+
+  protected closeUpgradeModal() {
+    this.showUpgradeModal.set(false);
+    this.upgradeStoreId.set('');
+    this.upgradeStoreName.set('');
+  this.upgradeStoreCode.set('');
+    // Clear initial values
+    this.upgradeInitialTier.set(undefined);
+    this.upgradeInitialDurationMonths.set(undefined);
+    this.upgradeInitialPromoCode.set(undefined);
+    this.upgradeInitialReferralCode.set(undefined);
+  }
+
+  protected async onUpgradeCompleted() {
+    // After successful upgrade, reload stores to refresh subscription info
+    this.closeUpgradeModal();
+    try {
+      await this.loadStores();
+      this.toastService.success('Subscription updated successfully');
+    } catch (err) {
+      console.warn('Failed to reload stores after upgrade:', err);
     }
   }
 

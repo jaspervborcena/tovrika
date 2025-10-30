@@ -1,0 +1,35 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    function isSignedIn() { return request.auth != null; }
+
+    // Store logo images: {storeId}/logo.{ext}
+    match /{storeId}/logo.{ext} {
+      allow read: if true; // logos are public
+      allow write: if isSignedIn()
+        && request.resource.size < 6 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+    }
+
+    // Product images: {storeId}/products/{fileName}
+    match /{storeId}/products/{fileName=**} {
+      allow read: if true;
+      allow write: if isSignedIn()
+        && request.resource.size < 6 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+    }
+
+    // Subscription payment receipts: {storeId}/payments/{subscriptionId}/{fileName}
+    match /{storeId}/payments/{subscriptionId}/{fileName=**} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn()
+        && request.resource.size < 6 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+    }
+
+    // Default deny
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
