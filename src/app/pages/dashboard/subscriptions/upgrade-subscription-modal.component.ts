@@ -10,7 +10,7 @@ import { CompanyService } from '../../../services/company.service';
 import { ToastService } from '../../../shared/services/toast.service';
 
 type Tier = 'standard' | 'premium';
-type PaymentMethod = 'gcash' | 'paymaya' | 'bank';
+type PaymentMethod = 'gcash' | 'paymaya' | 'paypal';
 
 @Component({
   selector: 'app-upgrade-subscription-modal',
@@ -59,6 +59,13 @@ export class UpgradeSubscriptionModalComponent implements OnChanges {
   paymentDescription: string = '';
   // Validation state
   showErrors = false;
+  // PayPal config (replace with your business handle or dynamic config)
+  private paypalMeHandle = 'yourbusiness'; // TODO: set to your PayPal.Me handle
+  // Card (PayPal) placeholders – do NOT store these values to Firestore
+  cardName: string = '';
+  cardNumber: string = '';
+  cardExpiry: string = '';
+  cardCvv: string = '';
   // QR preview state
   qrPreviewOpen = signal(false);
   qrPreviewUrl = signal<string>('');
@@ -79,11 +86,11 @@ export class UpgradeSubscriptionModalComponent implements OnChanges {
       nameValue: 'JASPER BORCENA',
       qrUrl: 'assets/mayaQR.jpg'
     },
-    bank: {
-      numberLabel: 'Account Number / Mobile Number',
-      numberValue: '09XX XXX XXXX',
-      nameLabel: 'Account Name',
-      nameValue: 'Juan Dela Cruz',
+    paypal: {
+      numberLabel: 'Card via PayPal',
+      numberValue: 'Use the PayPal button below',
+      nameLabel: 'Payment Processor',
+      nameValue: 'PayPal',
       qrUrl: ''
     },
   } as const;
@@ -107,12 +114,12 @@ export class UpgradeSubscriptionModalComponent implements OnChanges {
 
   // Basic guard to enable/disable submit button
   canSubmit(): boolean {
-    const hasRef = !!this.paymentReference && this.paymentReference.trim().length > 0;
-    const hasPayerNo = !!this.payerMobile && this.payerMobile.trim().length > 0;
-    const hasPayerName = !!this.payerName && this.payerName.trim().length > 0;
+    const hasRef = this.activeTab === 'paypal' ? true : (!!this.paymentReference && this.paymentReference.trim().length > 0);
+    const hasPayerNo = this.activeTab === 'paypal' ? true : (!!this.payerMobile && this.payerMobile.trim().length > 0);
+    const hasPayerName = this.activeTab === 'paypal' ? true : (!!this.payerName && this.payerName.trim().length > 0);
     const amount = this.amountPaid ?? this.finalAmount();
     const hasValidAmount = typeof amount === 'number' && !isNaN(amount) && amount > 0;
-    const hasReceipt = !!this.receiptFile;
+    const hasReceipt = this.activeTab === 'paypal' ? true : !!this.receiptFile;
     return hasRef && hasPayerNo && hasPayerName && hasValidAmount && hasReceipt && !!this.companyId && !!this.storeId;
   }
 
@@ -138,6 +145,19 @@ export class UpgradeSubscriptionModalComponent implements OnChanges {
     }
   }
 
+  // Open PayPal payment page in a new tab
+  openPayPal() {
+    const amount = this.amountPaid ?? this.finalAmount();
+    const url = this.getPaypalLink(amount || 0);
+    window.open(url, '_blank', 'noopener');
+  }
+
+  private getPaypalLink(amount: number): string {
+    const safeAmount = Math.max(0, Math.round(amount * 100) / 100); // 2 decimals
+    // PayPal.Me format: https://www.paypal.me/<handle>/<amount>
+    return `https://www.paypal.me/${this.paypalMeHandle}/${safeAmount}`;
+  }
+
   openQrPreview() {
     const url = this.accountInfo[this.activeTab].qrUrl;
     if (!url) return;
@@ -157,11 +177,11 @@ export class UpgradeSubscriptionModalComponent implements OnChanges {
       // Validate required fields
       const effectiveAmount = this.amountPaid ?? this.finalAmount();
       const missing: string[] = [];
-      if (!this.paymentReference || !this.paymentReference.trim()) missing.push('Reference ID');
-      if (!this.payerMobile || !this.payerMobile.trim()) missing.push(this.activeTab === 'gcash' ? 'GCash Number' : (this.activeTab === 'paymaya' ? 'PayMaya Number' : 'Sender Account / Mobile'));
-      if (!this.payerName || !this.payerName.trim()) missing.push('Payer Name');
-      if (!(typeof effectiveAmount === 'number' && !isNaN(effectiveAmount) && effectiveAmount > 0)) missing.push('Amount');
-      if (!this.receiptFile) missing.push('Payment Receipt');
+  if (this.activeTab !== 'paypal' && (!this.paymentReference || !this.paymentReference.trim())) missing.push('Reference ID');
+  if (this.activeTab !== 'paypal' && (!this.payerMobile || !this.payerMobile.trim())) missing.push(this.activeTab === 'gcash' ? 'GCash Number' : (this.activeTab === 'paymaya' ? 'PayMaya Number' : 'Sender Account / Mobile'));
+  if (this.activeTab !== 'paypal' && (!this.payerName || !this.payerName.trim())) missing.push('Payer Name');
+  if (this.activeTab !== 'paypal' && !(typeof effectiveAmount === 'number' && !isNaN(effectiveAmount) && effectiveAmount > 0)) missing.push('Amount');
+  if (this.activeTab !== 'paypal' && !this.receiptFile) missing.push('Payment Receipt');
 
       if (missing.length > 0) {
         this.showErrors = true;
@@ -205,18 +225,26 @@ export class UpgradeSubscriptionModalComponent implements OnChanges {
       const docId = await this.subs.createSubscription(subInput);
 
       // Upload receipt using docId as subscriptionId in path
-      const url = await this.subs.uploadPaymentReceipt(this.receiptFile!, {
-        companyId: this.companyId,
-        storeId: this.storeId,
-        subscriptionId: docId,
-        paymentMethod: this.activeTab,
-      });
-
-      // Update subscription with receipt URL and subscriptionId field
-      await this.subs.updateSubscription(docId, {
-        subscriptionId: docId,
-        paymentReceiptUrl: url,
-      } as any);
+      let url = '';
+      if (this.activeTab !== 'paypal') {
+        url = await this.subs.uploadPaymentReceipt(this.receiptFile!, {
+          companyId: this.companyId,
+          storeId: this.storeId,
+          subscriptionId: docId,
+          paymentMethod: this.activeTab,
+        });
+        // Update subscription with receipt URL and subscriptionId field
+        await this.subs.updateSubscription(docId, {
+          subscriptionId: docId,
+          paymentReceiptUrl: url,
+        } as any);
+      } else {
+        // For PayPal card flow, we'll later set receipt/transaction after capture
+        await this.subs.updateSubscription(docId, {
+          subscriptionId: docId,
+          paymentReceiptUrl: '',
+        } as any);
+      }
 
       // Denormalize to Store.subscription for dashboard
       const subscriptionUpdate: any = {
@@ -229,7 +257,7 @@ export class UpgradeSubscriptionModalComponent implements OnChanges {
         amountPaid: effectiveAmount,
         discountPercent: 0,
         finalAmount: effectiveAmount,
-        paymentMethod: (this.activeTab === 'bank' ? 'bank_transfer' : this.activeTab) as any,
+        paymentMethod: this.activeTab as any,
         lastPaymentDate: new Date(),
       };
       if (this.promoCode) subscriptionUpdate.promoCode = this.promoCode;
@@ -248,11 +276,11 @@ export class UpgradeSubscriptionModalComponent implements OnChanges {
         finalAmount: effectiveAmount,
         promoCode: this.promoCode || '',
         referralCode: this.referralCode || '',
-        paymentMethod: (this.activeTab === 'bank' ? 'bank_transfer' : this.activeTab),
-        transactionId: this.paymentReference || '',
-        payerMobile: this.payerMobile || '',
-        payerName: this.payerName || '',
-        description: this.paymentDescription || '',
+        paymentMethod: this.activeTab,
+        transactionId: this.activeTab === 'paypal' ? '' : (this.paymentReference || ''),
+        payerMobile: this.activeTab === 'paypal' ? '' : (this.payerMobile || ''),
+        payerName: this.activeTab === 'paypal' ? '' : (this.payerName || ''),
+        description: this.activeTab === 'paypal' ? '' : (this.paymentDescription || ''),
         paidAt: new Date(),
         createdAt: new Date(),
       } as any);
@@ -327,6 +355,22 @@ export class UpgradeSubscriptionModalComponent implements OnChanges {
     this.payerName = '';
     this.paymentDescription = '';
     this.showErrors = false;
+    this.cardName = '';
+    this.cardNumber = '';
+    this.cardExpiry = '';
+    this.cardCvv = '';
+  }
+
+  // Normalize MMYY numeric entry, clamp month between 01-12
+  onCardExpiryInput(event: Event) {
+    const input = event.target as HTMLInputElement;
+    let digits = (input.value || '').replace(/\D/g, '').slice(0, 4);
+    if (digits.length >= 2) {
+      const mm = Math.min(Math.max(parseInt(digits.slice(0, 2) || '0', 10), 1), 12);
+      const mmStr = mm.toString().padStart(2, '0');
+      digits = mmStr + digits.slice(2);
+    }
+    this.cardExpiry = digits;
   }
 
   async ngOnChanges(changes: SimpleChanges) {

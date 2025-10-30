@@ -173,12 +173,6 @@ import { OfflineDocumentService } from '../../../core/services/offline-document.
         <div class="subscription-section">
           <div class="section-header">
             <h2>Store Subscriptions</h2>
-            <button (click)="openSubscriptionModal()" class="btn-add-subscription" *ngIf="stores().length > 0">
-              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" class="btn-icon">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-              </svg>
-              Add Subscription
-            </button>
           </div>
 
           <!-- Subscription Grid -->
