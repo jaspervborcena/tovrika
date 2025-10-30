@@ -199,6 +199,23 @@ service cloud.firestore {
                    request.resource.data.companyId is string;
     }
 
+    // ===== SUBSCRIPTIONS COLLECTION =====
+    // Users can only read/write subscriptions tied to their company/store and their uid
+    match /subscriptions/{subscriptionId} {
+      allow read: if isAuthenticated() &&
+                  resource.data.companyId is string &&
+                  resource.data.storeId is string;
+      allow create: if isAuthenticated() &&
+                    request.resource.data.uid == request.auth.uid &&
+                    request.resource.data.companyId is string &&
+                    request.resource.data.storeId is string;
+      allow update: if isAuthenticated() &&
+                    resource.data.uid == request.auth.uid &&
+                    request.resource.data.uid == request.auth.uid;
+      allow delete: if isAuthenticated() &&
+                    resource.data.uid == request.auth.uid;
+    }
+
     // ===== PERMISSIONS COLLECTION =====
     
     // User Permissions - Users can access their own permissions

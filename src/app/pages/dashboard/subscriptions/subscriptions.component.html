@@ -225,3 +225,14 @@
   [storeName]="selectedStore()?.storeName || ''"
   (closeModal)="closeBillingHistoryModal()"
 ></app-billing-history-modal>
+
+<!-- Upgrade Subscription Modal -->
+<app-upgrade-subscription-modal
+  [isOpen]="upgradeModalOpen()"
+  [companyId]="upgradeStore()?.companyId || ''"
+  [storeId]="upgradeStore()?.id || ''"
+  [storeName]="upgradeStore()?.storeName || ''"
+  [storeCode]="upgradeStore()?.storeCode || ''"
+  (closeModal)="closeUpgradeModal()"
+  (completed)="onUpgradeCompleted()"
+></app-upgrade-subscription-modal>

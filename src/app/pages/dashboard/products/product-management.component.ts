@@ -246,6 +246,20 @@ import { CloudLoggingService } from '../../../services/cloud-logging.service';
       text-align: center;
     }
 
+    .product-img-cell {
+      width: 56px;
+      text-align: center;
+    }
+
+    .product-thumb {
+      width: 40px;
+      height: 40px;
+      object-fit: cover;
+      border-radius: 6px;
+      border: 1px solid #e5e7eb;
+      background: #f3f4f6;
+    }
+
     .action-buttons {
       display: flex;
       gap: 0.5rem;
@@ -971,6 +985,8 @@ import { CloudLoggingService } from '../../../services/cloud-logging.service';
           <table class="products-table">
             <thead>
               <tr>
+                <th>Image</th>
+                <th>Product Code</th>
                 <th>Product Name</th>
                 <th>SKU</th>
                 <th>Category</th>
@@ -982,6 +998,13 @@ import { CloudLoggingService } from '../../../services/cloud-logging.service';
             </thead>
             <tbody>
               <tr *ngFor="let product of filteredProducts()">
+                <td class="product-img-cell">
+                  <img 
+                    class="product-thumb"
+                    [src]="product.imageUrl || 'assets/noimage.png'" 
+                    [alt]="product.productName || 'Product image'" />
+                </td>
+                <td class="product-code-cell">{{ product.productCode || '-' }}</td>
                 <td class="product-name-cell">{{ product.productName }}</td>
                 <td class="product-sku-cell">{{ product.skuId }}</td>
                 <td class="product-category-cell">{{ product.category }}</td>
@@ -990,6 +1013,7 @@ import { CloudLoggingService } from '../../../services/cloud-logging.service';
                 <td class="product-store-cell">{{ getStoreName(product.storeId) }}</td>
                 <td class="actions-cell">
                   <div class="action-buttons">
+                    <button class="btn btn-sm btn-secondary" (click)="triggerRowImageUpload(product)">Add Photo</button>
                     <button class="btn btn-sm btn-secondary" (click)="openEditModal(product)">Edit</button>
                     <button class="btn btn-sm btn-secondary" (click)="openInventoryModal(product)">Inventory</button>
                     <button class="btn btn-sm btn-danger" (click)="deleteProduct(product)">Delete</button>
@@ -1574,6 +1598,14 @@ import { CloudLoggingService } from '../../../services/cloud-logging.service';
         (confirmed)="onDeleteConfirmed()" 
         (cancelled)="closeDeleteConfirmation()">
       </app-confirmation-dialog>
+
+      <!-- Hidden file input for per-row Add Photo action -->
+      <input 
+        type="file" 
+        id="hiddenRowImageFile" 
+        accept="image/*" 
+        (change)="onRowImageFileChange($event)"
+        style="display: none;"/>
     </div>
   `
 })
@@ -1615,6 +1647,8 @@ export class ProductManagementComponent implements OnInit {
   // Category deletion context
   private categoryToDeleteId: string | null = null;
   private categoryToDeleteLabel: string | null = null;
+  // Row-level image upload context
+  private pendingPhotoProduct: Product | null = null;
 
   // Modal mode management
   modalMode: 'product' | 'category' = 'product';
@@ -2518,6 +2552,65 @@ export class ProductManagementComponent implements OnInit {
       throw new Error(`Upload failed: ${error.message || 'Unknown error'}`);
     }
   }
+
+    // ===== Per-row Add Photo actions =====
+    triggerRowImageUpload(product: Product): void {
+      this.pendingPhotoProduct = product;
+      const el = document.getElementById('hiddenRowImageFile') as HTMLInputElement | null;
+      el?.click();
+    }
+
+    async onRowImageFileChange(ev: Event): Promise<void> {
+      const input = ev.target as HTMLInputElement;
+      if (!input.files || input.files.length === 0) return;
+      const file = input.files[0];
+
+      if (!this.pendingPhotoProduct || !this.pendingPhotoProduct.id) {
+        this.toastService.error('No product selected for image upload.');
+        input.value = '';
+        return;
+      }
+
+      const originalSelected = this.selectedProduct;
+      try {
+        this.loading = true;
+        this.toastService.info('Compressing and uploading image...');
+
+        // Temporarily set selectedProduct so uploadFileToStorage uses the correct productId
+        this.selectedProduct = this.pendingPhotoProduct;
+        const compressed = await this.compressImage(file, 1024 * 1024);
+        const url = await this.uploadFileToStorage(compressed);
+
+        await this.productService.updateProduct(this.pendingPhotoProduct.id!, { imageUrl: url });
+
+        // Refresh list copy from service
+        const updated = this.productService.getProduct(this.pendingPhotoProduct.id!);
+        if (updated) {
+          // Force UI refresh
+          this.filterProducts();
+        }
+
+        // Log upload
+        const currentPermission = this.authService.getCurrentPermission();
+        const storeId = currentPermission?.storeId || '';
+        await this.cloudLoggingService.logProductImageUpload(
+          this.pendingPhotoProduct.id!,
+          url,
+          storeId,
+          compressed.size
+        );
+
+        this.toastService.success('Product photo updated.');
+      } catch (err: any) {
+        console.error('❌ Row image upload error:', err);
+        this.toastService.error(`Image upload failed: ${err?.message || 'Unknown error'}`);
+      } finally {
+        this.selectedProduct = originalSelected;
+        this.pendingPhotoProduct = null;
+        input.value = '';
+        this.loading = false;
+      }
+    }
 
   async deleteProduct(product: Product): Promise<void> {
     // Set up confirmation dialog
