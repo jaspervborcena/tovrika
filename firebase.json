@@ -68,4 +68,8 @@
       ]
     }
   ]
+  ,
+  "storage": {
+    "rules": "storage.rules"
+  }
 }

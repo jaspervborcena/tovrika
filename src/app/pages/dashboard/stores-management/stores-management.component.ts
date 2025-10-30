@@ -1,4 +1,5 @@
 import { Component, OnInit, ChangeDetectorRef, signal, computed } from '@angular/core';
+import { Router } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { StoreService, Store } from '../../../services/store.service';
@@ -7,11 +8,12 @@ import { ToastService } from '../../../shared/services/toast.service';
 import { PredefinedTypesService, PredefinedType } from '../../../services/predefined-types.service';
 import { DeviceService, Device } from '../../../services/device.service';
 import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../shared/components/confirmation-dialog/confirmation-dialog.component';
+import { UpgradeSubscriptionModalComponent } from '../subscriptions/upgrade-subscription-modal.component';
 
 @Component({
   selector: 'app-stores-management',
   standalone: true,
-  imports: [CommonModule, FormsModule, ReactiveFormsModule, ConfirmationDialogComponent],
+  imports: [CommonModule, FormsModule, ReactiveFormsModule, ConfirmationDialogComponent, UpgradeSubscriptionModalComponent],
   template: `
     <div class="stores-management">
       <!-- Header -->
@@ -109,6 +111,12 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
                       (click)="openDevicesModal(store)"
                       [title]="canManageDevices() ? 'Manage Devices' : 'Device Management (View Only)'">
                       💻
+                    </button>
+                    <button 
+                      class="btn-icon-action btn-edit"
+                      (click)="openUpgradeModal(store)"
+                      title="Upgrade Subscription">
+                      ⚡
                     </button>
                   </div>
                 </td>
@@ -658,6 +666,17 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
       (confirmed)="onConfirmationConfirmed()"
       (cancelled)="onConfirmationCancelled()">
     </app-confirmation-dialog>
+
+    <!-- Upgrade Subscription Modal -->
+    <app-upgrade-subscription-modal
+      [isOpen]="upgradeModalOpen"
+      [companyId]="currentCompanyId || ''"
+      [storeId]="upgradeTarget?.id || ''"
+      [storeName]="upgradeTarget?.storeName || ''"
+      [storeCode]="upgradeTarget?.storeCode || ''"
+      (closeModal)="closeUpgradeModal()"
+      (completed)="onUpgradeCompleted()"
+    ></app-upgrade-subscription-modal>
   `,
   styles: [`
     .stores-management {
@@ -1615,6 +1634,11 @@ export class StoresManagementComponent implements OnInit {
   editingDevice: Device | null = null;
   storeDevices: Device[] = [];
 
+  // Upgrade modal state
+  upgradeModalOpen: boolean = false;
+  upgradeTarget: Store | null = null;
+  currentCompanyId: string | null = null;
+
   storeForm: FormGroup;
   birForm: FormGroup;
   deviceForm: FormGroup;
@@ -1633,7 +1657,8 @@ export class StoresManagementComponent implements OnInit {
     private cdr: ChangeDetectorRef,
     private toastService: ToastService,
     private predefinedTypesService: PredefinedTypesService,
-    private deviceService: DeviceService
+    private deviceService: DeviceService,
+    private router: Router
   ) {
     this.storeForm = this.fb.group({
       storeName: ['', [Validators.required]],
@@ -1730,6 +1755,7 @@ export class StoresManagementComponent implements OnInit {
       await this.authService.waitForAuth();
       const currentPermission = this.authService.getCurrentPermission();
       if (currentPermission?.companyId) {
+        this.currentCompanyId = currentPermission.companyId;
         await this.storeService.loadStoresByCompany(currentPermission.companyId);
         this.stores = this.storeService.getStoresByCompany(currentPermission.companyId);
         this.filteredStores = [...this.stores];
@@ -1743,6 +1769,27 @@ export class StoresManagementComponent implements OnInit {
     } finally {
       this.isLoading = false;
     }
+  }
+
+  // ===== Upgrade Subscription Integration =====
+  openUpgradeModal(store: Store) {
+    if (!this.isAdminUser()) {
+      this.showAccessDeniedMessage('Upgrade Subscription');
+      return;
+    }
+    this.upgradeTarget = store;
+    this.upgradeModalOpen = true;
+  }
+  closeUpgradeModal() {
+    this.upgradeModalOpen = false;
+    this.upgradeTarget = null;
+  }
+  async onUpgradeCompleted() {
+    // Refresh stores to reflect updated subscription badge
+    await this.refreshStores();
+    this.toastService.success('Subscription upgraded successfully');
+    // Optional: navigate to subscriptions dashboard
+    try { this.router.navigate(['/dashboard/subscriptions']); } catch {}
   }
 
   onSearchChange() {

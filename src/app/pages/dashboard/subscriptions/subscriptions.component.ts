@@ -5,11 +5,12 @@ import { Store, Subscription } from '../../../interfaces/store.interface';
 import { StoreService } from '../../../services/store.service';
 import { AuthService } from '../../../services/auth.service';
 import { BillingHistoryModalComponent } from './billing-history-modal.component';
+import { UpgradeSubscriptionModalComponent } from './upgrade-subscription-modal.component';
 
 @Component({
   selector: 'app-subscriptions',
   standalone: true,
-  imports: [CommonModule, FormsModule, BillingHistoryModalComponent],
+  imports: [CommonModule, FormsModule, BillingHistoryModalComponent, UpgradeSubscriptionModalComponent],
   templateUrl: './subscriptions.component.html',
   styleUrls: ['./subscriptions.component.css']
 })
@@ -20,6 +21,10 @@ export class SubscriptionsComponent implements OnInit {
   // Billing History Modal State
   billingHistoryModalOpen = signal(false);
   selectedStore = signal<Store | null>(null);
+
+  // Upgrade Modal State
+  upgradeModalOpen = signal(false);
+  upgradeStore = signal<Store | null>(null);
 
   stores = signal<Store[]>([]);
   loading = signal(false);
@@ -163,8 +168,8 @@ export class SubscriptionsComponent implements OnInit {
   }
 
   upgradeSubscription(store: Store) {
-    console.log('Upgrade subscription for store:', store);
-    // TODO: Open upgrade modal
+    this.upgradeStore.set(store);
+    this.upgradeModalOpen.set(true);
   }
 
   renewSubscription(store: Store) {
@@ -212,5 +217,15 @@ export class SubscriptionsComponent implements OnInit {
   closeBillingHistoryModal() {
     this.billingHistoryModalOpen.set(false);
     this.selectedStore.set(null);
+  }
+
+  // Upgrade Modal Methods
+  closeUpgradeModal() {
+    this.upgradeModalOpen.set(false);
+    this.upgradeStore.set(null);
+  }
+  onUpgradeCompleted() {
+    // Reload stores to reflect updated subscription denormalization
+    this.loadStores();
   }
 }
