@@ -1,7 +1,15 @@
 import * as functions from 'firebase-functions';
+import * as admin from 'firebase-admin';
 import fetch from 'node-fetch';
 import cors from 'cors';
 import express from 'express';
+
+// Initialize Admin SDK once
+try {
+  admin.initializeApp();
+} catch (e) {
+  // no-op if already initialized
+}
 
 // CORS-enabled Express app for PayPal endpoints
 const app = express();
@@ -102,3 +110,6 @@ app.post('/capture-order', async (req, res) => {
 });
 
 export const paypal = functions.region('asia-east1').https.onRequest(app);
+
+// Reconciliation exports (stubs)
+export { reconcileDaily, reconcileOnDemand } from './reconciliation';
