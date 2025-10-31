@@ -17,6 +17,8 @@ import { Order, OrderDetail, OrderItem, CartItem, ReceiptData, OrderDiscount, Ca
 import { Product } from '../interfaces/product.interface';
 import { Store } from '../interfaces/store.interface';
 import { Device } from '../interfaces/device.interface';
+import { OrdersSellingTrackingService } from './orders-selling-tracking.service';
+import { environment } from '../../environments/environment';
 
 @Injectable({
   providedIn: 'root'
@@ -92,7 +94,8 @@ export class PosService {
     private companyService: CompanyService,
     private productService: ProductService,
     private indexedDBService: IndexedDBService,
-    private securityService: FirestoreSecurityService
+    private securityService: FirestoreSecurityService,
+    private ordersSellingTrackingService: OrdersSellingTrackingService
   ) {
     // Load persisted store selection on service initialization
     this.loadPersistedStoreSelection();
@@ -253,7 +256,6 @@ export class PosService {
         discount: item.discountAmount,
         isVatExempt: item.isVatExempt
       }));
-
       // Prepare complete order data (without invoice number - will be assigned by transaction)
       const orderData = {
         companyId: company.id!,
@@ -323,7 +325,7 @@ export class PosService {
 
       // Update product inventory (this happens after successful order creation)
       try {
-        await this.updateProductInventory(cartItems);
+        await this.updateProductInventory(cartItems, { orderId: invoiceResult.orderId!, invoiceNumber: invoiceResult.invoiceNumber! });
         console.log('✅ Product inventory updated successfully');
       } catch (inventoryError) {
         console.error('⚠️ Warning: Order created but inventory update failed:', inventoryError);
@@ -463,7 +465,7 @@ export class PosService {
 
       // Update product inventory
       try {
-        await this.updateProductInventory(cartItems);
+        await this.updateProductInventory(cartItems, { orderId: invoiceResult.orderId!, invoiceNumber: invoiceResult.invoiceNumber! });
         console.log('✅ Product inventory updated successfully');
       } catch (inventoryError) {
         console.error('⚠️ Warning: Order created but inventory update failed:', inventoryError);
@@ -583,7 +585,7 @@ export class PosService {
 
       // Update product inventory (this happens after successful order creation)
       try {
-        await this.updateProductInventory(cartItems);
+        await this.updateProductInventory(cartItems, { orderId: invoiceResult.orderId!, invoiceNumber: invoiceResult.invoiceNumber! });
         console.log('✅ Product inventory updated successfully');
       } catch (inventoryError) {
         console.error('⚠️ Warning: Order created but inventory update failed:', inventoryError);
@@ -715,23 +717,57 @@ export class PosService {
     };
   }
 
-  private async updateProductInventory(cartItems: CartItem[]): Promise<void> {
+  private async updateProductInventory(
+    cartItems: CartItem[],
+    context?: { orderId?: string; invoiceNumber?: string }
+  ): Promise<void> {
+    const mode = environment.inventory?.reconciliationMode || 'legacy';
+    if (mode === 'recon') {
+      console.log('� Tracking sale for reconciliation mode (no client-side FIFO). Items:', cartItems.length);
+      const user = this.authService.getCurrentUser();
+      const company = await this.companyService.getActiveCompany();
+      const storeId = this.selectedStoreId();
+
+      if (!user || !company || !storeId) {
+        throw new Error('Missing user/company/store for tracking');
+      }
+
+      const items = cartItems.map(ci => ({
+        productId: ci.productId,
+        productName: ci.productName,
+        quantity: ci.quantity,
+        unitPrice: ci.sellingPrice,
+        lineTotal: ci.total
+      }));
+
+      const res = await this.ordersSellingTrackingService.logSaleAndAdjustStock({
+        companyId: company.id!,
+        storeId,
+        orderId: context?.orderId || 'unknown-order',
+        invoiceNumber: context?.invoiceNumber,
+        cashierId: user.uid,
+        cashierEmail: user.email || undefined,
+        cashierName: user.displayName || user.email || 'Unknown Cashier'
+      }, items);
+
+      if (!res.success) {
+        console.warn('⚠️ Some items failed to track/adjust:', res.errors);
+      }
+      return;
+    }
+
+    // Legacy: client-side FIFO deduction
     console.log('🔄 Starting FIFO inventory deduction for cart items:', cartItems.length);
-    
-    // Import InventoryDataService dynamically to avoid circular dependency
     const { InventoryDataService } = await import('./inventory-data.service');
     const inventoryService = this.injector.get(InventoryDataService);
-    
     for (const cartItem of cartItems) {
       try {
         await this.deductInventoryFifo(cartItem.productId, cartItem.quantity, inventoryService);
         console.log(`✅ Inventory deducted for ${cartItem.productName}: ${cartItem.quantity} units`);
       } catch (error) {
         console.error(`❌ Failed to deduct inventory for ${cartItem.productName}:`, error);
-        // Continue with other items even if one fails
       }
     }
-    
     console.log('✅ FIFO inventory deduction completed for all items');
   }
 

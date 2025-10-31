@@ -14,6 +14,9 @@ export const environment = {
     ordersApi: "https://get-orders-by-date-7bpeqovfmq-de.a.run.app", // Direct URL in production
     directOrdersApi: "https://get-orders-by-date-7bpeqovfmq-de.a.run.app"
   },
+  inventory: {
+    reconciliationMode: 'legacy' as 'legacy' | 'recon' // Default to legacy in prod until rollout
+  },
   cloudLogging: {
     projectId: 'jasperpos-1dfd5',
     logName: 'pos-application-logs',

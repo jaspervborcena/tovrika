@@ -14,6 +14,10 @@ export const environment = {
     ordersApi: "/api", // Uses proxy in development
     directOrdersApi: "https://get-orders-by-date-7bpeqovfmq-de.a.run.app"
   },
+  inventory: {
+    // reconciliationMode: 'legacy' uses client-side FIFO; 'recon' defers to Cloud Function with tracking
+    reconciliationMode: 'recon' as 'legacy' | 'recon'
+  },
   cloudLogging: {
     projectId: 'jasperpos-1dfd5',
     logName: 'pos-application-logs',

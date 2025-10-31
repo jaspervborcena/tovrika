@@ -191,6 +191,13 @@ export const routes: Routes = [
         canActivate: [onboardingGuard, roleGuard],
         data: { roles: ['creator', 'store_manager'] }
       }
+      ,
+      {
+        path: 'reconciliation',
+        loadComponent: () => import('./pages/dashboard/reconciliation/reconciliation.component').then(m => m.ReconciliationComponent),
+        canActivate: [onboardingGuard, roleGuard],
+        data: { roles: ['creator', 'store_manager'] }
+      }
     ]
   },
   

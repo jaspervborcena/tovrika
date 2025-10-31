@@ -396,6 +396,17 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
     await this.updateProduct(productId, { totalStock: newStock });
   }
 
+  /**
+   * Adjust product totalStock by a delta (positive or negative)
+   * Clamps at 0 to avoid negative stock. Updates lastUpdated timestamp.
+   */
+  async adjustTotalStockDelta(productId: string, delta: number): Promise<void> {
+    const product = this.getProduct(productId);
+    const current = product?.totalStock ?? 0;
+    const newTotal = Math.max(0, current + delta);
+    await this.updateProduct(productId, { totalStock: newTotal, lastUpdated: new Date() } as any);
+  }
+
   // (Removed) Embedded inventory add/update/remove methods — replaced by InventoryDataService in separate collection
 
   // Getter methods
