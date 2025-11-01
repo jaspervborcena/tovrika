@@ -458,12 +458,12 @@ export class OfflineDocumentService {
 
     console.log('🔄 Starting offline document sync...');
     
-    let synced = 0;
-    let failed = 0;
+  let synced = 0;
+  let failed = 0;
 
     try {
-      const pendingDocs = this.getPendingDocumentsFromStorage();
-      const unsyncedDocs = pendingDocs.filter(doc => !doc.synced);
+  const pendingDocs = this.getPendingDocumentsFromStorage();
+  const unsyncedDocs = pendingDocs.filter(doc => !doc.synced);
 
       for (const offlineDoc of unsyncedDocs) {
         try {
@@ -486,6 +486,36 @@ export class OfflineDocumentService {
 
       // Update storage with synced documents
       localStorage.setItem('pendingDocuments', JSON.stringify(pendingDocs));
+
+      // Process pending deletes
+      const pendingDeletes = this.getPendingDeletesFromStorage();
+      const remainingDeletes: Array<{ id: string; collectionName: string; createdAt: string }> = [];
+      for (const del of pendingDeletes) {
+        try {
+          const ref = doc(this.firestore, del.collectionName, del.id);
+          const start = performance.now?.() ?? Date.now();
+          await deleteDoc(ref);
+          const durationMs = Math.round((performance.now?.() ?? Date.now()) - start);
+          this.logger.dbSuccess('Synced offline delete', {
+            api: 'firestore.delete',
+            area: del.collectionName,
+            collectionPath: del.collectionName,
+            docId: del.id,
+            durationMs
+          });
+          synced++;
+        } catch (error) {
+          this.logger.dbFailure('Failed to sync offline delete', {
+            api: 'firestore.delete',
+            area: del.collectionName,
+            collectionPath: del.collectionName,
+            docId: del.id
+          }, error);
+          remainingDeletes.push(del);
+          failed++;
+        }
+      }
+      localStorage.setItem('pendingDeletes', JSON.stringify(remainingDeletes));
       
     } catch (error) {
       console.error('❌ Sync process failed:', error);

@@ -201,7 +201,7 @@ export class NotificationService {
    */
   async markAsRead(notificationId: string): Promise<void> {
     const notificationRef = doc(this.firestore, 'notifications', notificationId);
-    await updateDoc(notificationRef, {
+    await this.offlineDocService.updateDocument('notifications', notificationId, {
       read: true,
       readAt: Timestamp.now()
     });

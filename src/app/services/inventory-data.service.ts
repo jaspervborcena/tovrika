@@ -342,7 +342,7 @@ export class InventoryDataService {
           } as any);
         }
         // Remove embedded inventory fields
-        await updateDoc(doc(this.firestore, 'products', productId), {
+        await this.offlineDocService.updateDocument('products', productId, {
           inventory: deleteField(),
           isMultipleInventory: deleteField()
         });

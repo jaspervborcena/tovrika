@@ -187,7 +187,7 @@ export class UserRoleService {
         },
         updatedAt: new Date()
       };
-      await updateDoc(userDocRef, permissionUpdate);
+  await this.offlineDocService.updateDocument('users', userRoleData.userId, permissionUpdate);
 
       await this.loadUserRoles(); // Refresh the data
     } catch (error) {
@@ -211,7 +211,7 @@ export class UserRoleService {
       }
 
       const userRoleDocRef = doc(this.firestore, 'userRoles', userRoleId);
-      await updateDoc(userRoleDocRef, {
+      await this.offlineDocService.updateDocument('userRoles', userRoleId, {
         ...userRoleData,
         companyId: currentPermission.companyId, // Ensure companyId cannot be changed
         updatedAt: new Date()
