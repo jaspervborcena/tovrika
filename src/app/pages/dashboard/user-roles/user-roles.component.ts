@@ -36,7 +36,7 @@ import { ToastService } from '../../../shared/services/toast.service';
             type="text" 
             [(ngModel)]="searchEmail"
             (input)="onSearchChange()"
-            placeholder="Search by email or user ID..."
+            placeholder="Search by email or name..."
             class="search-input">
           <button class="btn btn-secondary" (click)="clearSearch()">
             Clear
@@ -48,8 +48,12 @@ import { ToastService } from '../../../shared/services/toast.service';
       <div class="table-container">
         <div class="table-header">
           <h3>User Roles ({{ filteredUserRoles.length }})</h3>
-          <button class="btn btn-secondary" (click)="refreshUserRoles()">
-            Refresh
+          <button 
+            class="btn-icon-action" 
+            (click)="refreshUserRoles()"
+            title="Refresh user roles"
+            aria-label="Refresh user roles">
+            🔄
           </button>
         </div>
 
@@ -58,7 +62,7 @@ import { ToastService } from '../../../shared/services/toast.service';
             <thead>
               <tr>
                 <th>Email</th>
-                <th>User ID</th>
+                <th>Name</th>
                 <th>Role</th>
                 <th>Store</th>
                 <th>Created</th>
@@ -67,8 +71,8 @@ import { ToastService } from '../../../shared/services/toast.service';
             </thead>
             <tbody>
               <tr *ngFor="let userRole of filteredUserRoles">
-                <td class="email-cell">{{ userRole.email }}</td>
-                <td class="user-id-cell">{{ userRole.userId }}</td>
+                <td class="email-cell">{{ getUserEmail(userRole) }}</td>
+                <td class="user-id-cell">{{ getDisplayName(userRole.userId) }}</td>
                 <td class="role-cell">
                   <span class="role-badge" [class]="'role-' + userRole.roleId">
                     {{ userRole.roleId | titlecase }}
@@ -444,6 +448,54 @@ import { ToastService } from '../../../shared/services/toast.service';
       font-size: 0.75rem;
     }
 
+    /* Icon button style to match Product/Stores refresh */
+    .btn-icon-action {
+      padding: 0.5rem;
+      border: 1px solid #d1d5db;
+      background: white;
+      border-radius: 0.375rem;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-size: 1.25rem;
+      line-height: 1;
+      position: relative;
+    }
+
+    .btn-icon-action:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    }
+
+    .btn-icon-action[title]:hover::after {
+      content: attr(title);
+      position: absolute;
+      bottom: 100%;
+      left: 50%;
+      transform: translateX(-50%);
+      margin-bottom: 0.5rem;
+      padding: 0.375rem 0.75rem;
+      background: #1f2937;
+      color: white;
+      font-size: 0.75rem;
+      border-radius: 0.375rem;
+      white-space: nowrap;
+      z-index: 10;
+      pointer-events: none;
+    }
+
+    .btn-icon-action[title]:hover::before {
+      content: '';
+      position: absolute;
+      bottom: 100%;
+      left: 50%;
+      transform: translateX(-50%);
+      margin-bottom: 0.25rem;
+      border: 4px solid transparent;
+      border-top-color: #1f2937;
+      z-index: 10;
+      pointer-events: none;
+    }
+
     .empty-state, .loading-state {
       text-align: center;
       padding: 4rem 2rem;
@@ -648,6 +700,8 @@ export class UserRolesComponent implements OnInit {
   filteredUserRoles: UserRole[] = [];
   availableRoles: RoleDefinition[] = [];
   availableStores: Store[] = [];
+  // Cache user profiles by userId (displayName, email)
+  userProfiles: Record<string, { displayName: string; email: string }> = {};
   
   searchEmail: string = '';
   isLoading: boolean = false;
@@ -677,10 +731,13 @@ export class UserRolesComponent implements OnInit {
     this.isLoading = true;
     
     try {
-      // Load user roles
+  // Load user roles
       await this.userRoleService.loadUserRoles();
       this.userRoles = this.userRoleService.getCompanyUserRoles();
       this.filteredUserRoles = [...this.userRoles];
+
+  // Enrich with user profiles (names/emails)
+  await this.loadUserProfilesForRoles(this.userRoles);
 
       // Load available roles
       await this.roleDefinitionService.loadRoleDefinitions();
@@ -701,7 +758,16 @@ export class UserRolesComponent implements OnInit {
   }
 
   onSearchChange() {
-    this.filteredUserRoles = this.userRoleService.searchUserRolesByEmail(this.searchEmail);
+    const term = (this.searchEmail || '').toLowerCase();
+    if (!term) {
+      this.filteredUserRoles = [...this.userRoles];
+      return;
+    }
+    this.filteredUserRoles = this.userRoles.filter(ur => {
+      const email = (this.getUserEmail(ur) || '').toLowerCase();
+      const name = (this.getDisplayName(ur.userId) || '').toLowerCase();
+      return email.includes(term) || name.includes(term);
+    });
   }
 
   clearSearch() {
@@ -824,5 +890,42 @@ export class UserRolesComponent implements OnInit {
   getStoreName(storeId: string): string {
     const store = this.availableStores.find((s: Store) => s.id === storeId);
     return store?.storeName || 'Unknown Store';
+  }
+
+  // ===== User profile enrichment =====
+  private async loadUserProfilesForRoles(userRoles: UserRole[]): Promise<void> {
+    try {
+      const uniqueIds = Array.from(new Set(userRoles.map(ur => ur.userId).filter(Boolean)));
+      if (uniqueIds.length === 0) return;
+      const { getFirestore, doc, getDoc } = await import('firebase/firestore');
+      const db = getFirestore();
+      const results = await Promise.all(uniqueIds.map(async (uid) => {
+        try {
+          const snap = await getDoc(doc(db, 'users', uid));
+          if (snap.exists()) {
+            const d = snap.data() as any;
+            return { uid, displayName: d.displayName || '', email: d.email || '' };
+          }
+        } catch {}
+        return { uid, displayName: '', email: '' };
+      }));
+      const map: Record<string, { displayName: string; email: string }> = {};
+      results.forEach(r => { map[r.uid] = { displayName: r.displayName, email: r.email }; });
+      this.userProfiles = map;
+    } catch (e) {
+      console.warn('Failed to load user profiles for roles', e);
+    }
+  }
+
+  getDisplayName(userId: string): string {
+    const name = this.userProfiles[userId]?.displayName;
+    return name && name.trim() ? name : '(No name)';
+  }
+
+  getUserEmail(userRole: UserRole): string {
+    const direct = userRole.email || '';
+    if (direct && direct.trim()) return direct;
+    const cached = this.userProfiles[userRole.userId]?.email || '';
+    return cached && cached.trim() ? cached : '—';
   }
 }

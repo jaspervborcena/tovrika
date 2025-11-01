@@ -246,23 +246,8 @@ export class UpgradeSubscriptionModalComponent implements OnChanges {
         } as any);
       }
 
-      // Denormalize to Store.subscription for dashboard
-      const subscriptionUpdate: any = {
-        tier: this.selectedTier,
-        status: 'active',
-        subscribedAt: startDate,
-        expiresAt: endDate,
-        billingCycle: 'monthly',
-        durationMonths: this.durationMonths,
-        amountPaid: effectiveAmount,
-        discountPercent: 0,
-        finalAmount: effectiveAmount,
-        paymentMethod: this.activeTab as any,
-        lastPaymentDate: new Date(),
-      };
-      if (this.promoCode) subscriptionUpdate.promoCode = this.promoCode;
-      if (this.referralCode) subscriptionUpdate.referralCodeUsed = this.referralCode;
-      await this.storeService.updateStore(this.storeId, { subscription: subscriptionUpdate });
+      // Update denormalized subscription end date on store for quick checks
+      await this.storeService.updateStore(this.storeId, { subscriptionEndDate: endDate as any });
 
       // Create billing history record
       await this.billing.createBillingHistory({

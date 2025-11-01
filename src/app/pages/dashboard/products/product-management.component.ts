@@ -262,8 +262,78 @@ import { CloudLoggingService } from '../../../services/cloud-logging.service';
 
     .action-buttons {
       display: flex;
-      gap: 0.5rem;
+      gap: 0.375rem; /* match stores management */
+      align-items: center;
       justify-content: center;
+    }
+
+    /* Match Stores Management emoji action buttons */
+    .btn-icon-action {
+      padding: 0.5rem;
+      border: 1px solid #d1d5db;
+      background: white;
+      border-radius: 0.375rem;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-size: 1.25rem;
+      line-height: 1;
+      position: relative;
+    }
+
+    .btn-icon-action:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    }
+
+    .btn-icon-action[title]:hover::after {
+      content: attr(title);
+      position: absolute;
+      bottom: 100%;
+      left: 50%;
+      transform: translateX(-50%);
+      margin-bottom: 0.5rem;
+      padding: 0.375rem 0.75rem;
+      background: #1f2937;
+      color: white;
+      font-size: 0.75rem;
+      border-radius: 0.375rem;
+      white-space: nowrap;
+      z-index: 10;
+      pointer-events: none;
+    }
+
+    .btn-icon-action[title]:hover::before {
+      content: '';
+      position: absolute;
+      bottom: 100%;
+      left: 50%;
+      transform: translateX(-50%);
+      margin-bottom: 0.25rem;
+      border: 4px solid transparent;
+      border-top-color: #1f2937;
+      z-index: 10;
+      pointer-events: none;
+    }
+
+    /* Hover variants consistent with Stores Management */
+    .btn-edit:hover {
+      background: #eff6ff;
+      border-color: #3b82f6;
+    }
+
+    .btn-bir:hover {
+      background: #f0fdf4;
+      border-color: #10b981;
+    }
+
+    .btn-devices:hover {
+      background: #faf5ff;
+      border-color: #8b5cf6;
+    }
+
+    .btn-icon-action.btn-danger:hover {
+      background: #fef2f2;
+      border-color: #ef4444;
     }
 
     .empty-state, .loading-state {
@@ -978,7 +1048,13 @@ import { CloudLoggingService } from '../../../services/cloud-logging.service';
       <div class="table-container">
         <div class="table-header">
           <h3>Products ({{ filteredProducts().length }})</h3>
-          <button class="btn btn-secondary" (click)="refreshProducts()">Refresh</button>
+          <button 
+            class="btn-icon-action" 
+            (click)="refreshProducts()" 
+            title="Refresh products"
+            aria-label="Refresh products">
+            🔄
+          </button>
         </div>
 
         <div class="table-wrapper" *ngIf="filteredProducts().length > 0">
@@ -1013,10 +1089,34 @@ import { CloudLoggingService } from '../../../services/cloud-logging.service';
                 <td class="product-store-cell">{{ getStoreName(product.storeId) }}</td>
                 <td class="actions-cell">
                   <div class="action-buttons">
-                    <button class="btn btn-sm btn-secondary" (click)="triggerRowImageUpload(product)">Add Photo</button>
-                    <button class="btn btn-sm btn-secondary" (click)="openEditModal(product)">Edit</button>
-                    <button class="btn btn-sm btn-secondary" (click)="openInventoryModal(product)">Inventory</button>
-                    <button class="btn btn-sm btn-danger" (click)="deleteProduct(product)">Delete</button>
+                    <button 
+                      class="btn-icon-action btn-bir" 
+                      (click)="triggerRowImageUpload(product)"
+                      title="Add product photo"
+                      aria-label="Add product photo">
+                      🖼️
+                    </button>
+                    <button 
+                      class="btn-icon-action btn-edit" 
+                      (click)="openEditModal(product)"
+                      title="Edit product"
+                      aria-label="Edit product">
+                      ✏️
+                    </button>
+                    <button 
+                      class="btn-icon-action btn-devices" 
+                      (click)="openInventoryModal(product)"
+                      title="Manage inventory"
+                      aria-label="Manage inventory">
+                      📦
+                    </button>
+                    <button 
+                      class="btn-icon-action btn-danger" 
+                      (click)="deleteProduct(product)"
+                      title="Delete product"
+                      aria-label="Delete product">
+                      🗑️
+                    </button>
                   </div>
                 </td>
               </tr>

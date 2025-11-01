@@ -30,20 +30,19 @@ export class CompanySetupService {
   );
 
   constructor(private firestore: Firestore, private authService: AuthService, private offlineDocService: OfflineDocumentService) {
-    // Only load companies if user has permissions (not a visitor)
+  // Only load companies if user has permissions
     this.loadCompaniesIfAuthorized();
   }
 
   private async loadCompaniesIfAuthorized() {
-    // Check if user is a visitor (no company permissions)
+    // Check if user lacks company permissions
     const currentPermission = this.authService.getCurrentPermission();
-    const isVisitor = !currentPermission || 
+    const noCompanyAccess = !currentPermission || 
                      !currentPermission.companyId || 
-                     currentPermission.companyId.trim() === '' || 
-                     currentPermission.roleId === 'visitor';
+                     currentPermission.companyId.trim() === '';
     
-    if (isVisitor) {
-      console.log('CompanySetupService: User is visitor, skipping company loading');
+    if (noCompanyAccess) {
+      console.log('CompanySetupService: No company access, skipping company loading');
       return;
     }
     

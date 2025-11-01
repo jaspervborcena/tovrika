@@ -1,5 +1,4 @@
 export enum UserRolesEnum {
-  VISITOR = 'visitor',
   CREATOR = 'creator',
   STORE_MANAGER = 'store_manager',
   CASHIER = 'cashier',

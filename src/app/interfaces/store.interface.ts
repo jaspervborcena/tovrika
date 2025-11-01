@@ -25,8 +25,8 @@ export interface Store {
   birDetails: BirDetails;
   tinNumber: string;
   
-  // Subscription
-  subscription: Subscription;
+  // Effective subscription end date for quick checks (synced from subscriptions collection)
+  subscriptionEndDate?: Date;
   promoUsage?: PromoUsage;
   subscriptionPopupShown: boolean;
   
@@ -50,21 +50,7 @@ export interface BirDetails {
   receiptType?: string;
 }
 
-export interface Subscription {
-  tier: 'freemium' | 'standard' | 'premium' | 'enterprise';
-  status: 'active' | 'inactive' | 'expired' | 'cancelled';
-  subscribedAt: Date;
-  expiresAt: Date;
-  billingCycle: 'monthly' | 'quarterly' | 'yearly';
-  durationMonths: number;
-  amountPaid: number;
-  discountPercent: number;
-  finalAmount: number;
-  promoCode?: string;
-  referralCodeUsed?: string;
-  paymentMethod: 'credit_card' | 'paypal' | 'bank_transfer' | 'gcash' | 'paymaya';
-  lastPaymentDate: Date;
-}
+// Deprecated: store-embedded subscription moved to 'subscriptions' collection
 
 export interface PromoUsage {
   promoCodeApplied?: string;
