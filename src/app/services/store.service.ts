@@ -309,12 +309,7 @@ export class StoreService {
         updatedAt: new Date()
       });
 
-      console.log('🔥 Firestore updateStore - Store ID:', storeId);
-      console.log('🔥 Firestore updateStore - Updates:', updates);
-      console.log('🔥 Firestore updateStore - Final data to save:', updateData);
-      
-      await updateDoc(storeRef, updateData);
-      console.log('✅ Firestore document updated successfully');
+  await this.offlineDocService.updateDocument('stores', storeId, updateData);
 
       // Update the signal
       this.storesSignal.update(stores =>
@@ -333,8 +328,7 @@ export class StoreService {
 
   async deleteStore(storeId: string) {
     try {
-      const storeRef = doc(this.firestore, 'stores', storeId);
-      await deleteDoc(storeRef);
+  await this.offlineDocService.deleteDocument('stores', storeId);
 
       // Update the signal
       this.storesSignal.update(stores =>

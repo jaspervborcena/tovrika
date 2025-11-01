@@ -233,8 +233,8 @@ export class RoleDefinitionService {
         throw new Error('Role not found or access denied');
       }
 
-      const roleDocRef = doc(this.firestore, 'roleDefinition', roleId);
-      await deleteDoc(roleDocRef);
+  const roleDocRef = doc(this.firestore, 'roleDefinition', roleId);
+  await this.offlineDocService.deleteDocument('roleDefinition', roleId);
       await this.loadRoleDefinitions(); // Refresh the data
     } catch (error) {
       console.error('Error deleting role definition:', error);

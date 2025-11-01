@@ -1,4 +1,6 @@
-export type ReconciliationAction = 'deduct' | 'skip' | 'error';
+// Note: Cloud Functions may log a 'partial' action when only some quantity is deducted.
+// Keep this union aligned with functions/src/reconciliation.ts logData.action values.
+export type ReconciliationAction = 'deduct' | 'partial' | 'skip' | 'error';
 
 export interface ReconciliationLogEntry {
   id?: string;

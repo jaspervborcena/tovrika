@@ -144,7 +144,7 @@ export class NewCompanyService {
         ...updates,
         updatedAt: new Date()
       };
-      await updateDoc(companyRef, updateData);
+      await this.offlineDocService.updateDocument(this.companiesCollection, companyId, updateData);
 
       await this.loadCompanies(); // Reload to get fresh data
     } catch (error) {
@@ -162,8 +162,8 @@ export class NewCompanyService {
       }
 
       // Then delete the company
-      const companyRef = doc(this.firestore, this.companiesCollection, companyId);
-      await deleteDoc(companyRef);
+  const companyRef = doc(this.firestore, this.companiesCollection, companyId);
+  await this.offlineDocService.deleteDocument(this.companiesCollection, companyId);
       await this.loadCompanies(); // Reload to get fresh data
     } catch (error) {
       console.error('Error deleting company:', error);
@@ -188,11 +188,11 @@ export class NewCompanyService {
     const branchesSnapshot = await getDocs(branchesQuery);
     
     for (const branchDoc of branchesSnapshot.docs) {
-      await deleteDoc(doc(this.firestore, this.branchesCollection, branchDoc.id));
+  await this.offlineDocService.deleteDocument(this.branchesCollection, branchDoc.id);
     }
 
     // Then delete the store
-    await deleteDoc(doc(this.firestore, this.storesCollection, storeId));
+  await this.offlineDocService.deleteDocument(this.storesCollection, storeId);
   }
 
   // Public methods for store and branch creation

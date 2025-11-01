@@ -177,7 +177,7 @@ export class CategoryService {
         updatedAt: new Date()
       };
 
-      await updateDoc(categoryRef, updateData);
+      await this.offlineDocService.updateDocument('categories', categoryId, updateData);
       
       // Refresh categories after update
       const currentPermission = this.authService.getCurrentPermission();
@@ -198,8 +198,8 @@ export class CategoryService {
    */
   async deleteCategory(categoryId: string): Promise<void> {
     try {
-      const categoryRef = doc(db, 'categories', categoryId);
-      await deleteDoc(categoryRef);
+  const categoryRef = doc(db, 'categories', categoryId);
+  await this.offlineDocService.deleteDocument('categories', categoryId);
       
       // Refresh categories after deletion
       const currentPermission = this.authService.getCurrentPermission();

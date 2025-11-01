@@ -248,8 +248,8 @@ export class UserRoleService {
       }
 
       console.log('🔍 [UserRoleService] Proceeding with deletion...');
-      const userRoleDocRef = doc(this.firestore, 'userRoles', userRoleId);
-      await deleteDoc(userRoleDocRef);
+  const userRoleDocRef = doc(this.firestore, 'userRoles', userRoleId);
+  await this.offlineDocService.deleteDocument('userRoles', userRoleId);
       console.log('🔍 [UserRoleService] Document deleted successfully');
       await this.loadUserRoles(); // Refresh the data
       console.log('🔍 [UserRoleService] Data reloaded');

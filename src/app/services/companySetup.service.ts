@@ -11,6 +11,7 @@ import {
   getDocs 
 } from '@angular/fire/firestore';
 import { AuthService } from './auth.service';
+import { OfflineDocumentService } from '../core/services/offline-document.service';
 import { Company } from '../interfaces/company.interface';
 
 @Injectable({
@@ -28,7 +29,7 @@ export class CompanySetupService {
     this.companiesSignal().filter(company => company.settings?.currency)
   );
 
-  constructor(private firestore: Firestore, private authService: AuthService) {
+  constructor(private firestore: Firestore, private authService: AuthService, private offlineDocService: OfflineDocumentService) {
     // Only load companies if user has permissions (not a visitor)
     this.loadCompaniesIfAuthorized();
   }
@@ -117,7 +118,7 @@ export class CompanySetupService {
         updatedAt: new Date()
       };
       
-      await updateDoc(companyRef, updateData);
+  await this.offlineDocService.updateDocument('companies', companyId, updateData);
 
       // Update the signal
       this.companiesSignal.update(companies =>
@@ -135,8 +136,8 @@ export class CompanySetupService {
 
   async deleteCompany(companyId: string) {
     try {
-      const companyRef = doc(this.firestore, `companies/${companyId}`);
-      await deleteDoc(companyRef);
+  const companyRef = doc(this.firestore, `companies/${companyId}`);
+  await this.offlineDocService.deleteDocument('companies', companyId);
 
       // Update the signal
       this.companiesSignal.update(companies =>
