@@ -1,6 +1,6 @@
 {
   "/api": {
-    "target": "https://get-orders-by-date-7bpeqovfmq-de.a.run.app",
+    "target": "https://get-orders-by-date-bq-7bpeqovfmq-de.a.run.app",
     "secure": true,
     "changeOrigin": true,
     "logLevel": "debug",

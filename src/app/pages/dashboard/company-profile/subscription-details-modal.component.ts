@@ -12,7 +12,7 @@ import { Subscription as SubscriptionDoc } from '../../../interfaces/subscriptio
     <div class="modal-overlay" *ngIf="isOpen()" (click)="close()">
       <div class="modal" (click)="$event.stopPropagation()">
         <div class="modal-header">
-          <h3>📊 Subscription Details</h3>
+          <h3>� Subscription Details (View Only)</h3>
           <button class="close-btn" (click)="close()">×</button>
         </div>
         
@@ -41,6 +41,14 @@ import { Subscription as SubscriptionDoc } from '../../../interfaces/subscriptio
               <span>🎯</span>
               <span>Subscription Details</span>
             </h4>
+            <div class="form-group">
+              <label>Subscription Doc ID</label>
+              <input type="text" class="form-input readonly" [value]="sub.id || '—'" readonly />
+            </div>
+            <div class="form-group">
+              <label>Subscription UUID</label>
+              <input type="text" class="form-input readonly" [value]="sub.subscriptionId || '—'" readonly />
+            </div>
             
             <div class="form-group">
               <label>Tier</label>
@@ -103,6 +111,26 @@ import { Subscription as SubscriptionDoc } from '../../../interfaces/subscriptio
             <div class="form-group">
               <label>Payment Method</label>
               <input type="text" class="form-input" [value]="(sub.paymentMethod || '').replace('_', ' ').toUpperCase()" readonly />
+            </div>
+            <div class="form-group" *ngIf="sub.paymentReference">
+              <label>Payment Reference</label>
+              <input type="text" class="form-input" [value]="sub.paymentReference" readonly />
+            </div>
+          </div>
+
+          <!-- Features Section -->
+          <div class="form-section" *ngIf="latestSub()?.features as f">
+            <h4 class="section-title">
+              <span>🧰</span>
+              <span>Plan Features</span>
+            </h4>
+            <div class="form-group">
+              <label>Limits</label>
+              <input type="text" class="form-input readonly" [value]="featureLimits(f)" readonly />
+            </div>
+            <div class="form-group">
+              <label>Included</label>
+              <input type="text" class="form-input readonly" [value]="featureFlags(f)" readonly />
             </div>
           </div>
         </div>
@@ -337,6 +365,8 @@ import { Subscription as SubscriptionDoc } from '../../../interfaces/subscriptio
 export class SubscriptionDetailsModalComponent {
   isOpen = input.required<boolean>();
   store = input.required<Store | undefined>();
+  // Optional: directly view a specific subscription document by ID
+  subscriptionDocId = input<string | undefined>();
   closed = output<void>();
 
   private readonly subs = inject(SubscriptionService);
@@ -345,6 +375,13 @@ export class SubscriptionDetailsModalComponent {
   // Reactively load latest subscription when store changes
   private _eff = effect(() => {
     const s = this.store();
+    const docId = this.subscriptionDocId();
+    if (docId) {
+      this.subs.getSubscriptionById(docId)
+        .then(res => this.latestSub.set(res?.data || null))
+        .catch(() => this.latestSub.set(null));
+      return;
+    }
     if (s?.id && s.companyId) {
       this.subs.getSubscriptionForStore(s.companyId, s.id)
         .then(res => this.latestSub.set(res?.data || null))
@@ -377,5 +414,27 @@ export class SubscriptionDetailsModalComponent {
       month: 'short',
       day: 'numeric'
     });
+  }
+
+  featureLimits(f: any): string {
+    if (!f) return '—';
+    const parts = [] as string[];
+    if (typeof f.maxStores === 'number') parts.push(`Stores: ${f.maxStores}`);
+    if (typeof f.maxDevicesPerStore === 'number') parts.push(`Devices/Store: ${f.maxDevicesPerStore}`);
+    if (typeof f.maxProducts === 'number') parts.push(`Products: ${f.maxProducts}`);
+    if (typeof f.maxUsers === 'number') parts.push(`Users: ${f.maxUsers}`);
+    if (typeof f.transactionLimit === 'number') parts.push(`Txn limit: ${f.transactionLimit}`);
+    return parts.join(' • ');
+  }
+
+  featureFlags(f: any): string {
+    const flags: string[] = [];
+    if (f?.cloudSync) flags.push('Cloud Sync');
+    if (f?.birCompliance) flags.push('BIR Compliance');
+    if (f?.crmEnabled) flags.push('CRM');
+    if (f?.loyaltyEnabled) flags.push('Loyalty');
+    if (f?.apiAccess) flags.push('API Access');
+    if (f?.whiteLabel) flags.push('White Label');
+    return flags.length ? flags.join(', ') : '—';
   }
 }

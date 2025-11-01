@@ -10,6 +10,7 @@ import { DeviceService, Device } from '../../../services/device.service';
 import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../shared/components/confirmation-dialog/confirmation-dialog.component';
 import { UpgradeSubscriptionModalComponent } from '../subscriptions/upgrade-subscription-modal.component';
 import { SubscriptionService } from '../../../services/subscription.service';
+import { UserRolesEnum } from '../../../shared/enums/user-roles.enum';
 import { Subscription as SubscriptionDoc } from '../../../interfaces/subscription.interface';
 
 @Component({
@@ -26,7 +27,7 @@ import { Subscription as SubscriptionDoc } from '../../../interfaces/subscriptio
             <p class="page-subtitle">Manage your company stores and locations</p>
           </div>
           <div class="header-actions">
-            <button class="btn btn-primary" (click)="openAddStoreModal()" style="background: #007bff !important; color: white !important; padding: 8px 16px !important;">
+            <button class="btn btn-primary" (click)="openAddStoreModal()">
               Add New Store
             </button>
           </div>
@@ -42,7 +43,10 @@ import { Subscription as SubscriptionDoc } from '../../../interfaces/subscriptio
             (input)="onSearchChange()"
             placeholder="Search stores by name, code, or type..."
             class="search-input">
-          <button class="btn btn-secondary" (click)="clearSearch()">
+          <button class="btn-gradient" (click)="clearSearch()" title="Clear search" aria-label="Clear search">
+            <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm3.54 12.46-1.08 1.08L12 13.08l-2.46 2.46-1.08-1.08L10.92 12 8.46 9.54l1.08-1.08L12 10.92l2.46-2.46 1.08 1.08L13.08 12l2.46 2.46z"/>
+            </svg>
             Clear
           </button>
         </div>
@@ -101,11 +105,13 @@ import { Subscription as SubscriptionDoc } from '../../../interfaces/subscriptio
                   </div>
                 </td>
                 <td class="status-cell">
-                  <label class="toggle-switch" [title]="store.status === 'active' ? 'Deactivate Store' : 'Activate Store'">
+                  <label class="toggle-switch" 
+                         [class.disabled]="true"
+                         [title]="isStoreExpired(store) ? 'Expired — status set to Inactive automatically' : 'Active — managed by subscription'">
                     <input 
                       type="checkbox" 
-                      [checked]="store.status === 'active'"
-                      (click)="onToggleClick($event, store)">
+                      [checked]="getEffectiveStatus(store) === 'active'"
+                      [disabled]="true">
                     <span class="toggle-slider"></span>
                   </label>
                 </td>
@@ -130,10 +136,12 @@ import { Subscription as SubscriptionDoc } from '../../../interfaces/subscriptio
                       💻
                     </button>
                     <button 
-                      class="btn-icon-action btn-edit"
+                      class="btn-icon-action btn-upgrade"
                       (click)="openUpgradeModal(store)"
                       title="Upgrade Subscription">
-                      ⚡
+                      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" class="icon">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                      </svg>
                     </button>
                   </div>
                 </td>
@@ -934,6 +942,32 @@ import { Subscription as SubscriptionDoc } from '../../../interfaces/subscriptio
       background: #e53e3e;
     }
 
+    /* Gradient primary style to match View Details cosmetic */
+    .btn-gradient {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+      color: white;
+      border: none;
+      padding: 0.5rem 1rem;
+      border-radius: 8px;
+      font-size: 0.875rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      box-shadow: 0 2px 4px rgba(79, 70, 229, 0.2);
+    }
+
+    .btn-gradient:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);
+      background: linear-gradient(135deg, #4338ca 0%, #6d28d9 100%);
+    }
+
+    .btn-gradient:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+    .btn-gradient svg { width: 16px; height: 16px; }
+
     .btn-sm {
       padding: 0.25rem 0.5rem;
       font-size: 0.75rem;
@@ -1329,7 +1363,8 @@ import { Subscription as SubscriptionDoc } from '../../../interfaces/subscriptio
 
     .btn-icon-action {
       padding: 0.5rem;
-      border: 1px solid #d1d5db;
+      border: 1px solid #667eea;
+      color: #667eea;
       background: white;
       border-radius: 0.375rem;
       cursor: pointer;
@@ -1341,7 +1376,15 @@ import { Subscription as SubscriptionDoc } from '../../../interfaces/subscriptio
 
     .btn-icon-action:hover {
       transform: translateY(-2px);
+      background: #eef2ff;
+      border-color: #667eea;
       box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    }
+
+    /* Ensure inline SVG icons inherit color and have consistent size */
+    .btn-icon-action .icon {
+      width: 1rem;
+      height: 1rem;
     }
 
     .btn-icon-action[title]:hover::after {
@@ -1374,19 +1417,17 @@ import { Subscription as SubscriptionDoc } from '../../../interfaces/subscriptio
       pointer-events: none;
     }
 
-    .btn-edit:hover {
-      background: #eff6ff;
-      border-color: #3b82f6;
+    /* All icon buttons follow indigo treatment for consistency */
+
+    /* Match Company Profile upgrade button color treatment (indigo) */
+    .btn-upgrade {
+      color: #667eea;
+      border-color: #667eea;
     }
 
-    .btn-bir:hover {
-      background: #f0fdf4;
-      border-color: #10b981;
-    }
-
-    .btn-devices:hover {
-      background: #faf5ff;
-      border-color: #8b5cf6;
+    .btn-upgrade:hover {
+      background: #eef2ff;
+      border-color: #667eea;
     }
 
     .btn-icon-action.disabled {
@@ -1449,6 +1490,18 @@ import { Subscription as SubscriptionDoc } from '../../../interfaces/subscriptio
 
     .toggle-switch input:checked + .toggle-slider:before {
       transform: translateX(24px);
+    }
+
+    /* Disabled (read-only) toggle styling */
+    .toggle-switch.disabled,
+    .toggle-switch input[disabled] + .toggle-slider {
+      cursor: not-allowed;
+      opacity: 0.6;
+      box-shadow: none;
+    }
+
+    .toggle-switch.disabled:hover .toggle-slider {
+      box-shadow: none;
     }
 
     .toggle-switch:hover .toggle-slider {
@@ -1754,8 +1807,8 @@ export class StoresManagementComponent implements OnInit {
 
   // Role-based access control methods
   isAdminUser(): boolean {
-    const currentPermission = this.authService.getCurrentPermission();
-    return currentPermission?.roleId === 'creator';
+    const role = this.authService.getCurrentPermission()?.roleId;
+    return role === UserRolesEnum.ADMIN || role === UserRolesEnum.CREATOR; // historical: creator treated as admin of the business
   }
 
   isStoreManagerUser(): boolean {
@@ -1823,8 +1876,13 @@ export class StoresManagementComponent implements OnInit {
   }
 
   // ===== Upgrade Subscription Integration =====
+  private canUpgradeSubscription(): boolean {
+    const role = this.authService.getCurrentPermission()?.roleId as string | undefined;
+    return role === UserRolesEnum.CREATOR || role === UserRolesEnum.ADMIN || role === UserRolesEnum.STORE_MANAGER;
+  }
+
   openUpgradeModal(store: Store) {
-    if (!this.isAdminUser()) {
+    if (!this.canUpgradeSubscription()) {
       this.showAccessDeniedMessage('Upgrade Subscription');
       return;
     }
@@ -2379,6 +2437,18 @@ export class StoresManagementComponent implements OnInit {
     const d = new Date(date);
     if (isNaN(d.getTime())) return '—';
     return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+  }
+
+  // Compute effective status based on subscription expiry (UI-only enforcement)
+  isStoreExpired(store: Store): boolean {
+    const exp = this.getStoreExpiresAt(store);
+    if (!exp) return false; // No expiry recorded -> treat as active
+    const d = new Date(exp);
+    return d.getTime() < Date.now();
+  }
+
+  getEffectiveStatus(store: Store): 'active' | 'inactive' {
+    return this.isStoreExpired(store) ? 'inactive' : 'active';
   }
 
   // Helper method to format date for input

@@ -82,14 +82,18 @@ import { ToastService } from '../../../shared/services/toast.service';
                 <td class="date-cell">{{ userRole.createdAt | date:'short' }}</td>
                 <td class="actions-cell">
                   <button 
-                    class="btn btn-sm btn-secondary"
-                    (click)="editUserRole(userRole)">
-                    Edit
+                    class="btn-icon-action"
+                    (click)="editUserRole(userRole)"
+                    title="Edit user role"
+                    aria-label="Edit user role">
+                    ✏️
                   </button>
                   <button 
-                    class="btn btn-sm btn-danger"
-                    (click)="deleteUserRole(userRole)">
-                    Delete
+                    class="btn-icon-action"
+                    (click)="deleteUserRole(userRole)"
+                    title="Delete user role"
+                    aria-label="Delete user role">
+                    🗑️
                   </button>
                 </td>
               </tr>
@@ -451,7 +455,8 @@ import { ToastService } from '../../../shared/services/toast.service';
     /* Icon button style to match Product/Stores refresh */
     .btn-icon-action {
       padding: 0.5rem;
-      border: 1px solid #d1d5db;
+      border: 1px solid #667eea;
+      color: #667eea;
       background: white;
       border-radius: 0.375rem;
       cursor: pointer;
@@ -463,6 +468,8 @@ import { ToastService } from '../../../shared/services/toast.service';
 
     .btn-icon-action:hover {
       transform: translateY(-2px);
+      background: #eef2ff;
+      border-color: #667eea;
       box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
     }
 

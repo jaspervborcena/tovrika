@@ -26,6 +26,7 @@ import { TranslateModule } from '@ngx-translate/core';
 import { Product } from '../../../interfaces/product.interface';
 import { ProductViewType, OrderDiscount, ReceiptValidityNotice } from '../../../interfaces/pos.interface';
 import { Customer, CustomerFormData } from '../../../interfaces/customer.interface';
+import { SubscriptionService } from '../../../services/subscription.service';
 
 @Component({
   selector: 'app-pos',
@@ -51,6 +52,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   private customerService = inject(CustomerService);
   private companyService = inject(CompanyService);
   private translationService = inject(TranslationService);
+  private subscriptionService = inject(SubscriptionService);
   private router = inject(Router);
 
   private routerSubscription: any;
@@ -1350,7 +1352,20 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
 
   // Check if cart can be cleared
   canClearCart(): boolean {
-    return this.isNewOrderActive() && !this.isOrderCompleted() && this.cartItems().length > 0;
+    // Disable when subscription/store is inactive or expired (sync check using denormalized store fields)
+    const store = this.currentStoreInfo();
+    let subscriptionActive = false;
+    if (store) {
+      const statusOk = (store.status || 'inactive') === 'active';
+      let endDate: any = store.subscriptionEndDate as any;
+      let notExpired = false;
+      if (endDate) {
+        const end = endDate instanceof Date ? endDate : new Date(endDate);
+        notExpired = !isNaN(end.getTime()) && end.getTime() >= Date.now();
+      }
+      subscriptionActive = statusOk && notExpired;
+    }
+    return subscriptionActive && this.isNewOrderActive() && !this.isOrderCompleted() && this.cartItems().length > 0;
   }
 
   // Get user-friendly error message for store loading issues
@@ -1415,6 +1430,11 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
 
   // Direct new order without confirmation dialog (used internally)
   async startNewOrderDirect(): Promise<void> {
+    // Subscription gate: block if subscription expired or store inactive
+    const canStart = await this.checkSubscriptionGate();
+    if (!canStart) {
+      return;
+    }
     console.log('🆕 Starting new order directly');
     
     // Clear completed order status and data
@@ -1446,6 +1466,9 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
 
   // Unified New Order request flow used by button, hotkey, and item-click
   async requestStartNewOrder(trigger: 'button' | 'hotkey' | 'item' = 'button'): Promise<boolean> {
+    // Subscription gate before any prompts
+    const ok = await this.checkSubscriptionGate();
+    if (!ok) return false;
     // If order is already completed, allow starting a fresh order
     if (this.isOrderCompleted()) {
       const confirmed = await this.showConfirmationDialog({
@@ -1480,6 +1503,74 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       return true;
     }
     return false;
+  }
+
+  /**
+   * Check if current store is allowed to start a new order based on subscription and status.
+   * Uses denormalized store.subscriptionEndDate when available; falls back to latest subscription doc.
+   */
+  private async checkSubscriptionGate(): Promise<boolean> {
+    try {
+      const store = this.currentStoreInfo();
+      if (!store) {
+        await this.showConfirmationDialog({
+          title: 'No Store Selected',
+          message: 'Please select a store before creating a new order.',
+          confirmText: 'OK',
+          cancelText: ''
+        });
+        return false;
+      }
+
+      // Status check first
+      if ((store.status || 'inactive') !== 'active') {
+        await this.showConfirmationDialog({
+          title: 'Store Inactive',
+          message: 'Unable to create new order because this store is inactive. Please activate your subscription for this store.',
+          confirmText: 'OK',
+          cancelText: '',
+          type: 'warning'
+        });
+        return false;
+      }
+
+      // Expiry check using denormalized end date
+      let endDate: Date | null | undefined = store.subscriptionEndDate as any;
+
+      // If missing, try to fetch the latest subscription
+      if (!endDate && store.companyId && store.id) {
+        try {
+          const latest = await this.subscriptionService.getSubscriptionForStore(store.companyId, store.id);
+          endDate = latest?.data.endDate as any;
+        } catch (e) {
+          // ignore fetch errors; treat as unknown
+        }
+      }
+
+      const now = new Date();
+      if (!endDate || (endDate instanceof Date && endDate.getTime() < now.getTime())) {
+        const when = endDate instanceof Date ? endDate.toLocaleDateString() : 'unavailable';
+        await this.showConfirmationDialog({
+          title: 'Subscription Required',
+          message: `Unable to create new order due to subscription expiration (expiry: ${when}). Please renew or upgrade your subscription to continue.`,
+          confirmText: 'OK',
+          cancelText: '',
+          type: 'warning'
+        });
+        return false;
+      }
+
+      return true;
+    } catch (err) {
+      // Fail-safe: if something goes wrong, block and inform the user
+      await this.showConfirmationDialog({
+        title: 'Subscription Check Failed',
+        message: 'We could not verify your subscription status. Please try again shortly.',
+        confirmText: 'OK',
+        cancelText: ''
+      });
+      return false;
+    }
   }
 
   // Payment Dialog Methods
@@ -2333,6 +2424,9 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   async clearCart(): Promise<void> {
+    // Subscription gate: block if subscription expired or store inactive
+    const ok = await this.checkSubscriptionGate();
+    if (!ok) return;
     // Check if order is already completed
     if (this.isOrderCompleted()) {
       await this.showConfirmationDialog({
