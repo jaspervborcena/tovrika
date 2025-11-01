@@ -1315,6 +1315,31 @@
       background: #2563eb;
     }
 
+    /* Gradient primary style to match View Details button across app */
+    .btn-gradient {
+      background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+      color: white;
+      border: none;
+      box-shadow: 0 2px 4px rgba(79, 70, 229, 0.2);
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .btn-gradient:hover:not(:disabled) {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);
+      background: linear-gradient(135deg, #4338ca 0%, #6d28d9 100%);
+    }
+
+    .btn-gradient:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .btn-gradient svg { width: 16px; height: 16px; }
+
     .receipt-footer {
       border-top: 1px solid #e2e8f0;
       padding-top: 0.5rem;

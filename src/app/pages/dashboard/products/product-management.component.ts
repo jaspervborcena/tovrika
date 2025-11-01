@@ -82,14 +82,14 @@ import { CloudLoggingService } from '../../../services/cloud-logging.service';
     }
 
     .btn-primary {
-      background: #059669;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
       color: white;
+      box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
     }
 
     .btn-primary:hover:not(:disabled) {
-      background: #047857;
       transform: translateY(-1px);
-      box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+      box-shadow: 0 6px 16px rgba(102, 126, 234, 0.45);
     }
 
     .btn-secondary {
@@ -1568,18 +1568,20 @@ import { CloudLoggingService } from '../../../services/cloud-logging.service';
                         <!-- Edit button only for the most recent (first) item -->
                         <button 
                           *ngIf="i === 0"
-                          class="btn btn-sm btn-primary me-2" 
+                          class="btn-icon-action btn-edit" 
                           (click)="$event.stopPropagation(); openEditBatch(batch)"
-                          title="Edit quantity and price">
-                          ✏️ Edit
+                          title="Edit quantity and price"
+                          aria-label="Edit quantity and price">
+                          ✏️
                         </button>
                         <!-- Remove button only for the most recent (first) item -->
                         <button 
                           *ngIf="i === 0 && batch.id"
-                          class="btn btn-sm btn-danger" 
+                          class="btn-icon-action btn-danger" 
                           (click)="$event.stopPropagation(); removeInventoryBatch(batch.batchId, batch.id!)"
-                          title="Remove batch">
-                          🗑️ Remove
+                          title="Remove batch"
+                          aria-label="Remove batch">
+                          🗑️
                         </button>
                         <!-- Show disabled state for older items -->
                         <span *ngIf="i > 0" class="text-muted small">
