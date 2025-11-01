@@ -15,6 +15,7 @@ import {
   writeBatch
 } from '@angular/fire/firestore';
 import { AuthService } from './auth.service';
+import { OfflineDocumentService } from '../core/services/offline-document.service';
 import { Device } from '../interfaces/device.interface';
 
 export type { Device } from '../interfaces/device.interface';
@@ -37,7 +38,8 @@ export class DeviceService {
 
   constructor(
     private firestore: Firestore,
-    private authService: AuthService
+    private authService: AuthService,
+    private offlineDocService: OfflineDocumentService
   ) {}
 
   /**
@@ -524,8 +526,8 @@ export class DeviceService {
       }
 
       console.log('🗑️ Deleting device:', deviceId);
-      const deviceRef = doc(this.firestore, 'devices', deviceId);
-      await deleteDoc(deviceRef);
+  const deviceRef = doc(this.firestore, 'devices', deviceId);
+  await this.offlineDocService.deleteDocument('devices', deviceId);
       console.log('✅ Device deleted');
     } catch (error) {
       console.error('❌ Error deleting device:', error);

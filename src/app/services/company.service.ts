@@ -249,7 +249,7 @@ export class CompanyService {
         ...updates,
         updatedAt: new Date()
       };
-      await updateDoc(companyRef, updateData);
+      await this.offlineDocService.updateDocument('companies', companyId, updateData);
       await this.loadCompanies(); // Reload to get fresh data
     } catch (error) {
       console.error('Error updating company:', error);
@@ -259,8 +259,8 @@ export class CompanyService {
 
   async deleteCompany(companyId: string) {
     try {
-      const companyRef = doc(this.firestore, `companies/${companyId}`);
-      await deleteDoc(companyRef);
+  const companyRef = doc(this.firestore, `companies/${companyId}`);
+  await this.offlineDocService.deleteDocument('companies', companyId);
       await this.loadCompanies(); // Reload to get fresh data
     } catch (error) {
       console.error('Error deleting company:', error);

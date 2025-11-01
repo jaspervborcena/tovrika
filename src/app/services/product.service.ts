@@ -16,6 +16,8 @@ import { Product, ProductInventory } from '../interfaces/product.interface';
 import { AuthService } from './auth.service';
 import { FirestoreSecurityService } from '../core/services/firestore-security.service';
 import { OfflineDocumentService } from '../core/services/offline-document.service';
+import { LoggerService } from '@app/core/services/logger.service';
+import { logFirestore } from '@app/core/utils/firestore-logger';
 
 @Injectable({
   providedIn: 'root'
@@ -45,7 +47,8 @@ export class ProductService {
   constructor(
     private firestore: Firestore,
     private authService: AuthService,
-    private securityService: FirestoreSecurityService
+    private securityService: FirestoreSecurityService,
+    private logger: LoggerService
   ) {}
 
   private transformFirestoreDoc(doc: any): Product {
@@ -171,10 +174,7 @@ export class ProductService {
       }
 
       const companyId = await this.waitForAuth();
-      console.log('📦 Loading products with companyId query:', {
-        companyId,
-        storeId: storeId || 'all stores'
-      });
+      // Reduced noisy console logs; rely on logger when needed
 
       const productsRef = collection(this.firestore, 'products');
       
@@ -191,7 +191,6 @@ export class ProductService {
       const querySnapshot = await getDocs(q);
       const products = querySnapshot.docs.map(doc => this.transformFirestoreDoc(doc));
       
-      console.log(`✅ Loaded ${products.length} products for company ${companyId}`);
       this.products.set(products);
     } catch (error) {
       console.error('Error loading products:', error);
@@ -209,10 +208,7 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
       // Use provided companyId or get from auth
       const targetCompanyId = companyId || await this.waitForAuth();
       
-      console.log('� Loading products with companyId query:', { 
-        companyId: targetCompanyId, 
-        storeId: storeId || 'all stores'
-      });
+      // Reduced noisy console logs; rely on logger when needed
       
       const productsRef = collection(this.firestore, 'products');
       
@@ -223,28 +219,17 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
           where('companyId', '==', targetCompanyId),
           where('storeId', '==', storeId)
         );
-        console.log('🎯 Querying products for company + store:', { companyId: targetCompanyId, storeId });
+        
       } else {
         // Load all products for the company
         q = query(productsRef, where('companyId', '==', targetCompanyId));
-        console.log('🎯 Querying all products for company:', targetCompanyId);
+        
       }
       
       const querySnapshot = await getDocs(q);
       const products = querySnapshot.docs.map(doc => this.transformFirestoreDoc(doc));
       
-      console.log(`✅ Loaded ${products.length} products:`, {
-        companyId: targetCompanyId,
-        storeId,
-        productsFound: products.length,
-        productNames: products.map(p => p.productName).slice(0, 5), // Show first 5 product names
-        sampleProduct: products.length > 0 ? {
-          id: products[0].id,
-          name: products[0].productName,
-          companyId: products[0].companyId,
-          storeId: products[0].storeId
-        } : null
-      });
+      
       
       // Validate that we actually have products before setting
       if (products.length === 0) {
@@ -258,10 +243,6 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
       this.products.set(products);
     } catch (error) {
       console.error('❌ Error loading products:', error);
-      console.error('Query parameters:', { 
-        companyId: companyId || 'from auth', 
-        storeId 
-      });
       throw error;
     }
   }
@@ -294,10 +275,15 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
 
       const cleanedProductData = baseData;
 
-      console.log('Creating product with cleaned data:', cleanedProductData);
-
-      // 🔥 NEW APPROACH: Pre-generate documentId, then create with that ID
-      const documentId = await this.offlineDocService.createDocument('products', cleanedProductData);
+      // 🔥 NEW APPROACH: Pre-generate documentId, then create with that ID (with structured logging)
+      const documentId = await logFirestore(this.logger, {
+        api: 'firestore.add',
+        area: 'products',
+        collectionPath: 'products',
+        companyId
+      }, cleanedProductData, async () => {
+        return this.offlineDocService.createDocument('products', cleanedProductData);
+      });
 
       // Update the signal with the new product (works with both real and temp IDs)
       this.products.update(products => [
@@ -314,10 +300,9 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
         }
       ]);
       
-      console.log('✅ Product created with pre-generated ID:', documentId, navigator.onLine ? '(online)' : '(offline)');
       return documentId;
     } catch (error) {
-      console.error('❌ Error creating product:', error);
+      this.logger.dbFailure('Create product failed', { api: 'firestore.add', area: 'products', collectionPath: 'products' }, error);
       throw error;
     }
   }
@@ -354,11 +339,17 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
       // Clean undefined values to prevent Firestore errors
       const cleanedUpdateData = this.cleanUndefinedValues(updateData);
 
-      console.log('Updating product with cleaned data:', cleanedUpdateData);
-      console.log('User UID:', currentUser.uid);
-
-      // 🔥 NEW APPROACH: Use OfflineDocumentService for consistent online/offline updates
-      await this.offlineDocService.updateDocument('products', productId, cleanedUpdateData);
+      // 🔥 NEW APPROACH: Use OfflineDocumentService for consistent online/offline updates (with structured logging)
+      await logFirestore(this.logger, {
+        api: 'firestore.update',
+        area: 'products',
+        collectionPath: 'products',
+        docId: productId,
+        companyId: updates.companyId
+      }, cleanedUpdateData, async () => {
+        await this.offlineDocService.updateDocument('products', productId, cleanedUpdateData);
+        return true;
+      });
 
       // Update the signal
       this.products.update(products =>
@@ -369,9 +360,8 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
         )
       );
 
-      console.log('✅ Product updated with ID:', productId, navigator.onLine ? '(online)' : '(offline)');
     } catch (error) {
-      console.error('❌ Error updating product:', error);
+      this.logger.dbFailure('Update product failed', { api: 'firestore.update', area: 'products', collectionPath: 'products', docId: productId }, error);
       throw error;
     }
   }
@@ -379,14 +369,22 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
   async deleteProduct(productId: string): Promise<void> {
     try {
       const productRef = doc(this.firestore, 'products', productId);
-      await deleteDoc(productRef);
+      await logFirestore(this.logger, {
+        api: 'firestore.delete',
+        area: 'products',
+        collectionPath: 'products',
+        docId: productId
+      }, { productId }, async () => {
+        await this.offlineDocService.deleteDocument('products', productId);
+        return true;
+      });
 
       // Update the signal
       this.products.update(products =>
         products.filter(product => product.id !== productId)
       );
     } catch (error) {
-      console.error('Error deleting product:', error);
+      this.logger.dbFailure('Delete product failed', { api: 'firestore.delete', area: 'products', collectionPath: 'products', docId: productId }, error);
       throw error;
     }
   }
@@ -508,9 +506,9 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
         });
       }
 
-      console.log('✅ Price updated and logged:', priceChange);
+      this.logger.dbSuccess('Product price updated', { api: 'firestore.update', area: 'products', collectionPath: 'products', docId: productId, payload: priceChange });
     } catch (error) {
-      console.error('❌ Error updating price:', error);
+      this.logger.dbFailure('Error updating product price', { api: 'firestore.update', area: 'products', collectionPath: 'products', docId: productId }, error);
       throw error;
     }
   }
@@ -571,9 +569,9 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
         lastUpdated: new Date()
       });
 
-      console.log('✅ Quantity adjusted and logged:', quantityAdjustment);
+      this.logger.dbSuccess('Product quantity adjusted', { api: 'firestore.update', area: 'products', collectionPath: 'products', docId: productId, payload: quantityAdjustment });
     } catch (error) {
-      console.error('❌ Error adjusting quantity:', error);
+      this.logger.dbFailure('Error adjusting product quantity', { api: 'firestore.update', area: 'products', collectionPath: 'products', docId: productId }, error);
       throw error;
     }
   }

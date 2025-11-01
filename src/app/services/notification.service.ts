@@ -241,7 +241,7 @@ export class NotificationService {
    */
   async deleteNotification(notificationId: string): Promise<void> {
     const notificationRef = doc(this.firestore, 'notifications', notificationId);
-    await deleteDoc(notificationRef);
+    await this.offlineDocService.deleteDocument('notifications', notificationId);
   }
 
   /**
