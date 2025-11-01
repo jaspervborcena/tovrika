@@ -291,7 +291,7 @@ export class DeviceService {
       console.log('🔄 Updating device status:', deviceId, '→', status);
 
       const deviceRef = doc(this.firestore, 'devices', deviceId);
-      await updateDoc(deviceRef, {
+      await this.offlineDocService.updateDocument('devices', deviceId, {
         status,
         updatedAt: Timestamp.now()
       });
@@ -312,7 +312,7 @@ export class DeviceService {
       console.log('✅ Approving device:', deviceId, 'by admin:', adminUid);
 
       const deviceRef = doc(this.firestore, 'devices', deviceId);
-      await updateDoc(deviceRef, {
+      await this.offlineDocService.updateDocument('devices', deviceId, {
         status: 'active',
         isLocked: true,
         approvedBy: adminUid,
@@ -336,7 +336,7 @@ export class DeviceService {
       console.log('❌ Rejecting device:', deviceId);
 
       const deviceRef = doc(this.firestore, 'devices', deviceId);
-      await updateDoc(deviceRef, {
+      await this.offlineDocService.updateDocument('devices', deviceId, {
         status: 'pending',
         isLocked: false,
         updatedAt: Timestamp.now()
@@ -358,7 +358,7 @@ export class DeviceService {
       console.log('🔒 Locking device:', deviceId);
 
       const deviceRef = doc(this.firestore, 'devices', deviceId);
-      await updateDoc(deviceRef, {
+      await this.offlineDocService.updateDocument('devices', deviceId, {
         isLocked: true,
         updatedAt: Timestamp.now()
       });
@@ -387,7 +387,7 @@ export class DeviceService {
       console.log('📝 Updating device:', deviceId);
 
       const deviceRef = doc(this.firestore, 'devices', deviceId);
-      await updateDoc(deviceRef, {
+      await this.offlineDocService.updateDocument('devices', deviceId, {
         ...updates,
         updatedAt: Timestamp.now()
       });
@@ -413,7 +413,7 @@ export class DeviceService {
       console.log('🔧 Fixing device without uid:', deviceId);
 
       const deviceRef = doc(this.firestore, 'devices', deviceId);
-      await updateDoc(deviceRef, {
+      await this.offlineDocService.updateDocument('devices', deviceId, {
         uid: currentUser.uid,
         updatedAt: Timestamp.now()
       });
@@ -478,7 +478,7 @@ export class DeviceService {
       }
 
       const deviceRef = doc(this.firestore, 'devices', deviceId);
-      await updateDoc(deviceRef, {
+      await this.offlineDocService.updateDocument('devices', deviceId, {
         currentInvoiceNumber: nextNumber,
         lastUsedAt: Timestamp.now(),
         updatedAt: Timestamp.now()

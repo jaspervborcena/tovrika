@@ -1,5 +1,6 @@
 import { Injectable, inject } from '@angular/core';
 import { Firestore, collection, addDoc, updateDoc, doc, getDocs, query, where, limit, Timestamp } from '@angular/fire/firestore';
+import { OfflineDocumentService } from '../core/services/offline-document.service';
 import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { AuthService } from './auth.service';
 import { Subscription, SubscriptionFeatures } from '../interfaces/subscription.interface';
@@ -8,6 +9,7 @@ import { Subscription, SubscriptionFeatures } from '../interfaces/subscription.i
 export class SubscriptionService {
   private readonly firestore = inject(Firestore);
   private readonly auth = inject(AuthService);
+  private readonly offlineDocService = inject(OfflineDocumentService);
 
   private readonly collectionName = 'subscriptions';
 
@@ -61,8 +63,8 @@ export class SubscriptionService {
     if (updates.endDate instanceof Date) updatesPayload.endDate = Timestamp.fromDate(updates.endDate);
     if (updates.trialStart instanceof Date) updatesPayload.trialStart = Timestamp.fromDate(updates.trialStart);
 
-    const docRef = doc(this.firestore, this.collectionName, docId);
-    await updateDoc(docRef, updatesPayload);
+  const docRef = doc(this.firestore, this.collectionName, docId);
+  await this.offlineDocService.updateDocument(this.collectionName, docId, updatesPayload);
   }
 
   /** Get the latest subscription for a company+store (assumes one active at a time) */

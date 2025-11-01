@@ -1,7 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { environment } from '../../environments/environment';
 import { HttpClient } from '@angular/common/http';
-import { Firestore, collection, query, where, getDocs, updateDoc, doc, Timestamp, orderBy, limit, addDoc } from '@angular/fire/firestore';
+import { Firestore, collection, query, where, getDocs, Timestamp, orderBy, limit } from '@angular/fire/firestore';
 import { Order } from '../interfaces/pos.interface';
 import { AuthService } from './auth.service';
 import { FirestoreSecurityService } from '../core/services/firestore-security.service';
@@ -66,130 +66,60 @@ export class OrderService {
 
   async getRecentOrders(companyId: string, storeId?: string, limitCount: number = 20): Promise<Order[]> {
     try {
-      console.log('=============== ORDER LOADING START ===============');
-      console.log('📅 Loading recent orders - Company:', companyId, 'Store:', storeId, 'Limit:', limitCount);
-      console.log('🕐 Timestamp:', new Date().toLocaleString());
-      
       const ordersRef = collection(this.firestore, 'orders');
-      console.log('📡 Firestore orders collection reference created');
-      
-      // Try a simple query first to test connectivity
+
+      // Sanity check: ensure we can read from the collection
       try {
-        const simpleQuery = query(ordersRef, limit(5));
-        const simpleSnapshot = await getDocs(simpleQuery);
-        
-        if (simpleSnapshot.docs.length === 0) {
-          console.log('⚠️ No documents found in orders collection at all');
-          console.log('=============== ORDER LOADING END (EMPTY) ===============');
-          return [];
-        }
+        await getDocs(query(ordersRef, limit(1)));
       } catch (simpleError) {
-        console.error('❌ Simple query failed:', simpleError);
-        console.log('=============== ORDER LOADING END (ERROR) ===============');
+        console.error('Simple Firestore connectivity check failed:', simpleError);
         return [];
       }
-      
-      // If we have companyId, try with company filter only first
-      if (companyId) {
-        try {
-          const companyQuery = query(
-            ordersRef,
-            where('companyId', '==', companyId),
-            limit(limitCount)
-          );
-          const companySnapshot = await getDocs(companyQuery);
-          
-          if (companySnapshot.docs.length > 0) {
-            // Now try the full query with orderBy
-            let finalQuery;
-            if (storeId) {
-              finalQuery = query(
-                ordersRef,
-                where('companyId', '==', companyId),
-                where('storeId', '==', storeId),
-                orderBy('createdAt', 'desc'),
-                limit(limitCount)
-              );
-            } else {
-              console.log('🏢 Building company-wide query (all stores)');
-              finalQuery = query(
-                ordersRef,
-                where('companyId', '==', companyId),
-                orderBy('createdAt', 'desc'),
-                limit(limitCount)
-              );
-            }
-            
-            const finalSnapshot = await getDocs(finalQuery);
-            
-            const results = finalSnapshot.docs.map(d => this.transformDoc(d));
-            
-            // Add client-side sorting as safety measure (in case Firestore orderBy doesn't work properly)
-            const sortedResults = results.sort((a, b) => {
-              const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-              const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-              return dateB - dateA; // Descending order (newest first)
-            });
-            
-            console.log('✅ Orders loaded and sorted:', sortedResults.length, 'orders');
-            console.log('=============== ORDER LOADING END (SUCCESS) ===============');
-            return sortedResults;
-            
-          } else {
-            return [];
-          }
-          
-        } catch (companyError) {
-          console.error('❌ Company query failed:', companyError);
-          console.error('❌ Error details:', {
-            code: (companyError as any)?.code,
-            message: (companyError as any)?.message
-          });
-          
-          // Fallback to simple company query without orderBy
-          console.log('🔄 Step 4: Trying fallback query without orderBy...');
-          try {
-            const fallbackQuery = query(
+
+      if (!companyId) {
+        console.error('No company ID provided');
+        return [];
+      }
+
+      // Primary query with orderBy createdAt desc
+      try {
+        const primaryQuery = storeId
+          ? query(
               ordersRef,
               where('companyId', '==', companyId),
+              where('storeId', '==', storeId),
+              orderBy('createdAt', 'desc'),
+              limit(limitCount)
+            )
+          : query(
+              ordersRef,
+              where('companyId', '==', companyId),
+              orderBy('createdAt', 'desc'),
               limit(limitCount)
             );
-            console.log('📡 Executing fallback query...');
-            const fallbackSnapshot = await getDocs(fallbackQuery);
-            const results = fallbackSnapshot.docs.map(d => this.transformDoc(d));
-            
-            // Client-side sorting as fallback when Firestore orderBy fails
-            const sortedResults = results.sort((a, b) => {
-              const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-              const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-              return dateB - dateA; // Descending order (newest first)
-            });
-            
-            console.log('✅ Fallback query successful, found:', sortedResults.length, 'orders (client-side sorted)');
-            console.log('=============== ORDER LOADING END (FALLBACK SUCCESS) ===============');
-            return sortedResults;
-          } catch (fallbackError) {
-            console.error('❌ Fallback query also failed:', fallbackError);
-            console.log('=============== ORDER LOADING END (FALLBACK FAILED) ===============');
-            return [];
-          }
+        const snapshot = await getDocs(primaryQuery);
+        return snapshot.docs.map((d) => this.transformDoc(d));
+      } catch (primaryError) {
+        console.warn('Primary recent orders query failed, attempting fallback without orderBy:', primaryError);
+        try {
+          const fallbackQuery = storeId
+            ? query(ordersRef, where('companyId', '==', companyId), where('storeId', '==', storeId), limit(limitCount))
+            : query(ordersRef, where('companyId', '==', companyId), limit(limitCount));
+          const fallbackSnapshot = await getDocs(fallbackQuery);
+          const results = fallbackSnapshot.docs.map((d) => this.transformDoc(d));
+          results.sort((a, b) => {
+            const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+            const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+            return dateB - dateA; // Descending (newest first)
+          });
+          return results;
+        } catch (fallbackError) {
+          console.error('Fallback recent orders query failed:', fallbackError);
+          return [];
         }
-      } else {
-        console.error('❌ No company ID provided');
-        console.log('💡 Company ID is required for order queries');
-        console.log('=============== ORDER LOADING END (NO COMPANY ID) ===============');
-        return [];
       }
-      
     } catch (error) {
-      console.error('❌ Critical error loading recent orders:', error);
-      console.error('❌ Error details:', {
-        name: (error as any)?.name,
-        code: (error as any)?.code,
-        message: (error as any)?.message,
-        stack: (error as any)?.stack
-      });
-      console.log('=============== ORDER LOADING END (CRITICAL ERROR) ===============');
+      console.error('Critical error loading recent orders:', error);
       return [];
     }
   }
@@ -457,100 +387,10 @@ export class OrderService {
 
   async updateOrderStatus(orderId: string, status: string): Promise<void> {
     try {
-      const orderRef = doc(this.firestore, 'orders', orderId);
-      await updateDoc(orderRef, { status });
+      await this.offlineDocService.updateDocument('orders', orderId, { status });
     } catch (error) {
       console.error('Error updating order status:', error);
       throw error;
-    }
-  }
-  
-  // Debug method to create test orders
-  async createTestOrder(companyId: string, storeId: string): Promise<void> {
-    try {
-      console.log('🧪 Creating test order with companyId:', companyId, 'storeId:', storeId);
-      
-      // First, test basic Firestore connectivity
-      console.log('🔍 Testing Firestore connectivity...');
-      const ordersRef = collection(this.firestore, 'orders');
-      console.log('📡 Orders collection reference created:', ordersRef);
-      
-      // Create multiple test orders for better testing
-      for (let i = 1; i <= 3; i++) {
-        const testOrder = {
-          companyId,
-          storeId,
-          terminalId: `terminal-00${i}`,
-          assignedCashierId: 'test-cashier',
-          status: i === 1 ? 'completed' : i === 2 ? 'pending' : 'cancelled',
-          cashSale: true,
-          soldTo: `Test Customer ${i}`,
-          tin: `123-456-789-00${i}`,
-          businessAddress: `${100 + i} Test St., Test City`,
-          invoiceNumber: `INV-TEST-${Date.now()}-${i}`,
-          logoUrl: '',
-          date: Timestamp.now(),
-          vatableSales: 1000 * i,
-          vatAmount: 120 * i,
-          zeroRatedSales: 0,
-          vatExemptAmount: 0,
-          discountAmount: 0,
-          grossAmount: 1000 * i,
-          netAmount: 1120 * i,
-          totalAmount: 1120 * i,
-          exemptionId: '',
-          signature: '',
-          atpOrOcn: `OCN-2025-00123${i}`,
-          birPermitNo: `BIR-PERMIT-2025-5678${i}`,
-          inclusiveSerialNumber: `00000${i}-00099${i}`,
-          createdAt: Timestamp.now(),
-          updatedAt: Timestamp.now(),
-          message: `Test order ${i} - Thank you for your business!`
-        };
-
-        console.log(`📝 Creating test order ${i}:`, testOrder);
-        console.log(`📡 Attempting to add document ${i} to Firestore...`);
-        
-        // 🔥 OFFLINE-SAFE: Use OfflineDocumentService for pre-generated IDs
-        const documentId = await this.offlineDocService.createDocument('orders', testOrder);
-        console.log(`✅ Test order ${i} created with pre-generated ID:`, documentId, navigator.onLine ? '(online)' : '(offline)');
-        
-        // Small delay between orders
-        await new Promise(resolve => setTimeout(resolve, 100));
-      }
-      
-      // Wait a bit for Firestore to index the new documents
-      console.log('⏳ Waiting for Firestore indexing...');
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // Try to fetch them back to verify they were saved
-      console.log('🔄 Verifying orders were saved...');
-      const verifyQuery = query(
-        ordersRef, 
-        where('companyId', '==', companyId),
-        where('storeId', '==', storeId)
-      );
-      const verifySnapshot = await getDocs(verifyQuery);
-      console.log('✅ Verification query results:', verifySnapshot.docs.length, 'documents found');
-      
-      if (verifySnapshot.docs.length > 0) {
-        console.log('📄 Found documents:', verifySnapshot.docs.map(d => ({
-          id: d.id, 
-          invoiceNumber: d.data()['invoiceNumber'],
-          soldTo: d.data()['soldTo'],
-          status: d.data()['status']
-        })));
-      }
-      
-    } catch (error) {
-      console.error('❌ Error creating test order:', error);
-      console.error('❌ Full error details:', JSON.stringify(error, null, 2));
-      
-      // Check if it's a permission error
-      if (error && typeof error === 'object' && 'code' in error) {
-        console.error('❌ Firebase error code:', (error as any).code);
-        console.error('❌ Firebase error message:', (error as any).message);
-      }
     }
   }
 
@@ -617,60 +457,7 @@ export class OrderService {
     }
   }
 
-  // DEBUG METHOD - Create test order for current date
-  async createTestOrderForToday(companyId: string, storeId: string): Promise<void> {
-    try {
-      console.log('🧪 Creating test order for today:', { companyId, storeId });
-      
-      const testOrder = {
-        companyId,
-        storeId,
-        terminalId: 'terminal-1',
-        assignedCashierId: 'cashier-1',
-        status: 'completed',
-        
-        // Customer Information
-        cashSale: true,
-        soldTo: 'Test Customer',
-        tin: '',
-        businessAddress: '',
-        
-        // Invoice Information
-        invoiceNumber: `INV-${Date.now()}`,
-        logoUrl: '',
-        
-        // Financial Calculations
-        vatableSales: 100,
-        vatAmount: 12,
-        zeroRatedSales: 0,
-        vatExemptAmount: 0,
-        discountAmount: 0,
-        grossAmount: 112,
-        netAmount: 112,
-        totalAmount: 112,
-        
-        // BIR Fields
-        exemptionId: '',
-        signature: '',
-        atpOrOcn: 'OCN-2025-001234',
-        birPermitNo: 'BIR-PERMIT-2025-56789',
-        inclusiveSerialNumber: '000001-000999',
-        
-        // System Fields - IMPORTANT: Use current timestamp
-        createdAt: new Date(),
-        message: 'Test order for debugging - Created on ' + new Date().toISOString()
-      };
-
-      // 🔥 OFFLINE-SAFE: Use OfflineDocumentService for pre-generated IDs
-      const documentId = await this.offlineDocService.createDocument('orders', testOrder);
-      
-      console.log('✅ Test order created with pre-generated ID:', documentId, navigator.onLine ? '(online)' : '(offline)');
-      console.log('📅 Created at:', new Date().toISOString());
-      
-    } catch (error) {
-      console.error('❌ Error creating test order:', error);
-    }
-  }
+  // (Removed test-only order creation methods)
 
   /**
    * Determines if we should use API based on date range

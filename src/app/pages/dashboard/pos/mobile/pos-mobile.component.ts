@@ -504,44 +504,7 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
     }
   }
 
-  // Debug method to create test orders
-  async createTestOrder(): Promise<void> {
-    try {
-      console.log('🎯 Mobile Debug button clicked - creating test order...');
-      
-      // Check authentication first
-      const currentUser = this.authService.getCurrentUser();
-      console.log('👤 Mobile Current user:', currentUser);
-      
-      const storeInfo = this.currentStoreInfo();
-      const companyId = storeInfo?.companyId;
-      const storeId = this.selectedStoreId();
-      
-      console.log('🏪 Mobile Debug - Store info check:', { 
-        storeInfo, 
-        companyId, 
-        storeId,
-        availableStores: this.availableStores(),
-        selectedStoreId: this.selectedStoreId()
-      });
-      
-      if (!companyId || !storeId) {
-        console.error('❌ Mobile Missing company or store info for test order creation');
-        console.error('Mobile CompanyId:', companyId, 'StoreId:', storeId);
-        console.error('Mobile Store Info:', JSON.stringify(storeInfo, null, 2));
-        return;
-      }
-      
-      console.log('🧪 Mobile Creating test order with valid IDs...');
-      await this.orderService.createTestOrder(companyId, storeId);
-      
-      console.log('🔄 Mobile Refreshing orders after test order creation...');
-      // Refresh orders after creating test order
-      await this.loadRecentOrders();
-    } catch (error) {
-      console.error('❌ Mobile Error in createTestOrder component method:', error);
-    }
-  }
+  // (Removed debug-only createTestOrder method)
 
   // Process individual item actions (return, damage, refund, cancel)
   async processItemAction(orderId: string, itemIndex: number, action: string, item: any): Promise<void> {

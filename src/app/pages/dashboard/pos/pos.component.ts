@@ -734,44 +734,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     }
   }
 
-  // Debug method to create test orders
-  async createTestOrder(): Promise<void> {
-    try {
-      console.log('🎯 Debug button clicked - creating test order...');
-      
-      // Check authentication first
-      const currentUser = this.authService.getCurrentUser();
-      console.log('👤 Current user:', currentUser);
-      
-      const storeInfo = this.currentStoreInfo();
-      const companyId = storeInfo?.companyId;
-      const storeId = this.selectedStoreId();
-      
-      console.log('🏪 Debug - Store info check:', { 
-        storeInfo, 
-        companyId, 
-        storeId,
-        availableStores: this.availableStores(),
-        selectedStoreId: this.selectedStoreId()
-      });
-      
-      if (!companyId || !storeId) {
-        console.error('❌ Missing company or store info for test order creation');
-        console.error('CompanyId:', companyId, 'StoreId:', storeId);
-        console.error('Store Info:', JSON.stringify(storeInfo, null, 2));
-        return;
-      }
-      
-      console.log('🧪 Creating test order with valid IDs...');
-      await this.orderService.createTestOrder(companyId, storeId);
-      
-      console.log('🔄 Refreshing orders after test order creation...');
-      // Refresh orders after creating test order
-      await this.loadRecentOrders();
-    } catch (error) {
-      console.error('❌ Error in createTestOrder component method:', error);
-    }
-  }
+  // (Removed debug-only createTestOrder method)
 
   openOrder(order: any): void {
     this.selectedOrderSignal.set(order);
