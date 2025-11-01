@@ -15,6 +15,7 @@ import {
   getDoc
 } from '@angular/fire/firestore';
 import { AuthService } from './auth.service';
+import { OfflineDocumentService } from '../core/services/offline-document.service';
 import { CompanyBillingHistory } from '../interfaces/billing.interface';
 
 export type { CompanyBillingHistory } from '../interfaces/billing.interface';
@@ -31,7 +32,8 @@ export class BillingService {
 
   constructor(
     private firestore: Firestore,
-    private authService: AuthService
+    private authService: AuthService,
+    private offlineDocService: OfflineDocumentService
   ) {}
 
   /**
@@ -278,8 +280,8 @@ export class BillingService {
   async deleteBillingHistory(billingId: string): Promise<void> {
     try {
       console.log('🗑️ Deleting billing history:', billingId);
-      const billingRef = doc(this.firestore, 'companyBillingHistory', billingId);
-      await deleteDoc(billingRef);
+  const billingRef = doc(this.firestore, 'companyBillingHistory', billingId);
+  await this.offlineDocService.deleteDocument('companyBillingHistory', billingId);
       console.log('✅ Billing history deleted');
     } catch (error) {
       console.error('❌ Error deleting billing history:', error);

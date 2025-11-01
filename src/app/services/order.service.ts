@@ -1,4 +1,5 @@
 import { Injectable, inject } from '@angular/core';
+import { environment } from '../../environments/environment';
 import { HttpClient } from '@angular/common/http';
 import { Firestore, collection, query, where, getDocs, updateDoc, doc, Timestamp, orderBy, limit, addDoc } from '@angular/fire/firestore';
 import { Order } from '../interfaces/pos.interface';
@@ -719,9 +720,10 @@ export class OrderService {
 
     // Updated API URLs with authentication
     const apiUrls = [
-      'https://asia-east1-jasperpos-1dfd5.cloudfunctions.net/get-orders-by-date', // Primary authenticated endpoint
+      environment.api?.ordersApi || '',
+      environment.api?.directOrdersApi || '',
       '/api' // Proxy URL (for development)
-    ];
+    ].filter(Boolean);
 
     for (let i = 0; i < apiUrls.length; i++) {
       const apiUrl = apiUrls[i];

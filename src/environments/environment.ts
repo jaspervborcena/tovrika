@@ -9,6 +9,11 @@ export const environment = {
     appId: "1:251258556341:web:28cdcafbdb4ad89675d3fc",
     measurementId: "G-MG8T2RZ051"
   },
+  // Endpoint for UI to POST structured logs to Cloud Functions (HTTP). Replace with your Python function URL.
+  // Example pattern: https://REGION-PROJECT_ID.cloudfunctions.net/app-logs
+  cloudLoggingEndpoint: '',
+  // Optional API Key header for logging endpoint (sent as X-API-Key)
+  cloudLoggingApiKey: '',
   api: {
     baseUrl: "https://asia-east1-jasperpos-1dfd5.cloudfunctions.net",
     ordersApi: "/api", // Uses proxy in development
