@@ -103,6 +103,20 @@ import { OfflineDocumentService } from '../../../core/services/offline-document.
           </div>
 
           <form [formGroup]="profileForm" (ngSubmit)="onSubmit()" class="company-form">
+            <!-- UI helper: Visible only during initial company creation -->
+            <div class="form-group" *ngIf="isCreatingCompany()">
+              <label class="form-checkbox">
+                <input
+                  type="checkbox"
+                  [checked]="useSameInfoForStore()"
+                  (change)="useSameInfoForStore.set($any($event.target).checked)"
+                />
+                Use same information for my store
+              </label>
+              <p class="form-note">
+                Note: You can uncheck if you want to set up the store separately.
+              </p>
+            </div>
             <!-- Company Name -->
             <div class="form-group">
               <label for="name" class="form-label">Company Name *</label>
@@ -561,6 +575,20 @@ import { OfflineDocumentService } from '../../../core/services/offline-document.
       resize: vertical;
       min-height: 80px;
     }
+    /* UI helper styles for the checkbox and note */
+    .form-checkbox {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-weight: 600;
+      color: #374151;
+    }
+
+    .form-note {
+      color: #64748b;
+      font-size: 0.8125rem;
+      margin-top: 0.25rem;
+    }
 
     .error-message {
       color: #ef4444;
@@ -964,6 +992,8 @@ export class CompanyProfileComponent {
   protected loading = signal(false);
   protected error = signal<string | null>(null);
   protected showSuccessMessage = signal(false);
+  // UI-only: Default checkbox to reuse company info for initial store setup
+  protected useSameInfoForStore = signal(true);
   
   // Tab management
   protected activeTab = signal<'profile' | 'subscriptions'>('profile');
@@ -1156,7 +1186,7 @@ export class CompanyProfileComponent {
             
             if (!hasStore) {
               console.log('🏪 Company Profile: Company created, user needs to create store next');
-              await this.router.navigate(['/dashboard/stores']);
+              await this.router.navigate(['/dashboard/stores'], { state: { useSameInfoForStore: this.useSameInfoForStore() } });
             } else {
               console.log('🏪 Company Profile: Company created, user has store, going to overview');
               await this.router.navigate(['/dashboard/overview']);
