@@ -1130,6 +1130,65 @@ export class CompanyProfileComponent {
           };
 
           const newCompanyId = await this.companyService.createCompany(companyData);
+
+          // Optionally create or update a default store using company info
+          if (this.useSameInfoForStore()) {
+            try {
+              // Ensure we have the latest snapshot of stores for this company
+              await this.storeService.loadStoresByCompany(newCompanyId);
+              const existingStores = this.storeService.getStoresByCompany(newCompanyId);
+
+              const baseStoreInfo = {
+                storeName: formData.name,
+                email: formData.email,
+                phoneNumber: formData.phone || '',
+                address: ''
+              } as const;
+
+              if (!existingStores || existingStores.length === 0) {
+                const storePayload: Partial<Store> = {
+                  ...baseStoreInfo,
+                  companyId: newCompanyId,
+                  subscription: {
+                    // Minimal starter subscription; can be updated later
+                    tier: 'freemium' as any,
+                    status: 'inactive' as any
+                  } as any
+                };
+
+                try {
+                  await this.storeService.createStore(storePayload as any);
+                  this.toastService.success('Store created using company info. You can update it later in Store Settings.');
+                } catch (createErr) {
+                  console.warn('⚠️ Failed to auto-create store from company info:', createErr);
+                }
+              } else {
+                // Update the first existing store with any missing info
+                const firstStore = existingStores[0];
+                const updates: Partial<Store> = {};
+                if (!firstStore.storeName && baseStoreInfo.storeName) updates.storeName = baseStoreInfo.storeName;
+                if (!firstStore.email && baseStoreInfo.email) updates.email = baseStoreInfo.email;
+                if (!firstStore.phoneNumber && baseStoreInfo.phoneNumber) updates.phoneNumber = baseStoreInfo.phoneNumber;
+                if (!firstStore.address && baseStoreInfo.address !== undefined) updates.address = baseStoreInfo.address;
+
+                // Initialize subscription if missing
+                if (!firstStore.subscription) {
+                  (updates as any).subscription = { tier: 'freemium', status: 'inactive' } as any;
+                }
+
+                if (Object.keys(updates).length > 0) {
+                  try {
+                    await this.storeService.updateStore(firstStore.id!, updates);
+                    this.toastService.success('Existing store updated with company info.');
+                  } catch (updateErr) {
+                    console.warn('⚠️ Failed to update existing store with company info:', updateErr);
+                  }
+                }
+              }
+            } catch (prepErr) {
+              console.warn('⚠️ Auto store create/update precheck failed:', prepErr);
+            }
+          }
           // Ensure default userRoles entry (creator) exists for this user at company level
           try {
             const user = this.authService.getCurrentUser();
