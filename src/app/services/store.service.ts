@@ -60,16 +60,13 @@ export class StoreService {
 
   async loadStores(storeIds: string[]) {
     if (this.isLoading) {
-      console.log('⏳ Store loading already in progress, skipping...');
       return;
     }
     
     try {
-      this.isLoading = true;
-  console.log('🏪 StoreService.loadStores called with storeIds:', storeIds);
+    this.isLoading = true;
       
       if (!storeIds || storeIds.length === 0) {
-        console.log('📋 No store IDs provided, clearing stores');
         this.storesSignal.set([]);
         return;
       }
@@ -77,9 +74,7 @@ export class StoreService {
       const storesRef = collection(this.firestore, 'stores');
       const storesQuery = query(storesRef, where(documentId(), 'in', storeIds));
 
-  console.log('🔍 Executing Firestore query for stores...');
       const querySnapshot = await getDocs(storesQuery);
-  console.log('📊 Firestore query returned', querySnapshot.docs.length, 'documents');
       
       const stores = querySnapshot.docs.map(doc => {
         const data = doc.data() as any;
@@ -109,13 +104,8 @@ export class StoreService {
             maxNumber: ''
           },
           tinNumber: data.tinNumber || '',
-          // Subscription
-          subscription: data.subscription || {
-            tier: 'free',
-            status: 'trial',
-            startDate: new Date(),
-            billingCycle: 'monthly'
-          },
+          // Effective subscription end date (synced from subscriptions collection)
+          subscriptionEndDate: data.subscriptionEndDate?.toDate ? data.subscriptionEndDate.toDate() : (data.subscriptionEndDate || undefined),
           promoUsage: data.promoUsage || undefined,
           subscriptionPopupShown: data.subscriptionPopupShown || false
         };
@@ -123,10 +113,9 @@ export class StoreService {
         return store;
       });
       
-      console.log('💾 Setting stores signal with', stores.length, 'stores');
       this.storesSignal.set(stores);
       this.loadTimestamp = Date.now();
-      console.log('✅ Stores loaded and signal updated. Current stores:', this.getStores().length);
+      
       
     } catch (error) {
       console.error('❌ Error loading stores:', error);
@@ -138,20 +127,16 @@ export class StoreService {
 
   async loadStoresByCompany(companyId: string) {
     if (this.isLoading) {
-      console.log('⏳ Store loading already in progress, skipping...');
       return;
     }
     
     try {
-      this.isLoading = true;
-      console.log('🏪 StoreService.loadStoresByCompany called with companyId:', companyId);
+  this.isLoading = true;
       
       const storesRef = collection(this.firestore, 'stores');
       const storesQuery = query(storesRef, where('companyId', '==', companyId));
 
-      console.log('🔍 Executing Firestore query for stores by company...');
       const querySnapshot = await getDocs(storesQuery);
-      console.log('📊 Firestore query returned', querySnapshot.docs.length, 'documents');
       
       const stores = querySnapshot.docs.map(doc => {
         const data = doc.data() as any;
@@ -181,25 +166,18 @@ export class StoreService {
             maxNumber: ''
           },
           tinNumber: data.tinNumber || '',
-          // Subscription
-          subscription: data.subscription || {
-            tier: 'free',
-            status: 'trial',
-            startDate: new Date(),
-            billingCycle: 'monthly'
-          },
+          // Effective subscription end date (synced from subscriptions collection)
+          subscriptionEndDate: data.subscriptionEndDate?.toDate ? data.subscriptionEndDate.toDate() : (data.subscriptionEndDate || undefined),
           promoUsage: data.promoUsage || undefined,
           subscriptionPopupShown: data.subscriptionPopupShown || false
         };
         
-        console.log('🏪 Mapped store:', store.storeName, 'ID:', store.id, 'CompanyId:', store.companyId);
         return store;
       });
       
-      console.log('💾 Setting stores signal with', stores.length, 'stores');
       this.storesSignal.set(stores);
       this.loadTimestamp = Date.now();
-      console.log('✅ Stores loaded and signal updated. Current stores:', this.getStores().length);
+      
       
     } catch (error) {
       console.error('❌ Error loading stores by company:', error);
@@ -281,7 +259,6 @@ export class StoreService {
         }
       }
 
-      console.log('✅ Store created with ID:', documentId, navigator.onLine ? '(online)' : '(offline)');
       return documentId;
     } catch (error) {
       console.error('Error creating store:', error);
@@ -308,7 +285,7 @@ export class StoreService {
             : store
         )
       );
-      console.log('✅ Local stores signal updated');
+      
     } catch (error) {
       console.error('Error updating store:', error);
       throw error;
@@ -404,8 +381,7 @@ export class StoreService {
       const store = this.getStore(storeId);
       if (store && !store.tempInvoiceNumber) {
         const defaultInvoiceNo = this.generateDefaultInvoiceNo();
-        await this.updateStore(storeId, { tempInvoiceNumber: defaultInvoiceNo });
-        console.log(`✅ Initialized temp invoice number for store ${store.storeName}: ${defaultInvoiceNo}`);
+  await this.updateStore(storeId, { tempInvoiceNumber: defaultInvoiceNo });
       }
     } catch (error) {
       console.error('❌ Error initializing temp invoice number:', error);
@@ -415,12 +391,7 @@ export class StoreService {
 
   // Debug method to check store status
   debugStoreStatus() {
-    const stores = this.getStores();
-    console.log('🔍 StoreService Debug Status:');
-    console.log('  - Total stores:', stores.length);
-    console.log('  - Last load time:', this.loadTimestamp ? new Date(this.loadTimestamp).toLocaleTimeString() : 'Never');
-    console.log('  - Is loading:', this.isLoading);
-    console.log('  - Stores:', stores.map(s => ({ id: s.id, name: s.storeName, companyId: s.companyId, tempInvoice: s.tempInvoiceNumber })));
+  const stores = this.getStores();
     return { stores, count: stores.length, lastLoad: this.loadTimestamp, isLoading: this.isLoading };
   }
 
@@ -438,7 +409,7 @@ export class StoreService {
     }
   ): Promise<void> {
     try {
-      console.log('📄 Submitting BIR accreditation for store:', storeId);
+      
 
       const storeRef = doc(this.firestore, 'stores', storeId);
       await this.offlineDocService.updateDocument('stores', storeId, {
@@ -451,7 +422,7 @@ export class StoreService {
         updatedAt: new Date()
       });
 
-      console.log('✅ BIR accreditation submitted, awaiting admin approval');
+      
     } catch (error) {
       console.error('❌ Error submitting BIR accreditation:', error);
       throw error;
@@ -468,7 +439,7 @@ export class StoreService {
     rejectionReason?: string
   ): Promise<void> {
     try {
-      console.log('🔄 Updating BIR accreditation status:', storeId, '→', status);
+      
 
       const updateData: any = {
         birAccreditationStatus: status,
@@ -485,7 +456,7 @@ export class StoreService {
   const storeRef = doc(this.firestore, 'stores', storeId);
   await this.offlineDocService.updateDocument('stores', storeId, updateData);
 
-      console.log('✅ BIR accreditation status updated');
+      
     } catch (error) {
       console.error('❌ Error updating BIR accreditation status:', error);
       throw error;
@@ -497,7 +468,7 @@ export class StoreService {
    */
   async getStoresPendingBirAccreditation(): Promise<Store[]> {
     try {
-      console.log('📋 Loading stores pending BIR accreditation');
+      
 
       const storesRef = collection(this.firestore, 'stores');
       const storesQuery = query(
@@ -539,26 +510,14 @@ export class StoreService {
             permitDateIssued: new Date(),
             validityNotice: ''
           },
-          subscription: data.subscription || {
-            tier: 'freemium',
-            status: 'inactive',
-            subscribedAt: new Date(),
-            expiresAt: new Date(),
-            billingCycle: 'monthly',
-            durationMonths: 0,
-            amountPaid: 0,
-            discountPercent: 0,
-            finalAmount: 0,
-            paymentMethod: 'credit_card',
-            lastPaymentDate: new Date()
-          },
+          subscriptionEndDate: data.subscriptionEndDate?.toDate ? data.subscriptionEndDate.toDate() : (data.subscriptionEndDate || undefined),
           subscriptionPopupShown: data.subscriptionPopupShown || false,
           tempInvoiceNumber: data.tempInvoiceNumber
         };
         return store;
       });
 
-      console.log('✅ Found', stores.length, 'stores pending BIR accreditation');
+      
       return stores;
     } catch (error) {
       console.error('❌ Error loading pending BIR stores:', error);

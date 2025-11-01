@@ -296,19 +296,6 @@ export class StoresComponent implements OnInit {
               permitDateIssued: new Date(),
               validityNotice: ''
             },
-            subscription: {
-              tier: 'freemium',
-              status: 'inactive',
-              subscribedAt: new Date(),
-              expiresAt: new Date(),
-              billingCycle: 'monthly',
-              durationMonths: 0,
-              amountPaid: 0,
-              discountPercent: 0,
-              finalAmount: 0,
-              paymentMethod: 'credit_card',
-              lastPaymentDate: new Date()
-            },
             subscriptionPopupShown: false
           };
           await this.storeService.createStore(newStoreData);

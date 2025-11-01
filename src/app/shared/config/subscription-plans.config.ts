@@ -42,10 +42,10 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
     price: 0,
     billingCycle: 'monthly',
     currency: '₱',
-    description: 'Start free for 30 days with basic POS access',
+  description: 'Start free for 14 days with basic POS access',
     cta: 'Start Free Trial',
     features: [
-      '30-day free trial',
+  '14-day free trial',
       '1 Store Location',
       '1 POS Device',
       '2 Users (Admin + Cashier)',
@@ -54,7 +54,7 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
       'Basic POS (Cash only)',
       'Thermal Receipt Printing',
       'Offline Mode After Trial',
-      '⚠️ Trial data deleted after 30 days'
+  '⚠️ Trial ends after 14 days'
     ],
     limits: {
       stores: 1,
@@ -62,7 +62,7 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
       devices: 1,
       transactions: 100,
       products: 50,
-      dataRetention: '30 days (deleted after)'
+  dataRetention: '14 days (trial duration)'
     }
   },
   {
@@ -193,7 +193,7 @@ export const SUBSCRIPTION_FEATURES: SubscriptionPlanFeature[] = [
   {
     name: 'Trial Period',
     description: 'Free trial duration',
-    freemium: '30 days',
+  freemium: '14 days',
     standard: '7 days',
     premium: '7 days',
     enterprise: 'Custom',
@@ -263,7 +263,7 @@ export const SUBSCRIPTION_FEATURES: SubscriptionPlanFeature[] = [
   {
     name: 'Data Retention',
     description: 'Historical data storage',
-    freemium: '30 days',
+  freemium: '14 days',
     standard: '1 month',
     premium: '6 months',
     enterprise: 'Unlimited',

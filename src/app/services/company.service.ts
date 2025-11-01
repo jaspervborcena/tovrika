@@ -38,6 +38,47 @@ export class CompanyService {
     private offlineDocService: OfflineDocumentService
   ) {}
 
+  // Resolve the primary companyId from user profile or permissions.
+  // Order: user.companyId (string or first non-empty in array) -> user.currentCompanyId -> permission.companyId (string or first non-empty in array)
+  private getPrimaryCompanyId(): string | undefined {
+    const user: any = this.authService.getCurrentUser() as any;
+    const pickFirstNonEmpty = (val: any): string | undefined => {
+      if (Array.isArray(val)) {
+        for (const v of val) {
+          if (typeof v === 'string' && v.trim()) return v.trim();
+        }
+        return undefined;
+      }
+      if (typeof val === 'string') {
+        const s = val.trim();
+        return s || undefined;
+      }
+      return undefined;
+    };
+
+    // 1) From user document (getUserData output)
+    const fromUserDoc = pickFirstNonEmpty(user?.companyId);
+    if (fromUserDoc) return fromUserDoc;
+
+    // 2) From user's currentCompanyId selection
+    const fromCurrentSelection = pickFirstNonEmpty(user?.currentCompanyId);
+    if (fromCurrentSelection) return fromCurrentSelection;
+
+    // 2.5) From any permission entry in the user's permissions array
+    if (Array.isArray(user?.permissions)) {
+      const ids = user.permissions.map((p: any) => p?.companyId).filter((x: any) => typeof x === 'string' || Array.isArray(x));
+      const fromAnyPermission = pickFirstNonEmpty(ids);
+      if (fromAnyPermission) return fromAnyPermission;
+    }
+
+    // 3) From permission (supports string or array)
+    const permission: any = this.authService.getCurrentPermission() as any;
+    const fromPermission = pickFirstNonEmpty(permission?.companyId);
+    if (fromPermission) return fromPermission;
+
+    return undefined;
+  }
+
   // Helper function to convert Firestore Timestamp to Date
   private toDate(timestamp: any): Date {
     if (timestamp instanceof Timestamp) {
@@ -56,9 +97,9 @@ export class CompanyService {
     const user = this.authService.getCurrentUser();
     if (!user) return null;
 
-    // If user doesn't have current company access, return null
-    const currentPermission = this.authService.getCurrentPermission();
-    if (!currentPermission?.companyId) return null;
+    // If user doesn't have a resolvable companyId, return null
+    const primaryCompanyId = this.getPrimaryCompanyId();
+    if (!primaryCompanyId) return null;
 
     const companies = this.companies();
     if (companies.length === 0) {
@@ -77,12 +118,11 @@ export class CompanyService {
       }
 
       const companies: Company[] = [];
-      const currentPermission = this.authService.getCurrentPermission();
-      console.log("user current company:", currentPermission?.companyId);
+  const primaryCompanyId = this.getPrimaryCompanyId();
       
-      // If user has a current company selected, load only that company
-      if (currentPermission?.companyId) {
-        const companyDocRef = doc(this.firestore, 'companies', currentPermission.companyId);
+      // If user has a resolvable companyId, load only that company
+      if (primaryCompanyId) {
+        const companyDocRef = doc(this.firestore, 'companies', primaryCompanyId);
         const companyDoc = await getDoc(companyDocRef);
 
         if (companyDoc.exists()) {
@@ -167,7 +207,8 @@ export class CompanyService {
       // Update user's permissions - add new company permission or update existing creator permission
       const currentUser = this.authService.currentUser();
       if (currentUser) {
-        const permissions = currentUser.permissions || [];
+        // Remove any legacy 'visitor' entries to avoid confusion
+        const permissions = (currentUser.permissions || []).filter(p => p.roleId !== 'visitor');
         
         // Check if user already has a creator permission without companyId
         const creatorPermissionIndex = permissions.findIndex(p => p.roleId === 'creator' && !p.companyId);
@@ -190,8 +231,7 @@ export class CompanyService {
         });
       }
 
-      await this.loadCompanies(); // Reload to get fresh data
-      console.log('✅ Company created with ID:', documentId, navigator.onLine ? '(online)' : '(offline)');
+  await this.loadCompanies(); // Reload to get fresh data
       return documentId;
     } catch (error) {
       console.error('Error creating company:', error);
@@ -270,16 +310,13 @@ export class CompanyService {
 
   // Helper method to check if user needs to create a company
   userNeedsToCreateCompany(): boolean {
-    const user = this.authService.getCurrentUser();
-    const currentPermission = this.authService.getCurrentPermission();
-    return !currentPermission?.companyId;
+    return !this.getPrimaryCompanyId();
   }
 
   // Helper method to get current company or null if user needs to create one
   async getCurrentCompanyOrNull(): Promise<Company | null> {
-    const user = this.authService.getCurrentUser();
-    const currentPermission = this.authService.getCurrentPermission();
-    if (!currentPermission?.companyId) return null;
+    const primaryCompanyId = this.getPrimaryCompanyId();
+    if (!primaryCompanyId) return null;
     return this.getActiveCompany();
   }
 }
