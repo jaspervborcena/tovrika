@@ -1,6 +1,8 @@
-import { Component, input, output, computed } from '@angular/core';
+import { Component, input, output, computed, inject, signal, effect } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Store } from '../../../interfaces/store.interface';
+import { SubscriptionService } from '../../../services/subscription.service';
+import { Subscription as SubscriptionDoc } from '../../../interfaces/subscription.interface';
 
 @Component({
   selector: 'app-subscription-details-modal',
@@ -34,7 +36,7 @@ import { Store } from '../../../interfaces/store.interface';
           </div>
 
           <!-- Subscription Details Section -->
-          <div class="form-section" *ngIf="subscription()">
+          <div class="form-section" *ngIf="latestSub() as sub">
             <h4 class="section-title">
               <span>🎯</span>
               <span>Subscription Details</span>
@@ -42,7 +44,7 @@ import { Store } from '../../../interfaces/store.interface';
             
             <div class="form-group">
               <label>Tier</label>
-              <input type="text" class="form-input" [value]="subscription()!.tier.toUpperCase()" readonly />
+              <input type="text" class="form-input" [value]="(sub.planType || 'freemium')!.toUpperCase()" readonly />
             </div>
             
             <div class="form-group">
@@ -50,35 +52,26 @@ import { Store } from '../../../interfaces/store.interface';
               <input 
                 type="text" 
                 class="form-input" 
-                [class.status-active]="subscription()!.status === 'active'"
-                [class.status-expired]="subscription()!.status === 'expired'"
-                [class.status-inactive]="subscription()!.status === 'inactive'"
-                [value]="subscription()!.status.toUpperCase()" 
+                [class.status-active]="sub.status === 'active'"
+                [class.status-expired]="sub.status === 'expired'"
+                [class.status-inactive]="sub.status === 'inactive'"
+                [value]="(sub.status || 'inactive').toUpperCase()" 
                 readonly />
             </div>
             
             <div class="form-group">
               <label>Subscribed Date</label>
-              <input type="text" class="form-input" [value]="formatDate(subscription()!.subscribedAt)" readonly />
+              <input type="text" class="form-input" [value]="formatDate(sub.startDate)" readonly />
             </div>
             
             <div class="form-group">
               <label>Expiry Date</label>
-              <input type="text" class="form-input" [value]="formatDate(subscription()!.expiresAt)" readonly />
-            </div>
-            
-            <div class="form-group">
-              <label>Billing Cycle</label>
-              <input 
-                type="text" 
-                class="form-input" 
-                [value]="subscription()!.billingCycle.toUpperCase() + ' (' + subscription()!.durationMonths + ' month' + (subscription()!.durationMonths > 1 ? 's' : '') + ')'" 
-                readonly />
+              <input type="text" class="form-input" [value]="formatDate(sub.endDate || store()?.subscriptionEndDate || null)" readonly />
             </div>
           </div>
 
           <!-- Pricing Information Section -->
-          <div class="form-section" *ngIf="subscription()">
+          <div class="form-section" *ngIf="latestSub() as sub">
             <h4 class="section-title">
               <span>💰</span>
               <span>Pricing Information</span>
@@ -86,32 +79,22 @@ import { Store } from '../../../interfaces/store.interface';
             
             <div class="form-group">
               <label>Original Amount</label>
-              <input type="text" class="form-input" [value]="'₱' + subscription()!.amountPaid.toFixed(2)" readonly />
+              <input type="text" class="form-input" [value]="'₱' + (sub.amountPaid || 0)" readonly />
             </div>
             
-            <div class="form-group">
-              <label>Discount Applied</label>
-              <input type="text" class="form-input" [value]="subscription()!.discountPercent + '%'" readonly />
-            </div>
-            
-            <div class="form-group">
-              <label>Final Amount Paid</label>
-              <input type="text" class="form-input amount-highlight" [value]="'₱' + subscription()!.finalAmount.toFixed(2)" readonly />
-            </div>
-            
-            <div class="form-group" *ngIf="subscription()!.promoCode">
+            <div class="form-group" *ngIf="sub.promoCode">
               <label>Promo Code Used</label>
-              <input type="text" class="form-input" [value]="subscription()!.promoCode" readonly />
+              <input type="text" class="form-input" [value]="sub.promoCode" readonly />
             </div>
             
-            <div class="form-group" *ngIf="subscription()!.referralCodeUsed">
+            <div class="form-group" *ngIf="sub.referralCode">
               <label>Referral Code Used</label>
-              <input type="text" class="form-input" [value]="subscription()!.referralCodeUsed" readonly />
+              <input type="text" class="form-input" [value]="sub.referralCode" readonly />
             </div>
           </div>
 
           <!-- Payment Information Section -->
-          <div class="form-section" *ngIf="subscription()">
+          <div class="form-section" *ngIf="latestSub() as sub">
             <h4 class="section-title">
               <span>💳</span>
               <span>Payment Information</span>
@@ -119,12 +102,7 @@ import { Store } from '../../../interfaces/store.interface';
             
             <div class="form-group">
               <label>Payment Method</label>
-              <input type="text" class="form-input" [value]="subscription()!.paymentMethod.replace('_', ' ').toUpperCase()" readonly />
-            </div>
-            
-            <div class="form-group">
-              <label>Last Payment Date</label>
-              <input type="text" class="form-input" [value]="formatDate(subscription()!.lastPaymentDate)" readonly />
+              <input type="text" class="form-input" [value]="(sub.paymentMethod || '').replace('_', ' ').toUpperCase()" readonly />
             </div>
           </div>
         </div>
@@ -361,13 +339,26 @@ export class SubscriptionDetailsModalComponent {
   store = input.required<Store | undefined>();
   closed = output<void>();
 
-  subscription = computed(() => this.store()?.subscription);
+  private readonly subs = inject(SubscriptionService);
+  latestSub = signal<SubscriptionDoc | null>(null);
+
+  // Reactively load latest subscription when store changes
+  private _eff = effect(() => {
+    const s = this.store();
+    if (s?.id && s.companyId) {
+      this.subs.getSubscriptionForStore(s.companyId, s.id)
+        .then(res => this.latestSub.set(res?.data || null))
+        .catch(() => this.latestSub.set(null));
+    } else {
+      this.latestSub.set(null);
+    }
+  });
 
   close() {
     this.closed.emit();
   }
 
-  formatDate(date: Date | undefined): string {
+  formatDate(date: Date | undefined | null): string {
     if (!date) return 'N/A';
     
     // Handle Firestore Timestamp

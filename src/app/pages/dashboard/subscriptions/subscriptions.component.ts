@@ -1,11 +1,13 @@
 import { Component, OnInit, signal, computed, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { Store, Subscription } from '../../../interfaces/store.interface';
+import { Store } from '../../../interfaces/store.interface';
 import { StoreService } from '../../../services/store.service';
 import { AuthService } from '../../../services/auth.service';
 import { BillingHistoryModalComponent } from './billing-history-modal.component';
 import { UpgradeSubscriptionModalComponent } from './upgrade-subscription-modal.component';
+import { Subscription as SubscriptionDoc } from '../../../interfaces/subscription.interface';
+import { SubscriptionService } from '../../../services/subscription.service';
 
 @Component({
   selector: 'app-subscriptions',
@@ -17,6 +19,7 @@ import { UpgradeSubscriptionModalComponent } from './upgrade-subscription-modal.
 export class SubscriptionsComponent implements OnInit {
   private storeService = inject(StoreService);
   private authService = inject(AuthService);
+  private subscriptionService = inject(SubscriptionService);
 
   // Billing History Modal State
   billingHistoryModalOpen = signal(false);
@@ -27,6 +30,7 @@ export class SubscriptionsComponent implements OnInit {
   upgradeStore = signal<Store | null>(null);
 
   stores = signal<Store[]>([]);
+  subscriptionsMap = signal<Record<string, SubscriptionDoc>>({});
   loading = signal(false);
   searchTerm = signal('');
   filterStatus = signal<'all' | 'active' | 'inactive' | 'expired' | 'cancelled'>('all');
@@ -45,16 +49,16 @@ export class SubscriptionsComponent implements OnInit {
       );
     }
 
-    // Filter by subscription status
+    // Filter by subscription status (derived)
     const status = this.filterStatus();
     if (status !== 'all') {
-      filtered = filtered.filter(store => store.subscription.status === status);
+      filtered = filtered.filter(store => this.getStoreStatus(store) === status);
     }
 
-    // Filter by subscription tier
+    // Filter by subscription tier (derived)
     const tier = this.filterTier();
     if (tier !== 'all') {
-      filtered = filtered.filter(store => store.subscription.tier === tier);
+      filtered = filtered.filter(store => this.getStoreTier(store) === tier);
     }
 
     return filtered;
@@ -63,10 +67,13 @@ export class SubscriptionsComponent implements OnInit {
   // Stats
   totalStores = computed(() => this.stores().length);
   activeSubscriptions = computed(() => 
-    this.stores().filter(s => s.subscription.status === 'active').length
+    this.stores().filter(s => this.getStoreStatus(s) === 'active').length
   );
   totalRevenue = computed(() => 
-    this.stores().reduce((sum, s) => sum + (s.subscription.finalAmount || 0), 0)
+    this.stores().reduce((sum, s) => {
+      const sub = this.getLatestSub(s);
+      return sum + (sub?.amountPaid || 0);
+    }, 0)
   );
 
   ngOnInit() {
@@ -84,6 +91,21 @@ export class SubscriptionsComponent implements OnInit {
 
       const storesData = await this.storeService.getStoresByCompany(permission.companyId);
       this.stores.set(storesData);
+
+      // Load latest subscription for each store
+      const entries = await Promise.all(
+        storesData.map(async (s) => {
+          try {
+            const latest = await this.subscriptionService.getSubscriptionForStore(permission.companyId!, s.id!);
+            return { storeId: s.id!, sub: latest?.data || null } as { storeId: string; sub: SubscriptionDoc | null };
+          } catch {
+            return { storeId: s.id!, sub: null } as { storeId: string; sub: SubscriptionDoc | null };
+          }
+        })
+      );
+      const map: Record<string, SubscriptionDoc> = {};
+      entries.forEach(({ storeId, sub }) => { if (sub) map[storeId] = sub; });
+      this.subscriptionsMap.set(map);
     } catch (error) {
       console.error('Error loading stores:', error);
     } finally {
@@ -135,7 +157,7 @@ export class SubscriptionsComponent implements OnInit {
     }
   }
 
-  formatDate(date: Date): string {
+  formatDate(date: Date | null): string {
     if (!date) return 'N/A';
     return new Date(date).toLocaleDateString('en-US', {
       year: 'numeric',
@@ -151,13 +173,13 @@ export class SubscriptionsComponent implements OnInit {
     }).format(amount || 0);
   }
 
-  isExpiringSoon(expiresAt: Date): boolean {
+  isExpiringSoon(expiresAt: Date | null): boolean {
     if (!expiresAt) return false;
     const daysUntilExpiry = Math.ceil((new Date(expiresAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
     return daysUntilExpiry <= 7 && daysUntilExpiry > 0;
   }
 
-  getDaysUntilExpiry(expiresAt: Date): number {
+  getDaysUntilExpiry(expiresAt: Date | null): number {
     if (!expiresAt) return 0;
     return Math.ceil((new Date(expiresAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
   }
@@ -178,19 +200,20 @@ export class SubscriptionsComponent implements OnInit {
   }
 
   exportToCSV() {
-    const csvData = this.filteredStores().map(store => ({
-      'Store Name': store.storeName,
-      'Store ID': store.id || '',
-      'Tier': store.subscription.tier,
-      'Status': store.subscription.status,
-      'Subscribed At': this.formatDate(store.subscription.subscribedAt),
-      'Expires At': this.formatDate(store.subscription.expiresAt),
-      'Amount Paid': store.subscription.amountPaid,
-      'Discount %': store.subscription.discountPercent,
-      'Final Amount': store.subscription.finalAmount,
-      'Promo Code': store.subscription.promoCode || '',
-      'Referral Code': store.subscription.referralCodeUsed || ''
-    }));
+    const csvData = this.filteredStores().map(store => {
+      const sub = this.getLatestSub(store);
+      return {
+        'Store Name': store.storeName,
+        'Store ID': store.id || '',
+        'Tier': this.getStoreTier(store),
+        'Status': this.getStoreStatus(store),
+        'Subscribed At': this.formatDate(sub?.startDate as any),
+        'Expires At': this.formatDate(this.getExpiresAt(store) as any),
+        'Amount Paid': sub?.amountPaid || 0,
+        'Promo Code': sub?.promoCode || '',
+        'Referral Code': sub?.referralCode || ''
+      } as Record<string, any>;
+    });
 
     // Convert to CSV string
     const headers = Object.keys(csvData[0] || {});
@@ -227,5 +250,51 @@ export class SubscriptionsComponent implements OnInit {
   onUpgradeCompleted() {
     // Reload stores to reflect updated subscription denormalization
     this.loadStores();
+  }
+
+  // ===== Derived subscription helpers =====
+  private getLatestSub(store: Store): SubscriptionDoc | undefined {
+    if (!store?.id) return undefined;
+    return this.subscriptionsMap()[store.id];
+  }
+
+  getStoreTier(store: Store): string {
+    const sub = this.getLatestSub(store);
+    return (sub?.planType as string) || 'freemium';
+  }
+
+  getStoreStatus(store: Store): 'active' | 'inactive' | 'expired' | 'cancelled' {
+    const sub = this.getLatestSub(store);
+    if (!sub) return 'inactive';
+    const now = Date.now();
+    const endMs = sub.endDate ? new Date(sub.endDate).getTime() : 0;
+    if (sub.status === 'cancelled') return 'cancelled';
+    if (endMs && endMs < now) return 'expired';
+    return 'active';
+  }
+
+  getSubscribedAt(store: Store): Date | null {
+    const sub = this.getLatestSub(store);
+    return (sub?.startDate as any) || null;
+  }
+
+  getExpiresAt(store: Store): Date | null {
+    const sub = this.getLatestSub(store);
+    return (sub?.endDate as any) || (store.subscriptionEndDate || null);
+  }
+
+  getAmountPaid(store: Store): number {
+    const sub = this.getLatestSub(store);
+    return sub?.amountPaid || 0;
+  }
+
+  getPromoCode(store: Store): string {
+    const sub = this.getLatestSub(store);
+    return sub?.promoCode || '';
+  }
+
+  getReferralCode(store: Store): string {
+    const sub = this.getLatestSub(store);
+    return sub?.referralCode || '';
   }
 }

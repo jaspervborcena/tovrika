@@ -9,6 +9,8 @@ import { PredefinedTypesService, PredefinedType } from '../../../services/predef
 import { DeviceService, Device } from '../../../services/device.service';
 import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../shared/components/confirmation-dialog/confirmation-dialog.component';
 import { UpgradeSubscriptionModalComponent } from '../subscriptions/upgrade-subscription-modal.component';
+import { SubscriptionService } from '../../../services/subscription.service';
+import { Subscription as SubscriptionDoc } from '../../../interfaces/subscription.interface';
 
 @Component({
   selector: 'app-stores-management',
@@ -50,8 +52,12 @@ import { UpgradeSubscriptionModalComponent } from '../subscriptions/upgrade-subs
       <div class="table-container">
         <div class="table-header">
           <h3>Stores ({{ filteredStores.length }})</h3>
-          <button class="btn btn-secondary" (click)="refreshStores()">
-            Refresh
+          <button 
+            class="btn-icon-action" 
+            (click)="refreshStores()"
+            title="Refresh stores"
+            aria-label="Refresh stores">
+            🔄
           </button>
         </div>
 
@@ -79,9 +85,20 @@ import { UpgradeSubscriptionModalComponent } from '../subscriptions/upgrade-subs
                   </span>
                 </td>
                 <td class="subscription-cell">
-                  <span class="subscription-badge" [class]="'subscription-' + (store.subscription.tier || 'freemium')">
-                    {{ (store.subscription.tier || 'freemium') | titlecase }}
-                  </span>
+                  <div class="subscription-cell-content">
+                    <span class="subscription-badge" [class]="'subscription-' + (getStoreTier(store))">
+                      {{ (getStoreTier(store)) | titlecase }}
+                    </span>
+                    <div class="subscription-expiry" 
+                         *ngIf="getStoreExpiresAt(store) as exp"
+                         [class.expiry-soon]="isExpiringSoon(exp)">
+                      <span class="label">Expires:</span>
+                      <span class="value">{{ formatDate(exp) }}</span>
+                      <span class="days-left" *ngIf="isExpiringSoon(exp)">
+                        ({{ getDaysUntilExpiry(exp) }} days left)
+                      </span>
+                    </div>
+                  </div>
                 </td>
                 <td class="status-cell">
                   <label class="toggle-switch" [title]="store.status === 'active' ? 'Deactivate Store' : 'Activate Store'">
@@ -1233,6 +1250,22 @@ import { UpgradeSubscriptionModalComponent } from '../subscriptions/upgrade-subs
       color: #44337a;
     }
 
+    /* Subscription expiry styles (compact) */
+    .subscription-cell-content {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .subscription-expiry {
+      font-size: 12px;
+      color: #6b7280; /* gray-600 */
+      line-height: 1.2;
+    }
+    .subscription-expiry .label { opacity: 0.9; margin-right: 4px; }
+    .subscription-expiry .value { font-weight: 600; }
+    .subscription-expiry .days-left { margin-left: 4px; opacity: 0.9; }
+    .subscription-expiry.expiry-soon { color: #dc2626; } /* red-600 */
+
     .modal-footer {
       display: flex;
       gap: 0.75rem;
@@ -1621,6 +1654,8 @@ export class StoresManagementComponent implements OnInit {
   stores: Store[] = [];
   filteredStores: Store[] = [];
   storeTypes: PredefinedType[] = [];
+  // Latest subscription per storeId
+  private storeSubscriptions: Record<string, SubscriptionDoc> = {};
   
   searchTerm: string = '';
   isLoading: boolean = false;
@@ -1658,7 +1693,8 @@ export class StoresManagementComponent implements OnInit {
     private toastService: ToastService,
     private predefinedTypesService: PredefinedTypesService,
     private deviceService: DeviceService,
-    private router: Router
+    private router: Router,
+    private subscriptionService: SubscriptionService
   ) {
     this.storeForm = this.fb.group({
       storeName: ['', [Validators.required]],
@@ -1683,7 +1719,7 @@ export class StoresManagementComponent implements OnInit {
       invoiceNumber: [''],
       permitDateIssued: [''],
       validityNotice: [''],
-      // Subscription fields
+      // Subscription (UI-only flags)
       subscriptionTier: ['freemium'],
       subscriptionStatus: ['active'],
       subscriptionPopupShown: [false]
@@ -1759,6 +1795,21 @@ export class StoresManagementComponent implements OnInit {
         await this.storeService.loadStoresByCompany(currentPermission.companyId);
         this.stores = this.storeService.getStoresByCompany(currentPermission.companyId);
         this.filteredStores = [...this.stores];
+
+        // Load latest subscription per store
+        const subs = await Promise.all(
+          this.stores.map(async (s) => {
+            try {
+              const latest = await this.subscriptionService.getSubscriptionForStore(currentPermission.companyId!, s.id!);
+              return { storeId: s.id!, sub: latest?.data || null } as { storeId: string; sub: SubscriptionDoc | null };
+            } catch {
+              return { storeId: s.id!, sub: null } as { storeId: string; sub: SubscriptionDoc | null };
+            }
+          })
+        );
+        const map: Record<string, SubscriptionDoc> = {};
+        subs.forEach(({ storeId, sub }) => { if (sub) map[storeId] = sub; });
+        this.storeSubscriptions = map;
       } else {
         // Creator account, no companyId yet, allow empty stores array for onboarding
         this.stores = [];
@@ -1851,9 +1902,9 @@ export class StoresManagementComponent implements OnInit {
       invoiceNumber: store.birDetails?.invoiceNumber || '',
       permitDateIssued: store.birDetails?.permitDateIssued || '',
       validityNotice: store.birDetails?.validityNotice || '',
-      // Subscription
-      subscriptionTier: store.subscription?.tier || 'freemium',
-      subscriptionStatus: store.subscription?.status || 'active',
+      // Subscription (derived)
+      subscriptionTier: this.getStoreTier(store) || 'freemium',
+      subscriptionStatus: 'active',
       subscriptionPopupShown: store.subscriptionPopupShown || false
     };
     
@@ -1927,21 +1978,6 @@ export class StoresManagementComponent implements OnInit {
         validityNotice: formData.validityNotice || ''
       };
 
-      // Build the subscription object
-      const subscription = {
-        tier: formData.subscriptionTier || 'freemium',
-        status: formData.subscriptionStatus || 'active',
-        subscribedAt: new Date(),
-        expiresAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000), // 1 year from now
-        billingCycle: 'monthly' as const,
-        durationMonths: 12,
-        amountPaid: 0,
-        discountPercent: 0,
-        finalAmount: 0,
-        paymentMethod: 'gcash' as const,
-        lastPaymentDate: new Date()
-      };
-
       const storeData: Omit<Store, 'id' | 'createdAt' | 'updatedAt'> = {
         companyId: currentPermission.companyId,
         storeName: formData.storeName,
@@ -1958,8 +1994,6 @@ export class StoresManagementComponent implements OnInit {
         tempInvoiceNumber: formData.tempInvoiceNumber || '',
         birDetails: birDetails,
         tinNumber: formData.tinNumber || '',
-        // Subscription
-        subscription: subscription,
         subscriptionPopupShown: formData.subscriptionPopupShown || false
       };
 
@@ -2312,6 +2346,39 @@ export class StoresManagementComponent implements OnInit {
     this.showDeviceForm = false;
     this.editingDevice = null;
     this.deviceForm.reset();
+  }
+
+  // ===== Subscription helpers (derived from subscriptions collection) =====
+  getStoreTier(store: Store): string {
+    if (!store?.id) return 'freemium';
+    const sub = this.storeSubscriptions[store.id];
+    return (sub?.planType as string) || 'freemium';
+  }
+
+  getStoreExpiresAt(store: Store): Date | null {
+    if (!store?.id) return store?.subscriptionEndDate || null;
+    const sub = this.storeSubscriptions[store.id];
+    return (sub?.endDate as any) || store.subscriptionEndDate || null;
+  }
+
+  isExpiringSoon(date: Date | null): boolean {
+    if (!date) return false;
+    const d = new Date(date);
+    const days = Math.ceil((d.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+    return days <= 7 && days > 0;
+  }
+
+  getDaysUntilExpiry(date: Date | null): number {
+    if (!date) return 0;
+    const d = new Date(date);
+    return Math.ceil((d.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+  }
+
+  formatDate(date: Date | null): string {
+    if (!date) return '—';
+    const d = new Date(date);
+    if (isNaN(d.getTime())) return '—';
+    return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
   }
 
   // Helper method to format date for input

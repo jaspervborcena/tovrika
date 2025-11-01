@@ -128,11 +128,11 @@
               <p class="store-code">{{ store.id }}</p>
             </div>
             <div class="badges">
-              <span [class]="getTierBadgeClass(store.subscription.tier)">
-                {{ store.subscription.tier | titlecase }}
+              <span [class]="getTierBadgeClass(getStoreTier(store))">
+                {{ getStoreTier(store) | titlecase }}
               </span>
-              <span [class]="getStatusBadgeClass(store.subscription.status)">
-                {{ store.subscription.status | titlecase }}
+              <span [class]="getStatusBadgeClass(getStoreStatus(store))">
+                {{ getStoreStatus(store) | titlecase }}
               </span>
             </div>
           </div>
@@ -142,16 +142,16 @@
             <div class="detail-grid">
               <div class="detail-item">
                 <span class="detail-label">Subscribed</span>
-                <span class="detail-value">{{ formatDate(store.subscription.subscribedAt) }}</span>
+                <span class="detail-value">{{ formatDate(getSubscribedAt(store)) }}</span>
               </div>
 
               <div class="detail-item">
                 <span class="detail-label">Expires</span>
-                <span class="detail-value" [class.text-red-600]="isExpiringSoon(store.subscription.expiresAt)">
-                  {{ formatDate(store.subscription.expiresAt) }}
-                  @if (isExpiringSoon(store.subscription.expiresAt)) {
+                <span class="detail-value" [class.text-red-600]="isExpiringSoon(getExpiresAt(store))">
+                  {{ formatDate(getExpiresAt(store)) }}
+                  @if (isExpiringSoon(getExpiresAt(store))) {
                     <span class="expiry-warning">
-                      ({{ getDaysUntilExpiry(store.subscription.expiresAt) }} days left)
+                      ({{ getDaysUntilExpiry(getExpiresAt(store)) }} days left)
                     </span>
                   }
                 </span>
@@ -159,35 +159,20 @@
 
               <div class="detail-item">
                 <span class="detail-label">Amount Paid</span>
-                <span class="detail-value">{{ formatCurrency(store.subscription.amountPaid) }}</span>
+                <span class="detail-value">{{ formatCurrency(getAmountPaid(store)) }}</span>
               </div>
 
-              <div class="detail-item">
-                <span class="detail-label">Discount</span>
-                <span class="detail-value text-green-600">{{ store.subscription.discountPercent }}%</span>
-              </div>
-
-              <div class="detail-item">
-                <span class="detail-label">Final Amount</span>
-                <span class="detail-value font-semibold">{{ formatCurrency(store.subscription.finalAmount) }}</span>
-              </div>
-
-              <div class="detail-item">
-                <span class="detail-label">Billing Cycle</span>
-                <span class="detail-value">{{ store.subscription.billingCycle | titlecase }}</span>
-              </div>
-
-              @if (store.subscription.promoCode) {
+              @if (getPromoCode(store)) {
                 <div class="detail-item">
                   <span class="detail-label">Promo Code</span>
-                  <span class="detail-value text-purple-600">{{ store.subscription.promoCode }}</span>
+                  <span class="detail-value text-purple-600">{{ getPromoCode(store) }}</span>
                 </div>
               }
 
-              @if (store.subscription.referralCodeUsed) {
+              @if (getReferralCode(store)) {
                 <div class="detail-item">
                   <span class="detail-label">Referral Code</span>
-                  <span class="detail-value text-blue-600">{{ store.subscription.referralCodeUsed }}</span>
+                  <span class="detail-value text-blue-600">{{ getReferralCode(store) }}</span>
                 </div>
               }
             </div>
@@ -201,12 +186,12 @@
             <button class="btn-info" (click)="openBillingHistory(store)">
               Billing History
             </button>
-            @if (store.subscription.status === 'active' && store.subscription.tier !== 'premium') {
+            @if (getStoreStatus(store) === 'active' && getStoreTier(store) !== 'premium') {
               <button class="btn-primary" (click)="upgradeSubscription(store)">
                 Upgrade
               </button>
             }
-            @if (store.subscription.status === 'expired' || isExpiringSoon(store.subscription.expiresAt)) {
+            @if (getStoreStatus(store) === 'expired' || isExpiringSoon(getExpiresAt(store))) {
               <button class="btn-success" (click)="renewSubscription(store)">
                 Renew
               </button>

@@ -7,6 +7,7 @@ import { Store } from '../../../interfaces/store.interface';
 import { SubscriptionRequest } from '../../../interfaces/subscription-request.interface';
 import { CompanyService } from '../../../services/company.service';
 import { AuthService } from '../../../services/auth.service';
+import { SubscriptionService } from '../../../services/subscription.service';
 
 @Component({
   selector: 'app-subscription-modal',
@@ -19,6 +20,7 @@ export class SubscriptionModalComponent implements OnInit {
   private firestore = inject(Firestore);
   private companyService = inject(CompanyService);
   private authService = inject(AuthService);
+  private subscriptionService = inject(SubscriptionService);
 
   @Input() store?: Store; // If provided, this is an upgrade/renewal
   @Input() isOpen = false;
@@ -110,15 +112,21 @@ export class SubscriptionModalComponent implements OnInit {
   currentCompanyPhone = computed(() => this.store?.phoneNumber || 'Not provided');
   currentDate = computed(() => new Date().toLocaleDateString());
 
-  ngOnInit() {
-    // If upgrading existing store, pre-select their current tier + 1
-    if (this.store) {
-      const currentTier = this.store.subscription.tier;
-      if (currentTier === 'freemium') {
-        this.selectedTier.set('standard');
-      } else if (currentTier === 'standard') {
-        this.selectedTier.set('premium');
-      }
+  async ngOnInit() {
+    // If upgrading existing store, pre-select their current tier + 1 using latest subscription
+    if (this.store?.id) {
+      try {
+        const permission = this.authService.getCurrentPermission();
+        if (permission?.companyId) {
+          const latest = await this.subscriptionService.getSubscriptionForStore(permission.companyId, this.store.id);
+          const currentTier = (latest?.data?.planType as any) || 'freemium';
+          if (currentTier === 'freemium') {
+            this.selectedTier.set('standard');
+          } else if (currentTier === 'standard') {
+            this.selectedTier.set('premium');
+          }
+        }
+      } catch {}
     }
   }
 

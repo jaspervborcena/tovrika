@@ -16,6 +16,7 @@ import { RoleDefinitionService } from '../../../services/role-definition.service
 import { ToastService } from '../../../shared/services/toast.service';
 import { BillingService } from '../../../services/billing.service';
 import { OfflineDocumentService } from '../../../core/services/offline-document.service';
+import { SubscriptionService } from '../../../services/subscription.service';
 
 @Component({
   selector: 'app-company-profile',
@@ -32,21 +33,7 @@ import { OfflineDocumentService } from '../../../core/services/offline-document.
               <p class="page-subtitle">Configure your company information and settings</p>
             </div>
           </div>
-          <div class="header-actions">
-            <button 
-              class="btn btn-primary" 
-              (click)="createNewCompany()"
-              [disabled]="!isCreatingCompany() || loading()"
-              [class.disabled]="!isCreatingCompany()">
-              <svg *ngIf="isCreatingCompany()" fill="none" stroke="currentColor" viewBox="0 0 24 24" class="btn-icon">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-              </svg>
-              <svg *ngIf="!isCreatingCompany()" fill="none" stroke="currentColor" viewBox="0 0 24 24" class="btn-icon">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              {{ isCreatingCompany() ? 'Add Company' : 'Company Created' }}
-            </button>
-          </div>
+          
         </div>
       </div>
 
@@ -103,20 +90,6 @@ import { OfflineDocumentService } from '../../../core/services/offline-document.
           </div>
 
           <form [formGroup]="profileForm" (ngSubmit)="onSubmit()" class="company-form">
-            <!-- UI helper: Visible only during initial company creation -->
-            <div class="form-group" *ngIf="isCreatingCompany()">
-              <label class="form-checkbox">
-                <input
-                  type="checkbox"
-                  [checked]="useSameInfoForStore()"
-                  (change)="useSameInfoForStore.set($any($event.target).checked)"
-                />
-                Use same information for my store
-              </label>
-              <p class="form-note">
-                Note: You can uncheck if you want to set up the store separately.
-              </p>
-            </div>
             <!-- Company Name -->
             <div class="form-group">
               <label for="name" class="form-label">Company Name *</label>
@@ -159,6 +132,21 @@ import { OfflineDocumentService } from '../../../core/services/offline-document.
                 class="form-input"
                 placeholder="Enter phone number"
                 [disabled]="loading()">
+            </div>
+
+            <!-- UI helper: Show when user has no companyId in permission (explicit requirement) -->
+            <div class="form-group" *ngIf="noCompanyId()">
+              <label class="form-checkbox">
+                <input
+                  type="checkbox"
+                  [checked]="useSameInfoForStore()"
+                  (change)="useSameInfoForStore.set($any($event.target).checked)"
+                />
+                Use same information for my store
+              </label>
+              <p class="form-note">
+                Note: You can uncheck if you want to set up the store separately.
+              </p>
             </div>
 
             <!-- Form Actions -->
@@ -210,17 +198,17 @@ import { OfflineDocumentService } from '../../../core/services/offline-document.
                     </div>
                   </td>
                   <td>
-                    <span [class]="getTierBadgeClass(store.subscription ? store.subscription.tier : 'freemium')">
-                      {{ (store.subscription ? store.subscription.tier : 'freemium') | titlecase }}
+                    <span [class]="getTierBadgeClass(getStoreTier(store))">
+                      {{ getStoreTier(store) | titlecase }}
                     </span>
                   </td>
-                  <td>{{ formatDate(store.subscription ? store.subscription.subscribedAt : undefined) }}</td>
-                  <td [class.expiring]="isExpiringSoon(store.subscription ? store.subscription.expiresAt : undefined)">
-                    {{ formatDate(store.subscription ? store.subscription.expiresAt : undefined) }}
+                  <td>{{ formatDate(getStoreSubscribedAt(store)) }}</td>
+                  <td [class.expiring]="isExpiringSoon(getStoreExpiresAt(store))">
+                    {{ formatDate(getStoreExpiresAt(store)) }}
                   </td>
                   <td>
-                    <span [class]="getStatusBadgeClass(store.subscription ? store.subscription.status : 'inactive')">
-                      {{ (store.subscription ? store.subscription.status : 'inactive') | titlecase }}
+                    <span [class]="getStatusBadgeClass(getStoreStatus(store))">
+                      {{ getStoreStatus(store) | titlecase }}
                     </span>
                   </td>
                   <td>
@@ -270,8 +258,8 @@ import { OfflineDocumentService } from '../../../core/services/offline-document.
       <!-- Centralized Upgrade Modal (opened when subscription modal requests an upgrade flow) -->
       <app-upgrade-subscription-modal
         [isOpen]="showUpgradeModal()"
-        [companyId]="currentCompany().id || ''"
-        [companyName]="currentCompany().name || ''"
+        [companyId]="currentCompany()?.id || ''"
+        [companyName]="currentCompany()?.name || ''"
         [storeId]="upgradeStoreId()"
         [storeName]="upgradeStoreName()"
         [storeCode]="upgradeStoreCode()"
@@ -987,6 +975,7 @@ export class CompanyProfileComponent {
   private toastService = inject(ToastService);
   private billingService = inject(BillingService);
   private offlineDocService = inject(OfflineDocumentService);
+  private subscriptionService = inject(SubscriptionService);
 
   protected profileForm: FormGroup;
   protected loading = signal(false);
@@ -1002,6 +991,7 @@ export class CompanyProfileComponent {
   protected showSubscriptionModal = signal(false);
   protected selectedStore = signal<Store | undefined>(undefined);
   protected stores = signal<Store[]>([]);
+  protected storeSubscriptions = signal<Record<string, { planType: string; startDate?: Date; endDate?: Date; status?: string }>>({});
   // Centralized upgrade modal state
   protected showUpgradeModal = signal(false);
   protected upgradeStoreId = signal<string>('');
@@ -1022,11 +1012,31 @@ export class CompanyProfileComponent {
   protected selectedStoreForBillingHistory = signal<Store | undefined>(undefined);
 
   // Computed values
-  protected currentCompany = computed(() => this.companyService.companies()[0]);
-  protected isCreatingCompany = computed(() => !this.authService.getCurrentPermission()?.companyId);
+  protected currentCompany = computed<Company | undefined>(() => this.companyService.companies()[0]);
+  // Explicit: whether current permission has no companyId
+  protected noCompanyId = computed(() => {
+    const cid = this.getPrimaryCompanyId();
+    return !cid;
+  });
+  protected isCreatingCompany = computed(() => {
+    // Primary signal: if there are no companies loaded for this user, we're in onboarding/create mode.
+    const hasAnyCompany = (this.companyService.companies() || []).length > 0;
+    if (hasAnyCompany) return false;
+
+    // Fallback safety for edge cases before companies load: check both permission and IndexedDB-backed currentCompanyId
+    const permCompanyId = this.getPrimaryCompanyId();
+    const userCompanyId = this.authService.getCurrentUser()?.currentCompanyId?.trim();
+    const hasCompanyFromPerm = !!(permCompanyId && permCompanyId !== '');
+    const hasCompanyFromUser = !!(userCompanyId && userCompanyId !== '');
+    return !(hasCompanyFromPerm || hasCompanyFromUser);
+  });
   protected currentUser = computed(() => this.authService.getCurrentUser());
   protected permissions = computed(() => this.accessService.permissions);
   protected canEditOrAddCompanyProfile = computed(() => {
+    // Always allow saving during initial company creation to enable onboarding,
+    // regardless of granular permissions (e.g., visitor creating their first company).
+    if (this.isCreatingCompany()) return true;
+
     const perms = this.permissions();
     return perms.canViewCompanyProfile && (perms.canEditCompanyProfile || perms.canAddCompanyProfile);
   });
@@ -1086,7 +1096,7 @@ export class CompanyProfileComponent {
         
         // Load stores when company exists
         this.loadStores();
-      } else if (user && !this.authService.getCurrentPermission()?.companyId) {
+      } else if (user && !this.getPrimaryCompanyId()) {
         // New company creation - pre-populate with user email if available
         this.profileForm.patchValue({
           name: '',
@@ -1097,13 +1107,67 @@ export class CompanyProfileComponent {
     });
   }
 
+  // Normalize permission.companyId which may be a string or an array; return the first non-empty string
+  private getPrimaryCompanyId(): string | undefined {
+    const user: any = this.authService.getCurrentUser() as any;
+
+    const pickFirstNonEmpty = (val: any): string | undefined => {
+      if (Array.isArray(val)) {
+        for (const v of val) {
+          if (typeof v === 'string' && v.trim()) return v.trim();
+        }
+        return undefined;
+      }
+      if (typeof val === 'string') {
+        const s = val.trim();
+        return s || undefined;
+      }
+      return undefined;
+    };
+
+    // 1) From user document: companyId (string or array)
+    const fromUserDoc = pickFirstNonEmpty(user?.companyId);
+    if (fromUserDoc) return fromUserDoc;
+
+    // 2) From user's currentCompanyId selection
+    const fromCurrentSelection = pickFirstNonEmpty(user?.currentCompanyId);
+    if (fromCurrentSelection) return fromCurrentSelection;
+
+    // 3) From permissions array: first non-empty companyId
+    const perms: any[] = Array.isArray(user?.permissions) ? user.permissions : [];
+    const fromAnyPermission = pickFirstNonEmpty(perms.map(p => p?.companyId));
+    if (fromAnyPermission) return fromAnyPermission;
+
+    // 4) From current permission (which may itself hold string/array)
+    const permission: any = this.authService.getCurrentPermission() as any;
+    const fromPermission = pickFirstNonEmpty(permission?.companyId);
+    if (fromPermission) return fromPermission;
+
+    return undefined;
+  }
+
   private async loadStores() {
-    const permission = this.authService.getCurrentPermission();
-    if (!permission?.companyId) return;
+    const companyId = this.getPrimaryCompanyId();
+    if (!companyId) return;
     
     try {
-      const storesData = await this.storeService.getStoresByCompany(permission.companyId);
+      const storesData = await this.storeService.getStoresByCompany(companyId);
       this.stores.set(storesData);
+      // Build latest subscription map for UI
+      const subs: Record<string, { planType: string; startDate?: Date; endDate?: Date; status?: string }> = {};
+      for (const s of storesData) {
+        if (!s.id) continue;
+        const latest = await this.subscriptionService.getSubscriptionForStore(s.companyId, s.id);
+        if (latest?.data) {
+          subs[s.id] = {
+            planType: latest.data.planType,
+            startDate: latest.data.startDate,
+            endDate: latest.data.endDate,
+            status: latest.data.status
+          };
+        }
+      }
+      this.storeSubscriptions.set(subs);
     } catch (error) {
       console.error('Error loading stores:', error);
     }
@@ -1148,17 +1212,19 @@ export class CompanyProfileComponent {
               if (!existingStores || existingStores.length === 0) {
                 const storePayload: Partial<Store> = {
                   ...baseStoreInfo,
-                  companyId: newCompanyId,
-                  subscription: {
-                    // Minimal starter subscription; can be updated later
-                    tier: 'freemium' as any,
-                    status: 'inactive' as any
-                  } as any
+                  companyId: newCompanyId
                 };
 
                 try {
-                  await this.storeService.createStore(storePayload as any);
-                  this.toastService.success('Store created using company info. You can update it later in Store Settings.');
+                  const storeId = await this.storeService.createStore(storePayload as any);
+                  // Create 14-day trial subscription in subscriptions collection and sync end date on store
+                  const days = 14;
+                  const now = new Date();
+                  const trialEnds = new Date(now);
+                  trialEnds.setDate(trialEnds.getDate() + days);
+                  await this.subscriptionService.createTrial(newCompanyId, storeId, this.currentUser()?.uid || '', days);
+                  await this.storeService.updateStore(storeId, { subscriptionEndDate: trialEnds });
+                  this.toastService.success('Store created with a 14-day trial.');
                 } catch (createErr) {
                   console.warn('⚠️ Failed to auto-create store from company info:', createErr);
                 }
@@ -1170,10 +1236,14 @@ export class CompanyProfileComponent {
                 if (!firstStore.email && baseStoreInfo.email) updates.email = baseStoreInfo.email;
                 if (!firstStore.phoneNumber && baseStoreInfo.phoneNumber) updates.phoneNumber = baseStoreInfo.phoneNumber;
                 if (!firstStore.address && baseStoreInfo.address !== undefined) updates.address = baseStoreInfo.address;
-
-                // Initialize subscription if missing
-                if (!firstStore.subscription) {
-                  (updates as any).subscription = { tier: 'freemium', status: 'inactive' } as any;
+                // Initialize trial end if missing
+                if (!firstStore.subscriptionEndDate) {
+                  const days = 14;
+                  const now = new Date();
+                  const trialEnds = new Date(now);
+                  trialEnds.setDate(trialEnds.getDate() + days);
+                  await this.subscriptionService.createTrial(newCompanyId, firstStore.id!, this.currentUser()?.uid || '', days);
+                  (updates as any).subscriptionEndDate = trialEnds;
                 }
 
                 if (Object.keys(updates).length > 0) {
@@ -1210,9 +1280,6 @@ export class CompanyProfileComponent {
                     updatedAt: new Date()
                   };
                   await this.offlineDocService.createDocument('userRoles', userRole);
-                  console.log('✅ Created default creator userRoles entry at company level');
-                } else {
-                  console.log('ℹ️ userRoles already exists for this user & company; skipping');
                 }
               } catch (checkErr) {
                 console.warn('⚠️ userRoles check failed; creating offline entry:', checkErr);
@@ -1244,10 +1311,8 @@ export class CompanyProfileComponent {
                            currentPermission.storeId.trim() !== '';
             
             if (!hasStore) {
-              console.log('🏪 Company Profile: Company created, user needs to create store next');
               await this.router.navigate(['/dashboard/stores'], { state: { useSameInfoForStore: this.useSameInfoForStore() } });
             } else {
-              console.log('🏪 Company Profile: Company created, user has store, going to overview');
               await this.router.navigate(['/dashboard/overview']);
             }
           }, 2000);
@@ -1305,18 +1370,7 @@ export class CompanyProfileComponent {
     }
   }
 
-  protected createNewCompany(): void {
-    // This method is used for the button action
-    // When there's no company data, it allows creation
-    // When there's existing company data, this button is disabled
-    if (this.isCreatingCompany()) {
-      // Scroll to the form
-      document.querySelector('.form-card')?.scrollIntoView({ 
-        behavior: 'smooth',
-        block: 'start'
-      });
-    }
-  }
+  // Removed unused createNewCompany() button handler
 
   // Subscription Management Methods
   protected openSubscriptionModal(store?: Store) {
@@ -1373,38 +1427,37 @@ export class CompanyProfileComponent {
           break;
       }
 
-      // Calculate expiry date based on billing cycle
-      const expiresAt = this.calculateExpiryDate(data.billingCycle);
+      // Determine paid subscription scheduling based on remaining trial
+      const now = new Date();
+      const latest = this.storeSubscriptions()[store.id] || {};
+      const trialEnd = latest.endDate || store.subscriptionEndDate;
+      const paidStart: Date = trialEnd && trialEnd > now ? trialEnd : now;
 
-      // Create subscription data
-      const subscriptionData: Partial<Store> = {
-        subscription: {
-          tier: data.tier,
-          status: 'active',
-          subscribedAt: new Date(),
-          expiresAt: expiresAt,
-          billingCycle: data.billingCycle,
-          durationMonths: durationMonths,
-          amountPaid: data.amountPaid || 0,
-          discountPercent: data.discountPercent || 0,
-          finalAmount: data.finalAmount || data.amountPaid || 0,
-          promoCode: data.promoCode || '',
-          referralCodeUsed: data.referralCode || '',
-          paymentMethod: data.paymentMethod || 'gcash',
-          lastPaymentDate: new Date()
+      // Create paid subscription in subscriptions collection
+      const companyId = this.currentCompany()?.id || '';
+      await this.subscriptionService.createPaid(
+        companyId,
+        store.id!,
+        this.currentUser()?.uid || '',
+        data.tier,
+        paidStart,
+        durationMonths,
+        data.amountPaid || 0,
+        {
+          promoCode: data.promoCode || undefined,
+          referralCode: data.referralCode || undefined,
+          paymentMethod: data.paymentMethod || 'gcash'
         }
-      };
+      );
 
-      console.log('Updating store subscription:', {
-        storeId: store.id,
-        subscriptionData
-      });
-
-      // Update store subscription
-      await this.storeService.updateStore(store.id!, subscriptionData);
+      // Compute paid end based on start
+      const paidEnd = new Date(paidStart);
+      if (data.billingCycle === 'monthly') paidEnd.setMonth(paidEnd.getMonth() + 1);
+      if (data.billingCycle === 'quarterly') paidEnd.setMonth(paidEnd.getMonth() + 3);
+      if (data.billingCycle === 'yearly') paidEnd.setFullYear(paidEnd.getFullYear() + 1);
+      await this.storeService.updateStore(store.id!, { subscriptionEndDate: paidEnd });
 
       // Create billing history record
-      const companyId = this.currentCompany()?.id;
       if (companyId) {
         await this.billingService.createBillingHistory({
           companyId: companyId,
@@ -1420,7 +1473,7 @@ export class CompanyProfileComponent {
           paymentMethod: data.paymentMethod || 'gcash',
           paidAt: new Date()
         });
-        console.log('✅ Billing history record created');
+        // Billing history record created
       }
 
       this.toastService.success('Subscription activated successfully! 🎉');
@@ -1498,7 +1551,7 @@ export class CompanyProfileComponent {
 
   protected viewSubscriptionDetails(store: Store) {
     // Show detailed subscription information
-    const sub = store.subscription;
+    const sub = this.storeSubscriptions()[store.id || ''];
     if (!sub) {
       this.toastService.info('No subscription found for this store.');
       return;
@@ -1573,7 +1626,7 @@ export class CompanyProfileComponent {
     return daysUntilExpiry <= 7 && daysUntilExpiry > 0;
   }
 
-  private calculateExpiryDate(billingCycle: 'monthly' | 'quarterly' | 'yearly'): Date {
+  private calculateExpiryDate(billingCycle: 'monthly' | 'quarterly' | 'yearly' | 'trial14'): Date {
     const expiresAt = new Date();
     switch (billingCycle) {
       case 'monthly':
@@ -1585,6 +1638,9 @@ export class CompanyProfileComponent {
       case 'yearly':
         expiresAt.setFullYear(expiresAt.getFullYear() + 1);
         break;
+      case 'trial14':
+        expiresAt.setDate(expiresAt.getDate() + 14);
+        break;
     }
     return expiresAt;
   }
@@ -1592,5 +1648,32 @@ export class CompanyProfileComponent {
   // Tab management
   protected setActiveTab(tab: 'profile' | 'subscriptions') {
     this.activeTab.set(tab);
+  }
+
+  // Subscription summary helpers for template
+  protected getStoreTier(store: Store): string {
+    const sub = this.storeSubscriptions()[store.id || ''];
+    return sub?.planType || 'freemium';
+  }
+
+  protected getStoreStatus(store: Store): string {
+    const sub = this.storeSubscriptions()[store.id || ''];
+    const now = new Date();
+    const start = sub?.startDate;
+    const end = sub?.endDate || store.subscriptionEndDate;
+    if (!end) return 'inactive';
+    if (start && now < start) return 'inactive';
+    if (now <= end) return 'active';
+    return 'expired';
+  }
+
+  protected getStoreSubscribedAt(store: Store): Date | undefined {
+    const sub = this.storeSubscriptions()[store.id || ''];
+    return sub?.startDate;
+  }
+
+  protected getStoreExpiresAt(store: Store): Date | undefined {
+    const sub = this.storeSubscriptions()[store.id || ''];
+    return sub?.endDate || store.subscriptionEndDate;
   }
 }
