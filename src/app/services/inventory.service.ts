@@ -10,6 +10,7 @@ import {
   where, 
   getDocs 
 } from '@angular/fire/firestore';
+import { OfflineDocumentService } from '../core/services/offline-document.service';
 
 export interface InventoryItem {
   productId: string;
@@ -38,7 +39,7 @@ export class InventoryService {
     this.inventory().filter(item => item.quantity === 0)
   );
 
-  constructor(private firestore: Firestore) {}
+  constructor(private firestore: Firestore, private offlineDocService: OfflineDocumentService) {}
 
   async loadInventory(companyId: string, storeId: string, branchId: string) {
     try {
@@ -99,11 +100,19 @@ export class InventoryService {
           lastRestocked: new Date(),
           updatedAt: new Date()
         };
-        await setDoc(inventoryRef, newItem);
+        await this.offlineDocService.updateDocument(
+          `companies/${safeCompanyId}/stores/${safeStoreId}/branches/${safeBranchId}/inventory`,
+          productId,
+          newItem
+        );
         this.inventory.update(items => [...items, newItem]);
       } else {
         // Update existing item
-        await updateDoc(inventoryRef, updateData);
+        await this.offlineDocService.updateDocument(
+          `companies/${safeCompanyId}/stores/${safeStoreId}/branches/${safeBranchId}/inventory`,
+          productId,
+          updateData
+        );
         this.inventory.update(items =>
           items.map(item =>
             item.productId === productId

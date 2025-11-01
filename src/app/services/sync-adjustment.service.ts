@@ -1,5 +1,6 @@
 import { Injectable, inject } from '@angular/core';
 import { Firestore, collection, query, where, getDocs, doc, updateDoc, runTransaction, addDoc } from '@angular/fire/firestore';
+import { OfflineDocumentService } from '../core/services/offline-document.service';
 import { AuthService } from './auth.service';
 import { NetworkService } from './network.service';
 import { OfflineOrderService } from './offline-order.service';
@@ -16,6 +17,7 @@ export class SyncAdjustmentService {
   private networkService = inject(NetworkService);
   private offlineOrderService = inject(OfflineOrderService);
   private fifoService = inject(FIFOInventoryService);
+  private offlineDocService = inject(OfflineDocumentService);
 
   constructor() {
     // Listen for network restoration to trigger auto-sync
@@ -391,9 +393,10 @@ export class SyncAdjustmentService {
   private async storeOrderInFirestore(order: OrderDetails): Promise<void> {
     try {
       const orderDetailsRef = collection(this.firestore, 'orderDetails');
-      const orderDoc = doc(orderDetailsRef, order.id);
+      const orderId = (order as any).id || (order as any).orderId;
+      const orderDoc = doc(orderDetailsRef, orderId);
       
-      await updateDoc(orderDoc, {
+      await this.offlineDocService.updateDocument('orderDetails', orderId, {
         ...order,
         updatedAt: new Date()
       });

@@ -207,7 +207,7 @@ export class RoleDefinitionService {
       }
 
       const roleDocRef = doc(this.firestore, 'roleDefinition', roleId);
-      await updateDoc(roleDocRef, {
+      await this.offlineDocService.updateDocument('roleDefinition', roleId, {
         ...roleData,
         companyId: currentPermission.companyId, // Ensure companyId cannot be changed
         updatedAt: new Date()

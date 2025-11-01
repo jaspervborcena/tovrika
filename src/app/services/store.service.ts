@@ -36,7 +36,6 @@ export class StoreService {
     // Log when stores change
     if (currentStores.length === 0 && this.loadTimestamp > 0) {
       console.warn('🚨 STORES SIGNAL IS EMPTY! Last loaded:', new Date(this.loadTimestamp).toLocaleTimeString());
-      console.trace('Store signal empty trace');
     }
     return currentStores;
   });
@@ -67,7 +66,7 @@ export class StoreService {
     
     try {
       this.isLoading = true;
-      console.log('🏪 StoreService.loadStores called with storeIds:', storeIds);
+  console.log('🏪 StoreService.loadStores called with storeIds:', storeIds);
       
       if (!storeIds || storeIds.length === 0) {
         console.log('📋 No store IDs provided, clearing stores');
@@ -78,9 +77,9 @@ export class StoreService {
       const storesRef = collection(this.firestore, 'stores');
       const storesQuery = query(storesRef, where(documentId(), 'in', storeIds));
 
-      console.log('🔍 Executing Firestore query for stores...');
+  console.log('🔍 Executing Firestore query for stores...');
       const querySnapshot = await getDocs(storesQuery);
-      console.log('📊 Firestore query returned', querySnapshot.docs.length, 'documents');
+  console.log('📊 Firestore query returned', querySnapshot.docs.length, 'documents');
       
       const stores = querySnapshot.docs.map(doc => {
         const data = doc.data() as any;
@@ -121,7 +120,6 @@ export class StoreService {
           subscriptionPopupShown: data.subscriptionPopupShown || false
         };
         
-        console.log('🏪 Mapped store:', store.storeName, 'ID:', store.id, 'CompanyId:', store.companyId);
         return store;
       });
       
@@ -129,15 +127,6 @@ export class StoreService {
       this.storesSignal.set(stores);
       this.loadTimestamp = Date.now();
       console.log('✅ Stores loaded and signal updated. Current stores:', this.getStores().length);
-      
-      // Verify stores are still there after a delay
-      setTimeout(() => {
-        const currentCount = this.getStores().length;
-        console.log('🔍 Store count verification after 1s:', currentCount);
-        if (currentCount === 0) {
-          console.error('🚨 CRITICAL: Stores disappeared after loading!');
-        }
-      }, 1000);
       
     } catch (error) {
       console.error('❌ Error loading stores:', error);
@@ -452,7 +441,7 @@ export class StoreService {
       console.log('📄 Submitting BIR accreditation for store:', storeId);
 
       const storeRef = doc(this.firestore, 'stores', storeId);
-      await updateDoc(storeRef, {
+      await this.offlineDocService.updateDocument('stores', storeId, {
         isBirAccredited: false, // Not yet accredited until approved
         birAccreditationStatus: 'pending',
         birAccreditationSubmittedAt: new Date(),
@@ -493,8 +482,8 @@ export class StoreService {
         updateData.birAccreditationRejectedReason = rejectionReason;
       }
 
-      const storeRef = doc(this.firestore, 'stores', storeId);
-      await updateDoc(storeRef, updateData);
+  const storeRef = doc(this.firestore, 'stores', storeId);
+  await this.offlineDocService.updateDocument('stores', storeId, updateData);
 
       console.log('✅ BIR accreditation status updated');
     } catch (error) {

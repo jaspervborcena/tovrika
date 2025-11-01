@@ -458,7 +458,7 @@ export class OrderService {
   async updateOrderStatus(orderId: string, status: string): Promise<void> {
     try {
       const orderRef = doc(this.firestore, 'orders', orderId);
-      await updateDoc(orderRef, { status });
+      await this.offlineDocService.updateDocument('orders', orderId, { status });
     } catch (error) {
       console.error('Error updating order status:', error);
       throw error;
