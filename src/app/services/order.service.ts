@@ -399,7 +399,12 @@ export class OrderService {
       console.log('📊 HYBRID QUERY - Loading orders:', {
         storeId,
         startDate: startDate.toISOString(),
-        endDate: endDate.toISOString()
+        endDate: endDate.toISOString(),
+        userAuth: {
+          isLoggedIn: !!this.authService.getCurrentUser(),
+          userEmail: this.authService.getCurrentUser()?.email || 'null',
+          uid: this.authService.getCurrentUser()?.uid || 'null'
+        }
       });
 
       // Check if we should use API or Firebase based on date
@@ -407,7 +412,9 @@ export class OrderService {
       
       if (useApi) {
         console.log('🌐 Using API for historical data');
-        return await this.getOrdersFromApi(storeId, startDate, endDate);
+        // TEMPORARY: Skip API for now due to auth issues, use Firebase instead
+        console.log('⚠️ TEMPORARY: Skipping API due to auth issues, using Firebase for all dates');
+        // return await this.getOrdersFromApi(storeId, startDate, endDate);
       } else {
         console.log('🔥 Using Firebase for current date');
         // Fall back to existing Firebase logic below
@@ -430,17 +437,53 @@ export class OrderService {
         })));
       }
 
-      // Now check for orders with this storeId specifically
-      console.log('🔍 Step 2: Checking for orders with storeId:', storeId);
-      const storeOrdersQuery = query(ordersRef, where('storeId', '==', storeId), limit(10));
+      // Now check for orders with this storeId specifically and within date range
+      console.log('🔍 Step 2: Checking for orders with storeId and date range:', storeId);
+      
+      // Convert dates to Firestore Timestamps
+      const startTimestamp = Timestamp.fromDate(startDate);
+      const endTimestamp = Timestamp.fromDate(endDate);
+      
+      try {
+        const dateRangeQuery = query(
+          ordersRef, 
+          where('storeId', '==', storeId),
+          where('createdAt', '>=', startTimestamp),
+          where('createdAt', '<=', endTimestamp),
+          orderBy('createdAt', 'desc'),
+          limit(100) // Increased limit for date ranges
+        );
+        
+        const dateRangeSnapshot = await getDocs(dateRangeQuery);
+        console.log(`📊 Orders for store ${storeId} in date range: ${dateRangeSnapshot.docs.length}`);
+
+        if (dateRangeSnapshot.docs.length > 0) {
+          console.log('✅ Found orders for this store in date range!');
+          const orders = dateRangeSnapshot.docs.map(doc => this.transformDoc(doc));
+          console.log(`📊 Returning ${orders.length} orders`);
+          return orders;
+        }
+      } catch (dateQueryError) {
+        console.warn('⚠️ Date range query failed, trying without date filter:', dateQueryError);
+      }
+
+      // Fallback: Try without date filter if the date query failed
+      const storeOrdersQuery = query(ordersRef, where('storeId', '==', storeId), limit(50));
       const storeOrdersSnapshot = await getDocs(storeOrdersQuery);
-      console.log(`📊 Orders for store ${storeId}: ${storeOrdersSnapshot.docs.length}`);
+      console.log(`📊 Fallback - Orders for store ${storeId} (no date filter): ${storeOrdersSnapshot.docs.length}`);
 
       if (storeOrdersSnapshot.docs.length > 0) {
-        console.log('✅ Found orders for this store! Returning them...');
+        console.log('✅ Found orders for this store (fallback)!');
         const orders = storeOrdersSnapshot.docs.map(doc => this.transformDoc(doc));
-        console.log(`📊 Returning ${orders.length} orders`);
-        return orders;
+        
+        // Filter by date range on client side as fallback
+        const filteredOrders = orders.filter(order => {
+          const orderDate = new Date(order.createdAt);
+          return orderDate >= startDate && orderDate <= endDate;
+        });
+        
+        console.log(`📊 After client-side date filtering: ${filteredOrders.length} orders`);
+        return filteredOrders;
       } else {
         console.log('⚠️ No orders found for storeId:', storeId);
         console.log('💡 This might mean:');
@@ -494,8 +537,37 @@ export class OrderService {
     
     // Get Firebase ID token for authentication
     const idToken = await this.authService.getFirebaseIdToken();
+    console.log('🔐 Firebase ID token status:', {
+      hasToken: !!idToken,
+      tokenLength: idToken?.length || 0,
+      tokenStart: idToken ? idToken.substring(0, 10) + '...' : 'null',
+      currentUser: this.authService.getCurrentUser()?.email || 'null',
+      authStatus: 'logged in: ' + !!this.authService.getCurrentUser()
+    });
+    
+    // Check if user is signed in at all
+    const currentUser = this.authService.getCurrentUser();
+    if (!currentUser) {
+      console.error('❌ User is not signed in - redirecting to login or showing auth error');
+      return [];
+    }
+    
     if (!idToken) {
       console.error('❌ No Firebase ID token available for API authentication');
+      console.error('❌ User is signed in but token is null - possible token refresh issue');
+      // Try to force refresh the token
+      try {
+        console.log('🔄 Attempting to force refresh Firebase ID token...');
+        const refreshedToken = await this.authService.getFirebaseIdToken(true);
+        if (refreshedToken) {
+          console.log('✅ Token refresh successful, retrying API call...');
+          // Retry the API call with the refreshed token by calling this method again
+          return await this.getOrdersFromApi(storeId, startDate, endDate);
+        }
+      } catch (refreshError) {
+        console.error('❌ Token refresh failed:', refreshError);
+      }
+      
       return [];
     }
 
@@ -505,11 +577,11 @@ export class OrderService {
       to: toDate
     });
 
-    // Updated API URLs with authentication
+    // Updated API URLs with authentication - prioritize proxy for development
     const apiUrls = [
+      '/api', // Proxy URL (for development) - try this first to avoid CORS
       environment.api?.ordersApi || '',
-      environment.api?.directOrdersApi || '',
-      '/api' // Proxy URL (for development)
+      environment.api?.directOrdersApi || ''
     ].filter(Boolean);
 
     for (let i = 0; i < apiUrls.length; i++) {
@@ -521,7 +593,9 @@ export class OrderService {
           fromDate,
           toDate,
           fullUrl: `${apiUrl}?${params.toString()}`,
-          hasToken: !!idToken
+          hasToken: !!idToken,
+          currentUser: this.authService.getCurrentUser()?.email || 'null',
+          authStatus: 'logged in: ' + !!this.authService.getCurrentUser()
         });
 
         const headers: any = {
@@ -533,6 +607,8 @@ export class OrderService {
         if (idToken) {
           headers['Authorization'] = `Bearer ${idToken}`;
           console.log('🔐 Added Firebase ID token to Authorization header');
+        } else {
+          console.warn('⚠️ No ID token available - attempting request without authentication');
         }
 
         const response = await this.http.get<any>(

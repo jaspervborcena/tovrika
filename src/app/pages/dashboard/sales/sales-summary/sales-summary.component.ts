@@ -57,20 +57,22 @@ type Order = OrderDisplay;
           
           <div class="date-inputs">
             <div class="date-input-group">
-              <label for="fromDate">From:</label>
+              <label for="fromDate">From Date:</label>
               <input 
                 type="date" 
                 id="fromDate"
                 [(ngModel)]="fromDate"
-                class="date-input">
+                class="date-input"
+                title="Select start date">
             </div>
             <div class="date-input-group">
-              <label for="toDate">To:</label>
+              <label for="toDate">To Date:</label>
               <input 
                 type="date" 
                 id="toDate"
                 [(ngModel)]="toDate"
-                class="date-input">
+                class="date-input"
+                title="Select end date">
             </div>
             <div class="go-button-group">
               <button 
@@ -109,8 +111,14 @@ type Order = OrderDisplay;
       <div *ngIf="!isLoading()" class="sales-table-container">
         <div class="table-header">
           <h3>Sales Details</h3>
-          <div class="table-info">
-            Showing {{ paginatedOrders().length }} of {{ totalOrders() }} orders
+          <div class="table-info-container">
+            <div class="table-info">
+              Showing {{ paginatedOrders().length }} of {{ totalOrders() }} orders
+            </div>
+            <div *ngIf="sortColumn()" class="sort-info">
+              Sorted by {{ getSortDisplayName(sortColumn()) }} 
+              <span class="sort-direction">{{ sortDirection() === 'asc' ? '↑' : '↓' }}</span>
+            </div>
           </div>
         </div>
         
@@ -118,13 +126,62 @@ type Order = OrderDisplay;
           <table class="sales-table">
             <thead>
               <tr>
-                <th>Invoice Number</th>
-                <th>Date & Time</th>
-                <th>Customer</th>
-                <th>Items</th>
-                <th>Total Amount</th>
-                <th>Payment Method</th>
-                <th>Status</th>
+                <th class="sortable-header" (click)="sort('invoiceNumber')" [class.active]="isSortedColumn('invoiceNumber')">
+                  <div class="header-content">
+                    <span>Invoice Number</span>
+                    <svg class="sort-icon" width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                      <path [attr.d]="getSortIcon('invoiceNumber')"/>
+                    </svg>
+                  </div>
+                </th>
+                <th class="sortable-header" (click)="sort('createdAt')" [class.active]="isSortedColumn('createdAt')">
+                  <div class="header-content">
+                    <span>Date & Time</span>
+                    <svg class="sort-icon" width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                      <path [attr.d]="getSortIcon('createdAt')"/>
+                    </svg>
+                  </div>
+                </th>
+                <th class="sortable-header" (click)="sort('customerName')" [class.active]="isSortedColumn('customerName')">
+                  <div class="header-content">
+                    <span>Customer</span>
+                    <svg class="sort-icon" width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                      <path [attr.d]="getSortIcon('customerName')"/>
+                    </svg>
+                  </div>
+                </th>
+                <th class="sortable-header" (click)="sort('itemsCount')" [class.active]="isSortedColumn('itemsCount')">
+                  <div class="header-content">
+                    <span>Items</span>
+                    <svg class="sort-icon" width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                      <path [attr.d]="getSortIcon('itemsCount')"/>
+                    </svg>
+                  </div>
+                </th>
+                <th class="sortable-header" (click)="sort('totalAmount')" [class.active]="isSortedColumn('totalAmount')">
+                  <div class="header-content">
+                    <span>Total Amount</span>
+                    <svg class="sort-icon" width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                      <path [attr.d]="getSortIcon('totalAmount')"/>
+                    </svg>
+                  </div>
+                </th>
+                <th class="sortable-header" (click)="sort('paymentMethod')" [class.active]="isSortedColumn('paymentMethod')">
+                  <div class="header-content">
+                    <span>Payment Method</span>
+                    <svg class="sort-icon" width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                      <path [attr.d]="getSortIcon('paymentMethod')"/>
+                    </svg>
+                  </div>
+                </th>
+                <th class="sortable-header" (click)="sort('status')" [class.active]="isSortedColumn('status')">
+                  <div class="header-content">
+                    <span>Status</span>
+                    <svg class="sort-icon" width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                      <path [attr.d]="getSortIcon('status')"/>
+                    </svg>
+                  </div>
+                </th>
                 <th>Action</th>
               </tr>
             </thead>
@@ -563,9 +620,30 @@ type Order = OrderDisplay;
       font-weight: 600;
     }
 
+    .table-info-container {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      align-items: flex-end;
+    }
+
     .table-info {
       color: #718096;
       font-size: 14px;
+    }
+
+    .sort-info {
+      color: #4299e1;
+      font-size: 12px;
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .sort-direction {
+      font-size: 14px;
+      font-weight: 700;
     }
 
     .table-wrapper {
@@ -587,6 +665,66 @@ type Order = OrderDisplay;
       text-transform: uppercase;
       letter-spacing: 0.025em;
       border-bottom: 1px solid #e2e8f0;
+    }
+
+    .sortable-header {
+      cursor: pointer;
+      user-select: none;
+      transition: all 0.2s ease;
+      position: relative;
+    }
+
+    .sortable-header:hover {
+      background: #edf2f7;
+      color: #2d3748;
+    }
+
+    .sortable-header.active {
+      background: #e2e8f0;
+      color: #2d3748;
+    }
+
+    .header-content {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .sort-icon {
+      opacity: 0.5;
+      transition: all 0.2s ease;
+      flex-shrink: 0;
+    }
+
+    .sortable-header:hover .sort-icon {
+      opacity: 0.8;
+    }
+
+    .sortable-header.active .sort-icon {
+      opacity: 1;
+      color: #4299e1;
+    }
+
+    /* Visual indicator for sortable headers */
+    .sortable-header::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      bottom: 0;
+      width: 100%;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, #4299e1, transparent);
+      opacity: 0;
+      transition: opacity 0.2s ease;
+    }
+
+    .sortable-header.active::before {
+      opacity: 1;
+    }
+
+    .sortable-header:hover::before {
+      opacity: 0.5;
     }
 
     .sales-table td {
@@ -785,13 +923,39 @@ type Order = OrderDisplay;
     }
 
     @media (max-width: 768px) {
-      .sales-header {
+      .header-content {
+        padding: 0 1rem;
+      }
+
+      .page-title {
+        font-size: 2rem;
+      }
+
+      .sales-controls {
+        padding: 0 1rem 2rem 1rem;
+      }
+
+      .date-picker-section {
         flex-direction: column;
         align-items: stretch;
+        gap: 15px;
+      }
+
+      .date-inputs {
+        justify-content: space-between;
+      }
+
+      .date-input {
+        width: 140px;
       }
 
       .totals-section {
         justify-content: center;
+      }
+
+      .total-card {
+        min-width: 140px;
+        padding: 20px;
       }
 
       .table-wrapper {
@@ -801,6 +965,40 @@ type Order = OrderDisplay;
       .sales-table th,
       .sales-table td {
         padding: 12px 8px;
+      }
+
+      .header-content {
+        gap: 4px;
+      }
+
+      .header-content span {
+        font-size: 11px;
+      }
+
+      .sort-icon {
+        width: 14px;
+        height: 14px;
+      }
+
+      .table-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 10px;
+      }
+
+      .table-info-container {
+        align-items: flex-start;
+      }
+
+      .pagination-container {
+        flex-direction: column;
+        gap: 12px;
+        align-items: center;
+      }
+
+      .pagination-controls {
+        flex-wrap: wrap;
+        justify-content: center;
       }
     }
 
@@ -1009,6 +1207,10 @@ export class SalesSummaryComponent implements OnInit {
   currentPage = signal<number>(1);
   itemsPerPage = signal<number>(20);
 
+  // Sorting signals
+  sortColumn = signal<string>('createdAt');
+  sortDirection = signal<'asc' | 'desc'>('desc');
+
   // Date properties
   fromDate: string = '';
   toDate: string = '';
@@ -1023,13 +1225,70 @@ export class SalesSummaryComponent implements OnInit {
     return this.stores().length > 1;
   });
 
-  // Computed values for pagination
+  // Computed values for sorting and pagination
+  sortedOrders = computed(() => {
+    const orders = this.orders();
+    const column = this.sortColumn();
+    const direction = this.sortDirection();
+
+    if (!column) return orders;
+
+    return [...orders].sort((a, b) => {
+      let aValue: any;
+      let bValue: any;
+
+      switch (column) {
+        case 'invoiceNumber':
+          aValue = a.invoiceNumber || '';
+          bValue = b.invoiceNumber || '';
+          break;
+        case 'createdAt':
+          aValue = new Date(a.createdAt);
+          bValue = new Date(b.createdAt);
+          break;
+        case 'customerName':
+          aValue = a.customerName || a.soldTo || 'Walk-in Customer';
+          bValue = b.customerName || b.soldTo || 'Walk-in Customer';
+          break;
+        case 'itemsCount':
+          aValue = a.items?.length || 0;
+          bValue = b.items?.length || 0;
+          break;
+        case 'totalAmount':
+          aValue = a.totalAmount || 0;
+          bValue = b.totalAmount || 0;
+          break;
+        case 'paymentMethod':
+          aValue = a.paymentMethod || 'Cash';
+          bValue = b.paymentMethod || 'Cash';
+          break;
+        case 'status':
+          aValue = a.status || 'completed';
+          bValue = b.status || 'completed';
+          break;
+        default:
+          return 0;
+      }
+
+      // Handle string comparison
+      if (typeof aValue === 'string' && typeof bValue === 'string') {
+        const comparison = aValue.toLowerCase().localeCompare(bValue.toLowerCase());
+        return direction === 'asc' ? comparison : -comparison;
+      }
+
+      // Handle number/date comparison
+      if (aValue < bValue) return direction === 'asc' ? -1 : 1;
+      if (aValue > bValue) return direction === 'asc' ? 1 : -1;
+      return 0;
+    });
+  });
+
   filteredOrders = computed(() => {
-    return this.orders();
+    return this.sortedOrders();
   });
 
   totalFilteredOrders = computed(() => {
-    return this.orders().length;
+    return this.filteredOrders().length;
   });
 
   totalPages = computed(() => {
@@ -1053,17 +1312,23 @@ export class SalesSummaryComponent implements OnInit {
   });
 
   constructor() {
-    // Initialize with current date
+    // Initialize default range to the last 7 days (From = today - 6, To = today)
     const today = new Date();
-    this.fromDate = this.formatDateForInput(today);
+    const sevenDaysAgo = new Date(today);
+    sevenDaysAgo.setDate(today.getDate() - 6); // include today -> 7-day window
+    this.fromDate = this.formatDateForInput(sevenDaysAgo);
     this.toDate = this.formatDateForInput(today);
   }
 
   async ngOnInit(): Promise<void> {
-    // Set default dates to today
-    const today = new Date();
-    this.fromDate = today.toISOString().split('T')[0];
-    this.toDate = today.toISOString().split('T')[0];
+    // Ensure default date range is ordered correctly and stay as last-7-days set in constructor
+    this.ensureDateOrder();
+    const today = new Date(this.toDate);
+    console.log('📅 Default date range set:', { 
+      from: this.fromDate, 
+      to: this.toDate,
+      formattedTo: this.formatDate(today)
+    });
     
     await this.loadStores();
     
@@ -1097,7 +1362,8 @@ export class SalesSummaryComponent implements OnInit {
   }
 
   onDateChange(): void {
-    // Don't auto-load on date change, wait for user to click Go button
+    // Ensure user-entered dates maintain a valid range (From <= To).
+    this.ensureDateOrder();
   }
 
   onStoreChange(): void {
@@ -1111,6 +1377,8 @@ export class SalesSummaryComponent implements OnInit {
    * Load current date data from Firebase (default behavior)
    */
   async loadCurrentDateData(): Promise<void> {
+    // Ensure date order before loading
+    this.ensureDateOrder();
     console.log('🔄 Loading current date data from Firebase');
     console.log('📅 Date range:', { from: this.fromDate, to: this.toDate });
     console.log('🏪 Selected store:', this.selectedStoreId());
@@ -1138,6 +1406,9 @@ export class SalesSummaryComponent implements OnInit {
       alert('Please select both from and to dates');
       return;
     }
+
+    // Ensure date ordering before proceeding (swap if user accidentally set From > To)
+    this.ensureDateOrder();
 
     // Determine data source based on date range for display purposes
     const startDate = new Date(this.fromDate);
@@ -1294,6 +1565,32 @@ export class SalesSummaryComponent implements OnInit {
     return date.toISOString().split('T')[0];
   }
 
+  /**
+   * Ensure the selected date range has fromDate <= toDate.
+   * If the user selected the dates in reverse, swap them so the UI always has a valid range.
+   */
+  private ensureDateOrder(): void {
+    if (!this.fromDate || !this.toDate) return;
+
+    try {
+      const from = new Date(this.fromDate);
+      const to = new Date(this.toDate);
+
+      if (from.getTime() > to.getTime()) {
+        // Swap them
+        const oldFrom = this.fromDate;
+        this.fromDate = this.toDate;
+        this.toDate = oldFrom;
+        // Reset pagination when swapping to avoid confusing page numbers
+        this.currentPage.set(1);
+        console.log('🔁 Date range swapped to maintain From <= To:', { from: this.fromDate, to: this.toDate });
+      }
+    } catch (err) {
+      // If parsing fails, do nothing - validation will catch missing/invalid dates later
+      console.warn('Could not ensure date order due to parse error', err);
+    }
+  }
+
   // Pagination methods
   goToPage(page: number): void {
     if (page >= 1 && page <= this.totalPages()) {
@@ -1344,7 +1641,52 @@ export class SalesSummaryComponent implements OnInit {
     return Math.min(a, b);
   }
 
-  // Test authentication method
-  
+  // Sorting methods
+  sort(column: string): void {
+    const currentColumn = this.sortColumn();
+    const currentDirection = this.sortDirection();
+
+    if (currentColumn === column) {
+      // Toggle direction if same column
+      this.sortDirection.set(currentDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      // Set new column and default to ascending
+      this.sortColumn.set(column);
+      this.sortDirection.set('asc');
+    }
+
+    // Reset to first page when sorting
+    this.currentPage.set(1);
+  }
+
+  getSortIcon(column: string): string {
+    const currentColumn = this.sortColumn();
+    const direction = this.sortDirection();
+
+    if (currentColumn !== column) {
+      return 'M7 10L12 15L17 10H7Z'; // Neutral sort icon
+    }
+
+    return direction === 'asc' 
+      ? 'M7 14L12 9L17 14H7Z' // Up arrow
+      : 'M7 10L12 15L17 10H7Z'; // Down arrow
+  }
+
+  isSortedColumn(column: string): boolean {
+    return this.sortColumn() === column;
+  }
+
+  getSortDisplayName(column: string): string {
+    const displayNames: { [key: string]: string } = {
+      'invoiceNumber': 'Invoice Number',
+      'createdAt': 'Date & Time',
+      'customerName': 'Customer',
+      'itemsCount': 'Items Count',
+      'totalAmount': 'Total Amount',
+      'paymentMethod': 'Payment Method',
+      'status': 'Status'
+    };
+    return displayNames[column] || column;
+  }
 
 }
