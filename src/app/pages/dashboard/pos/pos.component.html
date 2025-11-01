@@ -719,6 +719,9 @@
                 (click)="startNewOrder()" 
                 class="btn btn-new-order"
                 [class.active]="isNewOrderActive()">
+                <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true" style="vertical-align: middle; margin-right: 6px;">
+                  <path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm1 5v4h4v2h-4v4h-2v-4H7v-2h4V7h2z"/>
+                </svg>
                 {{ 'pos.newOrder' | translate }}
               </button>
             </div>
@@ -727,14 +730,20 @@
             <div class="action-buttons">
               <button 
                 (click)="clearCart()" 
-                [disabled]="cartItems().length === 0 || !isNewOrderActive()"
-                class="btn btn-secondary">
+                [disabled]="!canClearCart()"
+                class="btn btn-gradient">
+                <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6m5 5v6m4-6v6"/>
+                </svg>
                 {{ 'pos.clearCart' | translate }}
               </button>
               <button 
                 (click)="processOrder()" 
                 [disabled]="cartItems().length === 0 || isProcessing()"
                 class="btn btn-primary">
+                <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true" style="vertical-align: middle; margin-right: 6px;">
+                  <path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm-1 13.17-3.59-3.58 1.41-1.42L11 12.34l4.17-4.17 1.41 1.41L11 15.17z"/>
+                </svg>
                 {{ completeOrderButtonText() | translate }}
               </button>
             </div>

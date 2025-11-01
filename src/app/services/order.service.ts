@@ -655,51 +655,5 @@ export class OrderService {
     }
   }
 
-  /**
-   * Test authentication with the API endpoints
-   */
-  async testAuthenticationEndpoints(): Promise<void> {
-    console.log('🧪 Testing authentication endpoints...');
-    
-    const idToken = await this.authService.getFirebaseIdToken();
-    if (!idToken) {
-      console.error('❌ No Firebase ID token available for testing');
-      return;
-    }
-
-    const headers = {
-      'Authorization': `Bearer ${idToken}`,
-      'Content-Type': 'application/json',
-      'Accept': 'application/json'
-    };
-
-    // Test basic authentication
-    try {
-      console.log('🔐 Testing basic auth endpoint...');
-      const basicAuthResponse = await this.http.get(
-        'https://asia-east1-jasperpos-1dfd5.cloudfunctions.net/test_auth_basic',
-        { headers }
-      ).toPromise();
-      console.log('✅ Basic auth test successful:', basicAuthResponse);
-    } catch (error) {
-      console.error('❌ Basic auth test failed:', error);
-    }
-
-    // Test store access (using current user's store)
-    try {
-      const currentPermission = this.authService.getCurrentPermission();
-      if (currentPermission?.storeId) {
-        console.log('🏪 Testing store access endpoint...');
-        const storeAuthResponse = await this.http.get(
-          `https://asia-east1-jasperpos-1dfd5.cloudfunctions.net/test_auth_store?storeId=${currentPermission.storeId}`,
-          { headers }
-        ).toPromise();
-        console.log('✅ Store auth test successful:', storeAuthResponse);
-      } else {
-        console.warn('⚠️ No storeId found for store auth test');
-      }
-    } catch (error) {
-      console.error('❌ Store auth test failed:', error);
-    }
-  }
+  
 }

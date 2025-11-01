@@ -1,5 +1,6 @@
 import { Injectable, inject } from '@angular/core';
 import { Firestore, collection, addDoc, updateDoc, doc, getDocs, query, where, limit, orderBy, Timestamp } from '@angular/fire/firestore';
+import { getDoc as fbGetDoc } from 'firebase/firestore';
 import { OfflineDocumentService } from '../core/services/offline-document.service';
 import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { AuthService } from './auth.service';
@@ -159,5 +160,39 @@ export class SubscriptionService {
     const snap = await uploadBytes(r, file, { contentType: file.type || 'image/jpeg' });
     const url = await getDownloadURL(snap.ref);
     return url;
+  }
+
+  /** Get a subscription document directly by its document ID */
+  async getSubscriptionById(docId: string): Promise<{ id: string; data: SubDoc } | null> {
+    const dRef = doc(this.firestore, this.collectionName, docId);
+    const snap = await fbGetDoc(dRef);
+    if (!snap.exists()) return null;
+    const raw = snap.data() as any;
+    const toDate = (v: any) => v?.toDate?.() || v || null;
+    const sub: SubDoc = {
+      id: snap.id,
+      subscriptionId: raw.subscriptionId,
+      companyId: raw.companyId,
+      storeId: raw.storeId,
+      uid: raw.uid,
+      planType: raw.planType,
+      status: raw.status,
+      startDate: toDate(raw.startDate),
+      endDate: toDate(raw.endDate),
+      trialStart: toDate(raw.trialStart),
+      trialDays: raw.trialDays,
+      isTrial: raw.isTrial,
+      promoCode: raw.promoCode ?? null,
+      referralCode: raw.referralCode ?? null,
+      paymentMethod: raw.paymentMethod,
+      paymentReference: raw.paymentReference,
+      amountPaid: raw.amountPaid,
+      currency: raw.currency,
+      paymentReceiptUrl: raw.paymentReceiptUrl,
+      features: raw.features as SubscriptionFeatures,
+      createdAt: toDate(raw.createdAt),
+      updatedAt: toDate(raw.updatedAt),
+    };
+    return { id: snap.id, data: sub };
   }
 }
