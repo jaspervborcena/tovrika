@@ -1801,7 +1801,14 @@ export class ProductManagementComponent implements OnInit {
       const currentPermission = this.authService.getCurrentPermission();
       if (currentPermission?.companyId) {
         await this.storeService.loadStoresByCompany(currentPermission.companyId);
-        await this.productService.loadProducts(currentPermission.companyId);
+        
+        // Load products for the specific store (BigQuery API requires storeId)
+        if (currentPermission.storeId) {
+          await this.productService.loadProducts(currentPermission.storeId);
+        } else {
+          console.warn('No storeId available - cannot load products from BigQuery API');
+        }
+        
         await this.loadCategories(); // Load categories from CategoryService
       } else {
         // Creator account, no companyId or stores yet, allow empty arrays for onboarding
@@ -2815,7 +2822,15 @@ export class ProductManagementComponent implements OnInit {
   async refreshProducts(): Promise<void> {
     try {
       this.loading = true;
-      await this.productService.loadProducts();
+      
+      // Get current permission to access storeId
+      const currentPermission = this.authService.getCurrentPermission();
+      if (currentPermission?.storeId) {
+        await this.productService.loadProducts(currentPermission.storeId);
+      } else {
+        console.warn('No storeId available - cannot refresh products from BigQuery API');
+      }
+      
       this.filterProducts();
     } catch (error) {
       console.error('Error refreshing products:', error);
