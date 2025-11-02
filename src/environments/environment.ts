@@ -17,7 +17,8 @@ export const environment = {
   api: {
     baseUrl: "https://asia-east1-jasperpos-1dfd5.cloudfunctions.net",
     ordersApi: "/api", // Uses proxy in development
-    directOrdersApi: "https://get-orders-by-date-bq-7bpeqovfmq-de.a.run.app" // Updated to BQ endpoint
+    directOrdersApi: "https://get-orders-by-date-bq-7bpeqovfmq-de.a.run.app", // Updated to BQ endpoint
+    productsApi: "https://get-products-bq-7bpeqovfmq-de.a.run.app" // BigQuery products endpoint (Cloud Run)
   },
   inventory: {
     // reconciliationMode: 'legacy' uses client-side FIFO; 'recon' defers to Cloud Function with tracking

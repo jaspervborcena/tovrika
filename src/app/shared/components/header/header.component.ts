@@ -173,7 +173,13 @@ export class HeaderComponent implements OnInit {
       if (currentPermission?.companyId) {
         // Load company-specific data
         await this.storeService.loadStoresByCompany(currentPermission.companyId);
-        await this.productService.loadProducts(currentPermission.companyId);
+        
+        // Load products for the specific store (BigQuery API requires storeId)
+        if (currentPermission.storeId) {
+          await this.productService.loadProducts(currentPermission.storeId);
+        } else {
+          console.warn('No storeId available - cannot load products from BigQuery API');
+        }
         
         this.stores.set(this.storeService.getStores());
         this.totalStores.set(this.storeService.totalStores());
