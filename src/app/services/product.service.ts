@@ -1,4 +1,5 @@
 import { Injectable, computed, signal, inject } from '@angular/core';
+import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { 
   Firestore, 
   collection, 
@@ -18,6 +19,7 @@ import { FirestoreSecurityService } from '../core/services/firestore-security.se
 import { OfflineDocumentService } from '../core/services/offline-document.service';
 import { LoggerService } from '@app/core/services/logger.service';
 import { logFirestore } from '@app/core/utils/firestore-logger';
+import { environment } from '../../environments/environment';
 
 @Injectable({
   providedIn: 'root'
@@ -48,7 +50,8 @@ export class ProductService {
     private firestore: Firestore,
     private authService: AuthService,
     private securityService: FirestoreSecurityService,
-    private logger: LoggerService
+    private logger: LoggerService,
+    private http: HttpClient
   ) {}
 
   private transformFirestoreDoc(doc: any): Product {
@@ -165,7 +168,161 @@ export class ProductService {
     });
   }
 
-  async loadProducts(storeId?: string): Promise<void> {
+  async loadProducts(storeId: string): Promise<void> {
+    try {
+      if (!storeId) {
+        throw new Error('storeId is required for BigQuery products API');
+      }
+      // Use BigQuery API only - fallback disabled for testing
+      await this.loadProductsFromBigQuery(storeId);
+    } catch (error) {
+      console.error('BigQuery products API failed:', error);
+      throw error;
+    }
+  }
+
+  private async loadProductsFromBigQuery(storeId: string): Promise<void> {
+    try {
+      if (!storeId) {
+        throw new Error('storeId is required for BigQuery products API');
+      }
+
+      const currentUser = this.authService.getCurrentUser();
+      if (!currentUser) {
+        throw new Error('User not authenticated');
+      }
+
+      console.log('🔐 Current User:', { uid: currentUser.uid, email: currentUser.email });
+      console.log('🏪 Store ID:', storeId);
+
+      // Get Firebase ID token for authentication (same pattern as OrderService)
+      const idToken = await this.authService.getFirebaseIdToken();
+      console.log('🔐 Firebase ID token status:', {
+        hasToken: !!idToken,
+        tokenLength: idToken?.length || 0,
+        tokenStart: idToken ? idToken.substring(0, 10) + '...' : 'null',
+        currentUser: this.authService.getCurrentUser()?.email || 'null',
+        authStatus: 'logged in: ' + !!this.authService.getCurrentUser()
+      });
+
+      // Check if user is signed in at all
+      if (!currentUser) {
+        console.error('❌ User is not signed in - cannot load products');
+        throw new Error('User not authenticated');
+      }
+      
+      if (!idToken) {
+        console.error('❌ No Firebase ID token available for API authentication');
+        console.error('❌ User is signed in but token is null - possible token refresh issue');
+        
+        // Try to force refresh the token (same as OrderService)
+        try {
+          console.log('🔄 Attempting to force refresh Firebase ID token...');
+          const refreshedToken = await this.authService.getFirebaseIdToken(true);
+          if (refreshedToken) {
+            console.log('✅ Token refresh successful, retrying API call...');
+            // Retry with refreshed token
+            return await this.loadProductsFromBigQuery(storeId);
+          }
+        } catch (refreshError) {
+          console.error('❌ Token refresh failed:', refreshError);
+        }
+        
+        throw new Error('No Firebase ID token available');
+      }
+
+      // Build query parameters
+      const params = new URLSearchParams({
+        storeId: storeId, // Required parameter
+        limit: '100' // Default limit
+      });
+
+      // Make API call to BigQuery Cloud Function
+      const url = `${environment.api.productsApi}?${params}`;
+      console.log('🌐 API URL:', url);
+      
+      // Use same header pattern as OrderService (plain object, not HttpHeaders)
+      const headers: any = {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      };
+
+      // Add Authorization header with Firebase ID token
+      if (idToken) {
+        headers['Authorization'] = `Bearer ${idToken}`;
+        console.log('🔐 Added Firebase ID token to Authorization header');
+      }
+
+      console.log('📡 Request Headers:', {
+        'Authorization': `Bearer ${idToken.substring(0, 20)}...`,
+        'Content-Type': 'application/json'
+      });
+
+      const response = await this.http.get<any>(url, { headers }).toPromise();
+      
+      console.log('📦 BigQuery Response:', response);
+      console.log('📦 Response type:', typeof response);
+      console.log('📦 Response keys:', Object.keys(response || {}));
+      
+      // Transform BigQuery response to Product interface
+      const products: Product[] = (response?.products || response || []).map((item: any) => this.transformBigQueryProduct(item));
+      
+      this.products.set(products);
+      console.log(`✅ Loaded ${products.length} products from BigQuery API`);
+    } catch (error: any) {
+      console.error('❌ Error loading products from BigQuery:', error);
+      console.error('❌ Error status:', error.status);
+      console.error('❌ Error message:', error.message);
+      console.error('❌ Error details:', error.error);
+      
+      if (error.status === 401) {
+        console.error('🚫 AUTHENTICATION FAILED - Check:');
+        console.error('   1. Firebase ID token is valid');
+        console.error('   2. Cloud Function validates Bearer token');
+        console.error('   3. Firebase Admin SDK is initialized in Cloud Function');
+      }
+      
+      throw error;
+    }
+  }
+
+  private transformBigQueryProduct(item: any): Product {
+    return {
+      id: item.id || item.productId || '',
+      uid: item.uid || '',
+      productName: item.productName || item.name || '',
+      description: item.description || undefined,
+      skuId: item.skuId || item.sku || '',
+      unitType: item.unitType || 'pieces',
+      category: item.category || '',
+      totalStock: Number(item.totalStock || item.stock || 0),
+      sellingPrice: Number(item.sellingPrice || item.unitPrice || 0),
+      companyId: item.companyId || '',
+      storeId: item.storeId || '',
+      barcodeId: item.barcodeId || item.barcode || '',
+      imageUrl: item.imageUrl || '',
+      isFavorite: !!item.isFavorite || false,
+      inventory: this.transformInventoryArray(item.inventory || []),
+      
+      // Tax and Discount Fields with defaults
+      isVatApplicable: item.isVatApplicable || false,
+      vatRate: item.vatRate || 0,
+      hasDiscount: item.hasDiscount || false,
+      discountType: item.discountType || 'percentage',
+      discountValue: item.discountValue || 0,
+      
+      // Price and Quantity Tracking
+      priceHistory: this.transformPriceHistory(item.priceHistory || []),
+      quantityAdjustments: this.transformQuantityAdjustments(item.quantityAdjustments || []),
+      
+      status: item.status || 'active',
+      createdAt: item.createdAt ? new Date(item.createdAt) : new Date(),
+      updatedAt: item.updatedAt ? new Date(item.updatedAt) : new Date(),
+      lastUpdated: item.lastUpdated ? new Date(item.lastUpdated) : new Date()
+    };
+  }
+
+  private async loadProductsFromFirestore(storeId?: string): Promise<void> {
     try {
       // Only check authentication, no UID filtering needed for reading
       const currentUser = this.authService.getCurrentUser();
@@ -193,11 +350,82 @@ export class ProductService {
       
       this.products.set(products);
     } catch (error) {
-      console.error('Error loading products:', error);
+      console.error('Error loading products from Firestore:', error);
       throw error;
     }
   }
 async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promise<void> {
+    try {
+      // Use BigQuery API only - fallback disabled for testing
+      await this.loadProductsByCompanyAndStoreFromBigQuery(companyId, storeId);
+    } catch (error) {
+      console.error('BigQuery products API failed:', error);
+      throw error;
+    }
+  }
+
+  private async loadProductsByCompanyAndStoreFromBigQuery(companyId?: string, storeId?: string): Promise<void> {
+    try {
+      const currentUser = this.authService.getCurrentUser();
+      if (!currentUser) {
+        throw new Error('User not authenticated');
+      }
+
+      console.log('🔐 Company/Store Query - Current User:', { uid: currentUser.uid, email: currentUser.email });
+
+      // Get Firebase ID token for authentication
+      const token = await this.authService.getFirebaseIdToken();
+      if (!token) {
+        throw new Error('No Firebase ID token available');
+      }
+
+      console.log('🎫 Company/Store Query - Token exists:', !!token);
+
+      // Build query parameters
+      const params = new URLSearchParams({
+        limit: '100' // Default limit
+      });
+      
+      if (companyId) {
+        params.set('companyId', companyId);
+      }
+      
+      if (storeId) {
+        params.set('storeId', storeId);
+      }
+
+      // Make API call to BigQuery Cloud Function
+      const url = `${environment.api.productsApi}?${params}`;
+      console.log('🌐 Company/Store API URL:', url);
+      
+      const headers = new HttpHeaders({
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      });
+
+      const response = await this.http.get<any>(url, { headers }).toPromise();
+      
+      // Transform BigQuery response to Product interface
+      const products: Product[] = (response?.products || response || []).map((item: any) => this.transformBigQueryProduct(item));
+      
+      // Validate that we actually have products before setting
+      if (products.length === 0) {
+        console.warn('⚠️ No products found for BigQuery query:', { companyId, storeId });
+        console.warn('⚠️ This could be due to:');
+        console.warn('   1. No products exist for this company/store in BigQuery');
+        console.warn('   2. Company/store IDs do not match BigQuery records');
+        console.warn('   3. User needs to create products first');
+      }
+      
+      this.products.set(products);
+      console.log(`✅ Loaded ${products.length} products from BigQuery API`);
+    } catch (error) {
+      console.error('Error loading products from BigQuery:', error);
+      throw error;
+    }
+  }
+
+  private async loadProductsByCompanyAndStoreFromFirestore(companyId?: string, storeId?: string): Promise<void> {
     try {
       // Only check authentication, no UID filtering needed for reading
       const currentUser = this.authService.getCurrentUser();
