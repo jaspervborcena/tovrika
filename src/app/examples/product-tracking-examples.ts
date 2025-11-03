@@ -92,10 +92,9 @@ export class ProductTrackingExamples {
     console.log('- New batch created: 40 units at ₱2.25');
     console.log('- Total stock: 60 units');
     
-    const product = this.productService.getProduct(productId);
-    console.log('📦 Inventory:', product?.inventory);
-    console.log('📊 Price History:', product?.priceHistory);
-    console.log('📊 Quantity Adjustments:', product?.quantityAdjustments);
+  const product = this.productService.getProduct(productId);
+  console.log('📦 Inventory:', product?.inventory);
+  console.log('📊 Price History:', product?.priceHistory);
   }
 
   /**

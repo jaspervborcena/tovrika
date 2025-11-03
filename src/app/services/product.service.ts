@@ -83,9 +83,8 @@ export class ProductService {
       discountType: data['discountType'] || 'percentage',
       discountValue: data['discountValue'] || 0,
       
-      // Price and Quantity Tracking
-      priceHistory: this.transformPriceHistory(data['priceHistory'] || []),
-      quantityAdjustments: this.transformQuantityAdjustments(data['quantityAdjustments'] || []),
+  // Price and Quantity Tracking
+  priceHistory: this.transformPriceHistory(data['priceHistory'] || []),
       
       status: data['status'] || 'active',
       createdAt: data['createdAt']?.toDate() || new Date(),
@@ -111,18 +110,8 @@ export class ProductService {
   }
 
   private transformQuantityAdjustments(adjustmentsData: any[]): any[] {
-    if (!Array.isArray(adjustmentsData)) return [];
-    return adjustmentsData.map(item => ({
-      batchId: item.batchId || '',
-      oldQuantity: item.oldQuantity || 0,
-      newQuantity: item.newQuantity || 0,
-      adjustmentType: item.adjustmentType || 'manual',
-      adjustedAt: item.adjustedAt?.toDate() || new Date(),
-      adjustedBy: item.adjustedBy || '',
-      adjustedByName: item.adjustedByName || '',
-      reason: item.reason || '',
-      notes: item.notes || ''
-    }));
+    // quantityAdjustments removed from product documents. Keep method for backward compatibility but return empty.
+    return [];
   }
 
   private transformInventoryArray(inventoryData: any[]): ProductInventory[] {
@@ -358,9 +347,8 @@ export class ProductService {
       discountType: item.discountType || 'percentage',
       discountValue: item.discountValue || 0,
       
-      // Price and Quantity Tracking
-      priceHistory: this.transformPriceHistory(item.priceHistory || []),
-      quantityAdjustments: this.transformQuantityAdjustments(item.quantityAdjustments || []),
+  // Price and Quantity Tracking
+  priceHistory: this.transformPriceHistory(item.priceHistory || []),
       
       status: item.status || 'active',
       createdAt: item.createdAt ? new Date(item.createdAt) : new Date(),
@@ -561,19 +549,28 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
       });
 
       // Update the signal with the new product (works with both real and temp IDs)
-      this.products.update(products => [
-        ...products, 
-        { 
-          ...productData, 
-          id: documentId,
-          uid: currentUser.uid,  // Include UID in local state
-          companyId, 
-          createdAt: new Date(), 
-          updatedAt: new Date(),
-          // Add offline flag if it's a temporary ID
-          isOfflineCreated: documentId.startsWith('temp_')
+      // Avoid creating duplicates in the local signal: if a product with the same SKU exists for the same store,
+      // update it instead of adding a new row. This prevents the UI from showing duplicate entries when
+      // temporary/local copies are reconciled with server IDs.
+      const newLocalProd: Product = {
+        ...productData,
+        id: documentId,
+        uid: currentUser.uid,
+        companyId,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        isOfflineCreated: documentId.startsWith('temp_')
+      } as Product;
+
+      this.products.update(products => {
+        const existingIdx = products.findIndex(p => p.skuId === newLocalProd.skuId && p.storeId === newLocalProd.storeId);
+        if (existingIdx >= 0) {
+          const copy = products.slice();
+          copy[existingIdx] = { ...copy[existingIdx], ...newLocalProd };
+          return copy;
         }
-      ]);
+        return [...products, newLocalProd];
+      });
       
       return documentId;
     } catch (error) {
@@ -823,8 +820,6 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
         notes: notes || ''
       };
 
-      const currentAdjustments = product.quantityAdjustments || [];
-      const updatedAdjustments = [...currentAdjustments, quantityAdjustment];
 
       // Update batch quantity
       const updatedInventory = (product.inventory ?? []).map(inv =>
@@ -840,7 +835,6 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
       await this.updateProduct(productId, {
         inventory: updatedInventory,
         totalStock,
-        quantityAdjustments: updatedAdjustments,
         lastUpdated: new Date()
       });
 
@@ -920,16 +914,16 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
    * Get quantity adjustment history for a product
    */
   getQuantityAdjustments(productId: string) {
-    const product = this.getProduct(productId);
-    return product?.quantityAdjustments || [];
+    // quantityAdjustments removed from product docs; return empty list for compatibility
+    return [] as any[];
   }
 
   /**
    * Get quantity adjustments for a specific batch
    */
   getBatchAdjustments(productId: string, batchId: string) {
-    const adjustments = this.getQuantityAdjustments(productId);
-    return adjustments.filter(adj => adj.batchId === batchId);
+    // No embedded adjustments stored on products anymore
+    return [] as any[];
   }
 
   /**
@@ -952,6 +946,23 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
   // Inventory is now managed in productInventory collection. Keep a helper for summary updates if needed by other services.
   async setInventorySummary(productId: string, totalStock: number, sellingPrice: number): Promise<void> {
     await this.updateProduct(productId, { totalStock, sellingPrice });
+  }
+
+  /**
+   * Apply a local-only patch to the product signal without performing a Firestore write.
+   * Useful when another transaction already updated the backend and we just need
+   * to keep the UI in sync immediately.
+   */
+  applyLocalPatch(productId: string, updates: Partial<Product>): void {
+    try {
+      this.products.update(products =>
+        products.map(product =>
+          product.id === productId ? { ...product, ...updates } : product
+        )
+      );
+    } catch (e) {
+      console.warn('Failed to apply local product patch:', e);
+    }
   }
 
   // Legacy no-op implementations to avoid breaking callers; will be removed after UI refactor.

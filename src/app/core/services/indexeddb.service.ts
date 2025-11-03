@@ -136,6 +136,15 @@ export class IndexedDBService {
           console.log('📦 IndexedDB: Created orders store');
         }
 
+        // Notifications store
+        if (!db.objectStoreNames.contains('notifications')) {
+          const notifStore = db.createObjectStore('notifications', { keyPath: 'id' });
+          notifStore.createIndex('storeId', 'storeId', { unique: false });
+          notifStore.createIndex('read', 'read', { unique: false });
+          notifStore.createIndex('createdAt', 'createdAt', { unique: false });
+          console.log('📦 IndexedDB: Created notifications store');
+        }
+
         // App settings store
         if (!db.objectStoreNames.contains('settings')) {
           const settingsStore = db.createObjectStore('settings', { keyPath: 'key' });
@@ -402,6 +411,79 @@ export class IndexedDBService {
     });
   }
 
+  // ---------------------------
+  // Notifications methods
+  // ---------------------------
+  async saveNotification(notification: any): Promise<void> {
+    if (!this.db) await this.initDB();
+
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction(['notifications'], 'readwrite');
+      const store = transaction.objectStore('notifications');
+      const request = store.put(notification);
+
+      request.onsuccess = () => {
+        resolve();
+      };
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  async getUnreadNotificationsCount(storeId?: string): Promise<number> {
+    if (!this.db) await this.initDB();
+
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction(['notifications'], 'readonly');
+      const store = transaction.objectStore('notifications');
+      const request = store.getAll();
+
+      request.onsuccess = () => {
+        let results = request.result || [];
+        results = results.filter((r: any) => r.read === false);
+        if (storeId) {
+          results = results.filter((r: any) => r.storeId === storeId);
+        }
+        resolve(results.length);
+      };
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  async markNotificationRead(notificationId: string): Promise<void> {
+    if (!this.db) await this.initDB();
+
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction(['notifications'], 'readwrite');
+      const store = transaction.objectStore('notifications');
+      const getReq = store.get(notificationId);
+
+      getReq.onsuccess = () => {
+        const rec = getReq.result;
+        if (!rec) return resolve();
+        rec.read = true;
+        rec.readAt = new Date();
+        const putReq = store.put(rec);
+        putReq.onsuccess = () => resolve();
+        putReq.onerror = () => reject(putReq.error);
+      };
+      getReq.onerror = () => reject(getReq.error);
+    });
+  }
+
+  async getNotificationsByStore(storeId: string): Promise<any[]> {
+    if (!this.db) await this.initDB();
+
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction(['notifications'], 'readonly');
+      const store = transaction.objectStore('notifications');
+      const index = store.index('storeId');
+      const request = index.getAll(storeId);
+
+      request.onsuccess = () => resolve(request.result || []);
+      request.onerror = () => reject(request.error);
+    });
+  }
+
   // Order Methods (for offline transactions)
   async saveOrder(order: OfflineOrder): Promise<void> {
     if (!this.db) await this.initDB();
@@ -464,6 +546,26 @@ export class IndexedDBService {
       };
       request.onerror = () => reject(request.error);
     });
+  }
+
+  // Last-sync helpers (store ISO string)
+  async saveLastSync(key: string, isoTimestamp: string): Promise<void> {
+    try {
+      await this.saveSetting(key, isoTimestamp);
+    } catch (e) {
+      console.warn('IndexedDB: saveLastSync failed', e);
+      throw e;
+    }
+  }
+
+  async getLastSync(key: string): Promise<string | null> {
+    try {
+      const val = await this.getSetting(key);
+      return val || null;
+    } catch (e) {
+      console.warn('IndexedDB: getLastSync failed', e);
+      return null;
+    }
   }
 
   // Utility Methods

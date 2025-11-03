@@ -69,26 +69,18 @@ export class OrdersSellingTrackingService {
         const product = this.productService.getProduct(it.productId);
         const current = product?.totalStock ?? 0;
         const newTotal = Math.max(0, current - it.quantity);
-        await this.productService.updateProduct(it.productId, {
-          totalStock: newTotal,
-          lastUpdated: new Date(),
-          // Append a lightweight quantity adjustment entry for traceability
-          quantityAdjustments: [
-            ...(product?.quantityAdjustments ?? []),
-            {
-              batchId: 'sale-delta',
-              oldQuantity: current,
-              newQuantity: newTotal,
-              adjustmentType: 'sale',
-              adjustedAt: new Date(),
-              adjustedBy: ctx.cashierId,
-              adjustedByName: ctx.cashierName || ctx.cashierEmail || 'Unknown',
-              reason: `POS sale for order ${ctx.orderId}`,
-              notes: 'Deferred FIFO via reconciliation'
-            }
-          ] as any
-        } as any);
-        adjusted++;
+        try {
+          await this.productService.updateProduct(it.productId, {
+            totalStock: newTotal,
+            lastUpdated: new Date()
+          } as any);
+
+          console.log(`✅ Adjusted product ${it.productId} stock: ${current} -> ${newTotal}`);
+          adjusted++;
+        } catch (updateErr) {
+          console.error(`⚠️ Failed to update product ${it.productId} totalStock. current=${current} calculatedNew=${newTotal}`, updateErr);
+          errors.push({ productId: it.productId, error: updateErr });
+        }
       } catch (e) {
         errors.push({ productId: it.productId, error: e });
       }

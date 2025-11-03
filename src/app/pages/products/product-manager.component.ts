@@ -2,9 +2,10 @@ import { Component, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormArray, FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Product, InventoryBatch } from '../../models/product.model';
-import { collection, addDoc } from 'firebase/firestore';
+import { collection } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, app } from '../../firebase.config';
+import { OfflineDocumentService } from '../../core/services/offline-document.service';
 import { getStorage } from 'firebase/storage';
 import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../shared/components/confirmation-dialog/confirmation-dialog.component';
 
@@ -137,7 +138,7 @@ export class ProductManagerComponent {
 
   private storage = getStorage(app);
 
-  constructor(private fb: FormBuilder) {
+  constructor(private fb: FormBuilder, private offlineDocService: OfflineDocumentService) {
     this.form = this.fb.group({
       productName: ['', Validators.required],
       skuId: [''],
@@ -380,9 +381,8 @@ export class ProductManagerComponent {
         totalStock: this.totalStock,
       };
 
-      // persist to Firestore - for now add to collection 'products'
-      const productsCol = collection(db, 'products');
-      await addDoc(productsCol, payload as any);
+  // persist via OfflineDocumentService to ensure timestamps and offline queueing
+  await this.offlineDocService.createDocument('products', payload as any);
 
       this.isSaving = false;
       this.close();

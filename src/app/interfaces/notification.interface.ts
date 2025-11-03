@@ -112,3 +112,26 @@ export interface NotificationFilter {
   dateTo?: Date;
   limit?: number;
 }
+
+// -----------------------------------------------------------------------------
+// Simple notification schema for the new `notifications` collection
+// -----------------------------------------------------------------------------
+import { Timestamp } from 'firebase/firestore';
+
+/**
+ * Lightweight notification record stored in `notifications` collection.
+ * - `type` distinguishes display/visibility logic (user-facing vs technical/system)
+ * - `metadata` can contain arbitrary technical details (error traces, codes, etc.)
+ */
+export interface StoreNotification {
+  id: string; // UUID or auto-generated document ID
+  type: 'user' | 'technical';
+  title: string;
+  message: string;
+  storeId: string;
+  createdAt: Timestamp;
+  read: boolean;
+  metadata?: any;
+}
+
+export type NotificationRecord = StoreNotification;
