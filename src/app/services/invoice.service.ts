@@ -92,121 +92,169 @@ export class InvoiceService {
     console.log('🧾 Starting invoice transaction for store:', storeId);
     
     try {
+      // --- PREPARE NON-TRANSACTIONAL READS AND SECURITY DATA FIRST ---
+      const storeDocRef = doc(this.firestore, 'stores', storeId);
+
+      // Read store outside the transaction to compute the next invoice number and check duplicates
+      const storeSnapshot = await getDoc(storeDocRef);
+      if (!storeSnapshot.exists()) {
+        throw new Error(`Store with ID ${storeId} not found`);
+      }
+
+      const storeDataOutside = storeSnapshot.data();
+      const currentInvoiceNoOutside = storeDataOutside['tempInvoiceNumber'] || this.storeService.generateDefaultInvoiceNo();
+      const nextInvoiceNoOutside = this.storeService.generateNextInvoiceNo(currentInvoiceNoOutside);
+
+      console.log('🧾 Current invoice number (pre-read):', currentInvoiceNoOutside);
+      console.log('🧾 Next invoice number (pre-read):', nextInvoiceNoOutside);
+
+      // Check duplicates BEFORE opening the transaction (non-transactional read)
+      const isDuplicateOutside = await this.checkInvoiceNumberExists(nextInvoiceNoOutside, storeId);
+      if (isDuplicateOutside) {
+        const errorMessage = `Duplicate invoice number detected: ${nextInvoiceNoOutside}. This order may have already been processed.`;
+        console.error('🚨 DUPLICATE PREVENTION:', errorMessage);
+        throw new Error(errorMessage);
+      }
+
+      // Prepare order and orderDetails doc refs and security-enriched payloads BEFORE transaction
+      const ordersRef = collection(this.firestore, 'orders');
+      const orderDocRef = doc(ordersRef); // Generate new doc reference (id available)
+
+      const orderDetailsBatchDocs: Array<{ ref: DocumentReference; data: any }> = [];
+      if (orderData.items && orderData.items.length > 0) {
+        const batches = this.createOrderDetailsBatches(orderData.items, 50);
+        console.log(`📦 Preparing ${batches.length} orderDetails batch(es) (pre-transaction)`);
+        for (const batch of batches) {
+          const orderDetailsRef = collection(this.firestore, 'orderDetails');
+          const orderDetailsDocRef = doc(orderDetailsRef);
+
+          const orderDetailsWithSecurity = await this.securityService.addSecurityFields({
+            orderId: orderDocRef.id,
+            companyId: orderData.companyId,
+            storeId: storeId,
+            batchNumber: batch.batchNumber,
+            items: batch.items
+          });
+
+          orderDetailsBatchDocs.push({ ref: orderDetailsDocRef as DocumentReference, data: orderDetailsWithSecurity });
+          console.log(`📦 Prepared batch ${batch.batchNumber} (docId: ${orderDetailsDocRef.id}) with ${batch.items.length} items`);
+        }
+      }
+
+      // Prepare main order payload (without items) with security fields
+      const { items, ...orderDataWithoutItems } = orderData;
+      const orderWithSecurityPre = await this.securityService.addSecurityFields({
+        ...orderDataWithoutItems,
+        invoiceNumber: nextInvoiceNoOutside,
+        storeId: storeId,
+        status: 'completed',
+        createdBy: this.authService.getCurrentUser()?.uid || 'system'
+      });
+
+      const completeOrderDataPre = {
+        ...orderWithSecurityPre,
+        customerInfo: customerInfo ? {
+          customerId: customerInfo.customerId || '',
+          fullName: customerInfo.fullName || 'Walk-in Customer',
+          address: customerInfo.address || 'Philippines',
+          tin: customerInfo.tin || ''
+        } : {
+          customerId: '',
+          fullName: 'Walk-in Customer',
+          address: 'Philippines',
+          tin: ''
+        },
+        payments: paymentsData ? {
+          amountTendered: paymentsData.amountTendered || 0,
+          changeAmount: paymentsData.changeAmount || 0,
+          paymentDescription: paymentsData.paymentDescription || 'Cash Payment'
+        } : {
+          amountTendered: 0,
+          changeAmount: 0,
+          paymentDescription: 'Cash Payment'
+        }
+      };
+
+      console.log('🔥 Main order structure prepared (pre-transaction) for orderId:', orderDocRef.id);
+
+      // --- RUN TRANSACTION: READS FIRST, THEN WRITES ---
       const result = await runTransaction(this.firestore, async (transaction) => {
-        // 1. Get current store data
-        const storeDocRef = doc(this.firestore, 'stores', storeId);
+        // 1. Read store inside transaction
         const storeDoc = await transaction.get(storeDocRef);
-        
         if (!storeDoc.exists()) {
-          throw new Error(`Store with ID ${storeId} not found`);
+          throw new Error(`Store with ID ${storeId} not found (transaction)`);
         }
 
-        const storeData = storeDoc.data();
-        const currentInvoiceNo = storeData['tempInvoiceNumber'] || this.storeService.generateDefaultInvoiceNo();
-        
-        console.log('🧾 Current invoice number:', currentInvoiceNo);
-        
-        // 2. Generate next invoice number
-        const nextInvoiceNo = this.storeService.generateNextInvoiceNo(currentInvoiceNo);
-        console.log('🧾 Next invoice number:', nextInvoiceNo);
-        
-        // 🚨 NEW: Check for duplicate invoice number before proceeding
-        const isDuplicate = await this.checkInvoiceNumberExists(nextInvoiceNo, storeId);
-        
-        if (isDuplicate) {
-          const errorMessage = `Duplicate invoice number detected: ${nextInvoiceNo}. This order may have already been processed.`;
-          console.error('🚨 DUPLICATE PREVENTION:', errorMessage);
-          throw new Error(errorMessage);
+        // 2. Read all product docs required for validation BEFORE performing any writes
+        const productReadSnapshots: Array<{ item: any; ref: any; snap: any }> = [];
+        if (orderData.items && Array.isArray(orderData.items) && orderData.items.length > 0) {
+          for (const item of orderData.items) {
+            const productId = item.productId;
+            const qty = Number(item.quantity || 0);
+            if (!productId || qty <= 0) continue;
+
+            const productRef = doc(this.firestore, 'products', productId);
+            const productSnap = await transaction.get(productRef);
+            productReadSnapshots.push({ item, ref: productRef, snap: productSnap });
+          }
         }
-        
-        console.log('✅ Invoice number is unique, proceeding with transaction:', nextInvoiceNo);
-        
-        // 3. Update store with new invoice number
-        transaction.update(storeDocRef, { 
-          tempInvoiceNumber: nextInvoiceNo,
+
+        // All reads are complete at this point. Now perform writes.
+
+        // Update store with new invoice number
+        transaction.update(storeDocRef, {
+          tempInvoiceNumber: nextInvoiceNoOutside,
           updatedAt: new Date()
         });
-        
-        // 4. Create order with the assigned invoice number
-        const ordersRef = collection(this.firestore, 'orders');
-        const orderDocRef = doc(ordersRef); // Generate new doc reference
-        
-        // 5. Create orderDetails documents with batching (BEFORE removing items from main order)
-        if (orderData.items && orderData.items.length > 0) {
-          const batches = this.createOrderDetailsBatches(orderData.items, 50);
-          console.log(`📦 Creating ${batches.length} orderDetails batch(es) for ${orderData.items.length} total items`);
-          
-          // Create one document per batch to avoid 1MB Firestore limit
-          for (const batch of batches) {
-            const orderDetailsRef = collection(this.firestore, 'orderDetails');
-            const orderDetailsDocRef = doc(orderDetailsRef);
-            
-            // Add security fields to orderDetails (with IndexedDB UID support)
-            const orderDetailsWithSecurity = await this.securityService.addSecurityFields({
-              orderId: orderDocRef.id,
-              companyId: orderData.companyId,
-              storeId: storeId,
-              batchNumber: batch.batchNumber,
-              items: batch.items // Max 50 items per batch
-            });
-            
-            const orderDetailsData = orderDetailsWithSecurity;
-            
-            transaction.set(orderDetailsDocRef, orderDetailsData);
-            console.log(`📦 Batch ${batch.batchNumber}/${batches.length} prepared with ${batch.items.length} items (docId: ${orderDetailsDocRef.id})`);
-          }
-          
-          console.log(`✅ All ${batches.length} orderDetails batches prepared successfully for order ${orderDocRef.id}`);
+
+        // Persist orderDetails batch documents
+        for (const od of orderDetailsBatchDocs) {
+          transaction.set(od.ref as any, od.data);
         }
-        
-        // Remove items from main order data (items will only be in orderDetails collection)
-        const { items, ...orderDataWithoutItems } = orderData;
-        
-        // Add security fields to order (with IndexedDB UID support)
-        const orderWithSecurity = await this.securityService.addSecurityFields({
-          ...orderDataWithoutItems, // Order data WITHOUT items
-          invoiceNumber: nextInvoiceNo,
-          storeId: storeId,
-          status: 'completed',
-          createdBy: this.authService.getCurrentUser()?.uid || 'system'
-        });
-        
-        const completeOrderData = {
-          ...orderWithSecurity,
-          
-          // NEW: customerInfo as a proper map structure
-          customerInfo: customerInfo ? {
-            customerId: customerInfo.customerId || '',
-            fullName: customerInfo.fullName || 'Walk-in Customer',
-            address: customerInfo.address || 'Philippines',
-            tin: customerInfo.tin || ''
-          } : {
-            customerId: '',
-            fullName: 'Walk-in Customer',
-            address: 'Philippines',
-            tin: ''
-          },
-          
-          // NEW: payments as a proper map structure  
-          payments: paymentsData ? {
-            amountTendered: paymentsData.amountTendered || 0,
-            changeAmount: paymentsData.changeAmount || 0,
-            paymentDescription: paymentsData.paymentDescription || 'Cash Payment'
-          } : {
-            amountTendered: 0,
-            changeAmount: 0,
-            paymentDescription: 'Cash Payment'
+
+        // Validate and update product totals
+        for (const prs of productReadSnapshots) {
+          const item = prs.item;
+          const productSnap = prs.snap;
+          const productRef = prs.ref;
+
+          if (!productSnap.exists()) {
+            throw new Error(`Product ${item.productId} not found while deducting stock (transaction)`);
           }
-        };
-        
-        console.log('🔥 Main order structure (WITHOUT items):', JSON.stringify(completeOrderData, null, 2));
-        
-        transaction.set(orderDocRef, completeOrderData);
-        
-        console.log('🧾 Transaction prepared successfully');
-        
+
+          const prodData: any = productSnap.data();
+
+          // Validate store/company match if present
+          if (prodData.storeId && prodData.storeId !== storeId) {
+            throw new Error(`Product ${item.productId} belongs to store ${prodData.storeId} which does not match order store ${storeId}`);
+          }
+          if (orderData.companyId && prodData.companyId && prodData.companyId !== orderData.companyId) {
+            throw new Error(`Product ${item.productId} company ${prodData.companyId} does not match order company ${orderData.companyId}`);
+          }
+
+          const currentTotal = Number(prodData.totalStock || 0);
+          const qty = Number(item.quantity || 0);
+          if (currentTotal < qty) {
+            throw new Error(`Insufficient stock for product ${item.productId}. Available: ${currentTotal}, Requested: ${qty}`);
+          }
+
+          const updatedTotal = Math.max(0, currentTotal - qty);
+
+          transaction.update(productRef, {
+            totalStock: updatedTotal,
+            lastUpdated: new Date()
+          });
+
+          console.log(`🔻 Product ${item.productId} totalStock: ${currentTotal} -> ${updatedTotal}`);
+        }
+
+        // Finally, write main order document
+        transaction.set(orderDocRef, completeOrderDataPre as any);
+
+        console.log('🧾 Transaction prepared and committed (reads before writes)');
+
         return {
-          invoiceNumber: nextInvoiceNo,
+          invoiceNumber: nextInvoiceNoOutside,
           orderId: orderDocRef.id,
           success: true
         };

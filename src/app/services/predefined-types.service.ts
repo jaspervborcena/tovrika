@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
-import { collection, query, where, getDocs, QuerySnapshot, DocumentData, addDoc, doc, setDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, QuerySnapshot, DocumentData } from 'firebase/firestore';
 import { db } from '../firebase.config';
+import { OfflineDocumentService } from '../core/services/offline-document.service';
 
 export interface PredefinedType {
   id: string;
@@ -23,7 +24,7 @@ export interface UnitTypeOption {
 })
 export class PredefinedTypesService {
 
-  constructor() { }
+  constructor(private offlineDocService: OfflineDocumentService) { }
 
   /**
    * Get predefined types by store ID and category
@@ -225,7 +226,7 @@ export class PredefinedTypesService {
           createdAt: new Date()
         };
         
-        await addDoc(predefinedTypesRef, docData);
+  await this.offlineDocService.createDocument('predefinedTypes', docData);
         seedCount++;
         console.log(`✅ Added unit type: ${unitType.label}`);
       }
@@ -270,7 +271,7 @@ export class PredefinedTypesService {
           createdAt: new Date()
         };
         
-        await addDoc(predefinedTypesRef, docData);
+  await this.offlineDocService.createDocument('predefinedTypes', docData);
         addedCount++;
         console.log(`✅ Added missing unit type: ${unitType.label}`);
       }
@@ -298,7 +299,7 @@ export class PredefinedTypesService {
         createdAt: new Date()
       };
       
-      await addDoc(predefinedTypesRef, docData);
+  await this.offlineDocService.createDocument('predefinedTypes', docData);
       console.log(`✅ Added new unit type: ${label}`);
     } catch (error) {
       console.error('❌ Error adding unit type:', error);

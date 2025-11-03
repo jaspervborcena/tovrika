@@ -1676,7 +1676,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       // Show error dialog
       await this.showConfirmationDialog({
         title: 'Payment Processing Failed',
-        message: 'Failed to process payment and save order. Please try again.',
+        message: `Failed to process payment and save order. Please try again.\nReason: ${error instanceof Error ? error.message : String(error)}`,
         confirmText: 'OK',
         cancelText: ''
       });

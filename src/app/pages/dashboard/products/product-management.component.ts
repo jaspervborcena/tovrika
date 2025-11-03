@@ -1854,6 +1854,10 @@ export class ProductManagementComponent implements OnInit {
       initialReceivedAt: [new Date().toISOString().split('T')[0]],
       initialExpiryDate: [''],
       initialSupplier: ['']
+      ,
+      // Denormalized editable summary fields (available when product has no separate inventory)
+      totalStock: [0, Validators.min(0)],
+      sellingPrice: [0, Validators.min(0)]
     });
   }
 
@@ -1948,13 +1952,18 @@ export class ProductManagementComponent implements OnInit {
     this.productForm.patchValue(product);
     
     // Use denormalized totalStock from product (no longer calculate from embedded inventory)
-    this.productForm.get('totalStock')?.setValue(product.totalStock || 0);
+    // Patch the denormalized summary controls if present
+    if (this.productForm.get('totalStock')) {
+      this.productForm.get('totalStock')?.setValue(product.totalStock || 0);
+    }
+
+    if (this.productForm.get('sellingPrice')) {
+      this.productForm.get('sellingPrice')?.setValue(product.sellingPrice || 0);
+    }
     
-    // Set selling price from product summary (denormalized)
-    this.productForm.get('sellingPrice')?.setValue(product.sellingPrice || 0);
-    
-    // Always enable inventory controls since we removed isMultipleInventory
-    this.toggleControlsForInventory(true);
+    // Enable/disable summary controls depending on whether product uses separate inventory
+    const hasInv = this.hasExistingInventory();
+    this.toggleControlsForInventory(hasInv);
     this.showModal = true;
   }
 
@@ -2087,7 +2096,8 @@ export class ProductManagementComponent implements OnInit {
           productCode: formValue.productCode,
           unitType: formValue.unitType,
           category: formValue.category,
-          sellingPrice: computedSellingPrice,
+          // sellingPrice: for products with existing inventory, prefer the stored summary (cannot edit)
+          sellingPrice: this.hasExistingInventory() ? (this.selectedProduct.sellingPrice || computedSellingPrice) : computedSellingPrice,
           storeId: storeId,  // Use storeId from permission
           barcodeId: formValue.barcodeId,
           imageUrl: formValue.imageUrl,
@@ -2099,8 +2109,12 @@ export class ProductManagementComponent implements OnInit {
           discountValue: formValue.discountValue || 0
         };
 
-        // Use denormalized totalStock from product for existing items
-        updates.totalStock = this.selectedProduct.totalStock || 0;
+        // totalStock: only allow editing when product has no separate inventory batches
+        if (this.hasExistingInventory()) {
+          updates.totalStock = this.selectedProduct.totalStock || 0;
+        } else {
+          updates.totalStock = Number(formValue.totalStock || 0);
+        }
 
         await this.productService.updateProduct(this.selectedProduct.id!, updates);
         

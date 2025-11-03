@@ -83,9 +83,8 @@ export class ProductService {
       discountType: data['discountType'] || 'percentage',
       discountValue: data['discountValue'] || 0,
       
-      // Price and Quantity Tracking
-      priceHistory: this.transformPriceHistory(data['priceHistory'] || []),
-      quantityAdjustments: this.transformQuantityAdjustments(data['quantityAdjustments'] || []),
+  // Price and Quantity Tracking
+  priceHistory: this.transformPriceHistory(data['priceHistory'] || []),
       
       status: data['status'] || 'active',
       createdAt: data['createdAt']?.toDate() || new Date(),
@@ -111,18 +110,8 @@ export class ProductService {
   }
 
   private transformQuantityAdjustments(adjustmentsData: any[]): any[] {
-    if (!Array.isArray(adjustmentsData)) return [];
-    return adjustmentsData.map(item => ({
-      batchId: item.batchId || '',
-      oldQuantity: item.oldQuantity || 0,
-      newQuantity: item.newQuantity || 0,
-      adjustmentType: item.adjustmentType || 'manual',
-      adjustedAt: item.adjustedAt?.toDate() || new Date(),
-      adjustedBy: item.adjustedBy || '',
-      adjustedByName: item.adjustedByName || '',
-      reason: item.reason || '',
-      notes: item.notes || ''
-    }));
+    // quantityAdjustments removed from product documents. Keep method for backward compatibility but return empty.
+    return [];
   }
 
   private transformInventoryArray(inventoryData: any[]): ProductInventory[] {
@@ -199,7 +188,7 @@ export class ProductService {
             uid: '',
             status: 'active'
           } as Product));
-          this.products.set(mapped);
+      this.products.set(this.normalizeAndDeduplicateProducts(mapped));
           return;
         }
       } catch (fallbackError) {
@@ -294,9 +283,9 @@ export class ProductService {
       console.log('📦 Response keys:', Object.keys(response || {}));
       
       // Transform BigQuery response to Product interface
-      const products: Product[] = (response?.products || response || []).map((item: any) => this.transformBigQueryProduct(item));
+  const products: Product[] = (response?.products || response || []).map((item: any) => this.transformBigQueryProduct(item));
       
-      this.products.set(products);
+  this.products.set(this.normalizeAndDeduplicateProducts(products));
 
       // Persist a simplified offline copy to IndexedDB for fallback
       try {
@@ -358,9 +347,8 @@ export class ProductService {
       discountType: item.discountType || 'percentage',
       discountValue: item.discountValue || 0,
       
-      // Price and Quantity Tracking
-      priceHistory: this.transformPriceHistory(item.priceHistory || []),
-      quantityAdjustments: this.transformQuantityAdjustments(item.quantityAdjustments || []),
+  // Price and Quantity Tracking
+  priceHistory: this.transformPriceHistory(item.priceHistory || []),
       
       status: item.status || 'active',
       createdAt: item.createdAt ? new Date(item.createdAt) : new Date(),
@@ -392,10 +380,10 @@ export class ProductService {
         q = query(productsRef, where('companyId', '==', companyId));
       }
       
-      const querySnapshot = await getDocs(q);
-      const products = querySnapshot.docs.map(doc => this.transformFirestoreDoc(doc));
+  const querySnapshot = await getDocs(q);
+  const products = querySnapshot.docs.map(doc => this.transformFirestoreDoc(doc));
       
-      this.products.set(products);
+  this.products.set(this.normalizeAndDeduplicateProducts(products));
     } catch (error) {
       console.error('Error loading products from Firestore:', error);
       throw error;
@@ -453,10 +441,10 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
       const response = await this.http.get<any>(url, { headers }).toPromise();
       
       // Transform BigQuery response to Product interface
-      const products: Product[] = (response?.products || response || []).map((item: any) => this.transformBigQueryProduct(item));
+  const products: Product[] = (response?.products || response || []).map((item: any) => this.transformBigQueryProduct(item));
       
-      // Validate that we actually have products before setting
-      if (products.length === 0) {
+  // Validate that we actually have products before setting
+  if (products.length === 0) {
         console.warn('⚠️ No products found for BigQuery query:', { companyId, storeId });
         console.warn('⚠️ This could be due to:');
         console.warn('   1. No products exist for this company/store in BigQuery');
@@ -464,7 +452,7 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
         console.warn('   3. User needs to create products first');
       }
       
-      this.products.set(products);
+  this.products.set(this.normalizeAndDeduplicateProducts(products));
       console.log(`✅ Loaded ${products.length} products from BigQuery API`);
     } catch (error) {
       console.error('Error loading products from BigQuery:', error);
@@ -515,7 +503,7 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
         console.warn('   3. User needs to create products first');
       }
       
-      this.products.set(products);
+  this.products.set(this.normalizeAndDeduplicateProducts(products));
     } catch (error) {
       console.error('❌ Error loading products:', error);
       throw error;
@@ -561,19 +549,28 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
       });
 
       // Update the signal with the new product (works with both real and temp IDs)
-      this.products.update(products => [
-        ...products, 
-        { 
-          ...productData, 
-          id: documentId,
-          uid: currentUser.uid,  // Include UID in local state
-          companyId, 
-          createdAt: new Date(), 
-          updatedAt: new Date(),
-          // Add offline flag if it's a temporary ID
-          isOfflineCreated: documentId.startsWith('temp_')
+      // Avoid creating duplicates in the local signal: if a product with the same SKU exists for the same store,
+      // update it instead of adding a new row. This prevents the UI from showing duplicate entries when
+      // temporary/local copies are reconciled with server IDs.
+      const newLocalProd: Product = {
+        ...productData,
+        id: documentId,
+        uid: currentUser.uid,
+        companyId,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        isOfflineCreated: documentId.startsWith('temp_')
+      } as Product;
+
+      this.products.update(products => {
+        const existingIdx = products.findIndex(p => p.skuId === newLocalProd.skuId && p.storeId === newLocalProd.storeId);
+        if (existingIdx >= 0) {
+          const copy = products.slice();
+          copy[existingIdx] = { ...copy[existingIdx], ...newLocalProd };
+          return copy;
         }
-      ]);
+        return [...products, newLocalProd];
+      });
       
       return documentId;
     } catch (error) {
@@ -823,8 +820,6 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
         notes: notes || ''
       };
 
-      const currentAdjustments = product.quantityAdjustments || [];
-      const updatedAdjustments = [...currentAdjustments, quantityAdjustment];
 
       // Update batch quantity
       const updatedInventory = (product.inventory ?? []).map(inv =>
@@ -840,7 +835,6 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
       await this.updateProduct(productId, {
         inventory: updatedInventory,
         totalStock,
-        quantityAdjustments: updatedAdjustments,
         lastUpdated: new Date()
       });
 
@@ -920,16 +914,16 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
    * Get quantity adjustment history for a product
    */
   getQuantityAdjustments(productId: string) {
-    const product = this.getProduct(productId);
-    return product?.quantityAdjustments || [];
+    // quantityAdjustments removed from product docs; return empty list for compatibility
+    return [] as any[];
   }
 
   /**
    * Get quantity adjustments for a specific batch
    */
   getBatchAdjustments(productId: string, batchId: string) {
-    const adjustments = this.getQuantityAdjustments(productId);
-    return adjustments.filter(adj => adj.batchId === batchId);
+    // No embedded adjustments stored on products anymore
+    return [] as any[];
   }
 
   /**
@@ -949,9 +943,76 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
     });
     return out;
   }
+  
+  /**
+   * Normalize and deduplicate an array of products before applying to the local signal.
+   * Deduplication key prefers explicit document id when present, otherwise falls back to
+   * a composite of storeId, skuId, barcodeId and productName. When duplicates are found,
+   * prefer the item with an explicit id and the newest updatedAt timestamp.
+   */
+  private normalizeAndDeduplicateProducts(products: Product[]): Product[] {
+    if (!Array.isArray(products)) return [];
+    const map = new Map<string, Product>();
+    for (const p of products) {
+      const idKey = p?.id && String(p.id).trim() ? `id:${p.id}` : null;
+      const sku = p?.skuId || '';
+      const barcode = p?.barcodeId || '';
+      const store = p?.storeId || '';
+      const name = (p?.productName || '').trim().toLowerCase();
+      const fallbackKey = `k:${store}::${sku}::${barcode}::${name}`;
+      const key = idKey || fallbackKey;
+
+      const existing = map.get(key);
+      // normalize date fields to Date objects when possible
+      const normalized: Product = {
+        ...p,
+        createdAt: p?.createdAt ? new Date(p.createdAt) : new Date(),
+        updatedAt: p?.updatedAt ? new Date(p.updatedAt) : (p?.lastUpdated ? new Date(p.lastUpdated) : new Date()),
+        lastUpdated: p?.lastUpdated ? new Date(p.lastUpdated) : (p?.updatedAt ? new Date(p.updatedAt) : new Date())
+      } as Product;
+
+      if (!existing) {
+        map.set(key, normalized);
+        continue;
+      }
+
+      // prefer records with real server id over temp ids
+      const existingHasRealId = existing.id && !String(existing.id).startsWith('temp_');
+      const incomingHasRealId = normalized.id && !String(normalized.id).startsWith('temp_');
+      if (incomingHasRealId && !existingHasRealId) {
+        map.set(key, { ...existing, ...normalized });
+        continue;
+      }
+
+      // otherwise prefer the most recently updated record
+      const existingTime = existing.updatedAt ? new Date(existing.updatedAt).getTime() : 0;
+      const incomingTime = normalized.updatedAt ? new Date(normalized.updatedAt).getTime() : 0;
+      if (incomingTime >= existingTime) {
+        map.set(key, { ...existing, ...normalized });
+      }
+    }
+    return Array.from(map.values());
+  }
   // Inventory is now managed in productInventory collection. Keep a helper for summary updates if needed by other services.
   async setInventorySummary(productId: string, totalStock: number, sellingPrice: number): Promise<void> {
     await this.updateProduct(productId, { totalStock, sellingPrice });
+  }
+
+  /**
+   * Apply a local-only patch to the product signal without performing a Firestore write.
+   * Useful when another transaction already updated the backend and we just need
+   * to keep the UI in sync immediately.
+   */
+  applyLocalPatch(productId: string, updates: Partial<Product>): void {
+    try {
+      this.products.update(products =>
+        products.map(product =>
+          product.id === productId ? { ...product, ...updates } : product
+        )
+      );
+    } catch (e) {
+      console.warn('Failed to apply local product patch:', e);
+    }
   }
 
   // Legacy no-op implementations to avoid breaking callers; will be removed after UI refactor.
