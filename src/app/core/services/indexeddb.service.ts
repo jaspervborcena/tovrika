@@ -368,30 +368,81 @@ export class IndexedDBService {
   // Product Methods
   async saveProducts(products: OfflineProduct[]): Promise<void> {
     if (!this.db) await this.initDB();
-
+    // Improved save: deduplicate by id and by (storeId + barcode or name) to avoid duplicate entries
     return new Promise((resolve, reject) => {
       const transaction = this.db!.transaction(['products'], 'readwrite');
       const store = transaction.objectStore('products');
-      
-      let completed = 0;
-      const total = products.length;
 
-      if (total === 0) {
-        resolve();
-        return;
-      }
+      // Load existing products to compare and dedupe
+      const getAllReq = store.getAll();
+      getAllReq.onsuccess = () => {
+        const existing: OfflineProduct[] = getAllReq.result || [];
 
-      products.forEach(product => {
-        const request = store.put(product);
-        request.onsuccess = () => {
-          completed++;
-          if (completed === total) {
-            console.log(`📦 IndexedDB: Saved ${total} products`);
+        // Build lookup by id and by skuKey (storeId|barcode|name)
+        const byId = new Map<string, OfflineProduct>();
+        const bySkuKey = new Map<string, OfflineProduct>();
+        existing.forEach(p => {
+          if (p.id) byId.set(p.id, p);
+          const key = `${p.storeId}::${p.barcode || ''}::${p.name || ''}`;
+          bySkuKey.set(key, p);
+        });
+
+        let pending = 0;
+        const finishIfDone = () => {
+          if (pending === 0) {
+            console.log(`📦 IndexedDB: Saved/updated products (input ${products.length})`);
             resolve();
           }
         };
-        request.onerror = () => reject(request.error);
-      });
+
+        if (!products || products.length === 0) {
+          resolve();
+          return;
+        }
+
+        products.forEach(prod => {
+          try {
+            // Normalize incoming dates
+            const incomingUpdated = prod.lastUpdated instanceof Date ? prod.lastUpdated : new Date(prod.lastUpdated as any);
+
+            // Prefer exact id match
+            const existingById = prod.id ? byId.get(prod.id) : undefined;
+            if (existingById) {
+              const existingUpdated = existingById.lastUpdated instanceof Date ? existingById.lastUpdated : new Date(existingById.lastUpdated as any);
+              // Only update if incoming is newer
+              if (incomingUpdated.getTime() > existingUpdated.getTime()) {
+                pending++;
+                const req = store.put(prod);
+                req.onsuccess = () => { pending--; finishIfDone(); };
+                req.onerror = () => { pending--; reject(req.error); };
+              }
+              return;
+            }
+
+            // Try SKU key match (store + barcode + name) to catch duplicates from different sources
+            const skuKey = `${prod.storeId}::${prod.barcode || ''}::${prod.name || ''}`;
+            const existingBySku = bySkuKey.get(skuKey);
+            if (existingBySku) {
+              // Merge into existing record (keep existing id)
+              const merged = { ...existingBySku, ...prod, id: existingBySku.id } as OfflineProduct;
+              pending++;
+              const req = store.put(merged);
+              req.onsuccess = () => { pending--; finishIfDone(); };
+              req.onerror = () => { pending--; reject(req.error); };
+              return;
+            }
+
+            // Otherwise, insert new product
+            pending++;
+            const putReq = store.put(prod);
+            putReq.onsuccess = () => { pending--; finishIfDone(); };
+            putReq.onerror = () => { pending--; reject(putReq.error); };
+          } catch (err) {
+            reject(err);
+          }
+        });
+      };
+      getAllReq.onerror = () => reject(getAllReq.error);
     });
   }
 

@@ -188,7 +188,7 @@ export class ProductService {
             uid: '',
             status: 'active'
           } as Product));
-          this.products.set(mapped);
+      this.products.set(this.normalizeAndDeduplicateProducts(mapped));
           return;
         }
       } catch (fallbackError) {
@@ -283,9 +283,9 @@ export class ProductService {
       console.log('📦 Response keys:', Object.keys(response || {}));
       
       // Transform BigQuery response to Product interface
-      const products: Product[] = (response?.products || response || []).map((item: any) => this.transformBigQueryProduct(item));
+  const products: Product[] = (response?.products || response || []).map((item: any) => this.transformBigQueryProduct(item));
       
-      this.products.set(products);
+  this.products.set(this.normalizeAndDeduplicateProducts(products));
 
       // Persist a simplified offline copy to IndexedDB for fallback
       try {
@@ -380,10 +380,10 @@ export class ProductService {
         q = query(productsRef, where('companyId', '==', companyId));
       }
       
-      const querySnapshot = await getDocs(q);
-      const products = querySnapshot.docs.map(doc => this.transformFirestoreDoc(doc));
+  const querySnapshot = await getDocs(q);
+  const products = querySnapshot.docs.map(doc => this.transformFirestoreDoc(doc));
       
-      this.products.set(products);
+  this.products.set(this.normalizeAndDeduplicateProducts(products));
     } catch (error) {
       console.error('Error loading products from Firestore:', error);
       throw error;
@@ -441,10 +441,10 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
       const response = await this.http.get<any>(url, { headers }).toPromise();
       
       // Transform BigQuery response to Product interface
-      const products: Product[] = (response?.products || response || []).map((item: any) => this.transformBigQueryProduct(item));
+  const products: Product[] = (response?.products || response || []).map((item: any) => this.transformBigQueryProduct(item));
       
-      // Validate that we actually have products before setting
-      if (products.length === 0) {
+  // Validate that we actually have products before setting
+  if (products.length === 0) {
         console.warn('⚠️ No products found for BigQuery query:', { companyId, storeId });
         console.warn('⚠️ This could be due to:');
         console.warn('   1. No products exist for this company/store in BigQuery');
@@ -452,7 +452,7 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
         console.warn('   3. User needs to create products first');
       }
       
-      this.products.set(products);
+  this.products.set(this.normalizeAndDeduplicateProducts(products));
       console.log(`✅ Loaded ${products.length} products from BigQuery API`);
     } catch (error) {
       console.error('Error loading products from BigQuery:', error);
@@ -503,7 +503,7 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
         console.warn('   3. User needs to create products first');
       }
       
-      this.products.set(products);
+  this.products.set(this.normalizeAndDeduplicateProducts(products));
     } catch (error) {
       console.error('❌ Error loading products:', error);
       throw error;
@@ -942,6 +942,56 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
       }
     });
     return out;
+  }
+  
+  /**
+   * Normalize and deduplicate an array of products before applying to the local signal.
+   * Deduplication key prefers explicit document id when present, otherwise falls back to
+   * a composite of storeId, skuId, barcodeId and productName. When duplicates are found,
+   * prefer the item with an explicit id and the newest updatedAt timestamp.
+   */
+  private normalizeAndDeduplicateProducts(products: Product[]): Product[] {
+    if (!Array.isArray(products)) return [];
+    const map = new Map<string, Product>();
+    for (const p of products) {
+      const idKey = p?.id && String(p.id).trim() ? `id:${p.id}` : null;
+      const sku = p?.skuId || '';
+      const barcode = p?.barcodeId || '';
+      const store = p?.storeId || '';
+      const name = (p?.productName || '').trim().toLowerCase();
+      const fallbackKey = `k:${store}::${sku}::${barcode}::${name}`;
+      const key = idKey || fallbackKey;
+
+      const existing = map.get(key);
+      // normalize date fields to Date objects when possible
+      const normalized: Product = {
+        ...p,
+        createdAt: p?.createdAt ? new Date(p.createdAt) : new Date(),
+        updatedAt: p?.updatedAt ? new Date(p.updatedAt) : (p?.lastUpdated ? new Date(p.lastUpdated) : new Date()),
+        lastUpdated: p?.lastUpdated ? new Date(p.lastUpdated) : (p?.updatedAt ? new Date(p.updatedAt) : new Date())
+      } as Product;
+
+      if (!existing) {
+        map.set(key, normalized);
+        continue;
+      }
+
+      // prefer records with real server id over temp ids
+      const existingHasRealId = existing.id && !String(existing.id).startsWith('temp_');
+      const incomingHasRealId = normalized.id && !String(normalized.id).startsWith('temp_');
+      if (incomingHasRealId && !existingHasRealId) {
+        map.set(key, { ...existing, ...normalized });
+        continue;
+      }
+
+      // otherwise prefer the most recently updated record
+      const existingTime = existing.updatedAt ? new Date(existing.updatedAt).getTime() : 0;
+      const incomingTime = normalized.updatedAt ? new Date(normalized.updatedAt).getTime() : 0;
+      if (incomingTime >= existingTime) {
+        map.set(key, { ...existing, ...normalized });
+      }
+    }
+    return Array.from(map.values());
   }
   // Inventory is now managed in productInventory collection. Keep a helper for summary updates if needed by other services.
   async setInventorySummary(productId: string, totalStock: number, sellingPrice: number): Promise<void> {
