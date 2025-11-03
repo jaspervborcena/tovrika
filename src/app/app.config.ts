@@ -2,6 +2,7 @@ import { ApplicationConfig, APP_INITIALIZER } from '@angular/core';
 import { provideHttpClient } from '@angular/common/http';
 import { provideFirebaseApp, initializeApp } from '@angular/fire/app';
 import { provideFirestore, getFirestore } from '@angular/fire/firestore';
+import { enableIndexedDbPersistence, enableMultiTabIndexedDbPersistence } from 'firebase/firestore';
 import { provideAuth, getAuth } from '@angular/fire/auth';
 import { environment } from '../environments/environment';
 import { provideRouter } from '@angular/router';
@@ -47,8 +48,33 @@ export const appConfig: ApplicationConfig = {
     {
       provide: APP_INITIALIZER,
       useFactory: (chunkErrorService: ChunkErrorService, routerErrorService: RouterErrorService) => {
-        return () => {
+        return async () => {
           console.log('🛡️ Initializing chunk error protection...');
+          // Attempt to enable Firestore IndexedDB persistence (multi-tab preferred)
+          try {
+            const db = getFirestore();
+            try {
+              await enableMultiTabIndexedDbPersistence(db);
+              console.log('📦 Firestore multi-tab persistence enabled');
+            } catch (multiErr: any) {
+              // If multi-tab fails (e.g., multiple tabs open or unimplemented), try single-tab
+              if (multiErr?.code === 'failed-precondition') {
+                try {
+                  await enableIndexedDbPersistence(db);
+                  console.log('📦 Firestore single-tab persistence enabled (fallback)');
+                } catch (singleErr) {
+                  console.warn('⚠️ Failed to enable single-tab Firestore persistence:', singleErr);
+                }
+              } else if (multiErr?.code === 'unimplemented') {
+                console.warn('⚠️ Firestore persistence is not available in this browser/runtime');
+              } else {
+                console.warn('⚠️ Failed to enable multi-tab Firestore persistence:', multiErr);
+              }
+            }
+          } catch (err) {
+            console.warn('⚠️ Firestore persistence initialization failed:', err);
+          }
+
           // Services will initialize their error handlers when created
           return Promise.resolve();
         };

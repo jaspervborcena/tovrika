@@ -1,5 +1,6 @@
 import { Injectable, inject } from '@angular/core';
 import { Firestore, collection, doc, getDocs, query, where, orderBy, limit, Timestamp, writeBatch, addDoc, getDoc, updateDoc } from '@angular/fire/firestore';
+import { applyCreateTimestamps } from '../core/utils/firestore-timestamps';
 import { deleteField } from 'firebase/firestore';
 import { OfflineDocumentService } from '../core/services/offline-document.service';
 import { AuthService } from './auth.service';
@@ -302,7 +303,8 @@ export class InventoryDataService {
   private async createDirectFirestoreDocument(payload: any): Promise<string> {
     console.log('🔥 Creating document directly with Firestore...');
     const colRef = collection(this.firestore, this.collectionName);
-    const docRef = await addDoc(colRef, payload);
+    const toWrite = applyCreateTimestamps(payload, navigator.onLine as boolean);
+    const docRef = await addDoc(colRef, toWrite);
     console.log('✅ Direct Firestore creation successful:', docRef.id);
     return docRef.id;
   }

@@ -14,20 +14,21 @@ export class OfflineNavigationService {
     '/pos',           // POS is essential and should work offline
     '/login',         // Login should always work
     '/help',          // Help pages are useful offline
-    '/dashboard'      // Dashboard main page (if already loaded)
+    '/dashboard',     // Dashboard main page (if already loaded)
+    '/dashboard/overview', // Overview should be available offline when snapshot exists
+    '/dashboard/sales/summary' // Sales summary should be available offline when snapshot exists
   ];
 
   // Define offline fallback routes for problematic routes
   private offlineFallbackRoutes: { [key: string]: string } = {
     '/dashboard/products': '/pos',                    // Products → POS (more relevant offline)
-    '/dashboard/overview': '/pos',                    // Overview → POS  
     '/dashboard/stores': '/pos',                      // Stores → POS
     '/dashboard/branches': '/pos',                    // Branches → POS
     '/dashboard/access': '/dashboard',                // Access → Dashboard main
     '/dashboard/user-roles': '/dashboard',            // User roles → Dashboard main
     '/dashboard/invoice-setup': '/pos',               // Invoice setup → POS
     '/dashboard/inventory': '/pos',                   // Inventory → POS
-    '/dashboard/sales/summary': '/pos',               // Sales → POS
+    // '/dashboard/sales/summary' handled as offline-safe now
     '/notifications': '/dashboard',                   // Notifications → Dashboard main
   };
 
@@ -47,27 +48,22 @@ export class OfflineNavigationService {
         return true;
       }
 
-      // We're offline - check if route is safe
-      const isRouteSafe = this.offlineSafeRoutes.includes(route);
-      
-      if (isRouteSafe) {
-        console.log(`🧭 OfflineNavigation: Offline safe route - navigating to ${route}`);
-        await this.router.navigate([route]);
+      // We're offline - allow navigation but mark the navigation state as offline.
+      // This avoids blocking the user from visiting pages they haven't cached yet
+      // while enabling components to detect offline state and use IndexedDB fallbacks.
+      try {
+        console.log(`🧭 OfflineNavigation: Offline - navigating to ${route} with offline state`);
+        await this.router.navigate([route], { state: { offline: true } });
+        if (showWarning) {
+          console.warn(`🧭 OfflineNavigation: You are offline. Some features on ${route} may be limited.`);
+        }
         return true;
+      } catch (navErr) {
+        console.warn(`🧭 OfflineNavigation: Navigation to ${route} failed while offline, attempting fallback`, navErr);
+        const fallbackRoute = this.offlineFallbackRoutes[route] || '/pos';
+        await this.router.navigate([fallbackRoute]);
+        return false;
       }
-
-      // Route is not safe offline - find fallback
-      const fallbackRoute = this.offlineFallbackRoutes[route] || '/pos';
-      console.log(`🧭 OfflineNavigation: Offline unsafe route ${route} - redirecting to ${fallbackRoute}`);
-      
-      if (showWarning) {
-        // Show a user-friendly message about offline limitation
-        console.warn(`🧭 OfflineNavigation: Feature "${route}" requires internet connection. Redirecting to ${fallbackRoute}`);
-        // You could show a toast notification here if needed
-      }
-      
-      await this.router.navigate([fallbackRoute]);
-      return false; // Indicates fallback was used
       
     } catch (error) {
       console.error(`🧭 OfflineNavigation: Navigation failed for ${route}:`, error);

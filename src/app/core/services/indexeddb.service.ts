@@ -486,6 +486,58 @@ export class IndexedDBService {
     console.log('📦 IndexedDB: All data cleared');
   }
 
+  /**
+   * Clear most offline data but preserve offline authentication entries stored in `settings`.
+   * This allows users to sign out and still be able to login offline later.
+   */
+  async clearAllDataPreserveOfflineAuth(): Promise<void> {
+    if (!this.db) await this.initDB();
+
+    // Clear userData, products, orders (but preserve settings keys that start with 'offlineAuth_')
+    const storeNames = ['userData', 'products', 'orders'];
+    for (const storeName of storeNames) {
+      await new Promise<void>((resolve, reject) => {
+        const transaction = this.db!.transaction([storeName], 'readwrite');
+        const store = transaction.objectStore(storeName);
+        const request = store.clear();
+
+        request.onsuccess = () => resolve();
+        request.onerror = () => reject(request.error);
+      });
+    }
+
+    // For settings, delete everything except keys starting with 'offlineAuth_'
+    await new Promise<void>((resolve, reject) => {
+      const transaction = this.db!.transaction(['settings'], 'readwrite');
+      const store = transaction.objectStore('settings');
+      const getAllRequest = store.getAll();
+
+      getAllRequest.onsuccess = async () => {
+        const entries = getAllRequest.result || [];
+        try {
+          for (const entry of entries) {
+            const key = entry?.key;
+            if (!key) continue;
+            if (!String(key).startsWith('offlineAuth_')) {
+              await new Promise<void>((res, rej) => {
+                const delReq = store.delete(key);
+                delReq.onsuccess = () => res();
+                delReq.onerror = () => rej(delReq.error);
+              });
+            }
+          }
+          resolve();
+        } catch (err) {
+          reject(err);
+        }
+      };
+
+      getAllRequest.onerror = () => reject(getAllRequest.error);
+    });
+
+    console.log('📦 IndexedDB: Data cleared but offline auth preserved');
+  }
+
   async getDatabaseSize(): Promise<number> {
     if (!navigator.storage?.estimate) return 0;
     

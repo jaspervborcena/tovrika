@@ -17,6 +17,7 @@ import { runTransaction, getFirestore } from 'firebase/firestore';
 import { AuthService } from './auth.service';
 import { FirestoreSecurityService } from '../core/services/firestore-security.service';
 import { OfflineDocumentService } from '../core/services/offline-document.service';
+import { IndexedDBService } from '../core/services/indexeddb.service';
 import { Store } from '../interfaces/store.interface';
 import { FEATURE_FLAGS } from '../shared/config/feature-flags';
 
@@ -56,6 +57,8 @@ export class StoreService {
     private authService: AuthService,
     private firestoreSecurityService: FirestoreSecurityService,
     private offlineDocService: OfflineDocumentService
+    ,
+    private indexedDb: IndexedDBService
   ) {}
 
   async loadStores(storeIds: string[]) {
@@ -115,10 +118,35 @@ export class StoreService {
       
       this.storesSignal.set(stores);
       this.loadTimestamp = Date.now();
+      // Persist snapshot per-company to IndexedDB settings for offline use
+      try {
+        const companyId = stores[0]?.companyId;
+        if (companyId) {
+          await this.indexedDb.saveSetting(`stores_${companyId}`, stores);
+        }
+      } catch (e) {
+        console.warn('Failed to persist stores snapshot to IndexedDB:', e);
+      }
       
       
     } catch (error) {
       console.error('❌ Error loading stores:', error);
+      // Attempt offline fallback: try to read stored snapshot for the company
+      try {
+        // As a simpler fallback, load saved stores for current user's company via auth
+        const currentUser = this.authService.getCurrentUser();
+        const currentCompanyId = currentUser?.currentCompanyId as string | undefined;
+        if (currentCompanyId) {
+          const saved = await this.indexedDb.getSetting(`stores_${currentCompanyId}`);
+          if (saved && Array.isArray(saved)) {
+            this.storesSignal.set(saved);
+            return;
+          }
+        }
+      } catch (fallbackError) {
+        console.warn('Stores offline fallback failed:', fallbackError);
+      }
+
       throw error;
     } finally {
       this.isLoading = false;
@@ -177,10 +205,26 @@ export class StoreService {
       
       this.storesSignal.set(stores);
       this.loadTimestamp = Date.now();
+      // Persist snapshot to IndexedDB for offline use
+      try {
+        await this.indexedDb.saveSetting(`stores_${companyId}`, stores);
+      } catch (e) {
+        console.warn('Failed to persist stores snapshot to IndexedDB:', e);
+      }
       
       
     } catch (error) {
       console.error('❌ Error loading stores by company:', error);
+      // Offline fallback: try to read saved snapshot
+      try {
+        const saved = await this.indexedDb.getSetting(`stores_${companyId}`);
+        if (saved && Array.isArray(saved)) {
+          this.storesSignal.set(saved);
+          return;
+        }
+      } catch (e) {
+        console.warn('Failed to read stores snapshot from IndexedDB:', e);
+      }
       throw error;
     } finally {
       this.isLoading = false;
