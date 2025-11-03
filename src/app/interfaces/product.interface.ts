@@ -39,7 +39,7 @@ export interface Product {
   
   // Price and Quantity Tracking
   priceHistory?: PriceChange[];
-  quantityAdjustments?: QuantityAdjustment[];
+  // quantityAdjustments removed: tracking moved to productInventoryEntries and deduction history
   
   status?: 'active' | 'inactive';
   createdAt?: Date;

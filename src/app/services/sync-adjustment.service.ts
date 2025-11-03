@@ -5,6 +5,7 @@ import { AuthService } from './auth.service';
 import { NetworkService } from './network.service';
 import { OfflineOrderService } from './offline-order.service';
 import { FIFOInventoryService } from './fifo-inventory.service';
+import { ProductService } from './product.service';
 import { OrderDetails, OrderDetailItem, SyncResult, ItemDiscrepancy } from '../interfaces/order-details.interface';
 import { ProductInventoryEntry } from '../interfaces/product-inventory-entry.interface';
 
@@ -18,6 +19,7 @@ export class SyncAdjustmentService {
   private offlineOrderService = inject(OfflineOrderService);
   private fifoService = inject(FIFOInventoryService);
   private offlineDocService = inject(OfflineDocumentService);
+  private productService = inject(ProductService);
 
   constructor() {
     // Listen for network restoration to trigger auto-sync
@@ -400,14 +402,46 @@ export class SyncAdjustmentService {
         ...order,
         updatedAt: new Date()
       });
+
+      // Deduct from product.totalStock for each item in the order
+      try {
+        if (order.items && Array.isArray(order.items)) {
+          for (const item of order.items) {
+            try {
+              const qty = Number(item.quantity || 0);
+              if (!item.productId || qty === 0) continue;
+
+              const localProduct = this.productService.getProduct(item.productId);
+              // If product exists locally, ensure it belongs to the same store/company as the order
+              if (localProduct) {
+                const prodStore = (localProduct as any).storeId || localProduct.storeId;
+                const prodCompany = (localProduct as any).companyId || localProduct.companyId;
+                if (order.storeId && prodStore && order.storeId !== prodStore) {
+                  console.warn(`⚠️ Skipping stock deduction for product ${item.productId} because product.storeId (${prodStore}) does not match order.storeId (${order.storeId})`);
+                  continue;
+                }
+                if (order.companyId && prodCompany && order.companyId !== prodCompany) {
+                  console.warn(`⚠️ Skipping stock deduction for product ${item.productId} because product.companyId (${prodCompany}) does not match order.companyId (${order.companyId})`);
+                  continue;
+                }
+              } else {
+                console.log(`ℹ️ Product ${item.productId} not loaded locally — attempting stock deduction by product id for order ${orderId}`);
+              }
+
+              // Adjust by negative delta to deduct stock
+              await this.productService.adjustTotalStockDelta(item.productId, -qty);
+              console.log(`🔻 Deducted ${qty} from product ${item.productId} totalStock for order ${orderId}`);
+            } catch (err) {
+              console.warn(`⚠️ Failed to deduct stock for product ${item.productId} after storing order ${orderId}:`, err);
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('⚠️ Error while applying product totalStock deductions after order store:', e);
+      }
     } catch (error) {
-      // If document doesn't exist, create it
-      const orderDetailsRef = collection(this.firestore, 'orderDetails');
-      await addDoc(orderDetailsRef, {
-        ...order,
-        createdAt: new Date(),
-        updatedAt: new Date()
-      });
+      // If document doesn't exist, create it using OfflineDocumentService
+      await this.offlineDocService.createDocument('orderDetails', order as any);
     }
   }
 

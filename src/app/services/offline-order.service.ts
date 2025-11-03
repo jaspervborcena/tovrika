@@ -1,6 +1,7 @@
 import { Injectable, inject } from '@angular/core';
-import { Firestore, collection, addDoc, doc, updateDoc, query, where, getDocs, deleteDoc } from '@angular/fire/firestore';
+import { Firestore, collection, doc, updateDoc, query, where, getDocs, deleteDoc } from '@angular/fire/firestore';
 import { AuthService } from './auth.service';
+import { OfflineDocumentService } from '../core/services/offline-document.service';
 import { FIFOInventoryService } from './fifo-inventory.service';
 import { OrderDetails, OrderDetailItem, OfflineOrderQueue, BatchDeductionDetail } from '../interfaces/order-details.interface';
 import { CartItem } from '../interfaces/cart.interface';
@@ -15,6 +16,8 @@ export class OfflineOrderService {
 
   private readonly OFFLINE_QUEUE_KEY = 'tovrika_offline_orders';
   private readonly MAX_OFFLINE_ORDERS = 100;
+
+  private offlineDocService = inject(OfflineDocumentService);
 
   /**
    * Creates an order in offline mode (no inventory deduction)
@@ -214,12 +217,8 @@ export class OfflineOrderService {
    */
   private async storeOrderInFirestore(orderDetails: OrderDetails): Promise<void> {
     try {
-      const orderDetailsRef = collection(this.firestore, 'orderDetails');
-      await addDoc(orderDetailsRef, {
-        ...orderDetails,
-        createdAt: new Date(),
-        updatedAt: new Date()
-      });
+      // Use OfflineDocumentService to ensure timestamps and offline queueing
+      await this.offlineDocService.createDocument('orderDetails', orderDetails as any);
     } catch (error) {
       console.error('Failed to store order in Firestore:', error);
       throw error;

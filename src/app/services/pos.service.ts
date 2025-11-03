@@ -2,7 +2,9 @@ import { Injectable, signal, computed, inject, Injector } from '@angular/core';
 import {
   Firestore,
   collection,
-  addDoc
+  addDoc,
+  doc,
+  runTransaction
 } from '@angular/fire/firestore';
 import { AuthService } from './auth.service';
 import { CompanyService } from './company.service';
@@ -777,61 +779,94 @@ export class PosService {
    */
   private async deductInventoryFifo(productId: string, quantityToDeduct: number, inventoryService: any): Promise<void> {
     if (quantityToDeduct <= 0) return;
-    
+
     console.log(`🔄 FIFO deduction for product ${productId}: ${quantityToDeduct} units`);
-    
-    // Get all active batches sorted by receivedAt ascending (oldest first)
+
+    // Build FIFO plan based on current batches
     const batches = await inventoryService.listBatches(productId);
     const activeBatches = batches
       .filter((batch: any) => batch.status === 'active' && batch.quantity > 0)
       .sort((a: any, b: any) => new Date(a.receivedAt).getTime() - new Date(b.receivedAt).getTime()); // Oldest first
-    
+
     if (activeBatches.length === 0) {
       throw new Error(`No active inventory batches found for product ${productId}`);
     }
-    
+
     let remainingToDeduct = quantityToDeduct;
-    const batchUpdates: Array<{batchId: string, docId: string, newQuantity: number}> = [];
-    
-    // Process batches in FIFO order (oldest first)
+    const plan: Array<{ batchId: string; docId: string; deduct: number }> = [];
+
     for (const batch of activeBatches) {
       if (remainingToDeduct <= 0) break;
-      
-      const batchQuantity = batch.quantity;
-      const deductFromThisBatch = Math.min(remainingToDeduct, batchQuantity);
-      const newQuantity = batchQuantity - deductFromThisBatch;
-      
-      batchUpdates.push({
-        batchId: batch.batchId,
-        docId: batch.id,
-        newQuantity: newQuantity
-      });
-      
-      remainingToDeduct -= deductFromThisBatch;
-      
-      console.log(`📦 Batch ${batch.batchId} (${new Date(batch.receivedAt).toLocaleDateString()}): ${batchQuantity} → ${newQuantity} (deducted: ${deductFromThisBatch})`);
+      const take = Math.min(remainingToDeduct, batch.quantity);
+      plan.push({ batchId: batch.batchId, docId: batch.id, deduct: take });
+      remainingToDeduct -= take;
+      console.log(`📦 Plan: Batch ${batch.batchId} will deduct ${take} (remaining needed ${remainingToDeduct})`);
     }
-    
+
     if (remainingToDeduct > 0) {
       throw new Error(`Insufficient inventory for product ${productId}. Need ${quantityToDeduct}, but only ${quantityToDeduct - remainingToDeduct} available.`);
     }
-    
-    // Apply all batch updates
-    for (const update of batchUpdates) {
-      const updateData: any = {
-        quantity: update.newQuantity,
-        updatedAt: new Date()
-      };
-      
-      // If quantity becomes zero, mark as inactive
-      if (update.newQuantity === 0) {
-        updateData.status = 'inactive';
+
+    // Execute all updates inside a Firestore transaction to keep batches and product.totalStock consistent
+  const currentUser = this.authService.getCurrentUser();
+  await runTransaction(this.firestore, async (transaction) => {
+      // Validate and apply batch updates
+      for (const p of plan) {
+        const batchRef = doc(this.firestore, 'productInventoryEntries', p.docId);
+        const batchSnap = await transaction.get(batchRef as any);
+        if (!batchSnap.exists()) {
+          throw new Error(`Batch ${p.batchId} not found during transaction`);
+        }
+
+        const batchData: any = batchSnap.data();
+        const currentQty = Number(batchData.quantity || 0);
+        if (currentQty < p.deduct) {
+          throw new Error(`Insufficient quantity in batch ${p.batchId}. Available: ${currentQty}, Needed: ${p.deduct}`);
+        }
+
+        const newQty = currentQty - p.deduct;
+        const updatedDeductionHistory = [...(batchData.deductionHistory || []), {
+          quantity: p.deduct,
+          deductedAt: new Date(),
+          note: 'POS FIFO deduction'
+        }];
+
+        const updateData: any = {
+          quantity: newQty,
+          totalDeducted: (batchData.totalDeducted || 0) + p.deduct,
+          deductionHistory: updatedDeductionHistory,
+          updatedAt: new Date(),
+          status: newQty === 0 ? 'inactive' : batchData.status
+        };
+
+        transaction.update(batchRef as any, updateData);
+        console.log(`✅ Transaction: will update batch ${p.batchId} ${currentQty} -> ${newQty}`);
       }
-      
-      await inventoryService.updateBatch(productId, update.docId, updateData);
-      console.log(`✅ Updated batch ${update.batchId} quantity to ${update.newQuantity}`);
-    }
-    
+
+      // Update product totalStock
+      const productRef = doc(this.firestore, 'products', productId);
+      const productSnap = await transaction.get(productRef as any);
+      if (!productSnap.exists()) {
+        throw new Error(`Product ${productId} not found while deducting stock`);
+      }
+
+      const prodData: any = productSnap.data();
+      const currentTotal = Number(prodData.totalStock || 0);
+      if (currentTotal < quantityToDeduct) {
+        throw new Error(`Insufficient product totalStock for product ${productId}. Available: ${currentTotal}, Needed: ${quantityToDeduct}`);
+      }
+
+      const newTotal = Math.max(0, currentTotal - quantityToDeduct);
+      // Update product summary (only totalStock and lastUpdated)
+      transaction.update(productRef as any, {
+        totalStock: newTotal,
+        lastUpdated: new Date(),
+        updatedBy: currentUser?.uid || 'system'
+      });
+
+      console.log(`🔻 Transaction: product ${productId} totalStock ${currentTotal} -> ${newTotal}`);
+    });
+
     console.log(`✅ FIFO deduction completed for product ${productId}`);
   }
 

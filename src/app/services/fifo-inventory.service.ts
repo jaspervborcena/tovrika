@@ -1,6 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { Firestore, collection, query, where, orderBy, getDocs, doc, updateDoc, runTransaction, writeBatch } from '@angular/fire/firestore';
 import { AuthService } from './auth.service';
+import { ProductService } from './product.service';
 import { ProductInventoryEntry, BatchDeduction } from '../interfaces/product-inventory-entry.interface';
 import { FIFODeductionPlan, StockValidation, BatchDeductionDetail } from '../interfaces/order-details.interface';
 
@@ -10,6 +11,7 @@ import { FIFODeductionPlan, StockValidation, BatchDeductionDetail } from '../int
 export class FIFOInventoryService {
   private firestore = inject(Firestore);
   private authService = inject(AuthService);
+  private productService = inject(ProductService);
 
   /**
    * Validates if requested quantity can be fulfilled using FIFO logic
@@ -124,7 +126,7 @@ export class FIFOInventoryService {
     }
 
     // Execute deduction in Firestore transaction
-    const deductionDetails = await runTransaction(this.firestore, async (transaction) => {
+    const result = await runTransaction(this.firestore, async (transaction) => {
       const deductions: BatchDeductionDetail[] = [];
       
       for (const allocation of plan.batchAllocations) {
@@ -181,11 +183,40 @@ export class FIFOInventoryService {
         });
       }
 
-      return deductions;
+      // Also update the product's totalStock inside the same transaction to keep product summary consistent
+      try {
+        const productRef = doc(this.firestore, 'products', productId);
+        const productSnap = await transaction.get(productRef);
+        const currentTotal = (productSnap.exists() && (productSnap.data() as any).totalStock) ? Number((productSnap.data() as any).totalStock) : 0;
+        const updatedTotal = Math.max(0, currentTotal - quantityToDeduct);
+        transaction.update(productRef, {
+          totalStock: updatedTotal,
+          lastUpdated: new Date(),
+          updatedBy: currentUser.uid
+        });
+
+        return { deductions, updatedTotal };
+      } catch (e) {
+        // If we fail to update product summary, still return deductions so caller can handle
+        console.warn('Failed to update product totalStock in transaction:', e);
+        return { deductions, updatedTotal: undefined } as any;
+      }
     });
 
-    console.log(`Successfully executed FIFO deduction for product ${productId}:`, deductionDetails);
-    return deductionDetails;
+    // If the transaction included an updatedTotal, apply local UI update to product signal
+    try {
+      const { deductions, updatedTotal } = result as { deductions: BatchDeductionDetail[]; updatedTotal?: number };
+      if (typeof updatedTotal === 'number') {
+        // Update local product state without issuing another Firestore write
+        this.productService.applyLocalPatch(productId, { totalStock: updatedTotal, lastUpdated: new Date(), updatedBy: currentUser.uid } as any);
+      }
+
+      console.log(`Successfully executed FIFO deduction for product ${productId}:`, deductions);
+      return deductions;
+    } catch (err) {
+      console.log(`Successfully executed FIFO deduction for product ${productId} (no local patch applied):`, result);
+      return (result as any).deductions || [];
+    }
   }
 
   /**
