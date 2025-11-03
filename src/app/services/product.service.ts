@@ -17,6 +17,7 @@ import { Product, ProductInventory } from '../interfaces/product.interface';
 import { AuthService } from './auth.service';
 import { FirestoreSecurityService } from '../core/services/firestore-security.service';
 import { OfflineDocumentService } from '../core/services/offline-document.service';
+import { IndexedDBService, OfflineProduct } from '../core/services/indexeddb.service';
 import { LoggerService } from '@app/core/services/logger.service';
 import { logFirestore } from '@app/core/utils/firestore-logger';
 import { environment } from '../../environments/environment';
@@ -52,6 +53,8 @@ export class ProductService {
     private securityService: FirestoreSecurityService,
     private logger: LoggerService,
     private http: HttpClient
+    ,
+    private indexedDb: IndexedDBService
   ) {}
 
   private transformFirestoreDoc(doc: any): Product {
@@ -177,6 +180,32 @@ export class ProductService {
       await this.loadProductsFromBigQuery(storeId);
     } catch (error) {
       console.error('BigQuery products API failed:', error);
+      // Attempt offline fallback: try to read products for the store from IndexedDB
+      try {
+        const offlineProducts = await this.indexedDb.getProductsByStore(storeId);
+        if (offlineProducts && offlineProducts.length > 0) {
+          // Map OfflineProduct to Product minimal shape
+          const mapped = offlineProducts.map(p => ({
+            id: p.id,
+            productName: p.name,
+            sellingPrice: p.price,
+            category: p.category,
+            totalStock: p.stock,
+            barcodeId: p.barcode || '',
+            imageUrl: p.image || '',
+            storeId: p.storeId,
+            createdAt: p.lastUpdated || new Date(),
+            updatedAt: p.lastUpdated || new Date(),
+            uid: '',
+            status: 'active'
+          } as Product));
+          this.products.set(mapped);
+          return;
+        }
+      } catch (fallbackError) {
+        console.warn('Failed to load products from IndexedDB fallback:', fallbackError);
+      }
+
       throw error;
     }
   }
@@ -268,6 +297,24 @@ export class ProductService {
       const products: Product[] = (response?.products || response || []).map((item: any) => this.transformBigQueryProduct(item));
       
       this.products.set(products);
+
+      // Persist a simplified offline copy to IndexedDB for fallback
+      try {
+        const offlineArr: OfflineProduct[] = products.map(p => ({
+          id: p.id || '',
+          name: p.productName,
+          price: Number(p.sellingPrice || 0),
+          category: p.category || '',
+          stock: Number(p.totalStock || 0),
+          barcode: p.barcodeId || undefined,
+          image: p.imageUrl || undefined,
+          storeId: p.storeId || storeId,
+          lastUpdated: p.lastUpdated || new Date()
+        }));
+        await this.indexedDb.saveProducts(offlineArr);
+      } catch (e) {
+        console.warn('Failed to persist products snapshot to IndexedDB:', e);
+      }
       console.log(`✅ Loaded ${products.length} products from BigQuery API`);
     } catch (error: any) {
       console.error('❌ Error loading products from BigQuery:', error);

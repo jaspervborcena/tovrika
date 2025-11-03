@@ -20,6 +20,7 @@ import { Store } from '../interfaces/store.interface';
 import { AuthService } from './auth.service';
 import { FirestoreSecurityService } from '../core/services/firestore-security.service';
 import { OfflineDocumentService } from '../core/services/offline-document.service';
+import { IndexedDBService } from '../core/services/indexeddb.service';
 
 @Injectable({
   providedIn: 'root'
@@ -35,7 +36,8 @@ export class CompanyService {
     private firestore: Firestore,
     private authService: AuthService,
     private firestoreSecurityService: FirestoreSecurityService,
-    private offlineDocService: OfflineDocumentService
+    private offlineDocService: OfflineDocumentService,
+    private indexedDBService: IndexedDBService
   ) {}
 
   // Resolve the primary companyId from user profile or permissions.
@@ -122,18 +124,49 @@ export class CompanyService {
       
       // If user has a resolvable companyId, load only that company
       if (primaryCompanyId) {
-        const companyDocRef = doc(this.firestore, 'companies', primaryCompanyId);
-        const companyDoc = await getDoc(companyDocRef);
+        try {
+          const companyDocRef = doc(this.firestore, 'companies', primaryCompanyId);
+          const companyDoc = await getDoc(companyDocRef);
 
-        if (companyDoc.exists()) {
-          const companyData = companyDoc.data() as Omit<Company, 'id'>;
-          const company: Company = {
-            ...companyData,
-            id: companyDoc.id,
-            createdAt: this.toDate(companyData['createdAt'])
-          };
+          if (companyDoc.exists()) {
+            const companyData = companyDoc.data() as Omit<Company, 'id'>;
+            const company: Company = {
+              ...companyData,
+              id: companyDoc.id,
+              createdAt: this.toDate(companyData['createdAt'])
+            };
 
-          companies.push(company);
+            companies.push(company);
+
+            // Persist a local snapshot for offline use
+            try {
+              await this.indexedDBService.saveSetting(`company_${company.id}`, company);
+              console.log('💾 CompanyService: Saved company snapshot to IndexedDB for offline use:', company.id);
+            } catch (saveErr) {
+              console.warn('💾 CompanyService: Failed to save company snapshot to IndexedDB:', saveErr);
+            }
+          }
+        } catch (fireErr) {
+          console.warn('🌐 CompanyService: Firestore unavailable or failed to load company, attempting offline snapshot...', fireErr);
+
+          // Try to load snapshot from IndexedDB
+          try {
+            const snapshot = await this.indexedDBService.getSetting(`company_${primaryCompanyId}`);
+            if (snapshot) {
+              // Snapshot may already be a Company object
+              const company: Company = {
+                ...(snapshot as any),
+                id: primaryCompanyId,
+                createdAt: snapshot.createdAt ? new Date(snapshot.createdAt) : new Date()
+              };
+              companies.push(company);
+              console.log('💾 CompanyService: Loaded company snapshot from IndexedDB for offline use:', primaryCompanyId);
+            } else {
+              console.warn('💾 CompanyService: No offline snapshot found for company:', primaryCompanyId);
+            }
+          } catch (snapErr) {
+            console.error('💾 CompanyService: Failed to read company snapshot from IndexedDB:', snapErr);
+          }
         }
       }
       // If user has no companyId, set empty array (they need to create a company)

@@ -450,7 +450,13 @@ export class OfflineStorageService {
   // Utility Methods
   async clearOfflineData(): Promise<void> {
     try {
-      await this.indexedDBService.clearAllData();
+      // Clear most offline data but preserve offline auth entries so users can still login offline
+      // after signing out. This prevents accidental removal of offline credentials.
+      if (typeof this.indexedDBService.clearAllDataPreserveOfflineAuth === 'function') {
+        await this.indexedDBService.clearAllDataPreserveOfflineAuth();
+      } else {
+        await this.indexedDBService.clearAllData();
+      }
       this.currentUserSignal.set(null);
       this.productsSignal.set([]);
       this.pendingOrdersSignal.set([]);

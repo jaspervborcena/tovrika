@@ -6,6 +6,7 @@ import { Product } from '../../../interfaces/product.interface';
 import { Order } from '../../../interfaces/pos.interface';
 import { OrderService } from '../../../services/order.service';
 import { AuthService } from '../../../services/auth.service';
+import { IndexedDBService } from '@app/core/services/indexeddb.service';
 
 @Component({
   selector: 'app-overview',
@@ -775,6 +776,7 @@ export class OverviewComponent implements OnInit {
   private productService = inject(ProductService);
   private orderService = inject(OrderService);
   private authService = inject(AuthService);
+  private indexedDb = inject(IndexedDBService);
 
   // Signals
   protected stores = signal<Store[]>([]);
@@ -935,7 +937,35 @@ export class OverviewComponent implements OnInit {
 
       // Load products for analytics
       const products = await this.productService.getProducts();
-      this.products.set(products || []);
+      if (products && products.length > 0) {
+        this.products.set(products || []);
+      } else {
+        // Fallback: try to load cached products from IndexedDB (offline case)
+        try {
+          const cached = await this.indexedDb.getProductsByStore(storeId);
+          if (cached && cached.length > 0) {
+            // Map OfflineProduct -> Product minimal shape if needed
+            const mapped = cached.map(p => ({
+              id: p.id,
+              productName: p.name,
+              sellingPrice: p.price,
+              totalStock: p.stock,
+              skuId: '',
+              companyId: '',
+              storeId: p.storeId,
+              createdAt: p.lastUpdated || new Date(),
+              updatedAt: p.lastUpdated || new Date(),
+              status: 'active'
+            } as Product));
+            this.products.set(mapped);
+          } else {
+            this.products.set([]);
+          }
+        } catch (e) {
+          console.warn('Overview: Failed to load products from IndexedDB fallback:', e);
+          this.products.set([]);
+        }
+      }
 
     } catch (error) {
       console.error('❌ Dashboard error loading current date data:', error);
