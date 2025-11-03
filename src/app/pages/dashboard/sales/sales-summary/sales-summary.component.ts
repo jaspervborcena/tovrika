@@ -5,6 +5,7 @@ import { OrderService } from '../../../../services/order.service';
 import { AuthService } from '../../../../services/auth.service';
 import { StoreService, Store } from '../../../../services/store.service';
 import { Order as PosOrder, OrderItem } from '../../../../interfaces/pos.interface';
+import { IndexedDBService } from '../../../../core/services/indexeddb.service';
 
 // Extended interface for display purposes
 interface OrderDisplay extends PosOrder {
@@ -1193,6 +1194,7 @@ export class SalesSummaryComponent implements OnInit {
   private orderService = inject(OrderService);
   private authService = inject(AuthService);
   private storeService = inject(StoreService);
+  private indexedDb = inject(IndexedDBService);
 
   // Signals for reactive state management
   orders = signal<Order[]>([]);
@@ -1499,28 +1501,39 @@ export class SalesSummaryComponent implements OnInit {
 
       // Use the hybrid method that automatically determines the data source
       console.log('📊 Using hybrid data loading...');
-      const orders = await this.orderService.getOrdersByDateRange(storeId, startDate, endDate);
+      let orders = await this.orderService.getOrdersByDateRange(storeId, startDate, endDate);
 
       // Debug: Check what we got back
       console.log('📊 Order Service returned:', orders.length, 'orders');
-      if (orders.length === 0) {
-        console.log('⚠️ No orders found. This could mean:');
-        console.log('1. No orders exist for this date range');
-        console.log('2. Store ID is incorrect');
-        console.log('3. API/Firebase connection issue');
-        console.log('4. Date format issue');
+
+      // If service returned no orders, attempt IndexedDB snapshot fallback
+      if (!orders || orders.length === 0) {
+        try {
+          console.warn('⚠️ No orders from remote service - attempting IndexedDB snapshot fallback');
+          const saved: any[] = await this.indexedDb.getSetting(`orders_snapshot_${storeId}`);
+          if (saved && Array.isArray(saved) && saved.length > 0) {
+            console.log(`📦 Loaded ${saved.length} orders from IndexedDB snapshot for store ${storeId}`);
+            orders = saved;
+            // mark data source as offline fallback (API or snapshot)
+            this.dataSource.set('api');
+          } else {
+            console.log('📦 No orders snapshot available in IndexedDB');
+          }
+        } catch (dbErr) {
+          console.warn('📦 Failed to read orders snapshot from IndexedDB:', dbErr);
+        }
       }
 
-      // No need to filter on client side - the service handles it
-      const filteredOrders = orders;
+      // No need to filter on client side - the service handles it when possible
+      const filteredOrders = orders || [];
 
       // Transform to match our interface - spread all existing properties and add display properties
       const transformedOrders: Order[] = filteredOrders.map((order: any) => ({
         ...order, // Spread all existing order properties
         id: order.id || '', // Ensure id is not undefined
         customerName: order.soldTo || 'Cash Sale',
-        items: [], // We'll load items separately if needed
-        paymentMethod: 'cash' // Default payment method since it's not in Order interface
+        items: order.items || [],
+        paymentMethod: order.paymentMethod || 'cash'
       }));
 
       this.orders.set(transformedOrders);

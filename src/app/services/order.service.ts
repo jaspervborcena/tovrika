@@ -6,6 +6,7 @@ import { Order } from '../interfaces/pos.interface';
 import { AuthService } from './auth.service';
 import { FirestoreSecurityService } from '../core/services/firestore-security.service';
 import { OfflineDocumentService } from '../core/services/offline-document.service';
+import { IndexedDBService } from '../core/services/indexeddb.service';
 
 @Injectable({
   providedIn: 'root'
@@ -18,6 +19,8 @@ export class OrderService {
     private firestore: Firestore,
     private http: HttpClient,
     private securityService: FirestoreSecurityService
+    ,
+    private indexedDb: IndexedDBService
   ) {}
 
   private transformDoc(d: any): Order {
@@ -475,6 +478,12 @@ export class OrderService {
       if (storeOrdersSnapshot.docs.length > 0) {
         console.log('✅ Found orders for this store (fallback)!');
         const orders = storeOrdersSnapshot.docs.map(doc => this.transformDoc(doc));
+        // Persist a snapshot for offline fallback
+        try {
+          await this.indexedDb.saveSetting(`orders_snapshot_${storeId}`, orders);
+        } catch (e) {
+          console.warn('Failed to persist orders snapshot to IndexedDB:', e);
+        }
         
         // Filter by date range on client side as fallback
         const filteredOrders = orders.filter(order => {
@@ -492,6 +501,21 @@ export class OrderService {
         console.log('3. Orders exist but with different storeId format');
         return [];
       }
+      // If nothing found remotely, attempt offline snapshot fallback
+      try {
+        const saved: any[] = await this.indexedDb.getSetting(`orders_snapshot_${storeId}`);
+        if (saved && Array.isArray(saved)) {
+          const filtered = saved.filter(order => {
+            const orderDate = new Date(order.createdAt);
+            return orderDate >= startDate && orderDate <= endDate;
+          });
+          if (filtered.length > 0) return filtered;
+        }
+      } catch (e) {
+        console.warn('Failed to read orders snapshot from IndexedDB:', e);
+      }
+
+      return [];
       
     } catch (error) {
       console.error('❌ Error getting orders by date range:', error);

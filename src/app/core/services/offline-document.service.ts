@@ -4,6 +4,8 @@ import { IndexedDBService } from './indexeddb.service';
 import { FirestoreSecurityService } from './firestore-security.service';
 import { LoggerService } from './logger.service';
 import { logFirestore } from '../utils/firestore-logger';
+import { applyCreateTimestamps, applyUpdateTimestamp } from '../utils/firestore-timestamps';
+import { serverTimestamp } from 'firebase/firestore';
 
 export interface OfflineDocument {
   id: string;
@@ -35,7 +37,9 @@ export class OfflineDocumentService {
   async createDocument(collectionName: string, data: any): Promise<string> {
     try {
       // Add security fields (works online/offline with IndexedDB)
-      const secureData = await this.securityService.addSecurityFields(data);
+  const secureData = await this.securityService.addSecurityFields(data);
+  // Ensure create timestamps are applied. Use serverTimestamp when online; fallback to ISO when offline.
+  const timestampedData = applyCreateTimestamps(secureData, navigator.onLine as boolean);
 
       // 🔥 NEW APPROACH: Always generate ID first, then create document
       let documentId: string;
@@ -50,14 +54,14 @@ export class OfflineDocumentService {
           collectionPath: collectionName,
           docId: documentId
         }, secureData, async () => {
-          await this.createOnlineDocumentWithId(collectionName, documentId, secureData);
+          await this.createOnlineDocumentWithId(collectionName, documentId, timestampedData);
           return documentId;
         });
         const durationMs = Math.round((performance.now?.() ?? Date.now()) - start);
       } else {
         // OFFLINE: Generate temp ID, store locally for later sync
         documentId = this.generateTempDocumentId(collectionName);
-        await this.createOfflineDocument(collectionName, documentId, secureData);
+  await this.createOfflineDocument(collectionName, documentId, timestampedData);
         // Log offline queue success as a separate event for visibility
         this.logger.dbSuccess('Queued offline document creation', {
           api: 'offline.queue.add',
@@ -82,9 +86,10 @@ export class OfflineDocumentService {
       // Fallback: If online creation fails, try offline
       if (navigator.onLine) {
         console.log('🔄 Online creation failed, falling back to offline mode...');
-        const secureData = await this.securityService.addSecurityFields(data);
+  const secureData = await this.securityService.addSecurityFields(data);
+  const timestampedData = applyCreateTimestamps(secureData, false);
         const tempId = this.generateTempDocumentId(collectionName);
-        await this.createOfflineDocument(collectionName, tempId, secureData);
+  await this.createOfflineDocument(collectionName, tempId, timestampedData);
         this.logger.dbSuccess('Queued offline document after online failure', {
           api: 'offline.queue.add',
           area: collectionName,
@@ -105,9 +110,11 @@ export class OfflineDocumentService {
   private async createOnlineDocument(collectionName: string, data: any): Promise<string> {
     try {
       console.log('🌐 Creating document online:', collectionName);
+      // Ensure server timestamps for create when writing online
+      const toWrite = applyCreateTimestamps(data, true);
       const collectionRef = collection(this.firestore, collectionName);
       const start = performance.now?.() ?? Date.now();
-      const docRef = await addDoc(collectionRef, data);
+      const docRef = await addDoc(collectionRef, toWrite);
       const durationMs = Math.round((performance.now?.() ?? Date.now()) - start);
       this.logger.dbSuccess('Firestore add succeeded', {
         api: 'firestore.add',
@@ -139,7 +146,8 @@ export class OfflineDocumentService {
       console.log('🌐 Creating document online with pre-generated ID:', documentId);
       const docRef = doc(this.firestore, collectionName, documentId);
       const start = performance.now?.() ?? Date.now();
-      await setDoc(docRef, data);
+      const toWrite = applyCreateTimestamps(data, true);
+      await setDoc(docRef, toWrite);
       const durationMs = Math.round((performance.now?.() ?? Date.now()) - start);
       this.logger.dbSuccess('Firestore set succeeded', {
         api: 'firestore.set',
@@ -259,13 +267,15 @@ export class OfflineDocumentService {
     try {
       // Add update security fields
       const secureUpdates = await this.securityService.addUpdateSecurityFields(updates);
+      // Ensure updatedAt is set to server timestamp when online
+      const timestampedUpdates = applyUpdateTimestamp(secureUpdates, navigator.onLine as boolean);
 
       if (navigator.onLine && !this.isTempId(documentId)) {
         // ONLINE: Update real document using setDoc with merge
-        await this.updateOnlineDocumentWithId(collectionName, documentId, secureUpdates);
+        await this.updateOnlineDocumentWithId(collectionName, documentId, timestampedUpdates);
       } else {
         // OFFLINE: Store update for later sync
-        await this.updateOfflineDocument(collectionName, documentId, secureUpdates);
+        await this.updateOfflineDocument(collectionName, documentId, timestampedUpdates);
       }
     } catch (error) {
       console.error('❌ Document update failed:', error);
@@ -414,6 +424,7 @@ export class OfflineDocumentService {
       
       if (docIndex >= 0) {
         // Update existing offline document
+        // Ensure offline updates contain an ISO updatedAt so UI can show recency
         pendingDocs[docIndex].data = { ...pendingDocs[docIndex].data, ...updates };
         localStorage.setItem('pendingDocuments', JSON.stringify(pendingDocs));
         console.log('✅ Offline document updated:', documentId);
@@ -469,6 +480,11 @@ export class OfflineDocumentService {
         try {
           console.log('🔄 Syncing document:', offlineDoc.id);
           
+          // When syncing offline-created documents, replace client timestamps with server timestamps
+          try {
+            (offlineDoc.data as any)['createdAt'] = serverTimestamp() as any;
+            (offlineDoc.data as any)['updatedAt'] = serverTimestamp() as any;
+          } catch {}
           // Create document online with real Firestore ID
           const realDocId = await this.createOnlineDocument(offlineDoc.collectionName, offlineDoc.data);
           

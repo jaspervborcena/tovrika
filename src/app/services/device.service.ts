@@ -17,6 +17,7 @@ import {
 import { AuthService } from './auth.service';
 import { OfflineDocumentService } from '../core/services/offline-document.service';
 import { Device } from '../interfaces/device.interface';
+import { applyCreateTimestamps, applyUpdateTimestamp } from '../core/utils/firestore-timestamps';
 
 export type { Device } from '../interfaces/device.interface';
 
@@ -50,13 +51,11 @@ export class DeviceService {
     try {
       console.log('🖥️ Creating new device:', deviceData);
 
-      const device = {
+      const device = applyCreateTimestamps({
         ...deviceData,
         status: deviceData.status || 'pending',
-        isLocked: false,
-        createdAt: Timestamp.now(),
-        updatedAt: Timestamp.now()
-      };
+        isLocked: false
+      }, navigator.onLine as boolean);
 
       const devicesRef = collection(this.firestore, 'devices');
       const docRef = await addDoc(devicesRef, device);
@@ -291,10 +290,7 @@ export class DeviceService {
       console.log('🔄 Updating device status:', deviceId, '→', status);
 
       const deviceRef = doc(this.firestore, 'devices', deviceId);
-      await this.offlineDocService.updateDocument('devices', deviceId, {
-        status,
-        updatedAt: Timestamp.now()
-      });
+      await this.offlineDocService.updateDocument('devices', deviceId, applyUpdateTimestamp({ status }, navigator.onLine as boolean));
 
       console.log('✅ Device status updated');
     } catch (error) {
@@ -312,13 +308,12 @@ export class DeviceService {
       console.log('✅ Approving device:', deviceId, 'by admin:', adminUid);
 
       const deviceRef = doc(this.firestore, 'devices', deviceId);
-      await this.offlineDocService.updateDocument('devices', deviceId, {
+      await this.offlineDocService.updateDocument('devices', deviceId, applyUpdateTimestamp({
         status: 'active',
         isLocked: true,
         approvedBy: adminUid,
-        approvedAt: Timestamp.now(),
-        updatedAt: Timestamp.now()
-      });
+        approvedAt: Timestamp.now()
+      }, navigator.onLine as boolean));
 
       console.log('✅ Device approved and locked');
     } catch (error) {
@@ -336,11 +331,7 @@ export class DeviceService {
       console.log('❌ Rejecting device:', deviceId);
 
       const deviceRef = doc(this.firestore, 'devices', deviceId);
-      await this.offlineDocService.updateDocument('devices', deviceId, {
-        status: 'pending',
-        isLocked: false,
-        updatedAt: Timestamp.now()
-      });
+      await this.offlineDocService.updateDocument('devices', deviceId, applyUpdateTimestamp({ status: 'pending', isLocked: false }, navigator.onLine as boolean));
 
       console.log('✅ Device rejected, user can resubmit');
     } catch (error) {
@@ -358,10 +349,7 @@ export class DeviceService {
       console.log('🔒 Locking device:', deviceId);
 
       const deviceRef = doc(this.firestore, 'devices', deviceId);
-      await this.offlineDocService.updateDocument('devices', deviceId, {
-        isLocked: true,
-        updatedAt: Timestamp.now()
-      });
+      await this.offlineDocService.updateDocument('devices', deviceId, applyUpdateTimestamp({ isLocked: true }, navigator.onLine as boolean));
 
       console.log('✅ Device locked');
     } catch (error) {
@@ -387,10 +375,7 @@ export class DeviceService {
       console.log('📝 Updating device:', deviceId);
 
       const deviceRef = doc(this.firestore, 'devices', deviceId);
-      await this.offlineDocService.updateDocument('devices', deviceId, {
-        ...updates,
-        updatedAt: Timestamp.now()
-      });
+      await this.offlineDocService.updateDocument('devices', deviceId, applyUpdateTimestamp({ ...updates }, navigator.onLine as boolean));
 
       console.log('✅ Device updated');
     } catch (error) {
@@ -413,10 +398,7 @@ export class DeviceService {
       console.log('🔧 Fixing device without uid:', deviceId);
 
       const deviceRef = doc(this.firestore, 'devices', deviceId);
-      await this.offlineDocService.updateDocument('devices', deviceId, {
-        uid: currentUser.uid,
-        updatedAt: Timestamp.now()
-      });
+      await this.offlineDocService.updateDocument('devices', deviceId, applyUpdateTimestamp({ uid: currentUser.uid }, navigator.onLine as boolean));
 
       console.log('✅ Device fixed with uid:', currentUser.uid);
     } catch (error) {
@@ -478,11 +460,7 @@ export class DeviceService {
       }
 
       const deviceRef = doc(this.firestore, 'devices', deviceId);
-      await this.offlineDocService.updateDocument('devices', deviceId, {
-        currentInvoiceNumber: nextNumber,
-        lastUsedAt: Timestamp.now(),
-        updatedAt: Timestamp.now()
-      });
+      await this.offlineDocService.updateDocument('devices', deviceId, applyUpdateTimestamp({ currentInvoiceNumber: nextNumber, lastUsedAt: Timestamp.now() }, navigator.onLine as boolean));
 
       console.log('📝 Invoice number incremented to:', nextNumber);
       return nextNumber;
