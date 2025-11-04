@@ -1525,7 +1525,7 @@ import { CloudLoggingService } from '../../../services/cloud-logging.service';
                 <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" class="tab-icon">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
                 </svg>
-                Edit
+                Add
               </button>
             </div>
 
@@ -1611,8 +1611,15 @@ import { CloudLoggingService } from '../../../services/cloud-logging.service';
             <div class="tab-content" *ngIf="inventoryTab==='edit'">
               <div class="form-card">
                 <div class="form-header">
-                  <h4 class="form-title">{{ isEditingBatch ? 'Edit Batch' : 'Add New Batch' }}</h4>
-                  <p class="form-subtitle">{{ isEditingBatch ? 'Update inventory batch details' : 'Add new inventory to your product stock' }}</p>
+                  <h4 class="form-title">
+                    {{ isEditingBatch ? 'Edit Batch' : 'Add New Batch' }}
+                    <span *ngIf="isEditingBatch && editingBatchOriginalId" style="font-weight:500; color:#4b5563; margin-left:8px;">• {{ editingBatchOriginalId }}</span>
+                  </h4>
+                  <p class="form-subtitle">
+                    {{ isEditingBatch 
+                      ? ('Update inventory batch details' + (editingBatchOriginalId ? ' — ' + editingBatchOriginalId : ''))
+                      : 'Add new inventory to your product stock' }}
+                  </p>
                 </div>
                 
                 <form [formGroup]="inventoryForm" (ngSubmit)="saveBatch()" class="inventory-form">
@@ -1993,15 +2000,26 @@ export class ProductManagementComponent implements OnInit {
   switchToEditTab(): void {
     this.inventoryTab = 'edit';
     this.generatedBatchId = this.generateBatchId(); // Generate new ID when switching to edit tab
-    this.isEditingBatch = false; // Ensure it's in add mode, not edit mode
-    this.editingBatchOriginalId = null;
-    this.editingBatchDocId = null;
-    
-    // Reset form for new batch
-    this.inventoryForm.reset();
-    this.inventoryForm.patchValue({
-      receivedAt: new Date().toISOString().split('T')[0]
-    });
+
+    // If there's already a selected batch for editing (from openEditBatch), preserve that
+    // Otherwise treat the tab as "add new batch" and reset the form.
+    const hasSelectedBatch = !!this.editingBatchOriginalId || !!this.editingBatchDocId;
+    if (hasSelectedBatch) {
+      // stay in edit mode for the selected batch
+      this.isEditingBatch = true;
+      // keep editingBatchOriginalId / editingBatchDocId as-is
+    } else {
+      // Ensure it's in add mode, not edit mode
+      this.isEditingBatch = false;
+      this.editingBatchOriginalId = null;
+      this.editingBatchDocId = null;
+
+      // Reset form for new batch
+      this.inventoryForm.reset();
+      this.inventoryForm.patchValue({
+        receivedAt: new Date().toISOString().split('T')[0]
+      });
+    }
   }
 
   async openInventoryModal(product: Product): Promise<void> {
@@ -2014,8 +2032,8 @@ export class ProductManagementComponent implements OnInit {
     this.inventoryTab = 'list';
     this.inventorySearch = '';
     try {
-      this.currentBatches = await this.inventoryDataService.listBatches(product.id!);
-      this.refreshFilteredInventory();
+      const batches = await this.inventoryDataService.listBatches(product.id!);
+      this.setCurrentBatches(batches || []);
     } catch (e) {
       console.error('Failed to load inventory batches:', e);
       this.filteredInventory = [];
@@ -2295,10 +2313,10 @@ export class ProductManagementComponent implements OnInit {
     if (!this.selectedProduct || !this.pendingBatchId || !this.pendingBatchDocId) return;
 
     try {
-      await this.inventoryDataService.removeBatch(this.selectedProduct.id!, this.pendingBatchDocId);
-      // Refresh collections
-  this.currentBatches = await this.inventoryDataService.listBatches(this.selectedProduct.id!);
-  this.refreshFilteredInventory();
+    await this.inventoryDataService.removeBatch(this.selectedProduct.id!, this.pendingBatchDocId);
+    // Refresh collections
+    const batches = await this.inventoryDataService.listBatches(this.selectedProduct.id!);
+    this.setCurrentBatches(batches || []);
       this.selectedProduct = this.productService.getProduct(this.selectedProduct.id!) || null;
     } catch (error) {
       console.error('Error removing inventory batch:', error);
@@ -2323,6 +2341,59 @@ export class ProductManagementComponent implements OnInit {
       : base.filter(b => (b.batchId || '').toLowerCase().includes(term));
   }
 
+  private setCurrentBatches(batches: ProductInventoryEntry[]): void {
+    this.currentBatches = batches || [];
+    this.sortCurrentBatchesIfNeeded();
+    this.refreshFilteredInventory();
+  }
+
+  private sortCurrentBatchesIfNeeded(): void {
+    if (!this.currentBatches || this.currentBatches.length <= 1) return;
+    this.currentBatches.sort((a, b) => {
+      const ta = this.asDate(a.receivedAt)?.getTime() ?? 0;
+      const tb = this.asDate(b.receivedAt)?.getTime() ?? 0;
+      // newest first
+      return tb - ta;
+    });
+  }
+
+  // --- Helpers to normalize Firestore Timestamp | number | string | Date to Date/input value ---
+  private asDate(value: any): Date | null {
+    try {
+      if (!value) return null;
+      // Firestore Timestamp: has toDate()
+      if (typeof value === 'object' && value !== null && typeof value.toDate === 'function') {
+        return value.toDate();
+      }
+      // If value is seconds/nanoseconds
+      if (typeof value === 'object' && 'seconds' in value && typeof value.seconds === 'number') {
+        return new Date((value.seconds as number) * 1000);
+      }
+      // If it's already a Date
+      if (value instanceof Date) return value;
+      // If it's a number (ms)
+      if (typeof value === 'number') return new Date(value);
+      // If it's a string
+      if (typeof value === 'string') {
+        const d = new Date(value);
+        return isNaN(d.getTime()) ? null : d;
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
+  private toDateInputValue(value: any, fallbackToday = true): string {
+    const d = this.asDate(value) ?? (fallbackToday ? new Date() : null);
+    if (!d) return '';
+    // Format YYYY-MM-DD for input[type=date]
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  }
+
   // Stabilize ngFor rendering to avoid perceived row movement
   trackByBatch(index: number, batch: ProductInventoryEntry): string | number {
     return batch.id || batch.batchId || index;
@@ -2330,26 +2401,41 @@ export class ProductManagementComponent implements OnInit {
 
   openEditBatch(batch: ProductInventoryEntry): void {
     if (!this.selectedProduct) return;
+    // Ensure batches are sorted so index 0 is the latest
+    this.sortCurrentBatchesIfNeeded();
+
     const isLatestBatch = this.currentBatches.length > 0 && this.currentBatches[0].batchId === batch.batchId;
-    
+
     if (!isLatestBatch) {
       this.toastService.error('You can only edit the most recent inventory batch.');
       return;
     }
-    
+
     this.inventoryTab = 'edit';
     this.isEditingBatch = true;
     this.editingBatchOriginalId = batch.batchId || null;
     this.editingBatchDocId = batch.id || null;
     this.inventoryForm.patchValue({
       batchId: batch.batchId,
-      quantity: batch.quantity,
-      unitPrice: batch.unitPrice,
-      costPrice: batch.costPrice || 0,
-      receivedAt: batch.receivedAt ? new Date(batch.receivedAt).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
-      expiryDate: batch.expiryDate ? new Date(batch.expiryDate).toISOString().split('T')[0] : '',
+      quantity: Number(batch.quantity ?? 0),
+      unitPrice: Number(batch.unitPrice ?? 0),
+      costPrice: Number(batch.costPrice ?? 0),
+      receivedAt: this.toDateInputValue(batch.receivedAt, true),
+      expiryDate: batch.expiryDate ? this.toDateInputValue(batch.expiryDate, false) : '',
       supplier: batch.supplier || ''
     });
+
+    // Force angular to update view so form fields appear immediately
+    try {
+      this.inventoryForm.updateValueAndValidity({ onlySelf: false, emitEvent: true });
+      this.cdr.detectChanges();
+      // Focus first field for better UX
+      setTimeout(() => {
+        const el = document.getElementById('quantity') as HTMLInputElement | null;
+        el?.focus();
+        el?.select?.();
+      }, 0);
+    } catch (e) { /* ignore */ }
   }
 
   cancelEdit(): void {
@@ -2408,9 +2494,9 @@ export class ProductManagementComponent implements OnInit {
         });
       }
 
-      // Refresh state and generate new batch ID for next entry
-  this.currentBatches = await this.inventoryDataService.listBatches(this.selectedProduct.id!);
-  this.refreshFilteredInventory();
+    // Refresh state and generate new batch ID for next entry
+    const batches = await this.inventoryDataService.listBatches(this.selectedProduct.id!);
+    this.setCurrentBatches(batches || []);
       this.selectedProduct = this.productService.getProduct(this.selectedProduct.id!) || null;
       this.inventoryForm.reset();
       this.inventoryForm.patchValue({ receivedAt: new Date().toISOString().split('T')[0] });
@@ -3174,10 +3260,9 @@ export class ProductManagementComponent implements OnInit {
     try {
       this.loading = true;
       
-      // Load inventory entries for this product using the existing method
-  const inventoryEntries = await this.inventoryDataService.listBatches(productId);
-  this.currentBatches = inventoryEntries || [];
-  this.refreshFilteredInventory();
+    // Load inventory entries for this product using the existing method
+    const inventoryEntries = await this.inventoryDataService.listBatches(productId);
+    this.setCurrentBatches(inventoryEntries || []);
       
       console.log(`Loaded ${this.currentBatches.length} inventory batches for product ${productId}`);
     } catch (error) {
