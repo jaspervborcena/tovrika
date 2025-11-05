@@ -1,6 +1,7 @@
 import { ApplicationConfig, APP_INITIALIZER } from '@angular/core';
 import { provideHttpClient } from '@angular/common/http';
 import { provideFirebaseApp, initializeApp } from '@angular/fire/app';
+import { getApp, getApps } from 'firebase/app';
 import { provideFirestore, getFirestore } from '@angular/fire/firestore';
 import { enableIndexedDbPersistence, enableMultiTabIndexedDbPersistence } from 'firebase/firestore';
 import { provideAuth, getAuth } from '@angular/fire/auth';
@@ -26,10 +27,17 @@ export const appConfig: ApplicationConfig = {
     ),
     provideFirebaseApp(() => {
       try {
-        return initializeApp(environment.firebase);
+        // Reuse existing app if already initialized elsewhere
+        const app = getApps().length > 0 ? getApp() : initializeApp(environment.firebase);
+        return app;
       } catch (error) {
         console.error('❌ Firebase App initialization failed:', error);
-        throw error;
+        // Attempt to fallback to existing app if available
+        try {
+          return getApp();
+        } catch {
+          throw error;
+        }
       }
     }),
     provideAuth(() => {
