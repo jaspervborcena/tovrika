@@ -7,11 +7,13 @@ import { AuthService } from '../../../services/auth.service';
 import { ToastService } from '../../../shared/services/toast.service';
 import { PredefinedTypesService, PredefinedType } from '../../../services/predefined-types.service';
 import { DeviceService, Device } from '../../../services/device.service';
+import { ExpenseService } from '../../../services/expense.service';
 import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../shared/components/confirmation-dialog/confirmation-dialog.component';
 import { UpgradeSubscriptionModalComponent } from '../subscriptions/upgrade-subscription-modal.component';
 import { SubscriptionService } from '../../../services/subscription.service';
 import { UserRolesEnum } from '../../../shared/enums/user-roles.enum';
 import { Subscription as SubscriptionDoc } from '../../../interfaces/subscription.interface';
+import { Timestamp } from '@angular/fire/firestore';
 
 @Component({
   selector: 'app-stores-management',
@@ -66,7 +68,8 @@ import { Subscription as SubscriptionDoc } from '../../../interfaces/subscriptio
         </div>
 
         <div class="table-wrapper" *ngIf="filteredStores.length > 0">
-          <table class="stores-table">
+          <div class="table-scroll">
+            <table class="stores-table">
             <thead>
               <tr>
                 <th>Store Name</th>
@@ -135,6 +138,12 @@ import { Subscription as SubscriptionDoc } from '../../../interfaces/subscriptio
                       [title]="canManageDevices() ? 'Manage Devices' : 'Device Management (View Only)'">
                       💻
                     </button>
+                    <button
+                      class="btn-icon-action btn-expense"
+                      (click)="openExpenseLog(store)"
+                      title="Expense Log">
+                      💸
+                    </button>
                     <button 
                       class="btn-icon-action btn-upgrade"
                       (click)="openUpgradeModal(store)"
@@ -147,7 +156,8 @@ import { Subscription as SubscriptionDoc } from '../../../interfaces/subscriptio
                 </td>
               </tr>
             </tbody>
-          </table>
+            </table>
+          </div>
         </div>
 
         <!-- Empty State -->
@@ -498,6 +508,8 @@ import { Subscription as SubscriptionDoc } from '../../../interfaces/subscriptio
             </button>
           </div>
         </div>
+
+          <!-- Expense Log Modal (moved to root level) -->
       </div>
 
       <!-- Devices Modal -->
@@ -702,6 +714,115 @@ import { Subscription as SubscriptionDoc } from '../../../interfaces/subscriptio
       (closeModal)="closeUpgradeModal()"
       (completed)="onUpgradeCompleted()"
     ></app-upgrade-subscription-modal>
+
+    <!-- Expense Log Modal (root-level) -->
+    <div class="modal-overlay expense-overlay" 
+         *ngIf="showExpenseModal" 
+         (click)="cancelExpenseModal()"
+         style="position: fixed !important; z-index: 1000001 !important; background: rgba(0, 0, 0, 0.8) !important;">
+      <div class="modal modal-large" (click)="$event.stopPropagation()">
+        <div class="modal-header">
+          <h3>💸 Expense Log - {{ selectedStore?.storeName }}</h3>
+          <button class="close-btn" (click)="cancelExpenseModal()">×</button>
+        </div>
+        <div class="modal-body">
+          <div class="expense-tabs" style="display:flex; gap:12px; align-items:center; margin-bottom:1rem;">
+            <button class="btn btn-secondary" [class.active]="expenseTab === 'recent'" (click)="setExpenseTab('recent')">Recent Expenses</button>
+            <button class="btn btn-secondary" [class.active]="expenseTab === 'add'" (click)="setExpenseTab('add')">Add Expense</button>
+          </div>
+
+          <div class="expense-grid">
+            <!-- Recent tab -->
+            <div *ngIf="expenseTab === 'recent'" class="expense-list" style="margin-bottom: 1rem;">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                <h4 style="margin:0">Recent Expenses</h4>
+                <button class="btn btn-primary btn-sm" (click)="setExpenseTab('add')">+ Add Expense..</button>
+              </div>
+              <div *ngIf="expenseLogs.length === 0" class="empty-devices">No expenses yet</div>
+              <div *ngFor="let exp of expenseLogs" style="display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid #f1f5f9;">
+                <div>
+                  <div style="font-weight:600">{{ exp.category | titlecase }} — {{ (exp.amount/100) | number:'1.2-2' }} {{ exp.currency }}</div>
+                  <div style="font-size:12px; color:#6b7280">{{ exp.description }}</div>
+                </div>
+                <div style="display:flex; gap:8px; align-items:center">
+                  <button class="btn-icon-sm" (click)="editExpense(exp)" title="Edit">✏️</button>
+                  <button class="btn-icon-sm" (click)="deleteExpense(exp)" title="Delete">🗑️</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Add tab -->
+            <div *ngIf="expenseTab === 'add'" class="expense-form">
+              <h4 style="margin-top:0">{{ selectedExpense ? 'Edit Expense' : 'Add Expense' }}</h4>
+              <form [formGroup]="expenseForm">
+                <div class="form-row">
+                  <div class="form-group">
+                    <label>Category</label>
+                    <select formControlName="category" class="form-input">
+                      <option value="supplies">Supplies</option>
+                      <option value="utilities">Utilities</option>
+                      <option value="rent">Rent</option>
+                      <option value="salary">Salary</option>
+                      <option value="marketing">Marketing</option>
+                      <option value="other">Other</option>
+                    </select>
+                  </div>
+
+                  <div class="form-group">
+                    <label>Amount (PHP)</label>
+                    <input type="number" formControlName="amount" class="form-input" step="0.01" />
+                  </div>
+                </div>
+
+                <div class="form-group">
+                  <label>Description</label>
+                  <textarea formControlName="description" class="form-textarea" rows="3"></textarea>
+                </div>
+
+                <div class="form-row">
+                  <div class="form-group">
+                    <label>Payment Method</label>
+                    <select formControlName="paymentMethod" class="form-input">
+                      <option value="cash">Cash</option>
+                      <option value="gcash">GCash</option>
+                      <option value="bank">Bank</option>
+                      <option value="credit">Credit</option>
+                      <option value="other">Other</option>
+                    </select>
+                  </div>
+
+                  <div class="form-group">
+                    <label>Payment Date</label>
+                    <input type="date" formControlName="paymentDate" class="form-input" />
+                  </div>
+                </div>
+
+                <div class="form-row">
+                  <div class="form-group">
+                    <label>Reference ID</label>
+                    <input type="text" formControlName="referenceId" class="form-input" />
+                  </div>
+
+                  <div class="form-group">
+                    <label>Tags (comma separated)</label>
+                    <input type="text" formControlName="tags" class="form-input" />
+                  </div>
+                </div>
+
+                <div style="display:flex; gap:8px; align-items:center; margin-top:12px;">
+                  <label style="display:flex; align-items:center; gap:8px"><input type="checkbox" formControlName="isRecurring" /> Recurring</label>
+                  <label style="display:flex; align-items:center; gap:8px"><input type="checkbox" formControlName="voided" /> Voided</label>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" (click)="cancelExpenseModal()">Cancel</button>
+          <button class="btn btn-primary" (click)="saveExpense()">{{ selectedExpense ? 'Update' : 'Save' }}</button>
+        </div>
+      </div>
+    </div>
   `,
   styles: [`
     .stores-management {
@@ -795,13 +916,31 @@ import { Subscription as SubscriptionDoc } from '../../../interfaces/subscriptio
     .table-wrapper {
       background: white;
       border-radius: 12px;
-      overflow: hidden;
+      /* Keep visual clipping but allow inner scrolling */
       box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    }
+
+    /* Horizontal scroll container for wide tables */
+    .table-scroll {
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      width: 100%;
+    }
+
+    /* Custom thin scrollbar for modern browsers */
+    .table-scroll::-webkit-scrollbar {
+      height: 8px;
+    }
+    .table-scroll::-webkit-scrollbar-thumb {
+      background: rgba(99,102,241,0.35);
+      border-radius: 8px;
     }
 
     .stores-table {
       width: 100%;
       border-collapse: collapse;
+      /* Allow the table to be wider than its container so horizontal scroll appears */
+      min-width: 900px;
     }
 
     .stores-table th,
@@ -1201,6 +1340,16 @@ import { Subscription as SubscriptionDoc } from '../../../interfaces/subscriptio
     .btn-secondary:hover {
       background: #e2e8f0;
       transform: translateY(-1px);
+    }
+
+    /* Highlighted state for selected expense tab */
+    .btn-secondary.active,
+    .expense-tabs .btn-secondary.active {
+      background: #667eea !important;
+      color: white !important;
+      border-color: #667eea !important;
+      box-shadow: 0 4px 12px rgba(102, 126, 234, 0.2);
+      transform: none;
     }
 
     .btn-primary {
@@ -1717,6 +1866,14 @@ export class StoresManagementComponent implements OnInit {
   showDevicesModal: boolean = false;
   showDeviceForm: boolean = false;
   isLoadingDevices: boolean = false;
+  // Expense Log modal state
+  showExpenseModal: boolean = false;
+  expenseForm: FormGroup;
+  expenseLogs: any[] = [];
+  selectedExpense: any = null;
+  // Expense modal tab state: 'recent' or 'add'
+  // Default to 'add' to show the Add Expense form first as requested
+  expenseTab: 'recent' | 'add' = 'add';
   editingStore: Store | null = null;
   selectedStore: Store | null = null;
   editingDevice: Device | null = null;
@@ -1746,6 +1903,7 @@ export class StoresManagementComponent implements OnInit {
     private toastService: ToastService,
     private predefinedTypesService: PredefinedTypesService,
     private deviceService: DeviceService,
+    private expenseService: ExpenseService,
     private router: Router,
     private subscriptionService: SubscriptionService
   ) {
@@ -1797,6 +1955,21 @@ export class StoresManagementComponent implements OnInit {
       currentInvoiceNumber: [100001, [Validators.required, Validators.min(1)]],
       minNumber: ['', [Validators.required]],
       serialNumber: ['', [Validators.required]]
+    });
+
+    // Expense form (used in Expense Log modal)
+    this.expenseForm = this.fb.group({
+      category: ['other', [Validators.required]],
+      description: [''],
+      amount: [0, [Validators.required, Validators.min(0)]],
+      currency: ['PHP'],
+      paymentMethod: ['cash', [Validators.required]],
+      paymentDate: [new Date(), [Validators.required]],
+      referenceId: [''],
+      tags: [''],
+      isRecurring: [false],
+      voided: [false],
+      voidReason: ['']
     });
   }
 
@@ -1899,6 +2072,176 @@ export class StoresManagementComponent implements OnInit {
     this.toastService.success('Subscription upgraded successfully');
     // Optional: navigate to subscriptions dashboard
     try { this.router.navigate(['/dashboard/subscriptions']); } catch {}
+  }
+
+  cancelExpenseModal() {
+    this.showExpenseModal = false;
+    this.selectedExpense = null;
+    this.selectedStore = null;
+  }
+
+  async saveExpense() {
+    if (!this.expenseForm.valid) {
+      this.toastService.error('Please complete required expense fields');
+      return;
+    }
+
+    const values = this.expenseForm.value;
+    // Convert amount to centavos (assume user entered pesos)
+    const amountCentavos = Math.round(Number(values.amount) * 100);
+
+    try {
+      // Build payload (do not include createdAt/updatedAt - OfflineDocumentService will add timestamps)
+      const payload: any = {
+        storeId: this.selectedStore?.id || '',
+        createdBy: this.authService.getCurrentUser()?.uid || 'unknown',
+        category: values.category,
+        description: values.description,
+        amount: amountCentavos,
+        currency: values.currency || 'PHP',
+        paymentMethod: values.paymentMethod,
+        // Use JS Date so Firestore client converts it to a timestamp
+        paymentDate: values.paymentDate ? new Date(values.paymentDate) : new Date(),
+        referenceId: values.referenceId,
+        tags: values.tags ? String(values.tags).split(',').map((t: string) => t.trim()).filter(Boolean) : [],
+        isRecurring: !!values.isRecurring,
+        voided: !!values.voided,
+        voidReason: values.voidReason
+      };
+
+      if (this.selectedExpense && this.selectedExpense.id) {
+        // Update existing
+        await this.expenseService.updateExpense(this.selectedExpense.id, payload);
+        // Update in-memory list
+        const idx = this.expenseLogs.findIndex(e => e.id === this.selectedExpense.id);
+        if (idx >= 0) this.expenseLogs[idx] = { ...this.expenseLogs[idx], ...payload };
+        this.toastService.success('Expense updated');
+      } else {
+        // Create new
+        const newId = await this.expenseService.createExpense(payload);
+        const saved = { id: newId, ...payload };
+        this.expenseLogs.unshift(saved);
+        this.toastService.success('Expense saved');
+      }
+
+      // After saving, switch to Recent tab so the user sees the saved expense in the list
+      this.expenseTab = 'recent';
+      this.cancelExpenseModal();
+    } catch (error) {
+      console.error('Error saving expense:', error);
+      this.toastService.error('Failed to save expense. Please try again.');
+    }
+  }
+
+  editExpense(exp: any) {
+    this.selectedExpense = exp;
+    this.expenseForm.patchValue({
+      category: exp.category || 'other',
+      description: exp.description || '',
+      amount: (exp.amount || 0) / 100,
+      currency: exp.currency || 'PHP',
+      paymentMethod: exp.paymentMethod || 'cash',
+      paymentDate: exp.paymentDate ? new Date(exp.paymentDate.toDate ? exp.paymentDate.toDate() : exp.paymentDate) : new Date(),
+      referenceId: exp.referenceId || '',
+      tags: (exp.tags || []).join(', '),
+      isRecurring: !!exp.isRecurring,
+      voided: !!exp.voided,
+      voidReason: exp.voidReason || ''
+    });
+    // Open modal and switch to Add tab for editing
+    this.expenseTab = 'add';
+    this.showExpenseModal = true;
+  }
+
+  deleteExpense(exp: any) {
+    (async () => {
+      try {
+        if (exp?.id) {
+          await this.expenseService.deleteExpense(exp.id);
+        }
+        this.expenseLogs = this.expenseLogs.filter(e => e.id !== exp.id);
+        this.toastService.success('Expense deleted');
+      } catch (error) {
+        console.error('Failed to delete expense', error);
+        this.toastService.error('Failed to delete expense. Please try again.');
+      }
+    })();
+  }
+
+  /**
+   * Open the Expense Log view for the selected store.
+   * Currently navigates to a store-specific expenses route. If you prefer a modal,
+   * I can implement an in-place modal instead.
+   */
+  openExpenseLog(store: Store) {
+    if (!store || !store.id) {
+      this.toastService.error('Cannot open expense log for unknown store');
+      return;
+    }
+    // Debug: ensure click handler is firing
+    console.log('openExpenseLog called for store', store && store.id);
+    try { this.toastService.info('Opening Expense Log...'); } catch {}
+
+    // Open modal in-place (patterned like inventory modal)
+  this.selectedStore = store;
+  this.selectedExpense = null;
+  this.expenseLogs = [];
+    this.expenseForm.reset({
+      category: 'other',
+      description: '',
+      amount: 0,
+      currency: 'PHP',
+      paymentMethod: 'cash',
+      paymentDate: new Date(),
+      referenceId: '',
+      tags: '',
+      isRecurring: false,
+      voided: false,
+      voidReason: ''
+    });
+
+  // Default to Add tab when opening (user requested default Add view)
+  this.expenseTab = 'add';
+
+    // Load persisted expenses for this store (if any)
+    setTimeout(async () => {
+      try {
+        if (this.selectedStore?.id) {
+          const rows = await this.expenseService.getExpensesByStore(this.selectedStore.id);
+          // Normalise paymentDate to Date for UI preview if it's a Firestore Timestamp
+          this.expenseLogs = rows.map(r => ({
+            ...r,
+            paymentDate: (r.paymentDate && (r.paymentDate as any).toDate) ? (r.paymentDate as any).toDate() : r.paymentDate
+          }));
+        }
+      } catch (err) {
+        console.warn('Failed to load persisted expenses', err);
+      }
+
+      this.showExpenseModal = true;
+      try { this.cdr.detectChanges(); } catch (e) { console.warn('detectChanges failed', e); }
+    }, 0);
+  }
+
+  setExpenseTab(tab: 'recent' | 'add') {
+    this.expenseTab = tab;
+    if (tab === 'add') {
+      // reset selectedExpense when switching to add
+      this.selectedExpense = null;
+      this.expenseForm.reset({
+        category: 'other',
+        description: '',
+        amount: 0,
+        currency: 'PHP',
+        paymentMethod: 'cash',
+        paymentDate: new Date(),
+        referenceId: '',
+        tags: '',
+        isRecurring: false,
+        voided: false,
+        voidReason: ''
+      });
+    }
   }
 
   onSearchChange() {

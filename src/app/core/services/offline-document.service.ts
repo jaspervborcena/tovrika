@@ -111,7 +111,7 @@ export class OfflineDocumentService {
     try {
       console.log('🌐 Creating document online:', collectionName);
       // Ensure server timestamps for create when writing online
-      const toWrite = applyCreateTimestamps(data, true);
+  const toWrite = this.cleanForFirestore(applyCreateTimestamps(data, true));
       const collectionRef = collection(this.firestore, collectionName);
       const start = performance.now?.() ?? Date.now();
       const docRef = await addDoc(collectionRef, toWrite);
@@ -146,8 +146,8 @@ export class OfflineDocumentService {
       console.log('🌐 Creating document online with pre-generated ID:', documentId);
       const docRef = doc(this.firestore, collectionName, documentId);
       const start = performance.now?.() ?? Date.now();
-      const toWrite = applyCreateTimestamps(data, true);
-      await setDoc(docRef, toWrite);
+  const toWrite = this.cleanForFirestore(applyCreateTimestamps(data, true));
+  await setDoc(docRef, toWrite);
       const durationMs = Math.round((performance.now?.() ?? Date.now()) - start);
       this.logger.dbSuccess('Firestore set succeeded', {
         api: 'firestore.set',
@@ -356,7 +356,7 @@ export class OfflineDocumentService {
       console.log('🌐 Updating document online:', documentId);
       const docRef = doc(this.firestore, collectionName, documentId);
       const start = performance.now?.() ?? Date.now();
-      await setDoc(docRef, updates, { merge: true });
+      await setDoc(docRef, this.cleanForFirestore(updates), { merge: true });
       const durationMs = Math.round((performance.now?.() ?? Date.now()) - start);
       this.logger.dbSuccess('Firestore update (merge) succeeded', {
         api: 'firestore.update',
@@ -388,7 +388,7 @@ export class OfflineDocumentService {
       console.log('🌐 Updating document online with ID:', documentId);
       const docRef = doc(this.firestore, collectionName, documentId);
       const start = performance.now?.() ?? Date.now();
-      await setDoc(docRef, updates, { merge: true });
+      await setDoc(docRef, this.cleanForFirestore(updates), { merge: true });
       const durationMs = Math.round((performance.now?.() ?? Date.now()) - start);
       this.logger.dbSuccess('Firestore update (merge) succeeded', {
         api: 'firestore.update',
@@ -565,5 +565,31 @@ export class OfflineDocumentService {
   clearPendingDocuments(): void {
     localStorage.removeItem('pendingDocuments');
     console.log('🗑️ All pending documents cleared');
+  }
+
+  /**
+   * Remove undefined values from an object recursively.
+   * Preserve Date and Firestore sentinel values.
+   */
+  private cleanForFirestore<T = any>(obj: T): T {
+    try {
+      if (obj === null || obj === undefined) return obj;
+      if (Array.isArray(obj)) return obj.map((v: any) => this.cleanForFirestore(v)) as any;
+      if (obj instanceof Date) return obj as any;
+      if (typeof obj !== 'object') return obj;
+      const out: any = {};
+      for (const [k, v] of Object.entries(obj as any)) {
+        if (v === undefined) continue; // skip undefined
+        // Keep serverTimestamp sentinel (it's an object without toJSON)
+        if (v && typeof v === 'object' && !(v instanceof Date)) {
+          out[k] = this.cleanForFirestore(v);
+        } else {
+          out[k] = v;
+        }
+      }
+      return out as T;
+    } catch (e) {
+      return obj;
+    }
   }
 }

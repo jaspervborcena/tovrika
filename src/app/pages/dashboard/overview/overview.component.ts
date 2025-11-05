@@ -7,6 +7,8 @@ import { Order } from '../../../interfaces/pos.interface';
 import { OrderService } from '../../../services/order.service';
 import { AuthService } from '../../../services/auth.service';
 import { IndexedDBService } from '@app/core/services/indexeddb.service';
+import { ExpenseService } from '../../../services/expense.service';
+import { ExpenseLog } from '../../../interfaces/expense-log.interface';
 
 @Component({
   selector: 'app-overview',
@@ -64,6 +66,40 @@ import { IndexedDBService } from '@app/core/services/indexeddb.service';
                 <div class="card-change">
                   <span class="change-icon">↗</span>
                   <span class="change-text">10.5% From Last Day</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Total Expenses Card -->
+            <div class="sales-card expenses-card">
+              <div class="card-icon">
+                <svg class="icon" fill="currentColor" viewBox="0 0 20 20">
+                  <path d="M4 3h12v2H4V3zm0 4h12v2H4V7zm0 4h8v2H4v-2z" />
+                </svg>
+              </div>
+              <div class="card-content">
+                <div class="card-value">₱{{ totalExpenses() | number:'1.0-0' }}</div>
+                <div class="card-label">Total Expenses</div>
+                <div class="card-change">
+                  <span class="change-icon">{{ expenseChange().symbol }}</span>
+                  <span class="change-text">{{ expenseChange().percent }}% Compared to yesterday</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Net Profit Card -->
+            <div class="sales-card profit-card">
+              <div class="card-icon">
+                <svg class="icon" fill="currentColor" viewBox="0 0 20 20">
+                  <path d="M10 2l3 6 6 .5-4.5 3.5L16 18l-6-4-6 4 1.5-6L1 8.5 7 8 10 2z" />
+                </svg>
+              </div>
+              <div class="card-content">
+                <div class="card-value">₱{{ netProfit() | number:'1.0-0' }}</div>
+                <div class="card-label">Net Profit</div>
+                <div class="card-change">
+                  <span class="change-icon">↗</span>
+                  <span class="change-text">After expenses</span>
                 </div>
               </div>
             </div>
@@ -356,16 +392,23 @@ import { IndexedDBService } from '@app/core/services/indexeddb.service';
     .sales-cards {
       display: flex;
       flex-direction: column;
-      gap: 16px;
+      gap: 12px;
     }
 
     .sales-card {
       background: white;
       border-radius: 16px;
-      padding: 20px;
-      box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
+      padding: 14px 18px;
+      box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.08);
       border: 1px solid #e5e7eb;
+      min-height: 68px; /* slightly shorter height */
+      display: flex;
+      gap: 12px;
+      align-items: center;
     }
+
+    .expenses-card { background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%); }
+    .profit-card { background: linear-gradient(135deg, #d1fae5 0%, #bbf7d0 100%); }
 
     .revenue-card {
       background: linear-gradient(135deg, #fef3c7 0%, #fed7aa 100%);
@@ -382,12 +425,12 @@ import { IndexedDBService } from '@app/core/services/indexeddb.service';
     .card-icon {
       width: 40px;
       height: 40px;
-      border-radius: 50%;
-      background: rgba(0, 0, 0, 0.1);
+      border-radius: 10px;
+      background: rgba(0, 0, 0, 0.06);
       display: flex;
       align-items: center;
       justify-content: center;
-      margin-bottom: 16px;
+      flex-shrink: 0;
     }
 
     .icon {
@@ -397,23 +440,23 @@ import { IndexedDBService } from '@app/core/services/indexeddb.service';
     }
 
     .card-value {
-      font-size: 1.875rem;
+      font-size: 1.625rem;
       font-weight: 700;
       color: #111827;
-      margin-bottom: 4px;
+      margin-bottom: 0;
     }
 
     .card-label {
       font-size: 0.875rem;
       color: #6b7280;
-      margin-bottom: 12px;
+      margin-bottom: 0;
     }
 
     .card-change {
       display: flex;
       align-items: center;
-      gap: 4px;
-      font-size: 0.875rem;
+      gap: 6px;
+      font-size: 0.85rem;
     }
 
     .change-icon {
@@ -777,11 +820,16 @@ export class OverviewComponent implements OnInit {
   private orderService = inject(OrderService);
   private authService = inject(AuthService);
   private indexedDb = inject(IndexedDBService);
+  private expenseService = inject(ExpenseService);
 
   // Signals
   protected stores = signal<Store[]>([]);
   protected products = signal<Product[]>([]);
   protected orders = signal<Order[]>([]);
+  protected expenses = signal<ExpenseLog[]>([]);
+  // Aggregates for expenses: month-to-date and yesterday totals (in PHP, not cents)
+  protected monthExpensesTotal = signal<number>(0);
+  protected yesterdayExpensesTotal = signal<number>(0);
   protected selectedStoreId = signal<string>('all');
   protected isLoading = signal<boolean>(true);
 
@@ -808,6 +856,19 @@ export class OverviewComponent implements OnInit {
   protected storeList = computed(() => this.stores());
   protected totalOrders = computed(() => this.orders().length);
   protected totalRevenue = computed(() => this.orders().reduce((s, o) => s + (Number(o.netAmount ?? o.totalAmount ?? 0) || 0), 0));
+  // Total expenses shown on the card should reflect month-to-date totals
+  protected totalExpenses = computed(() => this.monthExpensesTotal());
+
+  // Change vs yesterday: symbol and percent
+  protected expenseChange = computed(() => {
+    const month = this.monthExpensesTotal();
+    const yesterday = this.yesterdayExpensesTotal();
+    const diff = month - yesterday;
+    const percent = yesterday === 0 ? (month === 0 ? 0 : 100) : Math.round((Math.abs(diff) / yesterday) * 100);
+    const symbol = diff > 0 ? '↗' : (diff < 0 ? '↘' : '→');
+    return { symbol, percent, diff };
+  });
+  protected netProfit = computed(() => this.totalRevenue() - this.totalExpenses());
   protected totalCustomers = computed(() => {
     const set = new Set<string>();
     this.orders().forEach(o => { if (o.soldTo && String(o.soldTo).trim()) set.add(String(o.soldTo)); });
@@ -914,8 +975,62 @@ export class OverviewComponent implements OnInit {
 
       console.log('📅 Dashboard loading sales data for store:', storeId, 'from:', startDate, 'to:', endDate);
 
-      // Use the EXACT same method as sales-summary
-      const orders = await this.orderService.getOrdersByDateRange(storeId, startDate, endDate);
+  // Use the EXACT same method as sales-summary
+  const orders = await this.orderService.getOrdersByDateRange(storeId, startDate, endDate);
+
+  // Load today's expenses for the same date range
+  const expenses = await this.expenseService.getExpensesByStore(storeId, startDate, endDate);
+  this.expenses.set(expenses || []);
+
+      // Also compute month-to-date and yesterday aggregates for the Overview card
+      try {
+        const now = new Date();
+        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+        const monthEnd = now; // month-to-date
+        let monthExpenses = await this.expenseService.getExpensesByStore(storeId, monthStart, monthEnd);
+
+        // Debugging: if no results, try a fallback query without date filters to detect schema mismatches
+        if ((!monthExpenses || monthExpenses.length === 0)) {
+          console.warn('Overview: monthExpenses query returned 0 rows, trying fallback no-date query');
+          const fallback = await this.expenseService.getExpensesByStore(storeId);
+          if (fallback && fallback.length > 0) {
+            console.warn('Overview: fallback expenses returned', fallback.length, 'rows; using these for month total');
+            monthExpenses = fallback;
+          }
+        }
+
+        const monthTotal = (monthExpenses || []).reduce((s, e) => s + (Number((e as any).amount || 0) / 100), 0);
+        console.log('Overview: monthExpenses count=', (monthExpenses || []).length, 'monthTotal=', monthTotal);
+        this.monthExpensesTotal.set(monthTotal);
+
+        const yesterday = new Date(now);
+        yesterday.setDate(now.getDate() - 1);
+        const yStart = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate(), 0, 0, 0, 0);
+        const yEnd = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate(), 23, 59, 59, 999);
+        let yExpenses = await this.expenseService.getExpensesByStore(storeId, yStart, yEnd);
+        if ((!yExpenses || yExpenses.length === 0)) {
+          console.warn('Overview: yesterdayExpenses query returned 0 rows, trying fallback no-date query');
+          const fallbackY = await this.expenseService.getExpensesByStore(storeId);
+          if (fallbackY && fallbackY.length > 0) {
+            // Derive yesterday total by filtering fallback result locally
+            yExpenses = (fallbackY || []).filter((e: any) => {
+              const pd = (e.paymentDate && (e.paymentDate as any).toDate) ? (e.paymentDate as any).toDate() : (e.paymentDate ? new Date(e.paymentDate) : null);
+              if (!pd) return false;
+              const d = new Date(pd); d.setHours(0,0,0,0);
+              return d.getTime() === new Date(yStart).getTime();
+            });
+            console.warn('Overview: derived yesterdayExpenses count=', yExpenses.length);
+          }
+        }
+
+        const yTotal = (yExpenses || []).reduce((s, e) => s + (Number((e as any).amount || 0) / 100), 0);
+        console.log('Overview: yesterdayExpenses count=', (yExpenses || []).length, 'yTotal=', yTotal);
+        this.yesterdayExpensesTotal.set(yTotal);
+      } catch (e) {
+        console.warn('Overview: Failed to load expense aggregates', e);
+        this.monthExpensesTotal.set(0);
+        this.yesterdayExpensesTotal.set(0);
+      }
 
       console.log('📊 Dashboard Order Service returned:', orders?.length || 0, 'orders');
       if (orders && orders.length > 0) {
