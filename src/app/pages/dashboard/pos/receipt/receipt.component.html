@@ -98,7 +98,7 @@
         <table class="products-table">
           <thead>
             <tr>
-              <th>SKU</th>
+              <th>Product</th>
               <th>Qty</th>
               <th>Amount</th>
               <th>Total</th>
@@ -108,8 +108,8 @@
             <tr *ngFor="let item of receiptData?.items || []">
               <td>
                 <div class="sku-product-info">
-                  <div class="sku-value">{{ item.skuId }}</div>
                   <div class="product-name">{{ item.productName }}</div>
+                  <div class="sku-value">{{ item.skuId }}</div>
                 </div>
               </td>
               <td>{{ formatQuantityWithUnit(item.quantity, item.unitType) }}</td>

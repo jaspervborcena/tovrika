@@ -4,6 +4,7 @@ import {
   collection,
   addDoc,
   doc,
+  getDoc,
   runTransaction
 } from '@angular/fire/firestore';
 import { AuthService } from './auth.service';
@@ -324,6 +325,14 @@ export class PosService {
         invoiceNumber: invoiceResult.invoiceNumber,
         orderId: invoiceResult.orderId
       });
+
+      // Sync local product summaries with server values so UI reflects Firestore state
+      try {
+        await this.syncProductsFromOrder(orderItems);
+        console.log('🔄 Local product summaries synced from server after invoice');
+      } catch (syncErr) {
+        console.warn('⚠️ Failed to sync local product summaries after invoice:', syncErr);
+      }
 
       // Update product inventory (this happens after successful order creation)
       try {
@@ -771,6 +780,31 @@ export class PosService {
       }
     }
     console.log('✅ FIFO inventory deduction completed for all items');
+  }
+
+  /**
+   * Sync local product summaries for products present in order items by reading the
+   * authoritative product documents from Firestore and applying local patches.
+   * This prevents the UI from showing stale totals when the server-side transaction
+   * already updated product.totalStock.
+   */
+  private async syncProductsFromOrder(orderItems: OrderItem[] | CartItem[]): Promise<void> {
+    if (!Array.isArray(orderItems) || orderItems.length === 0) return;
+
+    const uniqueIds = Array.from(new Set(orderItems.map(i => i.productId).filter(Boolean)));
+    for (const productId of uniqueIds) {
+      try {
+        const prodRef = doc(this.firestore, 'products', productId);
+        const snap = await getDoc(prodRef as any);
+        if (!snap.exists()) continue;
+        const data: any = snap.data();
+        const serverTotal = typeof data.totalStock === 'number' ? data.totalStock : Number(data.totalStock || 0);
+        // Apply local patch to keep UI in sync without issuing another write
+        this.productService.applyLocalPatch(productId, { totalStock: serverTotal, lastUpdated: new Date() } as any);
+      } catch (err) {
+        console.warn(`Failed to sync product ${productId} from server:`, err);
+      }
+    }
   }
 
   /**

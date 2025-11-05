@@ -539,14 +539,18 @@ export class PrintService {
         // Total - right aligned
         const totalPadded = total.padStart(7); // 7 chars for amount
         
-        // Make item lines slightly bolder
-        commands += '\x1B\x45\x01'; // Bold on for item
-        commands += `${qtyPadded} ${productPadded} ${totalPadded}\n`;
-        commands += '\x1B\x45\x00'; // Bold off
-        
-        // Unit price on separate line, indented
-        const unitPrice = (item.sellingPrice || item.price || 0).toFixed(2);
-        commands += `    @ ${unitPrice} each\n`;
+  // Make item lines slightly bolder
+  commands += '\x1B\x45\x01'; // Bold on for item
+  commands += `${qtyPadded} ${productPadded} ${totalPadded}\n`;
+  commands += '\x1B\x45\x00'; // Bold off
+
+  // SKU on separate indented line (show SKU after product name)
+  const skuLine = `    SKU: ${item.skuId || item.productId || ''}`;
+  commands += `${skuLine}\n`;
+
+  // Unit price on separate line, indented
+  const unitPrice = (item.sellingPrice || item.price || 0).toFixed(2);
+  commands += `    @ ${unitPrice} each\n`;
       });
     }
     
@@ -1140,7 +1144,7 @@ export class PrintService {
       <table style="width: 100%; border-collapse: collapse;">
         <thead>
           <tr>
-            <th style="text-align: left; padding: 4px 2px; border-bottom: 1px solid #000;">SKU</th>
+            <th style="text-align: left; padding: 4px 2px; border-bottom: 1px solid #000;">Product</th>
             <th style="text-align: center; padding: 4px 2px; border-bottom: 1px solid #000;">Qty</th>
             <th style="text-align: right; padding: 4px 2px; border-bottom: 1px solid #000;">Amount</th>
             <th style="text-align: right; padding: 4px 2px; border-bottom: 1px solid #000;">Total</th>
@@ -1158,8 +1162,8 @@ export class PrintService {
       html += `
         <tr>
           <td style="padding: 4px 2px; vertical-align: top;">
-            <div style="font-size: 10px; color: #666;">${item.skuId || item.productId || 'N/A'}</div>
             <div style="font-weight: bold;">${item.productName || item.name}</div>
+            <div style="font-size: 10px; color: #666;">${item.skuId || item.productId || 'N/A'}</div>
           </td>
           <td style="padding: 4px 2px; text-align: center; vertical-align: top;">${qtyDisplay}</td>
           <td style="padding: 4px 2px; text-align: right; vertical-align: top;">₱${(item.sellingPrice || item.price || 0).toFixed(2)}</td>

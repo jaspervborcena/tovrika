@@ -548,6 +548,46 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
         return this.offlineDocService.createDocument('products', cleanedProductData);
       });
 
+      // If the product includes initial inventory batches (legacy support) or has an initial totalStock,
+      // create corresponding `productInventoryEntries` so FIFO/batch-based inventory is authoritative.
+      try {
+        const initialBatches = Array.isArray(invArr) && invArr.length > 0
+          ? invArr
+          : (cleanedProductData.totalStock && Number(cleanedProductData.totalStock) > 0)
+            ? [{ batchId: undefined, quantity: Number(cleanedProductData.totalStock), unitPrice: cleanedProductData.costPrice || cleanedProductData.sellingPrice || 0, receivedAt: new Date() }]
+            : [];
+
+        for (const b of initialBatches) {
+          const batchData: any = {
+            productId: documentId,
+            productName: cleanedProductData.productName || (productData as any).productName || '',
+            companyId: companyId,
+            storeId: (productData as any).storeId || cleanedProductData.storeId || '',
+            batchNumber: (b.batchNumber as any) || undefined,
+            quantity: Number(b.quantity || 0),
+            unitPrice: Number(b.unitPrice || 0),
+            costPrice: Number(b.costPrice || 0) || Number(b.unitPrice || 0),
+            receivedAt: b.receivedAt instanceof Date ? b.receivedAt : new Date(b.receivedAt || new Date()),
+            expiryDate: b.expiryDate ? (b.expiryDate instanceof Date ? b.expiryDate : new Date(b.expiryDate)) : null,
+            supplier: b.supplier || null,
+            status: 'active',
+            totalDeducted: 0,
+            deductionHistory: []
+          };
+
+          // Create inventory entry and then set its batchId field to the returned id so other code expecting
+          // batch.batchId will match the document id.
+          const createdBatchId = await this.offlineDocService.createDocument('productInventoryEntries', batchData);
+          try {
+            await this.offlineDocService.updateDocument('productInventoryEntries', createdBatchId, { batchId: createdBatchId });
+          } catch (uErr) {
+            console.warn('Failed to set batchId on created inventory entry:', createdBatchId, uErr);
+          }
+        }
+      } catch (inventoryErr) {
+        console.warn('Failed to create initial productInventoryEntries for product:', documentId, inventoryErr);
+      }
+
       // Update the signal with the new product (works with both real and temp IDs)
       // Avoid creating duplicates in the local signal: if a product with the same SKU exists for the same store,
       // update it instead of adding a new row. This prevents the UI from showing duplicate entries when
