@@ -12,36 +12,17 @@
       console.log('⚠️ Already reloaded once, skipping to prevent loop');
       return;
     }
-    
     hasReloaded = true;
-    
-    // Clear all possible caches
-    if ('caches' in window) {
-      caches.keys().then(names => {
-        return Promise.all(
-          names.map(name => caches.delete(name))
-        );
-      }).finally(() => {
-        performHardReload();
-      });
-    } else {
-      performHardReload();
-    }
+    // Safe reload: do NOT clear storage or CacheStorage to preserve offline data
+    performHardReload();
   }
   
   function performHardReload() {
-    // Clear storage
-    try {
-      localStorage.clear();
-      sessionStorage.clear();
-    } catch (e) {
-      console.warn('Could not clear storage:', e);
-    }
-    
-    // Force reload with cache bust
-    const url = new URL(window.location);
+    // Force reload with cache bust (preserves history minimalism)
+    const url = new URL(window.location.href);
     url.searchParams.set('_t', Date.now().toString());
-    window.location.href = url.toString();
+    // Use replace so we don't stack history entries
+    window.location.replace(url.toString());
   }
   
   function isChunkError(error) {
