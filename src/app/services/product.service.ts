@@ -168,7 +168,7 @@ export class ProductService {
       // Use BigQuery API only - fallback disabled for testing
       await this.loadProductsFromBigQuery(storeId);
     } catch (error) {
-      console.error('BigQuery products API failed:', error);
+      this.logger.dbFailure('BigQuery products API failed', { area: 'products', storeId }, error);
       // Attempt offline fallback: try to read products for the store from IndexedDB
       try {
         const offlineProducts = await this.indexedDb.getProductsByStore(storeId);
@@ -192,7 +192,7 @@ export class ProductService {
           return;
         }
       } catch (fallbackError) {
-        console.warn('Failed to load products from IndexedDB fallback:', fallbackError);
+        this.logger.warn('Failed to load products from IndexedDB fallback', { area: 'products', storeId, payload: { error: String(fallbackError) } });
       }
 
       throw error;
@@ -210,42 +210,34 @@ export class ProductService {
         throw new Error('User not authenticated');
       }
 
-      console.log('🔐 Current User:', { uid: currentUser.uid, email: currentUser.email });
-      console.log('🏪 Store ID:', storeId);
+      this.logger.debug('Current user and store for BigQuery products request', { storeId, userId: currentUser?.uid });
 
       // Get Firebase ID token for authentication (same pattern as OrderService)
       const idToken = await this.authService.getFirebaseIdToken();
-      console.log('🔐 Firebase ID token status:', {
-        hasToken: !!idToken,
-        tokenLength: idToken?.length || 0,
-        tokenStart: idToken ? idToken.substring(0, 10) + '...' : 'null',
-        currentUser: this.authService.getCurrentUser()?.email || 'null',
-        authStatus: 'logged in: ' + !!this.authService.getCurrentUser()
-      });
+  this.logger.debug('Firebase ID token availability', { payload: { hasToken: !!idToken } });
 
       // Check if user is signed in at all
       if (!currentUser) {
-        console.error('❌ User is not signed in - cannot load products');
+        this.logger.dbFailure('User not authenticated for BigQuery products request', { area: 'products', storeId });
         throw new Error('User not authenticated');
       }
-      
+
       if (!idToken) {
-        console.error('❌ No Firebase ID token available for API authentication');
-        console.error('❌ User is signed in but token is null - possible token refresh issue');
-        
+        this.logger.warn('No Firebase ID token available for API authentication', { area: 'products', storeId });
+
         // Try to force refresh the token (same as OrderService)
         try {
-          console.log('🔄 Attempting to force refresh Firebase ID token...');
+          this.logger.debug('Attempting to force refresh Firebase ID token', { area: 'products', storeId });
           const refreshedToken = await this.authService.getFirebaseIdToken(true);
           if (refreshedToken) {
-            console.log('✅ Token refresh successful, retrying API call...');
+            this.logger.debug('Token refresh successful, retrying API call', { area: 'products', storeId });
             // Retry with refreshed token
             return await this.loadProductsFromBigQuery(storeId);
           }
         } catch (refreshError) {
-          console.error('❌ Token refresh failed:', refreshError);
+          this.logger.error('Token refresh failed', { area: 'products', storeId }, refreshError);
         }
-        
+
         throw new Error('No Firebase ID token available');
       }
 
@@ -257,8 +249,8 @@ export class ProductService {
 
       // Make API call to BigQuery Cloud Function
       const url = `${environment.api.productsApi}?${params}`;
-      console.log('🌐 API URL:', url);
-      
+  this.logger.debug('Calling BigQuery products API', { area: 'products', storeId, payload: { url } });
+
       // Use same header pattern as OrderService (plain object, not HttpHeaders)
       const headers: any = {
         'Content-Type': 'application/json',
@@ -268,19 +260,12 @@ export class ProductService {
       // Add Authorization header with Firebase ID token
       if (idToken) {
         headers['Authorization'] = `Bearer ${idToken}`;
-        console.log('🔐 Added Firebase ID token to Authorization header');
+        this.logger.debug('Added Firebase ID token to Authorization header (redacted)', { area: 'products', storeId });
       }
 
-      console.log('📡 Request Headers:', {
-        'Authorization': `Bearer ${idToken.substring(0, 20)}...`,
-        'Content-Type': 'application/json'
-      });
-
       const response = await this.http.get<any>(url, { headers }).toPromise();
-      
-      console.log('📦 BigQuery Response:', response);
-      console.log('📦 Response type:', typeof response);
-      console.log('📦 Response keys:', Object.keys(response || {}));
+
+      this.logger.debug('BigQuery response received', { area: 'products', storeId, payload: { keys: Object.keys(response || {}) } });
       
       // Transform BigQuery response to Product interface
   const products: Product[] = (response?.products || response || []).map((item: any) => this.transformBigQueryProduct(item));
@@ -302,22 +287,14 @@ export class ProductService {
         }));
         await this.indexedDb.saveProducts(offlineArr);
       } catch (e) {
-        console.warn('Failed to persist products snapshot to IndexedDB:', e);
+        this.logger.warn('Failed to persist products snapshot to IndexedDB', { area: 'products', storeId, payload: { error: (e as any)?.message || String(e) } });
       }
-      console.log(`✅ Loaded ${products.length} products from BigQuery API`);
+      this.logger.dbSuccess('Loaded products from BigQuery', { area: 'products', storeId, payload: { count: products.length } });
     } catch (error: any) {
-      console.error('❌ Error loading products from BigQuery:', error);
-      console.error('❌ Error status:', error.status);
-      console.error('❌ Error message:', error.message);
-      console.error('❌ Error details:', error.error);
-      
-      if (error.status === 401) {
-        console.error('🚫 AUTHENTICATION FAILED - Check:');
-        console.error('   1. Firebase ID token is valid');
-        console.error('   2. Cloud Function validates Bearer token');
-        console.error('   3. Firebase Admin SDK is initialized in Cloud Function');
+      this.logger.dbFailure('Error loading products from BigQuery', { area: 'products', storeId }, error);
+      if ((error as any)?.status === 401) {
+        this.logger.error('AUTHENTICATION FAILED for BigQuery products API - check token and Cloud Function configuration', { area: 'products', storeId });
       }
-      
       throw error;
     }
   }
@@ -385,7 +362,7 @@ export class ProductService {
       
   this.products.set(this.normalizeAndDeduplicateProducts(products));
     } catch (error) {
-      console.error('Error loading products from Firestore:', error);
+      this.logger.dbFailure('Error loading products from Firestore', { area: 'products', storeId }, error);
       throw error;
     }
   }
@@ -394,7 +371,7 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
       // Use BigQuery API only - fallback disabled for testing
       await this.loadProductsByCompanyAndStoreFromBigQuery(companyId, storeId);
     } catch (error) {
-      console.error('BigQuery products API failed:', error);
+      this.logger.dbFailure('BigQuery products API failed', { area: 'products', companyId, storeId }, error);
       throw error;
     }
   }
@@ -406,7 +383,7 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
         throw new Error('User not authenticated');
       }
 
-      console.log('🔐 Company/Store Query - Current User:', { uid: currentUser.uid, email: currentUser.email });
+  this.logger.debug('Company/Store Query - Current User', { area: 'products', companyId, storeId, payload: { userId: currentUser.uid } });
 
       // Get Firebase ID token for authentication
       const token = await this.authService.getFirebaseIdToken();
@@ -414,7 +391,7 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
         throw new Error('No Firebase ID token available');
       }
 
-      console.log('🎫 Company/Store Query - Token exists:', !!token);
+  this.logger.debug('Company/Store token exists', { area: 'products', companyId, storeId, payload: { hasToken: !!token } });
 
       // Build query parameters
       const params = new URLSearchParams({
@@ -431,7 +408,7 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
 
       // Make API call to BigQuery Cloud Function
       const url = `${environment.api.productsApi}?${params}`;
-      console.log('🌐 Company/Store API URL:', url);
+  this.logger.debug('Company/Store API URL', { area: 'products', companyId, storeId, payload: { url } });
       
       const headers = new HttpHeaders({
         'Authorization': `Bearer ${token}`,
@@ -445,17 +422,14 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
       
   // Validate that we actually have products before setting
   if (products.length === 0) {
-        console.warn('⚠️ No products found for BigQuery query:', { companyId, storeId });
-        console.warn('⚠️ This could be due to:');
-        console.warn('   1. No products exist for this company/store in BigQuery');
-        console.warn('   2. Company/store IDs do not match BigQuery records');
-        console.warn('   3. User needs to create products first');
+        this.logger.warn('No products found for BigQuery company/store query', { area: 'products', companyId, storeId });
+        this.logger.warn('Possible causes: no products in BigQuery; ID mismatch; or no products created yet', { area: 'products', companyId, storeId });
       }
       
   this.products.set(this.normalizeAndDeduplicateProducts(products));
-      console.log(`✅ Loaded ${products.length} products from BigQuery API`);
+      this.logger.dbSuccess('Loaded products from BigQuery (company/store)', { area: 'products', companyId, storeId, payload: { count: products.length } });
     } catch (error) {
-      console.error('Error loading products from BigQuery:', error);
+      this.logger.dbFailure('Error loading products from BigQuery (company/store)', { area: 'products', companyId, storeId }, error);
       throw error;
     }
   }
@@ -496,16 +470,13 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
       
       // Validate that we actually have products before setting
       if (products.length === 0) {
-        console.warn('⚠️ No products found for company-based query:', { companyId: targetCompanyId, storeId });
-        console.warn('⚠️ This could be due to:');
-        console.warn('   1. No products exist for this company/store');
-        console.warn('   2. Company/store IDs do not match database records');
-        console.warn('   3. User needs to create products first');
+          this.logger.warn('No products found for company-based query', { area: 'products', companyId: targetCompanyId, storeId });
+          this.logger.warn('Possible causes: no products exist, ID mismatch, or no products created', { area: 'products', companyId: targetCompanyId, storeId });
       }
       
   this.products.set(this.normalizeAndDeduplicateProducts(products));
     } catch (error) {
-      console.error('❌ Error loading products:', error);
+      this.logger.dbFailure('Error loading products from Firestore', { area: 'products', companyId, storeId }, error);
       throw error;
     }
   }
@@ -581,11 +552,11 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
           try {
             await this.offlineDocService.updateDocument('productInventoryEntries', createdBatchId, { batchId: createdBatchId });
           } catch (uErr) {
-            console.warn('Failed to set batchId on created inventory entry:', createdBatchId, uErr);
+            this.logger.warn('Failed to set batchId on created inventory entry', { area: 'products', collectionPath: 'productInventoryEntries', docId: createdBatchId, payload: { error: String(uErr) } });
           }
         }
       } catch (inventoryErr) {
-        console.warn('Failed to create initial productInventoryEntries for product:', documentId, inventoryErr);
+        this.logger.warn('Failed to create initial productInventoryEntries for product', { area: 'products', payload: { productId: documentId, error: String(inventoryErr) } });
       }
 
       // Update the signal with the new product (works with both real and temp IDs)
@@ -932,12 +903,10 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
       };
 
       // This method still references old embedded inventory - needs refactoring to use InventoryDataService
-      console.warn('splitBatch method needs to be refactored to use InventoryDataService');
+      this.logger.warn('splitBatch method needs to be refactored to use InventoryDataService', { area: 'products', docId: productId });
       throw new Error('splitBatch method is deprecated and needs refactoring for separate inventory collection');
-
-      console.log(`✅ Batch split: ${quantityToMove} units moved from ${sourceBatchId} to ${newBatchId}`);
     } catch (error) {
-      console.error('❌ Error splitting batch:', error);
+      this.logger.dbFailure('Error splitting batch', { area: 'products', docId: productId }, error);
       throw error;
     }
   }
@@ -1051,23 +1020,23 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
         )
       );
     } catch (e) {
-      console.warn('Failed to apply local product patch:', e);
+      this.logger.warn('Failed to apply local product patch', { area: 'products', payload: { error: String(e) } });
     }
   }
 
   // Legacy no-op implementations to avoid breaking callers; will be removed after UI refactor.
   async addInventoryBatch(productId: string, _batch: ProductInventory): Promise<void> {
-    console.warn('addInventoryBatch is deprecated. Use InventoryDataService.addBatch instead.');
+  this.logger.warn('addInventoryBatch is deprecated. Use InventoryDataService.addBatch instead.', { area: 'products' });
     // No-op
   }
 
   async updateInventoryBatch(productId: string, _batchId: string, _updatedBatch: ProductInventory): Promise<void> {
-    console.warn('updateInventoryBatch is deprecated. Use InventoryDataService.updateBatch instead.');
+  this.logger.warn('updateInventoryBatch is deprecated. Use InventoryDataService.updateBatch instead.', { area: 'products' });
     // No-op
   }
 
   async removeInventoryBatch(productId: string, _batchId: string): Promise<void> {
-    console.warn('removeInventoryBatch is deprecated. Use InventoryDataService.removeBatch instead.');
+  this.logger.warn('removeInventoryBatch is deprecated. Use InventoryDataService.removeBatch instead.', { area: 'products' });
     // No-op
   }
 }

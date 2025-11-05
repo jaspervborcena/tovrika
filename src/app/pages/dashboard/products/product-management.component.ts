@@ -298,7 +298,7 @@ import { CloudLoggingService } from '../../../services/cloud-logging.service';
       font-size: 0.75rem;
       border-radius: 0.375rem;
       white-space: nowrap;
-      z-index: 10;
+      z-index: 10020; /* ensure tooltip overlays other UI inside modal */
       pointer-events: none;
     }
 
@@ -311,7 +311,7 @@ import { CloudLoggingService } from '../../../services/cloud-logging.service';
       margin-bottom: 0.25rem;
       border: 4px solid transparent;
       border-top-color: #1f2937;
-      z-index: 10;
+      z-index: 10020;
       pointer-events: none;
     }
 
@@ -442,6 +442,7 @@ import { CloudLoggingService } from '../../../services/cloud-logging.service';
       /* Keep header fixed; let rows scroll to prevent layout shift */
       max-height: 420px;
       overflow-y: auto;
+      position: relative; /* create stacking context for tooltips */
       border: 1px solid #e2e8f0;
     }
 
@@ -1565,24 +1566,24 @@ import { CloudLoggingService } from '../../../services/cloud-logging.service';
                         </span>
                       </td>
                       <td class="actions-cell">
-                        <!-- Edit button only for the most recent (first) item -->
-                        <button 
-                          *ngIf="i === 0"
-                          class="btn-icon-action btn-edit" 
-                          (click)="$event.stopPropagation(); openEditBatch(batch)"
-                          title="Edit quantity and price"
-                          aria-label="Edit quantity and price">
-                          ✏️
-                        </button>
-                        <!-- Remove button only for the most recent (first) item -->
-                        <button 
-                          *ngIf="i === 0 && batch.id"
-                          class="btn-icon-action btn-danger" 
-                          (click)="$event.stopPropagation(); removeInventoryBatch(batch.batchId, batch.id!)"
-                          title="Remove batch"
-                          aria-label="Remove batch">
-                          🗑️
-                        </button>
+                        <!-- Actions for most recent (first) item displayed horizontally -->
+                        <div *ngIf="i === 0" class="action-buttons">
+                          <button 
+                            class="btn-icon-action btn-edit" 
+                            (click)="$event.stopPropagation(); openEditBatch(batch)"
+                            title="Edit quantity and price"
+                            aria-label="Edit quantity and price">
+                            ✏️
+                          </button>
+                          <button 
+                            *ngIf="batch.id"
+                            class="btn-icon-action btn-danger" 
+                            (click)="$event.stopPropagation(); removeInventoryBatch(batch.batchId, batch.id!)"
+                            title="Remove batch"
+                            aria-label="Remove batch">
+                            🗑️
+                          </button>
+                        </div>
                         <!-- Show disabled state for older items -->
                         <span *ngIf="i > 0" class="text-muted small">
                           (Previous batch)
