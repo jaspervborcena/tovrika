@@ -222,7 +222,11 @@ export class DashboardComponent implements OnInit {
       if (currentPermission?.companyId) {
         // Load company-specific data
         await this.storeService.loadStoresByCompany(currentPermission.companyId);
-        await this.productService.loadProducts(currentPermission.companyId);
+        // NOTE: productService.loadProducts expects a storeId for the BigQuery endpoint.
+        // Passing companyId caused the Cloud Run BigQuery endpoint to receive an incorrect
+        // storeId and return 403 when the token's store doesn't match the requested store.
+        const targetStoreId = currentPermission.storeId || this.storeService.getStores()?.[0]?.id;
+        await this.productService.loadProducts(targetStoreId as string);
         
         this.stores.set(this.storeService.getStores());
         this.totalStores.set(this.stores().length);

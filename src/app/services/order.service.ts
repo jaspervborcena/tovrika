@@ -462,9 +462,13 @@ export class OrderService {
 
         if (dateRangeSnapshot.docs.length > 0) {
           console.log('✅ Found orders for this store in date range!');
-          const orders = dateRangeSnapshot.docs.map(doc => this.transformDoc(doc));
-          console.log(`📊 Returning ${orders.length} orders`);
-          return orders;
+          const baseOrders = dateRangeSnapshot.docs.map(doc => this.transformDoc(doc));
+          // Attach items for each order (orderDetails are stored in separate documents)
+          const ordersWithItems = await Promise.all(
+            baseOrders.map(async (o) => ({ ...(o as any), items: await this.fetchOrderItems(o.id || '') }))
+          );
+          console.log(`📊 Returning ${ordersWithItems.length} orders (with items)`);
+          return ordersWithItems as any as Order[];
         }
       } catch (dateQueryError) {
         console.warn('⚠️ Date range query failed, trying without date filter:', dateQueryError);
@@ -477,8 +481,12 @@ export class OrderService {
 
       if (storeOrdersSnapshot.docs.length > 0) {
         console.log('✅ Found orders for this store (fallback)!');
-        const orders = storeOrdersSnapshot.docs.map(doc => this.transformDoc(doc));
-        // Persist a snapshot for offline fallback
+        const baseOrders = storeOrdersSnapshot.docs.map(doc => this.transformDoc(doc));
+        // Attach items for each order
+        const orders = await Promise.all(
+          baseOrders.map(async (o) => ({ ...(o as any), items: await this.fetchOrderItems(o.id || '') }))
+        );
+        // Persist a snapshot for offline fallback (include items)
         try {
           await this.indexedDb.saveSetting(`orders_snapshot_${storeId}`, orders);
         } catch (e) {
@@ -492,7 +500,7 @@ export class OrderService {
         });
         
         console.log(`📊 After client-side date filtering: ${filteredOrders.length} orders`);
-        return filteredOrders;
+        return filteredOrders as any as Order[];
       } else {
         console.log('⚠️ No orders found for storeId:', storeId);
         console.log('💡 This might mean:');
@@ -550,6 +558,28 @@ export class OrderService {
     
     // Use API for all dates except current date
     return !isCurrentDate;
+  }
+
+  /**
+   * Fetch order items from the orderDetails collection for a given orderId.
+   * orderDetails may be batched across multiple documents, so we flatten all items.
+   */
+  private async fetchOrderItems(orderId: string): Promise<any[]> {
+    if (!orderId) return [];
+    try {
+      const orderDetailsRef = collection(this.firestore, 'orderDetails');
+      const q = query(orderDetailsRef, where('orderId', '==', orderId));
+      const snap = await getDocs(q);
+      if (!snap || snap.empty) return [];
+      const items = snap.docs.flatMap(d => {
+        const data: any = d.data();
+        return data.items || [];
+      });
+      return items;
+    } catch (e) {
+      console.warn('Failed to fetch orderDetails for orderId', orderId, e);
+      return [];
+    }
   }
 
   /**
