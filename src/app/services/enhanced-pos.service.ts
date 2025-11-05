@@ -1,7 +1,6 @@
 import { Injectable, inject } from '@angular/core';
 import { NetworkService } from './network.service';
 import { OfflineOrderService } from './offline-order.service';
-import { SyncAdjustmentService } from './sync-adjustment.service';
 import { FIFOInventoryService } from './fifo-inventory.service';
 import { AuthService } from './auth.service';
 import { CartItem } from '../interfaces/cart.interface';
@@ -37,7 +36,6 @@ export interface ProcessOrderResult {
 export class EnhancedPOSService {
   private networkService = inject(NetworkService);
   private offlineOrderService = inject(OfflineOrderService);
-  private syncService = inject(SyncAdjustmentService);
   private fifoService = inject(FIFOInventoryService);
   private authService = inject(AuthService);
 
@@ -92,8 +90,7 @@ export class EnhancedPOSService {
   private async processOrderOnline(cartItems: CartItem[], options: ProcessOrderOptions): Promise<ProcessOrderResult> {
     console.log('🌐 Processing order ONLINE');
 
-    // First, trigger any pending sync to ensure inventory is up to date
-    await this.syncService.triggerAutoSync();
+    // Note: automatic sync-on-processing removed; inventory validation follows below.
 
     // Validate inventory availability for all items
     for (const item of cartItems) {
@@ -262,28 +259,10 @@ export class EnhancedPOSService {
    */
   private async handleNetworkRestoration(): Promise<void> {
     console.log('🌐 Network restored - triggering sync...');
-    
-    try {
-      const syncResults = await this.syncService.triggerAutoSync();
-      
-      if (syncResults.length > 0) {
-        const successful = syncResults.filter(r => r.success).length;
-        const needsAdjustment = syncResults.filter(r => r.adjustmentRequired).length;
-        
-        console.log(`✅ Sync completed: ${successful} successful, ${needsAdjustment} need adjustment`);
-        
-        // Notify UI about sync results
-        window.dispatchEvent(new CustomEvent('pos-sync-completed', {
-          detail: { successful, needsAdjustment, results: syncResults }
-        }));
-      }
-    } catch (error) {
-      console.error('Auto-sync failed:', error);
-      // Notify UI about sync failure
-      window.dispatchEvent(new CustomEvent('pos-sync-failed', {
-        detail: { error: error instanceof Error ? error.message : String(error) }
-      }));
-    }
+    // Auto-sync service was removed. Notify listeners that network was restored but automatic order sync is disabled.
+    window.dispatchEvent(new CustomEvent('pos-sync-unavailable', {
+      detail: { message: 'Automatic offline order sync is disabled on this build' }
+    }));
   }
 
   /**
@@ -294,25 +273,7 @@ export class EnhancedPOSService {
     results: any[];
     message: string;
   }> {
-    if (!this.networkService.isOnline()) {
-      throw new Error('Cannot sync while offline');
-    }
-
-    try {
-      const results = await this.syncService.triggerAutoSync();
-      const successful = results.filter(r => r.success).length;
-      const failed = results.length - successful;
-
-      return {
-        success: failed === 0,
-        results,
-        message: failed === 0 
-          ? `Successfully synced ${successful} orders`
-          : `Synced ${successful} orders, ${failed} require manual adjustment`
-      };
-    } catch (error) {
-      throw new Error(`Sync failed: ${error instanceof Error ? error.message : String(error)}`);
-    }
+    throw new Error('Manual sync unavailable: SyncAdjustmentService has been removed');
   }
 
   /**
@@ -340,14 +301,15 @@ export class EnhancedPOSService {
    * Get orders requiring manual adjustment
    */
   getAdjustmentQueue(): OrderDetails[] {
-    return this.syncService.getOrdersRequiringAdjustment();
+    // SyncAdjustmentService has been removed; no adjustment queue available here.
+    return [];
   }
 
   /**
    * Manually resolve order adjustment
    */
   async resolveOrderAdjustment(orderId: string, resolutions: any[]): Promise<any> {
-    return await this.syncService.manuallyResolveOrder(orderId, resolutions);
+    throw new Error('Resolve order adjustment unavailable: SyncAdjustmentService has been removed');
   }
 
   /**
