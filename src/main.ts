@@ -10,18 +10,18 @@ function setupImmediateChunkErrorHandler() {
   window.addEventListener('error', (event) => {
     const error = event.error || event;
     if (isChunkError(error)) {
-      console.warn('🔄 Chunk error detected during app bootstrap, reloading...', error);
+      console.warn('🔄 Chunk error detected during app bootstrap, reloading with cache-bust...', error);
       event.preventDefault();
-      setTimeout(() => window.location.reload(), 100);
+      setTimeout(softReloadWithBust, 100);
     }
   });
 
   // Promise rejection handler  
   window.addEventListener('unhandledrejection', (event) => {
     if (isChunkError(event.reason)) {
-      console.warn('🔄 Promise chunk error detected, reloading...', event.reason);
+      console.warn('🔄 Promise chunk error detected, reloading with cache-bust...', event.reason);
       event.preventDefault();
-      setTimeout(() => window.location.reload(), 100);
+      setTimeout(softReloadWithBust, 100);
     }
   });
 }
@@ -40,11 +40,21 @@ function isChunkError(error: any): boolean {
 // Setup protection before Angular bootstrap
 setupImmediateChunkErrorHandler();
 
+function softReloadWithBust() {
+  try {
+    const url = new URL(window.location.href);
+    url.searchParams.set('_t', Date.now().toString());
+    window.location.replace(url.toString());
+  } catch {
+    window.location.reload();
+  }
+}
+
 bootstrapApplication(AppComponent, appConfig)
   .catch(err => {
     console.error('❌ Bootstrap error:', err);
     if (isChunkError(err)) {
-      console.log('🔄 Bootstrap failed due to chunk error, reloading...');
-      setTimeout(() => window.location.reload(), 100);
+      console.log('🔄 Bootstrap failed due to chunk error, reloading with cache-bust...');
+      setTimeout(softReloadWithBust, 100);
     }
   });
