@@ -71,7 +71,7 @@ export class OrderService {
     } as Order;
   }
 
-  async getRecentOrders(companyId: string, storeId?: string, limitCount: number = 20): Promise<Order[]> {
+  async getRecentOrders(companyId: string, storeId?: string, limitCount = 20): Promise<Order[]> {
     try {
       const ordersRef = collection(this.firestore, 'orders');
 
@@ -807,49 +807,53 @@ export class OrderService {
    */
   private transformApiOrder(apiOrder: any): Order {
   this.logger.debug('Transforming API order', { area: 'orders', payload: apiOrder });
-    
+    const id = apiOrder.order_id || apiOrder.orderId || apiOrder.id || '';
+    const dateRaw = apiOrder.updated_at || apiOrder.updatedAt || apiOrder.created_at || apiOrder.createdAt;
+    const date = dateRaw ? new Date(dateRaw) : new Date();
+    const gross = Number(apiOrder.gross_amount ?? apiOrder.grossAmount ?? apiOrder.total_amount ?? 0);
+    const net = Number(apiOrder.net_amount ?? apiOrder.netAmount ?? apiOrder.total_amount ?? gross);
+    const paymentMethod = apiOrder.payment || apiOrder.payment_method || apiOrder.paymentMethod || 'cash';
+
     return {
-      id: apiOrder.order_id || apiOrder.id || '',
-      companyId: '', // Not provided in API response
-      storeId: apiOrder.store_id || '',
-      terminalId: 'terminal-1', // Default since not in API
-      assignedCashierId: '', // Not provided in API response
-      status: this.mapApiStatus(apiOrder.status),
-      
-      // Customer Information
-      cashSale: true, // Default for API orders
-      soldTo: 'Walk-in Customer', // Default since not in API
-      tin: '',
-      businessAddress: '',
-      
-      // Invoice Information
-      invoiceNumber: apiOrder.invoice_number || '',
-      logoUrl: '',
-      date: apiOrder.created_at ? new Date(apiOrder.created_at) : new Date(),
-      
-      // Financial Calculations - using API response fields
-      vatableSales: 0, // Not provided in current API response
-      vatAmount: 0, // Not provided in current API response
-      zeroRatedSales: 0,
-      vatExemptAmount: 0,
-      discountAmount: 0, // Not provided in current API response
-      grossAmount: apiOrder.gross_amount || apiOrder.total_amount || 0,
-      netAmount: apiOrder.net_amount || apiOrder.total_amount || 0,
-      totalAmount: apiOrder.total_amount || 0,
-      
-      // BIR Fields - defaults since not in API
-      exemptionId: '',
-      signature: '',
-      atpOrOcn: 'OCN-2025-001234',
-      birPermitNo: 'BIR-PERMIT-2025-56789',
-      inclusiveSerialNumber: '000001-000999',
-      
-      // System Fields
-      createdAt: apiOrder.created_at ? new Date(apiOrder.created_at) : new Date(),
-      message: 'Thank you for your purchase!',
-      // Preserve items if API provides them (BigQuery endpoint may include order items)
-      items: apiOrder.items || []
-    };
+      id: id,
+      orderId: id || undefined,
+      companyId: '',
+      storeId: apiOrder.store_id || apiOrder.storeId || '',
+      terminalId: apiOrder.terminalId || 'terminal-1',
+      assignedCashierId: apiOrder.assignedCashierId || '',
+      status: this.mapApiStatus(apiOrder.status || apiOrder.order_status),
+
+      cashSale: true,
+      soldTo: apiOrder.soldTo || apiOrder.customerName || apiOrder.customer_name || 'Walk-in Customer',
+      tin: apiOrder.tin || '',
+      businessAddress: apiOrder.businessAddress || apiOrder.customer_address || '',
+
+      invoiceNumber: apiOrder.invoice_number || apiOrder.invoiceNumber || '',
+      logoUrl: apiOrder.logoUrl || '',
+      date,
+
+      vatableSales: Number(apiOrder.vatable_sales ?? apiOrder.vatableSales ?? 0),
+      vatAmount: Number(apiOrder.vat_amount ?? apiOrder.vatAmount ?? 0),
+      zeroRatedSales: Number(apiOrder.zero_rated_sales ?? apiOrder.zeroRatedSales ?? 0),
+      vatExemptAmount: Number(apiOrder.vat_exempt_amount ?? apiOrder.vatExemptAmount ?? 0),
+      discountAmount: Number(apiOrder.discount_amount ?? apiOrder.discountAmount ?? 0),
+      grossAmount: gross,
+      netAmount: net,
+      totalAmount: Number(apiOrder.total_amount ?? apiOrder.totalAmount ?? net ?? gross),
+
+      exemptionId: apiOrder.exemptionId || '',
+      signature: apiOrder.signature || '',
+      atpOrOcn: apiOrder.atpOrOcn || 'OCN-2025-001234',
+      birPermitNo: apiOrder.birPermitNo || 'BIR-PERMIT-2025-56789',
+      inclusiveSerialNumber: apiOrder.inclusiveSerialNumber || '000001-000999',
+
+      createdAt: date,
+      message: apiOrder.message || 'Thank you for your purchase!',
+      items: apiOrder.items || [],
+      // attach normalized payment for UI
+      // @ts-ignore
+      payment: paymentMethod
+    } as Order;
   }
 
   /**
