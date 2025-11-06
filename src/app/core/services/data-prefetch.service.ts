@@ -31,8 +31,14 @@ export class DataPrefetchService {
 
       for (const s of stores) {
         try {
-          // Try to load products and persist to IndexedDB
-          await this.productService.loadProductsByCompanyAndStore(primaryCompanyId, s.id).catch(() => {});
+          // Prefetch products using Firestore-only path to avoid BigQuery API calls during login
+          // (BigQuery calls can trigger Cloud Run 403s if token/iam mismatches exist)
+          if (typeof (this.productService as any).loadProductsByCompanyAndStoreFromFirestore === 'function') {
+            await (this.productService as any).loadProductsByCompanyAndStoreFromFirestore(primaryCompanyId, s.id).catch(() => {});
+          } else {
+            // Fallback to original call if the Firestore-only path isn't available
+            await this.productService.loadProductsByCompanyAndStore(primaryCompanyId, s.id).catch(() => {});
+          }
         } catch (e) {
           // ignore
         }

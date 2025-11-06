@@ -1703,9 +1703,28 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       console.log('📝 Processed customer info:', processedCustomerInfo);
       console.log('💳 Payment data:', paymentsData);
       
+      // Save customer first if this is a new customer (so we can attach the doc id to the order)
+      let savedCustomer: any = null;
+      try {
+        // Only attempt to save when we don't already have a customerId
+        if (!processedCustomerInfo.customerId && (this.customerInfo.soldTo && this.customerInfo.soldTo.trim())) {
+          console.log('👤 No existing customerId - saving customer before order to attach doc id');
+          savedCustomer = await this.saveCustomerData();
+          if (savedCustomer && savedCustomer.id) {
+            // Attach the newly created customer document id into the order payload
+            processedCustomerInfo.customerId = savedCustomer.id;
+            console.log('👤 Attached saved customer id to customerInfo for order:', savedCustomer.id);
+          }
+        } else {
+          console.log('👤 Existing customerId present or no customer info provided - skipping pre-save');
+        }
+      } catch (err) {
+        console.warn('⚠️ Failed to save customer before order - proceeding without attaching id:', err);
+      }
+
       // Use the invoice service with the new data structure
       const result = await this.posService.processOrderWithInvoiceAndPayment(
-        processedCustomerInfo, 
+        processedCustomerInfo,
         paymentsData
       );
       
@@ -1724,11 +1743,17 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
 
       console.log('📋 Invoice number updated to final result:', result.invoiceNumber);
 
-      // Save customer information if available
-      console.log('👤 Saving customer information...');
-      const savedCustomer = await this.saveCustomerData();
-      if (savedCustomer) {
-        console.log('✅ Customer saved successfully:', savedCustomer.customerId);
+      // If we didn't save the customer earlier (for some reason), try once more but avoid duplicate
+      if (!savedCustomer) {
+        try {
+          if (!this.customerInfo.customerId && (this.customerInfo.soldTo && this.customerInfo.soldTo.trim())) {
+            console.log('👤 Attempting post-order customer save (fallback)');
+            const postSaved = await this.saveCustomerData();
+            if (postSaved) console.log('✅ Customer saved post-order:', postSaved.id || postSaved.customerId);
+          }
+        } catch (e) {
+          console.warn('⚠️ Post-order customer save failed:', e);
+        }
       }
 
       // Prepare receipt data with the real order ID and invoice number

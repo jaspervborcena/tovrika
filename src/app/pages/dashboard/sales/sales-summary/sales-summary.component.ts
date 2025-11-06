@@ -239,8 +239,8 @@ type Order = OrderDisplay;
           </table>
         </div>
         
-        <!-- Pagination Controls -->
-        <div *ngIf="totalFilteredOrders() > itemsPerPage()" class="pagination-container">
+  <!-- Pagination Controls (hide when using API paging) -->
+  <div *ngIf="dataSource() !== 'api' && totalFilteredOrders() > itemsPerPage()" class="pagination-container">
           <div class="pagination-info">
             Page {{ currentPage() }} of {{ totalPages() }} 
             ({{ ((currentPage() - 1) * itemsPerPage()) + 1 }}-{{ min(currentPage() * itemsPerPage(), totalFilteredOrders()) }} of {{ totalFilteredOrders() }} items)
@@ -297,6 +297,14 @@ type Order = OrderDisplay;
               </svg>
             </button>
           </div>
+        </div>
+        
+        <!-- Show more for API-backed (BigQuery) results -->
+        <div *ngIf="dataSource() === 'api' && apiHasMore()" style="text-align:center; margin-top:12px;">
+          <button class="btn btn-primary" (click)="loadMoreApiOrders()" [disabled]="apiLoadingMore()">
+            <span *ngIf="apiLoadingMore()" class="loading-spinner" style="width:1rem; height:1rem; border-top-color: #fff; margin-right:8px;"></span>
+            {{ apiLoadingMore() ? 'Loading...' : 'Show more' }}
+          </button>
         </div>
       </div>
     </div>
@@ -1208,6 +1216,11 @@ export class SalesSummaryComponent implements OnInit {
   // Pagination signals
   currentPage = signal<number>(1);
   itemsPerPage = signal<number>(20);
+  // API pagination for BigQuery-backed endpoint
+  apiPageSize = 50;
+  apiCurrentPage = signal<number>(1);
+  apiHasMore = signal<boolean>(false);
+  apiLoadingMore = signal<boolean>(false);
 
   // Sorting signals
   sortColumn = signal<string>('createdAt');
@@ -1501,7 +1514,22 @@ export class SalesSummaryComponent implements OnInit {
 
       // Use the hybrid method that automatically determines the data source
       console.log('📊 Using hybrid data loading...');
-      let orders = await this.orderService.getOrdersByDateRange(storeId, startDate, endDate);
+      let orders: any[] = [];
+  const shouldUseApi = this.shouldUseApiForDates(startDate, endDate);
+
+      if (shouldUseApi) {
+        // Use paginated API: default to first page (50)
+        this.dataSource.set('api');
+        this.apiCurrentPage.set(1);
+        const fields = ['invoice_number','updated_at','gross_amount','net_amount','payment','status'];
+        const apiOrders = await this.orderService.getOrdersPage(storeId, startDate, endDate, this.apiPageSize, this.apiCurrentPage(), fields);
+        orders = apiOrders || [];
+        // If returned count equals page size, there may be more
+        this.apiHasMore.set((orders.length >= this.apiPageSize));
+      } else {
+        this.dataSource.set('firebase');
+        orders = await this.orderService.getOrdersByDateRange(storeId, startDate, endDate);
+      }
 
       // Debug: Check what we got back
       console.log('📊 Order Service returned:', orders.length, 'orders');
@@ -1525,7 +1553,7 @@ export class SalesSummaryComponent implements OnInit {
       }
 
       // No need to filter on client side - the service handles it when possible
-      const filteredOrders = orders || [];
+  const filteredOrders = orders || [];
 
       // Transform to match our interface - spread all existing properties and add display properties
       const transformedOrders: Order[] = filteredOrders.map((order: any) => ({
@@ -1542,6 +1570,36 @@ export class SalesSummaryComponent implements OnInit {
       this.orders.set([]);
     } finally {
       this.isLoading.set(false);
+    }
+  }
+
+  // Load next API page and append results (used when dataSource === 'api')
+  async loadMoreApiOrders(): Promise<void> {
+    if (this.apiLoadingMore()) return;
+    this.apiLoadingMore.set(true);
+    try {
+      const storeId = this.selectedStoreId() || this.authService.getCurrentPermission()?.storeId;
+      if (!storeId) return;
+      const startDate = new Date(this.fromDate);
+      const endDate = new Date(this.toDate);
+      endDate.setHours(23, 59, 59, 999);
+      const nextPage = this.apiCurrentPage() + 1;
+      const fields = ['invoice_number','updated_at','gross_amount','net_amount','payment','status'];
+      const page = await this.orderService.getOrdersPage(storeId, startDate, endDate, this.apiPageSize, nextPage, fields);
+      if (page && page.length > 0) {
+        // Append
+        const current = this.orders();
+        const transformed = page.map((order: any) => ({ ...(order as any), customerName: order.soldTo || 'Cash Sale', items: order.items || [], paymentMethod: order.payment || order.paymentMethod || 'cash' }));
+        this.orders.set(current.concat(transformed));
+        this.apiCurrentPage.set(nextPage);
+        this.apiHasMore.set(page.length >= this.apiPageSize);
+      } else {
+        this.apiHasMore.set(false);
+      }
+    } catch (err) {
+      console.error('Error loading more API orders:', err);
+    } finally {
+      this.apiLoadingMore.set(false);
     }
   }
 

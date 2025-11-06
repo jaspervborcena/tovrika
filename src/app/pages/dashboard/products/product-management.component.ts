@@ -1125,6 +1125,14 @@ import { CloudLoggingService } from '../../../services/cloud-logging.service';
           </table>
         </div>
 
+        <!-- Show more pagination -->
+        <div style="text-align:center; margin-top:12px;" *ngIf="hasMore">
+          <button class="btn btn-primary" (click)="loadMoreProducts()" [disabled]="loadingMore">
+            <span *ngIf="loadingMore" class="loading-spinner" style="width:1rem; height:1rem; border-top-color: #fff; margin-right:8px;"></span>
+            {{ loadingMore ? 'Loading...' : 'Show more' }}
+          </button>
+        </div>
+
         <!-- Empty State -->
         <div class="empty-state" *ngIf="filteredProducts().length === 0 && !loading">
           <div class="empty-content">
@@ -1730,6 +1738,11 @@ export class ProductManagementComponent implements OnInit {
   selectedCategory = '';
   selectedStore = '';
   filteredProducts = signal<Product[]>([]);
+  // Pagination state for BigQuery products API
+  pageSize = 50;
+  currentPage = 1;
+  hasMore = false;
+  loadingMore = false;
   
   // Modal state
   showModal = false;
@@ -1812,7 +1825,10 @@ export class ProductManagementComponent implements OnInit {
         
         // Load products for the specific store (BigQuery API requires storeId)
         if (currentPermission.storeId) {
-          await this.productService.loadProducts(currentPermission.storeId);
+          // Reset paging and load first page (default 50)
+          this.currentPage = 1;
+          const count = await this.productService.loadProducts(currentPermission.storeId, this.pageSize, this.currentPage);
+          this.hasMore = (count >= this.pageSize);
         } else {
           console.warn('No storeId available - cannot load products from BigQuery API');
         }
@@ -2927,7 +2943,10 @@ export class ProductManagementComponent implements OnInit {
       // Get current permission to access storeId
       const currentPermission = this.authService.getCurrentPermission();
       if (currentPermission?.storeId) {
-        await this.productService.loadProducts(currentPermission.storeId);
+        // reset paging and reload first page
+        this.currentPage = 1;
+        const count = await this.productService.loadProducts(currentPermission.storeId, this.pageSize, this.currentPage);
+        this.hasMore = (count >= this.pageSize);
       } else {
         console.warn('No storeId available - cannot refresh products from BigQuery API');
       }
@@ -2937,6 +2956,24 @@ export class ProductManagementComponent implements OnInit {
       console.error('Error refreshing products:', error);
     } finally {
       this.loading = false;
+    }
+  }
+
+  // Load next page of products and append to the list
+  async loadMoreProducts(): Promise<void> {
+    try {
+      this.loadingMore = true;
+      const currentPermission = this.authService.getCurrentPermission();
+      if (!currentPermission?.storeId) return;
+      this.currentPage += 1;
+      const count = await this.productService.loadProducts(currentPermission.storeId, this.pageSize, this.currentPage);
+      // If returned count is less than pageSize, no more pages
+      this.hasMore = (count >= this.pageSize);
+      this.filterProducts();
+    } catch (err) {
+      console.error('Error loading more products:', err);
+    } finally {
+      this.loadingMore = false;
     }
   }
 
