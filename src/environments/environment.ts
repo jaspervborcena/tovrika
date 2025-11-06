@@ -28,6 +28,7 @@ export const environment = {
     projectId: 'jasperpos-1dfd5',
     logName: 'pos-application-logs',
     enabled: true, // Set to false to disable logging in development
+    consoleSink: false, // Disable console sink in development to avoid noisy logs
     offlineStorageKey: 'pos_offline_logs',
     maxOfflineLogs: 1000
   }

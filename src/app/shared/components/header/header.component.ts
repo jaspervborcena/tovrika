@@ -174,12 +174,11 @@ export class HeaderComponent implements OnInit {
         // Load company-specific data
         await this.storeService.loadStoresByCompany(currentPermission.companyId);
         
-        // Load products for the specific store (BigQuery API requires storeId)
-        if (currentPermission.storeId) {
-          await this.productService.loadProducts(currentPermission.storeId);
-        } else {
-          console.warn('No storeId available - cannot load products from BigQuery API');
-        }
+        // NOTE: Loading products from BigQuery is deferred to product pages/components to
+        // avoid background API calls from the header which can trigger Cloud Run 403s.
+        // If you need a products count here, rely on cached/IndexedDB data or the
+        // ProductService signal which is kept in sync by product pages.
+        // (this.productService.loadProducts(currentPermission.storeId) intentionally omitted)
         
         this.stores.set(this.storeService.getStores());
         this.totalStores.set(this.storeService.totalStores());

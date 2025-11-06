@@ -143,10 +143,14 @@ export class InvoiceService {
 
       // Prepare main order payload (without items) with security fields
       const { items, ...orderDataWithoutItems } = orderData;
+      // Ensure companyTaxId is sourced from the store's tax id (tinNumber) when available
+      const storeTaxId = storeDataOutside?.['tinNumber'] || storeDataOutside?.['taxId'] || orderDataWithoutItems?.companyTaxId || '';
+
       const orderWithSecurityPre = await this.securityService.addSecurityFields({
         ...orderDataWithoutItems,
         invoiceNumber: nextInvoiceNoOutside,
         storeId: storeId,
+        companyTaxId: storeTaxId,
         status: 'completed',
         createdBy: this.authService.getCurrentUser()?.uid || 'system'
       });

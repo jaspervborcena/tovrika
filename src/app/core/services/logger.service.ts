@@ -34,8 +34,22 @@ export class LoggerService {
   private minLevel: LogLevel = environment.production ? 'info' : 'debug';
   private remoteEndpoint = (environment as any).cloudLoggingEndpoint as string | undefined;
   private apiKey = (environment as any).cloudLoggingApiKey as string | undefined;
+  // Optional context provider registered by AuthService (or similar) to avoid circular DI.
+  // Should return user-related context fields (userId/uid, companyId, storeId, etc).
+  private contextProvider?: () => Partial<LogContext> | undefined;
+
+  // NOTE: do not inject AuthService here to avoid circular DI. If you need
+  // user context in logs, use LoggerService.setContext(...) pattern instead.
 
   constructor(private http: HttpClient) {}
+
+  /**
+   * Register a callback that returns contextual log fields (userId, companyId, storeId).
+   * This avoids injecting AuthService into LoggerService and prevents circular DI.
+   */
+  setContextProvider(provider: () => Partial<LogContext> | undefined) {
+    this.contextProvider = provider;
+  }
 
   debug(message: string, ctx: LogContext = {}) { this.log('debug', message, ctx); }
   info(message: string, ctx: LogContext = {})  { this.log('info', message, ctx); }
@@ -55,33 +69,66 @@ export class LoggerService {
 
   private log(level: LogLevel, message: string, ctx: LogContext & { error?: any } = {}) {
     if (!this.shouldLog(level)) return;
+    try {
+      // Merge in optional context from registered provider (e.g., current user uid)
+      let providedCtx: Partial<LogContext> = {};
+      try {
+        providedCtx = this.contextProvider ? (this.contextProvider() || {}) : {};
+      } catch (e) {
+        // Context provider must never block logging; swallow errors and continue
+        providedCtx = {};
+        try { console.warn('[LOGGER] contextProvider threw', e); } catch {}
+      }
 
-    const entry: LogEntry = {
-      timestamp: new Date().toISOString(),
-      level,
-      severity: this.asSeverity(level),
-      message,
-      ...ctx,
-      payload: this.sanitize(ctx.payload),
-    };
+      const entry: LogEntry = {
+        timestamp: new Date().toISOString(),
+        level,
+        severity: this.asSeverity(level),
+        message,
+        ...providedCtx,
+        ...ctx,
+        payload: this.sanitize(ctx.payload),
+      };
 
-    this.consoleSink(entry);
+      // Console sink should not throw or block app logic
+      try {
+        this.consoleSink(entry);
+      } catch (e) {
+        try { console.error('[LOGGER] consoleSink failed', e); } catch {}
+      }
 
-    if (this.remoteEndpoint) {
-      const headers: HttpHeaders = new HttpHeaders({ 'Content-Type': 'application/json' })
-        .set('X-API-Key', this.apiKey || '');
-      this.http.post(this.remoteEndpoint, entry, { headers }).subscribe({ next: () => {}, error: () => {} });
+      // Remote post is best-effort and should never throw to callers
+      if (this.remoteEndpoint) {
+        try {
+          const headers: HttpHeaders = new HttpHeaders({ 'Content-Type': 'application/json' })
+            .set('X-API-Key', this.apiKey || '');
+          this.http.post(this.remoteEndpoint, entry, { headers }).subscribe({ next: () => {}, error: () => {} });
+        } catch (e) {
+          try { console.error('[LOGGER] remote post failed', e); } catch {}
+        }
+      }
+    } catch (e) {
+      // Guard: logging must never throw to application code. Swallow silently.
+      try { console.error('[LOGGER] Unexpected logging failure', e); } catch {}
     }
   }
 
   private consoleSink(entry: LogEntry) {
+    // Respect environment flag to avoid noisy console logging when desired
+    const consoleEnabled = (environment as any)?.cloudLogging?.consoleSink;
+    if (!consoleEnabled) return;
+
     const { level, message, ...rest } = entry;
     const fn = level === 'error' ? console.error
       : level === 'warn' ? console.warn
       : level === 'info' ? console.info
       : console.debug;
 
-    fn('[APP]', message, rest);
+    try {
+      fn('[APP]', message, rest);
+    } catch (e) {
+      try { console.error('[LOGGER] failed to write to console', e); } catch {}
+    }
   }
 
   private shouldLog(level: LogLevel): boolean {
