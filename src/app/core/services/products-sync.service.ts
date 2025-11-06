@@ -1,12 +1,14 @@
 import { Injectable, inject } from '@angular/core';
 import { Firestore, collection, query, where, getDocs, onSnapshot, Timestamp } from '@angular/fire/firestore';
 import { IndexedDBService, OfflineProduct } from './indexeddb.service';
-import { LoggerService } from '../services/logger.service';
+import { LoggerService } from './logger.service';
+// Client-side logging disabled for products sync. Server-side logging should be handled in Cloud Functions.
 
 @Injectable({ providedIn: 'root' })
 export class ProductsSyncService {
   private firestore = inject(Firestore);
   private indexedDb = inject(IndexedDBService);
+  // Use centralized LoggerService so logs include authenticated uid/company/store via context provider
   private logger = inject(LoggerService);
 
   private pollingHandle: any = null;

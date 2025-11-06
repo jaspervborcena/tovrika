@@ -21,6 +21,28 @@ import { ExpenseLog } from '../../../interfaces/expense-log.interface';
         <div class="header-content">
           <h1 class="page-title">Dashboard Overview</h1>
           <p class="page-subtitle">Welcome, {{ currentUserName() }} 🎉 - Here's what's happening in your store</p>
+          <!-- Overview controls: store selector and period -->
+          <div class="overview-controls">
+            <div class="control-row">
+              <label class="control-label">Store</label>
+              <select class="control-select" (change)="onOverviewStoreChange($event)">
+                <option *ngFor="let s of storeList()" [value]="s.id" [selected]="selectedStoreId()===s.id">{{ s.storeName || s.storeName }}</option>
+              </select>
+            </div>
+
+            <div class="control-row">
+              <label class="control-label">Period</label>
+              <select class="control-select" (change)="onOverviewPeriodChange($event)">
+                <option *ngFor="let p of periodOptions" [value]="p.key" [selected]="selectedPeriod()===p.key">{{ p.label }}</option>
+              </select>
+
+              <div *ngIf="selectedPeriod()==='date_range'" class="date-range-inputs">
+                <input type="date" class="control-input" [value]="dateFrom() || ''" (change)="dateFrom.set($any($event.target).value)" />
+                <input type="date" class="control-input" [value]="dateTo() || ''" (change)="dateTo.set($any($event.target).value)" />
+                <button class="control-go" (click)="onApplyDateRange()">Go</button>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -177,20 +199,18 @@ import { ExpenseLog } from '../../../interfaces/expense-log.interface';
                   
                   <!-- Sample chart lines -->
                   <path d="M 50 250 Q 150 200 250 180 T 450 160 T 650 140 T 750 120" 
-                        fill="none" stroke="#f59e0b" stroke-width="3" stroke-linecap="round"/>
-                  <path d="M 50 280 Q 150 240 250 220 T 450 200 T 650 180 T 750 160" 
-                        fill="none" stroke="#8b5cf6" stroke-width="3" stroke-linecap="round"/>
+        fill="none" stroke="#f59e0b" stroke-width="3" stroke-linecap="round" [attr.d]="chartPath()"/>
+      <path 
+        fill="none" stroke="#8b5cf6" stroke-width="3" stroke-linecap="round" [attr.d]="chartPathProfit()"/>
                   
                   <!-- Data points -->
                   <circle cx="450" cy="160" r="4" fill="#f59e0b" stroke="white" stroke-width="2"/>
-                  <text x="440" y="145" class="chart-label">21,345</text>
+                  <text x="440" y="145" class="chart-label">{{ netProfit() | number:'1.0-0' }}</text>
                 </svg>
                 
-                <!-- Month labels -->
+                <!-- Dynamic labels: show days if single-month period, otherwise months -->
                 <div class="chart-labels">
-                  <span>Jan</span><span>Feb</span><span>Mar</span><span>Apr</span>
-                  <span>May</span><span>Jun</span><span>Jul</span><span>Aug</span>
-                  <span>Sep</span><span>Oct</span>
+                  <span *ngFor="let l of chartLabels()">{{ l }}</span>
                 </div>
               </div>
             </div>
@@ -299,6 +319,26 @@ import { ExpenseLog } from '../../../interfaces/expense-log.interface';
       color: #6b7280;
       font-size: 1rem;
     }
+
+    /* Overview controls */
+    .overview-controls {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      margin-top: 12px;
+      flex-wrap: wrap;
+    }
+
+    .overview-controls .control-row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .control-label { font-weight: 600; color: #374151; }
+    .control-select { padding: 6px 8px; border-radius: 8px; border: 1px solid #e5e7eb; background: white; }
+    .control-input { padding: 6px 8px; border-radius: 8px; border: 1px solid #e5e7eb; }
+    .control-go { background: #3b82f6; color: white; border: none; padding: 6px 10px; border-radius: 8px; cursor: pointer; }
 
     .dashboard-grid {
       display: grid;
@@ -833,6 +873,16 @@ export class OverviewComponent implements OnInit {
   protected selectedStoreId = signal<string>('all');
   protected isLoading = signal<boolean>(true);
 
+  // UI controls for overview filtering
+  protected periodOptions = [
+    { key: 'this_month', label: 'This Month' },
+    { key: 'previous_month', label: 'Previous Month' },
+    { key: 'date_range', label: 'Date Range' }
+  ];
+  protected selectedPeriod = signal<'this_month' | 'previous_month' | 'date_range'>('this_month');
+  protected dateFrom = signal<string | null>(null); // YYYY-MM-DD
+  protected dateTo = signal<string | null>(null);
+
   // Computed values
   protected currentUserName = computed(() => {
     const user = this.authService.getCurrentUser();
@@ -896,6 +946,77 @@ export class OverviewComponent implements OnInit {
     this.loadData();
   }
 
+  // Handler: when user changes store selection
+  protected onOverviewStoreChange(event: Event) {
+    const target = event.target as HTMLSelectElement;
+    if (target && target.value) {
+      this.selectedStoreId.set(target.value);
+      this.applyPeriodAndLoad();
+    }
+  }
+
+  // Handler: when user changes period selection
+  protected onOverviewPeriodChange(event: Event) {
+    const target = event.target as HTMLSelectElement;
+    if (!target) return;
+    const v = target.value as 'this_month' | 'previous_month' | 'date_range';
+    this.selectedPeriod.set(v);
+    if (v === 'date_range') {
+      // default dateTo = today, dateFrom = today - 30 days
+      const now = new Date();
+      const toIso = now.toISOString().slice(0,10);
+      const from = new Date(now);
+      from.setDate(from.getDate() - 30);
+      const fromIso = from.toISOString().slice(0,10);
+      // Only set defaults if not already set by the user
+      if (!this.dateFrom()) this.dateFrom.set(fromIso);
+      if (!this.dateTo()) this.dateTo.set(toIso);
+      this.applyPeriodAndLoad();
+    } else {
+      this.dateFrom.set(null);
+      this.dateTo.set(null);
+      this.applyPeriodAndLoad();
+    }
+  }
+
+  protected onApplyDateRange() {
+    const from = this.dateFrom();
+    const to = this.dateTo();
+    if (!from || !to) return;
+    const start = new Date(from + 'T00:00:00');
+    const end = new Date(to + 'T23:59:59.999');
+    this.loadAnalyticsData(start, end);
+  }
+
+  // Compute start/end dates for selected period and call analytics loader
+  protected applyPeriodAndLoad() {
+    const period = this.selectedPeriod();
+    const now = new Date();
+    let start: Date | undefined;
+    let end: Date | undefined;
+    if (period === 'this_month') {
+      start = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+      end = new Date(now.getFullYear(), now.getMonth(), new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate(), 23, 59, 59, 999);
+    } else if (period === 'previous_month') {
+      const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      start = new Date(prev.getFullYear(), prev.getMonth(), 1, 0, 0, 0, 0);
+      end = new Date(prev.getFullYear(), prev.getMonth(), new Date(prev.getFullYear(), prev.getMonth() + 1, 0).getDate(), 23, 59, 59, 999);
+    } else if (period === 'date_range') {
+      const from = this.dateFrom();
+      const to = this.dateTo();
+      if (from && to) {
+        start = new Date(from + 'T00:00:00');
+        end = new Date(to + 'T23:59:59.999');
+      }
+    }
+
+    // If we have a store selected, trigger analytics load
+    const storeId = this.selectedStoreId() || this.authService.getCurrentPermission()?.storeId;
+    if (storeId && start && end) {
+      this.loadAnalyticsData(start, end);
+    }
+  }
+
   ngOnInit(): void {
     // Initialize data loading on component init - same as sales-summary
     this.loadData();
@@ -909,9 +1030,10 @@ export class OverviewComponent implements OnInit {
       // EXACT same approach as sales-summary
       await this.loadStores();
       
-      // Wait a bit for stores to be set, then load today's data
+      // After stores load, use the selected period/store to load analytics
+      // This ensures the new store/period controls drive the initial load
       setTimeout(() => {
-        this.loadCurrentDateData();
+        this.applyPeriodAndLoad();
       }, 100);
 
     } catch (error) {
@@ -1169,23 +1291,47 @@ export class OverviewComponent implements OnInit {
 
   readonly monthlyChartData = computed(() => {
     const orders = this.orders();
-    
-    // For demo purposes, generate monthly data based on current orders
-    // In production, you'd query BigQuery for historical monthly data
+
+    // If the selected period is a single month, return daily data for that month
+    const period = this.selectedPeriod();
+    if (period === 'this_month' || period === 'previous_month') {
+      const now = new Date();
+      const ref = period === 'this_month' ? now : new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const year = ref.getFullYear();
+      const month = ref.getMonth();
+      const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+      return Array.from({ length: daysInMonth }).map((_, idx) => {
+        const day = idx + 1;
+        const start = new Date(year, month, idx, 0, 0, 0, 0);
+        const end = new Date(year, month, idx, 23, 59, 59, 999);
+        const dayOrders = orders.filter(o => {
+          const d = o.createdAt ? new Date(o.createdAt) : null;
+          return d && d.getTime() >= start.getTime() && d.getTime() <= end.getTime();
+        });
+        const ordersCount = dayOrders.length;
+        const profit = dayOrders.reduce((s, o) => s + (Number(o.netAmount ?? o.totalAmount ?? 0) || 0), 0);
+        return { label: String(day), orders: ordersCount, profit: Math.round(profit) };
+      });
+    }
+
+    // Default: monthly overview across months
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     const currentMonth = new Date().getMonth();
-    
+
     return months.map((month, index) => {
       const baseValue = orders.length > 0 ? this.totalRevenue() : 0;
       const multiplier = index <= currentMonth ? Math.random() * 0.8 + 0.4 : 0;
-      
+
       return {
-        month,
+        label: month,
         orders: Math.floor(baseValue * multiplier / 1000),
         profit: Math.floor(baseValue * multiplier * 0.3 / 1000)
       };
     });
   });
+
+  protected chartLabels = computed(() => this.monthlyChartData().map(d => d.label));
 
   // Method to load historical analytics data from BigQuery
   async loadAnalyticsData(startDate: Date, endDate: Date): Promise<void> {
@@ -1209,6 +1355,47 @@ export class OverviewComponent implements OnInit {
         paymentMethod: 'cash'
       })));
 
+      // Load expenses for the same date range and compute totals
+      try {
+        let expenses = await this.expenseService.getExpensesByStore(storeId, startDate, endDate);
+
+        // If the query returned no rows, it's possible paymentDate is stored in a different shape
+        // (string or different field type). Fallback: fetch all expenses for store and filter locally.
+        if ((!expenses || expenses.length === 0)) {
+          const fallback = await this.expenseService.getExpensesByStore(storeId);
+          if (fallback && fallback.length > 0) {
+            // Filter by paymentDate within [startDate,endDate]
+            expenses = (fallback || []).filter((e: any) => this.isPaymentDateInRange(e?.paymentDate, startDate, endDate));
+            console.warn('Overview: used fallback expenses and filtered locally; count=', expenses.length);
+          }
+        }
+
+        this.expenses.set(expenses || []);
+        const periodTotal = (expenses || []).reduce((s, e) => s + (Number((e as any).amount || 0) / 100), 0);
+        this.monthExpensesTotal.set(periodTotal);
+
+        // Also compute yesterday total for comparison
+        const now = new Date();
+        const yesterday = new Date(now);
+        yesterday.setDate(now.getDate() - 1);
+        const yStart = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate(), 0, 0, 0, 0);
+        const yEnd = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate(), 23, 59, 59, 999);
+        let yExpenses = await this.expenseService.getExpensesByStore(storeId, yStart, yEnd);
+        if ((!yExpenses || yExpenses.length === 0)) {
+          const fallbackY = await this.expenseService.getExpensesByStore(storeId);
+          if (fallbackY && fallbackY.length > 0) {
+            yExpenses = (fallbackY || []).filter((e: any) => this.isPaymentDateInRange(e?.paymentDate, yStart, yEnd));
+          }
+        }
+        const yTotal = (yExpenses || []).reduce((s, e) => s + (Number((e as any).amount || 0) / 100), 0);
+        this.yesterdayExpensesTotal.set(yTotal);
+      } catch (e) {
+        console.warn('Overview: failed to load expenses for selected range', e);
+        this.expenses.set([]);
+        this.monthExpensesTotal.set(0);
+        this.yesterdayExpensesTotal.set(0);
+      }
+
       console.log('📈 Analytics data loaded:', orders.length, 'orders');
       
     } catch (error) {
@@ -1226,4 +1413,71 @@ export class OverviewComponent implements OnInit {
     
     this.loadAnalyticsData(startDate, endDate);
   }
+
+  // Helper: determine if a paymentDate value (Timestamp, ISO string, or Date) falls within start/end
+  private isPaymentDateInRange(paymentDate: any, start?: Date | null, end?: Date | null): boolean {
+    if (!paymentDate || !start || !end) return false;
+    let pd: Date | null = null;
+    try {
+      // Firestore Timestamp
+      if (paymentDate?.toDate && typeof paymentDate.toDate === 'function') {
+        pd = paymentDate.toDate();
+      } else if (typeof paymentDate === 'string') {
+        pd = new Date(paymentDate);
+      } else if (paymentDate instanceof Date) {
+        pd = paymentDate;
+      } else if (paymentDate && paymentDate.seconds) {
+        // unix-like object
+        pd = new Date(paymentDate.seconds * 1000);
+      }
+    } catch (e) {
+      return false;
+    }
+    if (!pd || isNaN(pd.getTime())) return false;
+    // Normalize to day boundaries for inclusive comparison
+    const t = pd.getTime();
+    return t >= start.getTime() && t <= end.getTime();
+  }
+
+  // Build an SVG path for orders line using monthlyChartData
+  protected chartPath = computed(() => {
+    try {
+      const data = this.monthlyChartData();
+      if (!Array.isArray(data) || data.length === 0) return '';
+      const width = 700;
+      const height = 220;
+      const padding = 40;
+      const values = data.map(d => d.orders || 0);
+      const max = Math.max(...values, 1);
+      const step = (width - padding * 2) / Math.max(1, values.length - 1);
+      return values.map((v, i) => {
+        const x = padding + i * step;
+        const y = height - padding - (v / max) * (height - padding * 2);
+        return `${i === 0 ? 'M' : 'L'} ${x} ${y}`;
+      }).join(' ');
+    } catch (e) {
+      return '';
+    }
+  });
+
+  // Build an SVG path for profit line (uses profit values)
+  protected chartPathProfit = computed(() => {
+    try {
+      const data = this.monthlyChartData();
+      if (!Array.isArray(data) || data.length === 0) return '';
+      const width = 700;
+      const height = 220;
+      const padding = 40;
+      const values = data.map(d => d.profit || 0);
+      const max = Math.max(...values, 1);
+      const step = (width - padding * 2) / Math.max(1, values.length - 1);
+      return values.map((v, i) => {
+        const x = padding + i * step;
+        const y = height - padding - (v / max) * (height - padding * 2);
+        return `${i === 0 ? 'M' : 'L'} ${x} ${y}`;
+      }).join(' ');
+    } catch (e) {
+      return '';
+    }
+  });
 }

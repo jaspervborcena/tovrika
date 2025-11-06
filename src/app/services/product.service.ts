@@ -15,11 +15,10 @@ import {
 } from '@angular/fire/firestore';
 import { Product, ProductInventory } from '../interfaces/product.interface';
 import { AuthService } from './auth.service';
-import { FirestoreSecurityService } from '../core/services/firestore-security.service';
+import { LoggerService } from '../core/services/logger.service';
 import { OfflineDocumentService } from '../core/services/offline-document.service';
 import { IndexedDBService, OfflineProduct } from '../core/services/indexeddb.service';
-import { LoggerService } from '@app/core/services/logger.service';
-import { logFirestore } from '@app/core/utils/firestore-logger';
+// Client-side logging disabled for products. Server-side logging should be handled in Cloud Functions.
 import { environment } from '../../environments/environment';
 
 @Injectable({
@@ -28,6 +27,8 @@ import { environment } from '../../environments/environment';
 export class ProductService {
   private readonly products = signal<Product[]>([]);
   private readonly offlineDocService = inject(OfflineDocumentService);
+  // Use centralized LoggerService so logs include authenticated uid/company/store via context provider
+  private logger = inject(LoggerService);
   
   // Computed properties
   readonly totalProducts = computed(() => this.products().length);
@@ -50,10 +51,7 @@ export class ProductService {
   constructor(
     private firestore: Firestore,
     private authService: AuthService,
-    private securityService: FirestoreSecurityService,
-    private logger: LoggerService,
-    private http: HttpClient
-    ,
+    private http: HttpClient,
     private indexedDb: IndexedDBService
   ) {}
 
@@ -160,15 +158,26 @@ export class ProductService {
     });
   }
 
-  async loadProducts(storeId: string): Promise<void> {
+  async loadProducts(storeId: string, pageSize = 50, pageNumber = 1): Promise<number> {
     try {
       if (!storeId) {
         throw new Error('storeId is required for BigQuery products API');
       }
       // Use BigQuery API only - fallback disabled for testing
-      await this.loadProductsFromBigQuery(storeId);
+      const count = await this.loadProductsFromBigQuery(storeId, pageSize, pageNumber);
+      return count;
     } catch (error) {
       this.logger.dbFailure('BigQuery products API failed', { area: 'products', storeId }, error);
+
+      // If BigQuery failed (403/500 etc), try Firestore fallback first for more complete data
+      try {
+        this.logger.warn('Attempting Firestore fallback for products after BigQuery failure', { area: 'products', storeId });
+        await this.loadProductsFromFirestore(storeId);
+        return this.products().length;
+      } catch (fsErr) {
+        this.logger.warn('Firestore fallback failed after BigQuery failure', { area: 'products', storeId, payload: { error: String(fsErr) } });
+      }
+
       // Attempt offline fallback: try to read products for the store from IndexedDB
       try {
         const offlineProducts = await this.indexedDb.getProductsByStore(storeId);
@@ -188,8 +197,8 @@ export class ProductService {
             uid: '',
             status: 'active'
           } as Product));
-      this.products.set(this.normalizeAndDeduplicateProducts(mapped));
-          return;
+          this.products.set(this.normalizeAndDeduplicateProducts(mapped));
+          return mapped.length;
         }
       } catch (fallbackError) {
         this.logger.warn('Failed to load products from IndexedDB fallback', { area: 'products', storeId, payload: { error: String(fallbackError) } });
@@ -199,7 +208,7 @@ export class ProductService {
     }
   }
 
-  private async loadProductsFromBigQuery(storeId: string): Promise<void> {
+  private async loadProductsFromBigQuery(storeId: string, pageSize = 50, pageNumber = 1): Promise<number> {
     try {
       if (!storeId) {
         throw new Error('storeId is required for BigQuery products API');
@@ -241,10 +250,11 @@ export class ProductService {
         throw new Error('No Firebase ID token available');
       }
 
-      // Build query parameters
+      // Build query parameters using page semantics expected by Cloud Function
       const params = new URLSearchParams({
         storeId: storeId, // Required parameter
-        limit: '100' // Default limit
+        page_size: String(pageSize),
+        page_number: String(pageNumber)
       });
 
       // Make API call to BigQuery Cloud Function
@@ -263,18 +273,24 @@ export class ProductService {
         this.logger.debug('Added Firebase ID token to Authorization header (redacted)', { area: 'products', storeId });
       }
 
-      const response = await this.http.get<any>(url, { headers }).toPromise();
+  const response = await this.http.get<any>(url, { headers }).toPromise();
 
       this.logger.debug('BigQuery response received', { area: 'products', storeId, payload: { keys: Object.keys(response || {}) } });
       
       // Transform BigQuery response to Product interface
-  const products: Product[] = (response?.products || response || []).map((item: any) => this.transformBigQueryProduct(item));
-      
-  this.products.set(this.normalizeAndDeduplicateProducts(products));
+  const fetched: Product[] = (response?.products || response || []).map((item: any) => this.transformBigQueryProduct(item));
+
+      // If requesting the first page, replace the signal. If requesting later pages, append.
+      if (pageNumber <= 1) {
+        this.products.set(this.normalizeAndDeduplicateProducts(fetched));
+      } else {
+        const merged = this.normalizeAndDeduplicateProducts([...(this.products() || []), ...fetched]);
+        this.products.set(merged);
+      }
 
       // Persist a simplified offline copy to IndexedDB for fallback
       try {
-        const offlineArr: OfflineProduct[] = products.map(p => ({
+        const offlineArr: OfflineProduct[] = (fetched || []).map(p => ({
           id: p.id || '',
           name: p.productName,
           price: Number(p.sellingPrice || 0),
@@ -289,7 +305,8 @@ export class ProductService {
       } catch (e) {
         this.logger.warn('Failed to persist products snapshot to IndexedDB', { area: 'products', storeId, payload: { error: (e as any)?.message || String(e) } });
       }
-      this.logger.dbSuccess('Loaded products from BigQuery', { area: 'products', storeId, payload: { count: products.length } });
+      this.logger.dbSuccess('Loaded products from BigQuery', { area: 'products', storeId, payload: { count: (fetched || []).length, pageSize, pageNumber } });
+      return (fetched || []).length;
     } catch (error: any) {
       this.logger.dbFailure('Error loading products from BigQuery', { area: 'products', storeId }, error);
       if ((error as any)?.status === 401) {
@@ -434,7 +451,7 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
     }
   }
 
-  private async loadProductsByCompanyAndStoreFromFirestore(companyId?: string, storeId?: string): Promise<void> {
+  async loadProductsByCompanyAndStoreFromFirestore(companyId?: string, storeId?: string): Promise<void> {
     try {
       // Only check authentication, no UID filtering needed for reading
       const currentUser = this.authService.getCurrentUser();
@@ -509,15 +526,8 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
 
       const cleanedProductData = baseData;
 
-      // 🔥 NEW APPROACH: Pre-generate documentId, then create with that ID (with structured logging)
-      const documentId = await logFirestore(this.logger, {
-        api: 'firestore.add',
-        area: 'products',
-        collectionPath: 'products',
-        companyId
-      }, cleanedProductData, async () => {
-        return this.offlineDocService.createDocument('products', cleanedProductData);
-      });
+      // Create document using OfflineDocumentService (server-side logging will run in Cloud Function)
+      const documentId = await this.offlineDocService.createDocument('products', cleanedProductData);
 
       // If the product includes initial inventory batches (legacy support) or has an initial totalStock,
       // create corresponding `productInventoryEntries` so FIFO/batch-based inventory is authoritative.
@@ -622,17 +632,8 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
       // Clean undefined values to prevent Firestore errors
       const cleanedUpdateData = this.cleanUndefinedValues(updateData);
 
-      // 🔥 NEW APPROACH: Use OfflineDocumentService for consistent online/offline updates (with structured logging)
-      await logFirestore(this.logger, {
-        api: 'firestore.update',
-        area: 'products',
-        collectionPath: 'products',
-        docId: productId,
-        companyId: updates.companyId
-      }, cleanedUpdateData, async () => {
-        await this.offlineDocService.updateDocument('products', productId, cleanedUpdateData);
-        return true;
-      });
+      // Use OfflineDocumentService for consistent online/offline updates
+      await this.offlineDocService.updateDocument('products', productId, cleanedUpdateData);
 
       // Update the signal
       this.products.update(products =>
@@ -652,15 +653,7 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
   async deleteProduct(productId: string): Promise<void> {
     try {
       const productRef = doc(this.firestore, 'products', productId);
-      await logFirestore(this.logger, {
-        api: 'firestore.delete',
-        area: 'products',
-        collectionPath: 'products',
-        docId: productId
-      }, { productId }, async () => {
-        await this.offlineDocService.deleteDocument('products', productId);
-        return true;
-      });
+      await this.offlineDocService.deleteDocument('products', productId);
 
       // Update the signal
       this.products.update(products =>

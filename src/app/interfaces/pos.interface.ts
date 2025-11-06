@@ -7,6 +7,8 @@ export enum ReceiptValidityNotice {
 
 export interface Order {
   id?: string;
+  /** Optional orderId coming from BigQuery / Cloud Function (documentId in storage) */
+  orderId?: string;
   companyId: string;
   storeId: string;
   branchId?: string;
@@ -52,6 +54,8 @@ export interface Order {
   // System Fields
   createdAt: Date;
   message: string; // Receipt message - Required
+  // Optional items array (orderDetails may be attached from API or fetched separately)
+  items?: OrderItem[];
 }
 
 export interface OrderDetail {
