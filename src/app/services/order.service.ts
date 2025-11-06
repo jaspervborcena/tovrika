@@ -564,7 +564,7 @@ export class OrderService {
    * Fetch order items from the orderDetails collection for a given orderId.
    * orderDetails may be batched across multiple documents, so we flatten all items.
    */
-  private async fetchOrderItems(orderId: string): Promise<any[]> {
+  public async fetchOrderItems(orderId: string): Promise<any[]> {
     if (!orderId) return [];
     try {
       const orderDetailsRef = collection(this.firestore, 'orderDetails');
@@ -807,12 +807,14 @@ export class OrderService {
    */
   private transformApiOrder(apiOrder: any): Order {
   this.logger.debug('Transforming API order', { area: 'orders', payload: apiOrder });
-    const id = apiOrder.order_id || apiOrder.orderId || apiOrder.id || '';
-    const dateRaw = apiOrder.updated_at || apiOrder.updatedAt || apiOrder.created_at || apiOrder.createdAt;
+  const id = apiOrder.order_id || apiOrder.orderId || apiOrder.id || '';
+  const dateRaw = apiOrder.updated_at || apiOrder.updatedAt || apiOrder.created_at || apiOrder.createdAt;
     const date = dateRaw ? new Date(dateRaw) : new Date();
     const gross = Number(apiOrder.gross_amount ?? apiOrder.grossAmount ?? apiOrder.total_amount ?? 0);
     const net = Number(apiOrder.net_amount ?? apiOrder.netAmount ?? apiOrder.total_amount ?? gross);
     const paymentMethod = apiOrder.payment || apiOrder.payment_method || apiOrder.paymentMethod || 'cash';
+
+    const customerName = apiOrder.customerInfo?.fullName || apiOrder.soldTo || apiOrder.customerName || apiOrder.customer_name || 'Walk-in Customer';
 
     return {
       id: id,
@@ -821,10 +823,11 @@ export class OrderService {
       storeId: apiOrder.store_id || apiOrder.storeId || '',
       terminalId: apiOrder.terminalId || 'terminal-1',
       assignedCashierId: apiOrder.assignedCashierId || '',
-      status: this.mapApiStatus(apiOrder.status || apiOrder.order_status),
+      // Preserve the raw status from API (e.g., 'completed') when present; fall back to mapped values
+      status: (apiOrder.status || apiOrder.order_status) ?? this.mapApiStatus(apiOrder.status),
 
       cashSale: true,
-      soldTo: apiOrder.soldTo || apiOrder.customerName || apiOrder.customer_name || 'Walk-in Customer',
+      soldTo: customerName,
       tin: apiOrder.tin || '',
       businessAddress: apiOrder.businessAddress || apiOrder.customer_address || '',
 
@@ -849,10 +852,10 @@ export class OrderService {
 
       createdAt: date,
       message: apiOrder.message || 'Thank you for your purchase!',
-      items: apiOrder.items || [],
-      // attach normalized payment for UI
-      // @ts-ignore
-      payment: paymentMethod
+      // Do not include items in the API-mapped Order (UI fetches details separately if needed)
+      // items: undefined,
+      // Explicitly provide paymentMethod for UI
+      paymentMethod: paymentMethod
     } as Order;
   }
 

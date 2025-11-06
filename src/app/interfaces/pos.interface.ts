@@ -14,7 +14,9 @@ export interface Order {
   branchId?: string;
   terminalId?: string;
   assignedCashierId: string;
-  status: 'pending' | 'paid' | 'cancelled' | 'refunded';
+  // Status can come from various data sources (Firestore, BigQuery). Keep as string to
+  // preserve source-specific values like 'completed' while older code may expect specific values.
+  status: string;
   
   // Customer Information
   cashSale?: boolean;
