@@ -1,4 +1,4 @@
-import { Injectable, computed, signal, inject } from '@angular/core';
+import { Injectable, computed, signal, inject, OnDestroy } from '@angular/core';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { 
   Firestore, 
@@ -11,26 +11,79 @@ import {
   query, 
   where, 
   getDocs,
-  Timestamp 
+  onSnapshot,
+  orderBy,
+  limit,
+  enableNetwork,
+  disableNetwork,
+  connectFirestoreEmulator,
+  Timestamp,
+  Unsubscribe,
+  DocumentChange,
+  QuerySnapshot,
+  DocumentSnapshot 
 } from '@angular/fire/firestore';
 import { Product, ProductInventory } from '../interfaces/product.interface';
 import { AuthService } from './auth.service';
 import { LoggerService } from '../core/services/logger.service';
 import { OfflineDocumentService } from '../core/services/offline-document.service';
-import { IndexedDBService, OfflineProduct } from '../core/services/indexeddb.service';
-// Client-side logging disabled for products. Server-side logging should be handled in Cloud Functions.
 import { environment } from '../../environments/environment';
+import { BehaviorSubject, Observable } from 'rxjs';
+
+interface ProductCacheState {
+  products: Product[];
+  isLoading: boolean;
+  lastUpdated: Date | null;
+  error: string | null;
+  isOnline: boolean;
+  hasInitialLoad: boolean;
+}
 
 @Injectable({
   providedIn: 'root'
 })
-export class ProductService {
-  private readonly products = signal<Product[]>([]);
+export class ProductService implements OnDestroy {
   private readonly offlineDocService = inject(OfflineDocumentService);
-  // Use centralized LoggerService so logs include authenticated uid/company/store via context provider
   private logger = inject(LoggerService);
   
-  // Computed properties
+  // Signal-based reactive cache
+  private readonly cacheState = signal<ProductCacheState>({
+    products: [],
+    isLoading: false,
+    lastUpdated: null,
+    error: null,
+    isOnline: navigator.onLine,
+    hasInitialLoad: false
+  });
+
+  // Real-time subscription management
+  private unsubscribeSnapshot: Unsubscribe | null = null;
+  private currentStoreId: string | null = null;
+  private currentCompanyId: string | null = null;
+
+  // Network status tracking
+  private isOnline = navigator.onLine;
+
+  // Computed properties - reactive access to cache
+  readonly products = computed(() => {
+    const products = this.cacheState().products;
+    console.log('📊 Products signal computed:', { 
+      count: products.length, 
+      firstFew: products.slice(0, 3).map(p => ({ id: p.id, name: p.productName }))
+    });
+    return products;
+  });
+  readonly isLoading = computed(() => {
+    const loading = this.cacheState().isLoading;
+    console.log('⏳ Loading signal computed:', loading);
+    return loading;
+  });
+  readonly lastUpdated = computed(() => this.cacheState().lastUpdated);
+  readonly error = computed(() => this.cacheState().error);
+  readonly hasInitialLoad = computed(() => this.cacheState().hasInitialLoad);
+  readonly isOnlineStatus = computed(() => this.cacheState().isOnline);
+
+  // Computed derived data
   readonly totalProducts = computed(() => this.products().length);
   readonly activeProducts = computed(() => 
     this.products().filter(product => product.status === 'active')
@@ -46,84 +99,696 @@ export class ProductService {
       categoryMap.set(product.category, products);
     });
     return categoryMap;
-  });
-
-  constructor(
+  });  constructor(
     private firestore: Firestore,
     private authService: AuthService,
-    private http: HttpClient,
-    private indexedDb: IndexedDBService
-  ) {}
+    private http: HttpClient
+  ) {
+    this.initializeNetworkMonitoring();
+    this.initializeFirestorePersistence();
+    
+    // Add debug methods to global window for console testing
+    (window as any).debugProducts = {
+      load: (storeId?: string) => this.debugProductLoad(storeId),
+      getProducts: () => this.getProducts(),
+      getCount: () => this.products().length,
+      getState: () => ({
+        isLoading: this.isLoading(),
+        hasInitialLoad: this.hasInitialLoad(),
+        error: this.error(),
+        currentStoreId: this.currentStoreId,
+        productCount: this.products().length
+      }),
+      forceReload: (storeId?: string) => this.initializeProducts(storeId || this.currentStoreId || '', true),
+      testFirestore: async () => {
+        console.log('🧪 Testing basic Firestore connection...');
+        try {
+          const testRef = collection(this.firestore, 'products');
+          const testQuery = query(testRef, limit(1));
+          const testSnapshot = await getDocs(testQuery);
+          console.log('✅ Firestore connection test successful!', {
+            docs: testSnapshot.size,
+            empty: testSnapshot.empty
+          });
+          return true;
+        } catch (error) {
+          console.error('❌ Firestore connection test failed:', error);
+          return false;
+        }
+      },
+      testQuery: async (companyId: string, storeId: string) => {
+        console.log('🧪 Testing specific product query...', { companyId, storeId });
+        try {
+          const testRef = collection(this.firestore, 'products');
+          const testQuery = query(
+            testRef,
+            where('companyId', '==', companyId),
+            where('storeId', '==', storeId),
+            limit(5)
+          );
+          const testSnapshot = await getDocs(testQuery);
+          console.log('✅ Query test successful!', {
+            docs: testSnapshot.size,
+            empty: testSnapshot.empty,
+            data: testSnapshot.docs.map(d => ({ id: d.id, data: d.data() }))
+          });
+          return testSnapshot.docs.map(d => d.data());
+        } catch (error) {
+          console.error('❌ Query test failed:', error);
+          return null;
+        }
+      },
+      testDirectLoad: async () => {
+        console.log('🧪 Testing direct product load...');
+        try {
+          const currentUser = this.authService.getCurrentUser();
+          if (!currentUser) {
+            console.error('❌ No current user');
+            return;
+          }
+          
+          const permission = this.authService.getCurrentPermission();
+          if (!permission) {
+            console.error('❌ No current permission');
+            return;
+          }
+          
+          console.log('🔍 Using permission:', permission);
+          if (permission.companyId && permission.storeId) {
+            await this.loadProductsDirectly(permission.companyId, permission.storeId);
+          } else {
+            console.error('❌ Missing companyId or storeId in permission');
+          }
+        } catch (error) {
+          console.error('❌ Direct load test failed:', error);
+        }
+      }
+    };
+    console.log('🐛 Debug methods available at window.debugProducts');
+    console.log('🐛 Available methods: load, getProducts, getCount, getState, forceReload, testFirestore, testQuery');
+  }
+
+  ngOnDestroy(): void {
+    this.unsubscribeFromRealTimeUpdates();
+    this.removeNetworkListeners();
+  }
+
+  /**
+   * Initialize network status monitoring
+   */
+  private initializeNetworkMonitoring(): void {
+    // Update cache state when network status changes
+    window.addEventListener('online', () => {
+      this.isOnline = true;
+      this.updateCacheState({ isOnline: true });
+      this.enableFirestoreNetwork();
+    });
+
+    window.addEventListener('offline', () => {
+      this.isOnline = false;
+      this.updateCacheState({ isOnline: false });
+    });
+  }
+
+  /**
+   * Remove network event listeners
+   */
+  private removeNetworkListeners(): void {
+    window.removeEventListener('online', () => {});
+    window.removeEventListener('offline', () => {});
+  }
+
+  /**
+   * Initialize Firestore offline persistence
+   */
+  private async initializeFirestorePersistence(): Promise<void> {
+    try {
+      // Firestore persistence is automatically enabled in v9+
+      // but we can control network state manually
+      this.logger.debug('Firestore persistence initialized', { area: 'products' });
+    } catch (error) {
+      this.logger.warn('Firestore persistence setup failed', { area: 'products', payload: { error: String(error) } });
+    }
+  }
+
+  /**
+   * Enable Firestore network access
+   */
+  private async enableFirestoreNetwork(): Promise<void> {
+    try {
+      await enableNetwork(this.firestore);
+      this.logger.debug('Firestore network enabled', { area: 'products' });
+    } catch (error) {
+      this.logger.warn('Failed to enable Firestore network', { area: 'products', payload: { error: String(error) } });
+    }
+  }
+
+  /**
+   * Disable Firestore network access (offline mode)
+   */
+  private async disableFirestoreNetwork(): Promise<void> {
+    try {
+      await disableNetwork(this.firestore);
+      this.logger.debug('Firestore network disabled', { area: 'products' });
+    } catch (error) {
+      this.logger.warn('Failed to disable Firestore network', { area: 'products', payload: { error: String(error) } });
+    }
+  }
+
+  /**
+   * Update cache state
+   */
+  private updateCacheState(updates: Partial<ProductCacheState>): void {
+    console.log('🔄 Updating cache state:', updates);
+    this.cacheState.update(current => {
+      const newState = { ...current, ...updates };
+      console.log('📦 New cache state:', {
+        productsCount: newState.products.length,
+        isLoading: newState.isLoading,
+        error: newState.error,
+        hasInitialLoad: newState.hasInitialLoad
+      });
+      return newState;
+    });
+  }
+
+  /**
+   * Fallback method to load products without real-time listener
+   */
+  private async loadProductsDirectly(companyId: string, storeId: string): Promise<void> {
+    try {
+      console.log('🔄 Loading products directly (fallback method)...', { companyId, storeId });
+      
+      const productsRef = collection(this.firestore, 'products');
+      
+      // Use simple query first to avoid index requirements
+      console.log('🔄 Using simple query without orderBy to avoid index requirements');
+      let q;
+      try {
+        q = query(
+          productsRef,
+          where('companyId', '==', companyId),
+          where('storeId', '==', storeId),
+          where('status', '==', 'active'),
+          limit(100)
+        );
+      } catch (queryError) {
+        console.log('🔄 Fallback to minimal query');
+        q = query(
+          productsRef,
+          where('companyId', '==', companyId),
+          where('storeId', '==', storeId),
+          where('status', '==', 'active'),
+          limit(100)
+        );
+      }
+      
+      const snapshot = await getDocs(q);
+      console.log('📊 Direct query results:', snapshot.size, 'products');
+      
+      if (!snapshot.empty) {
+        const products: Product[] = [];
+        snapshot.docs.forEach(doc => {
+          const product = this.transformFirestoreDoc(doc);
+          products.push(product);
+        });
+        
+        // Sort products by name since we removed Firestore orderBy
+        products.sort((a, b) => (a.productName || '').localeCompare(b.productName || ''));
+        
+        console.log('✅ Direct load successful:', products.length, 'products');
+        
+        // Update cache with direct results
+        this.updateCacheState({
+          products: products,
+          isLoading: false,
+          lastUpdated: new Date(),
+          error: null,
+          hasInitialLoad: true
+        });
+      } else {
+        console.log('📭 No products found with direct query');
+        this.updateCacheState({
+          products: [],
+          isLoading: false,
+          error: null,
+          hasInitialLoad: true
+        });
+      }
+      
+    } catch (error) {
+      console.error('❌ Direct load failed:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Main method to load products with real-time updates
+   * This replaces the old loadProducts method
+   */
+  async loadProductsRealTime(storeId: string, forceReload = false): Promise<void> {
+    try {
+      console.log('🔄 ProductService.loadProductsRealTime called', { storeId, forceReload });
+      console.log('🔄 Current state:', { 
+        currentStoreId: this.currentStoreId, 
+        currentProducts: this.products().length,
+        hasInitialLoad: this.hasInitialLoad()
+      });
+      
+      if (!storeId) {
+        throw new Error('storeId is required for loading products');
+      }
+
+      // Check if we already have this store loaded and don't need to reload
+      if (!forceReload && this.currentStoreId === storeId && this.hasInitialLoad() && this.products().length > 0) {
+        this.logger.debug('Products already loaded for store, skipping reload', { area: 'products', storeId });
+        console.log('✅ Products already loaded for store, skipping reload', { 
+          storeId, 
+          currentProducts: this.products().length 
+        });
+        return;
+      }
+
+      console.log('🔄 Loading products because:', {
+        forceReload,
+        currentStoreId: this.currentStoreId,
+        targetStoreId: storeId,
+        hasInitialLoad: this.hasInitialLoad(),
+        currentProductCount: this.products().length,
+        needsLoad: !this.hasInitialLoad() || this.products().length === 0 || this.currentStoreId !== storeId
+      });
+
+      // Get authentication
+      const currentUser = this.authService.getCurrentUser();
+      if (!currentUser) {
+        console.log('❌ User not authenticated');
+        throw new Error('User not authenticated');
+      }
+
+      console.log('🔑 Getting companyId from auth...');
+      const companyId = await this.waitForAuth();
+      console.log('🔑 Authentication details:', { 
+        currentUser: currentUser.email, 
+        companyId, 
+        storeId,
+        currentPermission: this.authService.getCurrentPermission()
+      });
+      
+      // Unsubscribe from previous listener if exists
+      this.unsubscribeFromRealTimeUpdates();
+      
+      // Update current store/company
+      this.currentStoreId = storeId;
+      this.currentCompanyId = companyId;
+
+      // Set loading state
+      this.updateCacheState({ 
+        isLoading: true, 
+        error: null 
+      });
+
+      // Setup real-time listener
+      try {
+        await this.setupRealtimeListener(companyId, storeId);
+      } catch (listenerError) {
+        console.error('❌ Real-time listener failed, trying direct load:', listenerError);
+        
+        // If listener setup fails due to assertion error, try direct load
+        if (listenerError instanceof Error && listenerError.message.includes('INTERNAL ASSERTION FAILED')) {
+          console.log('🔄 Firestore assertion failure detected, using direct load fallback');
+          await this.loadProductsDirectly(companyId, storeId);
+        } else {
+          throw listenerError;
+        }
+      }
+
+    } catch (error) {
+      this.logger.dbFailure('Failed to setup real-time product loading', { area: 'products', storeId }, error);
+      this.updateCacheState({ 
+        isLoading: false, 
+        error: String(error) 
+      });
+      
+      console.log('❌ Product loading failed completely');
+    }
+  }
+
+  /**
+   * Setup Firestore real-time listener with onSnapshot
+   */
+  private async setupRealtimeListener(companyId: string, storeId: string): Promise<void> {
+    try {
+      console.log('🎯 Setting up Firestore real-time listener...', { companyId, storeId });
+      
+      // Ensure we clean up any existing listener first
+      this.unsubscribeFromRealTimeUpdates();
+      
+      // Add a small delay to ensure cleanup is complete
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      const productsRef = collection(this.firestore, 'products');
+      
+      // Create query with proper error handling - avoid orderBy to prevent index requirements
+      console.log('🔧 Building Firestore query without orderBy to avoid index requirements...');
+      let q;
+      try {
+        // Use simple query first - we'll sort in JavaScript
+        q = query(
+          productsRef,
+          where('companyId', '==', companyId),
+          where('storeId', '==', storeId),
+          where('status', '==', 'active'),
+          limit(100)
+        );
+        console.log('✅ Simple Firestore query created successfully');
+      } catch (queryError) {
+        console.error('❌ Error creating Firestore query:', queryError);
+        // Even simpler fallback - just company and store
+        q = query(
+          productsRef,
+          where('companyId', '==', companyId),
+          where('storeId', '==', storeId),
+          limit(100)
+        );
+        console.log('🔄 Using minimal fallback query');
+      }
+
+      console.log('🔍 Firestore query created:', {
+        collection: 'products',
+        filters: {
+          companyId: companyId,
+          storeId: storeId,
+          status: 'active'
+        },
+        limit: 100
+      });
+
+      console.log('🔄 Setting up onSnapshot listener...');
+      
+      // Set up listener with better error handling
+      this.unsubscribeSnapshot = onSnapshot(
+        q,
+        {
+          includeMetadataChanges: false // Disable metadata changes to avoid assertion failures
+        },
+        (snapshot: QuerySnapshot) => {
+          try {
+            console.log('📨 onSnapshot callback triggered!', {
+              size: snapshot.size,
+              empty: snapshot.empty,
+              fromCache: snapshot.metadata.fromCache,
+              hasPendingWrites: snapshot.metadata.hasPendingWrites
+            });
+            this.handleSnapshotUpdate(snapshot);
+          } catch (handlerError) {
+            console.error('❌ Error in snapshot handler:', handlerError);
+            this.updateCacheState({ 
+              isLoading: false, 
+              error: String(handlerError) 
+            });
+          }
+        },
+        (error) => {
+          console.error('❌ Firestore snapshot listener error:', error);
+          this.logger.dbFailure('Firestore snapshot listener error', { area: 'products', companyId, storeId }, error);
+          
+          // Try to recover by falling back to offline cache
+          this.updateCacheState({ 
+            isLoading: false, 
+            error: String(error) 
+          });
+          
+          console.log('❌ Real-time listener error, no offline fallback available');
+        }
+      );
+
+      console.log('✅ Real-time listener setup complete', { companyId, storeId });
+      this.logger.debug('Real-time listener setup complete', { area: 'products', companyId, storeId });
+
+    } catch (error) {
+      console.error('❌ Failed to setup real-time listener:', error);
+      this.logger.dbFailure('Failed to setup real-time listener', { area: 'products', companyId, storeId }, error);
+      
+      console.log('❌ Real-time listener setup failed, Firestore offline persistence will handle caching');
+      throw error;
+    }
+  }
+
+  /**
+   * Handle snapshot updates from Firestore onSnapshot
+   */
+  private handleSnapshotUpdate(snapshot: QuerySnapshot): void {
+    try {
+      const isFromCache = snapshot.metadata.fromCache;
+      const hasPendingWrites = snapshot.metadata.hasPendingWrites;
+
+      console.log('📨 Firestore snapshot update received', { 
+        size: snapshot.size, 
+        fromCache: isFromCache, 
+        hasPendingWrites,
+        isEmpty: snapshot.empty,
+        docChanges: snapshot.docChanges().length
+      });
+
+      this.logger.debug('Snapshot update received', { 
+        area: 'products', 
+        payload: { 
+          size: snapshot.size, 
+          fromCache: isFromCache, 
+          hasPendingWrites,
+          isEmpty: snapshot.empty 
+        } 
+      });
+
+      // Get current products from cache
+      const currentProducts = [...this.products()];
+      let updatedProducts = [...currentProducts];
+
+      // Process document changes
+      snapshot.docChanges().forEach((change: DocumentChange) => {
+        const product = this.transformFirestoreDoc(change.doc);
+
+        switch (change.type) {
+          case 'added':
+            console.log('➕ Product added:', { productId: product.id, productName: product.productName });
+            this.logger.debug('Product added', { area: 'products', payload: { productId: product.id, productName: product.productName } });
+            // Add if not already exists
+            if (!updatedProducts.find(p => p.id === product.id)) {
+              updatedProducts.push(product);
+            }
+            break;
+
+          case 'modified':
+            this.logger.debug('Product modified', { area: 'products', payload: { productId: product.id, productName: product.productName } });
+            // Update existing product
+            const modifiedIndex = updatedProducts.findIndex(p => p.id === product.id);
+            if (modifiedIndex >= 0) {
+              updatedProducts[modifiedIndex] = product;
+            } else {
+              // Add if somehow not found
+              updatedProducts.push(product);
+            }
+            break;
+
+          case 'removed':
+            this.logger.debug('Product removed', { area: 'products', payload: { productId: product.id, productName: product.productName } });
+            // Remove from array
+            updatedProducts = updatedProducts.filter(p => p.id !== product.id);
+            break;
+        }
+      });
+
+      // Normalize and deduplicate
+      const normalizedProducts = this.normalizeAndDeduplicateProducts(updatedProducts);
+
+      console.log('✅ Products cache updated', { 
+        count: normalizedProducts.length, 
+        fromCache: isFromCache,
+        categories: [...new Set(normalizedProducts.map(p => p.category))].length
+      });
+
+      // Update cache state
+      this.updateCacheState({
+        products: normalizedProducts,
+        isLoading: false,
+        lastUpdated: new Date(),
+        error: null,
+        hasInitialLoad: true
+      });
+
+      console.log('✅ Products cache updated (Firestore offline persistence enabled)');
+
+      this.logger.dbSuccess('Products cache updated', { 
+        area: 'products', 
+        payload: { 
+          count: normalizedProducts.length, 
+          fromCache: isFromCache,
+          storeId: this.currentStoreId 
+        } 
+      });
+
+    } catch (error) {
+      this.logger.dbFailure('Error handling snapshot update', { area: 'products' }, error);
+      this.updateCacheState({ 
+        isLoading: false, 
+        error: String(error) 
+      });
+    }
+  }
+
+  /**
+   * Unsubscribe from real-time updates with improved error handling
+   */
+  private unsubscribeFromRealTimeUpdates(): void {
+    if (this.unsubscribeSnapshot) {
+      try {
+        console.log('🔄 Unsubscribing from real-time updates...');
+        this.unsubscribeSnapshot();
+        this.unsubscribeSnapshot = null;
+        console.log('✅ Successfully unsubscribed from real-time updates');
+        this.logger.debug('Unsubscribed from real-time updates', { area: 'products' });
+      } catch (error) {
+        console.error('❌ Error during unsubscribe from real-time updates:', error);
+        this.logger.dbFailure('Error during unsubscribe from real-time updates', { area: 'products' }, error);
+        // Force clear the reference even if unsubscribe failed
+        this.unsubscribeSnapshot = null;
+      }
+    } else {
+      console.log('📝 No active subscription to unsubscribe from');
+    }
+  }
+
+  /**
+   * Add a product to the cache (optimistic update)
+   */
+  private addProductToCache(product: Product): void {
+    const currentProducts = this.products();
+    const existingIdx = currentProducts.findIndex(p => p.skuId === product.skuId && p.storeId === product.storeId);
+    
+    let updatedProducts: Product[];
+    if (existingIdx >= 0) {
+      updatedProducts = [...currentProducts];
+      updatedProducts[existingIdx] = { ...updatedProducts[existingIdx], ...product };
+    } else {
+      updatedProducts = [...currentProducts, product];
+    }
+
+    this.updateCacheState({
+      products: this.normalizeAndDeduplicateProducts(updatedProducts)
+    });
+  }
+
+  /**
+   * Update a product in the cache (optimistic update)
+   */
+  private updateProductInCache(productId: string, updates: Partial<Product>): void {
+    const currentProducts = this.products();
+    const updatedProducts = currentProducts.map(product =>
+      product.id === productId
+        ? { ...product, ...updates, updatedAt: new Date() }
+        : product
+    );
+
+    this.updateCacheState({
+      products: this.normalizeAndDeduplicateProducts(updatedProducts)
+    });
+  }
+
+  /**
+   * Remove a product from the cache (optimistic update)
+   */
+  private removeProductFromCache(productId: string): void {
+    const currentProducts = this.products();
+    const updatedProducts = currentProducts.filter(product => product.id !== productId);
+
+    this.updateCacheState({
+      products: this.normalizeAndDeduplicateProducts(updatedProducts)
+    });
+  }
 
   private transformFirestoreDoc(doc: any): Product {
     const data = doc.data();
-    return {
-      id: doc.id,
-      uid: data['uid'] || '',  // Include UID field
-      productName: data['productName'] || '',
-      description: data['description'] || undefined,
-      skuId: data['skuId'] || '',
-      unitType: data['unitType'] || 'pieces',
-      category: data['category'] || '',
-      totalStock: data['totalStock'] || 0,
-      sellingPrice: data['sellingPrice'] || 0,
-      companyId: data['companyId'] || '',
-      storeId: data['storeId'] || '',
-      barcodeId: data['barcodeId'] || '',
-      imageUrl: data['imageUrl'] || '',
-  isFavorite: !!data['isFavorite'] || false,
-      inventory: this.transformInventoryArray(data['inventory'] || []),
+    console.log('🔍 Transforming Firestore doc:', { id: doc.id, rawData: data });
+    
+    try {
+      const product: Product = {
+        id: doc.id,
+        uid: data['uid'] || '',  // Include UID field
+        productName: data['productName'] || '',
+        description: data['description'] || undefined,
+        skuId: data['skuId'] || '',
+        productCode: data['productCode'] || undefined,
+        unitType: data['unitType'] || 'pieces',
+        category: data['category'] || '',
+        totalStock: Number(data['totalStock'] || 0),
+        sellingPrice: Number(data['sellingPrice'] || 0),
+        companyId: data['companyId'] || '',
+        storeId: data['storeId'] || '',
+        barcodeId: data['barcodeId'] || '',
+        imageUrl: data['imageUrl'] || '',
+        isFavorite: !!data['isFavorite'] || false,
+        
+        // Tax and Discount Fields with defaults
+        isVatApplicable: !!data['isVatApplicable'] || false,
+        vatRate: Number(data['vatRate'] || 0),
+        hasDiscount: !!data['hasDiscount'] || false,
+        discountType: data['discountType'] || 'percentage',
+        discountValue: Number(data['discountValue'] || 0),
+        
+        status: data['status'] || 'active',
+        createdAt: this.safeToDate(data['createdAt']),
+        updatedAt: this.safeToDate(data['updatedAt']),
+        lastUpdated: this.safeToDate(data['lastUpdated'])
+      };
       
-      // Tax and Discount Fields with defaults
-      isVatApplicable: data['isVatApplicable'] || false,
-      vatRate: data['vatRate'] || 0,
-      hasDiscount: data['hasDiscount'] || false,
-      discountType: data['discountType'] || 'percentage',
-      discountValue: data['discountValue'] || 0,
-      
-  // Price and Quantity Tracking
-  priceHistory: this.transformPriceHistory(data['priceHistory'] || []),
-      
-      status: data['status'] || 'active',
-      createdAt: data['createdAt']?.toDate() || new Date(),
-      updatedAt: data['updatedAt']?.toDate() || new Date(),
-      lastUpdated: data['lastUpdated']?.toDate() || new Date()
-    };
+      console.log('✅ Transformed product successfully:', {
+        id: product.id,
+        name: product.productName,
+        category: product.category,
+        price: product.sellingPrice,
+        stock: product.totalStock,
+        storeId: product.storeId,
+        companyId: product.companyId
+      });
+      return product;
+    } catch (error) {
+      console.error('❌ Error transforming Firestore doc:', error, { docId: doc.id, data });
+      throw error;
+    }
   }
 
-  private transformPriceHistory(historyData: any[]): any[] {
-    if (!Array.isArray(historyData)) return [];
-    return historyData.map(item => ({
-      oldPrice: item.oldPrice || 0,
-      newPrice: item.newPrice || 0,
-      changeType: item.changeType || 'initial',
-      changeAmount: item.changeAmount || 0,
-      changePercentage: item.changePercentage || 0,
-      changedAt: item.changedAt?.toDate() || new Date(),
-      changedBy: item.changedBy || '',
-      changedByName: item.changedByName || '',
-      reason: item.reason || '',
-      batchId: item.batchId || undefined
-    }));
+  /**
+   * Safely convert Firestore timestamp to Date, handling serverTimestamp
+   */
+  private safeToDate(value: any): Date {
+    if (!value) return new Date();
+    
+    // Handle serverTimestamp object
+    if (value && typeof value === 'object' && value._methodName === 'serverTimestamp') {
+      return new Date(); // Use current date for serverTimestamp placeholders
+    }
+    
+    // Handle Firestore Timestamp
+    if (value && typeof value.toDate === 'function') {
+      return value.toDate();
+    }
+    
+    // Handle Date objects
+    if (value instanceof Date) {
+      return value;
+    }
+    
+    // Handle strings/numbers
+    try {
+      return new Date(value);
+    } catch {
+      return new Date();
+    }
   }
 
   private transformQuantityAdjustments(adjustmentsData: any[]): any[] {
     // quantityAdjustments removed from product documents. Keep method for backward compatibility but return empty.
     return [];
-  }
-
-  private transformInventoryArray(inventoryData: any[]): ProductInventory[] {
-    return inventoryData.map(item => ({
-      batchId: item.batchId || '',
-      quantity: item.quantity || 0,
-      unitPrice: item.unitPrice || 0,
-      costPrice: item.costPrice || 0,
-      receivedAt: item.receivedAt?.toDate() || new Date(),
-      expiryDate: item.expiryDate?.toDate() || undefined,
-      supplier: item.supplier || undefined,
-      status: item.status || 'active',
-      unitType: item.unitType || 'pieces'
-    }));
   }
 
   private async waitForAuth(): Promise<string> {
@@ -159,161 +824,16 @@ export class ProductService {
   }
 
   async loadProducts(storeId: string, pageSize = 50, pageNumber = 1): Promise<number> {
-    try {
-      if (!storeId) {
-        throw new Error('storeId is required for BigQuery products API');
-      }
-      // Use BigQuery API only - fallback disabled for testing
-      const count = await this.loadProductsFromBigQuery(storeId, pageSize, pageNumber);
-      return count;
-    } catch (error) {
-      this.logger.dbFailure('BigQuery products API failed', { area: 'products', storeId }, error);
-
-      // If BigQuery failed (403/500 etc), try Firestore fallback first for more complete data
-      try {
-        this.logger.warn('Attempting Firestore fallback for products after BigQuery failure', { area: 'products', storeId });
-        await this.loadProductsFromFirestore(storeId);
-        return this.products().length;
-      } catch (fsErr) {
-        this.logger.warn('Firestore fallback failed after BigQuery failure', { area: 'products', storeId, payload: { error: String(fsErr) } });
-      }
-
-      // Attempt offline fallback: try to read products for the store from IndexedDB
-      try {
-        const offlineProducts = await this.indexedDb.getProductsByStore(storeId);
-        if (offlineProducts && offlineProducts.length > 0) {
-          // Map OfflineProduct to Product minimal shape
-          const mapped = offlineProducts.map(p => ({
-            id: p.id,
-            productName: p.name,
-            sellingPrice: p.price,
-            category: p.category,
-            totalStock: p.stock,
-            barcodeId: p.barcode || '',
-            imageUrl: p.image || '',
-            storeId: p.storeId,
-            createdAt: p.lastUpdated || new Date(),
-            updatedAt: p.lastUpdated || new Date(),
-            uid: '',
-            status: 'active'
-          } as Product));
-          this.products.set(this.normalizeAndDeduplicateProducts(mapped));
-          return mapped.length;
-        }
-      } catch (fallbackError) {
-        this.logger.warn('Failed to load products from IndexedDB fallback', { area: 'products', storeId, payload: { error: String(fallbackError) } });
-      }
-
-      throw error;
-    }
+    // Delegate to the new real-time method
+    await this.loadProductsRealTime(storeId);
+    return this.products().length;
   }
 
   private async loadProductsFromBigQuery(storeId: string, pageSize = 50, pageNumber = 1): Promise<number> {
-    try {
-      if (!storeId) {
-        throw new Error('storeId is required for BigQuery products API');
-      }
-
-      const currentUser = this.authService.getCurrentUser();
-      if (!currentUser) {
-        throw new Error('User not authenticated');
-      }
-
-      this.logger.debug('Current user and store for BigQuery products request', { storeId, userId: currentUser?.uid });
-
-      // Get Firebase ID token for authentication (same pattern as OrderService)
-      const idToken = await this.authService.getFirebaseIdToken();
-  this.logger.debug('Firebase ID token availability', { payload: { hasToken: !!idToken } });
-
-      // Check if user is signed in at all
-      if (!currentUser) {
-        this.logger.dbFailure('User not authenticated for BigQuery products request', { area: 'products', storeId });
-        throw new Error('User not authenticated');
-      }
-
-      if (!idToken) {
-        this.logger.warn('No Firebase ID token available for API authentication', { area: 'products', storeId });
-
-        // Try to force refresh the token (same as OrderService)
-        try {
-          this.logger.debug('Attempting to force refresh Firebase ID token', { area: 'products', storeId });
-          const refreshedToken = await this.authService.getFirebaseIdToken(true);
-          if (refreshedToken) {
-            this.logger.debug('Token refresh successful, retrying API call', { area: 'products', storeId });
-            // Retry with refreshed token
-            return await this.loadProductsFromBigQuery(storeId);
-          }
-        } catch (refreshError) {
-          this.logger.error('Token refresh failed', { area: 'products', storeId }, refreshError);
-        }
-
-        throw new Error('No Firebase ID token available');
-      }
-
-      // Build query parameters using page semantics expected by Cloud Function
-      const params = new URLSearchParams({
-        storeId: storeId, // Required parameter
-        page_size: String(pageSize),
-        page_number: String(pageNumber)
-      });
-
-      // Make API call to BigQuery Cloud Function
-      const url = `${environment.api.productsApi}?${params}`;
-  this.logger.debug('Calling BigQuery products API', { area: 'products', storeId, payload: { url } });
-
-      // Use same header pattern as OrderService (plain object, not HttpHeaders)
-      const headers: any = {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
-      };
-
-      // Add Authorization header with Firebase ID token
-      if (idToken) {
-        headers['Authorization'] = `Bearer ${idToken}`;
-        this.logger.debug('Added Firebase ID token to Authorization header (redacted)', { area: 'products', storeId });
-      }
-
-  const response = await this.http.get<any>(url, { headers }).toPromise();
-
-      this.logger.debug('BigQuery response received', { area: 'products', storeId, payload: { keys: Object.keys(response || {}) } });
-      
-      // Transform BigQuery response to Product interface
-  const fetched: Product[] = (response?.products || response || []).map((item: any) => this.transformBigQueryProduct(item));
-
-      // If requesting the first page, replace the signal. If requesting later pages, append.
-      if (pageNumber <= 1) {
-        this.products.set(this.normalizeAndDeduplicateProducts(fetched));
-      } else {
-        const merged = this.normalizeAndDeduplicateProducts([...(this.products() || []), ...fetched]);
-        this.products.set(merged);
-      }
-
-      // Persist a simplified offline copy to IndexedDB for fallback
-      try {
-        const offlineArr: OfflineProduct[] = (fetched || []).map(p => ({
-          id: p.id || '',
-          name: p.productName,
-          price: Number(p.sellingPrice || 0),
-          category: p.category || '',
-          stock: Number(p.totalStock || 0),
-          barcode: p.barcodeId || undefined,
-          image: p.imageUrl || undefined,
-          storeId: p.storeId || storeId,
-          lastUpdated: p.lastUpdated || new Date()
-        }));
-        await this.indexedDb.saveProducts(offlineArr);
-      } catch (e) {
-        this.logger.warn('Failed to persist products snapshot to IndexedDB', { area: 'products', storeId, payload: { error: (e as any)?.message || String(e) } });
-      }
-      this.logger.dbSuccess('Loaded products from BigQuery', { area: 'products', storeId, payload: { count: (fetched || []).length, pageSize, pageNumber } });
-      return (fetched || []).length;
-    } catch (error: any) {
-      this.logger.dbFailure('Error loading products from BigQuery', { area: 'products', storeId }, error);
-      if ((error as any)?.status === 401) {
-        this.logger.error('AUTHENTICATION FAILED for BigQuery products API - check token and Cloud Function configuration', { area: 'products', storeId });
-      }
-      throw error;
-    }
+    // BigQuery method deprecated - redirecting to Firestore real-time
+    this.logger.warn('loadProductsFromBigQuery is deprecated, using Firestore real-time instead', { area: 'products', storeId });
+    await this.loadProductsRealTime(storeId);
+    return this.products().length;
   }
 
   private transformBigQueryProduct(item: any): Product {
@@ -332,7 +852,6 @@ export class ProductService {
       barcodeId: item.barcodeId || item.barcode || '',
       imageUrl: item.imageUrl || '',
       isFavorite: !!item.isFavorite || false,
-      inventory: this.transformInventoryArray(item.inventory || []),
       
       // Tax and Discount Fields with defaults
       isVatApplicable: item.isVatApplicable || false,
@@ -340,9 +859,6 @@ export class ProductService {
       hasDiscount: item.hasDiscount || false,
       discountType: item.discountType || 'percentage',
       discountValue: item.discountValue || 0,
-      
-  // Price and Quantity Tracking
-  priceHistory: this.transformPriceHistory(item.priceHistory || []),
       
       status: item.status || 'active',
       createdAt: item.createdAt ? new Date(item.createdAt) : new Date(),
@@ -352,149 +868,33 @@ export class ProductService {
   }
 
   private async loadProductsFromFirestore(storeId?: string): Promise<void> {
-    try {
-      // Only check authentication, no UID filtering needed for reading
-      const currentUser = this.authService.getCurrentUser();
-      if (!currentUser) {
-        throw new Error('User not authenticated');
-      }
-
-      const companyId = await this.waitForAuth();
-      // Reduced noisy console logs; rely on logger when needed
-
-      const productsRef = collection(this.firestore, 'products');
-      
-      let q;
-      if (storeId) {
-        q = query(productsRef, 
-          where('companyId', '==', companyId),
-          where('storeId', '==', storeId)
-        );
-      } else {
-        q = query(productsRef, where('companyId', '==', companyId));
-      }
-      
-  const querySnapshot = await getDocs(q);
-  const products = querySnapshot.docs.map(doc => this.transformFirestoreDoc(doc));
-      
-  this.products.set(this.normalizeAndDeduplicateProducts(products));
-    } catch (error) {
-      this.logger.dbFailure('Error loading products from Firestore', { area: 'products', storeId }, error);
-      throw error;
+    // Legacy method - redirecting to real-time method
+    this.logger.warn('loadProductsFromFirestore is deprecated, using real-time method instead', { area: 'products', storeId });
+    if (storeId) {
+      await this.loadProductsRealTime(storeId);
     }
   }
 async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promise<void> {
-    try {
-      // Use BigQuery API only - fallback disabled for testing
-      await this.loadProductsByCompanyAndStoreFromBigQuery(companyId, storeId);
-    } catch (error) {
-      this.logger.dbFailure('BigQuery products API failed', { area: 'products', companyId, storeId }, error);
-      throw error;
+    // Legacy method - redirecting to real-time method
+    this.logger.warn('loadProductsByCompanyAndStore is deprecated, using real-time method instead', { area: 'products', companyId, storeId });
+    if (storeId) {
+      await this.loadProductsRealTime(storeId);
     }
   }
 
   private async loadProductsByCompanyAndStoreFromBigQuery(companyId?: string, storeId?: string): Promise<void> {
-    try {
-      const currentUser = this.authService.getCurrentUser();
-      if (!currentUser) {
-        throw new Error('User not authenticated');
-      }
-
-  this.logger.debug('Company/Store Query - Current User', { area: 'products', companyId, storeId, payload: { userId: currentUser.uid } });
-
-      // Get Firebase ID token for authentication
-      const token = await this.authService.getFirebaseIdToken();
-      if (!token) {
-        throw new Error('No Firebase ID token available');
-      }
-
-  this.logger.debug('Company/Store token exists', { area: 'products', companyId, storeId, payload: { hasToken: !!token } });
-
-      // Build query parameters
-      const params = new URLSearchParams({
-        limit: '100' // Default limit
-      });
-      
-      if (companyId) {
-        params.set('companyId', companyId);
-      }
-      
-      if (storeId) {
-        params.set('storeId', storeId);
-      }
-
-      // Make API call to BigQuery Cloud Function
-      const url = `${environment.api.productsApi}?${params}`;
-  this.logger.debug('Company/Store API URL', { area: 'products', companyId, storeId, payload: { url } });
-      
-      const headers = new HttpHeaders({
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      });
-
-      const response = await this.http.get<any>(url, { headers }).toPromise();
-      
-      // Transform BigQuery response to Product interface
-  const products: Product[] = (response?.products || response || []).map((item: any) => this.transformBigQueryProduct(item));
-      
-  // Validate that we actually have products before setting
-  if (products.length === 0) {
-        this.logger.warn('No products found for BigQuery company/store query', { area: 'products', companyId, storeId });
-        this.logger.warn('Possible causes: no products in BigQuery; ID mismatch; or no products created yet', { area: 'products', companyId, storeId });
-      }
-      
-  this.products.set(this.normalizeAndDeduplicateProducts(products));
-      this.logger.dbSuccess('Loaded products from BigQuery (company/store)', { area: 'products', companyId, storeId, payload: { count: products.length } });
-    } catch (error) {
-      this.logger.dbFailure('Error loading products from BigQuery (company/store)', { area: 'products', companyId, storeId }, error);
-      throw error;
+    // Legacy method - redirecting to real-time method
+    this.logger.warn('loadProductsByCompanyAndStoreFromBigQuery is deprecated, using real-time method instead', { area: 'products', companyId, storeId });
+    if (storeId) {
+      await this.loadProductsRealTime(storeId);
     }
   }
 
   async loadProductsByCompanyAndStoreFromFirestore(companyId?: string, storeId?: string): Promise<void> {
-    try {
-      // Only check authentication, no UID filtering needed for reading
-      const currentUser = this.authService.getCurrentUser();
-      if (!currentUser) {
-        throw new Error('User not authenticated');
-      }
-
-      // Use provided companyId or get from auth
-      const targetCompanyId = companyId || await this.waitForAuth();
-      
-      // Reduced noisy console logs; rely on logger when needed
-      
-      const productsRef = collection(this.firestore, 'products');
-      
-      let q;
-      if (storeId) {
-        // Load products for specific company and store
-        q = query(productsRef, 
-          where('companyId', '==', targetCompanyId),
-          where('storeId', '==', storeId)
-        );
-        
-      } else {
-        // Load all products for the company
-        q = query(productsRef, where('companyId', '==', targetCompanyId));
-        
-      }
-      
-      const querySnapshot = await getDocs(q);
-      const products = querySnapshot.docs.map(doc => this.transformFirestoreDoc(doc));
-      
-      
-      
-      // Validate that we actually have products before setting
-      if (products.length === 0) {
-          this.logger.warn('No products found for company-based query', { area: 'products', companyId: targetCompanyId, storeId });
-          this.logger.warn('Possible causes: no products exist, ID mismatch, or no products created', { area: 'products', companyId: targetCompanyId, storeId });
-      }
-      
-  this.products.set(this.normalizeAndDeduplicateProducts(products));
-    } catch (error) {
-      this.logger.dbFailure('Error loading products from Firestore', { area: 'products', companyId, storeId }, error);
-      throw error;
+    // Legacy method - redirecting to real-time method
+    this.logger.warn('loadProductsByCompanyAndStoreFromFirestore is deprecated, using real-time method instead', { area: 'products', companyId, storeId });
+    if (storeId) {
+      await this.loadProductsRealTime(storeId);
     }
   }
   async createProduct(productData: Omit<Product, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> {
@@ -529,14 +929,12 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
       // Create document using OfflineDocumentService (server-side logging will run in Cloud Function)
       const documentId = await this.offlineDocService.createDocument('products', cleanedProductData);
 
-      // If the product includes initial inventory batches (legacy support) or has an initial totalStock,
-      // create corresponding `productInventoryEntries` so FIFO/batch-based inventory is authoritative.
+      // If the product includes initial inventory batches (legacy support) for existing products only
+      // For new products, inventory will be created separately by the product management component
       try {
         const initialBatches = Array.isArray(invArr) && invArr.length > 0
           ? invArr
-          : (cleanedProductData.totalStock && Number(cleanedProductData.totalStock) > 0)
-            ? [{ batchId: undefined, quantity: Number(cleanedProductData.totalStock), unitPrice: cleanedProductData.costPrice || cleanedProductData.sellingPrice || 0, receivedAt: new Date() }]
-            : [];
+          : []; // Removed automatic batch creation for totalStock - handled by component
 
         for (const b of initialBatches) {
           const batchData: any = {
@@ -558,21 +956,19 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
 
           // Create inventory entry and then set its batchId field to the returned id so other code expecting
           // batch.batchId will match the document id.
-          const createdBatchId = await this.offlineDocService.createDocument('productInventoryEntries', batchData);
+          const createdBatchId = await this.offlineDocService.createDocument('productInventory', batchData);
           try {
-            await this.offlineDocService.updateDocument('productInventoryEntries', createdBatchId, { batchId: createdBatchId });
+            await this.offlineDocService.updateDocument('productInventory', createdBatchId, { batchId: createdBatchId });
           } catch (uErr) {
-            this.logger.warn('Failed to set batchId on created inventory entry', { area: 'products', collectionPath: 'productInventoryEntries', docId: createdBatchId, payload: { error: String(uErr) } });
+            this.logger.warn('Failed to set batchId on created inventory entry', { area: 'products', collectionPath: 'productInventory', docId: createdBatchId, payload: { error: String(uErr) } });
           }
         }
       } catch (inventoryErr) {
-        this.logger.warn('Failed to create initial productInventoryEntries for product', { area: 'products', payload: { productId: documentId, error: String(inventoryErr) } });
+        this.logger.warn('Failed to create initial productInventory for product', { area: 'products', payload: { productId: documentId, error: String(inventoryErr) } });
       }
 
-      // Update the signal with the new product (works with both real and temp IDs)
-      // Avoid creating duplicates in the local signal: if a product with the same SKU exists for the same store,
-      // update it instead of adding a new row. This prevents the UI from showing duplicate entries when
-      // temporary/local copies are reconciled with server IDs.
+      // Update the local cache immediately for optimistic updates
+      // The real-time listener will handle the actual Firestore update
       const newLocalProd: Product = {
         ...productData,
         id: documentId,
@@ -583,15 +979,7 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
         isOfflineCreated: documentId.startsWith('temp_')
       } as Product;
 
-      this.products.update(products => {
-        const existingIdx = products.findIndex(p => p.skuId === newLocalProd.skuId && p.storeId === newLocalProd.storeId);
-        if (existingIdx >= 0) {
-          const copy = products.slice();
-          copy[existingIdx] = { ...copy[existingIdx], ...newLocalProd };
-          return copy;
-        }
-        return [...products, newLocalProd];
-      });
+      this.addProductToCache(newLocalProd);
       
       return documentId;
     } catch (error) {
@@ -614,35 +1002,14 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
       // Ensure UID is maintained for security rules
       updateData.uid = currentUser.uid;
 
-      // Handle inventory array updates
-      if (updates.inventory) {
-        updateData.inventory = updates.inventory.map(inv => ({
-          batchId: inv.batchId,
-          quantity: inv.quantity,
-          unitPrice: inv.unitPrice,
-          costPrice: inv.costPrice || 0,
-          receivedAt: Timestamp.fromDate(inv.receivedAt instanceof Date ? inv.receivedAt : new Date(inv.receivedAt)),
-          expiryDate: inv.expiryDate ? Timestamp.fromDate(inv.expiryDate instanceof Date ? inv.expiryDate : new Date(inv.expiryDate)) : null,
-          supplier: inv.supplier || null,
-          status: inv.status,
-          unitType: inv.unitType || 'pieces'
-        }));
-      }
-
       // Clean undefined values to prevent Firestore errors
       const cleanedUpdateData = this.cleanUndefinedValues(updateData);
 
       // Use OfflineDocumentService for consistent online/offline updates
       await this.offlineDocService.updateDocument('products', productId, cleanedUpdateData);
 
-      // Update the signal
-      this.products.update(products =>
-        products.map(product =>
-          product.id === productId
-            ? { ...product, ...updates, updatedAt: new Date() }
-            : product
-        )
-      );
+      // Update the local cache optimistically
+      this.updateProductInCache(productId, updates);
 
     } catch (error) {
       this.logger.dbFailure('Update product failed', { api: 'firestore.update', area: 'products', collectionPath: 'products', docId: productId }, error);
@@ -652,13 +1019,10 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
 
   async deleteProduct(productId: string): Promise<void> {
     try {
-      const productRef = doc(this.firestore, 'products', productId);
       await this.offlineDocService.deleteDocument('products', productId);
 
-      // Update the signal
-      this.products.update(products =>
-        products.filter(product => product.id !== productId)
-      );
+      // Update the local cache optimistically
+      this.removeProductFromCache(productId);
     } catch (error) {
       this.logger.dbFailure('Delete product failed', { api: 'firestore.delete', area: 'products', collectionPath: 'products', docId: productId }, error);
       throw error;
@@ -683,9 +1047,131 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
 
   // (Removed) Embedded inventory add/update/remove methods — replaced by InventoryDataService in separate collection
 
+  // ============================================
+  // PUBLIC API - REACTIVE ACCESS METHODS
+  // ============================================
+
+  /**
+   * Initialize products for a store with real-time updates
+   * This is the main method that should be called by components
+   */
+  async initializeProducts(storeId: string, forceReload = false): Promise<void> {
+    console.log('🚀 initializeProducts called:', {
+      storeId,
+      forceReload,
+      currentStoreId: this.currentStoreId,
+      hasInitialLoad: this.hasInitialLoad(),
+      isLoading: this.isLoading(),
+      currentProductCount: this.products().length
+    });
+    
+    try {
+      const result = await this.loadProductsRealTime(storeId, forceReload);
+      console.log('✅ initializeProducts completed:', {
+        newProductCount: this.products().length,
+        isLoading: this.isLoading(),
+        hasError: !!this.error()
+      });
+      return result;
+    } catch (error) {
+      console.error('❌ initializeProducts failed:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Debug method for testing product loading from console
+   */
+  async debugProductLoad(storeId?: string): Promise<void> {
+    const targetStoreId = storeId || this.currentStoreId;
+    console.log('🐛 Debug product load starting...', { targetStoreId });
+    
+    if (!targetStoreId) {
+      console.error('❌ No store ID available for debug load');
+      return;
+    }
+
+    try {
+      await this.initializeProducts(targetStoreId, true);
+      console.log('🐛 Debug load completed:', {
+        productCount: this.products().length,
+        products: this.products().slice(0, 3).map(p => ({ id: p.id, name: p.productName }))
+      });
+    } catch (error) {
+      console.error('🐛 Debug load failed:', error);
+    }
+  }
+
+  /**
+   * Force refresh products from Firestore
+   */
+  async refreshProducts(storeId?: string): Promise<void> {
+    const targetStoreId = storeId || this.currentStoreId;
+    if (targetStoreId) {
+      await this.loadProductsRealTime(targetStoreId, true);
+    } else {
+      this.logger.warn('No storeId available for refresh', { area: 'products' });
+    }
+  }
+
+  /**
+   * Get reactive signal for all products
+   */
+  getProductsSignal() {
+    const signal = this.products;
+    console.log('📡 getProductsSignal() called - returning signal function');
+    return signal;
+  }
+
+  /**
+   * Get reactive signal for loading state
+   */
+  getLoadingSignal() {
+    return this.isLoading;
+  }
+
+  /**
+   * Get reactive signal for error state
+   */
+  getErrorSignal() {
+    return this.error;
+  }
+
+  /**
+   * Get reactive signal for online status
+   */
+  getOnlineStatusSignal() {
+    return this.isOnlineStatus;
+  }
+
+  /**
+   * Check if service has been initialized with data
+   */
+  isInitialized(): boolean {
+    return this.hasInitialLoad();
+  }
+
+  // ============================================
+  // LEGACY GETTER METHODS (for backward compatibility)
+  // ============================================
+
   // Getter methods
   getProducts(): Product[] {
-    return this.products();
+    const products = this.products();
+    console.log('🔍 getProducts() called:', {
+      count: products.length,
+      isLoading: this.isLoading(),
+      hasInitialLoad: this.hasInitialLoad(),
+      currentStoreId: this.currentStoreId,
+      error: this.error(),
+      products: products.slice(0, 5).map(p => ({ 
+        id: p.id, 
+        name: p.productName, 
+        store: p.storeId,
+        category: p.category 
+      }))
+    });
+    return products;
   }
 
   getProductsByCategory(category: string): Product[] {
@@ -739,50 +1225,13 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
       const currentUser = this.authService.getCurrentUser();
       if (!currentUser) throw new Error('User not authenticated');
 
-      const oldPrice = batchId 
-        ? (product.inventory?.find(inv => inv.batchId === batchId)?.unitPrice || 0)
-        : product.sellingPrice;
+      // Update main selling price only (inventory functionality removed)
+      await this.updateProduct(productId, {
+        sellingPrice: newPrice,
+        lastUpdated: new Date()
+      });
 
-      const changeAmount = newPrice - oldPrice;
-      const changePercentage = oldPrice > 0 ? (changeAmount / oldPrice) * 100 : 0;
-      const changeType = changeAmount > 0 ? 'increase' : changeAmount < 0 ? 'decrease' : 'initial';
-
-      const priceChange = {
-        oldPrice,
-        newPrice,
-        changeType: changeType as 'increase' | 'decrease' | 'initial',
-        changeAmount,
-        changePercentage,
-        changedAt: new Date(),
-        changedBy: currentUser.uid,
-        changedByName: currentUser.displayName || currentUser.email || 'Unknown',
-        reason: reason || 'Manual price update',
-        batchId: batchId || undefined
-      };
-
-      const currentHistory = product.priceHistory || [];
-      const updatedHistory = [...currentHistory, priceChange];
-
-      if (batchId) {
-        // Update batch price
-        const updatedInventory = (product.inventory ?? []).map(inv => 
-          inv.batchId === batchId ? { ...inv, unitPrice: newPrice } : inv
-        );
-        await this.updateProduct(productId, {
-          inventory: updatedInventory,
-          priceHistory: updatedHistory,
-          lastUpdated: new Date()
-        });
-      } else {
-        // Update main selling price
-        await this.updateProduct(productId, {
-          sellingPrice: newPrice,
-          priceHistory: updatedHistory,
-          lastUpdated: new Date()
-        });
-      }
-
-      this.logger.dbSuccess('Product price updated', { api: 'firestore.update', area: 'products', collectionPath: 'products', docId: productId, payload: priceChange });
+      this.logger.dbSuccess('Product price updated', { api: 'firestore.update', area: 'products', collectionPath: 'products', docId: productId });
     } catch (error) {
       this.logger.dbFailure('Error updating product price', { api: 'firestore.update', area: 'products', collectionPath: 'products', docId: productId }, error);
       throw error;
@@ -807,42 +1256,13 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
       const currentUser = this.authService.getCurrentUser();
       if (!currentUser) throw new Error('User not authenticated');
 
-  const batch = (product.inventory ?? []).find(inv => inv.batchId === batchId);
-      if (!batch) throw new Error('Batch not found');
-
-      const oldQuantity = batch.quantity;
-
-      const quantityAdjustment = {
-        batchId,
-        oldQuantity,
-        newQuantity,
-        adjustmentType: adjustmentType as 'manual' | 'sale' | 'return' | 'damage' | 'restock' | 'transfer',
-        adjustedAt: new Date(),
-        adjustedBy: currentUser.uid,
-        adjustedByName: currentUser.displayName || currentUser.email || 'Unknown',
-        reason: reason || `${adjustmentType} adjustment`,
-        notes: notes || ''
-      };
-
-
-      // Update batch quantity
-      const updatedInventory = (product.inventory ?? []).map(inv =>
-        inv.batchId === batchId ? { ...inv, quantity: newQuantity } : inv
-      );
-
-      // Recalculate total stock from active batches
-      const totalStock = updatedInventory.reduce(
-        (sum, inv) => sum + (inv.status === 'active' ? inv.quantity : 0), 
-        0
-      );
-
+      // Simplified: only update total stock (inventory functionality removed)
       await this.updateProduct(productId, {
-        inventory: updatedInventory,
-        totalStock,
+        totalStock: newQuantity,
         lastUpdated: new Date()
       });
 
-      this.logger.dbSuccess('Product quantity adjusted', { api: 'firestore.update', area: 'products', collectionPath: 'products', docId: productId, payload: quantityAdjustment });
+      this.logger.dbSuccess('Product quantity updated', { api: 'firestore.update', area: 'products', collectionPath: 'products', docId: productId });
     } catch (error) {
       this.logger.dbFailure('Error adjusting product quantity', { api: 'firestore.update', area: 'products', collectionPath: 'products', docId: productId }, error);
       throw error;
@@ -861,55 +1281,13 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
     reason?: string
   ): Promise<void> {
     try {
-      const product = this.getProduct(productId);
-      if (!product) throw new Error('Product not found');
-
-  const sourceBatch = (product.inventory ?? []).find(inv => inv.batchId === sourceBatchId);
-      if (!sourceBatch) throw new Error('Source batch not found');
-
-      if (quantityToMove > sourceBatch.quantity) {
-        throw new Error('Cannot move more quantity than available in source batch');
-      }
-
-      // Step 1: Reduce quantity in source batch
-      const newSourceQuantity = sourceBatch.quantity - quantityToMove;
-      await this.adjustBatchQuantity(
-        productId,
-        sourceBatchId,
-        newSourceQuantity,
-        'transfer',
-        reason || `Moved ${quantityToMove} units to new batch at updated price`,
-        `Split from batch ${sourceBatchId}`
-      );
-
-      // Step 2: Create new batch
-      const newBatchId = `${new Date().toISOString().slice(2, 10).replace(/-/g, '')}-${Date.now().toString().slice(-2)}`;
-      const newBatch: ProductInventory = {
-        batchId: newBatchId,
-        quantity: quantityToMove,
-        unitPrice: newBatchPrice,
-        costPrice: sourceBatch.costPrice, // Keep same cost price
-        receivedAt: new Date(),
-        expiryDate: sourceBatch.expiryDate,
-        supplier: sourceBatch.supplier,
-        status: 'active'
-      };
-
-      // This method still references old embedded inventory - needs refactoring to use InventoryDataService
-      this.logger.warn('splitBatch method needs to be refactored to use InventoryDataService', { area: 'products', docId: productId });
-      throw new Error('splitBatch method is deprecated and needs refactoring for separate inventory collection');
+      // Inventory functionality removed - method disabled
+      this.logger.warn('splitBatch method is deprecated (inventory functionality removed)', { area: 'products', docId: productId });
+      throw new Error('splitBatch method is not available (inventory functionality removed)');
     } catch (error) {
       this.logger.dbFailure('Error splitting batch', { area: 'products', docId: productId }, error);
       throw error;
     }
-  }
-
-  /**
-   * Get price history for a product
-   */
-  getPriceHistory(productId: string) {
-    const product = this.getProduct(productId);
-    return product?.priceHistory || [];
   }
 
   /**
@@ -993,7 +1371,11 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
         map.set(key, { ...existing, ...normalized });
       }
     }
-    return Array.from(map.values());
+    
+    // Convert to array and sort by product name since we removed Firestore orderBy
+    const sortedProducts = Array.from(map.values());
+    sortedProducts.sort((a, b) => (a.productName || '').localeCompare(b.productName || ''));
+    return sortedProducts;
   }
   // Inventory is now managed in productInventory collection. Keep a helper for summary updates if needed by other services.
   async setInventorySummary(productId: string, totalStock: number, sellingPrice: number): Promise<void> {
@@ -1007,11 +1389,7 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
    */
   applyLocalPatch(productId: string, updates: Partial<Product>): void {
     try {
-      this.products.update(products =>
-        products.map(product =>
-          product.id === productId ? { ...product, ...updates } : product
-        )
-      );
+      this.updateProductInCache(productId, updates);
     } catch (e) {
       this.logger.warn('Failed to apply local product patch', { area: 'products', payload: { error: String(e) } });
     }

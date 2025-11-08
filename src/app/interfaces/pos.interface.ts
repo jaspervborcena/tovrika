@@ -14,7 +14,9 @@ export interface Order {
   branchId?: string;
   terminalId?: string;
   assignedCashierId: string;
-  status: 'pending' | 'paid' | 'cancelled' | 'refunded';
+  // Status can come from various data sources (Firestore, BigQuery). Keep as string to
+  // preserve source-specific values like 'completed' while older code may expect specific values.
+  status: string;
   
   // Customer Information
   cashSale?: boolean;
@@ -180,4 +182,24 @@ export interface Receipt {
   createdAt: Date;
   status: 'completed' | 'cancelled' | 'void';
   orderNumber: string;
+}
+
+export interface CartItemTaxDiscount {
+  isVatApplicable: boolean;
+  vatRate?: number;
+  hasDiscount: boolean;
+  discountType: 'percentage' | 'fixed';
+  discountValue: number;
+  // Calculated values
+  subtotalBeforeDiscount: number;
+  discountAmount: number;
+  subtotalAfterDiscount: number;
+  vatAmount: number;
+  finalTotal: number;
+}
+
+export interface CartItemDetailsDialog {
+  item: CartItem;
+  onUpdate: (updatedItem: CartItem) => void;
+  onClose: () => void;
 }

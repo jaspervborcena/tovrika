@@ -151,14 +151,7 @@ type Order = OrderDisplay;
                     </svg>
                   </div>
                 </th>
-                <th class="sortable-header" (click)="sort('itemsCount')" [class.active]="isSortedColumn('itemsCount')">
-                  <div class="header-content">
-                    <span>Items</span>
-                    <svg class="sort-icon" width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                      <path [attr.d]="getSortIcon('itemsCount')"/>
-                    </svg>
-                  </div>
-                </th>
+                <!-- Items column removed (API no longer returns embedded items) -->
                 <th class="sortable-header" (click)="sort('totalAmount')" [class.active]="isSortedColumn('totalAmount')">
                   <div class="header-content">
                     <span>Total Amount</span>
@@ -196,7 +189,7 @@ type Order = OrderDisplay;
                   <div class="time">{{ formatTime(order.createdAt) }}</div>
                 </td>
                 <td class="customer">{{ order.customerName || 'Walk-in Customer' }}</td>
-                <td class="items-count">{{ order.items?.length || 0 }} items</td>
+                <!-- items column removed -->
                 <td class="amount">₱{{ order.totalAmount.toLocaleString('en-US', {minimumFractionDigits: 2}) }}</td>
                 <td class="payment-method">
                   <span class="payment-badge" [class]="'payment-' + (order.paymentMethod || 'cash').toLowerCase()">
@@ -222,7 +215,7 @@ type Order = OrderDisplay;
               
               <!-- Empty State -->
               <tr *ngIf="paginatedOrders().length === 0" class="empty-state">
-                <td colspan="8">
+                <td colspan="7">
                   <div class="empty-message">
                     <div class="empty-icon">📊</div>
                     <p>No sales found for the selected date range</p>
@@ -310,34 +303,94 @@ type Order = OrderDisplay;
     </div>
 
     <!-- Order Details Modal -->
-    <div *ngIf="showOrderDetails()" class="modal-overlay" (click)="closeOrderDetails()">
-      <div class="modal-content" (click)="$event.stopPropagation()">
+    <div *ngIf="showOrderDetails()" 
+         class="modal-overlay" 
+         (click)="closeOrderDetails()"
+         style="position: fixed !important; z-index: 9999 !important; background: rgba(0, 0, 0, 0.8) !important;">
+      <div class="modal" (click)="$event.stopPropagation()">
         <div class="modal-header">
-          <h3>Order Details - #{{ selectedOrder()?.id }}</h3>
+          <h3>📋 Order Details</h3>
           <button class="close-btn" (click)="closeOrderDetails()">×</button>
         </div>
         <div class="modal-body">
           <div *ngIf="selectedOrder()" class="order-details">
-            <div class="order-info">
-              <p><strong>Date:</strong> {{ formatDate(selectedOrder()!.createdAt) }} at {{ formatTime(selectedOrder()!.createdAt) }}</p>
-              <p><strong>Customer:</strong> {{ selectedOrder()!.customerName || 'Walk-in Customer' }}</p>
-              <p><strong>Payment Method:</strong> {{ selectedOrder()!.paymentMethod || 'Cash' }}</p>
-              <p><strong>Status:</strong> {{ selectedOrder()!.status }}</p>
-            </div>
-            
-            <div class="order-items">
-              <h4>Items Ordered:</h4>
-              <div *ngFor="let item of selectedOrder()!.items || []" class="order-item">
-                <span class="item-name">{{ item.productName }}</span>
-                <span class="item-quantity">Qty: {{ item.quantity }}</span>
-                <span class="item-price">₱{{ (item.price * item.quantity).toLocaleString('en-US', {minimumFractionDigits: 2}) }}</span>
+            <div class="form-section">
+              <h4 class="section-title">
+                <span>📝</span>
+                <span>Order Information</span>
+              </h4>
+              <div class="order-info">
+                <div class="info-row">
+                  <span class="info-label">Invoice Number:</span>
+                  <span class="info-value">{{ selectedOrder()!.invoiceNumber || 'N/A' }}</span>
+                </div>
+                <div class="info-row">
+                  <span class="info-label">Date:</span>
+                  <span class="info-value">{{ formatDate(selectedOrder()!.createdAt) }} at {{ formatTime(selectedOrder()!.createdAt) }}</span>
+                </div>
+                <div class="info-row">
+                  <span class="info-label">Customer:</span>
+                  <span class="info-value">{{ selectedOrder()!.customerName || 'Walk-in Customer' }}</span>
+                </div>
+                <div class="info-row">
+                  <span class="info-label">Payment Method:</span>
+                  <span class="info-value">{{ selectedOrder()!.paymentMethod || 'Cash' }}</span>
+                </div>
+                <div class="info-row">
+                  <span class="info-label">Status:</span>
+                  <span class="info-value">
+                    <span class="status-badge" [class]="'status-' + selectedOrder()!.status.toLowerCase()">
+                      {{ selectedOrder()!.status }}
+                    </span>
+                  </span>
+                </div>
               </div>
             </div>
             
-            <div class="order-total">
-              <strong>Total: ₱{{ selectedOrder()!.totalAmount.toLocaleString('en-US', {minimumFractionDigits: 2}) }}</strong>
+            <div class="form-section">
+              <h4 class="section-title">
+                <span>🛒</span>
+                <span>Items Ordered</span>
+              </h4>
+              <div class="order-items-table-wrapper">
+                <table class="order-items-table">
+                  <thead>
+                    <tr>
+                      <th>Product Name</th>
+                      <th>Quantity</th>
+                      <th>Price</th>
+                      <th>Discount</th>
+                      <th>VAT</th>
+                      <th>Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr *ngFor="let item of selectedOrder()!.items || []">
+                     <td class="mono">{{ item.productName || '-' }}</td>
+                      <td>{{ getQuantity(item) }}</td>
+                      <td>₱{{ formatCurrency(item?.price) }}</td>
+                      <td>{{ getDiscount(item) }}</td>
+                      <td>₱{{ formatCurrency(item?.vat) }}</td>
+                      <td class="mono">₱{{ formatCurrency(getItemTotal(item)) }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            
+            <div class="form-section">
+              <h4 class="section-title">
+                <span>💰</span>
+                <span>Order Total</span>
+              </h4>
+              <div class="order-total">
+                <strong>Total: ₱{{ selectedOrder()!.totalAmount.toLocaleString('en-US', {minimumFractionDigits: 2}) }}</strong>
+              </div>
             </div>
           </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" (click)="closeOrderDetails()">Close</button>
         </div>
       </div>
     </div>
@@ -534,36 +587,43 @@ type Order = OrderDisplay;
       gap: 10px;
     }
 
-    .store-name {
-      font-weight: 700;
-      color: #4299e1;
-      letter-spacing: 0.5px;
-      font-size: 16px;
-    }
-
-    .totals-section {
+    /* Modal header styled to match BIR compliance dialog */
+    .modal-header {
       display: flex;
-      gap: 20px;
-      flex-wrap: wrap;
-      align-items: flex-start;
-    }
-
-    .total-card {
+      justify-content: space-between;
+      align-items: center;
+      padding: 1.5rem 2rem;
+      border-bottom: 1px solid #e5e7eb;
       background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      color: white;
-      padding: 24px;
-      border-radius: 12px;
-      text-align: center;
-      min-width: 160px;
-      box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+      border-radius: 12px 12px 0 0;
     }
 
-    .total-label {
-      font-size: 14px;
-      opacity: 0.9;
-      margin-bottom: 8px;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
+    .modal-header h3 {
+      margin: 0;
+      font-size: 1.25rem;
+      font-weight: 600;
+      color: white;
+    }
+
+    .close-btn {
+      background: rgba(255, 255, 255, 0.2);
+      border: none;
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      font-size: 1.5rem;
+      color: white;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s ease;
+      line-height: 1;
+    }
+
+    .close-btn:hover {
+      background: rgba(255, 255, 255, 0.3);
+      transform: scale(1.1);
     }
 
     .total-amount, .total-count {
@@ -657,6 +717,59 @@ type Order = OrderDisplay;
 
     .table-wrapper {
       overflow-x: auto;
+    }
+
+    /* Order items table styling - matches BIR dialog patterns */
+    .order-items-table-wrapper {
+      overflow: auto;
+      max-height: 300px;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      background: white;
+      margin-top: 0.5rem;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    }
+
+    .order-items-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.875rem;
+      table-layout: auto;
+    }
+
+    .order-items-table thead th {
+      background: #f7fafc;
+      padding: 0.75rem;
+      text-align: left;
+      font-weight: 600;
+      color: #4a5568;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.025em;
+      border-bottom: 1px solid #e2e8f0;
+    }
+
+    .order-items-table td {
+      padding: 0.75rem;
+      border-bottom: 1px solid #f1f5f9;
+      color: #2d3748;
+      vertical-align: middle;
+    }
+
+    .order-items-table .mono {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, 'Roboto Mono', 'Courier New', monospace;
+      font-size: 0.8125rem;
+      color: #2b6cb0;
+    }
+
+    .order-total {
+      text-align: center;
+      padding: 1.5rem;
+      background: white;
+      border-radius: 8px;
+      border: 2px solid #e5e7eb;
+      font-size: 1.125rem;
+      color: #1f2937;
     }
 
     .sales-table {
@@ -825,39 +938,40 @@ type Order = OrderDisplay;
       position: fixed;
       top: 0;
       left: 0;
-      right: 0;
-      bottom: 0;
+      width: 100%;
+      height: 100%;
       background: rgba(0, 0, 0, 0.5);
       display: flex;
       align-items: center;
       justify-content: center;
-      z-index: 1000;
-      padding: 20px;
+      z-index: 9999;
+      backdrop-filter: blur(2px);
+      padding: 1rem;
     }
 
-    .modal-content {
+    .modal {
       background: white;
       border-radius: 12px;
-      max-width: 600px;
-      width: 100%;
-      max-height: 80vh;
-      overflow-y: auto;
-      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+      width: 90%;
+      max-width: 720px;
+      max-height: 90vh;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
     }
 
     .modal-header {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding: 24px;
+      padding: 18px 20px;
       border-bottom: 1px solid #e2e8f0;
     }
-
     .modal-header h3 {
       margin: 0;
       color: #2d3748;
-      font-size: 20px;
-      font-weight: 600;
+      font-size: 18px;
+      font-weight: 700;
     }
 
     .close-btn {
@@ -872,63 +986,135 @@ type Order = OrderDisplay;
 
     .close-btn:hover {
       color: #4a5568;
+      transform: scale(1.05);
     }
 
     .modal-body {
-      padding: 24px;
+      padding: 2rem;
+      overflow-y: auto;
+      flex: 1;
+    }
+
+    .form-section {
+      margin-bottom: 2rem;
+      padding: 1.5rem;
+      background: #f9fafb;
+      border-radius: 8px;
+      border: 1px solid #e5e7eb;
+    }
+
+    .form-section:last-child {
+      margin-bottom: 0;
+    }
+
+    .section-title {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 1rem;
+      font-weight: 600;
+      color: #374151;
+      margin: 0 0 1rem 0;
+      padding-bottom: 0.75rem;
+      border-bottom: 2px solid #e5e7eb;
+    }
+
+    .section-title span:first-child {
+      font-size: 1.25rem;
     }
 
     .order-info {
-      margin-bottom: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
     }
 
-    .order-info p {
-      margin: 8px 0;
-      font-size: 14px;
-      line-height: 1.5;
-    }
-
-    .order-items h4 {
-      margin: 0 0 16px 0;
-      color: #2d3748;
-      font-size: 16px;
-      font-weight: 600;
-    }
-
-    .order-item {
+    .info-row {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding: 12px 0;
+      padding: 0.5rem 0;
       border-bottom: 1px solid #f1f5f9;
     }
 
-    .order-item:last-child {
+    .info-row:last-child {
       border-bottom: none;
     }
 
-    .item-name {
+    .info-label {
       font-weight: 500;
-      color: #2d3748;
+      color: #6b7280;
+      font-size: 0.875rem;
     }
 
-    .item-quantity {
-      color: #718096;
-      font-size: 14px;
-    }
-
-    .item-price {
+    .info-value {
       font-weight: 600;
-      color: #38a169;
+      color: #1f2937;
+      font-size: 0.875rem;
     }
 
-    .order-total {
-      margin-top: 24px;
-      padding-top: 16px;
-      border-top: 2px solid #e2e8f0;
-      text-align: right;
-      font-size: 18px;
+    .status-badge {
+      padding: 0.25rem 0.75rem;
+      border-radius: 9999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.025em;
+    }
+
+    .status-completed {
+      background: #c6f6d5;
+      color: #2f855a;
+    }
+
+    .status-pending {
+      background: #faf089;
+      color: #d69e2e;
+    }
+
+    .status-cancelled {
+      background: #fed7d7;
+      color: #c53030;
+    }
+
+    .order-items h4 {
+      margin: 0 0 1rem 0;
       color: #2d3748;
+      font-size: 1rem;
+      font-weight: 600;
+    }
+
+    /* Modal footer styled like other footers */
+    /* Modal footer styled to match BIR compliance dialog */
+    .modal-footer {
+      display: flex;
+      justify-content: flex-end;
+      gap: 1rem;
+      padding: 1.5rem 2rem;
+      border-top: 1px solid #e5e7eb;
+      background: #f9fafb;
+      border-radius: 0 0 12px 12px;
+    }
+
+    .btn {
+      padding: 0.75rem 1.5rem;
+      border-radius: 8px;
+      font-size: 0.875rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      border: none;
+    }
+
+    .btn-secondary {
+      background: #f1f5f9;
+      color: #64748b;
+      border: 1px solid #e2e8f0;
+    }
+
+    .btn-secondary:hover {
+      background: #e2e8f0;
+      transform: translateY(-1px);
     }
 
     @media (max-width: 768px) {
@@ -1009,6 +1195,28 @@ type Order = OrderDisplay;
         flex-wrap: wrap;
         justify-content: center;
       }
+
+      /* Modal responsive styles */
+      .modal {
+        width: 95%;
+        max-height: 95vh;
+      }
+
+      .modal-header {
+        padding: 1rem 1.5rem;
+      }
+
+      .modal-body {
+        padding: 1rem;
+      }
+
+      .form-section {
+        padding: 1rem;
+      }
+
+      .modal-footer {
+        padding: 1rem 1.5rem;
+      }
     }
 
     /* Professional Button Styles */
@@ -1080,35 +1288,7 @@ type Order = OrderDisplay;
       to { transform: rotate(360deg); }
     }
 
-    .close-btn {
-      position: absolute;
-      top: 16px;
-      right: 16px;
-      background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
-      color: white;
-      border: none;
-      width: 32px;
-      height: 32px;
-      border-radius: 50%;
-      font-size: 18px;
-      font-weight: 700;
-      cursor: pointer;
-      transition: all 0.2s ease;
-      box-shadow: 0 2px 4px rgba(239, 68, 68, 0.2);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-
-    .close-btn:hover {
-      transform: scale(1.1);
-      box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
-      background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
-    }
-
-    .close-btn:active {
-      transform: scale(0.95);
-    }
+    /* .close-btn floating style removed to keep header-styled close button visible in modal header */
 
     /* Pagination Styles */
     .pagination-container {
@@ -1265,10 +1445,7 @@ export class SalesSummaryComponent implements OnInit {
           aValue = a.customerName || a.soldTo || 'Walk-in Customer';
           bValue = b.customerName || b.soldTo || 'Walk-in Customer';
           break;
-        case 'itemsCount':
-          aValue = a.items?.length || 0;
-          bValue = b.items?.length || 0;
-          break;
+        // itemsCount removed from sorting because Sales Summary no longer includes embedded items
         case 'totalAmount':
           aValue = a.totalAmount || 0;
           bValue = b.totalAmount || 0;
@@ -1394,12 +1571,12 @@ export class SalesSummaryComponent implements OnInit {
   async loadCurrentDateData(): Promise<void> {
     // Ensure date order before loading
     this.ensureDateOrder();
-    console.log('🔄 Loading current date data from Firebase');
+    console.log('🔄 Loading current date data via API (override - API only)');
     console.log('📅 Date range:', { from: this.fromDate, to: this.toDate });
     console.log('🏪 Selected store:', this.selectedStoreId());
     
-    // Set data source for UI (OrderService handles the actual logic)
-    this.dataSource.set('firebase');
+    // Set data source for UI to API (we use BigQuery-backed API for all ranges)
+    this.dataSource.set('api');
     
     // Check if we have any stores and data first
     const storeId = this.selectedStoreId() || this.authService.getCurrentPermission()?.storeId;
@@ -1425,13 +1602,8 @@ export class SalesSummaryComponent implements OnInit {
     // Ensure date ordering before proceeding (swap if user accidentally set From > To)
     this.ensureDateOrder();
 
-    // Determine data source based on date range for display purposes
-    const startDate = new Date(this.fromDate);
-    const endDate = new Date(this.toDate);
-    const shouldUseApi = this.shouldUseApiForDates(startDate, endDate);
-    
-    // Set data source for UI indication (OrderService will handle actual logic)
-    this.dataSource.set(shouldUseApi ? 'api' : 'firebase');
+    // Always use API for sales summary (BigQuery-backed). Save snapshot to IndexedDB after fetch.
+    this.dataSource.set('api');
     await this.loadSalesData();
   }
 
@@ -1512,23 +1684,25 @@ export class SalesSummaryComponent implements OnInit {
       console.log('Loading sales data for store:', storeId, 'from:', startDate, 'to:', endDate);
       console.log('Data source:', this.dataSource() === 'api' ? 'External API (2+ days old)' : 'Firebase (Recent data)');
 
-      // Use the hybrid method that automatically determines the data source
-      console.log('📊 Using hybrid data loading...');
+      // Use the API-only flow for sales summary (BigQuery-backed). Persist a snapshot to IndexedDB on success.
+      console.log('📊 Using API-only data loading (BigQuery)');
       let orders: any[] = [];
-  const shouldUseApi = this.shouldUseApiForDates(startDate, endDate);
+      this.dataSource.set('api');
+      this.apiCurrentPage.set(1);
+      const fields = ['invoice_number','updated_at','gross_amount','net_amount','payment','status'];
+      const apiOrders = await this.orderService.getOrdersPage(storeId, startDate, endDate, this.apiPageSize, this.apiCurrentPage(), fields);
+      orders = apiOrders || [];
+      // If returned count equals page size, there may be more
+      this.apiHasMore.set((orders.length >= this.apiPageSize));
 
-      if (shouldUseApi) {
-        // Use paginated API: default to first page (50)
-        this.dataSource.set('api');
-        this.apiCurrentPage.set(1);
-        const fields = ['invoice_number','updated_at','gross_amount','net_amount','payment','status'];
-        const apiOrders = await this.orderService.getOrdersPage(storeId, startDate, endDate, this.apiPageSize, this.apiCurrentPage(), fields);
-        orders = apiOrders || [];
-        // If returned count equals page size, there may be more
-        this.apiHasMore.set((orders.length >= this.apiPageSize));
-      } else {
-        this.dataSource.set('firebase');
-        orders = await this.orderService.getOrdersByDateRange(storeId, startDate, endDate);
+      // Persist snapshot to IndexedDB for offline fallback
+      try {
+        if (orders && orders.length > 0) {
+          await this.indexedDb.saveSetting(`orders_snapshot_${storeId}`, orders);
+          console.log(`📦 Saved ${orders.length} orders to IndexedDB snapshot for store ${storeId}`);
+        }
+      } catch (saveErr) {
+        console.warn('Failed to save orders snapshot to IndexedDB', saveErr);
       }
 
       // Debug: Check what we got back
@@ -1537,12 +1711,12 @@ export class SalesSummaryComponent implements OnInit {
       // If service returned no orders, attempt IndexedDB snapshot fallback
       if (!orders || orders.length === 0) {
         try {
-          console.warn('⚠️ No orders from remote service - attempting IndexedDB snapshot fallback');
+          console.warn('⚠️ No orders from API - attempting IndexedDB snapshot fallback');
           const saved: any[] = await this.indexedDb.getSetting(`orders_snapshot_${storeId}`);
           if (saved && Array.isArray(saved) && saved.length > 0) {
             console.log(`📦 Loaded ${saved.length} orders from IndexedDB snapshot for store ${storeId}`);
             orders = saved;
-            // mark data source as offline fallback (API or snapshot)
+            // mark data source as offline fallback
             this.dataSource.set('api');
           } else {
             console.log('📦 No orders snapshot available in IndexedDB');
@@ -1560,7 +1734,6 @@ export class SalesSummaryComponent implements OnInit {
         ...order, // Spread all existing order properties
         id: order.id || '', // Ensure id is not undefined
         customerName: order.soldTo || 'Cash Sale',
-        items: order.items || [],
         paymentMethod: order.paymentMethod || 'cash'
       }));
 
@@ -1586,10 +1759,10 @@ export class SalesSummaryComponent implements OnInit {
       const nextPage = this.apiCurrentPage() + 1;
       const fields = ['invoice_number','updated_at','gross_amount','net_amount','payment','status'];
       const page = await this.orderService.getOrdersPage(storeId, startDate, endDate, this.apiPageSize, nextPage, fields);
-      if (page && page.length > 0) {
+        if (page && page.length > 0) {
         // Append
         const current = this.orders();
-        const transformed = page.map((order: any) => ({ ...(order as any), customerName: order.soldTo || 'Cash Sale', items: order.items || [], paymentMethod: order.payment || order.paymentMethod || 'cash' }));
+        const transformed = page.map((order: any) => ({ ...(order as any), customerName: order.soldTo || 'Cash Sale', paymentMethod: order.payment || order.paymentMethod || 'cash' }));
         this.orders.set(current.concat(transformed));
         this.apiCurrentPage.set(nextPage);
         this.apiHasMore.set(page.length >= this.apiPageSize);
@@ -1603,9 +1776,29 @@ export class SalesSummaryComponent implements OnInit {
     }
   }
 
-  openOrderDetails(order: Order): void {
-    this.selectedOrder.set(order);
-    this.showOrderDetails.set(true);
+  async openOrderDetails(order: Order): Promise<void> {
+    try {
+      // Fetch order items (orderDetails) by orderId. Some orders may have multiple orderDetails documents (batches).
+      const targetOrderId = (order as any).orderId || order.id || '';
+      let items: any[] = [];
+      if (targetOrderId) {
+        try {
+          items = await this.orderService.fetchOrderItems(targetOrderId);
+        } catch (e) {
+          console.warn('Failed to fetch order items for orderId', targetOrderId, e);
+          items = [];
+        }
+      }
+
+      // Merge items into a copy of the order for display. Do not surface internal document ids.
+      const displayOrder = { ...(order as any), items } as Order & { items?: any[] };
+      this.selectedOrder.set(displayOrder as any);
+      this.showOrderDetails.set(true);
+    } catch (err) {
+      console.error('Error opening order details', err);
+      this.selectedOrder.set(order);
+      this.showOrderDetails.set(true);
+    }
   }
 
   closeOrderDetails(): void {
@@ -1710,6 +1903,36 @@ export class SalesSummaryComponent implements OnInit {
   // Helper method for template
   min(a: number, b: number): number {
     return Math.min(a, b);
+  }
+
+  // Formatting and item helpers used by the template
+  formatCurrency(value: any): string {
+    const n = Number(value ?? 0);
+    return n.toLocaleString('en-US', { minimumFractionDigits: 2 });
+  }
+
+  getQuantity(item: any): number {
+    return item?.quantity ?? 0;
+  }
+
+  getDiscount(item: any): number {
+    return item?.discount ?? 0;
+  }
+
+  isVatExempt(item: any): boolean {
+    return !!item?.isVatExempt;
+  }
+
+  getItemTotal(item: any): number {
+    if (!item) return 0;
+    if (item.total != null) return Number(item.total);
+    const price = Number(item.price ?? 0);
+    const qty = Number(item.quantity ?? 0);
+    return price * qty;
+  }
+
+  getBatch(item: any): string {
+    return item?.batchNumber || item?.batchId || '-';
   }
 
   // Sorting methods

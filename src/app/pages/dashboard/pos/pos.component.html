@@ -251,13 +251,9 @@
                 <div class="product-info">
                   <h4>{{ product.productName }}</h4>
                   <p class="product-sku">{{ product.skuId }}</p>
-                  <p class="product-stock">Stock: {{ product.totalStock }}</p>
                 </div>
                 <div class="product-price">
                   ₱{{ (product.sellingPrice || 0).toFixed(2) }}
-                  <span *ngIf="product.hasDiscount" class="discount-badge">
-                    {{ product.discountType === 'percentage' ? product.discountValue + '%' : '$' + product.discountValue }} OFF
-                  </span>
                 </div>
               </div>
             </div>
@@ -281,10 +277,6 @@
                   </div>
                   <div class="product-category-stock">
                     <p class="product-description">{{ product.category }}</p>
-                    <span class="product-stock">Stock: {{ product.totalStock }}</span>
-                  </div>
-                  <div *ngIf="product.hasDiscount" class="discount">
-                    {{ product.discountType === 'percentage' ? product.discountValue + '% OFF' : '$' + product.discountValue + ' OFF' }}
                   </div>
                 </div>
               </div>
@@ -309,10 +301,6 @@
                   </div>
                   <div class="product-category-stock">
                     <p class="product-description">{{ product.category }}</p>
-                    <span class="product-stock">Stock: {{ product.totalStock }}</span>
-                  </div>
-                  <div *ngIf="product.hasDiscount" class="discount">
-                    {{ product.discountType === 'percentage' ? product.discountValue + '% OFF' : '$' + product.discountValue + ' OFF' }}
                   </div>
                 </div>
               </div>
@@ -629,23 +617,32 @@
               </div>
             </fieldset>
 
-            <!-- Cart Header moved OUTSIDE scroll so it stays steady -->
-            <div class="cart-header">
-              <span>{{ 'pos.product' | translate }}</span>
-              <span>{{ 'pos.quantity' | translate }}</span>
-              <span>{{ 'pos.price' | translate }}</span>
-              <span>{{ 'pos.total' | translate }}</span>
-            </div>
+            <!-- Cart Information -->
+            <fieldset class="cart-fieldset">
+              <legend 
+                class="clickable-legend" 
+                (click)="openCartInformationDialog()"
+                title="Click to view cart details">
+                {{ 'pos.cartInformation' | translate }}
+              </legend>
+              
+              <!-- Cart Header moved OUTSIDE scroll so it stays steady -->
+              <div class="cart-header">
+                <span>{{ 'pos.product' | translate }}</span>
+                <span>{{ 'pos.quantity' | translate }}</span>
+                <span>{{ 'pos.price' | translate }}</span>
+                <span>{{ 'pos.total' | translate }}</span>
+              </div>
 
-            <!-- Cart Items (scrolls independently) -->
-            <div class="cart-items">
+              <!-- Cart Items (scrolls independently) -->
+              <div class="cart-items">
               
               <div *ngIf="cartItems().length === 0" class="empty-cart">
                 <p>{{ 'pos.cartEmpty' | translate }}</p>
               </div>
 
               <div 
-                *ngFor="let item of cartItemsLatestFirst()" 
+                *ngFor="let item of cartItemsLatestFirst(); let i = index" 
                 class="cart-item">
                 <div class="item-details">
                   <span class="item-name">{{ item.productName }}</span>
@@ -659,7 +656,14 @@
                 <div class="item-price">{{ item.sellingPrice.toFixed(2) }}</div>
                 <div class="item-total">
                   {{ item.total.toFixed(2) }}
-                  <button (click)="removeFromCart(item.productId)" class="remove-btn">×</button>
+                </div>
+                <div class="item-actions">
+                  <button 
+                    (click)="removeFromCart(item.productId)" 
+                    class="btn-icon-action btn-danger"
+                    title="Remove item">
+                    ×
+                  </button>
                 </div>
               </div>
             </div>
@@ -712,6 +716,7 @@
                 <span>₱{{ cartSummary().netAmount.toFixed(2) }}</span>
               </div>
             </div>
+            </fieldset>
 
             <!-- New Order Section -->
             <div class="new-order-section">
@@ -909,6 +914,391 @@
             class="btn-primary"
             (click)="processPayment()">
             {{ 'pos.processPayment' | translate }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Cart Information Dialog -->
+    <div *ngIf="showCartInformationDialog()" class="modal-overlay">
+      <div class="cart-information-dialog">
+        <!-- Fixed Header -->
+        <div class="cart-info-dialog-header">
+          <div class="header-content">
+            <h3>🛒 {{ 'pos.cartInformation' | translate }}</h3>
+            <p>{{ 'pos.cartDetailsInformation' | translate }}</p>
+          </div>
+          <button class="close-btn" (click)="closeCartInformationDialog()">×</button>
+        </div>
+        
+        <!-- Scrollable Body -->
+        <div class="cart-info-dialog-body">
+          <div class="cart-items-section">
+            <label>{{ 'pos.itemsInCart' | translate }}:</label>
+            <div class="cart-items-list-dialog">
+              <div class="cart-item-header-extended">
+                <span>{{ 'pos.product' | translate }}</span>
+                <span>{{ 'pos.quantity' | translate }}</span>
+                <span>{{ 'pos.price' | translate }}</span>
+                <span>{{ 'pos.total' | translate }}</span>
+                <span>{{ 'pos.vatApplicable' | translate }}</span>
+                <span>{{ 'pos.vatRate' | translate }}</span>
+                <span>{{ 'pos.hasDiscount' | translate }}</span>
+                <span>{{ 'pos.discountType' | translate }}</span>
+                <span>{{ 'pos.discountValue' | translate }}</span>
+                <span>{{ 'pos.total' | translate }}</span>
+              </div>
+              <div class="cart-item-row-extended" *ngFor="let item of cartItems(); let i = index">
+                <!-- Product Info -->
+                <div class="item-details-dialog">
+                  <span class="item-name">{{ item.productName }}</span>
+                  <span class="item-sku">{{ item.skuId }}</span>
+                </div>
+                
+                <!-- Quantity Controls -->
+                <div class="quantity-controls-dialog">
+                  <button (click)="updateQuantity(item.productId, item.quantity - 1)" class="qty-btn">-</button>
+                  <span class="quantity">{{ item.quantity }}</span>
+                  <button (click)="updateQuantity(item.productId, item.quantity + 1)" class="qty-btn">+</button>
+                </div>
+                
+                <!-- Price -->
+                <div class="item-price-dialog">₱{{ item.sellingPrice.toFixed(2) }}</div>
+                
+                <!-- Total -->
+                <div class="item-total-dialog">₱{{ (item.sellingPrice * item.quantity).toFixed(2) }}</div>
+                
+                <!-- VAT Applicable Checkbox -->
+                <div class="cart-item-field">
+                  <input 
+                    type="checkbox" 
+                    [(ngModel)]="item.isVatApplicable"
+                    (change)="updateCartItemField(i, 'isVatApplicable', item.isVatApplicable)"
+                    class="cart-item-checkbox">
+                </div>
+                
+                <!-- VAT Rate Input -->
+                <div class="cart-item-field">
+                  <input 
+                    type="number" 
+                    [(ngModel)]="item.vatRate"
+                    (change)="updateCartItemField(i, 'vatRate', item.vatRate)"
+                    [disabled]="!item.isVatApplicable"
+                    min="0"
+                    max="100"
+                    step="0.01"
+                    class="cart-item-input"
+                    placeholder="0">
+                </div>
+                
+                <!-- Has Discount Checkbox -->
+                <div class="cart-item-field">
+                  <input 
+                    type="checkbox" 
+                    [(ngModel)]="item.hasDiscount"
+                    (change)="updateCartItemField(i, 'hasDiscount', item.hasDiscount)"
+                    class="cart-item-checkbox">
+                </div>
+                
+                <!-- Discount Type Dropdown -->
+                <div class="cart-item-field">
+                  <select 
+                    [(ngModel)]="item.discountType"
+                    (change)="updateCartItemField(i, 'discountType', item.discountType)"
+                    [disabled]="!item.hasDiscount"
+                    class="cart-item-select">
+                    <option value="percentage">%</option>
+                    <option value="fixed">₱</option>
+                  </select>
+                </div>
+                
+                <!-- Discount Value Input -->
+                <div class="cart-item-field">
+                  <input 
+                    type="number" 
+                    [(ngModel)]="item.discountValue"
+                    (change)="updateCartItemField(i, 'discountValue', item.discountValue)"
+                    [disabled]="!item.hasDiscount"
+                    [max]="item.discountType === 'percentage' ? 100 : item.sellingPrice * item.quantity"
+                    min="0"
+                    step="0.01"
+                    class="cart-item-input"
+                    placeholder="0">
+                </div>
+
+                <!-- Final Total - Editable -->
+                <div class="cart-item-field">
+                  <input 
+                    type="number" 
+                    [(ngModel)]="item.total"
+                    (change)="updateCartItemField(i, 'total', item.total)"
+                    min="0"
+                    step="0.01"
+                    class="cart-item-input cart-item-total-input"
+                    placeholder="0.00">
+                </div>
+              </div>
+              <div *ngIf="cartItems().length === 0" class="empty-cart-message">
+                {{ 'pos.cartEmpty' | translate }}
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Fixed Footer -->
+        <div class="cart-info-dialog-footer">
+          <button 
+            type="button"
+            class="btn-secondary"
+            (click)="closeCartInformationDialog()">
+            {{ 'buttons.cancel' | translate }}
+          </button>
+          <button 
+            type="button"
+            class="btn-primary"
+            (click)="saveAndCloseCartInformationDialog()">
+            {{ 'buttons.save' | translate }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Cart Item Details Modal -->
+    <div class="modal-overlay" *ngIf="showCartItemDetails" (click)="closeCartItemDetails()">
+      <div class="modal cart-details-modal" (click)="$event.stopPropagation()">
+        <div class="modal-header">
+          <h3 *ngIf="selectedCartItem">🛒 Item Details - {{ selectedCartItem.productName }}</h3>
+          <h3 *ngIf="!selectedCartItem">🛒 Cart Overview ({{ cartItems().length }} items)</h3>
+          <button class="close-btn" (click)="closeCartItemDetails()">×</button>
+        </div>
+        <div class="modal-body">
+          
+          <!-- Individual Item Details (when specific item is selected) -->
+          <div class="item-details-section" *ngIf="selectedCartItem">
+            <!-- Product Information -->
+            <div class="detail-card">
+              <div class="detail-header">
+                <span class="detail-icon">📦</span>
+                <span class="detail-title">Product Information</span>
+              </div>
+              <div class="detail-content">
+                <div class="detail-row">
+                  <span class="detail-label">Product:</span>
+                  <span class="detail-value">{{ selectedCartItem.productName }}</span>
+                </div>
+                <div class="detail-row">
+                  <span class="detail-label">SKU:</span>
+                  <span class="detail-value">{{ selectedCartItem.skuId }}</span>
+                </div>
+                <div class="detail-row">
+                  <span class="detail-label">Quantity:</span>
+                  <span class="detail-value">{{ selectedCartItem.quantity }} {{ selectedCartItem.unitType }}</span>
+                </div>
+                <div class="detail-row">
+                  <span class="detail-label">Unit Price:</span>
+                  <span class="detail-value">₱{{ selectedCartItem.sellingPrice.toFixed(2) }}</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- VAT Settings -->
+            <div class="detail-card">
+              <div class="detail-header">
+                <span class="detail-icon">📋</span>
+                <span class="detail-title">VAT Settings</span>
+              </div>
+              <div class="detail-content">
+                <div class="toggle-row">
+                  <label class="toggle-label">
+                    <input 
+                      type="checkbox" 
+                      [(ngModel)]="cartItemDetails.isVatApplicable"
+                      (change)="recalculateCartItem()">
+                    <span class="toggle-text">Apply VAT ({{ cartItemDetails.vatRate || 12 }}%)</span>
+                  </label>
+                </div>
+                <div class="detail-row" *ngIf="cartItemDetails.isVatApplicable">
+                  <span class="detail-label">VAT Rate:</span>
+                  <span class="detail-value">{{ cartItemDetails.vatRate || 12 }}%</span>
+                </div>
+                <div class="detail-row" *ngIf="cartItemDetails.isVatApplicable">
+                  <span class="detail-label">VAT Amount:</span>
+                  <span class="detail-value">₱{{ (cartItemDetails.vatAmount || 0).toFixed(2) }}</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Discount Settings -->
+            <div class="detail-card">
+              <div class="detail-header">
+                <span class="detail-icon">💰</span>
+                <span class="detail-title">Discount Settings</span>
+              </div>
+              <div class="detail-content">
+                <div class="toggle-row">
+                  <label class="toggle-label">
+                    <input 
+                      type="checkbox" 
+                      [(ngModel)]="cartItemDetails.hasDiscount"
+                      (change)="recalculateCartItem()">
+                    <span class="toggle-text">Apply Discount</span>
+                  </label>
+                </div>
+                
+                <div class="discount-settings" *ngIf="cartItemDetails.hasDiscount">
+                  <div class="form-row">
+                    <div class="form-group">
+                      <label>Discount Type:</label>
+                      <select 
+                        [(ngModel)]="cartItemDetails.discountType" 
+                        (change)="recalculateCartItem()"
+                        class="form-input">
+                        <option value="percentage">Percentage (%)</option>
+                        <option value="fixed">Fixed Amount (₱)</option>
+                      </select>
+                    </div>
+                    <div class="form-group">
+                      <label>
+                        Discount Value 
+                        <span *ngIf="cartItemDetails.discountType === 'percentage'">(%)</span>
+                        <span *ngIf="cartItemDetails.discountType === 'fixed'">(₱)</span>:
+                      </label>
+                      <input 
+                        type="number" 
+                        [(ngModel)]="cartItemDetails.discountValue"
+                        (input)="recalculateCartItem()"
+                        class="form-input"
+                        [max]="cartItemDetails.discountType === 'percentage' ? 100 : cartItemDetails.subtotalBeforeDiscount"
+                        min="0"
+                        step="0.01">
+                    </div>
+                  </div>
+                  
+                  <div class="detail-row" *ngIf="cartItemDetails.hasDiscount">
+                    <span class="detail-label">Discount Amount:</span>
+                    <span class="detail-value text-green">₱{{ (cartItemDetails.discountAmount || 0).toFixed(2) }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Price Breakdown -->
+            <div class="detail-card total-breakdown">
+              <div class="detail-header">
+                <span class="detail-icon">🧮</span>
+                <span class="detail-title">Price Breakdown</span>
+              </div>
+              <div class="detail-content">
+                <div class="breakdown-row">
+                  <span class="breakdown-label">Subtotal:</span>
+                  <span class="breakdown-value">₱{{ (cartItemDetails.subtotalBeforeDiscount || 0).toFixed(2) }}</span>
+                </div>
+                <div class="breakdown-row" *ngIf="cartItemDetails.hasDiscount">
+                  <span class="breakdown-label">Discount:</span>
+                  <span class="breakdown-value text-green">-₱{{ (cartItemDetails.discountAmount || 0).toFixed(2) }}</span>
+                </div>
+                <div class="breakdown-row">
+                  <span class="breakdown-label">After Discount:</span>
+                  <span class="breakdown-value">₱{{ (cartItemDetails.subtotalAfterDiscount || 0).toFixed(2) }}</span>
+                </div>
+                <div class="breakdown-row" *ngIf="cartItemDetails.isVatApplicable">
+                  <span class="breakdown-label">VAT ({{ cartItemDetails.vatRate || 12 }}%):</span>
+                  <span class="breakdown-value">₱{{ (cartItemDetails.vatAmount || 0).toFixed(2) }}</span>
+                </div>
+                <div class="breakdown-row total-row">
+                  <span class="breakdown-label">Final Total:</span>
+                  <span class="breakdown-value">₱{{ (cartItemDetails.finalTotal || 0).toFixed(2) }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Cart Overview (when no specific item is selected) -->
+          <div class="cart-overview-section" *ngIf="!selectedCartItem">
+            <!-- Cart Summary -->
+            <div class="detail-card">
+              <div class="detail-header">
+                <span class="detail-icon">🛒</span>
+                <span class="detail-title">Cart Summary</span>
+              </div>
+              <div class="detail-content">
+                <div class="detail-row">
+                  <span class="detail-label">Total Items:</span>
+                  <span class="detail-value">{{ cartItems().length }}</span>
+                </div>
+                <div class="detail-row">
+                  <span class="detail-label">Gross Amount:</span>
+                  <span class="detail-value">₱{{ cartSummary().grossAmount.toFixed(2) }}</span>
+                </div>
+                <div class="detail-row">
+                  <span class="detail-label">VAT Amount:</span>
+                  <span class="detail-value">₱{{ cartSummary().vatAmount.toFixed(2) }}</span>
+                </div>
+                <div class="detail-row">
+                  <span class="detail-label">Net Amount:</span>
+                  <span class="detail-value">₱{{ cartSummary().netAmount.toFixed(2) }}</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Items List -->
+            <div class="detail-card">
+              <div class="detail-header">
+                <span class="detail-icon">📝</span>
+                <span class="detail-title">Items in Cart</span>
+              </div>
+              <div class="detail-content">
+                <div class="cart-items-list">
+                  <div class="cart-item-row" *ngFor="let item of cartItems()">
+                    <div class="item-basic-info">
+                      <div class="item-name">{{ item.productName }}</div>
+                      <div class="item-details">{{ item.quantity }}x ₱{{ item.sellingPrice.toFixed(2) }} = ₱{{ item.total.toFixed(2) }}</div>
+                    </div>
+                    <button 
+                      class="btn btn-sm btn-outline" 
+                      (click)="openCartItemDetails(item)"
+                      title="Edit this item">
+                      ✏️ Edit
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Batch Actions (always visible) -->
+          <div class="batch-actions">
+            <div class="action-buttons">
+              <button 
+                class="btn btn-outline" 
+                (click)="removeVatFromAllItems()"
+                title="Remove VAT from all cart items">
+                🚫 Remove VAT from All
+              </button>
+              <button 
+                class="btn btn-outline" 
+                (click)="removeDiscountFromAllItems()"
+                title="Remove discounts from all cart items">
+                🚫 Remove All Discounts
+              </button>
+              <button 
+                class="btn btn-outline" 
+                (click)="applyVatToAllItems()"
+                title="Apply VAT to all cart items">
+                ✅ Apply VAT to All
+              </button>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" (click)="closeCartItemDetails()">
+            {{ selectedCartItem ? 'Cancel' : 'Close' }}
+          </button>
+          <button 
+            *ngIf="selectedCartItem" 
+            class="btn btn-primary" 
+            (click)="saveCartItemChanges()">
+            Save Changes
           </button>
         </div>
       </div>

@@ -1,4 +1,4 @@
-import { Component, inject, OnInit } from '@angular/core';
+import { Component, inject, OnInit, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { StoreService } from '../../../services/store.service';
@@ -45,7 +45,34 @@ import { AuthService } from '../../../services/auth.service';
                   class="preview-btn">
                   Preview Next
                 </button>
+                <button
+                  (click)="openBirModal(store)"
+                  class="view-bir-btn">
+                  View BIR
+                </button>
               </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- BIR Compliance View-Only Modal -->
+        <div *ngIf="showBirModal()" class="bir-modal-overlay" (click)="closeBirModal()">
+          <div class="bir-modal-content" (click)="$event.stopPropagation()">
+            <div class="bir-modal-header">
+              <h3>BIR Compliance (View Only)</h3>
+              <button class="bir-close-btn" (click)="closeBirModal()">×</button>
+            </div>
+            <div class="bir-modal-body">
+              <div *ngIf="birModalData">
+                <h4>{{ birModalData.storeName || birModalData.id }}</h4>
+                <pre style="white-space:pre-wrap">{{ birModalData.birDetails | json }}</pre>
+              </div>
+              <div *ngIf="!birModalData">
+                <p>No BIR data available for this store.</p>
+              </div>
+            </div>
+            <div class="bir-modal-footer">
+              <button class="init-all-btn" (click)="closeBirModal()">Close</button>
             </div>
           </div>
         </div>
@@ -239,6 +266,134 @@ import { AuthService } from '../../../services/auth.service';
       opacity: 0.5;
       cursor: not-allowed;
     }
+
+    /* Reused order-items table styles (patterned after Sales Summary) */
+    .order-items-table-wrapper {
+      overflow: auto;
+      max-height: 44vh; /* allow modal/dialog scrolling */
+      border: 1px solid #e8eef6;
+      border-radius: 8px;
+      background: white;
+      padding: 8px;
+      margin-top: 12px;
+    }
+
+    .order-items-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+      table-layout: auto;
+    }
+
+    .order-items-table thead th {
+      background: #f7fafc;
+      padding: 10px 12px;
+      text-align: left;
+      font-weight: 600;
+      color: #4a5568;
+      font-size: 12px;
+      text-transform: uppercase;
+      border-bottom: 1px solid #e2e8f0;
+    }
+
+    .order-items-table td {
+      padding: 10px 12px;
+      border-bottom: 1px solid #f1f5f9;
+      color: #2d3748;
+      vertical-align: middle;
+    }
+
+    .order-items-table .mono {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, 'Roboto Mono', 'Courier New', monospace;
+      font-size: 13px;
+      color: #2b6cb0;
+    }
+
+    /* BIR View-Only Modal styles (patterned after Sales Summary modal) */
+    .bir-modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.5);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      padding: 20px;
+    }
+
+    .bir-modal-content {
+      background: white;
+      border-radius: 12px;
+      max-width: 720px;
+      width: 100%;
+      max-height: 80vh;
+      overflow-y: auto;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+      position: relative;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .bir-modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 18px 20px;
+      border-bottom: 1px solid #e2e8f0;
+    }
+
+    .bir-modal-header h3 {
+      margin: 0;
+      color: #2d3748;
+      font-size: 18px;
+      font-weight: 700;
+    }
+
+    .bir-close-btn {
+      background: none;
+      border: none;
+      font-size: 24px;
+      cursor: pointer;
+      color: #718096;
+      padding: 4px;
+      line-height: 1;
+    }
+
+    .bir-close-btn:hover {
+      color: #4a5568;
+      transform: scale(1.05);
+    }
+
+    .bir-modal-body {
+      padding: 18px 20px;
+      color: #374151;
+    }
+
+    .bir-modal-footer {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      padding: 16px 20px;
+      border-top: 1px solid #e2e8f0;
+      background: #fafafa;
+      border-bottom-left-radius: 12px;
+      border-bottom-right-radius: 12px;
+    }
+
+    .view-bir-btn {
+      padding: 6px 10px;
+      border-radius: 6px;
+      border: 1px solid #d1d5db;
+      background: white;
+      cursor: pointer;
+    }
+
+    .view-bir-btn:hover {
+      background: #f3f4f6;
+    }
   `]
 })
 export class InvoiceSetupComponent implements OnInit {
@@ -250,6 +405,9 @@ export class InvoiceSetupComponent implements OnInit {
   isProcessing = false;
   testResults: any[] = [];
   selectedStoreId = '';
+  // BIR modal state
+  showBirModal = signal(false);
+  birModalData: any = null;
 
   async ngOnInit() {
     await this.loadStores();
@@ -384,5 +542,16 @@ export class InvoiceSetupComponent implements OnInit {
     } finally {
       this.isProcessing = false;
     }
+  }
+
+  // Open/view-only BIR modal for a store
+  openBirModal(store: any) {
+    this.birModalData = store || null;
+    this.showBirModal.set(true);
+  }
+
+  closeBirModal() {
+    this.showBirModal.set(false);
+    this.birModalData = null;
   }
 }

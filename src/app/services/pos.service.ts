@@ -51,7 +51,7 @@ export class PosService {
     
     // Calculate VAT amounts
     const vatableItems = items.filter(item => item.isVatApplicable && !item.isVatExempt);
-    const vatExemptItems = items.filter(item => item.isVatExempt || !item.isVatApplicable);
+    const vatExemptItems = items.filter(item => item.vatRate === 0 || item.isVatExempt || !item.isVatApplicable);
     
     const vatableSales = vatableItems.reduce((sum, item) => 
       sum + ((item.sellingPrice * item.quantity) - item.discountAmount), 0);
@@ -132,6 +132,17 @@ export class PosService {
       items.map(item => {
         if (item.productId === productId) {
           const updatedItem = { ...item, quantity };
+          return this.recalculateCartItem(updatedItem);
+        }
+        return item;
+      })
+    );
+  }
+
+  updateCartItem(updatedItem: CartItem): void {
+    this.cartItemsSignal.update(items =>
+      items.map(item => {
+        if (item.productId === updatedItem.productId) {
           return this.recalculateCartItem(updatedItem);
         }
         return item;
@@ -707,9 +718,11 @@ export class PosService {
     
     if (item.hasDiscount) {
       if (item.discountType === 'percentage') {
+        // Percentage discount: apply percentage to base total
         discountAmount = (baseTotal * item.discountValue) / 100;
       } else {
-        discountAmount = item.discountValue * item.quantity;
+        // Fixed amount discount: use the fixed discount value directly
+        discountAmount = item.discountValue;
       }
     }
 
@@ -846,7 +859,7 @@ export class PosService {
   await runTransaction(this.firestore, async (transaction) => {
       // Validate and apply batch updates
       for (const p of plan) {
-        const batchRef = doc(this.firestore, 'productInventoryEntries', p.docId);
+        const batchRef = doc(this.firestore, 'productInventory', p.docId);
         const batchSnap = await transaction.get(batchRef as any);
         if (!batchSnap.exists()) {
           throw new Error(`Batch ${p.batchId} not found during transaction`);
