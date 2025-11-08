@@ -1,7 +1,7 @@
-import { Component, OnInit, signal, inject, OnDestroy } from '@angular/core';
+import { Component, OnInit, signal, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterModule } from '@angular/router';
-import { NetworkService } from '../../../core/services/network.service';
+// import { NetworkService } from '../../../core/services/network.service';
 
 @Component({
   selector: 'app-header',
@@ -89,7 +89,7 @@ import { NetworkService } from '../../../core/services/network.service';
   `]
 })
 export class AppHeaderComponent implements OnInit, OnDestroy {
-  private networkService = inject(NetworkService);
+  // NetworkService not needed here; using navigator events directly
   networkStatus = signal<'online' | 'offline' | 'syncing'>('online');
   private listeners: (() => void)[] = [];
 
@@ -117,18 +117,15 @@ export class AppHeaderComponent implements OnInit, OnDestroy {
   }
 
   private handleOnline() {
-    console.log('🌐 Network: Connection restored - switching to syncing mode');
     this.networkStatus.set('syncing');
     
     // Show syncing for 2 seconds, then switch to online
     setTimeout(() => {
-      console.log('🌐 Network: Sync complete - now online');
       this.networkStatus.set('online');
     }, 2000);
   }
 
   private handleOffline() {
-    console.log('🌐 Network: Connection lost - switching to offline mode');
     this.networkStatus.set('offline');
   }
 

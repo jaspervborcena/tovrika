@@ -1,5 +1,5 @@
 import { Injectable, computed, signal, inject, OnDestroy } from '@angular/core';
-import { HttpClient, HttpHeaders } from '@angular/common/http';
+// import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { 
   Firestore, 
   collection, 
@@ -15,7 +15,7 @@ import {
   orderBy,
   limit,
   enableNetwork,
-  disableNetwork,
+  // disableNetwork,
   connectFirestoreEmulator,
   runTransaction,
   Timestamp,
@@ -68,15 +68,10 @@ export class ProductService implements OnDestroy {
   // Computed properties - reactive access to cache
   readonly products = computed(() => {
     const products = this.cacheState().products;
-    console.log('📊 Products signal computed:', { 
-      count: products.length, 
-      firstFew: products.slice(0, 3).map(p => ({ id: p.id, name: p.productName }))
-    });
     return products;
   });
   readonly isLoading = computed(() => {
     const loading = this.cacheState().isLoading;
-    console.log('⏳ Loading signal computed:', loading);
     return loading;
   });
   readonly lastUpdated = computed(() => this.cacheState().lastUpdated);
@@ -102,91 +97,10 @@ export class ProductService implements OnDestroy {
     return categoryMap;
   });  constructor(
     private firestore: Firestore,
-    private authService: AuthService,
-    private http: HttpClient
+    private authService: AuthService
   ) {
     this.initializeNetworkMonitoring();
     this.initializeFirestorePersistence();
-    
-    // Add debug methods to global window for console testing
-    (window as any).debugProducts = {
-      load: (storeId?: string) => this.debugProductLoad(storeId),
-      getProducts: () => this.getProducts(),
-      getCount: () => this.products().length,
-      getState: () => ({
-        isLoading: this.isLoading(),
-        hasInitialLoad: this.hasInitialLoad(),
-        error: this.error(),
-        currentStoreId: this.currentStoreId,
-        productCount: this.products().length
-      }),
-      forceReload: (storeId?: string) => this.initializeProducts(storeId || this.currentStoreId || '', true),
-      testFirestore: async () => {
-        console.log('🧪 Testing basic Firestore connection...');
-        try {
-          const testRef = collection(this.firestore, 'products');
-          const testQuery = query(testRef, limit(1));
-          const testSnapshot = await getDocs(testQuery);
-          console.log('✅ Firestore connection test successful!', {
-            docs: testSnapshot.size,
-            empty: testSnapshot.empty
-          });
-          return true;
-        } catch (error) {
-          console.error('❌ Firestore connection test failed:', error);
-          return false;
-        }
-      },
-      testQuery: async (companyId: string, storeId: string) => {
-        console.log('🧪 Testing specific product query...', { companyId, storeId });
-        try {
-          const testRef = collection(this.firestore, 'products');
-          const testQuery = query(
-            testRef,
-            where('companyId', '==', companyId),
-            where('storeId', '==', storeId),
-            limit(5)
-          );
-          const testSnapshot = await getDocs(testQuery);
-          console.log('✅ Query test successful!', {
-            docs: testSnapshot.size,
-            empty: testSnapshot.empty,
-            data: testSnapshot.docs.map(d => ({ id: d.id, data: d.data() }))
-          });
-          return testSnapshot.docs.map(d => d.data());
-        } catch (error) {
-          console.error('❌ Query test failed:', error);
-          return null;
-        }
-      },
-      testDirectLoad: async () => {
-        console.log('🧪 Testing direct product load...');
-        try {
-          const currentUser = this.authService.getCurrentUser();
-          if (!currentUser) {
-            console.error('❌ No current user');
-            return;
-          }
-          
-          const permission = this.authService.getCurrentPermission();
-          if (!permission) {
-            console.error('❌ No current permission');
-            return;
-          }
-          
-          console.log('🔍 Using permission:', permission);
-          if (permission.companyId && permission.storeId) {
-            await this.loadProductsDirectly(permission.companyId, permission.storeId);
-          } else {
-            console.error('❌ Missing companyId or storeId in permission');
-          }
-        } catch (error) {
-          console.error('❌ Direct load test failed:', error);
-        }
-      }
-    };
-    console.log('🐛 Debug methods available at window.debugProducts');
-    console.log('🐛 Available methods: load, getProducts, getCount, getState, forceReload, testFirestore, testQuery');
   }
 
   ngOnDestroy(): void {
@@ -247,28 +161,21 @@ export class ProductService implements OnDestroy {
   /**
    * Disable Firestore network access (offline mode)
    */
-  private async disableFirestoreNetwork(): Promise<void> {
-    try {
-      await disableNetwork(this.firestore);
-      this.logger.debug('Firestore network disabled', { area: 'products' });
-    } catch (error) {
-      this.logger.warn('Failed to disable Firestore network', { area: 'products', payload: { error: String(error) } });
-    }
-  }
+  // private async disableFirestoreNetwork(): Promise<void> {
+  //   try {
+  //     await disableNetwork(this.firestore);
+  //     this.logger.debug('Firestore network disabled', { area: 'products' });
+  //   } catch (error) {
+  //     this.logger.warn('Failed to disable Firestore network', { area: 'products', payload: { error: String(error) } });
+  //   }
+  // }
 
   /**
    * Update cache state
    */
   private updateCacheState(updates: Partial<ProductCacheState>): void {
-    console.log('🔄 Updating cache state:', updates);
     this.cacheState.update(current => {
       const newState = { ...current, ...updates };
-      console.log('📦 New cache state:', {
-        productsCount: newState.products.length,
-        isLoading: newState.isLoading,
-        error: newState.error,
-        hasInitialLoad: newState.hasInitialLoad
-      });
       return newState;
     });
   }
@@ -787,10 +694,10 @@ export class ProductService implements OnDestroy {
     }
   }
 
-  private transformQuantityAdjustments(adjustmentsData: any[]): any[] {
-    // quantityAdjustments removed from product documents. Keep method for backward compatibility but return empty.
-    return [];
-  }
+  // private transformQuantityAdjustments(_adjustmentsData: any[]): any[] {
+  //   // quantityAdjustments removed from product documents. Keep method for backward compatibility but return empty.
+  //   return [];
+  // }
 
   private async waitForAuth(): Promise<string> {
     return new Promise((resolve, reject) => {
@@ -824,57 +731,57 @@ export class ProductService implements OnDestroy {
     });
   }
 
-  async loadProducts(storeId: string, pageSize = 50, pageNumber = 1): Promise<number> {
+  async loadProducts(storeId: string, _pageSize = 50, _pageNumber = 1): Promise<number> {
     // Delegate to the new real-time method
     await this.loadProductsRealTime(storeId);
     return this.products().length;
   }
 
-  private async loadProductsFromBigQuery(storeId: string, pageSize = 50, pageNumber = 1): Promise<number> {
-    // BigQuery method deprecated - redirecting to Firestore real-time
-    this.logger.warn('loadProductsFromBigQuery is deprecated, using Firestore real-time instead', { area: 'products', storeId });
-    await this.loadProductsRealTime(storeId);
-    return this.products().length;
-  }
+  // private async loadProductsFromBigQuery(storeId: string, _pageSize = 50, _pageNumber = 1): Promise<number> {
+  //   // BigQuery method deprecated - redirecting to Firestore real-time
+  //   this.logger.warn('loadProductsFromBigQuery is deprecated, using Firestore real-time instead', { area: 'products', storeId });
+  //   await this.loadProductsRealTime(storeId);
+  //   return this.products().length;
+  // }
 
-  private transformBigQueryProduct(item: any): Product {
-    return {
-      id: item.id || item.productId || '',
-      uid: item.uid || '',
-      productName: item.productName || item.name || '',
-      description: item.description || undefined,
-      skuId: item.skuId || item.sku || '',
-      unitType: item.unitType || 'pieces',
-      category: item.category || '',
-      totalStock: Number(item.totalStock || item.stock || 0),
-      sellingPrice: Number(item.sellingPrice || item.unitPrice || 0),
-      companyId: item.companyId || '',
-      storeId: item.storeId || '',
-      barcodeId: item.barcodeId || item.barcode || '',
-      imageUrl: item.imageUrl || '',
-      isFavorite: !!item.isFavorite || false,
-      
-      // Tax and Discount Fields with defaults
-      isVatApplicable: item.isVatApplicable || false,
-      vatRate: item.vatRate || 0,
-      hasDiscount: item.hasDiscount || false,
-      discountType: item.discountType || 'percentage',
-      discountValue: item.discountValue || 0,
-      
-      status: item.status || 'active',
-      createdAt: item.createdAt ? new Date(item.createdAt) : new Date(),
-      updatedAt: item.updatedAt ? new Date(item.updatedAt) : new Date(),
-      lastUpdated: item.lastUpdated ? new Date(item.lastUpdated) : new Date()
-    };
-  }
+  // private transformBigQueryProduct(item: any): Product {
+  //   return {
+  //     id: item.id || item.productId || '',
+  //     uid: item.uid || '',
+  //     productName: item.productName || item.name || '',
+  //     description: item.description || undefined,
+  //     skuId: item.skuId || item.sku || '',
+  //     unitType: item.unitType || 'pieces',
+  //     category: item.category || '',
+  //     totalStock: Number(item.totalStock || item.stock || 0),
+  //     sellingPrice: Number(item.sellingPrice || item.unitPrice || 0),
+  //     companyId: item.companyId || '',
+  //     storeId: item.storeId || '',
+  //     barcodeId: item.barcodeId || item.barcode || '',
+  //     imageUrl: item.imageUrl || '',
+  //     isFavorite: !!item.isFavorite || false,
+  //     
+  //     // Tax and Discount Fields with defaults
+  //     isVatApplicable: item.isVatApplicable || false,
+  //     vatRate: item.vatRate || 0,
+  //     hasDiscount: item.hasDiscount || false,
+  //     discountType: item.discountType || 'percentage',
+  //     discountValue: item.discountValue || 0,
+  //     
+  //     status: item.status || 'active',
+  //     createdAt: item.createdAt ? new Date(item.createdAt) : new Date(),
+  //     updatedAt: item.updatedAt ? new Date(item.updatedAt) : new Date(),
+  //     lastUpdated: item.lastUpdated ? new Date(item.lastUpdated) : new Date()
+  //   };
+  // }
 
-  private async loadProductsFromFirestore(storeId?: string): Promise<void> {
-    // Legacy method - redirecting to real-time method
-    this.logger.warn('loadProductsFromFirestore is deprecated, using real-time method instead', { area: 'products', storeId });
-    if (storeId) {
-      await this.loadProductsRealTime(storeId);
-    }
-  }
+  // private async loadProductsFromFirestore(storeId?: string): Promise<void> {
+  //   // Legacy method - redirecting to real-time method
+  //   this.logger.warn('loadProductsFromFirestore is deprecated, using real-time method instead', { area: 'products', storeId });
+  //   if (storeId) {
+  //     await this.loadProductsRealTime(storeId);
+  //   }
+  // }
 async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promise<void> {
     // Legacy method - redirecting to real-time method
     this.logger.warn('loadProductsByCompanyAndStore is deprecated, using real-time method instead', { area: 'products', companyId, storeId });
@@ -883,13 +790,13 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
     }
   }
 
-  private async loadProductsByCompanyAndStoreFromBigQuery(companyId?: string, storeId?: string): Promise<void> {
-    // Legacy method - redirecting to real-time method
-    this.logger.warn('loadProductsByCompanyAndStoreFromBigQuery is deprecated, using real-time method instead', { area: 'products', companyId, storeId });
-    if (storeId) {
-      await this.loadProductsRealTime(storeId);
-    }
-  }
+  // private async loadProductsByCompanyAndStoreFromBigQuery(companyId?: string, storeId?: string): Promise<void> {
+  //   // Legacy method - redirecting to real-time method
+  //   this.logger.warn('loadProductsByCompanyAndStoreFromBigQuery is deprecated, using real-time method instead', { area: 'products', companyId, storeId });
+  //   if (storeId) {
+  //     await this.loadProductsRealTime(storeId);
+  //   }
+  // }
 
   async loadProductsByCompanyAndStoreFromFirestore(companyId?: string, storeId?: string): Promise<void> {
     // Legacy method - redirecting to real-time method
@@ -1267,8 +1174,8 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
   async updateProductPrice(
     productId: string, 
     newPrice: number, 
-    reason?: string, 
-    batchId?: string
+    _reason?: string, 
+    _batchId?: string
   ): Promise<void> {
     try {
       const product = this.getProduct(productId);
@@ -1295,11 +1202,11 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
    */
   async adjustBatchQuantity(
     productId: string,
-    batchId: string,
+    _batchId: string,
     newQuantity: number,
-    adjustmentType: 'manual' | 'sale' | 'return' | 'damage' | 'restock' | 'transfer',
-    reason?: string,
-    notes?: string
+    _adjustmentType: 'manual' | 'sale' | 'return' | 'damage' | 'restock' | 'transfer',
+    _reason?: string,
+    _notes?: string
   ): Promise<void> {
     try {
       const product = this.getProduct(productId);
@@ -1327,10 +1234,10 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
    */
   async splitBatch(
     productId: string,
-    sourceBatchId: string,
-    quantityToMove: number,
-    newBatchPrice: number,
-    reason?: string
+    _sourceBatchId: string,
+    _quantityToMove: number,
+    _newBatchPrice: number,
+    _reason?: string
   ): Promise<void> {
     try {
       // Inventory functionality removed - method disabled
@@ -1345,7 +1252,7 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
   /**
    * Get quantity adjustment history for a product
    */
-  getQuantityAdjustments(productId: string) {
+  getQuantityAdjustments(_productId: string) {
     // quantityAdjustments removed from product docs; return empty list for compatibility
     return [] as any[];
   }
@@ -1353,7 +1260,7 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
   /**
    * Get quantity adjustments for a specific batch
    */
-  getBatchAdjustments(productId: string, batchId: string) {
+  getBatchAdjustments(_productId: string, _batchId: string) {
     // No embedded adjustments stored on products anymore
     return [] as any[];
   }
@@ -1448,17 +1355,17 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
   }
 
   // Legacy no-op implementations to avoid breaking callers; will be removed after UI refactor.
-  async addInventoryBatch(productId: string, _batch: ProductInventory): Promise<void> {
+  async addInventoryBatch(_productId: string, _batch: ProductInventory): Promise<void> {
   this.logger.warn('addInventoryBatch is deprecated. Use InventoryDataService.addBatch instead.', { area: 'products' });
     // No-op
   }
 
-  async updateInventoryBatch(productId: string, _batchId: string, _updatedBatch: ProductInventory): Promise<void> {
+  async updateInventoryBatch(_productId: string, _batchId: string, _updatedBatch: ProductInventory): Promise<void> {
   this.logger.warn('updateInventoryBatch is deprecated. Use InventoryDataService.updateBatch instead.', { area: 'products' });
     // No-op
   }
 
-  async removeInventoryBatch(productId: string, _batchId: string): Promise<void> {
+  async removeInventoryBatch(_productId: string, _batchId: string): Promise<void> {
   this.logger.warn('removeInventoryBatch is deprecated. Use InventoryDataService.removeBatch instead.', { area: 'products' });
     // No-op
   }
