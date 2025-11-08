@@ -13,7 +13,6 @@ import { CategoryService, ProductCategory } from '../../../services/category.ser
 import { InventoryDataService } from '../../../services/inventory-data.service';
 import { PredefinedTypesService, UnitTypeOption, PredefinedType } from '../../../services/predefined-types.service';
 import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../shared/components/confirmation-dialog/confirmation-dialog.component';
-import { CloudLoggingService } from '../../../services/cloud-logging.service';
 
 @Component({
   selector: 'app-product-management',
@@ -1024,19 +1023,16 @@ import { CloudLoggingService } from '../../../services/cloud-logging.service';
           <input 
             type="text" 
             [(ngModel)]="searchTerm"
-            (ngModelChange)="filterProducts()"
             placeholder="Search products by name, SKU, or category..."
             class="search-input">
           <select 
             [(ngModel)]="selectedCategory" 
-            (change)="filterProducts()" 
             class="filter-select">
             <option value="">All Categories</option>
             <option *ngFor="let category of categories()" [value]="category">{{ category }}</option>
           </select>
           <select 
             [(ngModel)]="selectedStore" 
-            (change)="filterProducts()" 
             class="filter-select">
             <option value="">All Stores</option>
             <option *ngFor="let store of stores()" [value]="store.id">{{ store.storeName }}</option>
@@ -1733,11 +1729,35 @@ export class ProductManagementComponent implements OnInit {
   readonly stores = computed(() => this.storeService.getStores());
   readonly categories = computed(() => this.categoryService.getCategoryLabels());
 
+  // Reactive filtered products - automatically updates when products change or filters change
+  readonly filteredProducts = computed(() => {
+    let filtered = this.products();
+
+    if (this.searchTerm) {
+      const term = this.searchTerm.toLowerCase();
+      filtered = filtered.filter(product =>
+        product.productName.toLowerCase().includes(term) ||
+        product.skuId.toLowerCase().includes(term) ||
+        product.category.toLowerCase().includes(term) ||
+        product.barcodeId?.toLowerCase().includes(term)
+      );
+    }
+
+    if (this.selectedCategory) {
+      filtered = filtered.filter(product => product.category === this.selectedCategory);
+    }
+
+    if (this.selectedStore) {
+      filtered = filtered.filter(product => product.storeId === this.selectedStore);
+    }
+
+    return filtered;
+  });
+
   // State
   searchTerm = '';
   selectedCategory = '';
   selectedStore = '';
-  filteredProducts = signal<Product[]>([]);
   // Pagination state for BigQuery products API
   pageSize = 50;
   currentPage = 1;
@@ -1798,8 +1818,7 @@ export class ProductManagementComponent implements OnInit {
     private toastService: ToastService,
     private categoryService: CategoryService,
     private inventoryDataService: InventoryDataService,
-    private predefinedTypesService: PredefinedTypesService,
-    private cloudLoggingService: CloudLoggingService
+    private predefinedTypesService: PredefinedTypesService
   ) {
     this.productForm = this.createProductForm();
     this.inventoryForm = this.createInventoryForm();
@@ -1838,8 +1857,6 @@ export class ProductManagementComponent implements OnInit {
       
       // Load unit types from predefined types
       await this.loadUnitTypes();
-      
-      this.filterProducts();
     } catch (error) {
       console.error('Error loading data:', error);
     }
@@ -1934,29 +1951,7 @@ export class ProductManagementComponent implements OnInit {
     });
   }
 
-  filterProducts(): void {
-    let filtered = this.products();
-
-    if (this.searchTerm) {
-      const term = this.searchTerm.toLowerCase();
-      filtered = filtered.filter(product =>
-        product.productName.toLowerCase().includes(term) ||
-        product.skuId.toLowerCase().includes(term) ||
-        product.category.toLowerCase().includes(term) ||
-        product.barcodeId?.toLowerCase().includes(term)
-      );
-    }
-
-    if (this.selectedCategory) {
-      filtered = filtered.filter(product => product.category === this.selectedCategory);
-    }
-
-    if (this.selectedStore) {
-      filtered = filtered.filter(product => product.storeId === this.selectedStore);
-    }
-
-    this.filteredProducts.set(filtered);
-  }
+  // Note: filterProducts() method removed - filtering is now handled by the computed filteredProducts signal
 
   openAddModal(): void {
     console.log('openAddModal called');
@@ -2167,13 +2162,6 @@ export class ProductManagementComponent implements OnInit {
 
         await this.productService.updateProduct(this.selectedProduct.id!, updates);
         
-        // Log product update
-        await this.cloudLoggingService.logProductUpdated(
-          this.selectedProduct.id!,
-          formValue.productName,
-          storeId,
-          { updates, previousValues: this.selectedProduct }
-        );
         } else {
         // Create new product (no embedded inventory)
         const hasInitial = !!(formValue.initialQuantity && formValue.initialQuantity > 0);
@@ -2190,12 +2178,16 @@ export class ProductManagementComponent implements OnInit {
 
         // Get current user for UID
         const currentUser = this.authService.getCurrentUser();
+        console.log('🔍 Current user check:', currentUser ? { uid: currentUser.uid, email: currentUser.email } : 'NULL');
         if (!currentUser) {
           throw new Error('User not authenticated');
         }
+        
+        const currentPermission = this.authService.getCurrentPermission();
+        console.log('🔍 Current permission check:', currentPermission ? { companyId: currentPermission.companyId, storeId: currentPermission.storeId } : 'NULL');
 
         const newProduct: Omit<Product, 'id' | 'createdAt' | 'updatedAt'> = {
-          uid: currentUser.uid,  // Add UID for security rules
+          uid: currentUser.uid,  // Required by Product interface
           productName: formValue.productName,
           description: formValue.description,
           skuId: formValue.skuId,
@@ -2219,23 +2211,24 @@ export class ProductManagementComponent implements OnInit {
           status: 'active'
         };
 
+        console.log('🚀 About to create product with data:', newProduct);
         const productId = await this.productService.createProduct(newProduct);
-        
-        // Log product creation
-        await this.cloudLoggingService.logProductCreated(
-          productId,
-          formValue.productName,
-          storeId,
-          { newProduct, hasInitialBatch: hasInitial }
-        );
+        console.log('✅ Product created successfully with ID:', productId);
         
         // If initial batch exists, create it in separate collection and recompute summary
         if (hasInitial && productId) {
           console.log('🎯 Creating initial inventory batch for new product:', productId);
           console.log('📦 Initial batch data:', initialBatch);
+          console.log('🔍 Form values for initial batch:', {
+            initialQuantity: formValue.initialQuantity,
+            initialUnitPrice: formValue.initialUnitPrice,
+            initialCostPrice: formValue.initialCostPrice,
+            hasInitial,
+            productId
+          });
           
           try {
-            await this.inventoryDataService.addBatch(productId, {
+            const batchData = {
               batchId: initialBatch!.batchId,
               quantity: initialBatch!.quantity,
               unitPrice: initialBatch!.unitPrice,
@@ -2243,24 +2236,34 @@ export class ProductManagementComponent implements OnInit {
               receivedAt: initialBatch!.receivedAt,
               expiryDate: initialBatch!.expiryDate,
               supplier: initialBatch!.supplier,
-              status: 'active',
+              status: 'active' as const,
               unitType: formValue.unitType || 'pieces',
               companyId: companyId,
               storeId: storeId,
               productId: productId
-            });
+            };
+            console.log('📦 Final batch data being sent to addBatch:', batchData);
+            
+            await this.inventoryDataService.addBatch(productId, batchData);
             console.log('✅ Initial inventory batch created successfully');
           } catch (batchError) {
             console.error('❌ Failed to create initial inventory batch:', batchError);
+            console.error('❌ Error details:', {
+              message: batchError instanceof Error ? batchError.message : 'Unknown error',
+              stack: batchError instanceof Error ? batchError.stack : undefined,
+              batchData: initialBatch
+            });
             throw batchError; // Re-throw to show error to user
           }
-        } else if (hasInitial) {
-          console.warn('⚠️ Initial inventory requested but no productId returned');
+        } else {
+          console.log('⚠️ Initial batch not created:', { hasInitial, productId, initialQuantity: formValue.initialQuantity });
+          if (hasInitial && !productId) {
+            console.warn('⚠️ Initial inventory requested but no productId returned');
+          }
         }
       }
 
       this.closeModal();
-      this.filterProducts();
     } catch (error) {
       console.error('Error saving product:', error);
       
@@ -2270,12 +2273,12 @@ export class ProductManagementComponent implements OnInit {
       const action = this.isEditMode ? 'UPDATE' : 'CREATE';
       const productName = this.productForm.get('productName')?.value || 'Unknown Product';
       
-      await this.cloudLoggingService.logProductError(
-        this.selectedProduct?.id || 'new-product',
+      console.error('Product error:', {
+        productId: this.selectedProduct?.id || 'new-product',
         action,
-        error instanceof Error ? error.message : 'Unknown error',
+        error: error instanceof Error ? error.message : 'Unknown error',
         storeId
-      );
+      });
       
       this.toastService.error('Error saving product. Please try again.');
     } finally {
@@ -2640,12 +2643,12 @@ export class ProductManagementComponent implements OnInit {
       const currentPermission = this.authService.getCurrentPermission();
       const storeId = currentPermission?.storeId || '';
       const productId = this.selectedProduct?.id || 'new-product';
-      await this.cloudLoggingService.logProductImageUpload(
+      console.log('Image uploaded:', {
         productId,
         url,
         storeId,
-        compressed.size
-      );
+        size: compressed.size
+      });
       
       // Set the URL in the form
       this.productForm.get('imageUrl')?.setValue(url);
@@ -2658,12 +2661,12 @@ export class ProductManagementComponent implements OnInit {
       const currentPermission = this.authService.getCurrentPermission();
       const storeId = currentPermission?.storeId || '';
       const productId = this.selectedProduct?.id || 'new-product';
-      await this.cloudLoggingService.logProductError(
+      console.error('Image upload error:', {
         productId,
-        'IMAGE_UPLOAD',
-        err.message || 'Unknown error',
+        action: 'IMAGE_UPLOAD',
+        error: err.message || 'Unknown error',
         storeId
-      );
+      });
       
       this.toastService.error(`Image upload failed: ${err.message || 'Unknown error'}`);
     } finally {
@@ -2850,19 +2853,18 @@ export class ProductManagementComponent implements OnInit {
         // Refresh list copy from service
         const updated = this.productService.getProduct(this.pendingPhotoProduct.id!);
         if (updated) {
-          // Force UI refresh
-          this.filterProducts();
+          // No need to manually filter - computed signal handles this automatically
         }
 
         // Log upload
         const currentPermission = this.authService.getCurrentPermission();
         const storeId = currentPermission?.storeId || '';
-        await this.cloudLoggingService.logProductImageUpload(
-          this.pendingPhotoProduct.id!,
+        console.log('Product photo updated:', {
+          productId: this.pendingPhotoProduct.id!,
           url,
           storeId,
-          compressed.size
-        );
+          size: compressed.size
+        });
 
         this.toastService.success('Product photo updated.');
       } catch (err: any) {
@@ -2900,13 +2902,13 @@ export class ProductManagementComponent implements OnInit {
         // Log product deletion
         const currentPermission = this.authService.getCurrentPermission();
         const storeId = currentPermission?.storeId || '';
-        await this.cloudLoggingService.logProductDeleted(
-          productToDelete.id!,
-          productToDelete.productName,
+        console.log('Product deleted:', {
+          productId: productToDelete.id!,
+          productName: productToDelete.productName,
           storeId
-        );
+        });
         
-        this.filterProducts();
+        // No need to manually filter - computed signal handles this automatically
         this.toastService.success(`Product "${this.productToDelete.productName}" deleted successfully`);
       } catch (error) {
         console.error('Error deleting product:', error);
@@ -2914,12 +2916,12 @@ export class ProductManagementComponent implements OnInit {
         // Log the deletion error
         const currentPermission = this.authService.getCurrentPermission();
         const storeId = currentPermission?.storeId || '';
-        await this.cloudLoggingService.logProductError(
-          this.productToDelete.id!,
-          'DELETE',
-          error instanceof Error ? error.message : 'Unknown error',
+        console.error('Product deletion error:', {
+          productId: this.productToDelete.id!,
+          action: 'DELETE',
+          error: error instanceof Error ? error.message : 'Unknown error',
           storeId
-        );
+        });
         
         this.toastService.error(ErrorMessages.PRODUCT_DELETE_ERROR);
       }
@@ -2971,7 +2973,7 @@ export class ProductManagementComponent implements OnInit {
     this.searchTerm = '';
     this.selectedCategory = '';
     this.selectedStore = '';
-    this.filterProducts();
+    // No need to manually filter - computed signal handles this automatically
   }
 
   async refreshProducts(): Promise<void> {
@@ -2989,7 +2991,7 @@ export class ProductManagementComponent implements OnInit {
         console.warn('No storeId available - cannot refresh products from BigQuery API');
       }
       
-      this.filterProducts();
+      // No need to manually filter - computed signal handles this automatically
     } catch (error) {
       console.error('Error refreshing products:', error);
     } finally {
@@ -3005,7 +3007,7 @@ export class ProductManagementComponent implements OnInit {
       // With real-time updates, we don't need pagination since we limit to 100 products
       // This method is kept for backward compatibility but essentially does nothing
       console.warn('loadMoreProducts() is deprecated with real-time service - all products are loaded initially');
-      this.filterProducts();
+      // No need to manually filter - computed signal handles this automatically
     } catch (err) {
       console.error('Error in loadMoreProducts:', err);
     } finally {
