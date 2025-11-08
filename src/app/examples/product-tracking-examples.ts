@@ -24,7 +24,6 @@ export class ProductTrackingExamples {
     );
     
     console.log('✅ Price updated to ₱2.99');
-    console.log('📊 History:', this.productService.getPriceHistory(productId));
   }
 
   /**
@@ -93,8 +92,7 @@ export class ProductTrackingExamples {
     console.log('- Total stock: 60 units');
     
   const product = this.productService.getProduct(productId);
-  console.log('📦 Inventory:', product?.inventory);
-  console.log('📊 Price History:', product?.priceHistory);
+  console.log('📦 Product loaded successfully');
   }
 
   /**
@@ -149,24 +147,10 @@ export class ProductTrackingExamples {
     const product = this.productService.getProduct(productId);
     
     console.log('=== PRODUCT AUDIT TRAIL ===');
-    console.log('\n📦 Current Inventory:');
-    (product?.inventory ?? []).forEach(batch => {
-      console.log(`  Batch ${batch.batchId}:`);
-      console.log(`    Quantity: ${batch.quantity}`);
-      console.log(`    Price: ₱${batch.unitPrice}`);
-      console.log(`    Status: ${batch.status}`);
-    });
-    
-    console.log('\n💰 Price History:');
-    const priceHistory = this.productService.getPriceHistory(productId);
-    priceHistory.forEach(change => {
-      console.log(`  ${change.changedAt.toISOString()}`);
-      console.log(`    ₱${change.oldPrice} → ₱${change.newPrice} (${change.changeType})`);
-      console.log(`    Change: ${change.changeAmount > 0 ? '+' : ''}₱${change.changeAmount} (${change.changePercentage.toFixed(2)}%)`);
-      console.log(`    By: ${change.changedByName}`);
-      console.log(`    Reason: ${change.reason}`);
-      if (change.batchId) console.log(`    Batch: ${change.batchId}`);
-    });
+    console.log('\n📦 Current Product Info:');
+    console.log(`  Product: ${product?.productName}`);
+    console.log(`  Stock: ${product?.totalStock}`);
+    console.log(`  Price: ₱${product?.sellingPrice}`);
     
     console.log('\n📊 Quantity Adjustments:');
     const adjustments = this.productService.getQuantityAdjustments(productId);

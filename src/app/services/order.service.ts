@@ -71,7 +71,7 @@ export class OrderService {
     } as Order;
   }
 
-  async getRecentOrders(companyId: string, storeId?: string, limitCount: number = 20): Promise<Order[]> {
+  async getRecentOrders(companyId: string, storeId?: string, limitCount = 20): Promise<Order[]> {
     try {
       const ordersRef = collection(this.firestore, 'orders');
 
@@ -564,7 +564,7 @@ export class OrderService {
    * Fetch order items from the orderDetails collection for a given orderId.
    * orderDetails may be batched across multiple documents, so we flatten all items.
    */
-  private async fetchOrderItems(orderId: string): Promise<any[]> {
+  public async fetchOrderItems(orderId: string): Promise<any[]> {
     if (!orderId) return [];
     try {
       const orderDetailsRef = collection(this.firestore, 'orderDetails');
@@ -635,7 +635,7 @@ export class OrderService {
     }
     // Updated API URLs with authentication - prioritize proxy for development
     // Build deduplicated API URL list. Keep proxy but ensure direct endpoint is also tried.
-    const rawUrls = ['/api', environment.api?.ordersApi || '', environment.api?.directOrdersApi || ''].filter(Boolean);
+    const rawUrls = [environment.api?.ordersApi || '', environment.api?.directOrdersApi || ''].filter(Boolean);
     const apiUrls = Array.from(new Set(rawUrls));
 
     for (let i = 0; i < apiUrls.length; i++) {
@@ -754,7 +754,7 @@ export class OrderService {
       try { params.append('uid', currentUser.uid); } catch {}
     }
 
-    const rawUrls = ['/api', environment.api?.ordersApi || '', environment.api?.directOrdersApi || ''].filter(Boolean);
+    const rawUrls = [environment.api?.ordersApi || '', environment.api?.directOrdersApi || ''].filter(Boolean);
     const apiUrls = Array.from(new Set(rawUrls));
 
     for (let i = 0; i < apiUrls.length; i++) {
@@ -807,49 +807,56 @@ export class OrderService {
    */
   private transformApiOrder(apiOrder: any): Order {
   this.logger.debug('Transforming API order', { area: 'orders', payload: apiOrder });
-    
+  const id = apiOrder.order_id || apiOrder.orderId || apiOrder.id || '';
+  const dateRaw = apiOrder.updated_at || apiOrder.updatedAt || apiOrder.created_at || apiOrder.createdAt;
+    const date = dateRaw ? new Date(dateRaw) : new Date();
+    const gross = Number(apiOrder.gross_amount ?? apiOrder.grossAmount ?? apiOrder.total_amount ?? 0);
+    const net = Number(apiOrder.net_amount ?? apiOrder.netAmount ?? apiOrder.total_amount ?? gross);
+    const paymentMethod = apiOrder.payment || apiOrder.payment_method || apiOrder.paymentMethod || 'cash';
+
+    const customerName = apiOrder.customerInfo?.fullName || apiOrder.soldTo || apiOrder.customerName || apiOrder.customer_name || 'Walk-in Customer';
+
     return {
-      id: apiOrder.order_id || apiOrder.id || '',
-      companyId: '', // Not provided in API response
-      storeId: apiOrder.store_id || '',
-      terminalId: 'terminal-1', // Default since not in API
-      assignedCashierId: '', // Not provided in API response
-      status: this.mapApiStatus(apiOrder.status),
-      
-      // Customer Information
-      cashSale: true, // Default for API orders
-      soldTo: 'Walk-in Customer', // Default since not in API
-      tin: '',
-      businessAddress: '',
-      
-      // Invoice Information
-      invoiceNumber: apiOrder.invoice_number || '',
-      logoUrl: '',
-      date: apiOrder.created_at ? new Date(apiOrder.created_at) : new Date(),
-      
-      // Financial Calculations - using API response fields
-      vatableSales: 0, // Not provided in current API response
-      vatAmount: 0, // Not provided in current API response
-      zeroRatedSales: 0,
-      vatExemptAmount: 0,
-      discountAmount: 0, // Not provided in current API response
-      grossAmount: apiOrder.gross_amount || apiOrder.total_amount || 0,
-      netAmount: apiOrder.net_amount || apiOrder.total_amount || 0,
-      totalAmount: apiOrder.total_amount || 0,
-      
-      // BIR Fields - defaults since not in API
-      exemptionId: '',
-      signature: '',
-      atpOrOcn: 'OCN-2025-001234',
-      birPermitNo: 'BIR-PERMIT-2025-56789',
-      inclusiveSerialNumber: '000001-000999',
-      
-      // System Fields
-      createdAt: apiOrder.created_at ? new Date(apiOrder.created_at) : new Date(),
-      message: 'Thank you for your purchase!',
-      // Preserve items if API provides them (BigQuery endpoint may include order items)
-      items: apiOrder.items || []
-    };
+      id: id,
+      orderId: id || undefined,
+      companyId: '',
+      storeId: apiOrder.store_id || apiOrder.storeId || '',
+      terminalId: apiOrder.terminalId || 'terminal-1',
+      assignedCashierId: apiOrder.assignedCashierId || '',
+      // Preserve the raw status from API (e.g., 'completed') when present; fall back to mapped values
+      status: (apiOrder.status || apiOrder.order_status) ?? this.mapApiStatus(apiOrder.status),
+
+      cashSale: true,
+      soldTo: customerName,
+      tin: apiOrder.tin || '',
+      businessAddress: apiOrder.businessAddress || apiOrder.customer_address || '',
+
+      invoiceNumber: apiOrder.invoice_number || apiOrder.invoiceNumber || '',
+      logoUrl: apiOrder.logoUrl || '',
+      date,
+
+      vatableSales: Number(apiOrder.vatable_sales ?? apiOrder.vatableSales ?? 0),
+      vatAmount: Number(apiOrder.vat_amount ?? apiOrder.vatAmount ?? 0),
+      zeroRatedSales: Number(apiOrder.zero_rated_sales ?? apiOrder.zeroRatedSales ?? 0),
+      vatExemptAmount: Number(apiOrder.vat_exempt_amount ?? apiOrder.vatExemptAmount ?? 0),
+      discountAmount: Number(apiOrder.discount_amount ?? apiOrder.discountAmount ?? 0),
+      grossAmount: gross,
+      netAmount: net,
+      totalAmount: Number(apiOrder.total_amount ?? apiOrder.totalAmount ?? net ?? gross),
+
+      exemptionId: apiOrder.exemptionId || '',
+      signature: apiOrder.signature || '',
+      atpOrOcn: apiOrder.atpOrOcn || 'OCN-2025-001234',
+      birPermitNo: apiOrder.birPermitNo || 'BIR-PERMIT-2025-56789',
+      inclusiveSerialNumber: apiOrder.inclusiveSerialNumber || '000001-000999',
+
+      createdAt: date,
+      message: apiOrder.message || 'Thank you for your purchase!',
+      // Do not include items in the API-mapped Order (UI fetches details separately if needed)
+      // items: undefined,
+      // Explicitly provide paymentMethod for UI
+      paymentMethod: paymentMethod
+    } as Order;
   }
 
   /**

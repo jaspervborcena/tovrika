@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>ProductService Test</title>
+    <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-auth-compat.js"></script>
+</head>
+<body>
+    <h1>ProductService Connection Test</h1>
+    <div id="status">Testing...</div>
+    <div id="results"></div>
+
+    <script>
+        // Firebase config from environment
+        const firebaseConfig = {
+            apiKey: "AIzaSyDNIYovvzNKVj40h99kxOHu5yfEUzx7OYA",
+            authDomain: "jasperpos-1dfd5.firebaseapp.com",
+            projectId: "jasperpos-1dfd5",
+            storageBucket: "jasperpos-1dfd5.firebasestorage.app",
+            messagingSenderId: "251258556341",
+            appId: "1:251258556341:web:28cdcafbdb4ad89675d3fc",
+            measurementId: "G-MG8T2RZ051"
+        };
+
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+        const auth = firebase.auth();
+
+        const statusDiv = document.getElementById('status');
+        const resultsDiv = document.getElementById('results');
+
+        function log(message) {
+            console.log(message);
+            resultsDiv.innerHTML += '<div>' + new Date().toLocaleTimeString() + ': ' + message + '</div>';
+        }
+
+        async function testFirestoreConnection() {
+            try {
+                statusDiv.textContent = 'Testing Firestore connection...';
+                log('🔄 Starting Firestore connection test');
+
+                // Test basic connection
+                const testQuery = await db.collection('products').limit(1).get();
+                log('✅ Firestore connection successful');
+                log('📊 Test query returned ' + testQuery.docs.length + ' documents');
+
+                // Test products collection structure
+                if (testQuery.docs.length > 0) {
+                    const sampleDoc = testQuery.docs[0];
+                    log('📋 Sample document ID: ' + sampleDoc.id);
+                    log('📋 Sample document data: ' + JSON.stringify(sampleDoc.data(), null, 2));
+                } else {
+                    log('⚠️ Products collection is empty');
+                }
+
+                // Test with filters (similar to ProductService query)
+                log('🔍 Testing filtered query...');
+                const filteredQuery = db.collection('products')
+                    .where('status', '==', 'active')
+                    .limit(5);
+                
+                const filteredResults = await filteredQuery.get();
+                log('📊 Filtered query (status=active) returned ' + filteredResults.docs.length + ' documents');
+
+                if (filteredResults.docs.length > 0) {
+                    filteredResults.docs.forEach((doc, index) => {
+                        const data = doc.data();
+                        log(`📦 Product ${index + 1}: ${data.productName || 'N/A'} (Company: ${data.companyId || 'N/A'}, Store: ${data.storeId || 'N/A'})`);
+                    });
+                }
+
+                // List all companies and stores in products
+                log('🔍 Analyzing companies and stores...');
+                const allProductsQuery = await db.collection('products').limit(50).get();
+                const companies = new Set();
+                const stores = new Set();
+                
+                allProductsQuery.docs.forEach(doc => {
+                    const data = doc.data();
+                    if (data.companyId) companies.add(data.companyId);
+                    if (data.storeId) stores.add(data.storeId);
+                });
+
+                log('🏢 Found companies: ' + Array.from(companies).join(', '));
+                log('🏪 Found stores: ' + Array.from(stores).join(', '));
+
+                statusDiv.textContent = 'Test completed! Check results below.';
+
+            } catch (error) {
+                log('❌ Error: ' + error.message);
+                log('🔍 Error details: ' + JSON.stringify(error, null, 2));
+                statusDiv.textContent = 'Test failed! Check console for details.';
+            }
+        }
+
+        // Check authentication status
+        auth.onAuthStateChanged((user) => {
+            if (user) {
+                log('🔑 User authenticated: ' + user.email);
+                log('🆔 User UID: ' + user.uid);
+                testFirestoreConnection();
+            } else {
+                log('❌ No user authenticated');
+                statusDiv.textContent = 'Please log in to test Firestore access';
+            }
+        });
+
+        // Start the test
+        log('🚀 Initializing test...');
+    </script>
+</body>
+</html>
