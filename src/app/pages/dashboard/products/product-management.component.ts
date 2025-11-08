@@ -13,7 +13,6 @@ import { CategoryService, ProductCategory } from '../../../services/category.ser
 import { InventoryDataService } from '../../../services/inventory-data.service';
 import { PredefinedTypesService, UnitTypeOption, PredefinedType } from '../../../services/predefined-types.service';
 import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../shared/components/confirmation-dialog/confirmation-dialog.component';
-import { CloudLoggingService } from '../../../services/cloud-logging.service';
 
 @Component({
   selector: 'app-product-management',
@@ -1798,8 +1797,7 @@ export class ProductManagementComponent implements OnInit {
     private toastService: ToastService,
     private categoryService: CategoryService,
     private inventoryDataService: InventoryDataService,
-    private predefinedTypesService: PredefinedTypesService,
-    private cloudLoggingService: CloudLoggingService
+    private predefinedTypesService: PredefinedTypesService
   ) {
     this.productForm = this.createProductForm();
     this.inventoryForm = this.createInventoryForm();
@@ -2167,13 +2165,6 @@ export class ProductManagementComponent implements OnInit {
 
         await this.productService.updateProduct(this.selectedProduct.id!, updates);
         
-        // Log product update
-        await this.cloudLoggingService.logProductUpdated(
-          this.selectedProduct.id!,
-          formValue.productName,
-          storeId,
-          { updates, previousValues: this.selectedProduct }
-        );
         } else {
         // Create new product (no embedded inventory)
         const hasInitial = !!(formValue.initialQuantity && formValue.initialQuantity > 0);
@@ -2221,14 +2212,6 @@ export class ProductManagementComponent implements OnInit {
 
         const productId = await this.productService.createProduct(newProduct);
         
-        // Log product creation
-        await this.cloudLoggingService.logProductCreated(
-          productId,
-          formValue.productName,
-          storeId,
-          { newProduct, hasInitialBatch: hasInitial }
-        );
-        
         // If initial batch exists, create it in separate collection and recompute summary
         if (hasInitial && productId) {
           console.log('🎯 Creating initial inventory batch for new product:', productId);
@@ -2270,12 +2253,12 @@ export class ProductManagementComponent implements OnInit {
       const action = this.isEditMode ? 'UPDATE' : 'CREATE';
       const productName = this.productForm.get('productName')?.value || 'Unknown Product';
       
-      await this.cloudLoggingService.logProductError(
-        this.selectedProduct?.id || 'new-product',
+      console.error('Product error:', {
+        productId: this.selectedProduct?.id || 'new-product',
         action,
-        error instanceof Error ? error.message : 'Unknown error',
+        error: error instanceof Error ? error.message : 'Unknown error',
         storeId
-      );
+      });
       
       this.toastService.error('Error saving product. Please try again.');
     } finally {
@@ -2640,12 +2623,12 @@ export class ProductManagementComponent implements OnInit {
       const currentPermission = this.authService.getCurrentPermission();
       const storeId = currentPermission?.storeId || '';
       const productId = this.selectedProduct?.id || 'new-product';
-      await this.cloudLoggingService.logProductImageUpload(
+      console.log('Image uploaded:', {
         productId,
         url,
         storeId,
-        compressed.size
-      );
+        size: compressed.size
+      });
       
       // Set the URL in the form
       this.productForm.get('imageUrl')?.setValue(url);
@@ -2658,12 +2641,12 @@ export class ProductManagementComponent implements OnInit {
       const currentPermission = this.authService.getCurrentPermission();
       const storeId = currentPermission?.storeId || '';
       const productId = this.selectedProduct?.id || 'new-product';
-      await this.cloudLoggingService.logProductError(
+      console.error('Image upload error:', {
         productId,
-        'IMAGE_UPLOAD',
-        err.message || 'Unknown error',
+        action: 'IMAGE_UPLOAD',
+        error: err.message || 'Unknown error',
         storeId
-      );
+      });
       
       this.toastService.error(`Image upload failed: ${err.message || 'Unknown error'}`);
     } finally {
@@ -2857,12 +2840,12 @@ export class ProductManagementComponent implements OnInit {
         // Log upload
         const currentPermission = this.authService.getCurrentPermission();
         const storeId = currentPermission?.storeId || '';
-        await this.cloudLoggingService.logProductImageUpload(
-          this.pendingPhotoProduct.id!,
+        console.log('Product photo updated:', {
+          productId: this.pendingPhotoProduct.id!,
           url,
           storeId,
-          compressed.size
-        );
+          size: compressed.size
+        });
 
         this.toastService.success('Product photo updated.');
       } catch (err: any) {
@@ -2900,11 +2883,11 @@ export class ProductManagementComponent implements OnInit {
         // Log product deletion
         const currentPermission = this.authService.getCurrentPermission();
         const storeId = currentPermission?.storeId || '';
-        await this.cloudLoggingService.logProductDeleted(
-          productToDelete.id!,
-          productToDelete.productName,
+        console.log('Product deleted:', {
+          productId: productToDelete.id!,
+          productName: productToDelete.productName,
           storeId
-        );
+        });
         
         this.filterProducts();
         this.toastService.success(`Product "${this.productToDelete.productName}" deleted successfully`);
@@ -2914,12 +2897,12 @@ export class ProductManagementComponent implements OnInit {
         // Log the deletion error
         const currentPermission = this.authService.getCurrentPermission();
         const storeId = currentPermission?.storeId || '';
-        await this.cloudLoggingService.logProductError(
-          this.productToDelete.id!,
-          'DELETE',
-          error instanceof Error ? error.message : 'Unknown error',
+        console.error('Product deletion error:', {
+          productId: this.productToDelete.id!,
+          action: 'DELETE',
+          error: error instanceof Error ? error.message : 'Unknown error',
           storeId
-        );
+        });
         
         this.toastService.error(ErrorMessages.PRODUCT_DELETE_ERROR);
       }

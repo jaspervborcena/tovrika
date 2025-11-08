@@ -7,14 +7,5 @@
     "pathRewrite": {
       "^/api/orders": ""
     }
-  },
-  "/api/logs": {
-    "target": "https://app-logs-7bpeqovfmq-de.a.run.app",
-    "secure": true,
-    "changeOrigin": true,
-    "logLevel": "debug",
-    "pathRewrite": {
-      "^/api/logs": ""
-    }
   }
 }

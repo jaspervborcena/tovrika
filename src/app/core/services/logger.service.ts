@@ -1,5 +1,4 @@
 import { Injectable } from '@angular/core';
-import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { environment } from '../../../environments/environment';
 
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
@@ -32,8 +31,6 @@ export interface LogEntry extends LogContext {
 @Injectable({ providedIn: 'root' })
 export class LoggerService {
   private minLevel: LogLevel = environment.production ? 'info' : 'debug';
-  private remoteEndpoint = (environment as any).cloudLoggingEndpoint as string | undefined;
-  private apiKey = (environment as any).cloudLoggingApiKey as string | undefined;
   // Optional context provider registered by AuthService (or similar) to avoid circular DI.
   // Should return user-related context fields (userId/uid, companyId, storeId, etc).
   private contextProvider?: () => Partial<LogContext> | undefined;
@@ -41,7 +38,7 @@ export class LoggerService {
   // NOTE: do not inject AuthService here to avoid circular DI. If you need
   // user context in logs, use LoggerService.setContext(...) pattern instead.
 
-  constructor(private http: HttpClient) {}
+  constructor() {}
 
   /**
    * Register a callback that returns contextual log fields (userId, companyId, storeId).
@@ -51,20 +48,17 @@ export class LoggerService {
     this.contextProvider = provider;
   }
 
-  debug(message: string, ctx: LogContext = {}) { this.log('debug', message, ctx); }
-  info(message: string, ctx: LogContext = {})  { this.log('info', message, ctx); }
-  warn(message: string, ctx: LogContext = {})  { this.log('warn', message, ctx); }
-  error(message: string, ctx: LogContext = {}, err?: unknown) {
-    const errorObj = this.normalizeError(err);
-    this.log('error', message, { ...ctx, ...(errorObj ? { error: errorObj } : {}) } as any);
-  }
+  debug(message: string, ctx: LogContext = {}) { /* disabled */ }
+  info(message: string, ctx: LogContext = {})  { /* disabled */ }
+  warn(message: string, ctx: LogContext = {})  { /* disabled */ }
+  error(message: string, ctx: LogContext = {}, err?: unknown) { /* disabled */ }
 
   // Convenience helpers for DB ops
   dbSuccess(message: string, ctx: Omit<LogContext, 'status' | 'success'>) {
-    this.info(message, { ...ctx, success: true, status: 200 });
+    /* disabled */
   }
   dbFailure(message: string, ctx: Omit<LogContext, 'status' | 'success'>, err?: unknown) {
-    this.error(message, { ...ctx, success: false, status: 400 }, err);
+    /* disabled */
   }
 
   private log(level: LogLevel, message: string, ctx: LogContext & { error?: any } = {}) {
@@ -96,17 +90,6 @@ export class LoggerService {
       } catch (e) {
         try { console.error('[LOGGER] consoleSink failed', e); } catch {}
       }
-
-      // Remote post is best-effort and should never throw to callers
-      if (this.remoteEndpoint) {
-        try {
-          const headers: HttpHeaders = new HttpHeaders({ 'Content-Type': 'application/json' })
-            .set('X-API-Key', this.apiKey || '');
-          this.http.post(this.remoteEndpoint, entry, { headers }).subscribe({ next: () => {}, error: () => {} });
-        } catch (e) {
-          try { console.error('[LOGGER] remote post failed', e); } catch {}
-        }
-      }
     } catch (e) {
       // Guard: logging must never throw to application code. Swallow silently.
       try { console.error('[LOGGER] Unexpected logging failure', e); } catch {}
@@ -114,10 +97,7 @@ export class LoggerService {
   }
 
   private consoleSink(entry: LogEntry) {
-    // Respect environment flag to avoid noisy console logging when desired
-    const consoleEnabled = (environment as any)?.cloudLogging?.consoleSink;
-    if (!consoleEnabled) return;
-
+    // Always enable console logging in this simplified version
     const { level, message, ...rest } = entry;
     const fn = level === 'error' ? console.error
       : level === 'warn' ? console.warn
