@@ -1,11 +1,20 @@
 {
-  "/api": {
+  "/api/orders": {
     "target": "https://get-orders-by-date-bq-7bpeqovfmq-de.a.run.app",
     "secure": true,
     "changeOrigin": true,
     "logLevel": "debug",
     "pathRewrite": {
-      "^/api": ""
+      "^/api/orders": ""
+    }
+  },
+  "/api/logs": {
+    "target": "https://app-logs-7bpeqovfmq-de.a.run.app",
+    "secure": true,
+    "changeOrigin": true,
+    "logLevel": "debug",
+    "pathRewrite": {
+      "^/api/logs": ""
     }
   }
 }

@@ -2,6 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import { Firestore, collection, query, where, orderBy, getDocs, doc, updateDoc, runTransaction, writeBatch } from '@angular/fire/firestore';
 import { AuthService } from './auth.service';
 import { ProductService } from './product.service';
+import { ProductSummaryService } from './product-summary.service';
 import { ProductInventoryEntry, BatchDeduction } from '../interfaces/product-inventory-entry.interface';
 import { FIFODeductionPlan, StockValidation, BatchDeductionDetail } from '../interfaces/order-details.interface';
 
@@ -12,6 +13,7 @@ export class FIFOInventoryService {
   private firestore = inject(Firestore);
   private authService = inject(AuthService);
   private productService = inject(ProductService);
+  private productSummaryService = inject(ProductSummaryService);
 
   /**
    * Validates if requested quantity can be fulfilled using FIFO logic
@@ -89,7 +91,8 @@ export class FIFOInventoryService {
   }
 
   /**
-   * Executes FIFO deduction (ONLINE MODE ONLY)
+   * Executes FIFO deduction with full transaction consistency (ONLINE MODE ONLY)
+   * ALL-OR-NOTHING: All batch deductions and product summary update happen atomically
    */
   async executeFIFODeduction(
     productId: string, 
@@ -125,12 +128,13 @@ export class FIFOInventoryService {
       throw new Error(`Cannot fulfill FIFO deduction plan. Shortfall: ${plan.shortfall}`);
     }
 
-    // Execute deduction in Firestore transaction
+    // Execute EVERYTHING in a single Firestore transaction for full consistency
     const result = await runTransaction(this.firestore, async (transaction) => {
+      console.log('🔄 Starting FIFO deduction transaction...');
       const deductions: BatchDeductionDetail[] = [];
       
       for (const allocation of plan.batchAllocations) {
-        const batchRef = doc(this.firestore, 'productInventoryEntries', allocation.batchId);
+        const batchRef = doc(this.firestore, 'productInventory', allocation.batchId);
         const batchDoc = await transaction.get(batchRef);
         
         if (!batchDoc.exists()) {
@@ -159,8 +163,9 @@ export class FIFOInventoryService {
           syncStatus: 'SYNCED'
         };
 
-        // Update batch
+        // Update batch with new status logic
         const updatedDeductionHistory = [...(batch.deductionHistory || []), deductionRecord];
+        const newStatus = newQuantity === 0 ? 'removed' : batch.status; // Use 'removed' when depleted
         
         transaction.update(batchRef, {
           quantity: newQuantity,
@@ -168,8 +173,10 @@ export class FIFOInventoryService {
           deductionHistory: updatedDeductionHistory,
           updatedAt: new Date(),
           updatedBy: currentUser.uid,
-          status: newQuantity === 0 ? 'inactive' : batch.status
+          status: newStatus // Changed from 'inactive' to 'removed' when depleted
         });
+
+        console.log(`📦 Batch ${allocation.batchId}: ${batch.quantity} -> ${newQuantity} (status: ${newStatus})`);
 
         // Add to deduction details
         deductions.push({
@@ -183,40 +190,19 @@ export class FIFOInventoryService {
         });
       }
 
-      // Also update the product's totalStock inside the same transaction to keep product summary consistent
-      try {
-        const productRef = doc(this.firestore, 'products', productId);
-        const productSnap = await transaction.get(productRef);
-        const currentTotal = (productSnap.exists() && (productSnap.data() as any).totalStock) ? Number((productSnap.data() as any).totalStock) : 0;
-        const updatedTotal = Math.max(0, currentTotal - quantityToDeduct);
-        transaction.update(productRef, {
-          totalStock: updatedTotal,
-          lastUpdated: new Date(),
-          updatedBy: currentUser.uid
-        });
+      // Update product summary using ProductSummaryService within the same transaction
+      console.log('📊 Updating product summary within transaction...');
+      await this.productSummaryService.recomputeProductSummaryInTransaction(
+        transaction,
+        productId
+      );
 
-        return { deductions, updatedTotal };
-      } catch (e) {
-        // If we fail to update product summary, still return deductions so caller can handle
-        console.warn('Failed to update product totalStock in transaction:', e);
-        return { deductions, updatedTotal: undefined } as any;
-      }
+      console.log('✅ FIFO deduction transaction prepared successfully');
+      return deductions;
     });
 
-    // If the transaction included an updatedTotal, apply local UI update to product signal
-    try {
-      const { deductions, updatedTotal } = result as { deductions: BatchDeductionDetail[]; updatedTotal?: number };
-      if (typeof updatedTotal === 'number') {
-        // Update local product state without issuing another Firestore write
-        this.productService.applyLocalPatch(productId, { totalStock: updatedTotal, lastUpdated: new Date(), updatedBy: currentUser.uid } as any);
-      }
-
-      console.log(`Successfully executed FIFO deduction for product ${productId}:`, deductions);
-      return deductions;
-    } catch (err) {
-      console.log(`Successfully executed FIFO deduction for product ${productId} (no local patch applied):`, result);
-      return (result as any).deductions || [];
-    }
+    console.log(`🎉 FIFO deduction transaction committed! Product ${productId} deducted ${quantityToDeduct} units across ${result.length} batches`);
+    return result;
   }
 
   /**
@@ -239,6 +225,7 @@ export class FIFOInventoryService {
 
   /**
    * Gets available inventory batches sorted by FIFO (oldest first)
+   * Uses fallback query to avoid index requirements
    */
   async getAvailableBatchesFIFO(productId: string): Promise<ProductInventoryEntry[]> {
     const currentUser = this.authService.getCurrentUser();
@@ -252,35 +239,65 @@ export class FIFOInventoryService {
       throw new Error('No company permission found');
     }
 
-    const inventoryRef = collection(this.firestore, 'productInventoryEntries');
-    const q = query(
-      inventoryRef,
-      where('productId', '==', productId),
-      where('companyId', '==', permission.companyId),
-      where('status', '==', 'active'),
-      where('quantity', '>', 0),
-      orderBy('receivedAt', 'asc') // FIFO: oldest first
-    );
+    const inventoryRef = collection(this.firestore, 'productInventory');
+    
+    try {
+      // Try the optimized query first (if index exists)
+      const q = query(
+        inventoryRef,
+        where('productId', '==', productId),
+        where('companyId', '==', permission.companyId),
+        where('status', '==', 'active'),
+        orderBy('receivedAt', 'asc') // FIFO: oldest first
+      );
 
-    const snapshot = await getDocs(q);
-    return snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    } as ProductInventoryEntry));
+      const snapshot = await getDocs(q);
+      const batches = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      } as ProductInventoryEntry));
+
+      // Filter out zero quantities in memory
+      return batches.filter(batch => (batch.quantity || 0) > 0);
+
+    } catch (indexError: any) {
+      console.warn('⚠️ Firestore index not ready for getAvailableBatchesFIFO, using fallback:', indexError.message);
+      
+      // Fallback: Simple query and filter in memory
+      const simpleQuery = query(
+        inventoryRef,
+        where('productId', '==', productId),
+        where('companyId', '==', permission.companyId)
+      );
+
+      const snapshot = await getDocs(simpleQuery);
+      const allBatches = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      } as ProductInventoryEntry));
+
+      // Filter and sort in memory
+      return allBatches
+        .filter(batch => batch.status === 'active' && (batch.quantity || 0) > 0)
+        .sort((a, b) => new Date(a.receivedAt).getTime() - new Date(b.receivedAt).getTime());
+    }
   }
 
   /**
-   * Reverses a FIFO deduction (for returns or adjustments)
+   * Reverses a FIFO deduction with full transaction consistency (for returns or adjustments)
+   * ALL-OR-NOTHING: All batch reversals and product summary update happen atomically
    */
-  async reverseFIFODeduction(deductions: BatchDeductionDetail[], orderId: string): Promise<void> {
+  async reverseFIFODeduction(deductions: BatchDeductionDetail[], orderId: string, productId: string): Promise<void> {
     const currentUser = this.authService.getCurrentUser();
     if (!currentUser) {
       throw new Error('User not authenticated');
     }
 
     await runTransaction(this.firestore, async (transaction) => {
+      console.log('🔄 Starting FIFO reversal transaction...');
+
       for (const deduction of deductions) {
-        const batchRef = doc(this.firestore, 'productInventoryEntries', deduction.batchId);
+        const batchRef = doc(this.firestore, 'productInventory', deduction.batchId);
         const batchDoc = await transaction.get(batchRef);
         
         if (!batchDoc.exists()) {
@@ -305,12 +322,21 @@ export class FIFOInventoryService {
           deductionHistory: updatedDeductionHistory,
           updatedAt: new Date(),
           updatedBy: currentUser.uid,
-          status: 'active' // Reactivate if was inactive due to zero quantity
+          status: 'active' // Reactivate batch (change from 'removed' back to 'active')
         });
+
+        console.log(`📦 Batch ${deduction.batchId}: restored ${deduction.quantity} units (now ${newQuantity})`);
       }
+
+      // Update product summary using ProductSummaryService within the same transaction
+      console.log('📊 Updating product summary within reversal transaction...');
+      await this.productSummaryService.recomputeProductSummaryInTransaction(
+        transaction,
+        productId
+      );
     });
 
-    console.log(`Successfully reversed FIFO deduction for order ${orderId}`);
+    console.log(`🎉 FIFO reversal transaction committed! Order ${orderId} reversed successfully`);
   }
 
   /**
@@ -328,7 +354,7 @@ export class FIFOInventoryService {
       throw new Error('No company permission found');
     }
 
-    const inventoryRef = collection(this.firestore, 'productInventoryEntries');
+    const inventoryRef = collection(this.firestore, 'productInventory');
     let q;
 
     if (batchId) {

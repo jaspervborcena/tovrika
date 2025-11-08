@@ -24,21 +24,17 @@ export interface Product {
    * Deprecated: inventory is managed in productInventory collection.
    * Kept optional for backward compatibility during migration.
    */
-  inventory?: ProductInventory[];
+  // inventory?: ProductInventory[];
   
   // Tax and Discount Fields
   isVatApplicable: boolean;
-  /**
-   * Deprecated: VAT rate should come from device/store configuration.
-   * Kept optional for backward compatibility.
-   */
   vatRate?: number; // percentage
   hasDiscount: boolean;
   discountType: 'percentage' | 'fixed';
   discountValue: number;
   
   // Price and Quantity Tracking
-  priceHistory?: PriceChange[];
+  // priceHistory?: PriceChange[];
   // quantityAdjustments removed: tracking moved to productInventoryEntries and deduction history
   
   status?: 'active' | 'inactive';

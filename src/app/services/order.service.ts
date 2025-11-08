@@ -635,7 +635,7 @@ export class OrderService {
     }
     // Updated API URLs with authentication - prioritize proxy for development
     // Build deduplicated API URL list. Keep proxy but ensure direct endpoint is also tried.
-    const rawUrls = ['/api', environment.api?.ordersApi || '', environment.api?.directOrdersApi || ''].filter(Boolean);
+    const rawUrls = [environment.api?.ordersApi || '', environment.api?.directOrdersApi || ''].filter(Boolean);
     const apiUrls = Array.from(new Set(rawUrls));
 
     for (let i = 0; i < apiUrls.length; i++) {
@@ -754,7 +754,7 @@ export class OrderService {
       try { params.append('uid', currentUser.uid); } catch {}
     }
 
-    const rawUrls = ['/api', environment.api?.ordersApi || '', environment.api?.directOrdersApi || ''].filter(Boolean);
+    const rawUrls = [environment.api?.ordersApi || '', environment.api?.directOrdersApi || ''].filter(Boolean);
     const apiUrls = Array.from(new Set(rawUrls));
 
     for (let i = 0; i < apiUrls.length; i++) {

@@ -1823,23 +1823,17 @@ export class ProductManagementComponent implements OnInit {
       if (currentPermission?.companyId) {
         await this.storeService.loadStoresByCompany(currentPermission.companyId);
         
-        // Load products for the specific store (BigQuery API requires storeId)
+        // Initialize products with real-time updates
         if (currentPermission.storeId) {
-          // Reset paging and load first page (default 50)
-          this.currentPage = 1;
-          const count = await this.productService.loadProducts(currentPermission.storeId, this.pageSize, this.currentPage);
-          this.hasMore = (count >= this.pageSize);
+          await this.productService.initializeProducts(currentPermission.storeId);
         } else {
-          console.warn('No storeId available - cannot load products from BigQuery API');
+          console.warn('No storeId available - cannot load products');
         }
         
         await this.loadCategories(); // Load categories from CategoryService
       } else {
         // Creator account, no companyId or stores yet, allow empty arrays for onboarding
         this.storeService['storesSignal']?.set([]); // Use bracket notation to bypass private
-        if (this.productService['products'] && typeof this.productService['products'].set === 'function') {
-          this.productService['products'].set([]);
-        }
       }
       
       // Load unit types from predefined types
@@ -1894,6 +1888,26 @@ export class ProductManagementComponent implements OnInit {
       expiryDate: [''],
       supplier: ['']
     });
+  }
+
+  /**
+   * Reload a specific product from Firestore to get updated values
+   */
+  private async reloadProductFromFirestore(productId: string): Promise<void> {
+    try {
+      // Force refresh products from Firestore to get updated values
+      const permission = this.authService.getCurrentPermission();
+      const storeId = this.selectedProduct?.storeId || permission?.storeId;
+
+      if (storeId) {
+        await this.productService.refreshProducts(storeId);
+      }
+
+      // Update selectedProduct from the refreshed cache
+      this.selectedProduct = this.productService.getProduct(productId) || null;
+    } catch (error) {
+      console.error('Error reloading product from Firestore:', error);
+    }
   }
 
   /**
@@ -2164,11 +2178,11 @@ export class ProductManagementComponent implements OnInit {
         // Create new product (no embedded inventory)
         const hasInitial = !!(formValue.initialQuantity && formValue.initialQuantity > 0);
         const initialBatch = hasInitial ? {
-          batchId: formValue.initialBatchId || `BATCH-${Date.now()}`,
+          batchId: formValue.initialBatchId || this.generateBatchId(), // Use proper batch ID generator
           quantity: Number(formValue.initialQuantity || 0),
           unitPrice: Number(formValue.initialUnitPrice || 0),
           costPrice: Number(formValue.initialCostPrice || 0),
-          receivedAt: new Date(formValue.initialReceivedAt),
+          receivedAt: formValue.initialReceivedAt ? new Date(formValue.initialReceivedAt) : new Date(), // Default to now if not specified
           expiryDate: formValue.initialExpiryDate ? new Date(formValue.initialExpiryDate) : undefined,
           supplier: formValue.initialSupplier || undefined,
           status: 'active' as const
@@ -2217,20 +2231,31 @@ export class ProductManagementComponent implements OnInit {
         
         // If initial batch exists, create it in separate collection and recompute summary
         if (hasInitial && productId) {
-          await this.inventoryDataService.addBatch(productId, {
-            batchId: initialBatch!.batchId,
-            quantity: initialBatch!.quantity,
-            unitPrice: initialBatch!.unitPrice,
-            costPrice: initialBatch!.costPrice,
-            receivedAt: initialBatch!.receivedAt,
-            expiryDate: initialBatch!.expiryDate,
-            supplier: initialBatch!.supplier,
-            status: 'active',
-            unitType: formValue.unitType || 'pieces',
-            companyId: companyId,
-            storeId: storeId,
-            productId: productId
-          });
+          console.log('🎯 Creating initial inventory batch for new product:', productId);
+          console.log('📦 Initial batch data:', initialBatch);
+          
+          try {
+            await this.inventoryDataService.addBatch(productId, {
+              batchId: initialBatch!.batchId,
+              quantity: initialBatch!.quantity,
+              unitPrice: initialBatch!.unitPrice,
+              costPrice: initialBatch!.costPrice,
+              receivedAt: initialBatch!.receivedAt,
+              expiryDate: initialBatch!.expiryDate,
+              supplier: initialBatch!.supplier,
+              status: 'active',
+              unitType: formValue.unitType || 'pieces',
+              companyId: companyId,
+              storeId: storeId,
+              productId: productId
+            });
+            console.log('✅ Initial inventory batch created successfully');
+          } catch (batchError) {
+            console.error('❌ Failed to create initial inventory batch:', batchError);
+            throw batchError; // Re-throw to show error to user
+          }
+        } else if (hasInitial) {
+          console.warn('⚠️ Initial inventory requested but no productId returned');
         }
       }
 
@@ -2366,10 +2391,20 @@ export class ProductManagementComponent implements OnInit {
 
   private sortCurrentBatchesIfNeeded(): void {
     if (!this.currentBatches || this.currentBatches.length <= 1) return;
+    // Prefer sorting by batchId descending when batchId follows YYMMDD... pattern
     this.currentBatches.sort((a, b) => {
+      const aId = (a.batchId || '').toString();
+      const bId = (b.batchId || '').toString();
+      // If both look numeric, compare as numbers to ensure proper order
+      const aNum = Number(aId.replace(/[^0-9]/g, ''));
+      const bNum = Number(bId.replace(/[^0-9]/g, ''));
+      if (!isNaN(aNum) && !isNaN(bNum) && aNum !== 0 && bNum !== 0) {
+        return bNum - aNum; // newest/bigger first
+      }
+
+      // Fallback to receivedAt date (newest first)
       const ta = this.asDate(a.receivedAt)?.getTime() ?? 0;
       const tb = this.asDate(b.receivedAt)?.getTime() ?? 0;
-      // newest first
       return tb - ta;
     });
   }
@@ -2514,14 +2549,17 @@ export class ProductManagementComponent implements OnInit {
     // Refresh state and generate new batch ID for next entry
     const batches = await this.inventoryDataService.listBatches(this.selectedProduct.id!);
     this.setCurrentBatches(batches || []);
-      this.selectedProduct = this.productService.getProduct(this.selectedProduct.id!) || null;
-      this.inventoryForm.reset();
-      this.inventoryForm.patchValue({ receivedAt: new Date().toISOString().split('T')[0] });
-      this.generatedBatchId = this.generateBatchId();
-      this.isEditingBatch = false;
-      this.inventoryTab = 'list';
-      this.editingBatchOriginalId = null;
-      this.editingBatchDocId = null;
+    
+    // Reload the specific product from Firestore to get updated totalStock and sellingPrice
+    await this.reloadProductFromFirestore(this.selectedProduct.id!);
+    
+    this.inventoryForm.reset();
+    this.inventoryForm.patchValue({ receivedAt: new Date().toISOString().split('T')[0] });
+    this.generatedBatchId = this.generateBatchId();
+    this.isEditingBatch = false;
+    this.inventoryTab = 'list';
+    this.editingBatchOriginalId = null;
+    this.editingBatchDocId = null;
     } catch (err: any) {
       console.error('Error saving batch:', err);
       
@@ -2959,19 +2997,17 @@ export class ProductManagementComponent implements OnInit {
     }
   }
 
-  // Load next page of products and append to the list
+  // Load next page of products - for real-time service, this is not needed 
+  // since all products are loaded initially (limited to 100)
   async loadMoreProducts(): Promise<void> {
     try {
       this.loadingMore = true;
-      const currentPermission = this.authService.getCurrentPermission();
-      if (!currentPermission?.storeId) return;
-      this.currentPage += 1;
-      const count = await this.productService.loadProducts(currentPermission.storeId, this.pageSize, this.currentPage);
-      // If returned count is less than pageSize, no more pages
-      this.hasMore = (count >= this.pageSize);
+      // With real-time updates, we don't need pagination since we limit to 100 products
+      // This method is kept for backward compatibility but essentially does nothing
+      console.warn('loadMoreProducts() is deprecated with real-time service - all products are loaded initially');
       this.filterProducts();
     } catch (err) {
-      console.error('Error loading more products:', err);
+      console.error('Error in loadMoreProducts:', err);
     } finally {
       this.loadingMore = false;
     }
@@ -3253,8 +3289,7 @@ export class ProductManagementComponent implements OnInit {
     }
     
     // Check if product has inventory entries or legacy inventory
-    return (this.selectedProduct.inventory && this.selectedProduct.inventory.length > 0) ||
-           (this.currentBatches && this.currentBatches.length > 0) ||
+    return (this.currentBatches && this.currentBatches.length > 0) ||
            !!(this.selectedProduct.totalStock && this.selectedProduct.totalStock > 0);
   }
 

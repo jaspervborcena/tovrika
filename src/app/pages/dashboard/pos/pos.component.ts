@@ -15,6 +15,7 @@ import { TransactionService } from '../../../services/transaction.service';
 import { AuthService } from '../../../services/auth.service';
 import { NetworkService } from '../../../core/services/network.service';
 import { IndexedDBService } from '../../../core/services/indexeddb.service';
+import { AppConstants } from '../../../shared/enums/app-constants.enum';
 
 import { OrderService } from '../../../services/order.service';
 import { StoreService } from '../../../services/store.service';
@@ -24,7 +25,7 @@ import { CompanyService } from '../../../services/company.service';
 import { TranslationService } from '../../../services/translation.service';
 import { TranslateModule } from '@ngx-translate/core';
 import { Product } from '../../../interfaces/product.interface';
-import { ProductViewType, OrderDiscount, ReceiptValidityNotice } from '../../../interfaces/pos.interface';
+import { ProductViewType, OrderDiscount, ReceiptValidityNotice, CartItem, CartItemTaxDiscount } from '../../../interfaces/pos.interface';
 import { Customer, CustomerFormData } from '../../../interfaces/customer.interface';
 import { SubscriptionService } from '../../../services/subscription.service';
 
@@ -117,8 +118,28 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   readonly isProcessing = computed(() => this.posService.isProcessing());
   
   readonly products = computed(() => {
-    const prods = this.productService.getProducts();
+    const prods = this.productService.getProductsSignal()();
     console.log('🔍 PRODUCTS COMPUTED - Count:', prods.length);
+    
+    // Check for missing required fields in products
+    if (prods.length > 0) {
+      const sampleProduct = prods[0];
+      console.log('🔍 Sample product structure:', sampleProduct);
+      
+      const requiredFields = ['uid', 'productName', 'skuId', 'unitType', 'category', 'companyId', 'storeId', 'isVatApplicable', 'hasDiscount', 'discountType'];
+      const missingFields = requiredFields.filter(field => 
+        sampleProduct[field as keyof Product] === undefined || 
+        sampleProduct[field as keyof Product] === null ||
+        sampleProduct[field as keyof Product] === ''
+      );
+      
+      if (missingFields.length > 0) {
+        console.warn('⚠️ Missing or empty required fields in products:', missingFields);
+      } else {
+        console.log('✅ All required fields present in products');
+      }
+    }
+    
     return prods;
   });
   readonly categories = computed(() => {
@@ -232,6 +253,11 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     type: 'none',
     ready: false
   });
+
+  // Cart Item Details Modal State
+  showCartItemDetails = false;
+  selectedCartItem: CartItem | null = null;
+  cartItemDetails: CartItemTaxDiscount = this.getDefaultCartItemDetails();
   
   // Order completion status - tracks if current order is already processed
   readonly isOrderCompleted = signal<boolean>(false);
@@ -277,6 +303,18 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   readonly paymentModalVisible = signal<boolean>(false);
   paymentAmountTendered: number = 0;
   paymentDescription: string = '';
+
+  // Cart Information Dialog State
+  readonly cartInformationModalVisible = signal<boolean>(false);
+  
+  // Cart VAT and Discount Settings
+  public cartVatSettings = {
+    isVatApplicable: true,
+    vatRate: 12,
+    hasDiscount: false,
+    discountType: 'percentage' as 'percentage' | 'fixed',
+    discountValue: 0
+  };
 
   async loadNextInvoicePreview(): Promise<void> {
     try {
@@ -991,9 +1029,34 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     console.log('🎯 POS COMPONENT: Current URL:', window.location.href);
     console.log('🎯 POS COMPONENT: Timestamp:', new Date().toISOString());
     
+    // Add Firestore test
+    await this.testFirestoreConnection();
+    
     // 🔍 DEBUG: Make debug methods available globally for console debugging
     (window as any).debugPOS = {
       refreshProducts: () => this.debugRefreshProducts(),
+      testProductService: async () => {
+        console.log('🧪 Testing ProductService manually...');
+        const currentPermission = this.authService.getCurrentPermission();
+        if (currentPermission?.storeId) {
+          console.log('🔄 Calling initializeProducts with storeId:', currentPermission.storeId);
+          await this.productService.initializeProducts(currentPermission.storeId, true);
+        } else {
+          console.log('❌ No storeId available');
+        }
+      },
+      showCurrentProducts: () => {
+        console.log('📊 Current products:', this.products());
+        console.log('📊 Current products count:', this.products().length);
+      },
+      showProductServiceState: () => {
+        console.log('📊 ProductService state:', {
+          products: this.productService.getProductsSignal()(),
+          isLoading: this.productService.getLoadingSignal()(),
+          error: this.productService.getErrorSignal()(),
+          hasInitialLoad: (this.productService as any).hasInitialLoad()
+        });
+      },
       checkFilteredProducts: () => {
         console.log('🔍 CURRENT STATE:', {
           products: this.products().length,
@@ -1620,6 +1683,105 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     return Math.max(0, change); // Don't allow negative change
   }
 
+  // Cart Information Dialog Methods
+  public showCartInformationDialog(): boolean {
+    return this.cartInformationModalVisible();
+  }
+
+  public openCartInformationDialog(): void {
+    console.log('🛒 Opening cart information dialog');
+    this.cartInformationModalVisible.set(true);
+  }
+
+  public closeCartInformationDialog(): void {
+    console.log('🛒 Closing cart information dialog');
+    this.cartInformationModalVisible.set(false);
+  }
+
+  editCartDetails(): void {
+    console.log('✏️ Opening cart details for editing');
+    // Close cart information dialog and open the existing cart details modal
+    this.closeCartInformationDialog();
+    this.openCartDetailsModal();
+  }
+
+  public updateCartItemField(index: number, field: string, value: any): void {
+    try {
+      const currentItems = this.cartItems();
+      if (index >= 0 && index < currentItems.length) {
+        const updatedItem = { ...currentItems[index] };
+        
+        // Update the specific field
+        (updatedItem as any)[field] = value;
+        
+        // Handle VAT logic
+        if (field === 'isVatApplicable') {
+          if (value) {
+            // When VAT is enabled, set default rate from enum if not already set
+            updatedItem.vatRate = updatedItem.vatRate || AppConstants.DEFAULT_VAT_RATE;
+          } else {
+            // When VAT is disabled, set rate to 0
+            updatedItem.vatRate = 0;
+          }
+        }
+        
+        // Handle discount logic
+        if (field === 'hasDiscount') {
+          if (value) {
+            // When discount is enabled, set defaults from enum if not already set
+            updatedItem.discountType = updatedItem.discountType || AppConstants.DEFAULT_DISCOUNT_TYPE as 'percentage' | 'fixed';
+            updatedItem.discountValue = updatedItem.discountValue || AppConstants.DEFAULT_DISCOUNT_VALUE;
+          } else {
+            // When discount is disabled, reset values
+            updatedItem.discountType = 'percentage';
+            updatedItem.discountValue = 0;
+          }
+        }
+        
+        // Update the cart item through the POS service using productId
+        this.posService.updateCartItem(updatedItem);
+      }
+    } catch (error) {
+      console.error('Error updating cart item field:', error);
+    }
+  }
+
+  public saveAndCloseCartInformationDialog(): void {
+    console.log('💾 Saving individual cart item settings and closing dialog...');
+    
+    // Individual item changes are already saved in real-time through updateCartItemField()
+    // No need to overwrite with global settings
+    
+    // Close the dialog
+    this.closeCartInformationDialog();
+    
+    console.log('✅ Cart information dialog closed - individual item settings preserved');
+  }
+
+  public saveCartVatDiscountSettings(): void {
+    console.log('💾 Saving cart VAT and discount settings:', this.cartVatSettings);
+    
+    // Apply settings to all cart items
+    this.cartItems().forEach(item => {
+      const updatedItem = {
+        ...item,
+        isVatApplicable: this.cartVatSettings.isVatApplicable,
+        vatRate: this.cartVatSettings.vatRate,
+        hasDiscount: this.cartVatSettings.hasDiscount,
+        discountType: this.cartVatSettings.discountType,
+        discountValue: this.cartVatSettings.discountValue
+      };
+      
+      // Update each item through the POS service
+      this.posService.updateCartItem(updatedItem);
+    });
+    
+    // Close the dialog
+    this.closeCartInformationDialog();
+    
+    console.log('✅ Cart VAT and discount settings applied to all items');
+  }
+
   async processPayment(): Promise<void> {
     try {
       console.log('💳 Processing payment and completing order...');
@@ -1884,7 +2046,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
           // Load products for the user's company and selected store
           // Note: initializeStore() will be called after this method completes
           console.log('📦 Loading products for company and store...');
-          await this.productService.loadProductsByCompanyAndStore(userRole.companyId, userRole.storeId);
+          await this.productService.initializeProducts(userRole.storeId);
           console.log('📦 Product loading completed');
         } else if (userRole && userRole.companyId) {
           // If user has company access but no specific store, load all company stores
@@ -1897,9 +2059,9 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
           console.log('🏪 Loaded company stores details:', loadedStores.map(s => ({ id: s.id, name: s.storeName })));
           
           // Load products for the company (products will be filtered by store after auto-selection)
-          console.log('📦 Loading products for company...');
-          await this.productService.loadProductsByCompanyAndStore(userRole.companyId);
-          console.log('📦 Company product loading completed');
+          console.log('📦 Products will be loaded after store selection...');
+          // await this.productService.loadProductsByCompanyAndStore(userRole.companyId);
+          console.log('📦 Company product loading skipped - waiting for store selection');
         } else {
           console.warn('No user role found or no store/company assigned to user');
           console.log('Available user role data:', userRole);
@@ -1918,12 +2080,13 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
                 
                 if (permission.companyId) {
                   console.log('📦 Loading products from IndexedDB fallback');
-                  await this.productService.loadProductsByCompanyAndStore(permission.companyId, permission.storeId);
+                  await this.productService.initializeProducts(permission.storeId);
                 }
               } else if (permission?.companyId) {
                 console.log('🏪 Loading company stores from IndexedDB fallback:', permission.companyId);
                 await this.storeService.loadStoresByCompany(permission.companyId);
-                await this.productService.loadProductsByCompanyAndStore(permission.companyId);
+                // Products will be loaded after store selection
+                console.log('📦 Products will be loaded after store selection...');
               }
             } else {
               console.error('❌ No IndexedDB fallback data available');
@@ -2049,7 +2212,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
           
           // Load products for the already selected store
           if (selectedStore.companyId) {
-            await this.productService.loadProductsByCompanyAndStore(selectedStore.companyId, currentlySelected);
+            await this.productService.initializeProducts(currentlySelected);
           }
           return; // Success, exit the function
         } else if (currentlySelected && !selectedStore) {
@@ -2158,7 +2321,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
             const fallbackCompanyId = offlineUserData.permissions[0].companyId;
             if (fallbackCompanyId) {
               console.log('📦 Loading products for fallback store - company:', fallbackCompanyId, 'store:', fallbackStoreId);
-              await this.productService.loadProductsByCompanyAndStore(fallbackCompanyId, fallbackStoreId);
+              await this.productService.initializeProducts(fallbackStoreId);
             }
             
             console.log('✅ IndexedDB fallback store selection completed');
@@ -2184,7 +2347,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
         if (currentProducts.length === 0) {
           console.log('📦 Desktop No products found, loading products for company:', selectedStoreInfo.companyId, 'store:', finalSelectedStore);
           try {
-            await this.productService.loadProductsByCompanyAndStore(selectedStoreInfo.companyId, finalSelectedStore);
+            await this.productService.initializeProducts(finalSelectedStore);
             console.log('✅ Desktop Final product loading completed, products count:', this.products().length);
             console.log('📂 Desktop Categories available:', this.categories().length);
           } catch (error) {
@@ -2241,9 +2404,9 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     
     if (companyId) {
       console.log('📦 Loading products for companyId:', companyId, 'storeId:', storeId);
-      await this.productService.loadProductsByCompanyAndStore(companyId, storeId);
+      await this.productService.initializeProducts(storeId);
       console.log('✅ Product loading completed');
-      console.log('🛍️ Total products loaded:', this.productService.getProducts().length);
+      console.log('🛍️ Total products loaded:', this.productService.getProductsSignal()().length);
   // Reset grid pagination when store changes
   this.gridRowsVisible.set(4);
       
@@ -2446,6 +2609,149 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       return;
     }
     this.posService.updateCartItemQuantity(productId, quantity);
+  }
+
+  // Cart Item Details Methods
+  getDefaultCartItemDetails(): CartItemTaxDiscount {
+    return {
+      isVatApplicable: true,
+      vatRate: 12,
+      hasDiscount: false,
+      discountType: 'percentage',
+      discountValue: 0,
+      subtotalBeforeDiscount: 0,
+      discountAmount: 0,
+      subtotalAfterDiscount: 0,
+      vatAmount: 0,
+      finalTotal: 0
+    };
+  }
+
+  openCartItemDetails(item: CartItem): void {
+    this.selectedCartItem = item;
+    this.cartItemDetails = {
+      isVatApplicable: item.isVatApplicable ?? true,
+      vatRate: item.vatRate ?? 12,
+      hasDiscount: item.hasDiscount ?? false,
+      discountType: item.discountType || 'percentage',
+      discountValue: item.discountValue ?? 0,
+      subtotalBeforeDiscount: item.quantity * item.sellingPrice,
+      discountAmount: 0,
+      subtotalAfterDiscount: 0,
+      vatAmount: 0,
+      finalTotal: 0
+    };
+    this.recalculateCartItem();
+    this.showCartItemDetails = true;
+  }
+
+  closeCartItemDetails(): void {
+    this.showCartItemDetails = false;
+    this.selectedCartItem = null;
+    this.cartItemDetails = this.getDefaultCartItemDetails();
+  }
+
+  openCartDetailsModal(): void {
+    // Open the cart details modal to show all cart items details
+    // For now, we'll use the existing cart item details modal but show a summary
+    // You can customize this to show a different modal if needed
+    this.showCartItemDetails = true;
+    this.selectedCartItem = null; // No specific item selected, show all
+  }
+
+  recalculateCartItem(): void {
+    if (!this.selectedCartItem) return;
+
+    const subtotal = this.selectedCartItem.quantity * this.selectedCartItem.sellingPrice;
+    this.cartItemDetails.subtotalBeforeDiscount = subtotal;
+
+    // Calculate discount
+    let discountAmount = 0;
+    if (this.cartItemDetails.hasDiscount) {
+      if (this.cartItemDetails.discountType === 'percentage') {
+        discountAmount = (subtotal * this.cartItemDetails.discountValue) / 100;
+      } else {
+        discountAmount = this.cartItemDetails.discountValue;
+      }
+      // Ensure discount doesn't exceed subtotal
+      discountAmount = Math.min(discountAmount, subtotal);
+    }
+    this.cartItemDetails.discountAmount = discountAmount;
+
+    // Calculate after discount
+    const afterDiscount = subtotal - discountAmount;
+    this.cartItemDetails.subtotalAfterDiscount = afterDiscount;
+
+    // Calculate VAT
+    let vatAmount = 0;
+    if (this.cartItemDetails.isVatApplicable) {
+      vatAmount = (afterDiscount * (this.cartItemDetails.vatRate || 12)) / 100;
+    }
+    this.cartItemDetails.vatAmount = vatAmount;
+
+    // Final total
+    this.cartItemDetails.finalTotal = afterDiscount + vatAmount;
+  }
+
+  saveCartItemChanges(): void {
+    if (!this.selectedCartItem) return;
+
+    // Update the cart item with new tax/discount settings
+    const updatedItem: CartItem = {
+      ...this.selectedCartItem,
+      isVatApplicable: this.cartItemDetails.isVatApplicable,
+      vatRate: this.cartItemDetails.vatRate || 12,
+      hasDiscount: this.cartItemDetails.hasDiscount,
+      discountType: this.cartItemDetails.discountType,
+      discountValue: this.cartItemDetails.discountValue,
+      total: this.cartItemDetails.finalTotal
+    };
+
+    // Update the item in the cart via POS service
+    this.posService.updateCartItem(updatedItem);
+    
+    console.log('✅ Cart item updated:', updatedItem);
+    this.closeCartItemDetails();
+  }
+
+  // Batch operations
+  removeVatFromAllItems(): void {
+    const cartItems = this.cartItems();
+    cartItems.forEach(item => {
+      const updatedItem = {
+        ...item,
+        isVatApplicable: false,
+        vatRate: 0
+      };
+      this.posService.updateCartItem(updatedItem);
+    });
+    console.log('🚫 VAT removed from all cart items');
+  }
+
+  removeDiscountFromAllItems(): void {
+    const cartItems = this.cartItems();
+    cartItems.forEach(item => {
+      const updatedItem = {
+        ...item,
+        hasDiscount: false,
+        discountValue: 0
+      };
+      this.posService.updateCartItem(updatedItem);
+    });
+    console.log('🚫 Discounts removed from all cart items');
+  }
+
+  applyVatToAllItems(): void {
+    const cartItems = this.cartItems();
+    cartItems.forEach(item => {
+      const updatedItem = {
+        ...item,
+        isVatApplicable: true,
+        vatRate: 12
+      };
+      this.posService.updateCartItem(updatedItem);
+    });
+    console.log('✅ VAT applied to all cart items');
   }
 
   async clearCart(): Promise<void> {
@@ -3030,7 +3336,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     
     if (storeInfo?.companyId && storeId) {
       console.log('🔍 DEBUG: Reloading products...');
-      await this.productService.loadProductsByCompanyAndStore(storeInfo.companyId, storeId);
+      await this.productService.initializeProducts(storeId, true); // Force reload
       
       // Wait a moment for signals to update
       setTimeout(() => {
@@ -3063,5 +3369,102 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       return `${discount.customType} Discount${discountMethod}`;
     }
     return `Custom Discount${discountMethod}`;
+  }
+
+  /**
+   * Test Firestore connection and product data availability
+   */
+  private async testFirestoreConnection(): Promise<void> {
+    try {
+      console.log('🧪 === FIRESTORE CONNECTION TEST ===');
+      
+      // Test 1: Check authentication
+      const currentUser = this.authService.getCurrentUser();
+      const currentPermission = this.authService.getCurrentPermission();
+      
+      console.log('🔑 Auth Status:', {
+        user: currentUser?.email || 'No user',
+        permission: currentPermission || 'No permission',
+        companyId: currentPermission?.companyId || 'No company',
+        storeId: currentPermission?.storeId || 'No store'
+      });
+      
+      if (!currentUser) {
+        console.log('❌ Test skipped - no user authenticated');
+        return;
+      }
+      
+      // Test 2: Direct Firestore query
+      console.log('🔍 Testing direct Firestore access...');
+      const { collection, query, where, getDocs, limit } = await import('@angular/fire/firestore');
+      const firestore = (this.productService as any)['firestore']; // Access private firestore instance
+      
+      const productsRef = collection(firestore, 'products');
+      const basicQuery = query(productsRef, limit(5));
+      const basicSnapshot = await getDocs(basicQuery);
+      
+      console.log('📊 Total products in collection:', basicSnapshot.size);
+      
+      if (basicSnapshot.empty) {
+        console.log('❌ Products collection is empty!');
+        return;
+      }
+      
+      // Test 3: Analyze structure
+      const companies = new Set<string>();
+      const stores = new Set<string>();
+      const statuses = new Set<string>();
+      
+      basicSnapshot.docs.forEach(doc => {
+        const data = doc.data();
+        console.log('📦 Sample product:', {
+          id: doc.id,
+          name: data['productName'],
+          company: data['companyId'],
+          store: data['storeId'],
+          status: data['status']
+        });
+        
+        if (data['companyId']) companies.add(data['companyId']);
+        if (data['storeId']) stores.add(data['storeId']);
+        if (data['status']) statuses.add(data['status']);
+      });
+      
+      console.log('📈 Data Summary:');
+      console.log('🏢 Companies:', Array.from(companies));
+      console.log('🏪 Stores:', Array.from(stores));
+      console.log('📊 Statuses:', Array.from(statuses));
+      
+      // Test 4: Try ProductService query pattern
+      if (currentPermission?.companyId) {
+        console.log('🎯 Testing ProductService query pattern...');
+        
+        const testQuery = query(
+          productsRef,
+          where('companyId', '==', currentPermission.companyId),
+          where('status', '==', 'active'),
+          limit(10)
+        );
+        
+        const testSnapshot = await getDocs(testQuery);
+        console.log('🎯 ProductService pattern results:', testSnapshot.size, 'products');
+        
+        if (testSnapshot.empty) {
+          console.log('❌ No products found with ProductService query!');
+          console.log('💡 Check if products have correct companyId and status=active');
+        } else {
+          console.log('✅ ProductService query pattern works!');
+          testSnapshot.docs.forEach(doc => {
+            const data = doc.data();
+            console.log('  📦', data['productName'], '(Store:', data['storeId'], ')');
+          });
+        }
+      }
+      
+      console.log('🧪 === END FIRESTORE TEST ===');
+      
+    } catch (error) {
+      console.error('❌ Firestore test error:', error);
+    }
   }
 }

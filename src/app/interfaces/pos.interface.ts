@@ -183,3 +183,23 @@ export interface Receipt {
   status: 'completed' | 'cancelled' | 'void';
   orderNumber: string;
 }
+
+export interface CartItemTaxDiscount {
+  isVatApplicable: boolean;
+  vatRate?: number;
+  hasDiscount: boolean;
+  discountType: 'percentage' | 'fixed';
+  discountValue: number;
+  // Calculated values
+  subtotalBeforeDiscount: number;
+  discountAmount: number;
+  subtotalAfterDiscount: number;
+  vatAmount: number;
+  finalTotal: number;
+}
+
+export interface CartItemDetailsDialog {
+  item: CartItem;
+  onUpdate: (updatedItem: CartItem) => void;
+  onClose: () => void;
+}
