@@ -1023,19 +1023,16 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
           <input 
             type="text" 
             [(ngModel)]="searchTerm"
-            (ngModelChange)="filterProducts()"
             placeholder="Search products by name, SKU, or category..."
             class="search-input">
           <select 
             [(ngModel)]="selectedCategory" 
-            (change)="filterProducts()" 
             class="filter-select">
             <option value="">All Categories</option>
             <option *ngFor="let category of categories()" [value]="category">{{ category }}</option>
           </select>
           <select 
             [(ngModel)]="selectedStore" 
-            (change)="filterProducts()" 
             class="filter-select">
             <option value="">All Stores</option>
             <option *ngFor="let store of stores()" [value]="store.id">{{ store.storeName }}</option>
@@ -1732,11 +1729,35 @@ export class ProductManagementComponent implements OnInit {
   readonly stores = computed(() => this.storeService.getStores());
   readonly categories = computed(() => this.categoryService.getCategoryLabels());
 
+  // Reactive filtered products - automatically updates when products change or filters change
+  readonly filteredProducts = computed(() => {
+    let filtered = this.products();
+
+    if (this.searchTerm) {
+      const term = this.searchTerm.toLowerCase();
+      filtered = filtered.filter(product =>
+        product.productName.toLowerCase().includes(term) ||
+        product.skuId.toLowerCase().includes(term) ||
+        product.category.toLowerCase().includes(term) ||
+        product.barcodeId?.toLowerCase().includes(term)
+      );
+    }
+
+    if (this.selectedCategory) {
+      filtered = filtered.filter(product => product.category === this.selectedCategory);
+    }
+
+    if (this.selectedStore) {
+      filtered = filtered.filter(product => product.storeId === this.selectedStore);
+    }
+
+    return filtered;
+  });
+
   // State
   searchTerm = '';
   selectedCategory = '';
   selectedStore = '';
-  filteredProducts = signal<Product[]>([]);
   // Pagination state for BigQuery products API
   pageSize = 50;
   currentPage = 1;
@@ -1836,8 +1857,6 @@ export class ProductManagementComponent implements OnInit {
       
       // Load unit types from predefined types
       await this.loadUnitTypes();
-      
-      this.filterProducts();
     } catch (error) {
       console.error('Error loading data:', error);
     }
@@ -1932,29 +1951,7 @@ export class ProductManagementComponent implements OnInit {
     });
   }
 
-  filterProducts(): void {
-    let filtered = this.products();
-
-    if (this.searchTerm) {
-      const term = this.searchTerm.toLowerCase();
-      filtered = filtered.filter(product =>
-        product.productName.toLowerCase().includes(term) ||
-        product.skuId.toLowerCase().includes(term) ||
-        product.category.toLowerCase().includes(term) ||
-        product.barcodeId?.toLowerCase().includes(term)
-      );
-    }
-
-    if (this.selectedCategory) {
-      filtered = filtered.filter(product => product.category === this.selectedCategory);
-    }
-
-    if (this.selectedStore) {
-      filtered = filtered.filter(product => product.storeId === this.selectedStore);
-    }
-
-    this.filteredProducts.set(filtered);
-  }
+  // Note: filterProducts() method removed - filtering is now handled by the computed filteredProducts signal
 
   openAddModal(): void {
     console.log('openAddModal called');
@@ -2181,12 +2178,16 @@ export class ProductManagementComponent implements OnInit {
 
         // Get current user for UID
         const currentUser = this.authService.getCurrentUser();
+        console.log('🔍 Current user check:', currentUser ? { uid: currentUser.uid, email: currentUser.email } : 'NULL');
         if (!currentUser) {
           throw new Error('User not authenticated');
         }
+        
+        const currentPermission = this.authService.getCurrentPermission();
+        console.log('🔍 Current permission check:', currentPermission ? { companyId: currentPermission.companyId, storeId: currentPermission.storeId } : 'NULL');
 
         const newProduct: Omit<Product, 'id' | 'createdAt' | 'updatedAt'> = {
-          uid: currentUser.uid,  // Add UID for security rules
+          uid: currentUser.uid,  // Required by Product interface
           productName: formValue.productName,
           description: formValue.description,
           skuId: formValue.skuId,
@@ -2210,15 +2211,24 @@ export class ProductManagementComponent implements OnInit {
           status: 'active'
         };
 
+        console.log('🚀 About to create product with data:', newProduct);
         const productId = await this.productService.createProduct(newProduct);
+        console.log('✅ Product created successfully with ID:', productId);
         
         // If initial batch exists, create it in separate collection and recompute summary
         if (hasInitial && productId) {
           console.log('🎯 Creating initial inventory batch for new product:', productId);
           console.log('📦 Initial batch data:', initialBatch);
+          console.log('🔍 Form values for initial batch:', {
+            initialQuantity: formValue.initialQuantity,
+            initialUnitPrice: formValue.initialUnitPrice,
+            initialCostPrice: formValue.initialCostPrice,
+            hasInitial,
+            productId
+          });
           
           try {
-            await this.inventoryDataService.addBatch(productId, {
+            const batchData = {
               batchId: initialBatch!.batchId,
               quantity: initialBatch!.quantity,
               unitPrice: initialBatch!.unitPrice,
@@ -2226,24 +2236,34 @@ export class ProductManagementComponent implements OnInit {
               receivedAt: initialBatch!.receivedAt,
               expiryDate: initialBatch!.expiryDate,
               supplier: initialBatch!.supplier,
-              status: 'active',
+              status: 'active' as const,
               unitType: formValue.unitType || 'pieces',
               companyId: companyId,
               storeId: storeId,
               productId: productId
-            });
+            };
+            console.log('📦 Final batch data being sent to addBatch:', batchData);
+            
+            await this.inventoryDataService.addBatch(productId, batchData);
             console.log('✅ Initial inventory batch created successfully');
           } catch (batchError) {
             console.error('❌ Failed to create initial inventory batch:', batchError);
+            console.error('❌ Error details:', {
+              message: batchError instanceof Error ? batchError.message : 'Unknown error',
+              stack: batchError instanceof Error ? batchError.stack : undefined,
+              batchData: initialBatch
+            });
             throw batchError; // Re-throw to show error to user
           }
-        } else if (hasInitial) {
-          console.warn('⚠️ Initial inventory requested but no productId returned');
+        } else {
+          console.log('⚠️ Initial batch not created:', { hasInitial, productId, initialQuantity: formValue.initialQuantity });
+          if (hasInitial && !productId) {
+            console.warn('⚠️ Initial inventory requested but no productId returned');
+          }
         }
       }
 
       this.closeModal();
-      this.filterProducts();
     } catch (error) {
       console.error('Error saving product:', error);
       
@@ -2833,8 +2853,7 @@ export class ProductManagementComponent implements OnInit {
         // Refresh list copy from service
         const updated = this.productService.getProduct(this.pendingPhotoProduct.id!);
         if (updated) {
-          // Force UI refresh
-          this.filterProducts();
+          // No need to manually filter - computed signal handles this automatically
         }
 
         // Log upload
@@ -2889,7 +2908,7 @@ export class ProductManagementComponent implements OnInit {
           storeId
         });
         
-        this.filterProducts();
+        // No need to manually filter - computed signal handles this automatically
         this.toastService.success(`Product "${this.productToDelete.productName}" deleted successfully`);
       } catch (error) {
         console.error('Error deleting product:', error);
@@ -2954,7 +2973,7 @@ export class ProductManagementComponent implements OnInit {
     this.searchTerm = '';
     this.selectedCategory = '';
     this.selectedStore = '';
-    this.filterProducts();
+    // No need to manually filter - computed signal handles this automatically
   }
 
   async refreshProducts(): Promise<void> {
@@ -2972,7 +2991,7 @@ export class ProductManagementComponent implements OnInit {
         console.warn('No storeId available - cannot refresh products from BigQuery API');
       }
       
-      this.filterProducts();
+      // No need to manually filter - computed signal handles this automatically
     } catch (error) {
       console.error('Error refreshing products:', error);
     } finally {
@@ -2988,7 +3007,7 @@ export class ProductManagementComponent implements OnInit {
       // With real-time updates, we don't need pagination since we limit to 100 products
       // This method is kept for backward compatibility but essentially does nothing
       console.warn('loadMoreProducts() is deprecated with real-time service - all products are loaded initially');
-      this.filterProducts();
+      // No need to manually filter - computed signal handles this automatically
     } catch (err) {
       console.error('Error in loadMoreProducts:', err);
     } finally {

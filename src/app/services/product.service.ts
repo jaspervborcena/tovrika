@@ -909,9 +909,12 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
       
       // Clean undefined values that Firestore doesn't accept
       const invArr = Array.isArray((productData as any).inventory) ? (productData as any).inventory : [];
+      
+      // Remove uid from productData since OfflineDocumentService will add it via security service
+      const { uid, ...productDataWithoutUid } = productData;
+      
       const baseData: any = this.cleanUndefinedValues({
-        ...productData,
-        uid: currentUser.uid,  // Add UID for security rules
+        ...productDataWithoutUid,
         companyId,
         status: productData.status || 'active'
       });
@@ -972,7 +975,6 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
       const newLocalProd: Product = {
         ...productData,
         id: documentId,
-        uid: currentUser.uid,
         companyId,
         createdAt: new Date(),
         updatedAt: new Date(),
@@ -998,9 +1000,6 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
 
       // Prepare update data with proper Timestamp conversion
       const updateData: any = { ...updates };
-
-      // Ensure UID is maintained for security rules
-      updateData.uid = currentUser.uid;
 
       // Clean undefined values to prevent Firestore errors
       const cleanedUpdateData = this.cleanUndefinedValues(updateData);
