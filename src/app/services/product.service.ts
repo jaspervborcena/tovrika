@@ -17,6 +17,7 @@ import {
   enableNetwork,
   disableNetwork,
   connectFirestoreEmulator,
+  runTransaction,
   Timestamp,
   Unsubscribe,
   DocumentChange,
@@ -898,6 +899,8 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
     }
   }
   async createProduct(productData: Omit<Product, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> {
+    console.log('🚀 Starting atomic product creation with transaction...');
+    
     try {
       // Get current user for UID
       const currentUser = this.authService.getCurrentUser();
@@ -906,11 +909,13 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
       }
 
       const companyId = await this.waitForAuth();
+      console.log('🔐 User authenticated for product creation:', { uid: currentUser.uid, companyId });
       
       // Clean undefined values that Firestore doesn't accept
       const invArr = Array.isArray((productData as any).inventory) ? (productData as any).inventory : [];
+      console.log('📦 Initial inventory batches:', invArr.length);
       
-      // Remove uid from productData since OfflineDocumentService will add it via security service
+      // Remove uid from productData since we'll add it in the transaction
       const { uid, ...productDataWithoutUid } = productData;
       
       const baseData: any = this.cleanUndefinedValues({
@@ -919,73 +924,121 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
         status: productData.status || 'active'
       });
 
-      // Only include inventory if provided (legacy support); otherwise omit
-      if (invArr.length > 0) {
-        baseData.inventory = invArr.map((inv: any) => ({
-          ...this.cleanUndefinedValues(inv),
-          receivedAt: Timestamp.fromDate(inv.receivedAt)
-        }));
-      }
+      // Use Firestore transaction for all-or-nothing product + inventory creation
+      return await runTransaction(this.firestore, async (transaction) => {
+        console.log('🔄 Starting atomic transaction for product creation...');
 
-      const cleanedProductData = baseData;
+        // 1. Create product document reference
+        const productRef = doc(collection(this.firestore, 'products'));
+        const productId = productRef.id;
+        console.log('📝 Generated product ID:', productId);
 
-      // Create document using OfflineDocumentService (server-side logging will run in Cloud Function)
-      const documentId = await this.offlineDocService.createDocument('products', cleanedProductData);
+        // 2. Prepare product data with security fields
+        const productPayload = {
+          ...baseData,
+          uid: currentUser.uid,
+          createdBy: currentUser.uid,
+          updatedBy: currentUser.uid,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          lastUpdated: new Date()
+        };
 
-      // If the product includes initial inventory batches (legacy support) for existing products only
-      // For new products, inventory will be created separately by the product management component
-      try {
-        const initialBatches = Array.isArray(invArr) && invArr.length > 0
-          ? invArr
-          : []; // Removed automatic batch creation for totalStock - handled by component
+        // 3. Calculate initial totals from batches
+        let totalStock = 0;
+        let sellingPrice = 0;
+        
+        if (invArr.length > 0) {
+          // Calculate total stock
+          totalStock = invArr.reduce((sum: number, batch: any) => sum + Number(batch.quantity || 0), 0);
+          
+          // Get selling price from latest batch by receivedAt
+          const sortedBatches = [...invArr].sort((a: any, b: any) => {
+            const dateA = a.receivedAt instanceof Date ? a.receivedAt : new Date(a.receivedAt);
+            const dateB = b.receivedAt instanceof Date ? b.receivedAt : new Date(b.receivedAt);
+            return dateB.getTime() - dateA.getTime();
+          });
+          sellingPrice = Number(sortedBatches[0]?.unitPrice || 0);
+          
+          console.log('📊 Calculated totals:', { totalStock, sellingPrice, batchCount: invArr.length });
+        }
 
-        for (const b of initialBatches) {
-          const batchData: any = {
-            productId: documentId,
-            productName: cleanedProductData.productName || (productData as any).productName || '',
+        // Add calculated fields to product
+        productPayload.totalStock = totalStock;
+        productPayload.sellingPrice = sellingPrice;
+
+        // 4. Queue product creation in transaction
+        transaction.set(productRef, productPayload);
+        console.log('📝 Product creation queued in transaction');
+
+        // 5. Queue inventory batch creation in transaction
+        const batchRefs: string[] = [];
+        for (const batch of invArr) {
+          const batchRef = doc(collection(this.firestore, 'productInventory'));
+          const batchId = batchRef.id;
+          
+          const batchData = {
+            productId: productId,
+            productName: baseData.productName || '',
             companyId: companyId,
-            storeId: (productData as any).storeId || cleanedProductData.storeId || '',
-            batchNumber: (b.batchNumber as any) || undefined,
-            quantity: Number(b.quantity || 0),
-            unitPrice: Number(b.unitPrice || 0),
-            costPrice: Number(b.costPrice || 0) || Number(b.unitPrice || 0),
-            receivedAt: b.receivedAt instanceof Date ? b.receivedAt : new Date(b.receivedAt || new Date()),
-            expiryDate: b.expiryDate ? (b.expiryDate instanceof Date ? b.expiryDate : new Date(b.expiryDate)) : null,
-            supplier: b.supplier || null,
+            storeId: baseData.storeId || '',
+            batchNumber: batch.batchNumber || undefined,
+            batchId: batchId, // Set batchId to document ID
+            quantity: Number(batch.quantity || 0),
+            unitPrice: Number(batch.unitPrice || 0),
+            costPrice: Number(batch.costPrice || 0) || Number(batch.unitPrice || 0),
+            receivedAt: batch.receivedAt instanceof Date ? batch.receivedAt : new Date(batch.receivedAt || new Date()),
+            expiryDate: batch.expiryDate ? (batch.expiryDate instanceof Date ? batch.expiryDate : new Date(batch.expiryDate)) : null,
+            supplier: batch.supplier || null,
             status: 'active',
             totalDeducted: 0,
-            deductionHistory: []
+            deductionHistory: [],
+            uid: currentUser.uid,
+            createdBy: currentUser.uid,
+            updatedBy: currentUser.uid,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            syncStatus: 'SYNCED',
+            isOffline: false,
+            initialQuantity: Number(batch.quantity || 0)
           };
 
-          // Create inventory entry and then set its batchId field to the returned id so other code expecting
-          // batch.batchId will match the document id.
-          const createdBatchId = await this.offlineDocService.createDocument('productInventory', batchData);
-          try {
-            await this.offlineDocService.updateDocument('productInventory', createdBatchId, { batchId: createdBatchId });
-          } catch (uErr) {
-            this.logger.warn('Failed to set batchId on created inventory entry', { area: 'products', collectionPath: 'productInventory', docId: createdBatchId, payload: { error: String(uErr) } });
-          }
+          transaction.set(batchRef, batchData);
+          batchRefs.push(batchId);
+          console.log('📦 Batch creation queued in transaction:', batchId);
         }
-      } catch (inventoryErr) {
-        this.logger.warn('Failed to create initial productInventory for product', { area: 'products', payload: { productId: documentId, error: String(inventoryErr) } });
-      }
 
-      // Update the local cache immediately for optimistic updates
-      // The real-time listener will handle the actual Firestore update
-      const newLocalProd: Product = {
-        ...productData,
-        id: documentId,
-        companyId,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        isOfflineCreated: documentId.startsWith('temp_')
-      } as Product;
+        console.log('✅ Transaction prepared - will create product + ' + invArr.length + ' inventory batches atomically');
+        return productId;
+      }).then((productId) => {
+        console.log('🎉 Atomic transaction committed successfully! Product created:', productId);
+        
+        // Update the local cache immediately for optimistic updates
+        const newLocalProd: Product = {
+          ...productData,
+          id: productId,
+          companyId,
+          totalStock: invArr.reduce((sum: number, batch: any) => sum + Number(batch.quantity || 0), 0),
+          sellingPrice: invArr.length > 0 ? Number(invArr.sort((a: any, b: any) => {
+            const dateA = a.receivedAt instanceof Date ? a.receivedAt : new Date(a.receivedAt);
+            const dateB = b.receivedAt instanceof Date ? b.receivedAt : new Date(b.receivedAt);
+            return dateB.getTime() - dateA.getTime();
+          })[0]?.unitPrice || 0) : 0,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          isOfflineCreated: productId.startsWith('temp_')
+        } as Product;
 
-      this.addProductToCache(newLocalProd);
+        this.addProductToCache(newLocalProd);
+        
+        return productId;
+      }).catch((error) => {
+        console.error('❌ Atomic transaction failed - no changes made:', error);
+        throw new Error(`Failed to create product atomically: ${error.message}`);
+      });
       
-      return documentId;
     } catch (error) {
-      this.logger.dbFailure('Create product failed', { api: 'firestore.add', area: 'products', collectionPath: 'products' }, error);
+      this.logger.dbFailure('Atomic product creation failed', { api: 'firestore.transaction', area: 'products', collectionPath: 'products' }, error);
       throw error;
     }
   }
