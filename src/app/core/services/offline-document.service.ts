@@ -36,10 +36,22 @@ export class OfflineDocumentService {
    */
   async createDocument(collectionName: string, data: any): Promise<string> {
     try {
+      console.log('🔄 OfflineDocumentService.createDocument starting for:', collectionName);
+      console.log('📦 Input data:', data);
+      
       // Add security fields (works online/offline with IndexedDB)
-  const secureData = await this.securityService.addSecurityFields(data);
-  // Ensure create timestamps are applied. Use serverTimestamp when online; fallback to ISO when offline.
-  const timestampedData = applyCreateTimestamps(secureData, navigator.onLine as boolean);
+      let secureData;
+      try {
+        secureData = await this.securityService.addSecurityFields(data);
+        console.log('✅ Security fields added successfully');
+      } catch (securityError) {
+        console.error('❌ Failed to add security fields:', securityError);
+        throw new Error(`Authentication failed: ${securityError instanceof Error ? securityError.message : 'Unknown auth error'}`);
+      }
+      
+      // Ensure create timestamps are applied. Use serverTimestamp when online; fallback to ISO when offline.
+      const timestampedData = applyCreateTimestamps(secureData, navigator.onLine as boolean);
+      console.log('⏰ Timestamps applied, final data:', timestampedData);
 
       // 🔥 NEW APPROACH: Always generate ID first, then create document
       let documentId: string;

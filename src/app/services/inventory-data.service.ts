@@ -166,7 +166,16 @@ export class InventoryDataService {
     return runTransaction(this.firestore, async (transaction) => {
       console.log('🔄 Starting Firestore transaction for addBatch...');
 
-      // 1. Create new batch document
+      // IMPORTANT: Do all reads FIRST, then all writes (Firestore transaction requirement)
+      
+      // 1. Read the product document first (before any writes)
+      const productRef = doc(this.firestore, 'products', productId);
+      const prodSnap = await transaction.get(productRef);
+      console.log('📖 Product document read completed, exists:', prodSnap.exists());
+
+      // 2. Now do all the writes after reads are complete
+      
+      // 2a. Create new batch document
       const batchRef = doc(collection(this.firestore, this.collectionName));
       const cleanBatchData = this.cleanUndefined(batchData);
       
@@ -178,20 +187,65 @@ export class InventoryDataService {
 
       console.log('📦 Batch document queued for creation:', batchRef.id);
 
-      // 2. Update product summary using ProductSummaryService
-      await this.productSummaryService.recomputeProductSummaryInTransaction(
-        transaction,
-        productId
-      );
+      // 2b. Update product summary within the same transaction
+      try {
+        // Compute incremental totals for totalStock
+        const existingTotal = prodSnap.exists() ? (Number((prodSnap.data() as any).totalStock) || 0) : 0;
+        const newTotal = existingTotal + (Number(cleanBatchData.quantity) || 0);
 
-      console.log('📊 Product summary update queued in transaction');
+        // For sellingPrice, we'll let the post-commit recompute handle it correctly
+        // since it can read all batches and determine the latest by receivedAt
+        const currentSellingPrice = prodSnap.exists() ? (Number((prodSnap.data() as any).sellingPrice) || 0) : Number(cleanBatchData.unitPrice) || 0;
+
+        if (prodSnap.exists()) {
+          // For existing products, only update totalStock in transaction
+          // Post-commit recompute will handle sellingPrice correctly
+          transaction.update(productRef, {
+            totalStock: newTotal,
+            lastUpdated: new Date(),
+            updatedBy: user.uid
+          });
+          console.log('� Updated existing product totalStock in transaction:', newTotal);
+        } else {
+          // If the product document does not exist yet, create it with initial values
+          // Post-commit recompute will correct the sellingPrice if needed
+          transaction.set(productRef, {
+            uid: user.uid,
+            companyId: permission.companyId,
+            storeId: permission.storeId || '',
+            totalStock: newTotal,
+            sellingPrice: Number(cleanBatchData.unitPrice) || 0,
+            status: 'active',
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            lastUpdated: new Date(),
+            createdBy: user.uid,
+            updatedBy: user.uid
+          });
+          console.log('📊 Created new product with initial values:', { totalStock: newTotal, sellingPrice: cleanBatchData.unitPrice });
+        }
+      } catch (err) {
+        // If product doesn't exist or update fails, still allow transaction to proceed
+        // but surface a warning. The separate recompute path can be used to repair
+        // discrepancies later.
+        console.warn('⚠️ Failed to incrementally update product summary inside transaction:', err);
+      }
 
       // Transaction will commit both operations atomically
       console.log('✅ Transaction prepared successfully - both batch and product will be updated atomically');
       
       return batchRef.id;
-    }).then((batchId) => {
+    }).then(async (batchId) => {
       console.log('🎉 Transaction committed successfully! Batch created:', batchId);
+      try {
+        // Ensure product summary is fully recomputed from committed batches
+        // so UI and other services see the authoritative values.
+        // This will correctly calculate sellingPrice from the latest batch by receivedAt.
+        const summary = await this.productSummaryService.recomputeProductSummary(productId);
+        console.log('🔁 Post-commit product summary recompute completed for', productId, 'with summary:', summary);
+      } catch (recomputeErr) {
+        console.warn('⚠️ Post-commit recompute failed:', recomputeErr);
+      }
       return batchId;
     }).catch((error) => {
       console.error('❌ Transaction failed - no changes made:', error);
