@@ -45,6 +45,25 @@ export interface RoleDefinition {
 })
 export class RoleDefinitionService {
   private readonly roleDefinitionsSignal = signal<RoleDefinition[]>([]);
+
+  // Helper: normalize Firestore Timestamp | Date | number | string into Date
+  private toDateValue(value: any): Date | null {
+    try {
+      if (!value) return null;
+      if (typeof value === 'object' && typeof (value as any).toDate === 'function') {
+        return (value as any).toDate();
+      }
+      if (value instanceof Date) return value;
+      if (typeof value === 'number') return new Date(value);
+      if (typeof value === 'string') {
+        const d = new Date(value);
+        return isNaN(d.getTime()) ? null : d;
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }
   
   // Public signals
   readonly roleDefinitions = computed(() => this.roleDefinitionsSignal());
@@ -82,11 +101,13 @@ export class RoleDefinitionService {
       const roleDefs = querySnapshot.docs.map(doc => {
         const data = doc.data();
         console.log('🔍 [RoleDefinitionService] Processing role definition:', doc.id, data);
+        const created = this.toDateValue(data['createdAt']) || new Date();
+        const updated = this.toDateValue(data['updatedAt']) || new Date();
         return {
           id: doc.id,
           ...data,
-          createdAt: data['createdAt']?.toDate() || new Date(),
-          updatedAt: data['updatedAt']?.toDate() || new Date()
+          createdAt: created,
+          updatedAt: updated
         };
       }) as RoleDefinition[];
       

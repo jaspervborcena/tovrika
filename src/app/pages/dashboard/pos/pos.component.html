@@ -494,7 +494,7 @@
               <div style="display: grid; grid-template-columns: 1fr auto; gap: 1rem; margin-top: 0.75rem; align-items: center;">
                 <div>
                   <div style="font-weight: 600; color: #374151;">Store</div>
-                  <div style="color: #6b7280;">{{ selectedOrder()?.storeId || 'Global' }}</div>
+                  <div style="color: #6b7280;">{{ getOrderStoreName(selectedOrder()) }}</div>
                 </div>
                 <div style="text-align: right;">
                   <div style="font-weight: 600; color: #374151;">{{ 'pos.total' | translate }} {{ 'pos.amount' | translate }}</div>
@@ -946,7 +946,7 @@
                 <span>{{ 'pos.hasDiscount' | translate }}</span>
                 <span>{{ 'pos.discountType' | translate }}</span>
                 <span>{{ 'pos.discountValue' | translate }}</span>
-                <span>{{ 'pos.total' | translate }}</span>
+                <span>Unit Total</span>
               </div>
               <div class="cart-item-row-extended" *ngFor="let item of cartItems(); let i = index">
                 <!-- Product Info -->
@@ -966,7 +966,7 @@
                 <div class="item-price-dialog">₱{{ item.sellingPrice.toFixed(2) }}</div>
                 
                 <!-- Total -->
-                <div class="item-total-dialog">₱{{ (item.sellingPrice * item.quantity).toFixed(2) }}</div>
+                <div class="item-total-dialog">₱{{ (item.total || (item.sellingPrice * item.quantity)).toFixed(2) }}</div>
                 
                 <!-- VAT Applicable Checkbox -->
                 <div class="cart-item-field">

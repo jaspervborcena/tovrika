@@ -1455,6 +1455,21 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
                         </label>
                       </div>
 
+                      <div class="form-group" style="margin-top:8px; display:flex; gap:8px; align-items:center;">
+                        <label for="vatRate" style="margin:0; width:120px; font-weight:500; color:#6b7280;">VAT Rate (%)</label>
+                        <input
+                          type="number"
+                          id="vatRate"
+                          formControlName="vatRate"
+                          class="form-input"
+                          min="0"
+                          max="100"
+                          step="0.01"
+                          [disabled]="!productForm.get('isVatApplicable')?.value"
+                          style="width:120px;"
+                        />
+                      </div>
+
                     <!-- Additional initial batch fields -->
                     <div class="form-row">
                       <div class="form-group">
@@ -2002,14 +2017,16 @@ export class ProductManagementComponent implements OnInit {
   isMultipleInventory: false,
   initialBatchId: '',
   initialQuantity: 0,
-  initialUnitPrice: 0
+  initialUnitPrice: 0,
+  vatRate: 12.0
     });
     // Ensure required defaults after reset
     this.productForm.patchValue({
       unitType: 'pieces',
       category: 'General',
   status: ProductStatus.Active,
-      isVatApplicable: true
+      isVatApplicable: true,
+      vatRate: 12.0
     });
     // set totalStock from initial fields if provided
     const initialQty = this.productForm.get('initialQuantity')?.value || 0;
@@ -2025,6 +2042,11 @@ export class ProductManagementComponent implements OnInit {
     this.isEditMode = true;
     this.selectedProduct = product;
     this.productForm.patchValue(product);
+    // Ensure vatRate defaults to 12 if the product doesn't include it
+    const currentVat = this.productForm.get('vatRate')?.value;
+    if (currentVat === null || currentVat === undefined || currentVat === '') {
+      this.productForm.get('vatRate')?.setValue(12.0);
+    }
     
     // Use denormalized totalStock from product (no longer calculate from embedded inventory)
     // Patch the denormalized summary controls if present
