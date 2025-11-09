@@ -61,14 +61,17 @@ export class HeaderComponent implements OnInit {
   // App constants and network status
   protected isOnline = computed(() => {
     const status = this.networkService.isOnline();
+    console.log('🎨 Header: Network status is:', status ? 'ONLINE' : 'OFFLINE');
     return status;
   });
   protected appName = computed(() => {
     const name = this.isOnline() ? AppConstants.APP_NAME : AppConstants.APP_NAME_OFFLINE;
+    console.log('🏷️ Header: App name is:', name);
     return name;
   });
   protected headerClass = computed(() => {
     const cssClass = this.isOnline() ? 'dashboard-header' : 'dashboard-header offline';
+    console.log('💄 Header: CSS class is:', cssClass);
     return cssClass;
   });
   
@@ -111,10 +114,14 @@ export class HeaderComponent implements OnInit {
   // Debug method to test offline mode
   protected toggleOfflineMode() {
     const currentStatus = this.networkService.getCurrentStatus();
+    console.log('🔄 Toggling offline mode. Current status:', currentStatus ? 'ONLINE' : 'OFFLINE');
     this.networkService.setOfflineMode(currentStatus);
     
     // Force change detection after a short delay
     setTimeout(() => {
+      console.log('🔄 After toggle - isOnline():', this.isOnline());
+      console.log('🔄 After toggle - headerClass():', this.headerClass());
+      console.log('🔄 After toggle - appName():', this.appName());
     }, 200);
   }
 
@@ -131,7 +138,9 @@ export class HeaderComponent implements OnInit {
     this.loadDashboardData();
     
     // Subscribe to language changes for debugging
-    this.translationService.getLanguageChange().subscribe(() => {});
+    this.translationService.getLanguageChange().subscribe(lang => {
+      console.log('🌐 Header: Language changed to:', lang);
+    });
   }
 
   private async loadDashboardData() {
@@ -157,6 +166,7 @@ export class HeaderComponent implements OnInit {
         if (!userRolesSnap.empty) {
           const userRoleData = userRolesSnap.docs[0].data();
           roleId = userRoleData['roleId'];
+          console.log('Header UserRoles:', userRoleData);
         }
       }
 
@@ -204,6 +214,7 @@ export class HeaderComponent implements OnInit {
   }
 
   selectLanguage(language: Language): void {
+    console.log('🌐 Switching to language:', language.code, language.name);
     this.translationService.setLanguage(language.code);
     this.isLanguageMenuOpen.set(false);
   }
