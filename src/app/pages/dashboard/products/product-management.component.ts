@@ -1,7 +1,7 @@
 import { Component, OnInit, computed, signal, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
-import { Product, ProductInventory } from '../../../interfaces/product.interface';
+import { Product, ProductInventory, ProductStatus } from '../../../interfaces/product.interface';
 import { ProductInventoryEntry } from '../../../interfaces/product-inventory-entry.interface';
 import { ProductService } from '../../../services/product.service';
 import { StoreService } from '../../../services/store.service';
@@ -1033,6 +1033,7 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
           </select>
           <select 
             [(ngModel)]="selectedStore" 
+            (ngModelChange)="onSelectedStoreChange($event)"
             class="filter-select">
             <option value="">All Stores</option>
             <option *ngFor="let store of stores()" [value]="store.id">{{ store.storeName }}</option>
@@ -1065,7 +1066,7 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
                 <th>Category</th>
                 <th>Stock</th>
                 <th>Price</th>
-                <th>Store</th>
+                <th>Status</th>
                 <th>Actions</th>
               </tr>
             </thead>
@@ -1083,7 +1084,11 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
                 <td class="product-category-cell">{{ product.category }}</td>
                 <td class="product-stock-cell">{{ product.totalStock }}</td>
                 <td class="product-price-cell">\${{ displayPrice(product).toFixed(2) }}</td>
-                <td class="product-store-cell">{{ getStoreName(product.storeId) }}</td>
+                <td class="product-status-cell">
+                  <span [class]="getStatusBadgeClass(product.status || ProductStatus.Inactive)">
+                    {{ (product.status || ProductStatus.Inactive) | titlecase }}
+                  </span>
+                </td>
                 <td class="actions-cell">
                   <div class="action-buttons">
                     <button 
@@ -1169,7 +1174,7 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
                   <span>📋</span>
                   <span>Basic Information</span>
                 </h4>
-                
+
                 <div class="form-group">
                   <label for="category">Category</label>
                   <div class="category-input-wrapper" style="display: flex; gap: 8px; align-items: center;">
@@ -1207,15 +1212,15 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
                 </div>
 
                 <div class="form-group">
-                  <label for="skuId">SKU ID</label>
+                  <label for="productName">Product Name</label>
                   <input 
                     type="text" 
-                    id="skuId"
-                    formControlName="skuId"
-                    placeholder="Enter SKU identifier"
+                    id="productName"
+                    formControlName="productName"
+                    placeholder="Enter product name"
                     class="form-input">
-                  <div class="error-message" *ngIf="productForm.get('skuId')?.invalid && productForm.get('skuId')?.touched">
-                    SKU ID is required
+                  <div class="error-message" *ngIf="productForm.get('productName')?.invalid && productForm.get('productName')?.touched">
+                    Product name is required
                   </div>
                 </div>
 
@@ -1230,6 +1235,19 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
                 </div>
 
                 <div class="form-group">
+                  <label for="skuId">SKU ID</label>
+                  <input 
+                    type="text" 
+                    id="skuId"
+                    formControlName="skuId"
+                    placeholder="Enter SKU identifier"
+                    class="form-input">
+                  <div class="error-message" *ngIf="productForm.get('skuId')?.invalid && productForm.get('skuId')?.touched">
+                    SKU ID is required
+                  </div>
+                </div>
+
+                <div class="form-group">
                   <label for="barcodeId">Barcode ID</label>
                   <input 
                     type="text" 
@@ -1237,19 +1255,6 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
                     formControlName="barcodeId"
                     placeholder="Enter barcode identifier (optional)"
                     class="form-input">
-                </div>
-
-                <div class="form-group">
-                  <label for="productName">Product Name</label>
-                  <input 
-                    type="text" 
-                    id="productName"
-                    formControlName="productName"
-                    placeholder="Enter product name"
-                    class="form-input">
-                  <div class="error-message" *ngIf="productForm.get('productName')?.invalid && productForm.get('productName')?.touched">
-                    Product name is required
-                  </div>
                 </div>
 
                 <div class="form-group">
@@ -1264,6 +1269,23 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
                     Unit type is required
                   </div>
                 </div>
+                
+                <div class="form-group">
+                  <label for="status">Status</label>
+                  <select id="status" formControlName="status" class="form-input">
+                    <option value="active">Active</option>
+                    <option value="inactive">Inactive</option>
+                    <option value="expired">Expired</option>
+                  </select>
+                </div>
+              </div>
+
+              <!-- Image & Description Section (Section 2) -->
+              <div class="form-section">
+                <h4 class="section-title">
+                  <span>🖼️</span>
+                  <span>Image & Description</span>
+                </h4>
 
                 <!-- Product Image Upload -->
                 <div class="form-group">
@@ -1323,18 +1345,12 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
                     ⭐ Mark as Favorite (show in POS Favorites tab)
                   </label>
                 </div>
+
+                <!-- VAT notice removed from here and moved before new-product-inventory -->
               </div>
 
               <!-- Pricing & Inventory Section -->
               <div class="form-section">
-                <!-- VAT Notice -->
-                <div class="vat-notice">
-                  <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" class="notice-icon">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                  </svg>
-                  <span>Default 12% VAT applied. Some items may not be VATable - please double check tax settings.</span>
-                </div>
-
                 <h4 class="section-title">
                   <span>💲</span>
                   <span>Pricing & Inventory</span>
@@ -1377,6 +1393,14 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
                 </div>
 
                 <!-- New Product - Enable direct entry for authorized roles -->
+                <!-- VAT Notice -->
+                <div class="vat-notice" style="margin-bottom:8px;">
+                  <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" class="notice-icon">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                  </svg>
+                  <span>Selling price includes 12% VAT by default. Uncheck if item is VAT-exempt.</span>
+                </div>
+
                 <ng-template #newProductInventory>
                   <div class="new-product-inventory" *ngIf="canCreateInitialInventory(); else unauthorizedInventory">
                     <div class="form-row">
@@ -1418,6 +1442,18 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
                         step="0.01">
                       <small class="text-muted">Price per unit (will be used for initial batch)</small>
                     </div>
+
+                      <div class="form-group" style="display:flex; align-items:center; gap:8px; margin-top:8px;">
+                        <input
+                          type="checkbox"
+                          id="isVatApplicable"
+                          formControlName="isVatApplicable"
+                          style="width:16px; height:16px; cursor:pointer;"
+                        />
+                        <label for="isVatApplicable" style="margin:0; cursor:pointer;">
+                          VAT applicable (default 12%)
+                        </label>
+                      </div>
 
                     <!-- Additional initial batch fields -->
                     <div class="form-row">
@@ -1808,6 +1844,8 @@ export class ProductManagementComponent implements OnInit {
   
   // Unit types from predefined types
   unitTypes: UnitTypeOption[] = []; // Will be loaded from predefinedTypes
+  // expose enum to template
+  readonly ProductStatus = ProductStatus;
 
   constructor(
     public productService: ProductService,
@@ -1872,6 +1910,8 @@ export class ProductManagementComponent implements OnInit {
       unitType: ['pieces', Validators.required],
       // Default to 'General' so the form is valid even if categories haven't loaded yet
       category: ['General', Validators.required],
+  // Product status: active by default
+  status: [ProductStatus.Active],
   imageUrl: [''],
   // Favorites
   isFavorite: [false],
@@ -1967,7 +2007,9 @@ export class ProductManagementComponent implements OnInit {
     // Ensure required defaults after reset
     this.productForm.patchValue({
       unitType: 'pieces',
-      category: 'General'
+      category: 'General',
+  status: ProductStatus.Active,
+      isVatApplicable: true
     });
     // set totalStock from initial fields if provided
     const initialQty = this.productForm.get('initialQuantity')?.value || 0;
@@ -2173,7 +2215,7 @@ export class ProductManagementComponent implements OnInit {
           receivedAt: formValue.initialReceivedAt ? new Date(formValue.initialReceivedAt) : new Date(), // Default to now if not specified
           expiryDate: formValue.initialExpiryDate ? new Date(formValue.initialExpiryDate) : undefined,
           supplier: formValue.initialSupplier || undefined,
-          status: 'active' as const
+          status: ProductStatus.Active
         } : null;
 
         // Get current user for UID
@@ -2208,7 +2250,7 @@ export class ProductManagementComponent implements OnInit {
           discountType: formValue.discountType || 'percentage',
           discountValue: formValue.discountValue || 0,
           
-          status: 'active'
+          status: ProductStatus.Active
         };
 
         console.log('🚀 About to create product with data:', newProduct);
@@ -2236,7 +2278,7 @@ export class ProductManagementComponent implements OnInit {
               receivedAt: initialBatch!.receivedAt,
               expiryDate: initialBatch!.expiryDate,
               supplier: initialBatch!.supplier,
-              status: 'active' as const,
+              status: ProductStatus.Active,
               unitType: formValue.unitType || 'pieces',
               companyId: companyId,
               storeId: storeId,
@@ -2520,7 +2562,7 @@ export class ProductManagementComponent implements OnInit {
           receivedAt: new Date(formValue.receivedAt),
           expiryDate: formValue.expiryDate ? new Date(formValue.expiryDate) : undefined,
           supplier: formValue.supplier || undefined,
-          status: 'active',
+          status: ProductStatus.Active,
           unitType: this.selectedProduct?.unitType || 'pieces'
         });
       } else {
@@ -2541,7 +2583,7 @@ export class ProductManagementComponent implements OnInit {
           receivedAt: new Date(formValue.receivedAt),
           expiryDate: formValue.expiryDate ? new Date(formValue.expiryDate) : undefined,
           supplier: formValue.supplier || undefined,
-          status: 'active',
+          status: ProductStatus.Active,
           unitType: this.selectedProduct?.unitType || 'pieces',
           companyId: this.selectedProduct.companyId,
           storeId: this.selectedProduct.storeId,
@@ -2976,6 +3018,19 @@ export class ProductManagementComponent implements OnInit {
     // No need to manually filter - computed signal handles this automatically
   }
 
+  onSelectedStoreChange(storeId: string): void {
+    console.log('Store filter changed to:', storeId);
+    this.selectedStore = storeId;
+    // Try to initialize products for the selected store to ensure list is in sync
+    if (storeId) {
+      this.productService.initializeProducts(storeId).catch(err => {
+        console.error('Failed to initialize products for store filter change:', err);
+      });
+    }
+    // Force change detection to update filteredProducts UI
+    try { this.cdr.detectChanges(); } catch {}
+  }
+
   async refreshProducts(): Promise<void> {
     try {
       this.loading = true;
@@ -3036,11 +3091,11 @@ export class ProductManagementComponent implements OnInit {
 
   getStatusBadgeClass(status: string): string {
     switch (status) {
-      case 'active':
+      case ProductStatus.Active:
         return 'px-2 py-1 text-xs rounded-full bg-green-100 text-green-800';
-      case 'inactive':
+      case ProductStatus.Inactive:
         return 'px-2 py-1 text-xs rounded-full bg-red-100 text-red-800';
-      case 'expired':
+      case ProductStatus.Expired:
         return 'px-2 py-1 text-xs rounded-full bg-gray-100 text-gray-800';
       default:
         return 'px-2 py-1 text-xs rounded-full bg-gray-100 text-gray-800';

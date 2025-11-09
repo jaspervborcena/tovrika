@@ -1,4 +1,5 @@
 import { Component, OnInit, AfterViewInit, OnDestroy, HostListener, computed, signal, inject } from '@angular/core';
+import { ProductStatus } from '../../../interfaces/product.interface';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterModule, Router, NavigationEnd } from '@angular/router';
@@ -191,7 +192,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   @HostListener('document:keydown.escape', ['$event'])
-  onEscapeKey(event: KeyboardEvent): void {
+  onEscapeKey(event: Event | KeyboardEvent): void {
     event.stopPropagation();
     this.closeSortMenu();
   }
@@ -1236,7 +1237,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
 
   // F4 Hotkey for Clear Data
   @HostListener('document:keydown.f4', ['$event'])
-  async onF4KeyPress(event: KeyboardEvent): Promise<void> {
+  async onF4KeyPress(event: Event | KeyboardEvent): Promise<void> {
     event.preventDefault(); // Prevent default F4 behavior
     
     // Check if order is already completed
@@ -1274,7 +1275,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
 
   // F5 Hotkey for New Order
   @HostListener('document:keydown.f5', ['$event'])
-  async onF5KeyPress(event: KeyboardEvent): Promise<void> {
+  async onF5KeyPress(event: Event | KeyboardEvent): Promise<void> {
     event.preventDefault(); // Prevent page refresh
     // Use unified flow so hotkey, button, and item-click behave the same
     await this.requestStartNewOrder('hotkey');
@@ -1282,7 +1283,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
 
   // F6 Hotkey for Complete Order
   @HostListener('document:keydown.f6', ['$event'])
-  async onF6KeyPress(event: KeyboardEvent): Promise<void> {
+  async onF6KeyPress(event: Event | KeyboardEvent): Promise<void> {
     event.preventDefault(); // Prevent default F6 behavior
     
     // If order is already completed, just show receipt
@@ -1309,7 +1310,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
 
   // F7 Hotkey for Add Discount (mirrors Add Discount button behavior)
   @HostListener('document:keydown.f7', ['$event'])
-  async onF7KeyPress(event: KeyboardEvent): Promise<void> {
+  async onF7KeyPress(event: Event | KeyboardEvent): Promise<void> {
     event.preventDefault(); // Prevent default F7 behavior
 
     // Block on completed orders
@@ -1419,7 +1420,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     const store = this.currentStoreInfo();
     let subscriptionActive = false;
     if (store) {
-      const statusOk = (store.status || 'inactive') === 'active';
+      const statusOk = (store.status || ProductStatus.Inactive) === ProductStatus.Active;
       let endDate: any = store.subscriptionEndDate as any;
       let notExpired = false;
       if (endDate) {
@@ -1586,7 +1587,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       }
 
       // Status check first
-      if ((store.status || 'inactive') !== 'active') {
+  if ((store.status || ProductStatus.Inactive) !== ProductStatus.Active) {
         await this.showConfirmationDialog({
           title: 'Store Inactive',
           message: 'Unable to create new order because this store is inactive. Please activate your subscription for this store.',
@@ -3442,7 +3443,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
         const testQuery = query(
           productsRef,
           where('companyId', '==', currentPermission.companyId),
-          where('status', '==', 'active'),
+          where('status', '==', ProductStatus.Active),
           limit(10)
         );
         
