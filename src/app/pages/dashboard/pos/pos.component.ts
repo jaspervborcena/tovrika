@@ -1,4 +1,6 @@
 import { Component, OnInit, AfterViewInit, OnDestroy, HostListener, computed, signal, inject } from '@angular/core';
+import { Firestore, doc, getDoc } from '@angular/fire/firestore';
+import { ProductStatus } from '../../../interfaces/product.interface';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterModule, Router, NavigationEnd } from '@angular/router';
@@ -54,6 +56,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   private companyService = inject(CompanyService);
   private translationService = inject(TranslationService);
   private subscriptionService = inject(SubscriptionService);
+  private firestore = inject(Firestore);
   private router = inject(Router);
 
   private routerSubscription: any;
@@ -191,7 +194,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   @HostListener('document:keydown.escape', ['$event'])
-  onEscapeKey(event: KeyboardEvent): void {
+  onEscapeKey(event: Event | KeyboardEvent): void {
     event.stopPropagation();
     this.closeSortMenu();
   }
@@ -784,6 +787,31 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     this.selectedOrderSignal.set(null);
   }
 
+  /**
+   * Return a user-friendly store name for the given order.
+   * Falls back to 'Global' when order has no storeId and returns the id
+   * when the store object cannot be found.
+   */
+  getOrderStoreName(order: any): string {
+    try {
+      if (!order) return 'N/A';
+      const storeId = order.storeId;
+      if (!storeId) return 'Global';
+      const store = this.storeService.getStore(storeId);
+      if (store && store.storeName) return store.storeName;
+
+      // Some older orders may contain denormalized storeName field
+      if (order.storeName) return order.storeName;
+      if (order.store && order.store.storeName) return order.store.storeName;
+
+      // Fallback to the raw id so user can at least see something
+      return storeId;
+    } catch (err) {
+      console.warn('Error resolving store name for order', err);
+      return order?.storeName || order?.store?.storeName || order?.storeId || 'Unknown Store';
+    }
+  }
+
   async updateOrderStatus(orderId: string, status: string): Promise<void> {
     try {
       await this.orderService.updateOrderStatus(orderId, status);
@@ -956,16 +984,34 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       paymentMethod: order.cashSale ? 'Cash' : 'Charge',
       isCashSale: order.cashSale || true,
       isChargeSale: !order.cashSale || false,
-      items: (order.items || []).map((item: any) => ({
-        productName: item.productName || item.name,
-        skuId: item.skuId || item.sku,
-        quantity: item.quantity || 1,
-        unitType: item.unitType || 'pc',
-        sellingPrice: item.sellingPrice || item.price || item.amount,
-        total: item.total || (item.quantity * (item.sellingPrice || item.price || item.amount)),
-        vatAmount: item.vatAmount || 0,
-        discountAmount: item.discountAmount || 0
-      })),
+      items: await (async () => {
+        try {
+          let itemsSource = Array.isArray(order.items) && order.items.length > 0 ? order.items : [];
+          // If no items embedded in order, fetch from orderDetails collection (may be batched)
+          if ((!itemsSource || itemsSource.length === 0) && order.id) {
+            try {
+              const fetched = await this.orderService.fetchOrderItems(order.id);
+              if (Array.isArray(fetched) && fetched.length > 0) itemsSource = fetched;
+            } catch (e) {
+              console.warn('Failed to fetch order items for order', order.id, e);
+            }
+          }
+
+          return (itemsSource || []).map((item: any) => ({
+            productName: item.productName || item.name,
+            skuId: item.skuId || item.sku,
+            quantity: item.quantity || 1,
+            unitType: item.unitType || 'pc',
+            sellingPrice: item.sellingPrice || item.price || item.amount,
+            total: item.total || (item.quantity * (item.sellingPrice || item.price || item.amount)),
+            vatAmount: item.vatAmount || 0,
+            discountAmount: item.discountAmount || 0
+          }));
+        } catch (err) {
+          console.warn('Error normalizing order items', err);
+          return [];
+        }
+      })(),
       subtotal: order.grossAmount || order.subtotal || order.totalAmount,
       vatAmount: order.vatAmount || 0,
       vatExempt: order.vatExemptAmount || 0,
@@ -1236,7 +1282,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
 
   // F4 Hotkey for Clear Data
   @HostListener('document:keydown.f4', ['$event'])
-  async onF4KeyPress(event: KeyboardEvent): Promise<void> {
+  async onF4KeyPress(event: Event | KeyboardEvent): Promise<void> {
     event.preventDefault(); // Prevent default F4 behavior
     
     // Check if order is already completed
@@ -1274,7 +1320,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
 
   // F5 Hotkey for New Order
   @HostListener('document:keydown.f5', ['$event'])
-  async onF5KeyPress(event: KeyboardEvent): Promise<void> {
+  async onF5KeyPress(event: Event | KeyboardEvent): Promise<void> {
     event.preventDefault(); // Prevent page refresh
     // Use unified flow so hotkey, button, and item-click behave the same
     await this.requestStartNewOrder('hotkey');
@@ -1282,7 +1328,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
 
   // F6 Hotkey for Complete Order
   @HostListener('document:keydown.f6', ['$event'])
-  async onF6KeyPress(event: KeyboardEvent): Promise<void> {
+  async onF6KeyPress(event: Event | KeyboardEvent): Promise<void> {
     event.preventDefault(); // Prevent default F6 behavior
     
     // If order is already completed, just show receipt
@@ -1309,7 +1355,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
 
   // F7 Hotkey for Add Discount (mirrors Add Discount button behavior)
   @HostListener('document:keydown.f7', ['$event'])
-  async onF7KeyPress(event: KeyboardEvent): Promise<void> {
+  async onF7KeyPress(event: Event | KeyboardEvent): Promise<void> {
     event.preventDefault(); // Prevent default F7 behavior
 
     // Block on completed orders
@@ -1419,7 +1465,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     const store = this.currentStoreInfo();
     let subscriptionActive = false;
     if (store) {
-      const statusOk = (store.status || 'inactive') === 'active';
+      const statusOk = (store.status || ProductStatus.Inactive) === ProductStatus.Active;
       let endDate: any = store.subscriptionEndDate as any;
       let notExpired = false;
       if (endDate) {
@@ -1586,7 +1632,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       }
 
       // Status check first
-      if ((store.status || 'inactive') !== 'active') {
+  if ((store.status || ProductStatus.Inactive) !== ProductStatus.Active) {
         await this.showConfirmationDialog({
           title: 'Store Inactive',
           message: 'Unable to create new order because this store is inactive. Please activate your subscription for this store.',
@@ -1688,8 +1734,53 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     return this.cartInformationModalVisible();
   }
 
-  public openCartInformationDialog(): void {
-    console.log('🛒 Opening cart information dialog');
+  public async openCartInformationDialog(): Promise<void> {
+    console.log('🛒 Opening cart information dialog - fetching latest VAT rates from Firestore');
+
+    // Ensure each cart item picks up the latest tax settings from the products collection (Firestore)
+    try {
+      const items = this.cartItems();
+      for (const item of items) {
+        try {
+          // Try to read the authoritative product doc directly from Firestore
+          if (item.productId) {
+            const prodRef = doc(this.firestore, 'products', item.productId as string);
+            const snap = await getDoc(prodRef as any);
+            if (snap && snap.exists && snap.exists()) {
+              const data: any = snap.data();
+              const isVatApplicable = typeof data.isVatApplicable === 'boolean' ? data.isVatApplicable : (item.isVatApplicable ?? true);
+              const vatRate = typeof data.vatRate === 'number' ? Number(data.vatRate) : (item.vatRate ?? 12);
+
+              const updatedItem = {
+                ...item,
+                isVatApplicable,
+                vatRate
+              } as any;
+
+              // Update via PosService so totals are recalculated consistently
+              this.posService.updateCartItem(updatedItem);
+              continue; // next item
+            }
+          }
+
+          // Fallback to cached product if Firestore read failed or productId missing
+          const product = this.productService.getProduct(item.productId);
+          if (product) {
+            const updatedItem = {
+              ...item,
+              isVatApplicable: typeof product.isVatApplicable === 'boolean' ? product.isVatApplicable : (item.isVatApplicable ?? true),
+              vatRate: typeof product.vatRate === 'number' ? Number(product.vatRate) : (item.vatRate ?? 12)
+            } as any;
+            this.posService.updateCartItem(updatedItem);
+          }
+        } catch (err) {
+          console.warn('Failed to sync VAT for cart item', item.productId, err);
+        }
+      }
+    } catch (err) {
+      console.warn('Error while syncing cart VAT settings:', err);
+    }
+
     this.cartInformationModalVisible.set(true);
   }
 
@@ -1931,6 +2022,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       
       // Mark order as completed and store the receipt data for reprinting
       this.isOrderCompleted.set(true);
+      // orderDetails.status is set at creation time by the invoice service
       this.completedOrderData.set(updatedReceiptData);
       
       // Set receipt data and show modal
@@ -3442,7 +3534,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
         const testQuery = query(
           productsRef,
           where('companyId', '==', currentPermission.companyId),
-          where('status', '==', 'active'),
+          where('status', '==', ProductStatus.Active),
           limit(10)
         );
         

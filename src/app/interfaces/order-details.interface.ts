@@ -1,5 +1,19 @@
 import { SyncStatus } from './product-inventory-entry.interface';
 
+/**
+ * OrderDetails status values.
+ * Centralized enum to avoid scattered string literals and typos.
+ */
+export enum OrderDetailsStatus {
+  PENDING = 'PENDING',
+  COMPLETED = 'COMPLETED',
+  CANCELLED = 'CANCELLED',
+  REFUNDED = 'REFUNDED',
+  PARTIALLY_REFUNDED = 'PARTIALLY_REFUNDED',
+  PARTIALLY_RETURNED = 'PARTIALLY_RETURNED',
+  DAMAGED = 'DAMAGED'
+}
+
 export interface OrderDetails {
   id?: string;
   orderId: string;
@@ -28,6 +42,7 @@ export interface OrderDetails {
   discountAmount: number;
   totalAmount: number;
   
+  status?: OrderDetailsStatus;
   // Sync and adjustment tracking
   lastSyncAt?: Date;
   adjustmentRequired?: boolean;

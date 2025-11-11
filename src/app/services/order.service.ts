@@ -583,6 +583,12 @@ export class OrderService {
   }
 
   /**
+   * Mark all orderDetails documents for a given orderId as COMPLETED.
+   * Uses OfflineDocumentService so updates work both online and offline.
+   */
+  // markOrderDetailsCompleted intentionally removed: status is now set at creation time in invoice/offline flows
+
+  /**
    * Get orders from API (for historical dates)
    */
   private async getOrdersFromApi(storeId: string, startDate: Date, endDate: Date): Promise<Order[]> {
