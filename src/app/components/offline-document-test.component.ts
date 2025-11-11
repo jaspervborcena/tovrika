@@ -4,6 +4,7 @@ import { inject } from '@angular/core';
 import { OfflineDocumentService } from '../core/services/offline-document.service';
 import { ProductService } from '../services/product.service';
 import { AuthService } from '../services/auth.service';
+import { ProductStatus } from '../interfaces/product.interface';
 
 @Component({
   selector: 'app-offline-document-test',
@@ -127,7 +128,7 @@ export class OfflineDocumentTestComponent {
         hasDiscount: false,
         discountType: 'percentage' as const,
         discountValue: 0,
-        status: 'active' as const
+        status: ProductStatus.Active
       };
 
       const documentId = await this.productService.createProduct(testProduct);

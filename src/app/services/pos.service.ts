@@ -349,6 +349,17 @@ export class PosService {
       try {
         await this.updateProductInventory(cartItems, { orderId: invoiceResult.orderId!, invoiceNumber: invoiceResult.invoiceNumber! });
         console.log('✅ Product inventory updated successfully');
+        // Mark tracking docs as completed for this order (if any were created as pending)
+        try {
+          const markRes = await this.ordersSellingTrackingService.markOrderTrackingCompleted(invoiceResult.orderId!, user.uid);
+          if (markRes.errors && markRes.errors.length) {
+            console.warn('⚠️ Some tracking docs failed to be marked completed:', markRes.errors);
+          } else {
+            console.log(`✅ Marked ${markRes.updated} tracking docs completed for order ${invoiceResult.orderId}`);
+          }
+        } catch (markErr) {
+          console.warn('⚠️ Failed to mark ordersSellingTracking docs completed:', markErr);
+        }
       } catch (inventoryError) {
         console.error('⚠️ Warning: Order created but inventory update failed:', inventoryError);
         // Don't throw error here as the order was already created successfully
@@ -489,6 +500,17 @@ export class PosService {
       try {
         await this.updateProductInventory(cartItems, { orderId: invoiceResult.orderId!, invoiceNumber: invoiceResult.invoiceNumber! });
         console.log('✅ Product inventory updated successfully');
+        // Mark tracking docs as completed for this order (if any were created as pending)
+        try {
+          const markRes = await this.ordersSellingTrackingService.markOrderTrackingCompleted(invoiceResult.orderId!, user.uid);
+          if (markRes.errors && markRes.errors.length) {
+            console.warn('⚠️ Some tracking docs failed to be marked completed:', markRes.errors);
+          } else {
+            console.log(`✅ Marked ${markRes.updated} tracking docs completed for order ${invoiceResult.orderId}`);
+          }
+        } catch (markErr) {
+          console.warn('⚠️ Failed to mark ordersSellingTracking docs completed:', markErr);
+        }
       } catch (inventoryError) {
         console.error('⚠️ Warning: Order created but inventory update failed:', inventoryError);
       }
@@ -609,6 +631,17 @@ export class PosService {
       try {
         await this.updateProductInventory(cartItems, { orderId: invoiceResult.orderId!, invoiceNumber: invoiceResult.invoiceNumber! });
         console.log('✅ Product inventory updated successfully');
+        // Mark tracking docs as completed for this order (if any were created as pending)
+        try {
+          const markRes = await this.ordersSellingTrackingService.markOrderTrackingCompleted(invoiceResult.orderId!, user.uid);
+          if (markRes.errors && markRes.errors.length) {
+            console.warn('⚠️ Some tracking docs failed to be marked completed:', markRes.errors);
+          } else {
+            console.log(`✅ Marked ${markRes.updated} tracking docs completed for order ${invoiceResult.orderId}`);
+          }
+        } catch (markErr) {
+          console.warn('⚠️ Failed to mark ordersSellingTracking docs completed:', markErr);
+        }
       } catch (inventoryError) {
         console.error('⚠️ Warning: Order created but inventory update failed:', inventoryError);
         // Don't throw error here as the order was already created successfully

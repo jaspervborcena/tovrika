@@ -1,5 +1,11 @@
 import { BusinessType } from './company.interface';
 
+export enum ProductStatus {
+  Active = 'active',
+  Inactive = 'inactive',
+  Expired = 'expired'
+}
+
 export interface Product {
   id?: string;
   uid: string;  // User ID for security rules
@@ -37,7 +43,7 @@ export interface Product {
   // priceHistory?: PriceChange[];
   // quantityAdjustments removed: tracking moved to productInventoryEntries and deduction history
   
-  status?: 'active' | 'inactive';
+  status?: ProductStatus;
   createdAt?: Date;
   updatedAt?: Date;
   lastUpdated?: Date;
@@ -76,7 +82,7 @@ export interface ProductInventory {
   receivedAt: Date;
   expiryDate?: Date;
   supplier?: string;
-  status: 'active' | 'inactive' | 'expired';
+  status: ProductStatus;
   unitType?: string;  // Added to match Firestore structure
 }
 

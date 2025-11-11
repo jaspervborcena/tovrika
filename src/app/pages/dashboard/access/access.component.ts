@@ -23,6 +23,16 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
       </div>
 
       <!-- Main Content -->
+
+      <!-- Store selector: placed above the tabs so it's globally visible for filtering -->
+      <div style="max-width:1200px; margin:0 auto 1rem auto; padding:0 1rem; display:flex; gap:0.75rem; align-items:center;">
+        <label style="font-weight:600; color:#4a5568; margin-right:0.5rem;">Store:</label>
+        <select class="form-input" [(ngModel)]="selectedStoreId" (change)="onStoreFilterChange()">
+          <option value="">All Stores</option>
+          <option *ngFor="let store of accessibleStores()" [value]="store.id">{{ store.storeName }}</option>
+        </select>
+      </div>
+
       <div class="tabs-container">
         <!-- Loading State -->
         <div *ngIf="isLoading" class="loading-state">
@@ -35,7 +45,7 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
         <!-- Tab Headers -->
         <div *ngIf="!isLoading" class="tab-headers">
           <div 
-            *ngFor="let role of roles; let i = index" 
+            *ngFor="let role of filteredRoles(); let i = index" 
             class="tab-header" 
             [class.active]="activeTabIndex === i"
             (click)="setActiveTab(i)">
@@ -44,16 +54,17 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
               <div class="tab-details">{{ getPermissionCount(role.permissions) }} permissions</div>
             </div>
           </div>
-          <div class="tab-header add-role-tab" (click)="addNewRole()">
+              <div class="tab-header add-role-tab" (click)="addNewRole()">
             <div class="tab-content">
               <div class="tab-label">+ Add Role</div>
               <div class="tab-details">Create new role</div>
             </div>
           </div>
+              
         </div>
 
         <!-- Tab Content Area -->
-        <div *ngIf="!isLoading && activeRole" class="tab-content-area">
+  <div *ngIf="!isLoading && activeRole" class="tab-content-area">
           <!-- Role Header -->
           <div class="role-header">
             <h2 class="role-title">{{ activeRole.roleId }}</h2>
@@ -173,8 +184,8 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
           </div>
         </div>
 
-        <!-- Empty State -->
-        <div *ngIf="!isLoading && roles.length === 0" class="empty-state">
+  <!-- Empty State -->
+  <div *ngIf="!isLoading && filteredRoles().length === 0" class="empty-state">
           <div class="empty-content">
             <h3>No roles found</h3>
             <p>Create your first role to get started</p>
@@ -184,7 +195,7 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
       </div>
 
       <!-- Add Role Modal -->
-      <div *ngIf="showAddRoleModal" class="modal-overlay" (click)="closeAddRoleModal()">
+  <div *ngIf="showAddRoleModal" class="modal-overlay" (click)="closeAddRoleModal()">
         <div class="modal" (click)="$event.stopPropagation()">
           <div class="modal-header">
             <h3>Add New Role</h3>
@@ -205,7 +216,7 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
                 {{ roleNameError }}
               </div>
             </div>
-            <div class="form-group">
+              <div class="form-group">
               <label for="storeId">Store</label>
               <select id="storeId" class="form-input" [(ngModel)]="selectedStoreId" (change)="validateRoleName()">
                 <option value="">Select a store</option>
@@ -265,6 +276,20 @@ export class AccessComponent implements OnInit {
     private toastService: ToastService
   ) {}
 
+  // Return roles filtered by selected store. If no store selected, return all roles.
+  filteredRoles(): RoleDefinition[] {
+    if (!this.selectedStoreId) return this.roles || [];
+    return (this.roles || []).filter(r => (r.storeId || '') === this.selectedStoreId);
+  }
+
+  onStoreFilterChange(): void {
+    // Reset active tab to first item in the filtered set
+    const set = this.filteredRoles();
+    this.setActiveTab(0);
+    this.roles = this.roles || [];
+    this.activeRole = set[0] || null;
+  }
+
   async ngOnInit() {
     await this.loadRoles();
     await this.loadStores();
@@ -312,10 +337,63 @@ export class AccessComponent implements OnInit {
       if (currentPermission?.companyId) {
         await this.storeService.loadStoresByCompany(currentPermission.companyId);
         this.stores = this.storeService.getStoresByCompany(currentPermission.companyId);
+        // If the current permission includes a storeId, prefer it as the default selected store
+        const permStoreId = currentPermission.storeId;
+        if (permStoreId) {
+          const found = this.stores.some(s => s.id === permStoreId);
+          if (found) {
+            this.selectedStoreId = permStoreId;
+          }
+        }
+
+        // If no explicit permission store selected, but user only has one accessible store, default to it
+        if (!this.selectedStoreId) {
+          const accessible = this.accessibleStores();
+          if (accessible.length === 1) {
+            this.selectedStoreId = accessible[0].id || '';
+          }
+        }
+
+        // Ensure active role reflects the selected store
+        if (this.selectedStoreId) {
+          const filtered = this.filteredRoles();
+          if (filtered.length > 0) {
+            this.activeRole = filtered[0];
+            this.activeTabIndex = 0;
+          }
+        }
       }
     } catch (error) {
       console.error('Error loading stores:', error);
     }
+  }
+
+  /**
+   * Return stores that the current user has access to.
+   * Prefers explicit store-level permissions; falls back to company-level access.
+   */
+  accessibleStores(): Store[] {
+    const all = this.stores || [];
+    const user = this.authService.getCurrentUser();
+    if (!user) return [];
+
+    let perms: any = user.permissions || [];
+    if (perms && !Array.isArray(perms)) perms = [perms];
+    if (!perms || perms.length === 0) return [];
+
+    const allowedStoreIds = new Set<string>();
+    const allowedCompanyIds = new Set<string>();
+    perms.forEach((p: any) => {
+      if (p?.storeId) allowedStoreIds.add(p.storeId);
+      if (p?.companyId) allowedCompanyIds.add(p.companyId);
+    });
+
+    // Return stores that either match explicit store permissions or match the allowed companies.
+    return all.filter(s => {
+      const sid = s.id || '';
+      const cid = s.companyId || '';
+      return (allowedStoreIds.size > 0 && allowedStoreIds.has(sid)) || (allowedCompanyIds.size > 0 && allowedCompanyIds.has(cid));
+    });
   }
 
   isDefaultRole(roleId: string): boolean {
@@ -394,7 +472,9 @@ export class AccessComponent implements OnInit {
 
   setActiveTab(index: number): void {
     this.activeTabIndex = index;
-    this.activeRole = this.roles[index] || null;
+    // When a store filter is active, pick from filteredRoles(); otherwise from full roles list
+    const list = this.selectedStoreId ? this.filteredRoles() : this.roles;
+    this.activeRole = list[index] || null;
   }
 
   addNewRole(): void {

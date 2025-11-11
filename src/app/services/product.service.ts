@@ -24,7 +24,7 @@ import {
   QuerySnapshot,
   DocumentSnapshot 
 } from '@angular/fire/firestore';
-import { Product, ProductInventory } from '../interfaces/product.interface';
+import { Product, ProductInventory, ProductStatus } from '../interfaces/product.interface';
 import { AuthService } from './auth.service';
 import { LoggerService } from '../core/services/logger.service';
 import { OfflineDocumentService } from '../core/services/offline-document.service';
@@ -87,7 +87,7 @@ export class ProductService implements OnDestroy {
   // Computed derived data
   readonly totalProducts = computed(() => this.products().length);
   readonly activeProducts = computed(() => 
-    this.products().filter(product => product.status === 'active')
+    this.products().filter(product => product.status === ProductStatus.Active)
   );
   readonly lowStockProducts = computed(() => 
     this.products().filter(product => product.totalStock <= 10)

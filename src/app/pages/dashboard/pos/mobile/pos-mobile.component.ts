@@ -764,7 +764,7 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
 
   // F4 Hotkey for Clear Data
   @HostListener('document:keydown.f4', ['$event'])
-  async onF4KeyPress(event: KeyboardEvent): Promise<void> {
+  async onF4KeyPress(event: Event | KeyboardEvent): Promise<void> {
     event.preventDefault(); // Prevent default F4 behavior
     
     if (this.cartItems().length > 0) {
@@ -774,7 +774,7 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
 
   // F5 Hotkey for New Order
   @HostListener('document:keydown.f5', ['$event'])
-  async onF5KeyPress(event: KeyboardEvent): Promise<void> {
+  async onF5KeyPress(event: Event | KeyboardEvent): Promise<void> {
     event.preventDefault(); // Prevent page refresh
     // Subscription gate
     const canStart = await this.checkSubscriptionGate();
@@ -795,7 +795,7 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
 
   // F6 Hotkey for Complete Order
   @HostListener('document:keydown.f6', ['$event'])
-  async onF6KeyPress(event: KeyboardEvent): Promise<void> {
+  async onF6KeyPress(event: Event | KeyboardEvent): Promise<void> {
     event.preventDefault(); // Prevent default F6 behavior
     
     if (this.cartItems().length > 0 && !this.isProcessing()) {
@@ -1613,6 +1613,7 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
 
         // Mark order as completed to prevent cart editing
         this.isOrderCompletedSignal.set(true);
+        // orderDetails.status is set at creation time in the invoice/offline flows
         
         // Reset active order state since order is now complete
         this.hasActiveOrderSignal.set(false);
