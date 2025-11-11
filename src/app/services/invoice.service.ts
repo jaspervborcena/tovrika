@@ -15,6 +15,7 @@ import { StoreService } from './store.service';
 import { AuthService } from './auth.service';
 import { FirestoreSecurityService } from '../core/services/firestore-security.service';
 import { OfflineDocumentService } from '../core/services/offline-document.service';
+import { OrderDetailsStatus } from '../interfaces/order-details.interface';
 
 export interface InvoiceTransactionData {
   storeId: string;
@@ -133,7 +134,9 @@ export class InvoiceService {
             companyId: orderData.companyId,
             storeId: storeId,
             batchNumber: batch.batchNumber,
-            items: batch.items
+            items: batch.items,
+            // Ensure orderDetails created for a completed order are marked as COMPLETED
+            status: OrderDetailsStatus.COMPLETED
           });
 
           orderDetailsBatchDocs.push({ ref: orderDetailsDocRef as DocumentReference, data: orderDetailsWithSecurity });

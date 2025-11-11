@@ -2022,6 +2022,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       
       // Mark order as completed and store the receipt data for reprinting
       this.isOrderCompleted.set(true);
+      // orderDetails.status is set at creation time by the invoice service
       this.completedOrderData.set(updatedReceiptData);
       
       // Set receipt data and show modal

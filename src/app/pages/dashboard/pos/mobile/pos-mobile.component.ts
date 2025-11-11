@@ -1613,6 +1613,7 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
 
         // Mark order as completed to prevent cart editing
         this.isOrderCompletedSignal.set(true);
+        // orderDetails.status is set at creation time in the invoice/offline flows
         
         // Reset active order state since order is now complete
         this.hasActiveOrderSignal.set(false);
