@@ -2,6 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import { environment } from '../../environments/environment';
 import { HttpClient } from '@angular/common/http';
 import { Firestore, collection, query, where, getDocs, Timestamp, orderBy, limit } from '@angular/fire/firestore';
+import { User } from '@angular/fire/auth';
 import { Order } from '../interfaces/pos.interface';
 import { AuthService } from './auth.service';
 import { LoggerService } from '../core/services/logger.service';
@@ -583,6 +584,95 @@ export class OrderService {
   }
 
   /**
+   * Fetch order selling tracking entries for a given orderId from the Cloud Function.
+   * Uses the manage_item_status endpoint which joins ordersSellingTracking with products table.
+   * Returns array of tracking documents with proper product information.
+   */
+  public async getOrderSellingTracking(orderId: string): Promise<any[]> {
+    if (!orderId) return [];
+    try {
+      const currentUser = this.authService.getCurrentUser();
+      if (!currentUser) {
+        console.warn('No authenticated user for manage_item_status request');
+        return [];
+      }
+
+      // Get the current store ID from auth service permissions
+      const currentPermission = this.authService.getCurrentPermission();
+      const currentStoreId = currentPermission?.storeId;
+      if (!currentStoreId) {
+        console.warn('No current store ID available for manage_item_status request');
+        return [];
+      }
+
+      console.log('🚀 Calling manage_item_status Cloud Function:', {
+        orderId,
+        storeId: currentStoreId
+      });
+
+      // Get the ID token for authorization
+      const idToken = await this.authService.getFirebaseIdToken();
+      if (!idToken) {
+        throw new Error('Failed to get Firebase ID token for authentication');
+      }
+
+      // Call the Cloud Function
+      const response = await fetch('https://asia-east1-jasperpos-1dfd5.cloudfunctions.net/manage_item_status', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${idToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          storeId: currentStoreId,
+          orderId: orderId
+        })
+      });
+
+      console.log('📡 Cloud Function response status:', response.status, response.statusText);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('❌ Cloud Function error response:', errorText);
+        throw new Error(`Cloud Function request failed: ${response.status} ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      console.log('📦 Cloud Function response data:', data);
+      
+      // The Cloud Function returns: { success: true, storeId, orderId, count, rows: [...] }
+      // Each row contains: productName, SKU, quantity, discountType, discount, vat, isVatApplicable, isVatExempt, total, updatedAt, status
+      let results = [];
+      
+      if (Array.isArray(data)) {
+        // Direct array response
+        results = data;
+      } else if (data.rows && Array.isArray(data.rows)) {
+        // Response with rows property (current format)
+        results = data.rows;
+      } else if (data.results && Array.isArray(data.results)) {
+        // Alternative format with results property
+        results = data.results;
+      } else if (data.data && Array.isArray(data.data)) {
+        // Alternative format with data property
+        results = data.data;
+      } else {
+        console.warn('❌ Unexpected Cloud Function response format:', data);
+        results = [];
+      }
+      
+      console.log('✅ Normalized results:', results.length, 'tracking entries');
+      
+      return results;
+
+    } catch (e) {
+      console.error('💥 Error calling manage_item_status Cloud Function:', e);
+      this.logger.warn('Failed to fetch orderSellingTracking via Cloud Function', { area: 'orders', payload: { orderId, error: String(e) } });
+      return [];
+    }
+  }
+
+  /**
    * Mark all orderDetails documents for a given orderId as COMPLETED.
    * Uses OfflineDocumentService so updates work both online and offline.
    */
@@ -667,6 +757,9 @@ export class OrderService {
           `${apiUrl}?${params.toString()}`,
           { headers }
         ).toPromise();
+
+        // Log the raw API response for easier debugging in browser console
+        try { console.log('[OrderService] getOrdersFromApi response for', apiUrl, response); } catch (e) {}
 
   this.logger.info('API call success', { area: 'orders', payload: { apiUrl, responseSummary: response?.success ? 'success' : 'no-data' } });
 
@@ -769,9 +862,12 @@ export class OrderService {
         const headers: any = { 'Content-Type': 'application/json', 'Accept': 'application/json' };
         if (idToken) headers['Authorization'] = `Bearer ${idToken}`;
 
-        const response = await this.http.get<any>(`${apiUrl}?${params.toString()}`, { headers }).toPromise();
+  const response = await this.http.get<any>(`${apiUrl}?${params.toString()}`, { headers }).toPromise();
 
-        if (response?.success && response.orders) {
+  // Console log for debugging of paged API responses
+  try { console.log('[OrderService] getOrdersPage response for', apiUrl, response); } catch (e) {}
+
+  if (response?.success && response.orders) {
           const orders = response.orders.map((order: any) => this.transformApiOrder(order));
           return orders;
         } else {
