@@ -581,6 +581,14 @@
           <!-- Scrollable Body -->
           <div class="cart-info-dialog-body">
             
+            <!-- Debug Info (temporary) -->
+            <div style="background: #f0f9ff; border: 1px solid #0ea5e9; padding: 0.5rem; margin-bottom: 1rem; border-radius: 4px; font-size: 0.8rem;">
+              <strong>Debug Info:</strong><br>
+              Loading: {{ loadingTracking() }}<br>
+              Entries Count: {{ trackingEntries().length }}<br>
+              Selected Order: {{ selectedOrder()?.id || 'None' }}
+            </div>
+            
             <!-- Loading State -->
             <div *ngIf="loadingTracking()" class="loading-section">
               <div class="loading-content">
@@ -613,6 +621,9 @@
                   <span class="col-discount">Discount</span>
                   <span class="col-total">Total</span>
                   <span class="col-status">Status</span>
+                  <span class="col-qty-adjust">Qty to Adjust</span>
+                  <span class="col-adjustment-type">Adjustment Type</span>
+                  <span class="col-update-reason">Update Reason</span>
                 </div>
                 
                 <!-- Data Rows -->
@@ -630,15 +641,9 @@
                     <span class="sku-value">{{ item.sku || '-' }}</span>
                   </div>
                   
-                  <!-- Quantity (Editable) -->
+                  <!-- Quantity (Read-only) -->
                   <div class="col-qty">
-                    <input type="number" 
-                           class="qty-input"
-                           [value]="item.quantity || 0"
-                           min="0"
-                           step="1"
-                           (input)="updateTrackingItemQuantity(i, $event)"
-                           placeholder="Qty">
+                    <span class="qty-value">{{ item.quantity || 0 }}</span>
                   </div>
                   
                   <!-- Price (Read-only) -->
@@ -661,19 +666,55 @@
                     <span class="total-value">₱{{ calculateTrackingItemTotal(item) | number:'1.2-2' }}</span>
                   </div>
                   
-                  <!-- Status (Dropdown) -->
+                  <!-- Status (Read-only Label/Span) -->
                   <div class="col-status">
-                    <select class="status-select"
-                            [value]="item.status || 'pending'"
-                            (change)="updateTrackingItemStatus(i, $event)">
+                    <span class="status-badge" 
+                          [class.status-completed]="item.status === 'completed'" 
+                          [class.status-pending]="item.status === 'pending'" 
+                          [class.status-cancelled]="item.status === 'cancelled'"
+                          [class.status-processing]="item.status === 'processing'"
+                          [class.status-refunded]="item.status === 'refunded'"
+                          [class.status-damaged]="item.status === 'damaged'"
+                          [class.status-returned]="item.status === 'returned'">
+                      {{ item.status || 'unknown' }}
+                    </span>
+                  </div>
+                  
+                  <!-- Qty to Adjust (Editable) -->
+                  <div class="col-qty-adjust">
+                    <input type="number" 
+                           class="qty-adjust-input"
+                           [value]="getQtyToAdjust(item)"
+                           min="0"
+                           step="1"
+                           (input)="updateQtyToAdjust(i, $any($event.target).value)"
+                           placeholder="Qty">
+                  </div>
+                  
+                  <!-- Adjustment Type (Dropdown) -->
+                  <div class="col-adjustment-type">
+                    <select class="adjustment-type-select"
+                            [value]="getAdjustmentType(item)"
+                            (change)="updateAdjustmentType(i, $any($event.target).value)">
                       <option value="pending">Pending</option>
                       <option value="processing">Processing</option>
                       <option value="completed">Completed</option>
-                      <option value="refunded">Refunded</option>
                       <option value="cancelled">Cancelled</option>
+                      <option value="refunded">Refunded</option>
                       <option value="damaged">Damaged</option>
                       <option value="returned">Returned</option>
+                      <option value="partial_refund">Partial Refund</option>
+                      <option value="partial_return">Partial Return</option>
                     </select>
+                  </div>
+                  
+                  <!-- Update Reason (Textarea) -->
+                  <div class="col-update-reason">
+                    <textarea class="update-reason-textarea"
+                              [value]="getUpdateReason(item)"
+                              (input)="updateReason(i, $any($event.target).value)"
+                              placeholder="Enter reason for adjustment..."
+                              rows="2"></textarea>
                   </div>
                 </div>
               </div>

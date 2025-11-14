@@ -29,6 +29,7 @@ export const appConfig: ApplicationConfig = {
       try {
         // Reuse existing app if already initialized elsewhere
         const app = getApps().length > 0 ? getApp() : initializeApp(environment.firebase);
+        console.log('✅ Firebase App initialized:', app.name);
         return app;
       } catch (error) {
         console.error('❌ Firebase App initialization failed:', error);
@@ -42,7 +43,9 @@ export const appConfig: ApplicationConfig = {
     }),
     provideAuth(() => {
       try {
-        const auth = getAuth();
+        const app = getApp(); // Get the Firebase app instance
+        const auth = getAuth(app); // Pass app to ensure proper linking
+        console.log('✅ Firebase Auth initialized with app');
         // Firebase Auth automatically uses IndexedDB for persistence on web
         // This ensures user sessions persist across browser tabs and page refreshes
         return auth;
@@ -51,7 +54,17 @@ export const appConfig: ApplicationConfig = {
         throw error;
       }
     }),
-    provideFirestore(() => getFirestore()),
+    provideFirestore(() => {
+      try {
+        const app = getApp(); // Get the Firebase app instance
+        const firestore = getFirestore(app); // Pass app to ensure proper linking with Auth
+        console.log('✅ Firebase Firestore initialized with app');
+        return firestore;
+      } catch (error) {
+        console.error('❌ Firebase Firestore initialization failed:', error);
+        throw error;
+      }
+    }),
     // Initialize chunk error handling
     {
       provide: APP_INITIALIZER,

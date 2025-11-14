@@ -1,0 +1,186 @@
+<!-- Account Settings Page with Shared Header -->
+<app-header></app-header>
+<app-content-layout>
+  <div class="account-settings-container">
+    <!-- Page Header -->
+    <div class="page-header">
+      <h1 class="page-title">Account Settings</h1>
+      <p class="page-subtitle">
+        View your account information and user profile details
+      </p>
+    </div>
+
+    @if (currentUser()) {
+      <div class="settings-content">
+        <!-- Basic Information Section -->
+        <div class="info-section">
+          <h2 class="section-title">Basic Information</h2>
+          <div class="info-grid">
+            <div class="info-item">
+              <label class="info-label">Display Name</label>
+              <div class="info-value">{{ currentUser()?.displayName || 'N/A' }}</div>
+              <span class="info-type">string</span>
+            </div>
+
+            <div class="info-item">
+              <label class="info-label">Email</label>
+              <div class="info-value">{{ currentUser()?.email || 'N/A' }}</div>
+              <span class="info-type">string</span>
+            </div>
+
+            <div class="info-item">
+              <label class="info-label">User ID</label>
+              <div class="info-value code">{{ currentUser()?.uid || 'N/A' }}</div>
+              <span class="info-type">string</span>
+            </div>
+
+            <div class="info-item">
+              <label class="info-label">User Code</label>
+              <div class="info-value code">{{ currentUser()?.userCode || 'N/A' }}</div>
+              <span class="info-type">string</span>
+            </div>
+
+            <div class="info-item">
+              <label class="info-label">PIN</label>
+              <div class="info-value code">{{ currentUser()?.pin || 'N/A' }}</div>
+              <span class="info-type">string</span>
+            </div>
+
+            <div class="info-item">
+              <label class="info-label">Status</label>
+              <div class="info-value">
+                <span class="status-badge" [class.active]="currentUser()?.status === 'active'">
+                  {{ currentUser()?.status || 'N/A' }}
+                </span>
+              </div>
+              <span class="info-type">string</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Permissions Section -->
+        <div class="info-section">
+          <div class="section-header">
+            <div>
+              <h2 class="section-title">Permissions</h2>
+              <span class="info-type">array</span>
+            </div>
+            <button type="button" (click)="addPermission()" class="btn-add">
+              <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+              </svg>
+              Add Permission
+            </button>
+          </div>
+          
+          @if (currentUser()?.permissions && currentUser()!.permissions!.length > 0) {
+            <div class="permissions-list">
+              @for (permission of currentUser()!.permissions!; track $index) {
+                <div class="permission-card">
+                  <div class="permission-header">
+                    <span class="permission-index">{{ $index }}</span>
+                    <span class="permission-type">map</span>
+                    <button type="button" (click)="deletePermission($index)" class="btn-delete" title="Delete permission">
+                      <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
+                  </div>
+                  <div class="permission-details">
+                    <div class="permission-item">
+                      <label class="info-label">Company ID</label>
+                      <div class="info-value code">{{ permission.companyId }}</div>
+                      <span class="info-type">string</span>
+                    </div>
+
+                    <div class="permission-item">
+                      <label class="info-label">Role ID</label>
+                      <div class="info-value code">{{ permission.roleId }}</div>
+                      <span class="info-type">string</span>
+                    </div>
+
+                    <div class="permission-item">
+                      <label class="info-label">Store ID</label>
+                      <div class="info-value code">{{ permission.storeId || 'N/A' }}</div>
+                      <span class="info-type">string</span>
+                    </div>
+                  </div>
+                </div>
+              }
+            </div>
+          } @else {
+            <p class="empty-state">No permissions assigned</p>
+          }
+
+          <!-- New Permission Form (shown when adding) -->
+          @if (isAddingPermission) {
+            <div class="permission-card adding">
+              <div class="permission-header">
+                <span class="permission-index">New</span>
+                <span class="permission-type">map</span>
+                <button type="button" (click)="cancelAddPermission()" class="btn-cancel" title="Cancel">
+                  <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              <div class="permission-details">
+                <div class="permission-item">
+                  <label class="info-label">Company ID</label>
+                  <input 
+                    type="text" 
+                    [(ngModel)]="newPermission.companyId" 
+                    class="info-input"
+                    placeholder="Enter Company ID"
+                  />
+                  <span class="info-type">string</span>
+                </div>
+
+                <div class="permission-item">
+                  <label class="info-label">Role ID</label>
+                  <input 
+                    type="text" 
+                    [(ngModel)]="newPermission.roleId" 
+                    class="info-input"
+                    placeholder="Enter Role ID"
+                  />
+                  <span class="info-type">string</span>
+                </div>
+
+                <div class="permission-item">
+                  <label class="info-label">Store ID</label>
+                  <input 
+                    type="text" 
+                    [(ngModel)]="newPermission.storeId" 
+                    class="info-input"
+                    placeholder="Enter Store ID (optional)"
+                  />
+                  <span class="info-type">string</span>
+                </div>
+              </div>
+              <div class="permission-actions">
+                <button type="button" (click)="saveNewPermission()" class="btn-save-small" [disabled]="isSaving">
+                  @if (isSaving) {
+                    <svg class="spinner" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    Saving...
+                  } @else {
+                    <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                    </svg>
+                    Save
+                  }
+                </button>
+              </div>
+            </div>
+          }
+        </div>
+      </div>
+    } @else {
+      <div class="loading-state">
+        <p>Loading account information...</p>
+      </div>
+    }
+  </div>
+</app-content-layout>

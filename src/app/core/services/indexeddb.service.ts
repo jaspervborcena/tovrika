@@ -51,17 +51,65 @@ export class IndexedDBService {
   private db: IDBDatabase | null = null;
   private isPermanentlyBroken = false; // Flag to stop retrying corrupted DB
 
+  /**
+   * Create all object stores in the database
+   */
+  private createObjectStores(db: IDBDatabase): void {
+    console.log('📦 IndexedDB: Creating object stores...');
+
+    // User data store
+    if (!db.objectStoreNames.contains('userData')) {
+      const userStore = db.createObjectStore('userData', { keyPath: 'uid' });
+      userStore.createIndex('email', 'email', { unique: true });
+      console.log('📦 IndexedDB: Created userData store');
+    }
+
+    // Products store
+    if (!db.objectStoreNames.contains('products')) {
+      const productStore = db.createObjectStore('products', { keyPath: 'id' });
+      productStore.createIndex('storeId', 'storeId', { unique: false });
+      productStore.createIndex('category', 'category', { unique: false });
+      productStore.createIndex('barcode', 'barcode', { unique: false });
+      console.log('📦 IndexedDB: Created products store');
+    }
+
+    // Orders store (for offline transactions)
+    if (!db.objectStoreNames.contains('orders')) {
+      const orderStore = db.createObjectStore('orders', { keyPath: 'id' });
+      orderStore.createIndex('storeId', 'storeId', { unique: false });
+      orderStore.createIndex('timestamp', 'timestamp', { unique: false });
+      orderStore.createIndex('synced', 'synced', { unique: false });
+      console.log('📦 IndexedDB: Created orders store');
+    }
+
+    // Notifications store
+    if (!db.objectStoreNames.contains('notifications')) {
+      const notifStore = db.createObjectStore('notifications', { keyPath: 'id' });
+      notifStore.createIndex('storeId', 'storeId', { unique: false });
+      notifStore.createIndex('read', 'read', { unique: false });
+      notifStore.createIndex('createdAt', 'createdAt', { unique: false });
+      console.log('📦 IndexedDB: Created notifications store');
+    }
+
+    // App settings store
+    if (!db.objectStoreNames.contains('settings')) {
+      const settingsStore = db.createObjectStore('settings', { keyPath: 'key' });
+      console.log('📦 IndexedDB: Created settings store');
+    }
+  }
+
   async initDB(): Promise<void> {
     // Check if IndexedDB is permanently broken
     if (this.isPermanentlyBroken) {
-      throw new Error('IndexedDB is permanently unavailable. Please clear browser data and refresh.');
+      console.warn('📦 IndexedDB: Permanently unavailable - using in-memory fallback');
+      return; // Silently fail and use in-memory storage
     }
 
     // Check if IndexedDB is available
     if (!window.indexedDB) {
-      console.warn('📦 IndexedDB: Not available in this browser');
+      console.warn('📦 IndexedDB: Not available in this browser - using in-memory fallback');
       this.isPermanentlyBroken = true;
-      throw new Error('IndexedDB is not supported in this browser');
+      return; // Silently fail instead of throwing
     }
 
     return new Promise((resolve, reject) => {
@@ -73,24 +121,20 @@ export class IndexedDBService {
         
         // Check for specific errors
         if (error?.name === 'UnknownError') {
-          console.error('📦 IndexedDB: UnknownError - Database may be corrupted. Attempting to delete and recreate...');
-          // Attempt to delete the corrupted database
-          this.deleteDatabase()
-            .then(() => {
-              console.log('📦 IndexedDB: Corrupted database deleted. Please refresh the page to recreate.');
-              reject(new Error('IndexedDB was corrupted and has been reset. Please refresh the page.'));
-            })
-            .catch((deleteError) => {
-              console.error('📦 IndexedDB: Failed to delete corrupted database:', deleteError);
-              // Mark as permanently broken to stop retry attempts
-              this.isPermanentlyBroken = true;
-              reject(new Error('IndexedDB is corrupted and cannot be reset. Please clear browser data manually (Ctrl+Shift+Delete) and refresh.'));
-            });
+          console.warn('📦 IndexedDB: UnknownError - browser storage corrupted at OS level');
+          console.warn('📦 IndexedDB: Cannot access or fix corrupted storage - using online-only mode');
+          // Don't try to delete or recreate - it won't work with UnknownError
+          // Just mark as broken and let app work without offline storage
+          this.isPermanentlyBroken = true;
+          resolve(); // Resolve to allow app to continue
         } else if (error?.name === 'VersionError') {
           console.error('📦 IndexedDB: Version error - attempting to recover...');
           reject(new Error('IndexedDB version mismatch. Please refresh the page.'));
         } else {
-          reject(error);
+          // For other errors, mark as broken and continue
+          console.warn('📦 IndexedDB: Error opening database, using online-only mode:', error);
+          this.isPermanentlyBroken = true;
+          resolve();
         }
       };
       
@@ -108,49 +152,8 @@ export class IndexedDBService {
 
       request.onupgradeneeded = (event) => {
         const db = (event.target as IDBOpenDBRequest).result;
-        
         console.log('📦 IndexedDB: Upgrading database schema...');
-
-        // User data store
-        if (!db.objectStoreNames.contains('userData')) {
-          const userStore = db.createObjectStore('userData', { keyPath: 'uid' });
-          userStore.createIndex('email', 'email', { unique: true });
-          console.log('📦 IndexedDB: Created userData store');
-        }
-
-        // Products store
-        if (!db.objectStoreNames.contains('products')) {
-          const productStore = db.createObjectStore('products', { keyPath: 'id' });
-          productStore.createIndex('storeId', 'storeId', { unique: false });
-          productStore.createIndex('category', 'category', { unique: false });
-          productStore.createIndex('barcode', 'barcode', { unique: false });
-          console.log('📦 IndexedDB: Created products store');
-        }
-
-        // Orders store (for offline transactions)
-        if (!db.objectStoreNames.contains('orders')) {
-          const orderStore = db.createObjectStore('orders', { keyPath: 'id' });
-          orderStore.createIndex('storeId', 'storeId', { unique: false });
-          orderStore.createIndex('timestamp', 'timestamp', { unique: false });
-          orderStore.createIndex('synced', 'synced', { unique: false });
-          console.log('📦 IndexedDB: Created orders store');
-        }
-
-        // Notifications store
-        if (!db.objectStoreNames.contains('notifications')) {
-          const notifStore = db.createObjectStore('notifications', { keyPath: 'id' });
-          notifStore.createIndex('storeId', 'storeId', { unique: false });
-          notifStore.createIndex('read', 'read', { unique: false });
-          notifStore.createIndex('createdAt', 'createdAt', { unique: false });
-          console.log('📦 IndexedDB: Created notifications store');
-        }
-
-        // App settings store
-        if (!db.objectStoreNames.contains('settings')) {
-          const settingsStore = db.createObjectStore('settings', { keyPath: 'key' });
-          console.log('📦 IndexedDB: Created settings store');
-        }
-        
+        this.createObjectStores(db);
         console.log('📦 IndexedDB: Database schema upgrade complete');
       };
       
@@ -164,6 +167,8 @@ export class IndexedDBService {
   // Delete the entire database (for recovery from corruption)
   async deleteDatabase(): Promise<void> {
     return new Promise((resolve, reject) => {
+      console.log('📦 IndexedDB: Attempting to delete database:', this.dbName);
+      
       // Close existing connection
       if (this.db) {
         this.db.close();
@@ -173,25 +178,41 @@ export class IndexedDBService {
       const deleteRequest = indexedDB.deleteDatabase(this.dbName);
       
       deleteRequest.onsuccess = () => {
-        console.log('📦 IndexedDB: Database deleted successfully');
+        console.log('✅ IndexedDB: Database deleted successfully');
         resolve();
       };
       
       deleteRequest.onerror = (event) => {
-        console.error('📦 IndexedDB: Failed to delete database:', deleteRequest.error);
+        console.error('❌ IndexedDB: Failed to delete database:', deleteRequest.error);
         reject(deleteRequest.error);
       };
       
       deleteRequest.onblocked = () => {
-        console.warn('📦 IndexedDB: Delete blocked. Please close all tabs using this app.');
-        reject(new Error('Database deletion blocked by other tabs'));
+        console.warn('⚠️ IndexedDB: Delete blocked - other connections may be open');
+        // Try to resolve anyway after a delay - deletion will complete when connections close
+        setTimeout(() => {
+          console.log('📦 IndexedDB: Proceeding despite blocked state');
+          resolve();
+        }, 1000);
       };
     });
   }
 
   // User Data Methods
   async saveUserData(userData: OfflineUserData): Promise<void> {
+    // If IndexedDB is unavailable, silently skip
+    if (this.isPermanentlyBroken) {
+      console.warn('📦 IndexedDB: Unavailable - skipping user data save');
+      return;
+    }
+    
     if (!this.db) await this.initDB();
+    
+    // Check again after init
+    if (this.isPermanentlyBroken || !this.db) {
+      console.warn('📦 IndexedDB: Unavailable after init - skipping user data save');
+      return;
+    }
     
     // First, set all other users as inactive (logged out)
     await this.setAllUsersInactive();
@@ -208,13 +229,47 @@ export class IndexedDBService {
         console.log('📦 IndexedDB: User data saved successfully as active user');
         resolve();
       };
-      request.onerror = () => reject(request.error);
+      request.onerror = () => {
+        console.warn('📦 IndexedDB: Error saving user data:', request.error);
+        resolve(); // Resolve anyway to not block the app
+      };
     });
+  }
+
+  /**
+   * Check if IndexedDB is available and working
+   */
+  isAvailable(): boolean {
+    return !this.isPermanentlyBroken && !!this.db;
+  }
+
+  /**
+   * Get status information about IndexedDB
+   */
+  getStatus(): { available: boolean; reason?: string } {
+    if (!window.indexedDB) {
+      return { available: false, reason: 'IndexedDB not supported in this browser' };
+    }
+    if (this.isPermanentlyBroken) {
+      return { available: false, reason: 'IndexedDB storage corrupted at OS level - using online-only mode' };
+    }
+    if (!this.db) {
+      return { available: false, reason: 'IndexedDB not initialized' };
+    }
+    return { available: true };
   }
 
   // Set all users as inactive (logged out)
   async setAllUsersInactive(): Promise<void> {
+    if (this.isPermanentlyBroken) {
+      return; // Silently skip if unavailable
+    }
+    
     if (!this.db) await this.initDB();
+    
+    if (this.isPermanentlyBroken || !this.db) {
+      return; // Silently skip if unavailable
+    }
 
     return new Promise((resolve, reject) => {
       const transaction = this.db!.transaction(['userData'], 'readwrite');
@@ -242,67 +297,116 @@ export class IndexedDBService {
               resolve();
             }
           };
-          updateRequest.onerror = () => reject(updateRequest.error);
+          updateRequest.onerror = () => {
+            console.warn('📦 IndexedDB: Error updating user:', updateRequest.error);
+            resolve(); // Resolve anyway
+          };
         });
       };
-      getAllRequest.onerror = () => reject(getAllRequest.error);
+      getAllRequest.onerror = () => {
+        console.warn('📦 IndexedDB: Error getting users:', getAllRequest.error);
+        resolve(); // Resolve anyway
+      };
     });
   }
 
   // Set a specific user as active and all others as inactive
   async setActiveUser(uid: string): Promise<void> {
+    // Check if database is permanently broken
+    if (this.isPermanentlyBroken) {
+      console.warn('⚠️ IndexedDB: Cannot set active user - database permanently unavailable');
+      return;
+    }
+
     if (!this.db) await this.initDB();
+    
+    // Check again after init attempt
+    if (this.isPermanentlyBroken || !this.db) {
+      console.warn('⚠️ IndexedDB: Cannot set active user - database still unavailable after init');
+      return;
+    }
 
     return new Promise((resolve, reject) => {
-      const transaction = this.db!.transaction(['userData'], 'readwrite');
-      const store = transaction.objectStore('userData');
-      const getAllRequest = store.getAll();
+      try {
+        const transaction = this.db!.transaction(['userData'], 'readwrite');
+        const store = transaction.objectStore('userData');
+        const getAllRequest = store.getAll();
 
-      getAllRequest.onsuccess = () => {
-        const users = getAllRequest.result;
-        let completed = 0;
-        const total = users.length;
+        getAllRequest.onsuccess = () => {
+          const users = getAllRequest.result;
+          let completed = 0;
+          const total = users.length;
 
-        if (total === 0) {
-          resolve();
-          return;
-        }
+          if (total === 0) {
+            resolve();
+            return;
+          }
 
-        users.forEach((user: OfflineUserData) => {
-          const updatedUser = { 
-            ...user, 
-            isLoggedIn: user.uid === uid 
-          };
-          const updateRequest = store.put(updatedUser);
-          
-          updateRequest.onsuccess = () => {
-            completed++;
-            if (completed === total) {
-              console.log(`📦 IndexedDB: User ${uid} set as active, others set inactive`);
-              resolve();
-            }
-          };
-          updateRequest.onerror = () => reject(updateRequest.error);
-        });
-      };
-      getAllRequest.onerror = () => reject(getAllRequest.error);
+          users.forEach((user: OfflineUserData) => {
+            const updatedUser = { 
+              ...user, 
+              isLoggedIn: user.uid === uid 
+            };
+            const updateRequest = store.put(updatedUser);
+            
+            updateRequest.onsuccess = () => {
+              completed++;
+              if (completed === total) {
+                console.log(`📦 IndexedDB: User ${uid} set as active, others set inactive`);
+                resolve();
+              }
+            };
+            updateRequest.onerror = () => {
+              console.error('📦 IndexedDB: Error updating user:', updateRequest.error);
+              resolve(); // Resolve anyway
+            };
+          });
+        };
+        getAllRequest.onerror = () => {
+          console.error('📦 IndexedDB: Error getting users:', getAllRequest.error);
+          resolve(); // Resolve anyway
+        };
+      } catch (error) {
+        console.error('📦 IndexedDB: Exception setting active user:', error);
+        resolve(); // Resolve anyway
+      }
     });
   }
 
   // Clear all user data from IndexedDB (useful when switching accounts)
   async clearAllUserData(): Promise<void> {
+    // Check if database is permanently broken
+    if (this.isPermanentlyBroken) {
+      console.warn('⚠️ IndexedDB: Cannot clear user data - database permanently unavailable');
+      return;
+    }
+
     if (!this.db) await this.initDB();
+    
+    // Check again after init attempt
+    if (this.isPermanentlyBroken || !this.db) {
+      console.warn('⚠️ IndexedDB: Cannot clear user data - database still unavailable after init');
+      return;
+    }
 
     return new Promise((resolve, reject) => {
-      const transaction = this.db!.transaction(['userData'], 'readwrite');
-      const store = transaction.objectStore('userData');
-      const request = store.clear();
+      try {
+        const transaction = this.db!.transaction(['userData'], 'readwrite');
+        const store = transaction.objectStore('userData');
+        const request = store.clear();
 
-      request.onsuccess = () => {
-        console.log('📦 IndexedDB: All user data cleared');
-        resolve();
-      };
-      request.onerror = () => reject(request.error);
+        request.onsuccess = () => {
+          console.log('📦 IndexedDB: All user data cleared');
+          resolve();
+        };
+        request.onerror = () => {
+          console.error('📦 IndexedDB: Error clearing user data:', request.error);
+          resolve(); // Resolve anyway
+        };
+      } catch (error) {
+        console.error('📦 IndexedDB: Exception clearing user data:', error);
+        resolve(); // Resolve anyway
+      }
     });
   }
 
@@ -335,7 +439,15 @@ export class IndexedDBService {
   }
 
   async getUserData(uid: string): Promise<OfflineUserData | null> {
+    if (this.isPermanentlyBroken) {
+      return null; // Return null if unavailable
+    }
+    
     if (!this.db) await this.initDB();
+    
+    if (this.isPermanentlyBroken || !this.db) {
+      return null; // Return null if unavailable
+    }
 
     return new Promise((resolve, reject) => {
       const transaction = this.db!.transaction(['userData'], 'readonly');
@@ -345,12 +457,23 @@ export class IndexedDBService {
       request.onsuccess = () => {
         resolve(request.result || null);
       };
-      request.onerror = () => reject(request.error);
+      request.onerror = () => {
+        console.warn('📦 IndexedDB: Error getting user data:', request.error);
+        resolve(null); // Resolve with null instead of rejecting
+      };
     });
   }
 
   async getCurrentUser(): Promise<OfflineUserData | null> {
+    if (this.isPermanentlyBroken) {
+      return null; // Return null if unavailable
+    }
+    
     if (!this.db) await this.initDB();
+    
+    if (this.isPermanentlyBroken || !this.db) {
+      return null; // Return null if unavailable
+    }
 
     return new Promise((resolve, reject) => {
       const transaction = this.db!.transaction(['userData'], 'readonly');
@@ -361,44 +484,61 @@ export class IndexedDBService {
         const users = request.result.filter((user: OfflineUserData) => user.isLoggedIn);
         resolve(users.length > 0 ? users[0] : null);
       };
-      request.onerror = () => reject(request.error);
+      request.onerror = () => {
+        console.warn('📦 IndexedDB: Error getting current user:', request.error);
+        resolve(null); // Resolve with null instead of rejecting
+      };
     });
   }
 
   // Product Methods
   async saveProducts(products: OfflineProduct[]): Promise<void> {
+    // Check if database is permanently broken
+    if (this.isPermanentlyBroken) {
+      console.warn('⚠️ IndexedDB: Cannot save products - database permanently unavailable');
+      return;
+    }
+
     if (!this.db) await this.initDB();
+    
+    // Check again after init attempt
+    if (this.isPermanentlyBroken || !this.db) {
+      console.warn('⚠️ IndexedDB: Cannot save products - database still unavailable after init');
+      return;
+    }
+
     // Improved save: deduplicate by id and by (storeId + barcode or name) to avoid duplicate entries
     return new Promise((resolve, reject) => {
-      const transaction = this.db!.transaction(['products'], 'readwrite');
-      const store = transaction.objectStore('products');
+      try {
+        const transaction = this.db!.transaction(['products'], 'readwrite');
+        const store = transaction.objectStore('products');
 
-      // Load existing products to compare and dedupe
-      const getAllReq = store.getAll();
-      getAllReq.onsuccess = () => {
-        const existing: OfflineProduct[] = getAllReq.result || [];
+        // Load existing products to compare and dedupe
+        const getAllReq = store.getAll();
+        getAllReq.onsuccess = () => {
+          const existing: OfflineProduct[] = getAllReq.result || [];
 
-        // Build lookup by id and by skuKey (storeId|barcode|name)
-        const byId = new Map<string, OfflineProduct>();
-        const bySkuKey = new Map<string, OfflineProduct>();
-        existing.forEach(p => {
-          if (p.id) byId.set(p.id, p);
-          const key = `${p.storeId}::${p.barcode || ''}::${p.name || ''}`;
-          bySkuKey.set(key, p);
-        });
+          // Build lookup by id and by skuKey (storeId|barcode|name)
+          const byId = new Map<string, OfflineProduct>();
+          const bySkuKey = new Map<string, OfflineProduct>();
+          existing.forEach(p => {
+            if (p.id) byId.set(p.id, p);
+            const key = `${p.storeId}::${p.barcode || ''}::${p.name || ''}`;
+            bySkuKey.set(key, p);
+          });
 
-        let pending = 0;
-        const finishIfDone = () => {
-          if (pending === 0) {
-            console.log(`📦 IndexedDB: Saved/updated products (input ${products.length})`);
+          let pending = 0;
+          const finishIfDone = () => {
+            if (pending === 0) {
+              console.log(`📦 IndexedDB: Saved/updated products (input ${products.length})`);
+              resolve();
+            }
+          };
+
+          if (!products || products.length === 0) {
             resolve();
+            return;
           }
-        };
-
-        if (!products || products.length === 0) {
-          resolve();
-          return;
-        }
 
         products.forEach(prod => {
           try {
@@ -442,23 +582,50 @@ export class IndexedDBService {
           }
         });
       };
-      getAllReq.onerror = () => reject(getAllReq.error);
+      getAllReq.onerror = () => {
+        console.error('📦 IndexedDB: Error getting products for deduplication:', getAllReq.error);
+        resolve(); // Resolve anyway
+      };
+      } catch (error) {
+        console.error('📦 IndexedDB: Exception saving products:', error);
+        resolve(); // Resolve anyway
+      }
     });
   }
 
   async getProductsByStore(storeId: string): Promise<OfflineProduct[]> {
+    // Check if database is permanently broken
+    if (this.isPermanentlyBroken) {
+      console.warn('⚠️ IndexedDB: Cannot get products - database permanently unavailable');
+      return [];
+    }
+
     if (!this.db) await this.initDB();
+    
+    // Check again after init attempt
+    if (this.isPermanentlyBroken || !this.db) {
+      console.warn('⚠️ IndexedDB: Cannot get products - database still unavailable after init');
+      return [];
+    }
 
     return new Promise((resolve, reject) => {
-      const transaction = this.db!.transaction(['products'], 'readonly');
-      const store = transaction.objectStore('products');
-      const index = store.index('storeId');
-      const request = index.getAll(storeId);
+      try {
+        const transaction = this.db!.transaction(['products'], 'readonly');
+        const store = transaction.objectStore('products');
+        const index = store.index('storeId');
+        const request = index.getAll(storeId);
 
-      request.onsuccess = () => {
-        resolve(request.result || []);
-      };
-      request.onerror = () => reject(request.error);
+        request.onsuccess = () => {
+          resolve(request.result || []);
+        };
+        request.onerror = () => {
+          console.error('📦 IndexedDB: Error getting products:', request.error);
+          resolve([]); // Return empty array instead of rejecting
+        };
+      } catch (error) {
+        console.error('📦 IndexedDB: Exception getting products:', error);
+        resolve([]); // Return empty array instead of rejecting
+      }
     });
   }
 
@@ -537,36 +704,76 @@ export class IndexedDBService {
 
   // Order Methods (for offline transactions)
   async saveOrder(order: OfflineOrder): Promise<void> {
+    // Check if database is permanently broken
+    if (this.isPermanentlyBroken) {
+      console.warn('⚠️ IndexedDB: Cannot save order - database permanently unavailable');
+      return;
+    }
+
     if (!this.db) await this.initDB();
+    
+    // Check again after init attempt
+    if (this.isPermanentlyBroken || !this.db) {
+      console.warn('⚠️ IndexedDB: Cannot save order - database still unavailable after init');
+      return;
+    }
 
     return new Promise((resolve, reject) => {
-      const transaction = this.db!.transaction(['orders'], 'readwrite');
-      const store = transaction.objectStore('orders');
-      const request = store.put(order);
+      try {
+        const transaction = this.db!.transaction(['orders'], 'readwrite');
+        const store = transaction.objectStore('orders');
+        const request = store.put(order);
 
       request.onsuccess = () => {
         console.log('📦 IndexedDB: Order saved successfully');
         resolve();
       };
-      request.onerror = () => reject(request.error);
+      request.onerror = () => {
+        console.error('📦 IndexedDB: Error saving order:', request.error);
+        resolve(); // Resolve anyway
+      };
+      } catch (error) {
+        console.error('📦 IndexedDB: Exception saving order:', error);
+        resolve(); // Resolve anyway
+      }
     });
   }
 
   async getPendingOrders(storeId: string): Promise<OfflineOrder[]> {
+    // Check if database is permanently broken
+    if (this.isPermanentlyBroken) {
+      console.warn('⚠️ IndexedDB: Cannot get pending orders - database permanently unavailable');
+      return [];
+    }
+
     if (!this.db) await this.initDB();
+    
+    // Check again after init attempt
+    if (this.isPermanentlyBroken || !this.db) {
+      console.warn('⚠️ IndexedDB: Cannot get pending orders - database still unavailable after init');
+      return [];
+    }
 
     return new Promise((resolve, reject) => {
-      const transaction = this.db!.transaction(['orders'], 'readonly');
-      const store = transaction.objectStore('orders');
-      const request = store.getAll();
+      try {
+        const transaction = this.db!.transaction(['orders'], 'readonly');
+        const store = transaction.objectStore('orders');
+        const request = store.getAll();
 
-      request.onsuccess = () => {
-        const orders = request.result.filter((order: OfflineOrder) => 
-          order.storeId === storeId && !order.synced
-        );
-        resolve(orders);
-      };
-      request.onerror = () => reject(request.error);
+        request.onsuccess = () => {
+          const orders = request.result.filter((order: OfflineOrder) => 
+            order.storeId === storeId && !order.synced
+          );
+          resolve(orders);
+        };
+        request.onerror = () => {
+          console.error('📦 IndexedDB: Error getting pending orders:', request.error);
+          resolve([]); // Return empty array instead of rejecting
+        };
+      } catch (error) {
+        console.error('📦 IndexedDB: Exception getting pending orders:', error);
+        resolve([]); // Return empty array instead of rejecting
+      }
     });
   }
 

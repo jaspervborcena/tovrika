@@ -1013,6 +1013,94 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   /**
+   * Get quantity to adjust for a tracking item (defaults to original quantity)
+   */
+  getQtyToAdjust(item: any): number {
+    return item?.qtyToAdjust ?? Number(item?.quantity || 0);
+  }
+
+  /**
+   * Update quantity to adjust for a tracking item
+   */
+  updateQtyToAdjust(index: number, newQty: string): void {
+    const entries = this.trackingEntries();
+    
+    if (entries[index]) {
+      const qtyValue = Number(newQty) || 0;
+      const updatedEntry = { 
+        ...entries[index], 
+        qtyToAdjust: qtyValue,
+        // Mark as modified for saving
+        isModified: true
+      };
+      
+      const updatedEntries = [...entries];
+      updatedEntries[index] = updatedEntry;
+      this.trackingEntriesSignal.set(updatedEntries);
+      
+      console.log('📝 Updated qty to adjust for item', index, 'to', qtyValue);
+    }
+  }
+
+  /**
+   * Get adjustment type for a tracking item (defaults to current status)
+   */
+  getAdjustmentType(item: any): string {
+    return item?.adjustmentType ?? item?.status ?? 'pending';
+  }
+
+  /**
+   * Update adjustment type for a tracking item
+   */
+  updateAdjustmentType(index: number, newType: string): void {
+    const entries = this.trackingEntries();
+    
+    if (entries[index]) {
+      const updatedEntry = { 
+        ...entries[index], 
+        adjustmentType: newType,
+        // Mark as modified for saving
+        isModified: true
+      };
+      
+      const updatedEntries = [...entries];
+      updatedEntries[index] = updatedEntry;
+      this.trackingEntriesSignal.set(updatedEntries);
+      
+      console.log('📝 Updated adjustment type for item', index, 'to', newType);
+    }
+  }
+
+  /**
+   * Get update reason for a tracking item
+   */
+  getUpdateReason(item: any): string {
+    return item?.updateReason ?? '';
+  }
+
+  /**
+   * Update reason for a tracking item
+   */
+  updateReason(index: number, newReason: string): void {
+    const entries = this.trackingEntries();
+    
+    if (entries[index]) {
+      const updatedEntry = { 
+        ...entries[index], 
+        updateReason: newReason,
+        // Mark as modified for saving
+        isModified: true
+      };
+      
+      const updatedEntries = [...entries];
+      updatedEntries[index] = updatedEntry;
+      this.trackingEntriesSignal.set(updatedEntries);
+      
+      console.log('📝 Updated reason for item', index, 'to', newReason);
+    }
+  }
+
+  /**
    * Return a user-friendly store name for the given order.
    * Falls back to 'Global' when order has no storeId and returns the id
    * when the store object cannot be found.
@@ -1299,6 +1387,11 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     console.log('🎯 POS COMPONENT: ngOnInit called - POS is loading!');
     console.log('🎯 POS COMPONENT: Current URL:', window.location.href);
     console.log('🎯 POS COMPONENT: Timestamp:', new Date().toISOString());
+    
+    // Scroll to top when POS component loads
+    setTimeout(() => {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }, 100);
     
     // Add Firestore test
     await this.testFirestoreConnection();

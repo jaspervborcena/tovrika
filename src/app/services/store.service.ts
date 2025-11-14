@@ -568,55 +568,29 @@ export class StoreService {
       throw error;
     }
   }
+async generateStoreCode(): Promise<string> {
+  const MAX_ATTEMPTS = 5;
+  let attempt = 0;
 
-  /**
-   * Generate a unique store code per spec:
-   * - Increment a Firestore counter (counters/storeCode.value)
-   * - Encode in base36 (uppercase)
-   * - Prefix with 'TOV'
-   * - Pad to 8 characters total after prefix
-   * - Ensure uniqueness by checking 'stores' collection
-   */
-  async generateStoreCode(): Promise<string> {
-    const MAX_ATTEMPTS = 5;
-    let attempt = 0;
-    while (attempt < MAX_ATTEMPTS) {
-      attempt++;
-      // 1) Atomically increment a global counter
-      const nextValue = await this.incrementStoreCodeCounter();
+  while (attempt < MAX_ATTEMPTS) {
+    attempt++;
 
-      // 2) Base36 encode and format
-      const base36 = nextValue.toString(36).toUpperCase();
-      // We want total length 8 including 'TOV' prefix => 5 chars after prefix
-      const padded = base36.padStart(5, '0');
-      const candidate = `TOV${padded}`;
+    // 1) Generate a unique base using epoch time + random suffix
+    const epoch = Date.now().toString(36).toUpperCase(); // e.g., 'L5Z3K8'
+    const rand = Math.floor(Math.random() * 1296).toString(36).toUpperCase(); // 2-char random (36^2 = 1296)
+    const candidate = (epoch + rand).slice(-6); // total length = 6
 
-      // 3) Ensure uniqueness in 'stores' collection
-      const isUnique = await this.isStoreCodeUnique(candidate);
-      if (isUnique) {
-        return candidate;
-      }
-      console.warn(`🔁 Collision on storeCode ${candidate}, retrying (attempt ${attempt}/${MAX_ATTEMPTS})`);
+    // 2) Ensure uniqueness in 'stores' collection
+    const isUnique = await this.isStoreCodeUnique(candidate);
+    if (isUnique) {
+      return candidate;
     }
-    throw new Error('Unable to generate a unique store code after multiple attempts');
+
+    console.warn(`🔁 Collision on storeCode ${candidate}, retrying (attempt ${attempt}/${MAX_ATTEMPTS})`);
   }
 
-  private async incrementStoreCodeCounter(): Promise<number> {
-    const firestore = getFirestore();
-    const counterRef = doc(firestore, 'counters', 'storeCode');
-    const value = await runTransaction(firestore, async (tx) => {
-      const snap = await tx.get(counterRef);
-      let current = 1000; // seed starting value
-      if (snap.exists()) {
-        const data = snap.data() as any;
-        current = typeof data.value === 'number' ? data.value : current;
-      }
-      const next = current + 1;
-      tx.set(counterRef, { value: next, updatedAt: new Date() }, { merge: true });
-      return next;
-    });
-    return value;
-  }
+  throw new Error('Unable to generate a unique store code after multiple attempts');
+}
 
   private async isStoreCodeUnique(code: string): Promise<boolean> {
     const storesRef = collection(this.firestore, 'stores');

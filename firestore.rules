@@ -19,14 +19,26 @@ service cloud.firestore {
 
     // ===== MAIN COLLECTIONS WITH UID SECURITY =====
     
-    // Products Collection - Read allowed for authenticated users, write requires UID
+    // Products Collection - UID-based security
     match /products/{productId} {
-      allow read: if isAuthenticated();  // Allow reading for any authenticated user
-      allow create: if isAuthenticated() && isCreatingOwnDocument();
+      // Allow read if user is authenticated AND either:
+      // 1. Product has no uid field (legacy data), OR
+      // 2. Product's uid matches the authenticated user's uid
+      allow read: if isAuthenticated() && 
+                  (!('uid' in resource.data) || resource.data.uid == request.auth.uid);
+      
+      // Allow create if user is authenticated and sets their own uid
+      allow create: if isAuthenticated() && 
+                    request.resource.data.uid == request.auth.uid;
+      
+      // Allow update if user owns the product
       allow update: if isAuthenticated() && 
                     resource.data.uid == request.auth.uid && 
                     request.resource.data.uid == request.auth.uid;
-      allow delete: if isAuthenticated() && isOwner(resource);
+      
+      // Allow delete if user owns the product
+      allow delete: if isAuthenticated() && 
+                    resource.data.uid == request.auth.uid;
     }
 
     // Product Inventory Collection - Read allowed for authenticated users, write requires UID
