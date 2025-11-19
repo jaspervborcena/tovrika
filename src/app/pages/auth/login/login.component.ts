@@ -57,12 +57,22 @@ export class LoginComponent implements OnInit {
         console.log('🔐 Login: Starting hybrid login process...');
         const { email, password, rememberMe } = this.loginForm.value;
         
+        console.log('🔐 Login: Calling authService.login...');
         const user = await this.authService.login(email!, password!, rememberMe!);
+        console.log('🔐 Login: authService.login returned:', user);
+        
         if (!user) {
+          console.error('🔐 Login: No user returned from login');
           throw new Error('Failed to get user data after login');
         }
         
-        console.log('🔐 Login: User authenticated successfully:', user.email);
+        console.log('🔐 Login: User authenticated successfully:', {
+          email: user.email,
+          uid: user.uid,
+          displayName: user.displayName,
+          hasPermissions: !!user.permissions,
+          permissionsCount: user.permissions?.length || 0
+        });
         
         // TEMP: Skip email verification enforcement (will be re-enabled later)
         
@@ -79,12 +89,14 @@ export class LoginComponent implements OnInit {
         
         // Check user role to determine where to redirect
         const userRole = user.roleId || 'visitor';
+        console.log('🔐 Login: User role:', userRole);
         
         // In offline mode, skip policy-agreement to avoid chunk loading issues
         if (!this.isOnline()) {
           console.log('🔐 Login: Offline mode - redirecting directly to dashboard...');
           try {
             await this.router.navigate(['/dashboard']);
+            console.log('🔐 Login: Navigation to dashboard successful');
           } catch (navError) {
             console.warn('🔐 Login: Dashboard navigation failed, trying POS...', navError);
             // Fallback to POS if dashboard also fails
@@ -93,20 +105,26 @@ export class LoginComponent implements OnInit {
         } else {
           // Online mode - always go to policy agreement after successful login
           try {
-            console.log('🔐 Login: Redirecting to policy agreement (all users)...');
-            await this.router.navigate(['/policy-agreement']);
+            console.log('🔐 Login: Online mode - redirecting to policy agreement...');
+            const navResult = await this.router.navigate(['/policy-agreement']);
+            console.log('🔐 Login: Navigation result:', navResult);
           } catch (navError) {
-            console.warn('🔐 Login: Policy agreement navigation failed, falling back to onboarding...', navError);
+            console.error('🔐 Login: Policy agreement navigation failed:', navError);
+            console.warn('🔐 Login: Falling back to onboarding...');
             // Fallback to onboarding if policy-agreement chunk fails
             await this.router.navigate(['/onboarding']);
           }
         }
       } catch (err: any) {
-        console.error('🔐 Login: Login failed:', err);
+        console.error('🔐 Login: Login failed with error:', err);
+        console.error('🔐 Login: Error stack:', err.stack);
         this.error = err.message || 'An error occurred during login';
       } finally {
         this.isLoading = false;
+        console.log('🔐 Login: Login process completed, isLoading:', this.isLoading);
       }
+    } else {
+      console.warn('🔐 Login: Form is invalid');
     }
   }
 

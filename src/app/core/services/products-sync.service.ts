@@ -1,4 +1,4 @@
-import { Injectable, inject } from '@angular/core';
+import { Injectable, inject, Injector, runInInjectionContext } from '@angular/core';
 import { Firestore, collection, query, where, getDocs, onSnapshot, Timestamp } from '@angular/fire/firestore';
 import { IndexedDBService, OfflineProduct } from './indexeddb.service';
 import { LoggerService } from './logger.service';
@@ -8,6 +8,7 @@ import { LoggerService } from './logger.service';
 export class ProductsSyncService {
   private firestore = inject(Firestore);
   private indexedDb = inject(IndexedDBService);
+  private injector = inject(Injector);
   // Use centralized LoggerService so logs include authenticated uid/company/store via context provider
   private logger = inject(LoggerService);
 
@@ -44,7 +45,7 @@ export class ProductsSyncService {
         q = query(productsRef);
       }
 
-      const unsub = onSnapshot(q as any, async (snapshot: any) => {
+      const unsub = runInInjectionContext(this.injector, () => onSnapshot(q as any, async (snapshot: any) => {
         try {
           const toSave: OfflineProduct[] = [];
           snapshot.docChanges().forEach((change: any) => {
@@ -79,7 +80,7 @@ export class ProductsSyncService {
         }
       }, (err: any) => {
         this.logger.dbFailure('ProductsSyncService: onSnapshot error', { companyId, storeId }, err);
-      });
+      }));
 
       this.unsubscribeSnapshot = () => unsub();
     } catch (error) {
@@ -110,7 +111,7 @@ export class ProductsSyncService {
           q = query(productsRef, where('updatedAt', '>', lastTs));
         }
 
-        const snap = await getDocs(q as any);
+        const snap = await runInInjectionContext(this.injector, () => getDocs(q as any));
         if (!snap.empty) {
           const toSave: OfflineProduct[] = [];
           snap.docs.forEach((doc: any) => {

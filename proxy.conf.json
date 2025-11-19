@@ -8,4 +8,14 @@
       "^/api/orders": ""
     }
   }
+  ,
+  "/api/functions": {
+    "target": "https://asia-east1-jasperpos-1dfd5.cloudfunctions.net",
+    "secure": true,
+    "changeOrigin": true,
+    "logLevel": "debug",
+    "pathRewrite": {
+      "^/api/functions": ""
+    }
+  }
 }

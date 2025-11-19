@@ -617,7 +617,7 @@ export class OrderService {
       }
 
       // Call the Cloud Function
-      const response = await fetch('https://asia-east1-jasperpos-1dfd5.cloudfunctions.net/manage_item_status', {
+      const response = await fetch(`${environment.api.baseUrl}/manage_item_status`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${idToken}`,

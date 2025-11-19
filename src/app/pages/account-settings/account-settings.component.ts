@@ -1,9 +1,19 @@
-import { Component, OnInit, inject } from '@angular/core';
+import { Component, OnInit, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HeaderComponent } from '../../shared/components/header/header.component';
 import { ContentLayoutComponent } from '../../shared/components/content-layout/content-layout.component';
-import { AuthService } from '../../services/auth.service';
+import { AuthService, User } from '../../services/auth.service';
+import { IndexedDBService } from '../../core/services/indexeddb.service';
+import { CompanyService } from '../../services/company.service';
+
+interface PermissionDisplay {
+  companyId: string;
+  companyName: string;
+  roleId: string;
+  storeId?: string;
+  storeName?: string;
+}
 
 @Component({
   selector: 'app-account-settings',
@@ -14,87 +24,172 @@ import { AuthService } from '../../services/auth.service';
 })
 export class AccountSettingsComponent implements OnInit {
   private authService = inject(AuthService);
+  private indexedDBService = inject(IndexedDBService);
+  private companyService = inject(CompanyService);
   
   currentUser = this.authService.currentUser;
-  isAddingPermission = false;
   isSaving = false;
-  newPermission = {
-    companyId: '',
-    roleId: '',
-    storeId: ''
-  };
+  isEditingPin = false;
+  editedPin = '';
+  pinError = '';
+  
+  permissionsDisplay = signal<PermissionDisplay[]>([]);
 
-  ngOnInit() {
-    // User data is already loaded via AuthService
+  async ngOnInit() {
+    // Load permission details with company and store names
+    const user = this.currentUser();
+    console.log('👤 Account Settings - Current User:', user);
+    console.log('📧 User Email:', user?.email);
+    console.log('👨 User Display Name:', user?.displayName);
+    console.log('🔑 User Permissions:', user?.permissions);
+    console.log('🔢 User Code:', user?.userCode);
+    console.log('🔐 User PIN:', user?.pin);
+    await this.loadPermissionDetails();
   }
 
-  addPermission() {
-    this.isAddingPermission = true;
-    this.newPermission = {
-      companyId: '',
-      roleId: '',
-      storeId: ''
-    };
-  }
-
-  cancelAddPermission() {
-    this.isAddingPermission = false;
-    this.newPermission = {
-      companyId: '',
-      roleId: '',
-      storeId: ''
-    };
-  }
-
-  async saveNewPermission() {
-    if (!this.newPermission.companyId || !this.newPermission.roleId) {
-      alert('Company ID and Role ID are required!');
+  async loadPermissionDetails() {
+    const user = this.currentUser();
+    console.log('🔍 Loading permission details for user:', user?.email);
+    console.log('📋 User permissions:', user?.permissions);
+    
+    if (!user?.permissions) {
+      console.warn('⚠️ No permissions found for user');
       return;
     }
 
-    const user = this.currentUser();
-    if (!user) return;
+    const permissionsWithDetails: PermissionDisplay[] = [];
+
+    for (const permission of user.permissions) {
+      console.log('🔄 Processing permission:', permission);
+      
+      try {
+        // Fetch company details via CompanyService (will persist snapshot to IndexedDB)
+        console.log('🏢 Fetching company via CompanyService:', permission.companyId);
+        const company = await this.companyService.getCompanyById(permission.companyId);
+        console.log('🏢 Company data (from CompanyService):', company);
+        const companyName = company?.name || permission.companyId;
+        console.log('🏢 Company name:', companyName);
+
+        // Fetch store name from IndexedDB if storeId exists
+        let storeName: string | undefined;
+        if (permission.storeId) {
+          console.log('🏪 Fetching store from IndexedDB:', permission.storeId);
+          const store = await this.indexedDBService.getStoreById(permission.storeId);
+          console.log('🏪 Store data:', store);
+          if (store) {
+            storeName = store.storeName;
+            console.log('🏪 Store name:', storeName);
+          } else {
+            console.warn('⚠️ Store not found in IndexedDB:', permission.storeId);
+            storeName = 'Store not found';
+          }
+        }
+
+        const permissionDisplay = {
+          companyId: permission.companyId,
+          companyName,
+          roleId: permission.roleId,
+          storeId: permission.storeId,
+          storeName
+        };
+        
+        console.log('✅ Permission display object:', permissionDisplay);
+        permissionsWithDetails.push(permissionDisplay);
+      } catch (error) {
+        console.error('❌ Error loading permission details:', error);
+        const fallbackPermission = {
+          companyId: permission.companyId,
+          companyName: permission.companyId,
+          roleId: permission.roleId,
+          storeId: permission.storeId,
+          storeName: permission.storeId
+        };
+        console.log('📝 Using fallback permission:', fallbackPermission);
+        permissionsWithDetails.push(fallbackPermission);
+      }
+    }
+
+    console.log('🎯 Final permissions display array:', permissionsWithDetails);
+    this.permissionsDisplay.set(permissionsWithDetails);
+  }
+
+  // PIN editing methods
+  startEditingPin() {
+    this.isEditingPin = true;
+    this.editedPin = this.currentUser()?.pin || '';
+    this.pinError = '';
+  }
+
+  cancelEditingPin() {
+    this.isEditingPin = false;
+    this.editedPin = '';
+    this.pinError = '';
+  }
+
+  validatePin(value: string): boolean {
+    // Only allow digits
+    if (!/^\d*$/.test(value)) {
+      this.pinError = 'PIN must contain only numbers';
+      return false;
+    }
+
+    // Check length (must be exactly 6 digits)
+    if (value.length > 0 && value.length !== 6) {
+      this.pinError = 'PIN must be exactly 6 digits';
+      return false;
+    }
+
+    this.pinError = '';
+    return true;
+  }
+
+  onPinInput(event: Event) {
+    const input = event.target as HTMLInputElement;
+    const value = input.value;
+
+    // Remove any non-digit characters
+    const cleanedValue = value.replace(/\D/g, '');
+
+    // Limit to 6 digits
+    if (cleanedValue.length > 6) {
+      this.editedPin = cleanedValue.slice(0, 6);
+      input.value = this.editedPin;
+    } else {
+      this.editedPin = cleanedValue;
+    }
+
+    this.validatePin(this.editedPin);
+  }
+
+  async savePin() {
+    if (!this.validatePin(this.editedPin)) {
+      return;
+    }
+
+    if (this.editedPin.length !== 6 && this.editedPin.length !== 0) {
+      this.pinError = 'PIN must be exactly 6 digits or empty';
+      return;
+    }
 
     try {
       this.isSaving = true;
       
-      const updatedPermissions = [...(user.permissions || []), this.newPermission];
-      
-      await this.authService.updateUserData({
-        permissions: updatedPermissions
-      });
-
-      alert('Permission added successfully!');
-      this.isAddingPermission = false;
-      this.newPermission = {
-        companyId: '',
-        roleId: '',
-        storeId: ''
+      // Update user data with the new PIN
+      const updates: Partial<User> = {
+        pin: this.editedPin || undefined
       };
-    } catch (error) {
-      console.error('Error adding permission:', error);
-      alert('Failed to add permission. Please try again.');
+      
+      await this.authService.updateUserData(updates);
+      
+      this.isEditingPin = false;
+      this.pinError = '';
+      alert('PIN updated successfully!');
+    } catch (error: any) {
+      console.error('Error updating PIN:', error);
+      this.pinError = error?.message || 'Failed to update PIN. Please try again.';
+      alert(this.pinError);
     } finally {
       this.isSaving = false;
-    }
-  }
-
-  async deletePermission(index: number) {
-    if (!confirm('Are you sure you want to delete this permission?')) return;
-
-    const user = this.currentUser();
-    if (!user || !user.permissions) return;
-
-    const updatedPermissions = user.permissions.filter((_, i) => i !== index);
-    
-    try {
-      await this.authService.updateUserData({
-        permissions: updatedPermissions
-      });
-      alert('Permission deleted successfully!');
-    } catch (error) {
-      console.error('Error deleting permission:', error);
-      alert('Failed to delete permission. Please try again.');
     }
   }
 

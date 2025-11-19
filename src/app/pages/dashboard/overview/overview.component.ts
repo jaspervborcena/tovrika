@@ -1,4 +1,5 @@
 import { Component, inject, signal, computed, OnInit } from '@angular/core';
+import { environment } from '../../../../environments/environment';
 import { CommonModule } from '@angular/common';
 import { StoreService, Store } from '../../../services/store.service';
 import { ProductService } from '../../../services/product.service';
@@ -1305,7 +1306,8 @@ export class OverviewComponent implements OnInit {
       const month = refDate.getMonth() + 1;
       const monthStr = `${year}${month.toString().padStart(2, '0')}`; // e.g. 202511
 
-      const apiUrl = `https://asia-east1-jasperpos-1dfd5.cloudfunctions.net/sales_summary_by_store?month=${monthStr}&storeId=${storeId}&status=${encodeURIComponent(status)}`;
+  const apiBase = environment.api?.baseUrl || '';
+  const apiUrl = `${apiBase}/sales_summary_by_store?month=${monthStr}&storeId=${storeId}&status=${encodeURIComponent(status)}`;
       
       console.log('🌐 Fetching sales data from Cloud Function:', apiUrl);
 
@@ -1316,6 +1318,7 @@ export class OverviewComponent implements OnInit {
         if (idToken) {
           fetchOptions.headers['Authorization'] = `Bearer ${idToken}`;
           console.log('🔐 Attached Firebase ID token to Cloud Function request (redacted)');
+          console.log('🔐 Token present (length):', idToken.length);
         } else {
           console.log('⚠️ No Firebase ID token available for Cloud Function request; request will be unauthenticated');
         }
@@ -1323,7 +1326,23 @@ export class OverviewComponent implements OnInit {
         console.warn('Could not obtain Firebase ID token for Cloud Function request', e);
       }
 
-      const response = await fetch(apiUrl, fetchOptions);
+      let response = await fetch(apiUrl, fetchOptions);
+      if (response.status === 401) {
+        // Try refreshing token once and retry
+        console.warn('Cloud Function returned 401 - attempting token refresh and retry');
+        try {
+          const refreshed = await this.authService.getFirebaseIdToken(true);
+          if (refreshed) {
+            fetchOptions.headers['Authorization'] = `Bearer ${refreshed}`;
+            console.log('🔐 Refreshed token present (length):', refreshed.length);
+            response = await fetch(apiUrl, fetchOptions);
+            console.log('Retry after token refresh response status:', response.status);
+          }
+        } catch (refreshErr) {
+          console.warn('Failed to refresh Firebase ID token for Cloud Function retry', refreshErr);
+        }
+      }
+
       if (!response.ok) {
         throw new Error(`Cloud Function API returned ${response.status}: ${response.statusText}`);
       }

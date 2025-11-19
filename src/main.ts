@@ -1,6 +1,7 @@
 import { bootstrapApplication } from '@angular/platform-browser';
 import { appConfig } from './app/app.config';
 import { AppComponent } from './app/app.component';
+import { environment } from './environments/environment';
 
 // Immediate chunk error protection - runs before Angular starts
 function setupImmediateChunkErrorHandler() {
@@ -51,6 +52,14 @@ function softReloadWithBust() {
 }
 
 bootstrapApplication(AppComponent, appConfig)
+  .then(() => {
+    // Dev-only: do NOT automatically seed at bootstrap. Seeding is performed post-login
+    // so that client auth tokens are available for Firestore reads. Keeping startup
+    // seeding can cause permission errors if it runs before login.
+    if (!environment.production) {
+      console.log('🧪 Dev seeder disabled at startup; will run post-login if requested');
+    }
+  })
   .catch(err => {
     console.error('❌ Bootstrap error:', err);
     if (isChunkError(err)) {

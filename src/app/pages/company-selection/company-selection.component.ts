@@ -179,6 +179,7 @@ export class CompanySelectionComponent {
       for (const userCompany of userCompanies) {
         try {
           const company = await this.companyService.getCompanyById(userCompany.companyId);
+          console.log('CompanySelectionComponent: fetched company for id', userCompany.companyId, company);
           if (company) {
             companyOptions.push({
               companyId: userCompany.companyId,
@@ -192,6 +193,7 @@ export class CompanySelectionComponent {
       }
       
       this.availableCompanies.set(companyOptions);
+      console.log('CompanySelectionComponent: availableCompanies =', companyOptions);
       
       // Auto-select if user has a current company preference
       const currentUser = this.authService.currentUser();

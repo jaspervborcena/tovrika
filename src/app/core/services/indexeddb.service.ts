@@ -42,12 +42,25 @@ export interface OfflineOrder {
   synced: boolean;
 }
 
+// Import Company and Store interfaces
+import { Company } from '../../interfaces/company.interface';
+import { Store } from '../../interfaces/store.interface';
+
+// Offline versions include lastSync timestamp
+export interface OfflineCompany extends Omit<Company, 'stores'> {
+  lastSync?: Date;
+}
+
+export interface OfflineStore extends Store {
+  lastSync?: Date;
+}
+
 @Injectable({
   providedIn: 'root'
 })
 export class IndexedDBService {
   private dbName = 'TovrikaOfflineDB';
-  private dbVersion = 1;
+  private dbVersion = 2; // Increment version to add new stores
   private db: IDBDatabase | null = null;
   private isPermanentlyBroken = false; // Flag to stop retrying corrupted DB
 
@@ -96,6 +109,19 @@ export class IndexedDBService {
       const settingsStore = db.createObjectStore('settings', { keyPath: 'key' });
       console.log('📦 IndexedDB: Created settings store');
     }
+
+    // Companies store
+    if (!db.objectStoreNames.contains('companies')) {
+      const companiesStore = db.createObjectStore('companies', { keyPath: 'id' });
+      console.log('📦 IndexedDB: Created companies store');
+    }
+
+    // Stores store
+    if (!db.objectStoreNames.contains('stores')) {
+      const storesStore = db.createObjectStore('stores', { keyPath: 'id' });
+      storesStore.createIndex('companyId', 'companyId', { unique: false });
+      console.log('📦 IndexedDB: Created stores store');
+    }
   }
 
   async initDB(): Promise<void> {
@@ -141,6 +167,7 @@ export class IndexedDBService {
       request.onsuccess = () => {
         this.db = request.result;
         console.log('📦 IndexedDB: Database opened successfully');
+        console.log('📦 IndexedDB: Available object stores:', Array.from(this.db.objectStoreNames));
         
         // Set up error handler for the database
         this.db.onerror = (event) => {
@@ -826,11 +853,300 @@ export class IndexedDBService {
     }
   }
 
+  // Companies and Stores Methods
+  async saveCompanies(companies: OfflineCompany[]): Promise<void> {
+    console.log('💾 saveCompanies called with:', companies.length, 'companies');
+    console.log('💾 Companies data:', JSON.stringify(companies, null, 2));
+    
+    if (!this.db) await this.initDB();
+    if (!this.db) {
+      console.error('📦 IndexedDB: Database not initialized, cannot save companies');
+      return;
+    }
+    
+    console.log('💾 Database initialized, creating transaction...');
+
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction(['companies'], 'readwrite');
+      const store = transaction.objectStore('companies');
+
+      transaction.oncomplete = () => {
+        console.log(`📦 IndexedDB: Transaction complete - saved ${companies.length} companies`);
+        resolve();
+      };
+      
+      transaction.onerror = () => {
+        console.error('📦 IndexedDB: Transaction error saving companies:', transaction.error);
+        reject(transaction.error);
+      };
+
+      console.log('💾 Adding companies to store...');
+      for (const company of companies) {
+        console.log('💾 Putting company:', company.id, company.name);
+        // Normalize company shape to match Firestore document structure
+        // Helper to convert various timestamp shapes into a JS Date or undefined
+        const toDateValue = (val: any): Date | undefined => {
+          if (!val && val !== 0) return undefined;
+          if (val instanceof Date) return val;
+          if (val && typeof val.toDate === 'function') {
+            try { return val.toDate(); } catch (e) { /* fallthrough */ }
+          }
+          if (typeof val === 'string') {
+            const d = new Date(val);
+            return isNaN(d.getTime()) ? undefined : d;
+          }
+          // Firestore may serialize timestamps to { seconds, nanoseconds }
+          if (val && typeof val.seconds === 'number') {
+            return new Date(val.seconds * 1000 + Math.floor((val.nanoseconds || 0) / 1000000));
+          }
+          // Fallback: try to coerce number-like values
+          if (typeof val === 'number') {
+            const d = new Date(val);
+            return isNaN(d.getTime()) ? undefined : d;
+          }
+          return undefined;
+        };
+
+        // Prefer several possible name fields (company.name, company.company?.name,
+        // companyName, displayName) before falling back to the document id.
+        // Resolve name but do NOT fall back to the document id.
+        const resolvedName = (company as any).name ?? (company as any).company?.name ?? (company as any).companyName ?? (company as any).displayName ?? undefined;
+        const resolvedSlug = (company as any).slug ?? (resolvedName ? String(resolvedName).toLowerCase().replace(/[^a-z0-9]+/g, '-') : undefined);
+
+        if (!resolvedName) {
+          console.warn('💾 IndexedDB: company missing a name field; storing without name for id:', company.id);
+        }
+
+        const normalized = {
+          id: company.id,
+          name: resolvedName,
+          slug: resolvedSlug,
+          ownerUid: (company as any).ownerUid || (company as any).owner || '',
+          address: (company as any).address || undefined,
+          email: (company as any).email || undefined,
+          logoUrl: (company as any).logoUrl || undefined,
+          phone: (company as any).phone || undefined,
+          plan: (company as any).plan || undefined,
+          taxId: (company as any).taxId || undefined,
+          website: (company as any).website || undefined,
+          createdAt: toDateValue(company.createdAt) || new Date(),
+          updatedAt: toDateValue(company.updatedAt) || new Date(),
+          lastSync: new Date()
+        } as OfflineCompany;
+        const request = store.put(normalized);
+        request.onsuccess = () => {
+          console.log('✅ Successfully added company:', company.id);
+        };
+        request.onerror = () => {
+          console.error('❌ Error saving company:', company.id, request.error);
+        };
+      }
+      console.log('💾 All companies added to transaction, waiting for oncomplete...');
+    });
+  }
+
+  // Deprecated: company reads should come from `CompanyService.getCompanyById` so
+  // that the application can centralize fetch + offline persistence logic.
+  // The explicit IndexedDB-level getter was removed to avoid duplicate logic.
+
+  async getAllCompanies(): Promise<OfflineCompany[]> {
+    if (!this.db) await this.initDB();
+
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction(['companies'], 'readonly');
+      const store = transaction.objectStore('companies');
+      const request = store.getAll();
+
+      request.onsuccess = () => resolve(request.result || []);
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  /**
+   * Export companies as JSON-serializable objects (dates converted to ISO strings).
+   * Useful for debugging or diagnostics.
+   */
+  async exportAllCompanies(): Promise<any[]> {
+    const companies = await this.getAllCompanies();
+    const toISOStringSafe = (val: any) => {
+      if (!val && val !== 0) return val;
+      if (val instanceof Date) return val.toISOString();
+      if (val && typeof val.toDate === 'function') {
+        try { return val.toDate().toISOString(); } catch (e) { /* fallthrough */ }
+      }
+      if (typeof val === 'string') {
+        const d = new Date(val);
+        return isNaN(d.getTime()) ? val : d.toISOString();
+      }
+      if (val && typeof val.seconds === 'number') {
+        const d = new Date(val.seconds * 1000 + Math.floor((val.nanoseconds || 0) / 1000000));
+        return d.toISOString();
+      }
+      if (typeof val === 'number') {
+        const d = new Date(val);
+        return isNaN(d.getTime()) ? val : d.toISOString();
+      }
+      return val;
+    };
+
+    return companies.map(c => ({
+      id: c.id,
+      name: (c as any).name,
+      slug: (c as any).slug,
+      ownerUid: (c as any).ownerUid,
+      address: (c as any).address,
+      email: (c as any).email,
+      logoUrl: (c as any).logoUrl,
+      phone: (c as any).phone,
+      plan: (c as any).plan,
+      taxId: (c as any).taxId,
+      website: (c as any).website,
+      createdAt: toISOStringSafe((c as any).createdAt),
+      updatedAt: toISOStringSafe((c as any).updatedAt),
+      lastSync: toISOStringSafe((c as any).lastSync)
+    }));
+  }
+
+  /**
+   * Normalize existing companies in IndexedDB to match the latest Company schema.
+   * This will update each record to include missing fields (address, plan, taxId, etc.),
+   * normalize timestamps to Date, and set a fresh lastSync.
+   * Returns the number of records updated.
+   */
+  async normalizeExistingCompanies(): Promise<number> {
+    if (!this.db) await this.initDB();
+    if (!this.db) {
+      console.warn('📦 IndexedDB: Database not initialized, cannot migrate companies');
+      return 0;
+    }
+
+    const companies = await this.getAllCompanies();
+    if (!companies || companies.length === 0) return 0;
+
+    return new Promise<number>((resolve, reject) => {
+      try {
+        const transaction = this.db!.transaction(['companies'], 'readwrite');
+        const store = transaction.objectStore('companies');
+        let updated = 0;
+
+        transaction.oncomplete = () => {
+          console.log(`📦 IndexedDB: normalizeExistingCompanies complete - updated ${updated} companies`);
+          resolve(updated);
+        };
+
+        transaction.onerror = () => {
+          console.error('📦 IndexedDB: Transaction error during normalizeExistingCompanies', transaction.error);
+          reject(transaction.error);
+        };
+
+        for (const c of companies) {
+          try {
+            const normalized = {
+              id: c.id,
+              name: (c as any).name || c.id,
+              slug: (c as any).slug || ((c as any).name ? String((c as any).name).toLowerCase().replace(/[^a-z0-9]+/g, '-') : c.id),
+              ownerUid: (c as any).ownerUid || (c as any).owner || '',
+              address: (c as any).address || undefined,
+              email: (c as any).email || undefined,
+              logoUrl: (c as any).logoUrl || undefined,
+              phone: (c as any).phone || undefined,
+              plan: (c as any).plan || undefined,
+              taxId: (c as any).taxId || undefined,
+              website: (c as any).website || undefined,
+              createdAt: c.createdAt instanceof Date ? c.createdAt : new Date((c as any).createdAt as any),
+              updatedAt: c.updatedAt ? (c.updatedAt instanceof Date ? c.updatedAt : new Date((c as any).updatedAt as any)) : new Date(),
+              lastSync: new Date()
+            } as OfflineCompany;
+
+            const req = store.put(normalized);
+            req.onsuccess = () => { updated++; };
+            req.onerror = () => { console.error('📦 IndexedDB: Error normalizing company', c.id, req.error); };
+          } catch (err) {
+            console.error('📦 IndexedDB: Exception normalizing company', c.id, err);
+          }
+        }
+      } catch (err) {
+        console.error('📦 IndexedDB: Exception starting normalizeExistingCompanies transaction', err);
+        reject(err);
+      }
+    });
+  }
+
+  async saveStores(stores: OfflineStore[]): Promise<void> {
+    if (!this.db) await this.initDB();
+    if (!this.db) {
+      console.error('📦 IndexedDB: Database not initialized, cannot save stores');
+      return;
+    }
+
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction(['stores'], 'readwrite');
+      const store = transaction.objectStore('stores');
+
+      transaction.oncomplete = () => {
+        console.log(`📦 IndexedDB: Transaction complete - saved ${stores.length} stores`);
+        resolve();
+      };
+      
+      transaction.onerror = () => {
+        console.error('📦 IndexedDB: Transaction error saving stores:', transaction.error);
+        reject(transaction.error);
+      };
+
+      for (const storeData of stores) {
+        const request = store.put({ ...storeData, lastSync: new Date() });
+        request.onerror = () => {
+          console.error('📦 IndexedDB: Error saving store:', storeData.id, request.error);
+        };
+      }
+    });
+  }
+
+  async getStoreById(id: string): Promise<OfflineStore | null> {
+    if (!this.db) await this.initDB();
+
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction(['stores'], 'readonly');
+      const store = transaction.objectStore('stores');
+      const request = store.get(id);
+
+      request.onsuccess = () => resolve(request.result || null);
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  async getAllStores(): Promise<OfflineStore[]> {
+    if (!this.db) await this.initDB();
+
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction(['stores'], 'readonly');
+      const store = transaction.objectStore('stores');
+      const request = store.getAll();
+
+      request.onsuccess = () => resolve(request.result || []);
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  async getStoresByCompanyId(companyId: string): Promise<OfflineStore[]> {
+    if (!this.db) await this.initDB();
+
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction(['stores'], 'readonly');
+      const store = transaction.objectStore('stores');
+      const index = store.index('companyId');
+      const request = index.getAll(companyId);
+
+      request.onsuccess = () => resolve(request.result || []);
+      request.onerror = () => reject(request.error);
+    });
+  }
+
   // Utility Methods
   async clearAllData(): Promise<void> {
     if (!this.db) await this.initDB();
 
-    const storeNames = ['userData', 'products', 'orders', 'settings'];
+    const storeNames = ['userData', 'products', 'orders', 'settings', 'companies', 'stores'];
     
     for (const storeName of storeNames) {
       await new Promise<void>((resolve, reject) => {
@@ -853,8 +1169,8 @@ export class IndexedDBService {
   async clearAllDataPreserveOfflineAuth(): Promise<void> {
     if (!this.db) await this.initDB();
 
-    // Clear userData, products, orders (but preserve settings keys that start with 'offlineAuth_')
-    const storeNames = ['userData', 'products', 'orders'];
+    // Clear userData, products, orders, companies, stores (but preserve settings keys that start with 'offlineAuth_')
+    const storeNames = ['userData', 'products', 'orders', 'companies', 'stores'];
     for (const storeName of storeNames) {
       await new Promise<void>((resolve, reject) => {
         const transaction = this.db!.transaction([storeName], 'readwrite');

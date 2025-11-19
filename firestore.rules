@@ -149,11 +149,11 @@ service cloud.firestore {
       allow read, create, update, delete: if isAuthenticated();
     }
     
-    // Companies Collection - Users can only access their own companies
-    // Allow migration: if uid doesn't exist, allow authenticated users to read
+    // Companies Collection - Users can read companies they have permission for
+    // Allow read for authenticated users (permissions are checked in user document)
+    // Allow write only for owned companies
     match /companies/{companyId} {
-      allow read: if isAuthenticated() && 
-                  (resource == null || resource.data.uid == request.auth.uid || !('uid' in resource.data));
+      allow read: if isAuthenticated();
       allow create: if isAuthenticated() && isCreatingOwnDocument();
       allow update: if isAuthenticated() && 
                     (isOwner(resource) || (!('uid' in resource.data) && request.resource.data.uid == request.auth.uid));

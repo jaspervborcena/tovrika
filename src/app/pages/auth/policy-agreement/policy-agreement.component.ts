@@ -137,16 +137,37 @@ export class PolicyAgreementComponent implements OnInit {
       }
     });
     
-    // Check if user is authenticated
-    const currentAuthUser = this.authService.getCurrentUser();
-    console.log('🚀 POLICY AGREEMENT: Current auth user:', currentAuthUser?.email);
+    // Wait for user authentication to be fully loaded
+    // This handles race condition where navigation happens before auth state is fully set
+    let currentAuthUser = this.authService.getCurrentUser();
+    console.log('🚀 POLICY AGREEMENT: Initial auth user check:', currentAuthUser?.email);
     
-    // If no current auth user at all, redirect to login
     if (!currentAuthUser) {
-      console.warn('⚠️ Policy Agreement: User not authenticated, redirecting to login');
+      console.log('🚀 POLICY AGREEMENT: User not immediately available, waiting for auth state...');
+      // Wait up to 3 seconds for auth state to be set
+      const maxWaitTime = 3000;
+      const checkInterval = 100;
+      let elapsed = 0;
+      
+      while (!currentAuthUser && elapsed < maxWaitTime) {
+        await new Promise(resolve => setTimeout(resolve, checkInterval));
+        elapsed += checkInterval;
+        currentAuthUser = this.authService.getCurrentUser();
+        if (currentAuthUser) {
+          console.log('🚀 POLICY AGREEMENT: User authenticated after waiting:', currentAuthUser.email);
+          break;
+        }
+      }
+    }
+    
+    // If still no current auth user after waiting, redirect to login
+    if (!currentAuthUser) {
+      console.warn('⚠️ Policy Agreement: User not authenticated after waiting, redirecting to login');
       await this.router.navigate(['/login']);
       return;
     }
+    
+    console.log('🚀 POLICY AGREEMENT: User authenticated:', currentAuthUser.email);
 
     // User is authenticated, now ensure IndexedDB is synchronized
     try {
