@@ -14,6 +14,7 @@ import {
   Timestamp,
   writeBatch
 } from '@angular/fire/firestore';
+import { toDateValue } from '../core/utils/date-utils';
 import { AuthService } from './auth.service';
 import { OfflineDocumentService } from '../core/services/offline-document.service';
 import { Device } from '../interfaces/device.interface';
@@ -99,7 +100,7 @@ export class DeviceService {
           minNumber: data['minNumber'],
           birPermitNo: data['birPermitNo'],
           atpOrOcn: data['atpOrOcn'],
-          permitDateIssued: data['permitDateIssued']?.toDate() || new Date(),
+          permitDateIssued: toDateValue(data['permitDateIssued']) || new Date(),
           vatRegistrationType: data['vatRegistrationType'] || 'Non-VAT',
           vatRate: data['vatRate'],
           receiptType: data['receiptType'] || '',
@@ -107,9 +108,9 @@ export class DeviceService {
           status: data['status'] || 'pending',
           isLocked: data['isLocked'] || false,
           approvedBy: data['approvedBy'],
-          approvedAt: data['approvedAt']?.toDate(),
-          createdAt: data['createdAt']?.toDate() || new Date(),
-          updatedAt: data['updatedAt']?.toDate() || new Date()
+          approvedAt: toDateValue(data['approvedAt']) || undefined,
+          createdAt: toDateValue(data['createdAt']) || new Date(),
+          updatedAt: toDateValue(data['updatedAt']) || new Date()
         } as Device;
       });
 
@@ -153,7 +154,7 @@ export class DeviceService {
           minNumber: data['minNumber'],
           birPermitNo: data['birPermitNo'],
           atpOrOcn: data['atpOrOcn'],
-          permitDateIssued: data['permitDateIssued']?.toDate() || new Date(),
+          permitDateIssued: toDateValue(data['permitDateIssued']) || new Date(),
           vatRegistrationType: data['vatRegistrationType'] || 'Non-VAT',
           vatRate: data['vatRate'],
           receiptType: data['receiptType'] || '',
@@ -161,9 +162,9 @@ export class DeviceService {
           status: data['status'] || 'pending',
           isLocked: data['isLocked'] || false,
           approvedBy: data['approvedBy'],
-          approvedAt: data['approvedAt']?.toDate(),
-          createdAt: data['createdAt']?.toDate() || new Date(),
-          updatedAt: data['updatedAt']?.toDate() || new Date()
+          approvedAt: toDateValue(data['approvedAt']) || undefined,
+          createdAt: toDateValue(data['createdAt']) || new Date(),
+          updatedAt: toDateValue(data['updatedAt']) || new Date()
         } as Device;
       });
 
@@ -202,7 +203,7 @@ export class DeviceService {
         minNumber: data['minNumber'],
         birPermitNo: data['birPermitNo'],
         atpOrOcn: data['atpOrOcn'],
-        permitDateIssued: data['permitDateIssued']?.toDate() || new Date(),
+        permitDateIssued: toDateValue(data['permitDateIssued']) || new Date(),
         vatRegistrationType: data['vatRegistrationType'] || 'Non-VAT',
         vatRate: data['vatRate'],
         receiptType: data['receiptType'] || '',
@@ -210,9 +211,9 @@ export class DeviceService {
         status: data['status'] || 'pending',
         isLocked: data['isLocked'] || false,
         approvedBy: data['approvedBy'],
-        approvedAt: data['approvedAt']?.toDate(),
-        createdAt: data['createdAt']?.toDate() || new Date(),
-        updatedAt: data['updatedAt']?.toDate() || new Date()
+        approvedAt: toDateValue(data['approvedAt']) || undefined,
+        createdAt: toDateValue(data['createdAt']) || new Date(),
+        updatedAt: toDateValue(data['updatedAt']) || new Date()
       } as Device;
     } catch (error) {
       console.error('❌ Error getting device:', error);
@@ -259,19 +260,19 @@ export class DeviceService {
         minNumber: data['minNumber'],
         birPermitNo: data['birPermitNo'],
         atpOrOcn: data['atpOrOcn'],
-        permitDateIssued: data['permitDateIssued']?.toDate() || new Date(),
+        permitDateIssued: toDateValue(data['permitDateIssued']) || new Date(),
         vatRegistrationType: data['vatRegistrationType'] || 'VAT-registered',
         vatRate: data['vatRate'] || 12.0,
         receiptType: data['receiptType'] || 'POS Receipt',
         validityNotice: data['validityNotice'] || 'This invoice/receipt shall be valid for five (5) years from the date of the permit to use.',
         status: data['status'] || 'pending',
-        lastUsedAt: data['lastUsedAt']?.toDate(),
+        lastUsedAt: toDateValue(data['lastUsedAt']) || undefined,
         isOnline: data['isOnline'],
         isLocked: data['isLocked'] || false,
         approvedBy: data['approvedBy'],
-        approvedAt: data['approvedAt']?.toDate(),
-        createdAt: data['createdAt']?.toDate() || new Date(),
-        updatedAt: data['updatedAt']?.toDate() || new Date()
+        approvedAt: toDateValue(data['approvedAt']) || undefined,
+        createdAt: toDateValue(data['createdAt']) || new Date(),
+        updatedAt: toDateValue(data['updatedAt']) || new Date()
       } as Device;
     } catch (error) {
       console.error('❌ Error getting device by terminalId:', error);

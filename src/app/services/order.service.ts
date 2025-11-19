@@ -9,6 +9,7 @@ import { LoggerService } from '../core/services/logger.service';
 import { FirestoreSecurityService } from '../core/services/firestore-security.service';
 import { OfflineDocumentService } from '../core/services/offline-document.service';
 import { IndexedDBService } from '../core/services/indexeddb.service';
+import { toDateValue } from '../core/utils/date-utils';
 // Client-side logging is currently disabled for this service.
 // Logging will be handled server-side (Cloud Function) by passing the authenticated UID.
 
@@ -47,7 +48,7 @@ export class OrderService {
       // Invoice Information
       invoiceNumber: data.invoiceNumber,
       logoUrl: data.logoUrl,
-      date: data.date?.toDate ? data.date.toDate() : data.createdAt?.toDate(),
+      date: toDateValue(data.date) ?? toDateValue(data.createdAt) ?? new Date(),
       
       // Financial Calculations
       vatableSales: data.vatableSales || 0,
@@ -67,7 +68,7 @@ export class OrderService {
       inclusiveSerialNumber: data.inclusiveSerialNumber || '000001-000999',
       
       // System Fields
-      createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(),
+      createdAt: toDateValue(data.createdAt) ?? new Date(),
       message: data.message || 'Thank you! See you again!'
     } as Order;
   }
@@ -116,8 +117,8 @@ export class OrderService {
           const fallbackSnapshot = await getDocs(fallbackQuery);
           const results = fallbackSnapshot.docs.map((d) => this.transformDoc(d));
           results.sort((a, b) => {
-            const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-            const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+            const dateA = toDateValue(a.createdAt)?.getTime() || 0;
+            const dateB = toDateValue(b.createdAt)?.getTime() || 0;
             return dateB - dateA; // Descending (newest first)
           });
           return results;
@@ -450,7 +451,7 @@ export class OrderService {
   this.logger.info('Any orders in Firebase', { area: 'orders', payload: { count: anyOrdersSnapshot.docs.length } });
       
       if (anyOrdersSnapshot.docs.length > 0) {
-        this.logger.debug('Sample orders', { area: 'orders', payload: anyOrdersSnapshot.docs.map(doc => ({ id: doc.id, storeId: doc.data()['storeId'], createdAt: doc.data()['createdAt']?.toDate?.() || doc.data()['createdAt'] })) });
+        this.logger.debug('Sample orders', { area: 'orders', payload: anyOrdersSnapshot.docs.map(doc => ({ id: doc.id, storeId: doc.data()['storeId'], createdAt: toDateValue(doc.data()['createdAt']) || doc.data()['createdAt'] })) });
       }
 
       // Now check for orders with this storeId specifically and within date range
@@ -508,7 +509,7 @@ export class OrderService {
         
         // Filter by date range on client side as fallback
         const filteredOrders = orders.filter(order => {
-          const orderDate = new Date(order.createdAt);
+          const orderDate = toDateValue(order.createdAt) ?? new Date(order.createdAt);
           return orderDate >= startDate && orderDate <= endDate;
         });
         
@@ -523,7 +524,7 @@ export class OrderService {
         const saved: any[] = await this.indexedDb.getSetting(`orders_snapshot_${storeId}`);
         if (saved && Array.isArray(saved)) {
           const filtered = saved.filter(order => {
-            const orderDate = new Date(order.createdAt);
+            const orderDate = toDateValue(order.createdAt) ?? new Date(order.createdAt);
             return orderDate >= startDate && orderDate <= endDate;
           });
           if (filtered.length > 0) return filtered;
