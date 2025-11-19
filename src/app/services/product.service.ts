@@ -441,6 +441,17 @@ export class ProductService implements OnDestroy {
     try {
       console.log('🎯 Setting up Firestore real-time listener...', { companyId, storeId });
       
+      // CRITICAL: Verify auth state before creating query
+      const currentUser = this.authService.getCurrentUser();
+      if (!currentUser) {
+        throw new Error('Cannot setup listener - user not authenticated');
+      }
+      
+      console.log('✅ Auth verified for listener setup:', {
+        userEmail: currentUser.email,
+        uid: currentUser.uid
+      });
+      
       // Ensure we clean up any existing listener first
       this.unsubscribeFromRealTimeUpdates();
       
@@ -796,7 +807,15 @@ export class ProductService implements OnDestroy {
     return new Promise((resolve, reject) => {
       const currentUser = this.authService.getCurrentUser();
       const currentPermission = this.authService.getCurrentPermission();
+      
+      console.log('🔐 waitForAuth - checking auth state:', {
+        hasUser: !!currentUser,
+        hasPermission: !!currentPermission,
+        companyId: currentPermission?.companyId
+      });
+
       if (currentUser && currentPermission?.companyId) {
+        console.log('✅ Auth already available:', { companyId: currentPermission.companyId });
         resolve(currentPermission.companyId);
         return;
       }
@@ -806,14 +825,23 @@ export class ProductService implements OnDestroy {
       const checkAuth = () => {
         const user = this.authService.getCurrentUser();
         const permission = this.authService.getCurrentPermission();
+        
+        console.log(`🔄 waitForAuth attempt ${attempts + 1}:`, {
+          hasUser: !!user,
+          hasPermission: !!permission,
+          companyId: permission?.companyId
+        });
+
         if (user && permission?.companyId) {
+          console.log('✅ Auth became available:', { companyId: permission.companyId });
           resolve(permission.companyId);
           return;
         }
         
         attempts++;
         if (attempts >= 50) { // 5 seconds with 100ms intervals
-          reject(new Error('Authentication timeout'));
+          console.error('❌ Authentication timeout after 5 seconds');
+          reject(new Error('Authentication timeout - user or permission not available'));
           return;
         }
         

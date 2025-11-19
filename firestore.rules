@@ -19,14 +19,26 @@ service cloud.firestore {
 
     // ===== MAIN COLLECTIONS WITH UID SECURITY =====
     
-    // Products Collection - Read allowed for authenticated users, write requires UID
+    // Products Collection - UID-based security
     match /products/{productId} {
-      allow read: if isAuthenticated();  // Allow reading for any authenticated user
-      allow create: if isAuthenticated() && isCreatingOwnDocument();
+      // Allow read if user is authenticated AND either:
+      // 1. Product has no uid field (legacy data), OR
+      // 2. Product's uid matches the authenticated user's uid
+      allow read: if isAuthenticated() && 
+                  (!('uid' in resource.data) || resource.data.uid == request.auth.uid);
+      
+      // Allow create if user is authenticated and sets their own uid
+      allow create: if isAuthenticated() && 
+                    request.resource.data.uid == request.auth.uid;
+      
+      // Allow update if user owns the product
       allow update: if isAuthenticated() && 
                     resource.data.uid == request.auth.uid && 
                     request.resource.data.uid == request.auth.uid;
-      allow delete: if isAuthenticated() && isOwner(resource);
+      
+      // Allow delete if user owns the product
+      allow delete: if isAuthenticated() && 
+                    resource.data.uid == request.auth.uid;
     }
 
     // Product Inventory Collection - Read allowed for authenticated users, write requires UID
@@ -137,11 +149,11 @@ service cloud.firestore {
       allow read, create, update, delete: if isAuthenticated();
     }
     
-    // Companies Collection - Users can only access their own companies
-    // Allow migration: if uid doesn't exist, allow authenticated users to read
+    // Companies Collection - Users can read companies they have permission for
+    // Allow read for authenticated users (permissions are checked in user document)
+    // Allow write only for owned companies
     match /companies/{companyId} {
-      allow read: if isAuthenticated() && 
-                  (resource == null || resource.data.uid == request.auth.uid || !('uid' in resource.data));
+      allow read: if isAuthenticated();
       allow create: if isAuthenticated() && isCreatingOwnDocument();
       allow update: if isAuthenticated() && 
                     (isOwner(resource) || (!('uid' in resource.data) && request.resource.data.uid == request.auth.uid));

@@ -15,6 +15,7 @@ import {
   deleteDoc,
   writeBatch
 } from '@angular/fire/firestore';
+import { toDateValue } from '../core/utils/date-utils';
 import { AuthService } from './auth.service';
 import { FirestoreSecurityService } from '../core/services/firestore-security.service';
 import { OfflineDocumentService } from '../core/services/offline-document.service';
@@ -95,10 +96,10 @@ export class NotificationService {
         const notification: NotificationData = {
           id: doc.id,
           ...data,
-          createdAt: data['createdAt']?.toDate() || new Date(),
-          readAt: data['readAt']?.toDate(),
-          expiresAt: data['expiresAt']?.toDate(),
-          emailSentAt: data['emailSentAt']?.toDate()
+          createdAt: toDateValue(data['createdAt']) || new Date(),
+          readAt: toDateValue(data['readAt']) || undefined,
+          expiresAt: toDateValue(data['expiresAt']) || undefined,
+          emailSentAt: toDateValue(data['emailSentAt']) || undefined
         } as NotificationData;
 
         // Filter based on recipient logic

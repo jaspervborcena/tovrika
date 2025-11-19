@@ -1,0 +1,142 @@
+<!-- Account Settings Page with Shared Header -->
+<app-header></app-header>
+<app-content-layout>
+  <div class="account-settings-container">
+    <!-- Page Header -->
+    <div class="page-header">
+      <h1 class="page-title">Account Settings</h1>
+      <p class="page-subtitle">
+        View your account information and user profile details
+      </p>
+    </div>
+
+    @if (currentUser()) {
+      <div class="settings-content">
+        <!-- Basic Information Section -->
+        <div class="info-section">
+          <h2 class="section-title">Basic Information</h2>
+          <div class="info-grid">
+            <div class="info-item">
+              <label class="info-label">Display Name</label>
+              <div class="info-value">{{ currentUser()?.displayName || 'N/A' }}</div>
+            </div>
+
+            <div class="info-item">
+              <label class="info-label">Email</label>
+              <div class="info-value">{{ currentUser()?.email || 'N/A' }}</div>
+            </div>
+
+            <div class="info-item">
+              <label class="info-label">User ID</label>
+              <div class="info-value code">{{ currentUser()?.uid || 'N/A' }}</div>
+            </div>
+
+            <div class="info-item">
+              <label class="info-label">User Code</label>
+              <div class="info-value code">{{ currentUser()?.userCode || 'N/A' }}</div>
+            </div>
+
+            <div class="info-item">
+              <label class="info-label">PIN</label>
+              @if (isEditingPin) {
+                <div class="pin-edit-container">
+                  <input 
+                    type="text" 
+                    [(ngModel)]="editedPin" 
+                    (input)="onPinInput($event)"
+                    class="info-input pin-input"
+                    placeholder="Enter 6-digit PIN"
+                    maxlength="6"
+                    pattern="[0-9]*"
+                    inputmode="numeric"
+                  />
+                  @if (pinError) {
+                    <span class="pin-error">{{ pinError }}</span>
+                  }
+                  <div class="pin-actions">
+                    <button type="button" (click)="savePin()" class="btn-save-pin" [disabled]="isSaving || pinError">
+                      @if (isSaving) {
+                        Saving...
+                      } @else {
+                        Save
+                      }
+                    </button>
+                    <button type="button" (click)="cancelEditingPin()" class="btn-cancel-pin" [disabled]="isSaving">
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              } @else {
+                <div class="pin-display">
+                  <div class="info-value code">{{ currentUser()?.pin || 'Not set' }}</div>
+                  <button type="button" (click)="startEditingPin()" class="btn-edit-pin">
+                    <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                    </svg>
+                    Edit
+                  </button>
+                </div>
+              }
+            </div>
+
+            <div class="info-item">
+              <label class="info-label">Status</label>
+              <div class="info-value">
+                <span class="status-badge" [class.active]="currentUser()?.status === 'active'">
+                  {{ currentUser()?.status || 'N/A' }}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Permissions Section -->
+        <div class="info-section">
+          <div class="section-header">
+            <div>
+              <h2 class="section-title">Permissions</h2>
+            </div>
+          </div>
+          
+          @if (permissionsDisplay() && permissionsDisplay().length > 0) {
+            <div class="permissions-list">
+              @for (permission of permissionsDisplay(); track $index) {
+                <div class="permission-card">
+                  <div class="permission-header">
+                    <span class="permission-index">{{ $index + 1 }}</span>
+                  </div>
+                  <div class="permission-details">
+                    <div class="permission-item">
+                      <label class="info-label">Company</label>
+                      <div class="info-value">{{ permission.companyName }}</div>
+                    </div>
+
+                    <div class="permission-item">
+                      <label class="info-label">Role ID</label>
+                      <div class="info-value code">{{ permission.roleId }}</div>
+                    </div>
+
+                    <div class="permission-item">
+                      <label class="info-label">Store</label>
+                      @if (permission.storeName) {
+                        <div class="info-value">{{ permission.storeName }}</div>
+                      } @else {
+                        <div class="info-value">N/A</div>
+                      }
+                    </div>
+                  </div>
+                </div>
+              }
+            </div>
+          } @else {
+            <p class="empty-state">No permissions assigned</p>
+          }
+        </div>
+      </div>
+    } @else {
+      <div class="loading-state">
+        <p>Loading account information...</p>
+      </div>
+    }
+  </div>
+</app-content-layout>

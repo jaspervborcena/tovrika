@@ -2,12 +2,14 @@ import { Injectable, inject } from '@angular/core';
 import { environment } from '../../environments/environment';
 import { HttpClient } from '@angular/common/http';
 import { Firestore, collection, query, where, getDocs, Timestamp, orderBy, limit } from '@angular/fire/firestore';
+import { User } from '@angular/fire/auth';
 import { Order } from '../interfaces/pos.interface';
 import { AuthService } from './auth.service';
 import { LoggerService } from '../core/services/logger.service';
 import { FirestoreSecurityService } from '../core/services/firestore-security.service';
 import { OfflineDocumentService } from '../core/services/offline-document.service';
 import { IndexedDBService } from '../core/services/indexeddb.service';
+import { toDateValue } from '../core/utils/date-utils';
 // Client-side logging is currently disabled for this service.
 // Logging will be handled server-side (Cloud Function) by passing the authenticated UID.
 
@@ -46,7 +48,7 @@ export class OrderService {
       // Invoice Information
       invoiceNumber: data.invoiceNumber,
       logoUrl: data.logoUrl,
-      date: data.date?.toDate ? data.date.toDate() : data.createdAt?.toDate(),
+      date: toDateValue(data.date) ?? toDateValue(data.createdAt) ?? new Date(),
       
       // Financial Calculations
       vatableSales: data.vatableSales || 0,
@@ -66,7 +68,7 @@ export class OrderService {
       inclusiveSerialNumber: data.inclusiveSerialNumber || '000001-000999',
       
       // System Fields
-      createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(),
+      createdAt: toDateValue(data.createdAt) ?? new Date(),
       message: data.message || 'Thank you! See you again!'
     } as Order;
   }
@@ -115,8 +117,8 @@ export class OrderService {
           const fallbackSnapshot = await getDocs(fallbackQuery);
           const results = fallbackSnapshot.docs.map((d) => this.transformDoc(d));
           results.sort((a, b) => {
-            const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-            const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+            const dateA = toDateValue(a.createdAt)?.getTime() || 0;
+            const dateB = toDateValue(b.createdAt)?.getTime() || 0;
             return dateB - dateA; // Descending (newest first)
           });
           return results;
@@ -449,7 +451,7 @@ export class OrderService {
   this.logger.info('Any orders in Firebase', { area: 'orders', payload: { count: anyOrdersSnapshot.docs.length } });
       
       if (anyOrdersSnapshot.docs.length > 0) {
-        this.logger.debug('Sample orders', { area: 'orders', payload: anyOrdersSnapshot.docs.map(doc => ({ id: doc.id, storeId: doc.data()['storeId'], createdAt: doc.data()['createdAt']?.toDate?.() || doc.data()['createdAt'] })) });
+        this.logger.debug('Sample orders', { area: 'orders', payload: anyOrdersSnapshot.docs.map(doc => ({ id: doc.id, storeId: doc.data()['storeId'], createdAt: toDateValue(doc.data()['createdAt']) || doc.data()['createdAt'] })) });
       }
 
       // Now check for orders with this storeId specifically and within date range
@@ -507,7 +509,7 @@ export class OrderService {
         
         // Filter by date range on client side as fallback
         const filteredOrders = orders.filter(order => {
-          const orderDate = new Date(order.createdAt);
+          const orderDate = toDateValue(order.createdAt) ?? new Date(order.createdAt);
           return orderDate >= startDate && orderDate <= endDate;
         });
         
@@ -522,7 +524,7 @@ export class OrderService {
         const saved: any[] = await this.indexedDb.getSetting(`orders_snapshot_${storeId}`);
         if (saved && Array.isArray(saved)) {
           const filtered = saved.filter(order => {
-            const orderDate = new Date(order.createdAt);
+            const orderDate = toDateValue(order.createdAt) ?? new Date(order.createdAt);
             return orderDate >= startDate && orderDate <= endDate;
           });
           if (filtered.length > 0) return filtered;
@@ -578,6 +580,95 @@ export class OrderService {
       return items;
     } catch (e) {
       this.logger.warn('Failed to fetch orderDetails for orderId', { area: 'orders', payload: { orderId, error: String(e) } });
+      return [];
+    }
+  }
+
+  /**
+   * Fetch order selling tracking entries for a given orderId from the Cloud Function.
+   * Uses the manage_item_status endpoint which joins ordersSellingTracking with products table.
+   * Returns array of tracking documents with proper product information.
+   */
+  public async getOrderSellingTracking(orderId: string): Promise<any[]> {
+    if (!orderId) return [];
+    try {
+      const currentUser = this.authService.getCurrentUser();
+      if (!currentUser) {
+        console.warn('No authenticated user for manage_item_status request');
+        return [];
+      }
+
+      // Get the current store ID from auth service permissions
+      const currentPermission = this.authService.getCurrentPermission();
+      const currentStoreId = currentPermission?.storeId;
+      if (!currentStoreId) {
+        console.warn('No current store ID available for manage_item_status request');
+        return [];
+      }
+
+      console.log('🚀 Calling manage_item_status Cloud Function:', {
+        orderId,
+        storeId: currentStoreId
+      });
+
+      // Get the ID token for authorization
+      const idToken = await this.authService.getFirebaseIdToken();
+      if (!idToken) {
+        throw new Error('Failed to get Firebase ID token for authentication');
+      }
+
+      // Call the Cloud Function
+      const response = await fetch(`${environment.api.baseUrl}/manage_item_status`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${idToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          storeId: currentStoreId,
+          orderId: orderId
+        })
+      });
+
+      console.log('📡 Cloud Function response status:', response.status, response.statusText);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('❌ Cloud Function error response:', errorText);
+        throw new Error(`Cloud Function request failed: ${response.status} ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      console.log('📦 Cloud Function response data:', data);
+      
+      // The Cloud Function returns: { success: true, storeId, orderId, count, rows: [...] }
+      // Each row contains: productName, SKU, quantity, discountType, discount, vat, isVatApplicable, isVatExempt, total, updatedAt, status
+      let results = [];
+      
+      if (Array.isArray(data)) {
+        // Direct array response
+        results = data;
+      } else if (data.rows && Array.isArray(data.rows)) {
+        // Response with rows property (current format)
+        results = data.rows;
+      } else if (data.results && Array.isArray(data.results)) {
+        // Alternative format with results property
+        results = data.results;
+      } else if (data.data && Array.isArray(data.data)) {
+        // Alternative format with data property
+        results = data.data;
+      } else {
+        console.warn('❌ Unexpected Cloud Function response format:', data);
+        results = [];
+      }
+      
+      console.log('✅ Normalized results:', results.length, 'tracking entries');
+      
+      return results;
+
+    } catch (e) {
+      console.error('💥 Error calling manage_item_status Cloud Function:', e);
+      this.logger.warn('Failed to fetch orderSellingTracking via Cloud Function', { area: 'orders', payload: { orderId, error: String(e) } });
       return [];
     }
   }
@@ -667,6 +758,9 @@ export class OrderService {
           `${apiUrl}?${params.toString()}`,
           { headers }
         ).toPromise();
+
+        // Log the raw API response for easier debugging in browser console
+        try { console.log('[OrderService] getOrdersFromApi response for', apiUrl, response); } catch (e) {}
 
   this.logger.info('API call success', { area: 'orders', payload: { apiUrl, responseSummary: response?.success ? 'success' : 'no-data' } });
 
@@ -769,9 +863,12 @@ export class OrderService {
         const headers: any = { 'Content-Type': 'application/json', 'Accept': 'application/json' };
         if (idToken) headers['Authorization'] = `Bearer ${idToken}`;
 
-        const response = await this.http.get<any>(`${apiUrl}?${params.toString()}`, { headers }).toPromise();
+  const response = await this.http.get<any>(`${apiUrl}?${params.toString()}`, { headers }).toPromise();
 
-        if (response?.success && response.orders) {
+  // Console log for debugging of paged API responses
+  try { console.log('[OrderService] getOrdersPage response for', apiUrl, response); } catch (e) {}
+
+  if (response?.success && response.orders) {
           const orders = response.orders.map((order: any) => this.transformApiOrder(order));
           return orders;
         } else {

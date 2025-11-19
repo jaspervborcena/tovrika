@@ -560,9 +560,181 @@
               </button>
               <button *ngIf="selectedOrder()?.status !== 'cancelled'" class="btn" style="background: #f97316; color: white;" (click)="updateOrderStatus(selectedOrder()?.id, 'cancelled')">Cancel Order</button>
               <button *ngIf="selectedOrder()?.status !== 'refunded'" class="btn btn-primary" (click)="updateOrderStatus(selectedOrder()?.id, 'refunded')">Process Refund</button>
+              <button class="btn btn-secondary" (click)="openManageItemStatus()">Manage Item Status</button>
             </div>
           </div>
         </div>
+
+      <!-- Manage Item Status Modal (orderSellingTracking) - Styled like Cart Information Dialog -->
+      <div *ngIf="showTracking()" class="modal-overlay">
+        <div class="cart-information-dialog">
+          
+          <!-- Fixed Header -->
+          <div class="cart-info-dialog-header">
+            <div class="header-content">
+              <h3>📋 Manage Item Status</h3>
+              <p>View and manage tracking status for order items</p>
+            </div>
+            <button class="close-btn" (click)="closeTracking()">×</button>
+          </div>
+          
+          <!-- Scrollable Body -->
+          <div class="cart-info-dialog-body">
+            
+            <!-- Debug Info (temporary) -->
+            <div style="background: #f0f9ff; border: 1px solid #0ea5e9; padding: 0.5rem; margin-bottom: 1rem; border-radius: 4px; font-size: 0.8rem;">
+              <strong>Debug Info:</strong><br>
+              Loading: {{ loadingTracking() }}<br>
+              Entries Count: {{ trackingEntries().length }}<br>
+              Selected Order: {{ selectedOrder()?.id || 'None' }}
+            </div>
+            
+            <!-- Loading State -->
+            <div *ngIf="loadingTracking()" class="loading-section">
+              <div class="loading-content">
+                <div class="spinner"></div>
+                <p>Loading tracking entries...</p>
+              </div>
+            </div>
+            
+            <!-- Empty State -->
+            <div *ngIf="!loadingTracking() && trackingEntries().length === 0" class="empty-state">
+              <div class="empty-content">
+                <div class="empty-icon">📦</div>
+                <h4>No tracking entries found</h4>
+                <p>This order doesn't have any item status tracking entries in the system.</p>
+              </div>
+            </div>
+            
+            <!-- Items List -->
+            <div *ngIf="!loadingTracking() && trackingEntries().length > 0" class="tracking-items-section">
+              <label class="section-label">Items Status Tracking:</label>
+              
+              <div class="tracking-items-list">
+                <!-- Header Row -->
+                <div class="tracking-item-header">
+                  <span class="col-product">Product</span>
+                  <span class="col-sku">SKU</span>
+                  <span class="col-qty">Qty</span>
+                  <span class="col-price">Price</span>
+                  <span class="col-vat">VAT</span>
+                  <span class="col-discount">Discount</span>
+                  <span class="col-total">Total</span>
+                  <span class="col-status">Status</span>
+                  <span class="col-qty-adjust">Qty to Adjust</span>
+                  <span class="col-adjustment-type">Adjustment Type</span>
+                  <span class="col-update-reason">Update Reason</span>
+                </div>
+                
+                <!-- Data Rows -->
+                <div class="tracking-item-row" *ngFor="let item of trackingEntries(); let i = index">
+                  <!-- Product Info -->
+                  <div class="col-product">
+                    <div class="item-details-tracking">
+                      <span class="item-name">{{ item.productName || '-' }}</span>
+                      <span class="item-id" *ngIf="item.id">#{{ item.id }}</span>
+                    </div>
+                  </div>
+                  
+                  <!-- SKU -->
+                  <div class="col-sku">
+                    <span class="sku-value">{{ item.sku || '-' }}</span>
+                  </div>
+                  
+                  <!-- Quantity (Read-only) -->
+                  <div class="col-qty">
+                    <span class="qty-value">{{ item.quantity || 0 }}</span>
+                  </div>
+                  
+                  <!-- Price (Read-only) -->
+                  <div class="col-price">
+                    <span class="price-value">₱{{ (item.unitPrice || item.price || 0) | number:'1.2-2' }}</span>
+                  </div>
+                  
+                  <!-- VAT (Read-only) -->
+                  <div class="col-vat">
+                    <span class="vat-value">{{ (item.vat || 0) }}%</span>
+                  </div>
+                  
+                  <!-- Discount (Read-only) -->
+                  <div class="col-discount">
+                    <span class="discount-value">₱{{ (item.discount || 0) | number:'1.2-2' }}</span>
+                  </div>
+                  
+                  <!-- Total (Auto-calculated, Read-only) -->
+                  <div class="col-total">
+                    <span class="total-value">₱{{ calculateTrackingItemTotal(item) | number:'1.2-2' }}</span>
+                  </div>
+                  
+                  <!-- Status (Read-only Label/Span) -->
+                  <div class="col-status">
+                    <span class="status-badge" 
+                          [class.status-completed]="item.status === 'completed'" 
+                          [class.status-pending]="item.status === 'pending'" 
+                          [class.status-cancelled]="item.status === 'cancelled'"
+                          [class.status-processing]="item.status === 'processing'"
+                          [class.status-refunded]="item.status === 'refunded'"
+                          [class.status-damaged]="item.status === 'damaged'"
+                          [class.status-returned]="item.status === 'returned'">
+                      {{ item.status || 'unknown' }}
+                    </span>
+                  </div>
+                  
+                  <!-- Qty to Adjust (Editable) -->
+                  <div class="col-qty-adjust">
+                    <input type="number" 
+                           class="qty-adjust-input"
+                           [value]="getQtyToAdjust(item)"
+                           min="0"
+                           step="1"
+                           (input)="updateQtyToAdjust(i, $any($event.target).value)"
+                           placeholder="Qty">
+                  </div>
+                  
+                  <!-- Adjustment Type (Dropdown) -->
+                  <div class="col-adjustment-type">
+                    <select class="adjustment-type-select"
+                            [value]="getAdjustmentType(item)"
+                            (change)="updateAdjustmentType(i, $any($event.target).value)">
+                      <option value="pending">Pending</option>
+                      <option value="processing">Processing</option>
+                      <option value="completed">Completed</option>
+                      <option value="cancelled">Cancelled</option>
+                      <option value="refunded">Refunded</option>
+                      <option value="damaged">Damaged</option>
+                      <option value="returned">Returned</option>
+                      <option value="partial_refund">Partial Refund</option>
+                      <option value="partial_return">Partial Return</option>
+                    </select>
+                  </div>
+                  
+                  <!-- Update Reason (Textarea) -->
+                  <div class="col-update-reason">
+                    <textarea class="update-reason-textarea"
+                              [value]="getUpdateReason(item)"
+                              (input)="updateReason(i, $any($event.target).value)"
+                              placeholder="Enter reason for adjustment..."
+                              rows="2"></textarea>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+          </div>
+          
+          <!-- Fixed Footer -->
+          <div class="cart-info-dialog-footer">
+            <button type="button" class="btn-secondary" (click)="closeTracking()">
+              Close
+            </button>
+            <button type="button" class="btn btn-primary" (click)="saveTrackingChanges()" 
+                    [disabled]="loadingTracking()">
+              Save Changes
+            </button>
+          </div>
+          
+        </div>
+      </div>
 
         <!-- Right Panel: Receipt/Cart -->
         <div class="right-panel">

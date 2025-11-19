@@ -13,6 +13,7 @@ import { CategoryService, ProductCategory } from '../../../services/category.ser
 import { InventoryDataService } from '../../../services/inventory-data.service';
 import { PredefinedTypesService, UnitTypeOption, PredefinedType } from '../../../services/predefined-types.service';
 import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../shared/components/confirmation-dialog/confirmation-dialog.component';
+import { AppConstants } from '../../../shared/enums/app-constants.enum';
 
 @Component({
   selector: 'app-product-management',
@@ -1393,14 +1394,7 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
                 </div>
 
                 <!-- New Product - Enable direct entry for authorized roles -->
-                <!-- VAT Notice -->
-                <div class="vat-notice" style="margin-bottom:8px;">
-                  <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" class="notice-icon">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                  </svg>
-                  <span>Selling price includes 12% VAT by default. Uncheck if item is VAT-exempt.</span>
-                </div>
-
+                <!-- Render the initial-inventory block for both Add and Edit modes so VAT controls are available in the same place -->
                 <ng-template #newProductInventory>
                   <div class="new-product-inventory" *ngIf="canCreateInitialInventory(); else unauthorizedInventory">
                     <div class="form-row">
@@ -1443,32 +1437,35 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
                       <small class="text-muted">Price per unit (will be used for initial batch)</small>
                     </div>
 
-                      <div class="form-group" style="display:flex; align-items:center; gap:8px; margin-top:8px;">
-                        <input
-                          type="checkbox"
-                          id="isVatApplicable"
-                          formControlName="isVatApplicable"
-                          style="width:16px; height:16px; cursor:pointer;"
-                        />
-                        <label for="isVatApplicable" style="margin:0; cursor:pointer;">
-                          VAT applicable (default 12%)
-                        </label>
-                      </div>
+                                    <!-- VAT controls: placed inside new-product-inventory for both Add/Edit -->
+                                    <div class="form-row" style="margin-top:0.5rem;">
+                                      <div class="form-group" style="display:flex; align-items:center; gap:8px;">
+                                        <input
+                                          type="checkbox"
+                                          id="isVatApplicable"
+                                          formControlName="isVatApplicable"
+                                          style="width:16px; height:16px; cursor:pointer;" />
+                                        <label for="isVatApplicable" style="margin:0; cursor:pointer; font-weight:600;">VAT applicable</label>
+                                        <small class="text-muted">Apply VAT ({{ defaultVatRate }}%)</small>
+                                      </div>
 
-                      <div class="form-group" style="margin-top:8px; display:flex; gap:8px; align-items:center;">
-                        <label for="vatRate" style="margin:0; width:120px; font-weight:500; color:#6b7280;">VAT Rate (%)</label>
-                        <input
-                          type="number"
-                          id="vatRate"
-                          formControlName="vatRate"
-                          class="form-input"
-                          min="0"
-                          max="100"
-                          step="0.01"
-                          [disabled]="!productForm.get('isVatApplicable')?.value"
-                          style="width:120px;"
-                        />
-                      </div>
+                                      <div class="form-group">
+                                        <label for="vatRate">VAT Rate (%)</label>
+                                        <input
+                                          type="number"
+                                          id="vatRate"
+                                          formControlName="vatRate"
+                                          placeholder="0.00"
+                                          class="form-input"
+                                          min="0"
+                                          max="100"
+                                          step="0.01"
+                                          [disabled]="!productForm.get('isVatApplicable')?.value" />
+                                        <small class="text-muted">Default: {{ defaultVatRate }}%</small>
+                                      </div>
+                                    </div>
+
+                      
 
                     <!-- Additional initial batch fields -->
                     <div class="form-row">
@@ -1861,6 +1858,8 @@ export class ProductManagementComponent implements OnInit {
   unitTypes: UnitTypeOption[] = []; // Will be loaded from predefinedTypes
   // expose enum to template
   readonly ProductStatus = ProductStatus;
+  // expose default VAT rate from AppConstants
+  readonly defaultVatRate: number = AppConstants.DEFAULT_VAT_RATE;
 
   constructor(
     public productService: ProductService,
@@ -1884,6 +1883,27 @@ export class ProductManagementComponent implements OnInit {
         if (!this.selectedProduct) {
           // For new products, update total stock
           this.productForm.get('totalStock')?.setValue(quantity || 0, { emitEvent: false });
+        }
+      });
+    }
+
+    // Subscribe to VAT applicable checkbox changes to toggle vatRate
+    const isVatCtrl = this.productForm.get('isVatApplicable');
+    const vatRateCtrl = this.productForm.get('vatRate');
+    if (isVatCtrl && vatRateCtrl) {
+      isVatCtrl.valueChanges.subscribe((applies: boolean) => {
+        try {
+          if (applies) {
+            // When enabled, restore default VAT rate and enable input so user can edit
+            vatRateCtrl.enable({ emitEvent: false });
+            vatRateCtrl.setValue(AppConstants.DEFAULT_VAT_RATE, { emitEvent: false });
+          } else {
+            // When disabled, set rate to 0 and disable input
+            vatRateCtrl.setValue(0, { emitEvent: false });
+            vatRateCtrl.disable({ emitEvent: false });
+          }
+        } catch (e) {
+          // defensive: ignore errors during programmatic changes
         }
       });
     }
@@ -1931,8 +1951,8 @@ export class ProductManagementComponent implements OnInit {
   // Favorites
   isFavorite: [false],
   // Tax and Discount Fields
-      isVatApplicable: [true],
-      vatRate: [12.0, [Validators.min(0), Validators.max(100)]],
+  isVatApplicable: [true],
+  vatRate: [AppConstants.DEFAULT_VAT_RATE, [Validators.min(0), Validators.max(100)]],
       hasDiscount: [true],
       discountType: ['percentage'],
       discountValue: [10.0, [Validators.min(0)]],
@@ -2018,7 +2038,7 @@ export class ProductManagementComponent implements OnInit {
   initialBatchId: '',
   initialQuantity: 0,
   initialUnitPrice: 0,
-  vatRate: 12.0
+  vatRate: AppConstants.DEFAULT_VAT_RATE
     });
     // Ensure required defaults after reset
     this.productForm.patchValue({
@@ -2026,7 +2046,7 @@ export class ProductManagementComponent implements OnInit {
       category: 'General',
   status: ProductStatus.Active,
       isVatApplicable: true,
-      vatRate: 12.0
+      vatRate: AppConstants.DEFAULT_VAT_RATE
     });
     // set totalStock from initial fields if provided
     const initialQty = this.productForm.get('initialQuantity')?.value || 0;
@@ -2045,7 +2065,7 @@ export class ProductManagementComponent implements OnInit {
     // Ensure vatRate defaults to 12 if the product doesn't include it
     const currentVat = this.productForm.get('vatRate')?.value;
     if (currentVat === null || currentVat === undefined || currentVat === '') {
-      this.productForm.get('vatRate')?.setValue(12.0);
+      this.productForm.get('vatRate')?.setValue(AppConstants.DEFAULT_VAT_RATE);
     }
     
     // Use denormalized totalStock from product (no longer calculate from embedded inventory)

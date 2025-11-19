@@ -30,24 +30,23 @@ export class OfflineStorageService {
     try {
       console.log('💾 OfflineStorage: Initializing...');
       await this.indexedDBService.initDB();
+      
+      // Check IndexedDB status after initialization
+      const status = this.indexedDBService.getStatus();
+      if (!status.available) {
+        console.warn('⚠️ OfflineStorage: IndexedDB not available:', status.reason);
+        console.warn('� App will run in online-only mode - all data comes from Firestore');
+        console.warn('� This is normal if browser storage is full or corrupted');
+        console.warn('� To restore offline features: Clear browser data and refresh');
+      } else {
+        console.log('✅ OfflineStorage: IndexedDB available and ready');
+      }
+      
       await this.loadOfflineData();
       console.log('💾 OfflineStorage: Initialization complete');
     } catch (error: any) {
       console.error('💾 OfflineStorage: Initialization failed:', error);
-      
-      // Show user-friendly error message based on error type
-      if (error.message?.includes('permanently unavailable')) {
-        console.warn('⚠️ OfflineStorage: IndexedDB is permanently unavailable');
-        console.warn('📝 To restore offline functionality: Clear browser data (Ctrl+Shift+Delete) and refresh');
-        console.warn('📱 App will continue in online-only mode');
-      } else if (error.message?.includes('corrupted')) {
-        console.warn('💾 OfflineStorage: Database corrupted - please refresh page to recreate');
-      } else if (error.message?.includes('not supported')) {
-        console.warn('💾 OfflineStorage: IndexedDB not supported in this browser - offline features disabled');
-      } else if (error.message?.includes('other tabs')) {
-        console.warn('💾 OfflineStorage: Close other tabs and refresh to enable offline features');
-      }
-      
+      console.warn('📱 App will continue in online-only mode');
       // Don't throw - allow app to continue without offline storage
     }
   }
@@ -60,7 +59,7 @@ export class OfflineStorageService {
       // Ensure database is initialized
       await this.indexedDBService.initDB();
       
-      // Load current user
+      // Load current user (will return null if DB is unavailable)
       const currentUser = await this.indexedDBService.getCurrentUser();
       this.currentUserSignal.set(currentUser);
       
@@ -87,13 +86,12 @@ export class OfflineStorageService {
       console.log('💾 OfflineStorage: Data loaded successfully');
     } catch (error: any) {
       console.error('💾 OfflineStorage: Failed to load data:', error);
-      // Check if permanently broken
-      if (error.message?.includes('permanently unavailable')) {
-        console.warn('⚠️ OfflineStorage: IndexedDB permanently unavailable - skipping data load');
-        return; // Don't throw - allow app to continue
-      }
-      // For other errors, still don't throw - graceful degradation
+      // Always gracefully handle - don't block the app
       console.warn('⚠️ OfflineStorage: Continuing without cached data');
+      // Reset signals to empty state
+      this.currentUserSignal.set(null);
+      this.productsSignal.set([]);
+      this.pendingOrdersSignal.set([]);
     }
   }
 
@@ -143,6 +141,8 @@ export class OfflineStorageService {
         uid: userData.uid,
         email: userData.email,
         displayName: userData.displayName,
+        userCode: userData.userCode,
+        pin: userData.pin,
         status: userData.status,
         // Prefer roleId from the active permission
         roleId: activePermission.roleId || (userData as any).roleId,

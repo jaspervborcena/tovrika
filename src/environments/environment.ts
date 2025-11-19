@@ -10,7 +10,9 @@ export const environment = {
     measurementId: "G-MG8T2RZ051"
   },
   api: {
-    baseUrl: "https://asia-east1-jasperpos-1dfd5.cloudfunctions.net",
+    // During local development we route Cloud Function calls through the Angular dev proxy
+    // so the browser sees same-origin requests (avoids CORS preflight failures).
+    baseUrl: "/api/functions",
     ordersApi: "/api/orders", // Uses proxy in development
     directOrdersApi: "https://get-orders-by-date-bq-7bpeqovfmq-de.a.run.app", // Updated to BQ endpoint
     // productsApi removed - now using Firestore real-time updates

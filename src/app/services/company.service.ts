@@ -1,4 +1,4 @@
-import { Injectable, computed, signal } from '@angular/core';
+import { Injectable, computed, signal, Injector, runInInjectionContext } from '@angular/core';
 import {
   Firestore,
   collection,
@@ -37,7 +37,8 @@ export class CompanyService {
     private authService: AuthService,
     private firestoreSecurityService: FirestoreSecurityService,
     private offlineDocService: OfflineDocumentService,
-    private indexedDBService: IndexedDBService
+    private indexedDBService: IndexedDBService,
+    private injector: Injector
   ) {}
 
   // Resolve the primary companyId from user profile or permissions.
@@ -125,8 +126,28 @@ export class CompanyService {
       // If user has a resolvable companyId, load only that company
       if (primaryCompanyId) {
         try {
-          const companyDocRef = doc(this.firestore, 'companies', primaryCompanyId);
-          const companyDoc = await getDoc(companyDocRef);
+            // Ensure current user's ID token is fresh before attempting Firestore read.
+            try {
+              await runInInjectionContext(this.injector, async () => {
+                const { Auth } = await import('@angular/fire/auth');
+                try {
+                  const afAuth = this.injector.get(Auth as any) as any;
+                  const firebaseUser = afAuth?.currentUser;
+                  if (firebaseUser && typeof firebaseUser.getIdToken === 'function') {
+                    // Force refresh once to avoid stale/expired token causing permission errors
+                    await firebaseUser.getIdToken(true).catch(() => null);
+                  }
+                } catch (e) {
+                  // Non-fatal: continue to attempt the read even if token refresh fails
+                  console.warn('CompanyService: token refresh attempt failed', e);
+                }
+              });
+            } catch (e) {
+              console.warn('CompanyService: unable to run token refresh in injection context', e);
+            }
+
+            const companyDocRef = doc(this.firestore, 'companies', primaryCompanyId);
+            const companyDoc = await runInInjectionContext(this.injector, () => getDoc(companyDocRef));
 
           if (companyDoc.exists()) {
             const companyData = companyDoc.data() as Omit<Company, 'id'>;
@@ -138,12 +159,28 @@ export class CompanyService {
 
             companies.push(company);
 
-            // Persist a local snapshot for offline use
+            // Persist a local snapshot for offline use into the `companies` store
             try {
-              await this.indexedDBService.saveSetting(`company_${company.id}`, company);
-              console.log('💾 CompanyService: Saved company snapshot to IndexedDB for offline use:', company.id);
+              const offlineCompany = {
+                id: company.id,
+                name: (company as any).name,
+                slug: (company as any).slug,
+                ownerUid: (company as any).ownerUid || (company as any).owner || '',
+                address: (company as any).address,
+                email: (company as any).email,
+                logoUrl: (company as any).logoUrl,
+                phone: (company as any).phone,
+                plan: (company as any).plan,
+                taxId: (company as any).taxId,
+                website: (company as any).website,
+                createdAt: company.createdAt,
+                updatedAt: company.updatedAt || new Date(),
+                lastSync: new Date()
+              } as any;
+              await this.indexedDBService.saveCompanies([offlineCompany]);
+              console.log('💾 CompanyService: Saved company snapshot to IndexedDB.companies for offline use:', company.id);
             } catch (saveErr) {
-              console.warn('💾 CompanyService: Failed to save company snapshot to IndexedDB:', saveErr);
+              console.warn('💾 CompanyService: Failed to save company snapshot to IndexedDB.companies:', saveErr);
             }
           }
         } catch (fireErr) {
@@ -171,6 +208,7 @@ export class CompanyService {
       }
       // If user has no companyId, set empty array (they need to create a company)
 
+      console.log('CompanyService.loadCompanies: loaded companies count =', companies.length, 'companies =', companies);
       this.companiesSignal.set(companies);
     } catch (error) {
       console.error('Error loading companies:', error);
@@ -181,8 +219,26 @@ export class CompanyService {
 
   async getCompanyById(companyId: string): Promise<Company | null> {
     try {
+      // Force-refresh ID token before per-company read to reduce permission-denied errors.
+      try {
+        await runInInjectionContext(this.injector, async () => {
+          const { Auth } = await import('@angular/fire/auth');
+          try {
+            const afAuth = this.injector.get(Auth as any) as any;
+            const firebaseUser = afAuth?.currentUser;
+            if (firebaseUser && typeof firebaseUser.getIdToken === 'function') {
+              await firebaseUser.getIdToken(true).catch(() => null);
+            }
+          } catch (e) {
+            console.warn('CompanyService: token refresh attempt failed', e);
+          }
+        });
+      } catch (e) {
+        console.warn('CompanyService: unable to run token refresh in injection context', e);
+      }
+
       const companyDocRef = doc(this.firestore, 'companies', companyId);
-      const companyDoc = await getDoc(companyDocRef);
+      const companyDoc = await runInInjectionContext(this.injector, () => getDoc(companyDocRef));
 
       if (!companyDoc.exists()) {
         return null;
@@ -196,6 +252,33 @@ export class CompanyService {
         updatedAt: companyData['updatedAt'] ? this.toDate(companyData['updatedAt']) : undefined,
         stores: [] // We don't load stores for individual company lookup
       };
+
+      // Debug: log the fetched company data
+      console.log('CompanyService.getCompanyById: fetched company:', company);
+
+      // Persist a local snapshot for offline use into the `companies` store
+      try {
+        const offlineCompany = {
+          id: company.id,
+          name: (company as any).name,
+          slug: (company as any).slug,
+          ownerUid: (company as any).ownerUid || (company as any).owner || '',
+          address: (company as any).address,
+          email: (company as any).email,
+          logoUrl: (company as any).logoUrl,
+          phone: (company as any).phone,
+          plan: (company as any).plan,
+          taxId: (company as any).taxId,
+          website: (company as any).website,
+          createdAt: company.createdAt,
+          updatedAt: company.updatedAt || new Date(),
+          lastSync: new Date()
+        } as any;
+        await this.indexedDBService.saveCompanies([offlineCompany]);
+        console.log('💾 CompanyService: Saved company snapshot to IndexedDB.companies (getCompanyById):', company.id);
+      } catch (saveErr) {
+        console.warn('💾 CompanyService: Failed to save company snapshot to IndexedDB.companies (getCompanyById):', saveErr);
+      }
 
       return company;
     } catch (error) {
@@ -229,7 +312,7 @@ export class CompanyService {
         ownerUid: user.uid, // Set the current user as owner
         slug: companyData['slug'] || (typeof companyData['name'] === 'string' ? companyData['name'].toLowerCase().replace(/[^a-z0-9]/g, '-') : 'company'),
         plan: companyData['plan'] || 'basic',
-        onboardingStatus: companyData['onboardingStatus'] || 'pending',
+  // onboardingStatus removed - no longer tracked here
         createdAt: new Date(),
         updatedAt: new Date()
       };

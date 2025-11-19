@@ -1,8 +1,9 @@
-import { Injectable, computed, signal } from '@angular/core';
+import { Injectable, computed, signal, Injector, runInInjectionContext } from '@angular/core';
 import { 
   Firestore, 
   collection, 
   doc, 
+  getDoc,
   setDoc, 
   updateDoc, 
   deleteDoc, 
@@ -10,8 +11,10 @@ import {
   where, 
   getDocs 
 } from '@angular/fire/firestore';
+import { DocumentSnapshot, DocumentData } from 'firebase/firestore';
 import { AuthService } from './auth.service';
 import { OfflineDocumentService } from '../core/services/offline-document.service';
+import { IndexedDBService, OfflineCompany } from '../core/services/indexeddb.service';
 import { Company } from '../interfaces/company.interface';
 
 @Injectable({
@@ -25,13 +28,72 @@ export class CompanySetupService {
   
   // Computed properties
   public readonly totalCompanies = computed(() => this.companiesSignal().length);
+  // Active companies: consider those that have at least one store configured
   public readonly activeCompanies = computed(() => 
-    this.companiesSignal().filter(company => company.settings?.currency)
+    this.companiesSignal().filter(company => (company.stores?.length ?? 0) > 0)
   );
 
-  constructor(private firestore: Firestore, private authService: AuthService, private offlineDocService: OfflineDocumentService) {
+  constructor(
+    private firestore: Firestore,
+    private authService: AuthService,
+    private offlineDocService: OfflineDocumentService,
+    private indexedDBService: IndexedDBService,
+    private injector: Injector
+  ) {
   // Only load companies if user has permissions
     this.loadCompaniesIfAuthorized();
+  }
+
+  /**
+   * Load specific companies by their IDs and update the `companies` signal.
+   * Useful when you already know the list of company IDs for the current user.
+   */
+  async loadCompaniesByIds(companyIds: string[]) {
+    try {
+      if (!companyIds || companyIds.length === 0) {
+        this.companiesSignal.set([]);
+        return;
+      }
+
+      const docs = await Promise.all(companyIds.map(id => runInInjectionContext(this.injector, () => getDoc(doc(this.firestore, `companies/${id}`)))));
+      const docsTyped = docs as DocumentSnapshot<DocumentData>[];
+      const companies = docsTyped
+        .filter((d: DocumentSnapshot<DocumentData>) => d.exists())
+        .map((d: DocumentSnapshot<DocumentData>) => ({ id: d.id, ...(d.data() as any) } as Company));
+
+      this.companiesSignal.set(companies);
+
+      // Best-effort: persist companies to the TovrikaOfflineDB under `companies`
+      try {
+        const offlineCompanies: OfflineCompany[] = companies.map(c => {
+          const { stores, ...rest } = c as any;
+          return {
+            ...rest,
+            lastSync: new Date()
+          } as OfflineCompany;
+        });
+        await this.indexedDBService.saveCompanies(offlineCompanies);
+      } catch (saveErr) {
+        console.warn('CompanySetupService: Failed to save companies to IndexedDB:', saveErr);
+      }
+    } catch (error) {
+      console.error('Error loading companies by ids:', error);
+      // Keep existing companies signal untouched on error
+    }
+  }
+
+  /**
+   * Convenience: load companies for the currently authenticated user using
+   * `AuthService.getUserCompanies()` which returns an array of companyId/roleId.
+   */
+  async loadCompaniesForCurrentUser() {
+    try {
+      const list = this.authService.getUserCompanies();
+      const ids = list.map(l => l.companyId).filter(Boolean);
+      await this.loadCompaniesByIds(ids);
+    } catch (error) {
+      console.error('Error loading companies for current user:', error);
+    }
   }
 
   private async loadCompaniesIfAuthorized() {
@@ -52,7 +114,7 @@ export class CompanySetupService {
   private async loadCompanies() {
     try {
       const companiesRef = collection(this.firestore, 'companies');
-      const querySnapshot = await getDocs(companiesRef);
+      const querySnapshot = await runInInjectionContext(this.injector, () => getDocs(companiesRef));
       const companies = querySnapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()

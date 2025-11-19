@@ -80,6 +80,10 @@ export const routes: Routes = [
     path: 'help',
     loadComponent: () => import('./pages/help/help.component').then(m => m.HelpComponent)
   },
+  {
+    path: 'account-settings',
+    loadComponent: () => import('./pages/account-settings/account-settings.component').then(m => m.AccountSettingsComponent)
+  },
   
   // Import Utility Route (admin use only)
   {
