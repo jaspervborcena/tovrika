@@ -14,6 +14,7 @@ import {
   limit,
   getDoc
 } from '@angular/fire/firestore';
+import { toDateValue } from '../core/utils/date-utils';
 import { AuthService } from './auth.service';
 import { OfflineDocumentService } from '../core/services/offline-document.service';
 import { CompanyBillingHistory } from '../interfaces/billing.interface';
@@ -100,8 +101,8 @@ export class BillingService {
           promoCode: data['promoCode'] || '',
           referralCode: data['referralCode'] || '',
           paymentMethod: data['paymentMethod'],
-          paidAt: data['paidAt']?.toDate() || new Date(),
-          createdAt: data['createdAt']?.toDate() || new Date()
+          paidAt: toDateValue(data['paidAt']) || new Date(),
+          createdAt: toDateValue(data['createdAt']) || new Date()
         } as CompanyBillingHistory;
       });
 
@@ -145,8 +146,8 @@ export class BillingService {
           referralCode: data['referralCode'],
           paymentMethod: data['paymentMethod'],
           transactionId: data['transactionId'],
-          paidAt: data['paidAt']?.toDate() || new Date(),
-          createdAt: data['createdAt']?.toDate() || new Date()
+          paidAt: toDateValue(data['paidAt']) || new Date(),
+          createdAt: toDateValue(data['createdAt']) || new Date()
         } as CompanyBillingHistory;
       });
 

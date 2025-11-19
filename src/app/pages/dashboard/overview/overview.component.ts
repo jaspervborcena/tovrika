@@ -1,4 +1,5 @@
 import { Component, inject, signal, computed, OnInit } from '@angular/core';
+import { environment } from '../../../../environments/environment';
 import { CommonModule } from '@angular/common';
 import { StoreService, Store } from '../../../services/store.service';
 import { ProductService } from '../../../services/product.service';
@@ -1097,12 +1098,13 @@ export class OverviewComponent implements OnInit {
 
       console.log('📅 Dashboard loading sales data for store:', storeId, 'from:', startDate, 'to:', endDate);
 
-  // Use the EXACT same method as sales-summary
-  const orders = await this.orderService.getOrdersByDateRange(storeId, startDate, endDate);
+  // Use Cloud Function API for sales data (same as sales summary)
+  // Explicitly request completed sales for the overview dashboard
+  await this.loadSalesFromCloudFunction(storeId, startDate, endDate, 'completed');
 
-  // Load today's expenses for the same date range
-  const expenses = await this.expenseService.getExpensesByStore(storeId, startDate, endDate);
-  this.expenses.set(expenses || []);
+      // Load today's expenses for the same date range
+      const expenses = await this.expenseService.getExpensesByStore(storeId, startDate, endDate);
+      this.expenses.set(expenses || []);
 
       // Also compute month-to-date and yesterday aggregates for the Overview card
       try {
@@ -1154,23 +1156,12 @@ export class OverviewComponent implements OnInit {
         this.yesterdayExpensesTotal.set(0);
       }
 
-      console.log('📊 Dashboard Order Service returned:', orders?.length || 0, 'orders');
-      if (orders && orders.length > 0) {
-        const totalRevenue = orders.reduce((sum, order) => sum + order.totalAmount, 0);
+      console.log('📊 Dashboard sales data loaded from Cloud Function:', this.orders().length, 'orders');
+      if (this.orders().length > 0) {
+        const totalRevenue = this.totalRevenue();
         console.log('💰 Dashboard total revenue:', totalRevenue);
-        console.log('📋 Dashboard sample order:', orders[0]);
+        console.log('📋 Dashboard sample order:', this.orders()[0]);
       }
-
-      // Transform to match interface - same as sales-summary
-      const transformedOrders = (orders || []).map((order: any) => ({
-        ...order,
-        id: order.id || '',
-        customerName: order.soldTo || 'Cash Sale',
-        items: [],
-        paymentMethod: 'cash'
-      }));
-
-      this.orders.set(transformedOrders);
 
       // Load products for analytics
       const products = await this.productService.getProducts();
@@ -1305,20 +1296,127 @@ export class OverviewComponent implements OnInit {
 
   protected chartLabels = computed(() => this.monthlyChartData().map(d => d.label));
 
-  // Method to load historical analytics data from BigQuery
-  async loadAnalyticsData(startDate: Date, endDate: Date): Promise<void> {
+  // Method to load sales data from Cloud Function API
+  async loadSalesFromCloudFunction(storeId: string, startDate?: Date, endDate?: Date, status: string = 'completed'): Promise<void> {
+    // Ensure we have a reference date available both in try and catch blocks
+    const refDate = startDate || new Date();
     try {
-      this.isLoading.set(true);
-      
-      const storeId = this.selectedStoreId() || this.authService.getCurrentPermission()?.storeId;
-      if (!storeId) return;
+      // Format dates for API (YYYYMM for month queries)
+      const year = refDate.getFullYear();
+      const month = refDate.getMonth() + 1;
+      const monthStr = `${year}${month.toString().padStart(2, '0')}`; // e.g. 202511
 
-      console.log('📊 Loading analytics data from BigQuery/Firebase...', { storeId, startDate, endDate });
+  const apiBase = environment.api?.baseUrl || '';
+  const apiUrl = `${apiBase}/sales_summary_by_store?month=${monthStr}&storeId=${storeId}&status=${encodeURIComponent(status)}`;
       
-      // Use the same hybrid approach as sales summary
-      const orders = await this.orderService.getOrdersByDateRange(storeId, startDate, endDate);
+      console.log('🌐 Fetching sales data from Cloud Function:', apiUrl);
+
+      // Include Firebase ID token when available so authenticated Cloud Functions accept the request.
+      let fetchOptions: any = { method: 'GET', headers: { 'Accept': 'application/json' } };
+      try {
+        const idToken = await this.authService.getFirebaseIdToken();
+        if (idToken) {
+          fetchOptions.headers['Authorization'] = `Bearer ${idToken}`;
+          console.log('🔐 Attached Firebase ID token to Cloud Function request (redacted)');
+          console.log('🔐 Token present (length):', idToken.length);
+        } else {
+          console.log('⚠️ No Firebase ID token available for Cloud Function request; request will be unauthenticated');
+        }
+      } catch (e) {
+        console.warn('Could not obtain Firebase ID token for Cloud Function request', e);
+      }
+
+      let response = await fetch(apiUrl, fetchOptions);
+      if (response.status === 401) {
+        // Try refreshing token once and retry
+        console.warn('Cloud Function returned 401 - attempting token refresh and retry');
+        try {
+          const refreshed = await this.authService.getFirebaseIdToken(true);
+          if (refreshed) {
+            fetchOptions.headers['Authorization'] = `Bearer ${refreshed}`;
+            console.log('🔐 Refreshed token present (length):', refreshed.length);
+            response = await fetch(apiUrl, fetchOptions);
+            console.log('Retry after token refresh response status:', response.status);
+          }
+        } catch (refreshErr) {
+          console.warn('Failed to refresh Firebase ID token for Cloud Function retry', refreshErr);
+        }
+      }
+
+      if (!response.ok) {
+        throw new Error(`Cloud Function API returned ${response.status}: ${response.statusText}`);
+      }
+
+      const salesData = await response.json();
+      console.log('📊 Cloud Function response (raw):', salesData);
+      console.log('📊 Cloud Function response structure check:', {
+        hasSuccess: !!salesData?.success,
+        hasRows: !!salesData?.rows,
+        rowsLength: salesData?.rows?.length || 0,
+        firstRow: salesData?.rows?.[0] || null,
+        hasSummary: !!salesData?.summary
+      });
+
+      if (salesData && (salesData.summary || (salesData.success && salesData.rows))) {
+        // Extract data from Cloud Function response
+        let totalRevenue = 0;
+        let totalOrders = 0;
+        let totalCustomers = 0;
+        
+        if (salesData.summary) {
+          // Legacy format: use summary object
+          totalRevenue = Number(salesData.summary.totalRevenue || 0);
+          totalOrders = Number(salesData.summary.totalOrders || 0);
+          totalCustomers = Number(salesData.summary.uniqueCustomers || 0);
+        } else if (salesData.success && salesData.rows && salesData.rows.length > 0) {
+          // New format: use rows array
+          const firstRow = salesData.rows[0];
+          totalRevenue = Number(firstRow.totalAmount || 0);
+          totalOrders = Number(salesData.count || 0);
+          totalCustomers = Number(firstRow.uniqueCustomers || 0);
+        }
+        
+        console.log('📊 Extracted values:', { totalRevenue, totalOrders, totalCustomers });
+
+        // Create synthetic orders array for computed values
+        // This maintains compatibility with existing template
+        const syntheticOrders: any[] = Array.from({ length: totalOrders }, (_, index) => ({
+          id: `cf-order-${index}`,
+          orderId: `cf-order-${index}`,
+          companyId: '',
+          storeId: storeId,
+          assignedCashierId: '',
+          status: 'completed',
+          netAmount: totalRevenue / Math.max(1, totalOrders), // Average order value
+          totalAmount: totalRevenue / Math.max(1, totalOrders),
+          vatAmount: 0,
+          vatExemptAmount: 0,
+          discountAmount: 0,
+          grossAmount: totalRevenue / Math.max(1, totalOrders),
+          atpOrOcn: '',
+          birPermitNo: '',
+          inclusiveSerialNumber: '',
+          message: '',
+          soldTo: index < totalCustomers ? `Customer ${index + 1}` : '',
+          createdAt: new Date(refDate.getTime() + (index * 86400000)), // Spread across period (use refDate when startDate may be undefined)
+          customerName: index < totalCustomers ? `Customer ${index + 1}` : 'Cash Sale',
+          items: [],
+          paymentMethod: 'cash' as const
+        }));
+
+        this.orders.set(syntheticOrders);
+        
+        console.log(`✅ Loaded sales data: ₱${totalRevenue} revenue, ${totalOrders} orders, ${totalCustomers} customers`);
+      } else {
+        console.warn('⚠️ Cloud Function returned unexpected data format');
+        this.orders.set([]);
+      }
+
+    } catch (error) {
+      console.error('❌ Error loading from Cloud Function, falling back to Firebase:', error);
       
-      // Process orders for analytics
+      // Fallback to original Firebase/BigQuery approach
+  const orders = await this.orderService.getOrdersByDateRange(storeId, startDate || refDate, endDate || refDate);
       this.orders.set(orders.map((order: any) => ({
         ...order,
         id: order.id || '',
@@ -1326,6 +1424,22 @@ export class OverviewComponent implements OnInit {
         items: [],
         paymentMethod: 'cash'
       })));
+    }
+  }
+
+  // Method to load analytics data from Cloud Function API
+  async loadAnalyticsData(startDate: Date, endDate: Date): Promise<void> {
+    try {
+      this.isLoading.set(true);
+      
+      const storeId = this.selectedStoreId() || this.authService.getCurrentPermission()?.storeId;
+      if (!storeId) return;
+
+      console.log('📊 Loading analytics data from Cloud Function API...', { storeId, startDate, endDate });
+      
+  // Use Cloud Function API for sales data (same as sales summary)
+  // Explicitly request completed sales for analytics/overview
+  await this.loadSalesFromCloudFunction(storeId, startDate, endDate, 'completed');
 
       // Load expenses for the same date range and compute totals
       try {
@@ -1368,7 +1482,7 @@ export class OverviewComponent implements OnInit {
         this.yesterdayExpensesTotal.set(0);
       }
 
-      console.log('📈 Analytics data loaded:', orders.length, 'orders');
+      console.log('📈 Analytics data loaded:', this.orders().length, 'orders');
       
     } catch (error) {
       console.error('❌ Error loading analytics data:', error);

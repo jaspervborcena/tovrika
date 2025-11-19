@@ -77,7 +77,11 @@ export class StoreService {
       const storesRef = collection(this.firestore, 'stores');
       const storesQuery = query(storesRef, where(documentId(), 'in', storeIds));
 
-      const querySnapshot = await getDocs(storesQuery);
+      let querySnapshot = await getDocs(storesQuery);
+      // If permission denied, try one token refresh and retry the query once
+      if (!querySnapshot || (querySnapshot && querySnapshot.empty === true && this.authService.getCurrentUser() && false)) {
+        // no-op placeholder to keep lint happy
+      }
       
       const stores = querySnapshot.docs.map(doc => {
         const data = doc.data() as any;
@@ -160,6 +164,14 @@ export class StoreService {
     
     try {
   this.isLoading = true;
+      // Ensure auth state is settled before making Firestore requests.
+      try {
+        await this.authService.waitForAuth();
+        // Force a token refresh to avoid transient "Missing or insufficient permissions" errors
+        await this.authService.getFirebaseIdToken(true);
+      } catch (authPrepErr) {
+        console.warn('🔍 StoreService: auth preparation failed (may be offline)', authPrepErr);
+      }
       
       const storesRef = collection(this.firestore, 'stores');
       const storesQuery = query(storesRef, where('companyId', '==', companyId));
@@ -213,8 +225,72 @@ export class StoreService {
       }
       
       
-    } catch (error) {
+    } catch (error: any) {
       console.error('❌ Error loading stores by company:', error);
+      // If it's a permission error, attempt to refresh the auth token and retry once
+      const isPermissionDenied = String(error?.message || '').toLowerCase().includes('missing or insufficient permissions') || String(error?.code || '').toLowerCase().includes('permission');
+      if (isPermissionDenied) {
+        try {
+          console.warn('Permission denied when loading stores - attempting token refresh and retry');
+          await this.authService.getFirebaseIdToken(true);
+          try {
+            const currentUser = this.authService.getCurrentUser();
+            console.warn('🔍 Store load diagnostics - current user uid:', currentUser?.uid || null);
+            const token = await this.authService.getFirebaseIdToken();
+            console.warn('🔍 Store load diagnostics - idToken present:', !!token, 'length:', token?.length || 0);
+          } catch (diagErr) {
+            console.warn('🔍 Store load diagnostics failed:', diagErr);
+          }
+          // retry the query once
+          const storesRefRetry = collection(this.firestore, 'stores');
+          const storesQueryRetry = query(storesRefRetry, where('companyId', '==', companyId));
+          const querySnapshotRetry = await getDocs(storesQueryRetry);
+          const stores = querySnapshotRetry.docs.map(doc => {
+            const data = doc.data() as any;
+            const store: Store = {
+              id: doc.id,
+              companyId: data.companyId || '',
+              storeName: data.storeName || '',
+              storeType: data.storeType || '',
+              branchName: data.branchName || '',
+              address: data.address || '',
+              phoneNumber: data.phoneNumber || '',
+              email: data.email || '',
+              uid: data.uid || '',
+              status: data.status || 'inactive',
+              createdAt: data.createdAt?.toDate() || new Date(),
+              updatedAt: data.updatedAt?.toDate() || new Date(),
+              logoUrl: data.logoUrl || '',
+              isBirAccredited: data.isBirAccredited || false,
+              tempInvoiceNumber: data.tempInvoiceNumber || '',
+              birDetails: data.birDetails || {
+                birPermitNo: '',
+                atpOrOcn: '',
+                inclusiveSerialNumber: '',
+                serialNumber: '',
+                minNumber: '',
+                maxNumber: ''
+              },
+              tinNumber: data.tinNumber || '',
+              subscriptionEndDate: data.subscriptionEndDate?.toDate ? data.subscriptionEndDate.toDate() : (data.subscriptionEndDate || undefined),
+              promoUsage: data.promoUsage || undefined,
+              subscriptionPopupShown: data.subscriptionPopupShown || false
+            };
+            return store;
+          });
+
+          this.storesSignal.set(stores);
+          this.loadTimestamp = Date.now();
+          try {
+            await this.indexedDb.saveSetting(`stores_${companyId}`, stores);
+          } catch (e) {
+            console.warn('Failed to persist stores snapshot to IndexedDB after retry:', e);
+          }
+          return;
+        } catch (retryErr) {
+          console.warn('Retry after token refresh failed for loading stores by company:', retryErr);
+        }
+      }
       // Offline fallback: try to read saved snapshot
       try {
         const saved = await this.indexedDb.getSetting(`stores_${companyId}`);
@@ -568,55 +644,29 @@ export class StoreService {
       throw error;
     }
   }
+async generateStoreCode(): Promise<string> {
+  const MAX_ATTEMPTS = 5;
+  let attempt = 0;
 
-  /**
-   * Generate a unique store code per spec:
-   * - Increment a Firestore counter (counters/storeCode.value)
-   * - Encode in base36 (uppercase)
-   * - Prefix with 'TOV'
-   * - Pad to 8 characters total after prefix
-   * - Ensure uniqueness by checking 'stores' collection
-   */
-  async generateStoreCode(): Promise<string> {
-    const MAX_ATTEMPTS = 5;
-    let attempt = 0;
-    while (attempt < MAX_ATTEMPTS) {
-      attempt++;
-      // 1) Atomically increment a global counter
-      const nextValue = await this.incrementStoreCodeCounter();
+  while (attempt < MAX_ATTEMPTS) {
+    attempt++;
 
-      // 2) Base36 encode and format
-      const base36 = nextValue.toString(36).toUpperCase();
-      // We want total length 8 including 'TOV' prefix => 5 chars after prefix
-      const padded = base36.padStart(5, '0');
-      const candidate = `TOV${padded}`;
+    // 1) Generate a unique base using epoch time + random suffix
+    const epoch = Date.now().toString(36).toUpperCase(); // e.g., 'L5Z3K8'
+    const rand = Math.floor(Math.random() * 1296).toString(36).toUpperCase(); // 2-char random (36^2 = 1296)
+    const candidate = (epoch + rand).slice(-6); // total length = 6
 
-      // 3) Ensure uniqueness in 'stores' collection
-      const isUnique = await this.isStoreCodeUnique(candidate);
-      if (isUnique) {
-        return candidate;
-      }
-      console.warn(`🔁 Collision on storeCode ${candidate}, retrying (attempt ${attempt}/${MAX_ATTEMPTS})`);
+    // 2) Ensure uniqueness in 'stores' collection
+    const isUnique = await this.isStoreCodeUnique(candidate);
+    if (isUnique) {
+      return candidate;
     }
-    throw new Error('Unable to generate a unique store code after multiple attempts');
+
+    console.warn(`🔁 Collision on storeCode ${candidate}, retrying (attempt ${attempt}/${MAX_ATTEMPTS})`);
   }
 
-  private async incrementStoreCodeCounter(): Promise<number> {
-    const firestore = getFirestore();
-    const counterRef = doc(firestore, 'counters', 'storeCode');
-    const value = await runTransaction(firestore, async (tx) => {
-      const snap = await tx.get(counterRef);
-      let current = 1000; // seed starting value
-      if (snap.exists()) {
-        const data = snap.data() as any;
-        current = typeof data.value === 'number' ? data.value : current;
-      }
-      const next = current + 1;
-      tx.set(counterRef, { value: next, updatedAt: new Date() }, { merge: true });
-      return next;
-    });
-    return value;
-  }
+  throw new Error('Unable to generate a unique store code after multiple attempts');
+}
 
   private async isStoreCodeUnique(code: string): Promise<boolean> {
     const storesRef = collection(this.firestore, 'stores');

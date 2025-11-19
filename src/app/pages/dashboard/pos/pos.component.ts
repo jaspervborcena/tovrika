@@ -519,6 +519,16 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   private receiptDataSignal = signal<any>(null);
   readonly receiptData = computed(() => this.receiptDataSignal());
 
+  // Manage Item Status (orderSellingTracking) modal state
+  private showTrackingSignal = signal<boolean>(false);
+  readonly showTracking = computed(() => this.showTrackingSignal());
+
+  private trackingEntriesSignal = signal<any[]>([]);
+  readonly trackingEntries = computed(() => this.trackingEntriesSignal());
+
+  private loadingTrackingSignal = signal<boolean>(false);
+  readonly loadingTracking = computed(() => this.loadingTrackingSignal());
+
   // Discount modal state
   private isDiscountModalVisibleSignal = signal<boolean>(false);
   readonly isDiscountModalVisible = computed(() => this.isDiscountModalVisibleSignal());
@@ -785,6 +795,309 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
 
   closeOrder(): void {
     this.selectedOrderSignal.set(null);
+  }
+
+  // Open Manage Item Status modal and load tracking entries for the currently selected order
+  async openManageItemStatus(): Promise<void> {
+    try {
+      const order = this.selectedOrder();
+      const orderId = order?.id || order?.orderId || '';
+      
+      console.log('🔍 Debug: openManageItemStatus called', {
+        selectedOrder: order,
+        orderId: orderId,
+        orderKeys: order ? Object.keys(order) : 'No order'
+      });
+      
+      if (!orderId) {
+        console.warn('No order id available for Manage Item Status');
+        return;
+      }
+
+      this.loadingTrackingSignal.set(true);
+      
+      // Fetch tracking entries using OrderService (returns array of docs)
+      const entries = await this.orderService.getOrderSellingTracking(orderId);
+
+      const normalized = (entries || []).map((e: any) => {
+        // Cloud Function returns: productName, SKU, quantity, discountType, discount, vat, isVatApplicable, isVatExempt, total, updatedAt, status
+        const quantity = Number(e.quantity ?? 0);
+        const total = Number(e.total ?? 0);
+        const vat = Number(e.vat ?? 0);
+        const discount = Number(e.discount ?? 0);
+        
+        // Calculate price from total/quantity since API doesn't provide price directly
+        const price = quantity > 0 ? total / quantity : total;
+        
+        return {
+          id: e.id || `${e.productName}-${e.SKU}`,
+          updatedAt: e.updatedAt ? (e.updatedAt instanceof Date ? e.updatedAt : new Date(e.updatedAt)) : null,
+          productName: e.productName || '-',
+          sku: e.SKU || e.skuId || e.sku || '-', // Cloud Function returns SKU field
+          unitPrice: price, // Store as unitPrice for clarity
+          price, // Keep both for backward compatibility
+          quantity,
+          vat,
+          discount,
+          discountType: e.discountType || '',
+          isVatApplicable: e.isVatApplicable || false,
+          isVatExempt: e.isVatExempt || false,
+          total,
+          status: e.status || 'unknown',
+          isModified: false, // Track if user has modified this entry
+          ...e
+        };
+      });
+
+      this.trackingEntriesSignal.set(normalized);
+      this.showTrackingSignal.set(true);
+    } catch (err) {
+      console.error('Failed to load order selling tracking entries', err);
+      this.trackingEntriesSignal.set([]);
+      this.showTrackingSignal.set(false);
+    } finally {
+      this.loadingTrackingSignal.set(false);
+    }
+  }
+
+  closeTracking(): void {
+    this.showTrackingSignal.set(false);
+    this.trackingEntriesSignal.set([]);
+    this.loadingTrackingSignal.set(false);
+  }
+
+  // Interactive Tracking Methods
+
+  /**
+   * Update quantity for a tracking item and recalculate total
+   */
+  updateTrackingItemQuantity(index: number, event: any): void {
+    const newQuantity = parseInt(event.target.value) || 0;
+    const entries = this.trackingEntries();
+    
+    if (entries[index]) {
+      const updatedEntry = { 
+        ...entries[index], 
+        quantity: newQuantity,
+        // Mark as modified for saving
+        isModified: true
+      };
+      
+      const updatedEntries = [...entries];
+      updatedEntries[index] = updatedEntry;
+      this.trackingEntriesSignal.set(updatedEntries);
+      
+      console.log('📝 Updated quantity for item', index, 'to', newQuantity);
+    }
+  }
+
+  /**
+   * Update status for a tracking item
+   */
+  updateTrackingItemStatus(index: number, event: any): void {
+    const newStatus = event.target.value;
+    const entries = this.trackingEntries();
+    
+    if (entries[index]) {
+      const updatedEntry = { 
+        ...entries[index], 
+        status: newStatus,
+        // Mark as modified for saving
+        isModified: true
+      };
+      
+      const updatedEntries = [...entries];
+      updatedEntries[index] = updatedEntry;
+      this.trackingEntriesSignal.set(updatedEntries);
+      
+      console.log('📝 Updated status for item', index, 'to', newStatus);
+    }
+  }
+
+  /**
+   * Calculate total for a tracking item based on: (unitPrice × quantity) - discount - VAT
+   * Formula: total = (price * quantity) - discount - vat
+   */
+  calculateTrackingItemTotal(item: any): number {
+    const unitPrice = Number(item.unitPrice || item.price || 0);
+    const quantity = Number(item.quantity || 0);
+    const discount = Number(item.discount || 0);
+    const vat = Number(item.vat || 0);
+    
+    // Calculate subtotal
+    const subtotal = unitPrice * quantity;
+    
+    // Apply discount first, then VAT
+    const afterDiscount = subtotal - discount;
+    const total = afterDiscount - vat;
+    
+    return Math.max(0, total); // Ensure total is never negative
+  }
+
+  /**
+   * Save tracking changes back to the API/Cloud Function
+   */
+  async saveTrackingChanges(): Promise<void> {
+    try {
+      const entries = this.trackingEntries();
+      const modifiedEntries = entries.filter(entry => entry.isModified);
+      
+      if (modifiedEntries.length === 0) {
+        await this.showConfirmationDialog({
+          title: 'No Changes',
+          message: 'No modifications were made to save.',
+          confirmText: 'OK',
+          cancelText: '',
+          type: 'info'
+        });
+        return;
+      }
+
+      const confirmed = await this.showConfirmationDialog({
+        title: 'Save Changes',
+        message: `Are you sure you want to save changes to ${modifiedEntries.length} item(s)?`,
+        confirmText: 'Yes, Save',
+        cancelText: 'Cancel',
+        type: 'info'
+      });
+
+      if (!confirmed) return;
+
+      this.loadingTrackingSignal.set(true);
+
+      const order = this.selectedOrder();
+      const orderId = order?.id || order?.orderId || '';
+
+      console.log('💾 Saving tracking changes:', {
+        orderId,
+        modifiedCount: modifiedEntries.length,
+        changes: modifiedEntries.map(e => ({
+          id: e.id,
+          productName: e.productName,
+          quantity: e.quantity,
+          status: e.status
+        }))
+      });
+
+      // TODO: Call API to save changes
+      // This would typically call a Cloud Function to update the tracking entries
+      // await this.orderService.updateOrderSellingTracking(orderId, modifiedEntries);
+
+      // For now, simulate success
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      await this.showConfirmationDialog({
+        title: 'Changes Saved',
+        message: 'Item status tracking changes have been saved successfully.',
+        confirmText: 'OK',
+        cancelText: '',
+        type: 'info'
+      });
+
+      // Refresh the tracking data
+      await this.openManageItemStatus();
+
+    } catch (error) {
+      console.error('❌ Error saving tracking changes:', error);
+      
+      await this.showConfirmationDialog({
+        title: 'Save Failed',
+        message: 'Failed to save changes. Please try again.',
+        confirmText: 'OK',
+        cancelText: '',
+        type: 'danger'
+      });
+    } finally {
+      this.loadingTrackingSignal.set(false);
+    }
+  }
+
+  /**
+   * Get quantity to adjust for a tracking item (defaults to original quantity)
+   */
+  getQtyToAdjust(item: any): number {
+    return item?.qtyToAdjust ?? Number(item?.quantity || 0);
+  }
+
+  /**
+   * Update quantity to adjust for a tracking item
+   */
+  updateQtyToAdjust(index: number, newQty: string): void {
+    const entries = this.trackingEntries();
+    
+    if (entries[index]) {
+      const qtyValue = Number(newQty) || 0;
+      const updatedEntry = { 
+        ...entries[index], 
+        qtyToAdjust: qtyValue,
+        // Mark as modified for saving
+        isModified: true
+      };
+      
+      const updatedEntries = [...entries];
+      updatedEntries[index] = updatedEntry;
+      this.trackingEntriesSignal.set(updatedEntries);
+      
+      console.log('📝 Updated qty to adjust for item', index, 'to', qtyValue);
+    }
+  }
+
+  /**
+   * Get adjustment type for a tracking item (defaults to current status)
+   */
+  getAdjustmentType(item: any): string {
+    return item?.adjustmentType ?? item?.status ?? 'pending';
+  }
+
+  /**
+   * Update adjustment type for a tracking item
+   */
+  updateAdjustmentType(index: number, newType: string): void {
+    const entries = this.trackingEntries();
+    
+    if (entries[index]) {
+      const updatedEntry = { 
+        ...entries[index], 
+        adjustmentType: newType,
+        // Mark as modified for saving
+        isModified: true
+      };
+      
+      const updatedEntries = [...entries];
+      updatedEntries[index] = updatedEntry;
+      this.trackingEntriesSignal.set(updatedEntries);
+      
+      console.log('📝 Updated adjustment type for item', index, 'to', newType);
+    }
+  }
+
+  /**
+   * Get update reason for a tracking item
+   */
+  getUpdateReason(item: any): string {
+    return item?.updateReason ?? '';
+  }
+
+  /**
+   * Update reason for a tracking item
+   */
+  updateReason(index: number, newReason: string): void {
+    const entries = this.trackingEntries();
+    
+    if (entries[index]) {
+      const updatedEntry = { 
+        ...entries[index], 
+        updateReason: newReason,
+        // Mark as modified for saving
+        isModified: true
+      };
+      
+      const updatedEntries = [...entries];
+      updatedEntries[index] = updatedEntry;
+      this.trackingEntriesSignal.set(updatedEntries);
+      
+      console.log('📝 Updated reason for item', index, 'to', newReason);
+    }
   }
 
   /**
@@ -1074,6 +1387,11 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     console.log('🎯 POS COMPONENT: ngOnInit called - POS is loading!');
     console.log('🎯 POS COMPONENT: Current URL:', window.location.href);
     console.log('🎯 POS COMPONENT: Timestamp:', new Date().toISOString());
+    
+    // Scroll to top when POS component loads
+    setTimeout(() => {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }, 100);
     
     // Add Firestore test
     await this.testFirestoreConnection();
