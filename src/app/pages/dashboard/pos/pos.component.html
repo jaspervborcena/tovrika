@@ -581,13 +581,7 @@
           <!-- Scrollable Body -->
           <div class="cart-info-dialog-body">
             
-            <!-- Debug Info (temporary) -->
-            <div style="background: #f0f9ff; border: 1px solid #0ea5e9; padding: 0.5rem; margin-bottom: 1rem; border-radius: 4px; font-size: 0.8rem;">
-              <strong>Debug Info:</strong><br>
-              Loading: {{ loadingTracking() }}<br>
-              Entries Count: {{ trackingEntries().length }}<br>
-              Selected Order: {{ selectedOrder()?.id || 'None' }}
-            </div>
+            <!-- Debug Info removed -->
             
             <!-- Loading State -->
             <div *ngIf="loadingTracking()" class="loading-section">
@@ -696,7 +690,6 @@
                     <select class="adjustment-type-select"
                             [value]="getAdjustmentType(item)"
                             (change)="updateAdjustmentType(i, $any($event.target).value)">
-                      <option value="pending">Pending</option>
                       <option value="processing">Processing</option>
                       <option value="completed">Completed</option>
                       <option value="cancelled">Cancelled</option>

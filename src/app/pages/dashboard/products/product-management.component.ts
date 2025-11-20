@@ -1424,17 +1424,21 @@ import { AppConstants } from '../../../shared/enums/app-constants.enum';
                       </div>
                     </div>
 
-                    <div class="form-group">
-                      <label for="sellingPrice">Selling Price</label>
-                      <input 
-                        type="number" 
-                        id="sellingPrice"
-                        formControlName="initialUnitPrice"
-                        placeholder="0.00"
-                        class="form-input"
-                        min="0"
-                        step="0.01">
-                      <small class="text-muted">Price per unit (will be used for initial batch)</small>
+                    <div class="form-row">
+                      <div class="form-group">
+                        <label for="sellingPrice">Selling Price</label>
+                        <input 
+                          type="number" 
+                          id="sellingPrice"
+                          formControlName="initialUnitPrice"
+                          placeholder="0.00"
+                          class="form-input"
+                          min="0"
+                          step="0.01">
+                        <small class="text-muted">Price per unit (will be used for initial batch)</small>
+                      </div>
+
+                     
                     </div>
 
                                     <!-- VAT controls: placed inside new-product-inventory for both Add/Edit -->
@@ -1446,11 +1450,10 @@ import { AppConstants } from '../../../shared/enums/app-constants.enum';
                                           formControlName="isVatApplicable"
                                           style="width:16px; height:16px; cursor:pointer;" />
                                         <label for="isVatApplicable" style="margin:0; cursor:pointer; font-weight:600;">VAT applicable</label>
-                                        <small class="text-muted">Apply VAT ({{ defaultVatRate }}%)</small>
                                       </div>
 
                                       <div class="form-group">
-                                        <label for="vatRate">VAT Rate (%)</label>
+                                        <label for="vatRate">VAT Rate (%) Default: {{ defaultVatRate }}%<</label>
                                         <input
                                           type="number"
                                           id="vatRate"
@@ -1461,10 +1464,51 @@ import { AppConstants } from '../../../shared/enums/app-constants.enum';
                                           max="100"
                                           step="0.01"
                                           [disabled]="!productForm.get('isVatApplicable')?.value" />
-                                        <small class="text-muted">Default: {{ defaultVatRate }}%</small>
                                       </div>
+                                      
+                                      <div class="form-group" style="display:flex; align-items:center; gap:8px;">
+                                        <input
+                                          type="checkbox"
+                                          id="hasDiscount"
+                                          formControlName="hasDiscount"
+                                          style="width:16px; height:16px; cursor:pointer;" />
+                                        <label for="hasDiscount" style="margin:0; cursor:pointer; font-weight:600;">Has Discount</label>
+                                      </div>
+
+                                      
+
+                      
+
                                     </div>
 
+
+
+
+
+                     <div class="form-row">
+                      <div class="form-group">
+                                        <label for="discountType">Discount Type</label>
+                                        <select id="discountType" formControlName="discountType" class="form-input" [disabled]="!productForm.get('hasDiscount')?.value">
+                                          <option value="percentage">Percentage</option>
+                                          <option value="fixed">Fixed</option>
+                                        </select>
+                                        <small class="text-muted">Percentage or fixed amount</small>
+                                      </div>
+
+                     <div class="form-group">
+                        <label for="discountValue">Discount</label>
+                        <input
+                          type="number"
+                          id="discountValue"
+                          formControlName="discountValue"
+                          placeholder="0.00"
+                          class="form-input"
+                          min="0"
+                          step="0.01"
+                          [disabled]="!productForm.get('hasDiscount')?.value" />
+                        <small class="text-muted">Value depends on discount type</small>
+                      </div>
+                    </div>
                       
 
                     <!-- Additional initial batch fields -->
@@ -1732,6 +1776,30 @@ import { AppConstants } from '../../../shared/enums/app-constants.enum';
                         Received date is required
                       </div>
                     </div>
+                    
+                    <div class="form-group">
+                      <label class="form-label">VAT</label>
+                      <div style="display:flex; gap:8px; align-items:center;">
+                        <input type="checkbox" id="isVatApplicable" formControlName="isVatApplicable" />
+                        <label for="isVatApplicable" style="margin:0;">VAT applicable</label>
+                        <input type="number" formControlName="vatRate" min="0" max="100" step="0.01" class="form-input" style="width:120px; margin-left:8px;" />
+                      </div>
+                      <small class="text-muted">VAT Rate (%)</small>
+                    </div>
+                    
+                    <div class="form-group">
+                      <label class="form-label">Discount</label>
+                      <div style="display:flex; gap:8px; align-items:center;">
+                        <input type="checkbox" id="hasDiscount" formControlName="hasDiscount" />
+                        <label for="hasDiscount" style="margin:0;">Has Discount</label>
+                        <select formControlName="discountType" class="form-input" [disabled]="!inventoryForm.get('hasDiscount')?.value" style="width:140px; margin-left:8px;">
+                          <option value="percentage">Percentage</option>
+                          <option value="fixed">Fixed</option>
+                        </select>
+                        <input type="number" formControlName="discountValue" step="0.01" min="0" class="form-input" [disabled]="!inventoryForm.get('hasDiscount')?.value" style="width:120px;" />
+                      </div>
+                      <small class="text-muted">Discount type & value</small>
+                    </div>
                   </div>
                   
                   <div class="form-actions">
@@ -1978,7 +2046,13 @@ export class ProductManagementComponent implements OnInit {
       costPrice: [0, [Validators.required, Validators.min(0)]],
       receivedAt: [new Date().toISOString().split('T')[0], Validators.required],
       expiryDate: [''],
-      supplier: ['']
+      supplier: [''],
+      // VAT & Discount for batch-level metadata
+      isVatApplicable: [true],
+      vatRate: [AppConstants.DEFAULT_VAT_RATE, [Validators.min(0), Validators.max(100)]],
+      hasDiscount: [false],
+      discountType: ['percentage'],
+      discountValue: [0, [Validators.min(0)]]
     });
   }
 
@@ -2033,12 +2107,16 @@ export class ProductManagementComponent implements OnInit {
     this.isEditMode = false;
     this.selectedProduct = null;
     this.productForm.reset({
-  initialReceivedAt: new Date().toISOString().split('T')[0],
-  isMultipleInventory: false,
-  initialBatchId: '',
-  initialQuantity: 0,
-  initialUnitPrice: 0,
-  vatRate: AppConstants.DEFAULT_VAT_RATE
+      initialReceivedAt: new Date().toISOString().split('T')[0],
+      isMultipleInventory: false,
+      initialBatchId: '',
+      initialQuantity: 0,
+      initialUnitPrice: 0,
+      vatRate: AppConstants.DEFAULT_VAT_RATE,
+      // Preserve discount defaults when opening the Add Product modal
+      hasDiscount: true,
+      discountType: 'percentage',
+      discountValue: 0
     });
     // Ensure required defaults after reset
     this.productForm.patchValue({
@@ -2232,6 +2310,7 @@ export class ProductManagementComponent implements OnInit {
           isFavorite: !!formValue.isFavorite,
           // Tax and Discount Fields
           isVatApplicable: formValue.isVatApplicable || false,
+          vatRate: formValue.vatRate ?? AppConstants.DEFAULT_VAT_RATE,
           hasDiscount: formValue.hasDiscount || false,
           discountType: formValue.discountType || 'percentage',
           discountValue: formValue.discountValue || 0
@@ -2288,6 +2367,7 @@ export class ProductManagementComponent implements OnInit {
           
           // Tax and Discount Fields from form
           isVatApplicable: formValue.isVatApplicable || false,
+          vatRate: formValue.vatRate ?? AppConstants.DEFAULT_VAT_RATE,
           hasDiscount: formValue.hasDiscount || false,
           discountType: formValue.discountType || 'percentage',
           discountValue: formValue.discountValue || 0,
@@ -2322,6 +2402,9 @@ export class ProductManagementComponent implements OnInit {
               supplier: initialBatch!.supplier,
               status: ProductStatus.Active,
               unitType: formValue.unitType || 'pieces',
+              // Preserve VAT metadata on the batch
+              isVatApplicable: formValue.isVatApplicable || false,
+              vatRate: formValue.vatRate ?? AppConstants.DEFAULT_VAT_RATE,
               companyId: companyId,
               storeId: storeId,
               productId: productId
@@ -2561,7 +2644,13 @@ export class ProductManagementComponent implements OnInit {
       costPrice: Number(batch.costPrice ?? 0),
       receivedAt: this.toDateInputValue(batch.receivedAt, true),
       expiryDate: batch.expiryDate ? this.toDateInputValue(batch.expiryDate, false) : '',
-      supplier: batch.supplier || ''
+      supplier: batch.supplier || '',
+      // VAT & Discount
+      isVatApplicable: typeof batch.isVatApplicable === 'boolean' ? batch.isVatApplicable : true,
+      vatRate: batch.vatRate ?? AppConstants.DEFAULT_VAT_RATE,
+      hasDiscount: !!batch.hasDiscount,
+      discountType: batch.discountType ?? 'percentage',
+      discountValue: batch.discountValue ?? 0
     });
 
     // Force angular to update view so form fields appear immediately
@@ -2605,7 +2694,13 @@ export class ProductManagementComponent implements OnInit {
           expiryDate: formValue.expiryDate ? new Date(formValue.expiryDate) : undefined,
           supplier: formValue.supplier || undefined,
           status: ProductStatus.Active,
-          unitType: this.selectedProduct?.unitType || 'pieces'
+          unitType: this.selectedProduct?.unitType || 'pieces',
+          // VAT & Discount metadata
+          isVatApplicable: !!formValue.isVatApplicable,
+          vatRate: Number(formValue.vatRate ?? AppConstants.DEFAULT_VAT_RATE),
+          hasDiscount: !!formValue.hasDiscount,
+          discountType: formValue.discountType || 'percentage',
+          discountValue: Number(formValue.discountValue || 0)
         });
       } else {
         // Add new batch - check if previous batch has remaining stock
@@ -2627,6 +2722,12 @@ export class ProductManagementComponent implements OnInit {
           supplier: formValue.supplier || undefined,
           status: ProductStatus.Active,
           unitType: this.selectedProduct?.unitType || 'pieces',
+          // VAT & Discount metadata
+          isVatApplicable: !!formValue.isVatApplicable,
+          vatRate: Number(formValue.vatRate ?? AppConstants.DEFAULT_VAT_RATE),
+          hasDiscount: !!formValue.hasDiscount,
+          discountType: formValue.discountType || 'percentage',
+          discountValue: Number(formValue.discountValue || 0),
           companyId: this.selectedProduct.companyId,
           storeId: this.selectedProduct.storeId,
           productId: this.selectedProduct.id!

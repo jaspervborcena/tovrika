@@ -5,6 +5,7 @@ import { Firestore, collection, query, where, getDocs, Timestamp, orderBy, limit
 import { User } from '@angular/fire/auth';
 import { Order } from '../interfaces/pos.interface';
 import { AuthService } from './auth.service';
+import { OrdersSellingTrackingService } from './orders-selling-tracking.service';
 import { LoggerService } from '../core/services/logger.service';
 import { FirestoreSecurityService } from '../core/services/firestore-security.service';
 import { OfflineDocumentService } from '../core/services/offline-document.service';
@@ -27,6 +28,7 @@ export class OrderService {
     private http: HttpClient,
     private securityService: FirestoreSecurityService,
     private indexedDb: IndexedDBService,
+    private ordersSellingTrackingService: OrdersSellingTrackingService,
   ) {}
 
   private transformDoc(d: any): Order {
@@ -669,7 +671,15 @@ export class OrderService {
     } catch (e) {
       console.error('💥 Error calling manage_item_status Cloud Function:', e);
       this.logger.warn('Failed to fetch orderSellingTracking via Cloud Function', { area: 'orders', payload: { orderId, error: String(e) } });
-      return [];
+      // Fallback: attempt to read directly from Firestore 'ordersSellingTracking' collection
+      try {
+        const fallback = await this.ordersSellingTrackingService.fetchTrackingEntries(orderId);
+        console.info('Fallback fetched tracking entries from Firestore:', fallback.length);
+        return fallback;
+      } catch (fbErr) {
+        this.logger.warn('Fallback to Firestore ordersSellingTracking failed', { area: 'orders', payload: { orderId, error: String(fbErr) } });
+        return [];
+      }
     }
   }
 

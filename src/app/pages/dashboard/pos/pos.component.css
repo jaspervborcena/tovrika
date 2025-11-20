@@ -3213,6 +3213,30 @@
   text-align: left;
 }
 
+/* Add extra right padding after Update Reason to create visual margin */
+.col-update-reason {
+  padding-right: 1.25rem;
+}
+
+@media (max-width: 1024px) {
+  /* Slightly reduce padding on narrower screens */
+  .col-update-reason { padding-right: 0.8rem; }
+}
+
+/* Ensure the Update Reason textarea leaves space before the vertical scrollbar */
+.update-reason-textarea {
+  width: 100%;
+  box-sizing: border-box; /* include padding in width calculation */
+  padding: 0.5rem 1rem 0.5rem 0.5rem; /* extra right padding to avoid scrollbar overlap */
+  max-width: 100%;
+  resize: vertical;
+  scrollbar-gutter: stable; /* reserve space for scrollbar where supported */
+}
+
+@media (max-width: 1024px) {
+  .update-reason-textarea { padding: 0.45rem 0.8rem 0.45rem 0.45rem; }
+}
+
 /* Product Details */
 .item-details-tracking {
   display: flex;
@@ -3539,11 +3563,6 @@
 
 .status-select option {
   padding: 0.25rem;
-}
-
-/* Status-specific colors for select options */
-.status-select option[value="pending"] {
-  color: #d97706;
 }
 
 .status-select option[value="processing"] {

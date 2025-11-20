@@ -994,6 +994,13 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
         // Add calculated fields to product
         productPayload.totalStock = totalStock;
         productPayload.sellingPrice = sellingPrice;
+        // Ensure VAT fields are persisted
+        productPayload.vatRate = Number(baseData?.vatRate || 0);
+        productPayload.isVatApplicable = !!baseData?.isVatApplicable;
+        // Ensure Discount fields are persisted
+        productPayload.hasDiscount = !!baseData?.hasDiscount;
+        productPayload.discountType = baseData?.discountType || 'percentage';
+        productPayload.discountValue = Number(baseData?.discountValue || 0);
 
         // 4. Queue product creation in transaction
         transaction.set(productRef, productPayload);
@@ -1018,9 +1025,15 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
             receivedAt: batch.receivedAt instanceof Date ? batch.receivedAt : new Date(batch.receivedAt || new Date()),
             expiryDate: batch.expiryDate ? (batch.expiryDate instanceof Date ? batch.expiryDate : new Date(batch.expiryDate)) : null,
             supplier: batch.supplier || null,
+            // VAT metadata for the batch: prefer explicit batch value, fallback to product-level
+            isVatApplicable: !!(batch.isVatApplicable ?? baseData.isVatApplicable),
+            vatRate: Number(batch.vatRate ?? baseData.vatRate ?? 0),
+            // Discount metadata for the batch: prefer explicit batch value, fallback to product-level
+            hasDiscount: !!(batch.hasDiscount ?? baseData.hasDiscount),
+            discountType: batch.discountType ?? baseData.discountType ?? 'percentage',
+            discountValue: Number(batch.discountValue ?? baseData.discountValue ?? 0),
             status: 'active',
             totalDeducted: 0,
-            deductionHistory: [],
             uid: currentUser.uid,
             createdBy: currentUser.uid,
             updatedBy: currentUser.uid,
@@ -1054,6 +1067,13 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
           })[0]?.unitPrice || 0) : 0,
           createdAt: new Date(),
           updatedAt: new Date(),
+          // include VAT in optimistic local model
+          vatRate: Number((productData as any)?.vatRate || 0),
+          isVatApplicable: !!(productData as any)?.isVatApplicable,
+          // include Discount in optimistic local model
+          hasDiscount: !!(productData as any)?.hasDiscount,
+          discountType: (productData as any)?.discountType || 'percentage',
+          discountValue: Number((productData as any)?.discountValue || 0),
           isOfflineCreated: productId.startsWith('temp_')
         } as Product;
 
@@ -1081,6 +1101,23 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
 
       // Prepare update data with proper Timestamp conversion
       const updateData: any = { ...updates };
+      // Normalize VAT fields when present
+      if ('vatRate' in updates) {
+        updateData.vatRate = Number((updates as any).vatRate || 0);
+      }
+      if ('isVatApplicable' in updates) {
+        updateData.isVatApplicable = !!(updates as any).isVatApplicable;
+      }
+      // Normalize Discount fields when present
+      if ('hasDiscount' in updates) {
+        updateData.hasDiscount = !!(updates as any).hasDiscount;
+      }
+      if ('discountType' in updates) {
+        updateData.discountType = (updates as any).discountType || 'percentage';
+      }
+      if ('discountValue' in updates) {
+        updateData.discountValue = Number((updates as any).discountValue || 0);
+      }
 
       // Clean undefined values to prevent Firestore errors
       const cleanedUpdateData = this.cleanUndefinedValues(updateData);
@@ -1088,8 +1125,8 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
       // Use OfflineDocumentService for consistent online/offline updates
       await this.offlineDocService.updateDocument('products', productId, cleanedUpdateData);
 
-      // Update the local cache optimistically
-      this.updateProductInCache(productId, updates);
+      // Update the local cache optimistically with the cleaned/normalized data
+      this.updateProductInCache(productId, cleanedUpdateData as Partial<Product>);
 
     } catch (error) {
       this.logger.dbFailure('Update product failed', { api: 'firestore.update', area: 'products', collectionPath: 'products', docId: productId }, error);
