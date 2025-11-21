@@ -155,11 +155,16 @@ export class InventoryDataService {
       updatedBy: user.uid,
       receivedAt: entry.receivedAt instanceof Date ? entry.receivedAt : new Date(entry.receivedAt),
       expiryDate: entry.expiryDate ? (entry.expiryDate instanceof Date ? entry.expiryDate : new Date(entry.expiryDate)) : undefined,
+      // VAT and Discount metadata
+      isVatApplicable: !!entry.isVatApplicable,
+      vatRate: Number(entry.vatRate ?? 0),
+      hasDiscount: !!entry.hasDiscount,
+      discountType: entry.discountType ?? 'percentage',
+      discountValue: Number(entry.discountValue ?? 0),
       syncStatus: 'SYNCED',
       isOffline: false,
       initialQuantity: entry.quantity,
-      totalDeducted: 0,
-      deductionHistory: []
+      totalDeducted: 0
     };
 
     // Use Firestore transaction for all-or-nothing operation

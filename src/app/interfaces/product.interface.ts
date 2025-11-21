@@ -84,6 +84,12 @@ export interface ProductInventory {
   supplier?: string;
   status: ProductStatus;
   unitType?: string;  // Added to match Firestore structure
+  // VAT fields for batch-level taxation (optional)
+  isVatApplicable: boolean;
+  vatRate?: number; // percentage
+  hasDiscount: boolean;
+  discountType: 'percentage' | 'fixed';
+  discountValue: number;
 }
 
 // Legacy interfaces for backward compatibility

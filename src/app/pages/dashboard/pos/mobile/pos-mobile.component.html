@@ -321,16 +321,17 @@
         </div>
         <div class="info-row">
           <strong>Customer:</strong> {{ selectedOrder()?.soldTo || 'Walk-in' }}
-        </div>
-        <div class="info-row">
-          <strong>Status:</strong> {{ selectedOrder()?.status }}
-        </div>
-        <div class="info-row">
-          <strong>{{ 'pos.total' | translate }} {{ 'pos.amount' | translate }}:</strong> ₱{{ selectedOrder()?.totalAmount | number:'1.2-2' }}
-        </div>
-      </div>
-      
-      <!-- BIR Information Section -->
+          <div class="modal-actions">
+      <button (click)="openOrderReceipt(selectedOrder())" class="mobile-btn info-btn">View Receipt</button>
+      <button *ngIf="selectedOrder()?.status !== 'cancelled'" 
+        (click)="authorizeAndUpdateOrderStatus(selectedOrder()?.id, 'cancelled')" 
+        class="mobile-btn warning-btn">Cancel Order</button>
+      <button *ngIf="selectedOrder()" (click)="authorizeAndUpdateOrderStatus(selectedOrder()?.id, 'cancelled')" class="mobile-btn warning-btn">Return</button>
+      <button *ngIf="selectedOrder()?.status !== 'refunded'" 
+        (click)="authorizeAndUpdateOrderStatus(selectedOrder()?.id, 'refunded')" 
+        class="mobile-btn primary-btn">Refund</button>
+      <button *ngIf="selectedOrder()" (click)="openDamageModeAuthorized()" class="mobile-btn danger-btn">Damage</button>
+          </div>
       <div class="bir-section">
         <h4>BIR Information</h4>
         <div class="info-row">
@@ -347,18 +348,40 @@
       <div class="modal-actions">
         <button (click)="closeOrder()" class="mobile-btn secondary-btn">Close</button>
         <button (click)="openOrderReceipt(selectedOrder())" class="mobile-btn info-btn">View Receipt</button>
-        <button *ngIf="selectedOrder()?.status !== 'Cancelled'" 
-                (click)="updateOrderStatus(selectedOrder()?.id, 'Cancelled')" 
-                class="mobile-btn warning-btn">Cancel Order</button>
-        <button *ngIf="selectedOrder()?.status !== 'Refunded'" 
-                (click)="updateOrderStatus(selectedOrder()?.id, 'Refunded')" 
-                class="mobile-btn primary-btn">Process Refund</button>
+        <button *ngIf="selectedOrder()?.status !== 'cancelled'" 
+          (click)="authorizeAndUpdateOrderStatus(selectedOrder()?.id, 'cancelled')" 
+          class="mobile-btn warning-btn">Cancel Order</button>
+        <button *ngIf="selectedOrder()?.status !== 'refunded'" 
+          (click)="authorizeAndUpdateOrderStatus(selectedOrder()?.id, 'refunded')" 
+          class="mobile-btn primary-btn">Refund</button>
+        <button *ngIf="selectedOrder()" (click)="authorizeAndUpdateOrderStatus(selectedOrder()?.id, 'cancelled')" class="mobile-btn warning-btn">Return</button>
+        <button *ngIf="selectedOrder()" (click)="authorizeAndUpdateOrderStatus(selectedOrder()?.id, 'cancelled')" class="mobile-btn danger-btn">Damage</button>
       </div>
     </div>
   </div>
 </div>
 
 <!-- Receipt Modal -->
+<!-- Manager Authorization Modal (mobile) -->
+<div *ngIf="managerAuthVisible()" class="modal-overlay" style="position:fixed; inset:0; display:flex; align-items:center; justify-content:center; background:rgba(0,0,0,0.4); z-index:60;">
+  <div class="modal" style="background:white; padding:1rem; width:320px; max-width:90vw; border-radius:8px;">
+    <div class="modal-header" style="display:flex; align-items:center; justify-content:space-between; margin-bottom:0.75rem;">
+      <h4 style="margin:0;">Manager Authorization</h4>
+      <button class="close-btn" (click)="onManagerAuthCancel()" style="background:transparent; border:none; font-size:1.25rem; cursor:pointer;">×</button>
+    </div>
+    <div style="display:flex; flex-direction:column; gap:0.5rem;">
+      <label style="font-weight:600; font-size:0.9rem;">Manager Code</label>
+      <input type="text" [value]="managerAuthUserCode()" (input)="managerAuthUserCode.set($any($event.target).value)" placeholder="Enter manager code" style="padding:0.5rem; border:1px solid #e5e7eb; border-radius:4px;" />
+      <label style="font-weight:600; font-size:0.9rem;">PIN</label>
+      <input type="password" [value]="managerAuthPin()" (input)="managerAuthPin.set($any($event.target).value)" placeholder="Enter PIN" style="padding:0.5rem; border:1px solid #e5e7eb; border-radius:4px;" />
+      <div *ngIf="managerAuthError()" style="color:#b91c1c; font-weight:600; margin-top:0.25rem;">{{ managerAuthError() }}</div>
+    </div>
+    <div style="display:flex; gap:0.5rem; justify-content:flex-end; margin-top:0.75rem;">
+      <button class="mobile-btn secondary-btn" (click)="onManagerAuthCancel()">Cancel</button>
+      <button class="mobile-btn primary-btn" (click)="onManagerAuthConfirm()">Confirm</button>
+    </div>
+  </div>
+</div>
 <app-receipt
   [isVisible]="isReceiptModalVisible()"
   [receiptData]="receiptData()"

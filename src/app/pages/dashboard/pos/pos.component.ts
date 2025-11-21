@@ -1,5 +1,5 @@
 import { Component, OnInit, AfterViewInit, OnDestroy, HostListener, computed, signal, inject } from '@angular/core';
-import { Firestore, doc, getDoc } from '@angular/fire/firestore';
+import { Firestore, doc, getDoc, collection, query, where, getDocs } from '@angular/fire/firestore';
 import { ProductStatus } from '../../../interfaces/product.interface';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -526,8 +526,24 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   private trackingEntriesSignal = signal<any[]>([]);
   readonly trackingEntries = computed(() => this.trackingEntriesSignal());
 
+  // Optional mode to indicate why Manage Item Status was opened (e.g., 'return' or 'damage')
+  private trackingModeSignal = signal<string | null>(null);
+  readonly trackingMode = computed(() => this.trackingModeSignal());
+
   private loadingTrackingSignal = signal<boolean>(false);
   readonly loadingTracking = computed(() => this.loadingTrackingSignal());
+
+  // Manager auth modal state (collect userCode + pin)
+  private managerAuthVisibleSignal = signal<boolean>(false);
+  readonly managerAuthVisible = computed(() => this.managerAuthVisibleSignal());
+
+  managerAuthUserCode = signal<string>('');
+  managerAuthPin = signal<string>('');
+  // Inline error message to show inside the manager auth modal when creds are invalid
+  managerAuthError = signal<string>('');
+
+  // Internal resolver for showManagerAuthDialog promise
+  private _managerAuthResolve: ((value: { userCode: string; pin: string } | null) => void) | null = null;
 
   // Discount modal state
   private isDiscountModalVisibleSignal = signal<boolean>(false);
@@ -798,15 +814,19 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   // Open Manage Item Status modal and load tracking entries for the currently selected order
-  async openManageItemStatus(): Promise<void> {
+  async openManageItemStatus(mode?: 'return' | 'damage' | null): Promise<void> {
     try {
+      // Store the requested mode (used by the modal UI if needed)
+      this.trackingModeSignal.set(mode || null);
+
       const order = this.selectedOrder();
       const orderId = order?.id || order?.orderId || '';
-      
+
       console.log('🔍 Debug: openManageItemStatus called', {
         selectedOrder: order,
         orderId: orderId,
-        orderKeys: order ? Object.keys(order) : 'No order'
+        orderKeys: order ? Object.keys(order) : 'No order',
+        mode: this.trackingMode()
       });
       
       if (!orderId) {
@@ -1136,6 +1156,157 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     }
   }
 
+  // Show manager auth modal and return credentials or null if cancelled
+  showManagerAuthDialog(): Promise<{ userCode: string; pin: string } | null> {
+    return new Promise((resolve) => {
+      console.log('🔐 showManagerAuthDialog: opening manager auth modal');
+      this.managerAuthUserCode.set('');
+      this.managerAuthPin.set('');
+      // Clear any previous inline error
+      this.managerAuthError.set('');
+      this._managerAuthResolve = resolve;
+      this.managerAuthVisibleSignal.set(true);
+    });
+  }
+
+  // Called by modal confirm
+  async onManagerAuthConfirm(): Promise<void> {
+    const userCode = (this.managerAuthUserCode() || '').toString();
+    const pin = (this.managerAuthPin() || '').toString();
+    console.log('🔐 onManagerAuthConfirm: creds submitted (redacted)', { userCode: userCode ? 'present' : 'empty', pinProvided: !!pin });
+
+    // Validate credentials against users collection and check store permission
+    try {
+      const isValid = await this.validateManagerCredentials(userCode, pin);
+      if (isValid) {
+        this.managerAuthVisibleSignal.set(false);
+        if (this._managerAuthResolve) {
+          this._managerAuthResolve({ userCode, pin });
+          this._managerAuthResolve = null;
+        }
+        return;
+      }
+
+      // Invalid credentials - display inline error in the auth modal and keep it open for retry
+      this.managerAuthError.set('Invalid manager code or PIN, or manager is not authorized for this store.');
+      // Clear pin for security and allow retry
+      this.managerAuthPin.set('');
+
+    } catch (err) {
+      console.error('Error validating manager credentials', err);
+      await this.showConfirmationDialog({
+        title: 'Error',
+        message: 'An error occurred while validating credentials. Please try again.',
+        confirmText: 'OK',
+        cancelText: '',
+        type: 'danger'
+      });
+    }
+  }
+
+  // Validate manager credentials against Firestore `users` collection
+  private async validateManagerCredentials(userCode: string, pin: string): Promise<boolean> {
+    if (!userCode || !pin) return false;
+
+    try {
+      const usersRef = collection(this.firestore, 'users');
+      // Detect if the user entered an email (contains @ and .com or .net)
+      const lowered = userCode.toLowerCase();
+      const isEmail = userCode.includes('@') && (lowered.includes('.com') || lowered.includes('.net'));
+      const q = isEmail
+        ? query(usersRef, where('email', '==', userCode))
+        : query(usersRef, where('userCode', '==', userCode));
+      const snap = await getDocs(q);
+      if (!snap || snap.empty) return false;
+
+      const currentStore = this.selectedStoreId();
+
+      for (const docSnap of snap.docs) {
+        const data: any = docSnap.data();
+        // Basic pin match (assumes pin stored in users collection as plain or comparable string)
+        if ((data.pin || '').toString() !== pin.toString()) continue;
+
+        // Check permission/store mapping - flexible support for different shapes
+        // 1) direct storeId on user
+        if (data.storeId && currentStore && data.storeId === currentStore) return true;
+
+        // 2) permission object
+        if (data.permission && data.permission.storeId && currentStore && data.permission.storeId === currentStore) return true;
+
+        // 3) permissions array - require permissions[0].storeId to match the current store
+        if (Array.isArray(data.permissions) && data.permissions.length > 0 && currentStore) {
+          const first = data.permissions[0];
+          if (first && first.storeId && first.storeId === currentStore) return true;
+        }
+
+        // 4) if currentStore is falsy, accept pin/userCode match (fallback)
+        if (!currentStore) return true;
+      }
+
+      return false;
+    } catch (e) {
+      console.error('Error querying users for manager auth', e);
+      return false;
+    }
+  }
+
+  // Called by modal cancel
+  onManagerAuthCancel(): void {
+    console.log('🔐 onManagerAuthCancel: manager auth cancelled by user');
+    this.managerAuthVisibleSignal.set(false);
+    // Clear inline error when user cancels
+    this.managerAuthError.set('');
+    if (this._managerAuthResolve) {
+      this._managerAuthResolve(null);
+      this._managerAuthResolve = null;
+    }
+  }
+
+  // Require manager auth before opening Manage Item Status modal
+  async openManageItemStatusAuthorized(mode?: 'return' | 'damage' | null): Promise<void> {
+    const creds = await this.showManagerAuthDialog();
+    if (!creds) return; // cancelled
+    await this.openManageItemStatus(mode);
+  }
+
+  // Wrapper to require manager auth before updating order status
+  async authorizeAndUpdateOrderStatus(orderId: string, status: string): Promise<void> {
+    const creds = await this.showManagerAuthDialog();
+    if (!creds) return; // cancelled
+    // TODO: validate creds before proceeding (server-side validation recommended)
+    await this.updateOrderStatus(orderId, status);
+  }
+
+  // Wrapper to require manager auth before processing item actions
+  async processItemActionAuthorized(orderId: string, itemIndex: number, action: string, item: any): Promise<void> {
+    const creds = await this.showManagerAuthDialog();
+    if (!creds) return;
+    await this.processItemAction(orderId, itemIndex, action, item);
+  }
+
+  // Wrapper for opening return/damage modes with auth
+  async openReturnModeAuthorized(): Promise<void> {
+    const creds = await this.showManagerAuthDialog();
+    if (!creds) return;
+    await this.openReturnMode();
+  }
+
+  async openDamageModeAuthorized(): Promise<void> {
+    const creds = await this.showManagerAuthDialog();
+    if (!creds) return;
+    await this.openDamageMode();
+  }
+
+  // Open Manage Item Status modal pre-set to 'return' mode
+  async openReturnMode(): Promise<void> {
+    await this.openManageItemStatus('return');
+  }
+
+  // Open Manage Item Status modal pre-set to 'damage' mode
+  async openDamageMode(): Promise<void> {
+    await this.openManageItemStatus('damage');
+  }
+
   // Process individual item actions (return, damage, refund, cancel)
   async processItemAction(orderId: string, itemIndex: number, action: string, item: any): Promise<void> {
     try {
@@ -1154,11 +1325,23 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
         switch (action) {
           case 'return':
             console.log('Processing return for item:', item);
-            // TODO: Implement return logic
+            // TODO: Implement return logic (per-item) if needed
+            // Per requirement: treat Return as equivalent to cancelling the order
+            try {
+              await this.updateOrderStatus(orderId, 'cancelled');
+            } catch (e) {
+              console.error('Failed to set order to cancelled after return action', e);
+            }
             break;
           case 'damage':
             console.log('Processing damage for item:', item);
-            // TODO: Implement damage reporting logic
+            // TODO: Implement damage reporting logic (per-item) if needed
+            // Per requirement: treat Damage as equivalent to cancelling the order
+            try {
+              await this.updateOrderStatus(orderId, 'cancelled');
+            } catch (e) {
+              console.error('Failed to set order to cancelled after damage action', e);
+            }
             break;
           case 'refund':
             console.log('Processing refund for item:', item);
@@ -1167,6 +1350,11 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
           case 'cancel':
             console.log('Processing cancellation for item:', item);
             // TODO: Implement item cancellation logic
+            try {
+              await this.updateOrderStatus(orderId, 'cancelled');
+            } catch (e) {
+              console.error('Failed to set order to cancelled after cancel action', e);
+            }
             break;
         }
         

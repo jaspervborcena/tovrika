@@ -15,7 +15,7 @@ import { CartItem } from '../interfaces/cart.interface';
 
 export interface AddBatchRequest {
   productId: string;
-  batchData: Omit<ProductInventoryEntry, 'id' | 'uid' | 'createdAt' | 'updatedAt' | 'productId' | 'companyId' | 'storeId' | 'status' | 'syncStatus' | 'isOffline' | 'createdBy' | 'updatedBy' | 'initialQuantity' | 'totalDeducted' | 'deductionHistory'>;
+  batchData: Omit<ProductInventoryEntry, 'id' | 'uid' | 'createdAt' | 'updatedAt' | 'productId' | 'companyId' | 'storeId' | 'status' | 'syncStatus' | 'isOffline' | 'createdBy' | 'updatedBy' | 'initialQuantity' | 'totalDeducted'>;
 }
 
 export interface ProcessSaleRequest {
@@ -86,11 +86,17 @@ export class InventoryTransactionService {
         updatedBy: currentUser.uid,
         receivedAt: batchData.receivedAt instanceof Date ? batchData.receivedAt : new Date(batchData.receivedAt),
         expiryDate: batchData.expiryDate ? (batchData.expiryDate instanceof Date ? batchData.expiryDate : new Date(batchData.expiryDate)) : undefined,
+        // VAT metadata: prefer batch-level value, fallback to unspecified (0/false)
+        isVatApplicable: !!batchData.isVatApplicable,
+        vatRate: Number(batchData.vatRate ?? 0),
+        // Discount metadata for the batch
+        hasDiscount: !!batchData.hasDiscount,
+        discountType: batchData.discountType ?? 'percentage',
+        discountValue: Number(batchData.discountValue ?? 0),
         syncStatus: 'SYNCED',
         isOffline: false,
         initialQuantity: batchData.quantity,
-        totalDeducted: 0,
-        deductionHistory: []
+        totalDeducted: 0
       };
 
       transaction.set(batchRef, {
@@ -188,7 +194,7 @@ export class InventoryTransactionService {
           const newQuantity = batch.quantity - allocation.allocatedQuantity;
           const newTotalDeducted = (batch.totalDeducted || 0) + allocation.allocatedQuantity;
 
-          // Create deduction record
+          // Create deduction record and persist it to `inventoryDeductions`
           const deductionRecord = {
             orderId,
             orderDetailId: `${orderId}_${item.productId}`, // Generate orderDetailId
@@ -196,21 +202,24 @@ export class InventoryTransactionService {
             deductedAt: new Date(),
             deductedBy: currentUser.uid,
             isOffline: false,
-            syncStatus: 'SYNCED' as const
+            syncStatus: 'SYNCED' as const,
+            productId: item.productId,
+            batchId: allocation.batchId
           };
 
-          // Update batch
-          const updatedDeductionHistory = [...(batch.deductionHistory || []), deductionRecord];
+          // Update batch WITHOUT writing a deductionHistory array
           const newStatus = newQuantity === 0 ? 'removed' : batch.status; // Use 'removed' when depleted
-          
           transaction.update(batchRef, {
             quantity: newQuantity,
             totalDeducted: newTotalDeducted,
-            deductionHistory: updatedDeductionHistory,
             updatedAt: new Date(),
             updatedBy: currentUser.uid,
             status: newStatus
           });
+
+          // Persist the deduction record for auditing/querying
+          const dedRef = doc(collection(this.firestore, 'inventoryDeductions'));
+          transaction.set(dedRef, deductionRecord);
 
           console.log(`   📦 Batch ${allocation.batchId}: ${batch.quantity} -> ${newQuantity} (${newStatus})`);
 
@@ -302,19 +311,26 @@ export class InventoryTransactionService {
           const newQuantity = batch.quantity + deduction.quantity;
           const newTotalDeducted = Math.max(0, (batch.totalDeducted || 0) - deduction.quantity);
           
-          // Remove from deduction history
-          const updatedDeductionHistory = (batch.deductionHistory || []).filter(
-            d => d.orderId !== orderId
-          );
-
+          // Update batch quantities without a per-batch deduction array
           transaction.update(batchRef, {
             quantity: newQuantity,
             totalDeducted: newTotalDeducted,
-            deductionHistory: updatedDeductionHistory,
             updatedAt: new Date(),
             updatedBy: currentUser.uid,
             status: 'active' // Reactivate batch
           });
+
+          // Log a reversal record for audit purposes
+          const reversalRecord = {
+            orderId,
+            batchId: deduction.batchId,
+            productId: productBatch.productId,
+            quantity: deduction.quantity,
+            reversedAt: new Date(),
+            reversedBy: currentUser.uid
+          };
+          const reversalRef = doc(collection(this.firestore, 'inventoryDeductionReversals'));
+          transaction.set(reversalRef, reversalRecord);
 
           console.log(`   📦 Batch ${deduction.batchId}: restored ${deduction.quantity} units (now ${newQuantity})`);
         }
@@ -372,11 +388,16 @@ export class InventoryTransactionService {
           updatedBy: currentUser.uid,
           receivedAt: batchData.receivedAt instanceof Date ? batchData.receivedAt : new Date(batchData.receivedAt),
           expiryDate: batchData.expiryDate ? (batchData.expiryDate instanceof Date ? batchData.expiryDate : new Date(batchData.expiryDate)) : undefined,
+          // VAT / Discount metadata
+          isVatApplicable: !!batchData.isVatApplicable,
+          vatRate: Number(batchData.vatRate ?? 0),
+          hasDiscount: !!batchData.hasDiscount,
+          discountType: batchData.discountType ?? 'percentage',
+          discountValue: Number(batchData.discountValue ?? 0),
           syncStatus: 'SYNCED',
           isOffline: false,
           initialQuantity: batchData.quantity,
-          totalDeducted: 0,
-          deductionHistory: []
+          totalDeducted: 0
         };
 
         transaction.set(batchRef, {

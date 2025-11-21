@@ -152,29 +152,34 @@ export class FIFOInventoryService {
         const newQuantity = batch.quantity - allocation.allocatedQuantity;
         const newTotalDeducted = (batch.totalDeducted || 0) + allocation.allocatedQuantity;
 
-        // Create deduction record
-        const deductionRecord: BatchDeduction = {
+        // Create deduction record in a dedicated collection instead of
+        // storing an array on the batch document.
+        const deductionRecord: BatchDeduction & { productId: string; batchId: string } = {
           orderId,
           orderDetailId,
           quantity: allocation.allocatedQuantity,
           deductedAt: new Date(),
           deductedBy: currentUser.uid,
           isOffline: false,
-          syncStatus: 'SYNCED'
+          syncStatus: 'SYNCED',
+          productId,
+          batchId: allocation.batchId
         };
 
-        // Update batch with new status logic
-        const updatedDeductionHistory = [...(batch.deductionHistory || []), deductionRecord];
+        // Update batch with new status logic (do NOT write deductionHistory to batch)
         const newStatus = newQuantity === 0 ? 'removed' : batch.status; // Use 'removed' when depleted
-        
+
         transaction.update(batchRef, {
           quantity: newQuantity,
           totalDeducted: newTotalDeducted,
-          deductionHistory: updatedDeductionHistory,
           updatedAt: new Date(),
           updatedBy: currentUser.uid,
-          status: newStatus // Changed from 'inactive' to 'removed' when depleted
+          status: newStatus
         });
+
+        // Persist the deduction record to the `inventoryDeductions` collection
+        const deductionRef = doc(collection(this.firestore, 'inventoryDeductions'));
+        transaction.set(deductionRef, deductionRecord);
 
         console.log(`📦 Batch ${allocation.batchId}: ${batch.quantity} -> ${newQuantity} (status: ${newStatus})`);
 
@@ -311,19 +316,26 @@ export class FIFOInventoryService {
         const newQuantity = batch.quantity + deduction.quantity;
         const newTotalDeducted = Math.max(0, (batch.totalDeducted || 0) - deduction.quantity);
         
-        // Remove from deduction history
-        const updatedDeductionHistory = (batch.deductionHistory || []).filter(
-          d => d.orderId !== orderId
-        );
-
+        // Update batch quantities without touching a per-batch deduction array
         transaction.update(batchRef, {
           quantity: newQuantity,
           totalDeducted: newTotalDeducted,
-          deductionHistory: updatedDeductionHistory,
           updatedAt: new Date(),
           updatedBy: currentUser.uid,
           status: 'active' // Reactivate batch (change from 'removed' back to 'active')
         });
+
+        // Log a reversal record for audit purposes in a dedicated collection.
+        const reversalRecord = {
+          orderId,
+          batchId: deduction.batchId,
+          productId,
+          quantity: deduction.quantity,
+          reversedAt: new Date(),
+          reversedBy: currentUser.uid
+        };
+        const reversalRef = doc(collection(this.firestore, 'inventoryDeductionReversals'));
+        transaction.set(reversalRef, reversalRecord);
 
         console.log(`📦 Batch ${deduction.batchId}: restored ${deduction.quantity} units (now ${newQuantity})`);
       }
@@ -342,6 +354,11 @@ export class FIFOInventoryService {
   /**
    * Gets deduction history for a specific product or batch
    */
+  /**
+   * Gets deduction history for a specific product or batch from the
+   * `inventoryDeductions` collection. This replaces the old pattern of
+   * reading a `deductionHistory` array on the batch document.
+   */
   async getDeductionHistory(productId?: string, batchId?: string): Promise<BatchDeduction[]> {
     const currentUser = this.authService.getCurrentUser();
     if (!currentUser) {
@@ -354,30 +371,20 @@ export class FIFOInventoryService {
       throw new Error('No company permission found');
     }
 
-    const inventoryRef = collection(this.firestore, 'productInventory');
+    // Query the new `inventoryDeductions` collection
+    const deductionsRef = collection(this.firestore, 'inventoryDeductions');
     let q;
 
     if (batchId) {
-      q = query(inventoryRef, where('batchId', '==', batchId));
+      q = query(deductionsRef, where('batchId', '==', batchId));
     } else if (productId) {
-      q = query(
-        inventoryRef,
-        where('productId', '==', productId),
-        where('companyId', '==', permission.companyId)
-      );
+      q = query(deductionsRef, where('productId', '==', productId));
     } else {
       throw new Error('Either productId or batchId must be provided');
     }
 
     const snapshot = await getDocs(q);
-    const allDeductions: BatchDeduction[] = [];
-
-    snapshot.docs.forEach(doc => {
-      const batch = doc.data() as ProductInventoryEntry;
-      if (batch.deductionHistory) {
-        allDeductions.push(...batch.deductionHistory);
-      }
-    });
+    const allDeductions: BatchDeduction[] = snapshot.docs.map(d => d.data() as BatchDeduction);
 
     return allDeductions.sort((a, b) => 
       new Date(b.deductedAt).getTime() - new Date(a.deductedAt).getTime()
