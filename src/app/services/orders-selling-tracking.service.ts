@@ -1,5 +1,6 @@
 import { Injectable, inject } from '@angular/core';
 import { Firestore, collection, query, where, getDocs, doc, setDoc } from '@angular/fire/firestore';
+import { toDateValue } from '../core/utils/date-utils';
 import { OfflineDocumentService } from '../core/services/offline-document.service';
 import { OrdersSellingTrackingDoc } from '../interfaces/orders-selling-tracking.interface';
 import { ProductService } from './product.service';
@@ -13,7 +14,7 @@ export class OrdersSellingTrackingService {
   ) {}
 
   /**
-   * Mark all ordersSellingTracking docs for a given orderId from 'pending' to 'completed'.
+  * Mark all ordersSellingTracking docs for a given orderId from 'processing' to 'completed'.
    * Will attempt an online write that preserves the original createdAt as updatedAt when possible
    * so that updatedAt matches createdAt instead of being a serverTimestamp sentinel map.
    */
@@ -21,7 +22,7 @@ export class OrdersSellingTrackingService {
     const errors: any[] = [];
     let updated = 0;
     try {
-      const q = query(collection(this.firestore, 'ordersSellingTracking'), where('orderId', '==', orderId), where('status', '==', 'pending'));
+      const q = query(collection(this.firestore, 'ordersSellingTracking'), where('orderId', '==', orderId), where('status', '==', 'processing'));
       const snaps = await getDocs(q as any);
       for (const s of snaps.docs) {
         const id = s.id;
@@ -101,7 +102,7 @@ export class OrdersSellingTrackingService {
         createdAt: new Date(),
         createdBy: ctx.cashierId,
         uid: ctx.cashierId,
-        status: 'pending',
+        status: 'processing',
 
         // item details
         itemIndex: idx,
@@ -153,5 +154,40 @@ export class OrdersSellingTrackingService {
     }
 
     return { success: errors.length === 0, tracked, adjusted, errors };
+  }
+
+  /**
+   * Fetch tracking entries for an order directly from Firestore as a fallback when Cloud Function is unavailable.
+   */
+  async fetchTrackingEntries(orderId: string): Promise<any[]> {
+    try {
+      const q = query(collection(this.firestore, 'ordersSellingTracking'), where('orderId', '==', orderId));
+      const snaps = await getDocs(q as any);
+      if (!snaps || snaps.empty) return [];
+
+      const results: any[] = [];
+      for (const s of snaps.docs) {
+        const data: any = s.data() || {};
+        const product = this.productService.getProduct(data.productId);
+        results.push({
+          id: s.id,
+          productId: data.productId,
+          productName: data.productName || product?.productName || '',
+          sku: product?.skuId || undefined,
+          quantity: data.quantity,
+          price: data.price,
+          total: data.total,
+          status: data.status,
+          createdAt: toDateValue(data.createdAt) || undefined,
+          updatedAt: toDateValue(data.updatedAt) || undefined,
+          orderDetailsId: data.orderDetailsId,
+          batchNumber: data.batchNumber,
+          cashierId: data.cashierId || data.createdBy
+        });
+      }
+      return results;
+    } catch (e) {
+      return [];
+    }
   }
 }

@@ -20,7 +20,13 @@ export interface ProductInventoryEntry {
   supplier?: string;
   status: InventoryStatus;
   unitType?: string;
-
+  // VAT fields applied at batch level (optional)
+  isVatApplicable?: boolean;
+  vatRate?: number; // percentage
+  // Discount fields applied at batch level (optional)
+  hasDiscount?: boolean;
+  discountType?: 'percentage' | 'fixed';
+  discountValue?: number;
   // FIFO and batch tracking
   batchNumber?: number; // Sequential batch number for sorting
   lotNumber?: string; // Manufacturing lot number
@@ -41,7 +47,8 @@ export interface ProductInventoryEntry {
   
   // Deduction tracking
   totalDeducted?: number; // Total amount deducted from this batch
-  deductionHistory?: BatchDeduction[]; // Track individual deductions
+  // NOTE: `deductionHistory` has been removed. Individual deduction records
+  // are now stored in a dedicated `inventoryDeductions` collection.
 }
 
 export interface BatchDeduction {

@@ -905,21 +905,26 @@ export class PosService {
         }
 
         const newQty = currentQty - p.deduct;
-        const updatedDeductionHistory = [...(batchData.deductionHistory || []), {
-          quantity: p.deduct,
-          deductedAt: new Date(),
-          note: 'POS FIFO deduction'
-        }];
-
         const updateData: any = {
           quantity: newQty,
           totalDeducted: (batchData.totalDeducted || 0) + p.deduct,
-          deductionHistory: updatedDeductionHistory,
           updatedAt: new Date(),
           status: newQty === 0 ? 'inactive' : batchData.status
         };
 
         transaction.update(batchRef as any, updateData);
+
+        // Persist a deduction record for audit/querying
+        const dedRecord = {
+          productId,
+          batchId: p.batchId,
+          quantity: p.deduct,
+          deductedAt: new Date(),
+          note: 'POS FIFO deduction',
+          deductedBy: currentUser?.uid || null
+        };
+        const dedRef = doc(collection(this.firestore, 'inventoryDeductions'));
+        transaction.set(dedRef, dedRecord);
         console.log(`✅ Transaction: will update batch ${p.batchId} ${currentQty} -> ${newQty}`);
       }
 

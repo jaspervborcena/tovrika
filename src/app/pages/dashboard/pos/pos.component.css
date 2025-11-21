@@ -1574,6 +1574,81 @@
       background: #fca5a5;
     }
 
+    /* Top-level Return/Damage button overrides when used with .btn */
+    .btn.return-btn {
+      background: linear-gradient(135deg, #f59e0b 0%, #f97316 100%);
+      color: #ffffff;
+      border: none;
+      padding: 0.6rem 1rem;
+      border-radius: 8px;
+      font-weight: 600;
+    }
+
+    .btn.return-btn:hover {
+      filter: brightness(0.95);
+      transform: translateY(-1px);
+    }
+
+    .btn.damage-btn {
+      background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+      color: #ffffff;
+      border: none;
+      padding: 0.6rem 1rem;
+      border-radius: 8px;
+      font-weight: 600;
+    }
+
+    .btn.damage-btn:hover {
+      filter: brightness(0.95);
+      transform: translateY(-1px);
+    }
+
+    /* Manage Item Status button styling */
+    .btn.manage-status-btn {
+      background: linear-gradient(135deg, #4f46e5 0%, #6366f1 100%); /* indigo gradient */
+      color: white;
+      border: none;
+      padding: 0.55rem 0.9rem;
+      border-radius: 8px;
+      font-weight: 600;
+      box-shadow: 0 6px 18px rgba(99, 102, 241, 0.18);
+    }
+
+    .btn.manage-status-btn:hover,
+    .btn.manage-status-btn:focus {
+      filter: brightness(0.95);
+      transform: translateY(-1px);
+      outline: none;
+      box-shadow: 0 8px 22px rgba(99, 102, 241, 0.22);
+    }
+
+    /* Ensure the inline item-level buttons remain visually lighter */
+    .item-action-btn.return-btn { background: #ddd6fe; color: #5b21b6; }
+    .item-action-btn.damage-btn { background: #fed7aa; color: #c2410c; }
+
+    /* Open Receipt and Cancel Order top-level button styles */
+    .btn.open-receipt-btn {
+      background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+      color: white;
+      border: none;
+      padding: 0.6rem 1rem;
+      border-radius: 8px;
+      font-weight: 600;
+    }
+
+    .btn.open-receipt-btn:hover { transform: translateY(-1px); filter: brightness(0.98); }
+
+    .btn.cancel-order-btn {
+      background: linear-gradient(135deg, #fb923c 0%, #f97316 100%);
+      color: white;
+      border: none;
+      padding: 0.6rem 1rem;
+      border-radius: 8px;
+      font-weight: 600;
+    }
+
+    .btn.cancel-order-btn:hover { transform: translateY(-1px); filter: brightness(0.98); }
+
     /* Offline Invoice Dialog */
     .offline-invoice-dialog {
       background: white;
@@ -3213,6 +3288,30 @@
   text-align: left;
 }
 
+/* Add extra right padding after Update Reason to create visual margin */
+.col-update-reason {
+  padding-right: 1.25rem;
+}
+
+@media (max-width: 1024px) {
+  /* Slightly reduce padding on narrower screens */
+  .col-update-reason { padding-right: 0.8rem; }
+}
+
+/* Ensure the Update Reason textarea leaves space before the vertical scrollbar */
+.update-reason-textarea {
+  width: 100%;
+  box-sizing: border-box; /* include padding in width calculation */
+  padding: 0.5rem 1rem 0.5rem 0.5rem; /* extra right padding to avoid scrollbar overlap */
+  max-width: 100%;
+  resize: vertical;
+  scrollbar-gutter: stable; /* reserve space for scrollbar where supported */
+}
+
+@media (max-width: 1024px) {
+  .update-reason-textarea { padding: 0.45rem 0.8rem 0.45rem 0.45rem; }
+}
+
 /* Product Details */
 .item-details-tracking {
   display: flex;
@@ -3539,11 +3638,6 @@
 
 .status-select option {
   padding: 0.25rem;
-}
-
-/* Status-specific colors for select options */
-.status-select option[value="pending"] {
-  color: #d97706;
 }
 
 .status-select option[value="processing"] {
