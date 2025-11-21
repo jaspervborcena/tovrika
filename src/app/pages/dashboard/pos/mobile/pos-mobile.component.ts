@@ -1,4 +1,5 @@
 import { Component, OnInit, AfterViewInit, OnDestroy, computed, signal, inject, ViewChild, HostListener } from '@angular/core';
+import { Firestore, collection, query, where, getDocs } from '@angular/fire/firestore';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterModule, Router, NavigationEnd } from '@angular/router';
@@ -59,6 +60,7 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
   private posUtilsService = inject(PosUtilsService);
   private translationService = inject(TranslationService);
   private subscriptionService = inject(SubscriptionService);
+  private firestore = inject(Firestore);
 
   private routerSubscription: Subscription | undefined;
 
@@ -351,6 +353,132 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
     }
   }
 
+  // Manager auth modal state for mobile (collect userCode + pin)
+  private managerAuthVisibleSignal = signal<boolean>(false);
+  readonly managerAuthVisible = computed(() => this.managerAuthVisibleSignal());
+
+  managerAuthUserCode = signal<string>('');
+  managerAuthPin = signal<string>('');
+  // Inline error message for mobile manager auth modal
+  managerAuthError = signal<string>('');
+  private _managerAuthResolve: ((value: { userCode: string; pin: string } | null) => void) | null = null;
+
+  // Show manager auth dialog and return credentials or null if cancelled
+  showManagerAuthDialog(): Promise<{ userCode: string; pin: string } | null> {
+    return new Promise((resolve) => {
+      console.log('🔐 Mobile showManagerAuthDialog: opening manager auth modal');
+      this.managerAuthUserCode.set('');
+      this.managerAuthPin.set('');
+      this.managerAuthError.set('');
+      this._managerAuthResolve = resolve;
+      this.managerAuthVisibleSignal.set(true);
+    });
+  }
+
+  // Called when confirm is pressed
+  async onManagerAuthConfirm(): Promise<void> {
+    const userCode = (this.managerAuthUserCode() || '').toString();
+    const pin = (this.managerAuthPin() || '').toString();
+    console.log('🔐 Mobile onManagerAuthConfirm: creds submitted (redacted)', { userCode: userCode ? 'present' : 'empty', pinProvided: !!pin });
+
+    try {
+      const isValid = await this.validateManagerCredentials(userCode, pin);
+      if (isValid) {
+        this.managerAuthVisibleSignal.set(false);
+        if (this._managerAuthResolve) {
+          this._managerAuthResolve({ userCode, pin });
+          this._managerAuthResolve = null;
+        }
+        return;
+      }
+
+      // Show inline error and keep modal open for retry
+      this.managerAuthError.set('Invalid manager code or PIN, or manager is not authorized for this store.');
+      this.managerAuthPin.set('');
+
+    } catch (err) {
+      console.error('Mobile error validating manager credentials', err);
+      await this.showConfirmationDialog({
+        title: 'Error',
+        message: 'An error occurred while validating credentials. Please try again.',
+        confirmText: 'OK',
+        cancelText: '',
+        type: 'danger'
+      });
+    }
+  }
+
+  // Validate manager credentials against Firestore `users` collection (mobile)
+  private async validateManagerCredentials(userCode: string, pin: string): Promise<boolean> {
+    if (!userCode || !pin) return false;
+    try {
+      const usersRef = collection(this.firestore, 'users');
+      // Detect if the user entered an email (contains @ and .com or .net)
+      const lowered = userCode.toLowerCase();
+      const isEmail = userCode.includes('@') && (lowered.includes('.com') || lowered.includes('.net'));
+      const q = isEmail
+        ? query(usersRef, where('email', '==', userCode))
+        : query(usersRef, where('userCode', '==', userCode));
+      const snap = await getDocs(q);
+      if (!snap || snap.empty) return false;
+
+      const currentStore = this.selectedStoreId();
+
+      for (const docSnap of snap.docs) {
+        const data: any = docSnap.data();
+        if ((data.pin || '').toString() !== pin.toString()) continue;
+
+        if (data.storeId && currentStore && data.storeId === currentStore) return true;
+        if (data.permission && data.permission.storeId && currentStore && data.permission.storeId === currentStore) return true;
+        if (Array.isArray(data.permissions) && data.permissions.length > 0 && currentStore) {
+          const first = data.permissions[0];
+          if (first && first.storeId && first.storeId === currentStore) return true;
+        }
+
+        if (!currentStore) return true;
+      }
+
+      return false;
+    } catch (e) {
+      console.error('Mobile error querying users for manager auth', e);
+      return false;
+    }
+  }
+
+  // Called when cancel is pressed
+  onManagerAuthCancel(): void {
+    console.log('🔐 Mobile onManagerAuthCancel: manager auth cancelled by user');
+    this.managerAuthVisibleSignal.set(false);
+    this.managerAuthError.set('');
+    if (this._managerAuthResolve) {
+      this._managerAuthResolve(null);
+      this._managerAuthResolve = null;
+    }
+  }
+
+  // Require manager auth before updating an order status
+  async authorizeAndUpdateOrderStatus(orderId: string, status: string): Promise<void> {
+    const creds = await this.showManagerAuthDialog();
+    if (!creds) return;
+    // TODO: validate creds server-side
+    await this.updateOrderStatus(orderId, status);
+  }
+
+  // Require manager auth before opening return/damage flows on mobile
+  async openReturnModeAuthorized(): Promise<void> {
+    const creds = await this.showManagerAuthDialog();
+    if (!creds) return;
+    // Mobile: show informational stub for return workflow
+    window.alert('Return flow is not implemented on mobile; please use desktop for detailed returns.');
+  }
+
+  async openDamageModeAuthorized(): Promise<void> {
+    const creds = await this.showManagerAuthDialog();
+    if (!creds) return;
+    // Mobile: show informational stub for damage workflow
+    window.alert('Damage reporting is not implemented on mobile; please use desktop for detailed reporting.');
+  }
+
   // Refresh orders - manually triggered by user
   async refreshOrders(): Promise<void> {
     try {
@@ -564,6 +692,28 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
         type: 'danger'
       });
     }
+  }
+
+  // Open a mobile-friendly entry point for Return actions
+  async openReturnMode(): Promise<void> {
+    await this.showConfirmationDialog({
+      title: 'Return',
+      message: 'Return flow is available via per-item actions on mobile. Open Manage Item Status on desktop for bulk operations.',
+      confirmText: 'OK',
+      cancelText: '',
+      type: 'info'
+    });
+  }
+
+  // Open a mobile-friendly entry point for Damage actions
+  async openDamageMode(): Promise<void> {
+    await this.showConfirmationDialog({
+      title: 'Damage',
+      message: 'Damage reporting is available via per-item actions on mobile. Open Manage Item Status on desktop for bulk operations.',
+      confirmText: 'OK',
+      cancelText: '',
+      type: 'info'
+    });
   }
 
   // Open order receipt for viewing/printing

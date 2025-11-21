@@ -461,7 +461,12 @@
         <!-- Order detail modal -->
         <div *ngIf="selectedOrder()" class="modal-backdrop" style="position:fixed; inset:0; display:flex; align-items:center; justify-content:center; background:rgba(0,0,0,0.4); z-index:40;">
           <div class="modal" style="background:white; padding:1.5rem; width:600px; max-width:90vw; border-radius:8px; max-height:80vh; overflow-y:auto;">
-            <h3 style="margin-bottom: 1rem; color: #1f2937;">Order Details</h3>
+            <div class="modal-header" style="display:flex; align-items:center; justify-content:space-between; margin-bottom:1rem;">
+              <div style="display:flex; flex-direction:column;">
+                <h3 style="margin:0; color: #1f2937;">Order Details</h3>
+              </div>
+              <button class="close-btn" (click)="closeOrder()" style="font-size:1.25rem; background:transparent; border:none; cursor:pointer;">×</button>
+            </div>
             
             <!-- Order Header Information -->
             <div class="order-header-info" style="background: #f8fafc; padding: 1rem; border-radius: 6px; margin-bottom: 1rem;">
@@ -528,22 +533,22 @@
                   <!-- Item Action Buttons -->
                   <div style="display: flex; gap: 0.25rem; flex-wrap: wrap;">
                     <button class="item-action-btn return-btn" 
-                            (click)="processItemAction(selectedOrder()?.id, i, 'return', item)"
+                            (click)="processItemActionAuthorized(selectedOrder()?.id, i, 'return', item)"
                             title="Return Item">
                       ↩️ Return
                     </button>
                     <button class="item-action-btn damage-btn" 
-                            (click)="processItemAction(selectedOrder()?.id, i, 'damage', item)"
+                            (click)="processItemActionAuthorized(selectedOrder()?.id, i, 'damage', item)"
                             title="Mark as Damaged">
                       💥 Damage
                     </button>
                     <button class="item-action-btn refund-btn" 
-                            (click)="processItemAction(selectedOrder()?.id, i, 'refund', item)"
+                            (click)="processItemActionAuthorized(selectedOrder()?.id, i, 'refund', item)"
                             title="Refund Item">
                       💰 Refund
                     </button>
                     <button class="item-action-btn cancel-btn" 
-                            (click)="processItemAction(selectedOrder()?.id, i, 'cancel', item)"
+                            (click)="processItemActionAuthorized(selectedOrder()?.id, i, 'cancel', item)"
                             title="Cancel Item">
                       ❌ Cancel
                     </button>
@@ -552,15 +557,37 @@
               </div>
             </div>
             
-            <!-- Action Buttons -->
+            <!-- Action Buttons (manager authorization required for sensitive actions) -->
             <div style="display: flex; gap: 0.5rem; justify-content: flex-end; flex-wrap: wrap;">
-              <button class="btn btn-secondary" (click)="closeOrder()">Close</button>
-              <button class="btn" style="background: #059669; color: white;" (click)="openOrderReceipt(selectedOrder())">
+              <button class="btn open-receipt-btn" (click)="openOrderReceipt(selectedOrder())">
                 📄 Open Receipt
               </button>
-              <button *ngIf="selectedOrder()?.status !== 'cancelled'" class="btn" style="background: #f97316; color: white;" (click)="updateOrderStatus(selectedOrder()?.id, 'cancelled')">Cancel Order</button>
-              <button *ngIf="selectedOrder()?.status !== 'refunded'" class="btn btn-primary" (click)="updateOrderStatus(selectedOrder()?.id, 'refunded')">Process Refund</button>
-              <button class="btn btn-secondary" (click)="openManageItemStatus()">Manage Item Status</button>
+              <button *ngIf="selectedOrder()?.status !== 'cancelled'" class="btn cancel-order-btn" (click)="authorizeAndUpdateOrderStatus(selectedOrder()?.id, 'cancelled')">Cancel Order</button>
+              <button *ngIf="selectedOrder()" class="btn btn-warning return-btn" (click)="authorizeAndUpdateOrderStatus(selectedOrder()?.id, 'cancelled')">Return</button>
+              <button *ngIf="selectedOrder()?.status !== 'refunded'" class="btn btn-primary" (click)="authorizeAndUpdateOrderStatus(selectedOrder()?.id, 'refunded')">Refund</button>
+              <button *ngIf="selectedOrder()" class="btn btn-danger damage-btn" (click)="authorizeAndUpdateOrderStatus(selectedOrder()?.id, 'cancelled')">Damage</button>
+              <button class="btn btn-secondary manage-status-btn" (click)="openManageItemStatusAuthorized()">Manage Item Status</button>
+            </div>
+
+            <!-- Manager Authorization Modal (collect userCode + pin) -->
+            <div *ngIf="managerAuthVisible()" class="modal-backdrop" style="position:fixed; inset:0; display:flex; align-items:center; justify-content:center; background:rgba(0,0,0,0.4); z-index:60;">
+              <div class="modal" style="background:white; padding:1rem; width:360px; max-width:90vw; border-radius:8px;">
+                <div class="modal-header" style="display:flex; align-items:center; justify-content:space-between; margin-bottom:0.75rem;">
+                  <h4 style="margin:0;">Manager Authorization</h4>
+                  <button class="close-btn" (click)="onManagerAuthCancel()" style="background:transparent; border:none; font-size:1.25rem; cursor:pointer;">×</button>
+                </div>
+                <div style="display:flex; flex-direction:column; gap:0.5rem;">
+                  <label style="font-weight:600; font-size:0.9rem;">Manager Code</label>
+                  <input type="text" [value]="managerAuthUserCode()" (input)="managerAuthUserCode.set($any($event.target).value)" placeholder="Enter manager code" style="padding:0.5rem; border:1px solid #e5e7eb; border-radius:4px;" />
+                  <label style="font-weight:600; font-size:0.9rem;">PIN</label>
+                  <input type="password" [value]="managerAuthPin()" (input)="managerAuthPin.set($any($event.target).value)" placeholder="Enter PIN" style="padding:0.5rem; border:1px solid #e5e7eb; border-radius:4px;" />
+                  <div *ngIf="managerAuthError()" style="color:#b91c1c; font-weight:600; margin-top:0.25rem;">{{ managerAuthError() }}</div>
+                </div>
+                <div style="display:flex; gap:0.5rem; justify-content:flex-end; margin-top:0.75rem;">
+                  <button class="btn" (click)="onManagerAuthCancel()">Cancel</button>
+                  <button class="btn btn-primary" (click)="onManagerAuthConfirm()">Confirm</button>
+                </div>
+              </div>
             </div>
           </div>
         </div>

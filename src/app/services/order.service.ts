@@ -665,8 +665,26 @@ export class OrderService {
       }
       
       console.log('✅ Normalized results:', results.length, 'tracking entries');
-      
-      return results;
+      // Deduplicate near-identical entries to avoid UI duplicates
+      const deduped: any[] = [];
+      const seen = new Set<string>();
+
+      for (const r of results) {
+        // Build a stable key from the most likely identifying fields
+        const productName = (r.productName || r.product || '').toString();
+        const sku = (r.SKU || r.sku || r.skuCode || '').toString();
+        const qty = (r.quantity || r.qty || '').toString();
+        const price = (r.price || r.unitPrice || r.total || r.totalAmount || '').toString();
+        const key = `${productName}::${sku}::${qty}::${price}`;
+
+        if (!seen.has(key)) {
+          seen.add(key);
+          deduped.push(r);
+        }
+      }
+
+      console.log('✅ Normalized results:', results.length, 'tracking entries -> deduped:', deduped.length);
+      return deduped;
 
     } catch (e) {
       console.error('💥 Error calling manage_item_status Cloud Function:', e);
