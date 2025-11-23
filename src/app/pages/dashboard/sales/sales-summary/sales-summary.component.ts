@@ -1504,11 +1504,10 @@ export class SalesSummaryComponent implements OnInit {
   });
 
   constructor() {
-    // Initialize default range to the last 7 days (From = today - 6, To = today)
+    // Initialize default range to the current month (From = first day of month, To = today)
     const today = new Date();
-    const sevenDaysAgo = new Date(today);
-    sevenDaysAgo.setDate(today.getDate() - 6); // include today -> 7-day window
-    this.fromDate = this.formatDateForInput(sevenDaysAgo);
+    const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+    this.fromDate = this.formatDateForInput(startOfMonth);
     this.toDate = this.formatDateForInput(today);
   }
 
@@ -1575,8 +1574,8 @@ export class SalesSummaryComponent implements OnInit {
     console.log('📅 Date range:', { from: this.fromDate, to: this.toDate });
     console.log('🏪 Selected store:', this.selectedStoreId());
     
-    // Set data source for UI to API (we use BigQuery-backed API for all ranges)
-    this.dataSource.set('api');
+    // Use Firestore for Sales Summary (orders are few) — query by updatedAt/createdAt range
+    this.dataSource.set('firebase');
     
     // Check if we have any stores and data first
     const storeId = this.selectedStoreId() || this.authService.getCurrentPermission()?.storeId;
@@ -1684,16 +1683,96 @@ export class SalesSummaryComponent implements OnInit {
       console.log('Loading sales data for store:', storeId, 'from:', startDate, 'to:', endDate);
       console.log('Data source:', this.dataSource() === 'api' ? 'External API (2+ days old)' : 'Firebase (Recent data)');
 
-      // Use the API-only flow for sales summary (BigQuery-backed). Persist a snapshot to IndexedDB on success.
-      console.log('📊 Using API-only data loading (BigQuery)');
+      // Use Firestore-only flow: query `orders` collection by `storeId` and `updatedAt` (fallback to createdAt)
+      console.log('📊 Using Firestore-only data loading (orders collection)');
       let orders: any[] = [];
-      this.dataSource.set('api');
-      this.apiCurrentPage.set(1);
-      const fields = ['invoice_number','updated_at','gross_amount','net_amount','payment','status'];
-      const apiOrders = await this.orderService.getOrdersPage(storeId, startDate, endDate, this.apiPageSize, this.apiCurrentPage(), fields);
-      orders = apiOrders || [];
-      // If returned count equals page size, there may be more
-      this.apiHasMore.set((orders.length >= this.apiPageSize));
+      try {
+        const results = await this.orderService.getOrdersFromFirestoreByRange(storeId, startDate, endDate);
+        console.log('📊 Firestore returned:', results?.length ?? 0, 'orders');
+        if (results && results.length > 0) {
+          console.log('📊 Sample first order:', results[0]);
+        }
+        orders = results || [];
+      } catch (e) {
+        console.warn('Firestore sales query failed, setting orders to empty', e);
+        orders = [];
+      }
+
+      // If no results from date-range query (likely missing composite index), fetch store orders and filter client-side
+      if (!orders || orders.length === 0) {
+        console.log('📊 No results from date-range query - fetching all store orders for client-side filtering');
+        try {
+          const rawDocs = await this.orderService.getSampleOrdersForDebug(storeId, 500);
+          console.log('📊 Raw docs fetched:', rawDocs?.length ?? 0);
+          if (rawDocs && rawDocs.length > 0) {
+            // Transform raw docs to Order objects and filter by date range
+            const allOrders = rawDocs.map((doc: any) => {
+              const data = doc.data;
+              // Parse timestamps from various field names
+              let orderDate: Date | null = null;
+              if (data.updatedAt) {
+                orderDate = data.updatedAt.toDate ? data.updatedAt.toDate() : new Date(data.updatedAt);
+              } else if (data.updated_at) {
+                orderDate = data.updated_at.toDate ? data.updated_at.toDate() : new Date(data.updated_at);
+              } else if (data.createdAt) {
+                orderDate = data.createdAt.toDate ? data.createdAt.toDate() : new Date(data.createdAt);
+              } else if (data.created_at) {
+                orderDate = data.created_at.toDate ? data.created_at.toDate() : new Date(data.created_at);
+              } else if (data.date) {
+                orderDate = data.date.toDate ? data.date.toDate() : new Date(data.date);
+              }
+
+              return {
+                id: doc.id,
+                companyId: data.companyId || '',
+                storeId: data.storeId || '',
+                terminalId: data.terminalId || '',
+                assignedCashierId: data.assignedCashierId || '',
+                status: data.status || 'paid',
+                cashSale: data.cashSale !== false,
+                soldTo: data.soldTo || 'Cash Sale',
+                tin: data.tin || '',
+                businessAddress: data.businessAddress || '',
+                invoiceNumber: data.invoiceNumber || '',
+                logoUrl: data.logoUrl || '',
+                date: orderDate || new Date(),
+                vatableSales: data.vatableSales || 0,
+                vatAmount: data.vatAmount || 0,
+                zeroRatedSales: data.zeroRatedSales || 0,
+                vatExemptAmount: data.vatExemptAmount || 0,
+                discountAmount: data.discountAmount || 0,
+                grossAmount: data.grossAmount || 0,
+                netAmount: data.netAmount || 0,
+                totalAmount: data.totalAmount || data.netAmount || 0,
+                exemptionId: data.exemptionId || '',
+                signature: data.signature || '',
+                atpOrOcn: data.atpOrOcn || '',
+                birPermitNo: data.birPermitNo || '',
+                inclusiveSerialNumber: data.inclusiveSerialNumber || '',
+                createdAt: orderDate || new Date(),
+                message: data.message || '',
+                paymentMethod: data.paymentMethod || data.payment || 'cash'
+              };
+            });
+
+            // Filter by date range client-side
+            orders = allOrders.filter((o: any) => {
+              const oDate = o.createdAt;
+              return oDate >= startDate && oDate <= endDate;
+            });
+
+            console.log('📊 After client-side date filtering:', orders.length, 'orders');
+            if (orders.length > 0) {
+              console.log('📊 Sample filtered order:', orders[0]);
+            }
+          }
+        } catch (debugErr) {
+          console.warn('Failed to fetch orders via getSampleOrdersForDebug', debugErr);
+        }
+      }
+
+      // No API pagination when using Firestore for this view
+      this.apiHasMore.set(false);
 
       // Persist snapshot to IndexedDB for offline fallback
       try {
@@ -1724,6 +1803,13 @@ export class SalesSummaryComponent implements OnInit {
         } catch (dbErr) {
           console.warn('📦 Failed to read orders snapshot from IndexedDB:', dbErr);
         }
+        // If still no orders, fetch a few sample docs for debugging (helps identify field names/storeId)
+        try {
+          const samples = await this.orderService.getSampleOrdersForDebug(storeId, 5);
+          console.warn('🔎 Sample orders for debug (raw):', samples);
+        } catch (dbgErr) {
+          console.warn('🔎 Failed to fetch sample orders for debug', dbgErr);
+        }
       }
 
       // No need to filter on client side - the service handles it when possible
@@ -1737,7 +1823,28 @@ export class SalesSummaryComponent implements OnInit {
         paymentMethod: order.paymentMethod || 'cash'
       }));
 
-      this.orders.set(transformedOrders);
+      // Deduplicate results by a stable key (prefer `invoiceNumber`, then `id`, then fallback).
+      // If duplicates exist, keep the most recent entry by `createdAt`.
+      const dedupMap = new Map<string, Order>();
+      for (const o of transformedOrders) {
+        const key = this.makeOrderKey(o);
+        const existing = dedupMap.get(key);
+        if (!existing) {
+          dedupMap.set(key, o);
+        } else {
+          try {
+            const existingTime = new Date(existing.createdAt as any).getTime() || 0;
+            const newTime = new Date(o.createdAt as any).getTime() || 0;
+            if (newTime > existingTime) dedupMap.set(key, o);
+          } catch {
+            // If parsing fails, prefer the new one by default
+            dedupMap.set(key, o);
+          }
+        }
+      }
+
+      const deduped = Array.from(dedupMap.values());
+      this.orders.set(deduped);
     } catch (error) {
       console.error('Error loading sales data:', error);
       this.orders.set([]);
@@ -1760,10 +1867,34 @@ export class SalesSummaryComponent implements OnInit {
       const fields = ['invoice_number','updated_at','gross_amount','net_amount','payment','status'];
       const page = await this.orderService.getOrdersPage(storeId, startDate, endDate, this.apiPageSize, nextPage, fields);
         if (page && page.length > 0) {
-        // Append
+        // Append - transform and dedupe against existing orders
         const current = this.orders();
         const transformed = page.map((order: any) => ({ ...(order as any), customerName: order.soldTo || 'Cash Sale', paymentMethod: order.payment || order.paymentMethod || 'cash' }));
-        this.orders.set(current.concat(transformed));
+
+        // Build a map from existing orders for quick dedupe
+        const map = new Map<string, Order>();
+        for (const o of current) {
+          const key = this.makeOrderKey(o);
+          map.set(key, o);
+        }
+
+        for (const o of transformed) {
+          const key = this.makeOrderKey(o);
+          const existing = map.get(key);
+          if (!existing) {
+            map.set(key, o);
+          } else {
+            try {
+              const existingTime = new Date(existing.createdAt as any).getTime() || 0;
+              const newTime = new Date(o.createdAt as any).getTime() || 0;
+              if (newTime > existingTime) map.set(key, o);
+            } catch {
+              map.set(key, o);
+            }
+          }
+        }
+
+        this.orders.set(Array.from(map.values()));
         this.apiCurrentPage.set(nextPage);
         this.apiHasMore.set(page.length >= this.apiPageSize);
       } else {
@@ -1933,6 +2064,26 @@ export class SalesSummaryComponent implements OnInit {
 
   getBatch(item: any): string {
     return item?.batchNumber || item?.batchId || '-';
+  }
+
+  /**
+   * Build a stable dedupe key for an order object.
+   * Preference order:
+   *  - invoiceNumber (normalized, strip leading zeros)
+   *  - id (if present)
+   *  - fallback using customerName + totalAmount
+   */
+  private makeOrderKey(o: any): string {
+    const inv = (o.invoiceNumber || o.invoice_number || '').toString().trim();
+    if (inv) {
+      // normalize invoice numbers by stripping leading zeros
+      const normalized = inv.replace(/^0+/, '') || inv;
+      return `inv:${normalized}`;
+    }
+    if (o.id) return `id:${o.id}`;
+    const cust = (o.customerName || o.soldTo || '').toString().trim() || 'unknown';
+    const total = Number(o.totalAmount ?? o.netAmount ?? o.grossAmount ?? 0);
+    return `fallback:${cust}:${total}`;
   }
 
   // Sorting methods
