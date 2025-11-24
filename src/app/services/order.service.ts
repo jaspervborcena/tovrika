@@ -1,7 +1,8 @@
 import { Injectable, inject } from '@angular/core';
 import { environment } from '../../environments/environment';
 import { HttpClient } from '@angular/common/http';
-import { Firestore, collection, query, where, getDocs, Timestamp, orderBy, limit } from '@angular/fire/firestore';
+import { Firestore, collection, query, where, orderBy, limit } from '@angular/fire/firestore';
+import { getDocs, Timestamp } from 'firebase/firestore';
 import { User } from '@angular/fire/auth';
 import { Order } from '../interfaces/pos.interface';
 import { AuthService } from './auth.service';
@@ -539,6 +540,135 @@ export class OrderService {
       
     } catch (error) {
       this.logger.error('Error getting orders by date range', { area: 'orders', storeId }, error);
+      return [];
+    }
+  }
+
+  /**
+   * Force Firestore-only query for orders in a date range using `updatedAt` when available
+   * Falls back to `createdAt` if `updatedAt` query returns no documents.
+   */
+  public async getOrdersFromFirestoreByRange(storeId: string, startDate: Date, endDate: Date): Promise<Order[]> {
+    try {
+      const ordersRef = collection(this.firestore, 'orders');
+      const startTs = Timestamp.fromDate(startDate);
+      const endTs = Timestamp.fromDate(endDate);
+
+      // Try multiple candidate timestamp fields to be resilient to differing schemas
+      const candidateFields = ['updatedAt', 'updated_at', 'createdAt', 'created_at', 'date'];
+
+      for (const field of candidateFields) {
+        try {
+          const q = query(
+            ordersRef,
+            where('storeId', '==', storeId),
+            where(field, '>=', startTs),
+            where(field, '<=', endTs),
+            orderBy(field, 'desc')
+          );
+
+          const snap = await getDocs(q as any);
+          this.logger.info('Firestore range query attempted', { area: 'orders', storeId, payload: { field, count: snap?.docs?.length ?? 0 } });
+
+          if (snap && snap.docs && snap.docs.length > 0) {
+            this.logger.info(`Firestore query by ${field} returned orders`, { area: 'orders', storeId, payload: { field, count: snap.docs.length } });
+            return snap.docs.map(d => this.transformDoc(d));
+          }
+        } catch (e: any) {
+          const errMsg = String(e?.message ?? e);
+          // If Firestore indicates a missing composite index, it will often include a URL to create it
+          const urlMatch = errMsg.match(/https?:\/\/[^")\s]+/);
+          if (urlMatch && urlMatch[0]) {
+            this.logger.warn(`Firestore query for field '${field}' failed due to missing index. Create it: ${urlMatch[0]}`, { area: 'orders', storeId, payload: { field, error: errMsg } });
+          } else {
+            this.logger.debug(`Firestore query by '${field}' failed`, { area: 'orders', storeId, payload: { field, error: errMsg } });
+          }
+          // Try next candidate field
+          continue;
+        }
+      }
+
+      // If none of the timestamp fields returned documents, provide helpful debugging hints
+      this.logger.warn('No orders found when querying by candidate timestamp fields; falling back to store-only query for diagnosis', { area: 'orders', storeId, payload: { startDate: startDate.toISOString(), endDate: endDate.toISOString(), triedFields: candidateFields } });
+
+      try {
+        const storeOnlyQ = query(ordersRef, where('storeId', '==', storeId), limit(20));
+        const storeOnlySnap = await getDocs(storeOnlyQ as any);
+        this.logger.info('Store-only sample fetched', { area: 'orders', storeId, payload: { count: storeOnlySnap?.docs?.length ?? 0 } });
+        if (storeOnlySnap && storeOnlySnap.docs && storeOnlySnap.docs.length > 0) {
+          this.logger.debug('Store-only sample documents (ids and keys)', { area: 'orders', storeId, payload: storeOnlySnap.docs.map(d => ({ id: d.id, keys: Object.keys(d.data() as any) })) });
+        }
+      } catch (e) {
+        this.logger.debug('Store-only sample query failed', { area: 'orders', storeId, payload: { error: String(e) } });
+      }
+
+      return [];
+    } catch (error) {
+      this.logger.error('Critical error in getOrdersFromFirestoreByRange', { area: 'orders', storeId }, error);
+      return [];
+    }
+  }
+
+  /**
+   * Convenience helper: fetch orders for a specific year+month in YYYYMM format (e.g. '202511').
+   * Delegates to `getOrdersFromFirestoreByRange` after computing start/end of month.
+   */
+  public async getOrdersByYearAndMonth(storeId: string, yearMonth: string): Promise<Order[]> {
+    if (!yearMonth || !/^[0-9]{6}$/.test(yearMonth)) {
+      this.logger.warn('Invalid yearMonth provided to getOrdersByYearAndMonth', { area: 'orders', payload: { yearMonth } });
+      return [];
+    }
+
+    try {
+      const year = Number(yearMonth.slice(0, 4));
+      const month = Number(yearMonth.slice(4, 6)) - 1; // JS months are 0-indexed
+      const start = new Date(year, month, 1, 0, 0, 0, 0);
+      // Last millisecond of month: create next month day 0
+      const end = new Date(year, month + 1, 0, 23, 59, 59, 999);
+
+      this.logger.info('Fetching orders for yearMonth', { area: 'orders', payload: { storeId, yearMonth, start: start.toISOString(), end: end.toISOString() } });
+      return await this.getOrdersFromFirestoreByRange(storeId, start, end);
+    } catch (e) {
+      this.logger.error('Error in getOrdersByYearAndMonth', { area: 'orders', payload: { yearMonth, error: String(e) } }, e);
+      return [];
+    }
+  }
+
+  /**
+   * Convenience helper: fetch orders for the current day (00:00:00 -> 23:59:59.999).
+   * This uses the Firestore range query flow and will prefer `updatedAt` when present.
+   */
+  public async getOrdersForToday(storeId: string): Promise<Order[]> {
+    try {
+      const now = new Date();
+      const start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+      const end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+      this.logger.debug('Fetching orders for today', { area: 'orders', payload: { storeId, start: start.toISOString(), end: end.toISOString() } });
+      return await this.getOrdersFromFirestoreByRange(storeId, start, end);
+    } catch (e) {
+      this.logger.error('Error in getOrdersForToday', { area: 'orders', payload: { storeId, error: String(e) } }, e);
+      return [];
+    }
+  }
+
+  /**
+   * Debug helper: fetch up to `limitCount` orders for the given store without date filters.
+   * Returns raw document data for inspection (not transformed) so callers can log field names.
+   */
+  public async getSampleOrdersForDebug(storeId: string, limitCount = 10): Promise<any[]> {
+    try {
+      const ordersRef = collection(this.firestore, 'orders');
+      let q;
+      if (storeId) {
+        q = query(ordersRef, where('storeId', '==', storeId), limit(limitCount));
+      } else {
+        q = query(ordersRef, limit(limitCount));
+      }
+      const snap = await getDocs(q);
+      if (!snap || !snap.docs) return [];
+      return snap.docs.map(d => ({ id: d.id, data: d.data() }));
+    } catch (e) {
+      this.logger.warn('getSampleOrdersForDebug failed', { area: 'orders', payload: { storeId, error: String(e) } });
       return [];
     }
   }

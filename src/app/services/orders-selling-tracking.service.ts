@@ -54,6 +54,25 @@ export class OrdersSellingTrackingService {
       errors.push({ id: 'query', error: e });
     }
 
+    // ALSO: update any pending offline queued tracking documents so local UI reflects the completed status immediately.
+    try {
+      const pending = await this.offlineDocService.getPendingDocuments();
+      for (const pd of pending) {
+        try {
+          if (pd.collectionName === 'ordersSellingTracking' && pd.data && pd.data.orderId === orderId && pd.data.status === 'processing') {
+            // Update the pending offline document to completed locally (this uses updateDocument which will update the pending queue)
+            await this.offlineDocService.updateDocument('ordersSellingTracking', pd.id, { status: 'completed', updatedBy: completedBy || pd.data.createdBy || 'system' });
+            updated++;
+          }
+        } catch (e) {
+          errors.push({ id: pd.id, error: e });
+        }
+      }
+    } catch (e) {
+      // Non-fatal: log and continue
+      errors.push({ id: 'pending-check', error: e });
+    }
+
     return { updated, errors };
   }
 
