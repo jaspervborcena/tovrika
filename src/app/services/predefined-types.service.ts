@@ -1,7 +1,8 @@
-import { Injectable } from '@angular/core';
+import { Injectable, inject } from '@angular/core';
 import { collection, query, where, getDocs, QuerySnapshot, DocumentData } from 'firebase/firestore';
 import { db } from '../firebase.config';
 import { OfflineDocumentService } from '../core/services/offline-document.service';
+import { AuthService } from './auth.service';
 
 export interface PredefinedType {
   id: string;
@@ -23,6 +24,8 @@ export interface UnitTypeOption {
   providedIn: 'root'
 })
 export class PredefinedTypesService {
+
+  private readonly auth = inject(AuthService);
 
   constructor(private offlineDocService: OfflineDocumentService) { }
 
@@ -92,11 +95,12 @@ export class PredefinedTypesService {
    * Get store types specifically (storeId='global', typeCategory='storeType')
    */
   async getStoreTypes(): Promise<PredefinedType[]> {
-    const types = await this.getPredefinedTypes('global', 'storeType');
-    if (types.length === 0) {
-      // If no store types are defined, seed a small default set and return them
+    let types = await this.getPredefinedTypes('global', 'storeType');
+    const defaultCount = this.getDefaultStoreTypes().length;
+    // If some defaults are missing, add them and re-fetch so UI shows full list
+    if (types.length === 0 || types.length < defaultCount) {
       await this.addMissingStoreTypes(false);
-      return this.getPredefinedTypes('global', 'storeType');
+      types = await this.getPredefinedTypes('global', 'storeType');
     }
     return types;
   }
@@ -131,6 +135,7 @@ export class PredefinedTypesService {
       const toAdd = target.filter(t => !existingIds.has(t.value));
       if (toAdd.length === 0) return;
 
+      const currentUid = this.auth.getCurrentUser()?.uid || 'system';
       for (const s of toAdd) {
         const docData = {
           storeId: 'global',
@@ -139,7 +144,9 @@ export class PredefinedTypesService {
           typeLabel: s.label,
           typeDescription: s.description,
           createdAt: new Date(),
-          uid: 'system'
+          uid: currentUid,
+          iconName: s.value,
+          isActive: true
         };
         await this.offlineDocService.createDocument('predefinedTypes', docData);
       }

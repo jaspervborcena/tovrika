@@ -5,12 +5,12 @@
     "changeOrigin": true,
     "logLevel": "debug",
     "pathRewrite": {
-      "^/api/orders": ""
+      "^/api/orders": "/orders"
     }
   }
   ,
   "/api/functions": {
-    "target": "https://asia-east1-jasperpos-1dfd5.cloudfunctions.net",
+    "target": "https://asia-east1-jasperpos-dev.cloudfunctions.net",
     "secure": true,
     "changeOrigin": true,
     "logLevel": "debug",

@@ -30,6 +30,7 @@ import { Product } from '../../../interfaces/product.interface';
 import { ProductViewType, OrderDiscount, ReceiptValidityNotice, CartItem, CartItemTaxDiscount } from '../../../interfaces/pos.interface';
 import { Customer, CustomerFormData } from '../../../interfaces/customer.interface';
 import { SubscriptionService } from '../../../services/subscription.service';
+import { toDateValue } from '../../../core/utils/date-utils';
 
 @Component({
   selector: 'app-pos',
@@ -2149,21 +2150,28 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
         return false;
       }
 
-      // Expiry check using denormalized end date
-      let endDate: Date | null | undefined = store.subscriptionEndDate as any;
+      // Expiry check using denormalized end date (normalize various shapes)
+      const rawEndDate = store.subscriptionEndDate as any;
+      let endDate: Date | null | undefined = toDateValue(rawEndDate) ?? undefined;
 
-      // If missing, try to fetch the latest subscription
+      // If raw value is a string (ISO) and toDateValue returned null, attempt Date conversion
+      if (!endDate && typeof rawEndDate === 'string') {
+        const parsed = new Date(rawEndDate);
+        if (!isNaN(parsed.getTime())) endDate = parsed;
+      }
+
+      // If still missing, try to fetch the latest subscription
       if (!endDate && store.companyId && store.id) {
         try {
           const latest = await this.subscriptionService.getSubscriptionForStore(store.companyId, store.id);
-          endDate = latest?.data.endDate as any;
+          endDate = toDateValue(latest?.data?.endDate) ?? (latest?.data?.endDate instanceof Date ? latest.data.endDate : (latest?.data?.endDate ? new Date(latest.data.endDate) : undefined));
         } catch (e) {
           // ignore fetch errors; treat as unknown
         }
       }
 
       const now = new Date();
-      if (!endDate || (endDate instanceof Date && endDate.getTime() < now.getTime())) {
+      if (!endDate || endDate.getTime() < now.getTime()) {
         const when = endDate instanceof Date ? endDate.toLocaleDateString() : 'unavailable';
         await this.showConfirmationDialog({
           title: 'Subscription Required',
