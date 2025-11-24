@@ -1,3 +1,4 @@
+// PRODUCTION ENVIRONMENT - Uses jasperpos-1dfd5 Firebase project
 export const environment = {
   production: true,
   firebase: {
@@ -10,12 +11,15 @@ export const environment = {
     measurementId: "G-MG8T2RZ051"
   },
   api: {
-    baseUrl: "https://asia-east1-jasperpos-1dfd5.cloudfunctions.net",
-    ordersApi: "https://get-orders-by-date-bq-7bpeqovfmq-de.a.run.app", // BigQuery-backed endpoint
-    directOrdersApi: "https://get-orders-by-date-bq-7bpeqovfmq-de.a.run.app",
-    productsApi: "https://get-products-bq-7bpeqovfmq-de.a.run.app" // BigQuery products endpoint (Cloud Run)
+    // Production uses direct Cloud Function endpoints
+    baseUrl: "/api/functions",
+    ordersApi: "/api/orders",
+    // directOrdersApi intentionally disabled for Firestore-only Sales Summary
+    directOrdersApi: "",
+    // productsApi removed - now using Firestore real-time updates
   },
   inventory: {
-    reconciliationMode: 'legacy' as 'legacy' | 'recon' // Default to legacy in prod until rollout
+    // reconciliationMode: 'legacy' uses client-side FIFO; 'recon' defers to Cloud Function with tracking
+    reconciliationMode: 'recon' as 'legacy' | 'recon'
   }
 };
