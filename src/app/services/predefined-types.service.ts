@@ -92,7 +92,61 @@ export class PredefinedTypesService {
    * Get store types specifically (storeId='global', typeCategory='storeType')
    */
   async getStoreTypes(): Promise<PredefinedType[]> {
-    return this.getPredefinedTypes('global', 'storeType');
+    const types = await this.getPredefinedTypes('global', 'storeType');
+    if (types.length === 0) {
+      // If no store types are defined, seed a small default set and return them
+      await this.addMissingStoreTypes(false);
+      return this.getPredefinedTypes('global', 'storeType');
+    }
+    return types;
+  }
+
+  /**
+   * Default list of common store types to seed when none exist
+   */
+  private getDefaultStoreTypes(): Array<{ value: string; label: string; description: string }> {
+    return [
+      { value: 'store_barbershop', label: 'Barbershop', description: 'Haircuts and grooming services' },
+      { value: 'store_restaurant', label: 'Restaurant', description: 'Food and beverage establishment' },
+      { value: 'store_retail', label: 'Retail Store', description: 'General retail store' },
+      { value: 'store_grocery', label: 'Grocery', description: 'Supermarket or grocery store' },
+      { value: 'store_pharmacy', label: 'Pharmacy', description: 'Medicine and healthcare retail' },
+      { value: 'store_cafe', label: 'Cafe', description: 'Coffee shop and light meals' },
+      { value: 'store_salon', label: 'Salon', description: 'Beauty and hair salon' },
+      { value: 'store_bakery', label: 'Bakery', description: 'Bakery and pastries' },
+      { value: 'store_convenience', label: 'Convenience Store', description: '24/7 convenience items' }
+    ];
+  }
+
+  /**
+   * Add missing store types to `predefinedTypes` collection. If comprehensive is true,
+   * add an extended list; otherwise add a small default set.
+   */
+  async addMissingStoreTypes(comprehensive: boolean = false): Promise<void> {
+    try {
+      const target = comprehensive ? this.getDefaultStoreTypes() : this.getDefaultStoreTypes();
+      const existing = await this.getPredefinedTypes('global', 'storeType');
+      const existingIds = new Set(existing.map(t => t.typeId));
+
+      const toAdd = target.filter(t => !existingIds.has(t.value));
+      if (toAdd.length === 0) return;
+
+      for (const s of toAdd) {
+        const docData = {
+          storeId: 'global',
+          typeId: s.value,
+          typeCategory: 'storeType',
+          typeLabel: s.label,
+          typeDescription: s.description,
+          createdAt: new Date(),
+          uid: 'system'
+        };
+        await this.offlineDocService.createDocument('predefinedTypes', docData);
+      }
+    } catch (error) {
+      console.error('Error adding missing store types:', error);
+      throw error;
+    }
   }
 
   /**
