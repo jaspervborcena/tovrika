@@ -14,7 +14,8 @@ export const environment = {
     // so the browser sees same-origin requests (avoids CORS preflight failures).
     baseUrl: "/api/functions",
     ordersApi: "/api/orders", // Uses proxy in development
-    directOrdersApi: "https://get-orders-by-date-bq-7bpeqovfmq-de.a.run.app", // Updated to BQ endpoint
+    // directOrdersApi intentionally disabled for Firestore-only Sales Summary to avoid accidental external calls
+    directOrdersApi: "",
     // productsApi removed - now using Firestore real-time updates
   },
   inventory: {

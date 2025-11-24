@@ -33,7 +33,17 @@ import { SubscriptionService } from '../../../services/subscription.service';
               <p class="page-subtitle">Configure your company information and settings</p>
             </div>
           </div>
-          
+          <div class="header-actions">
+            <!-- Add quick links for Access Management and User Roles inside Company Profile -->
+            <button *ngIf="permissions().canViewAccess" class="btn btn-secondary" (click)="navigateTo('/dashboard/access')">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="margin-right:0.5rem"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 17l-4 4m0 0l-4-4m4 4V3"/></svg>
+              Access Management
+            </button>
+            <button *ngIf="permissions().canViewUserRoles" class="btn btn-secondary" (click)="navigateTo('/dashboard/user-roles')">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="margin-right:0.5rem"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a4 4 0 00-3-3.87M9 20h6M3 20h5v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75M8 3.13a4 4 0 010 7.75"/></svg>
+              User Roles
+            </button>
+          </div>
         </div>
       </div>
 
@@ -1105,6 +1115,15 @@ export class CompanyProfileComponent {
         });
       }
     });
+  }
+
+  // Expose a template-friendly navigation helper
+  protected navigateTo(path: string) {
+    try {
+      this.router.navigate([path]);
+    } catch (e) {
+      console.error('Navigation error:', e);
+    }
   }
 
   // Normalize permission.companyId which may be a string or an array; return the first non-empty string

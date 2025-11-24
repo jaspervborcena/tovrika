@@ -123,7 +123,26 @@
             </a>
           </div>
         </div>
-        <!-- Store Info (view only) -->
+          <!-- POS (Cashier, Manager, Admin) - moved to appear right after Company Profile -->
+          <div class="nav-section" *ngIf="permissions.canViewPOS">
+            <h3 class="nav-section-title">Sales</h3>
+            <div class="nav-items">
+              <a routerLink="/pos" class="nav-item pos-special" [class.active]="isActiveNavItem('pos')">
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span>Point of Sale</span>
+                <span class="pos-badge">POS</span>
+              </a>
+              <a routerLink="sales/summary" class="nav-item" [class.active]="isActiveNavItem('sales-summary')" *ngIf="permissions.canViewSalesReports">
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                </svg>
+                <span>Sales Summary</span>
+              </a>
+            </div>
+          </div>
+          <!-- Store Info (view only) -->
         <div class="nav-section" *ngIf="permissions.canViewStore">
           <h3 class="nav-section-title">Store</h3>
           <div class="nav-items">
@@ -135,30 +154,7 @@
             </a>
           </div>
         </div>
-        <!-- Access Management (hide for cashier) -->
-        <div class="nav-section" *ngIf="permissions.canViewAccess">
-          <h3 class="nav-section-title">Access</h3>
-          <div class="nav-items">
-            <a routerLink="access" class="nav-item" [class.active]="isActiveNavItem('access')">
-              <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 17l-4 4m0 0l-4-4m4 4V3" />
-              </svg>
-              <span>Access Management</span>
-            </a>
-          </div>
-        </div>
-        <!-- User Roles (hide for cashier) -->
-        <div class="nav-section" *ngIf="permissions.canViewUserRoles">
-          <h3 class="nav-section-title">User Roles</h3>
-          <div class="nav-items">
-            <a routerLink="user-roles" class="nav-item" [class.active]="isActiveNavItem('user-roles')">
-              <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a4 4 0 00-3-3.87M9 20h6M3 20h5v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75M8 3.13a4 4 0 010 7.75" />
-              </svg>
-              <span>User Roles</span>
-            </a>
-          </div>
-        </div>
+        <!-- Access Management and User Roles moved into Company Profile to centralize administration -->
         <!-- Products (view only) -->
         <div class="nav-section" *ngIf="permissions.canViewProducts">
           <h3 class="nav-section-title">Products</h3>
@@ -171,25 +167,7 @@
             </a>
           </div>
         </div>
-        <!-- POS (Cashier, Manager, Admin) -->
-        <div class="nav-section" *ngIf="permissions.canViewPOS">
-          <h3 class="nav-section-title">Sales</h3>
-          <div class="nav-items">
-            <a routerLink="/pos" class="nav-item pos-special" [class.active]="isActiveNavItem('pos')">
-              <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <span>Point of Sale</span>
-              <span class="pos-badge">POS</span>
-            </a>
-            <a routerLink="sales/summary" class="nav-item" [class.active]="isActiveNavItem('sales-summary')" *ngIf="permissions.canViewSalesReports">
-              <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-              </svg>
-              <span>Sales Summary</span>
-            </a>
-          </div>
-        </div>
+        
         <!-- Inventory (view only) -->
         <div class="nav-section" *ngIf="permissions.canViewInventory">
           <h3 class="nav-section-title">Inventory</h3>
@@ -228,30 +206,7 @@
         </svg>
         <span class="absolute bottom-[-1.4rem] left-1/2 -translate-x-1/2 px-2 py-1 bg-gray-900 text-white text-xs rounded shadow-lg opacity-0 group-hover:opacity-100 group-active:opacity-100 transition pointer-events-none whitespace-nowrap">Company</span>
       </a>
-      <a routerLink="stores" *ngIf="permissions.canViewStore" class="mx-6 flex flex-col items-center group relative" title="Manage Store">
-        <svg class="h-8 w-8 transition-transform duration-150 group-hover:scale-110" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-        </svg>
-        <span class="absolute bottom-[-1.4rem] left-1/2 -translate-x-1/2 px-2 py-1 bg-gray-900 text-white text-xs rounded shadow-lg opacity-0 group-hover:opacity-100 group-active:opacity-100 transition pointer-events-none whitespace-nowrap">Store</span>
-      </a>
-      <a routerLink="access" *ngIf="permissions.canViewAccess" class="mx-6 flex flex-col items-center group relative" title="Access Management">
-        <svg class="h-8 w-8 transition-transform duration-150 group-hover:scale-110" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 17l-4 4m0 0l-4-4m4 4V3" />
-        </svg>
-        <span class="absolute bottom-[-1.4rem] left-1/2 -translate-x-1/2 px-2 py-1 bg-gray-900 text-white text-xs rounded shadow-lg opacity-0 group-hover:opacity-100 group-active:opacity-100 transition pointer-events-none whitespace-nowrap">Access</span>
-      </a>
-      <a routerLink="user-roles" *ngIf="permissions.canViewUserRoles" class="mx-6 flex flex-col items-center group relative" title="User Roles">
-        <svg class="h-8 w-8 transition-transform duration-150 group-hover:scale-110" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a4 4 0 00-3-3.87M9 20h6M3 20h5v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75M8 3.13a4 4 0 010 7.75" />
-        </svg>
-        <span class="absolute bottom-[-1.4rem] left-1/2 -translate-x-1/2 px-2 py-1 bg-gray-900 text-white text-xs rounded shadow-lg opacity-0 group-hover:opacity-100 group-active:opacity-100 transition pointer-events-none whitespace-nowrap">User Roles</span>
-      </a>
-      <a routerLink="products" *ngIf="permissions.canViewProducts" class="mx-6 flex flex-col items-center group relative" title="Products">
-        <svg class="h-8 w-8 transition-transform duration-150 group-hover:scale-110" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-        </svg>
-        <span class="absolute bottom-[-1.4rem] left-1/2 -translate-x-1/2 px-2 py-1 bg-gray-900 text-white text-xs rounded shadow-lg opacity-0 group-hover:opacity-100 group-active:opacity-100 transition pointer-events-none whitespace-nowrap">Products</span>
-      </a>
+      <!-- POS and Sales Summary quick links moved here for easier access after Company -->
       <a routerLink="/pos" *ngIf="permissions.canViewPOS" class="mx-6 flex flex-col items-center group relative" title="Point of Sale">
         <svg class="h-8 w-8 transition-transform duration-150 group-hover:scale-110" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -264,6 +219,20 @@
         </svg>
         <span class="absolute bottom-[-1.4rem] left-1/2 -translate-x-1/2 px-2 py-1 bg-gray-900 text-white text-xs rounded shadow-lg opacity-0 group-hover:opacity-100 group-active:opacity-100 transition pointer-events-none whitespace-nowrap">Sales</span>
       </a>
+      <a routerLink="stores" *ngIf="permissions.canViewStore" class="mx-6 flex flex-col items-center group relative" title="Manage Store">
+        <svg class="h-8 w-8 transition-transform duration-150 group-hover:scale-110" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+        </svg>
+        <span class="absolute bottom-[-1.4rem] left-1/2 -translate-x-1/2 px-2 py-1 bg-gray-900 text-white text-xs rounded shadow-lg opacity-0 group-hover:opacity-100 group-active:opacity-100 transition pointer-events-none whitespace-nowrap">Store</span>
+      </a>
+      <!-- Access Management and User Roles removed from top bar — use Company Profile for management links -->
+      <a routerLink="products" *ngIf="permissions.canViewProducts" class="mx-6 flex flex-col items-center group relative" title="Products">
+        <svg class="h-8 w-8 transition-transform duration-150 group-hover:scale-110" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+        </svg>
+        <span class="absolute bottom-[-1.4rem] left-1/2 -translate-x-1/2 px-2 py-1 bg-gray-900 text-white text-xs rounded shadow-lg opacity-0 group-hover:opacity-100 group-active:opacity-100 transition pointer-events-none whitespace-nowrap">Products</span>
+      </a>
+      
       <a routerLink="inventory" *ngIf="permissions.canViewInventory" class="mx-6 flex flex-col items-center group relative" title="Inventory">
         <svg class="h-8 w-8 transition-transform duration-150 group-hover:scale-110" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
