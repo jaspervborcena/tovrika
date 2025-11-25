@@ -13,7 +13,7 @@ export const environment = {
   api: {
     // During local development we route Cloud Function calls through the Angular dev proxy
     // so the browser sees same-origin requests (avoids CORS preflight failures).
-    baseUrl: "/api/functions",
+    baseUrl: "/api",
     ordersApi: "/api/orders", // Uses proxy in development
     // directOrdersApi intentionally disabled for Firestore-only Sales Summary to avoid accidental external calls
     directOrdersApi: "",
