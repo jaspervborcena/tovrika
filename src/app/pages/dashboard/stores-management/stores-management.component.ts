@@ -2270,9 +2270,24 @@ export class StoresManagementComponent implements OnInit {
       invoiceNo: 'INV-0000-000000',
       status: 'active'
     });
-    this.showStoreModal = true;
-    console.log('showStoreModal set to:', this.showStoreModal);
-    this.cdr.detectChanges();
+    // Ensure store types are loaded for the Store Type select.
+    (async () => {
+      try {
+        await this.loadStoreTypes();
+        // If still empty (race condition), attempt to add missing defaults and reload
+        if (!this.storeTypes || this.storeTypes.length === 0) {
+          await this.predefinedTypesService.addMissingStoreTypes(false);
+          await this.loadStoreTypes();
+          this.toastService.success('Default store types added');
+        }
+      } catch (err) {
+        console.error('Failed to prepare store types for Add Store modal', err);
+      } finally {
+        this.showStoreModal = true;
+        console.log('showStoreModal set to:', this.showStoreModal);
+        this.cdr.detectChanges();
+      }
+    })();
   }
 
   editStore(store: Store) {

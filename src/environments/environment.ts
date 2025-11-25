@@ -1,18 +1,19 @@
+// DEVELOPMENT ENVIRONMENT - Uses jasperpos-dev Firebase project
 export const environment = {
   production: false,
   firebase: {
-    apiKey: "AIzaSyDNIYovvzNKVj40h99kxOHu5yfEUzx7OYA",
-    authDomain: "jasperpos-1dfd5.firebaseapp.com",
-    projectId: "jasperpos-1dfd5",
-    storageBucket: "jasperpos-1dfd5.firebasestorage.app",
-    messagingSenderId: "251258556341",
-    appId: "1:251258556341:web:28cdcafbdb4ad89675d3fc",
-    measurementId: "G-MG8T2RZ051"
+    apiKey: "AIzaSyABpbnPUjr16LnLU8WSJ1BmVvWy0tTmaI4",
+    authDomain: "jasperpos-dev.firebaseapp.com",
+    projectId: "jasperpos-dev",
+    storageBucket: "jasperpos-dev.firebasestorage.app",
+    messagingSenderId: "425012486350",
+    appId: "1:425012486350:web:6a1289e238eb26fb36709f",
+    measurementId: "G-5BLXC1688Z"
   },
   api: {
     // During local development we route Cloud Function calls through the Angular dev proxy
     // so the browser sees same-origin requests (avoids CORS preflight failures).
-    baseUrl: "/api/functions",
+    baseUrl: "/api",
     ordersApi: "/api/orders", // Uses proxy in development
     // directOrdersApi intentionally disabled for Firestore-only Sales Summary to avoid accidental external calls
     directOrdersApi: "",
