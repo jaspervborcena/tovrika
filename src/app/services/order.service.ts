@@ -743,34 +743,15 @@ export class OrderService {
         storeId: currentStoreId
       });
 
-      // Get the ID token for authorization
-      const idToken = await this.authService.getFirebaseIdToken();
-      if (!idToken) {
-        throw new Error('Failed to get Firebase ID token for authentication');
-      }
-
-      // Call the Cloud Function
-      const response = await fetch(`${environment.api.baseUrl}/manage_item_status`, {
-        method: 'POST',
+      // Use HttpClient so auth interceptor can automatically add Authorization header
+      const data = await this.http.post<any>(`${environment.api.baseUrl}/manage_item_status`, {
+        storeId: currentStoreId,
+        orderId: orderId
+      }, {
         headers: {
-          'Authorization': `Bearer ${idToken}`,
           'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          storeId: currentStoreId,
-          orderId: orderId
-        })
-      });
-
-      console.log('📡 Cloud Function response status:', response.status, response.statusText);
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('❌ Cloud Function error response:', errorText);
-        throw new Error(`Cloud Function request failed: ${response.status} ${response.statusText}`);
-      }
-
-      const data = await response.json();
+        }
+      }).toPromise();
       console.log('📦 Cloud Function response data:', data);
       
       // The Cloud Function returns: { success: true, storeId, orderId, count, rows: [...] }
@@ -839,38 +820,16 @@ export class OrderService {
 
   /**
    * Get orders from API (for historical dates)
+   * Auth interceptor automatically adds Firebase ID token to all /api/* requests
    */
   private async getOrdersFromApi(storeId: string, startDate: Date, endDate: Date): Promise<Order[]> {
     const fromDate = this.formatDateForApi(startDate);
     const toDate = this.formatDateForApi(endDate);
     
-    // Get Firebase ID token for authentication
-    const idToken = await this.authService.getFirebaseIdToken();
-    this.logger.debug('Firebase ID token status', { area: 'orders', payload: { hasToken: !!idToken, tokenLength: idToken?.length || 0, tokenStart: idToken ? idToken.substring(0, 10) + '...' : 'null', currentUser: this.authService.getCurrentUser()?.email || 'null', authStatus: 'logged in: ' + !!this.authService.getCurrentUser() } });
-    
     // Check if user is signed in at all
     const currentUser = this.authService.getCurrentUser();
     if (!currentUser) {
       this.logger.error('User is not signed in - cannot call orders API', { area: 'orders' });
-      return [];
-    }
-    
-    if (!idToken) {
-      this.logger.error('No Firebase ID token available for API authentication', { area: 'orders', storeId });
-      this.logger.error('User is signed in but token is null - possible token refresh issue', { area: 'orders', storeId });
-      // Try to force refresh the token
-      try {
-        this.logger.debug('Attempting to force refresh Firebase ID token', { area: 'orders', storeId });
-        const refreshedToken = await this.authService.getFirebaseIdToken(true);
-        if (refreshedToken) {
-          this.logger.info('Token refresh successful, retrying API call', { area: 'orders', storeId });
-          // Retry the API call with the refreshed token by calling this method again
-          return await this.getOrdersFromApi(storeId, startDate, endDate);
-        }
-      } catch (refreshError) {
-        this.logger.error('Token refresh failed', { area: 'orders', storeId }, refreshError);
-      }
-      
       return [];
     }
 
@@ -897,20 +856,13 @@ export class OrderService {
       const apiUrl = apiUrls[i];
       
       try {
-        this.logger.debug('Attempting API fetch', { area: 'orders', payload: { attempt: i + 1, apiUrl, storeId, fromDate, toDate, hasToken: !!idToken, currentUser: this.authService.getCurrentUser()?.email || 'null' } });
+        this.logger.debug('Attempting API fetch', { area: 'orders', payload: { attempt: i + 1, apiUrl, storeId, fromDate, toDate, currentUser: this.authService.getCurrentUser()?.email || 'null' } });
 
         const headers: any = {
           'Content-Type': 'application/json',
           'Accept': 'application/json'
         };
-
-        // Add Authorization header with Firebase ID token
-        if (idToken) {
-          headers['Authorization'] = `Bearer ${idToken}`;
-          this.logger.debug('Added Firebase ID token to Authorization header (redacted)', { area: 'orders', storeId });
-        } else {
-          this.logger.warn('No ID token available - attempting request without authentication', { area: 'orders', storeId });
-        }
+        // Note: Auth interceptor automatically adds Authorization header for /api/* requests
 
         const response = await this.http.get<any>(
           `${apiUrl}?${params.toString()}`,
@@ -989,7 +941,6 @@ export class OrderService {
     const fromDate = this.formatDateForApi(startDate);
     const toDate = this.formatDateForApi(endDate);
 
-    const idToken = await this.authService.getFirebaseIdToken();
     const currentUser = this.authService.getCurrentUser();
     if (!currentUser) {
       this.logger.error('User not signed in - cannot call paged orders API', { area: 'orders' });
@@ -1019,7 +970,7 @@ export class OrderService {
       const apiUrl = apiUrls[i];
       try {
         const headers: any = { 'Content-Type': 'application/json', 'Accept': 'application/json' };
-        if (idToken) headers['Authorization'] = `Bearer ${idToken}`;
+        // Auth interceptor automatically adds Authorization header
 
   const response = await this.http.get<any>(`${apiUrl}?${params.toString()}`, { headers }).toPromise();
 

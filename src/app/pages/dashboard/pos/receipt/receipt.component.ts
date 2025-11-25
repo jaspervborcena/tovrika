@@ -1,4 +1,4 @@
-import { Component, Input, Output, EventEmitter, OnInit } from '@angular/core';
+import { Component, Input, Output, EventEmitter, OnInit, ViewChild, ElementRef, AfterViewChecked } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 
@@ -10,6 +10,8 @@ import { FormsModule } from '@angular/forms';
   styleUrls: ['./receipt.component.css']
 })
 export class ReceiptComponent implements OnInit {
+  @ViewChild('printBtn', { read: ElementRef }) printBtn?: ElementRef<HTMLButtonElement>;
+  private hasFocusedPrint = false;
   @Input() isVisible: boolean = false;
   @Input() receiptData: any = null;
   @Output() closeModal = new EventEmitter<void>();
@@ -21,16 +23,34 @@ export class ReceiptComponent implements OnInit {
     console.log('Receipt Data:', this.receiptData);
   }
 
+  ngAfterViewChecked(): void {
+    if (this.isVisible && this.printBtn && !this.hasFocusedPrint) {
+      try {
+        this.printBtn.nativeElement.focus();
+      } catch (e) {
+        // ignore
+      }
+      this.hasFocusedPrint = true;
+    }
+
+    if (!this.isVisible) {
+      this.hasFocusedPrint = false;
+    }
+  }
+
   onCloseModal() {
     this.closeModal.emit();
   }
 
-  onPrintReceipt() {
+  onPrintReceipt(event?: Event) {
+    if (event) {
+      try { event.preventDefault(); event.stopPropagation(); } catch {}
+    }
     if (this.isPrinting) return; // Prevent double-clicking
-    
+
     this.isPrinting = true;
     this.printReceipt.emit(); // Simplified - smart print will handle everything
-    
+
     // Reset printing state after a delay (will be reset when modal closes anyway)
     setTimeout(() => {
       this.isPrinting = false;

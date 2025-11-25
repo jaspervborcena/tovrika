@@ -12,7 +12,7 @@ export const environment = {
   },
   api: {
     // Production uses direct Cloud Function endpoints
-    baseUrl: "/api/functions",
+    baseUrl: "/api",
     ordersApi: "/api/orders",
     // directOrdersApi intentionally disabled for Firestore-only Sales Summary
     directOrdersApi: "",
