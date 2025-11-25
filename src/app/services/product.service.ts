@@ -26,6 +26,7 @@ import {
 } from '@angular/fire/firestore';
 import { Product, ProductInventory, ProductStatus } from '../interfaces/product.interface';
 import { AuthService } from './auth.service';
+import { ProductSummaryService } from './product-summary.service';
 import { LoggerService } from '../core/services/logger.service';
 import { OfflineDocumentService } from '../core/services/offline-document.service';
 import { environment } from '../../environments/environment';
@@ -103,7 +104,8 @@ export class ProductService implements OnDestroy {
   });  constructor(
     private firestore: Firestore,
     private authService: AuthService,
-    private http: HttpClient
+    private http: HttpClient,
+    private productSummaryService: ProductSummaryService
   ) {
     this.initializeNetworkMonitoring();
     this.initializeFirestorePersistence();
@@ -184,7 +186,44 @@ export class ProductService implements OnDestroy {
           console.error('❌ Direct load test failed:', error);
         }
       }
+      ,
+      validateSummary: async (productId: string) => {
+        try {
+          console.log('🧪 Validating product summary for', productId);
+          const result = await this.productSummaryService.validateProductSummary(productId);
+          console.log('✅ Validation result:', result);
+          return result;
+        } catch (err) {
+          console.error('❌ validateSummary failed:', err);
+          throw err;
+        }
+      },
+      recomputeSummary: async (productId: string) => {
+        try {
+          console.log('🧪 Recomputing product summary for', productId);
+          const result = await this.productSummaryService.recomputeProductSummary(productId);
+          console.log('✅ Recompute result:', result);
+          return result;
+        } catch (err) {
+          console.error('❌ recomputeSummary failed:', err);
+          throw err;
+        }
+      }
     };
+    // Provide a callback hook that other services can call after updating product summary
+    // This avoids creating circular DI between ProductService and ProductSummaryService.
+    try {
+      (window as any).onProductSummaryUpdated = (productId: string, updates: any) => {
+        try {
+          // Apply a local-only patch so UI updates immediately without forcing a Firestore write
+          this.applyLocalPatch(productId, updates as any);
+        } catch (e) {
+          console.warn('⚠️ onProductSummaryUpdated handler error:', e);
+        }
+      };
+    } catch (e) {
+      console.warn('⚠️ Failed to register onProductSummaryUpdated hook:', e);
+    }
     console.log('🐛 Debug methods available at window.debugProducts');
     console.log('🐛 Available methods: load, getProducts, getCount, getState, forceReload, testFirestore, testQuery');
   }
@@ -734,6 +773,7 @@ export class ProductService implements OnDestroy {
         category: data['category'] || '',
         totalStock: Number(data['totalStock'] || 0),
         sellingPrice: Number(data['sellingPrice'] || 0),
+        originalPrice: Number((data['originalPrice'] ?? data['unitPrice'] ?? data['sellingPrice']) || 0),
         companyId: data['companyId'] || '',
         storeId: data['storeId'] || '',
         barcodeId: data['barcodeId'] || '',
@@ -758,6 +798,7 @@ export class ProductService implements OnDestroy {
         name: product.productName,
         category: product.category,
         price: product.sellingPrice,
+        originalPrice: product.originalPrice,
         stock: product.totalStock,
         storeId: product.storeId,
         companyId: product.companyId
@@ -876,6 +917,7 @@ export class ProductService implements OnDestroy {
       category: item.category || '',
       totalStock: Number(item.totalStock || item.stock || 0),
       sellingPrice: Number(item.sellingPrice || item.unitPrice || 0),
+      originalPrice: Number(item.originalPrice || item.unitPrice || item.sellingPrice || 0),
       companyId: item.companyId || '',
       storeId: item.storeId || '',
       barcodeId: item.barcodeId || item.barcode || '',
@@ -975,6 +1017,7 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
         // 3. Calculate initial totals from batches
         let totalStock = 0;
         let sellingPrice = 0;
+        let originalPrice = 0;
         
         if (invArr.length > 0) {
           // Calculate total stock
@@ -986,7 +1029,10 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
             const dateB = b.receivedAt instanceof Date ? b.receivedAt : new Date(b.receivedAt);
             return dateB.getTime() - dateA.getTime();
           });
-          sellingPrice = Number(sortedBatches[0]?.unitPrice || 0);
+          // Prefer explicit batch.sellingPrice when available, otherwise use unitPrice
+          sellingPrice = Number((sortedBatches[0]?.sellingPrice ?? sortedBatches[0]?.unitPrice) || 0);
+          // originalPrice is the base/unit price from the latest batch (unitPrice)
+          originalPrice = Number(sortedBatches[0]?.unitPrice || 0);
           
           console.log('📊 Calculated totals:', { totalStock, sellingPrice, batchCount: invArr.length });
         }
@@ -994,6 +1040,7 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
         // Add calculated fields to product
         productPayload.totalStock = totalStock;
         productPayload.sellingPrice = sellingPrice;
+        productPayload.originalPrice = originalPrice || Number(baseData?.originalPrice || 0);
         // Ensure VAT fields are persisted
         productPayload.vatRate = Number(baseData?.vatRate || 0);
         productPayload.isVatApplicable = !!baseData?.isVatApplicable;
@@ -1065,6 +1112,11 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
             const dateB = b.receivedAt instanceof Date ? b.receivedAt : new Date(b.receivedAt);
             return dateB.getTime() - dateA.getTime();
           })[0]?.unitPrice || 0) : 0,
+          originalPrice: invArr.length > 0 ? Number(invArr.sort((a: any, b: any) => {
+            const dateA = a.receivedAt instanceof Date ? a.receivedAt : new Date(a.receivedAt);
+            const dateB = b.receivedAt instanceof Date ? b.receivedAt : new Date(b.receivedAt);
+            return dateB.getTime() - dateA.getTime();
+          })[0]?.unitPrice || 0) : Number((productData as any)?.originalPrice || 0),
           createdAt: new Date(),
           updatedAt: new Date(),
           // include VAT in optimistic local model
@@ -1104,6 +1156,9 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
       // Normalize VAT fields when present
       if ('vatRate' in updates) {
         updateData.vatRate = Number((updates as any).vatRate || 0);
+      }
+      if ('originalPrice' in updates) {
+        updateData.originalPrice = Number((updates as any).originalPrice || 0);
       }
       if ('isVatApplicable' in updates) {
         updateData.isVatApplicable = !!(updates as any).isVatApplicable;

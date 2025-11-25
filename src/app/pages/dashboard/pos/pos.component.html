@@ -1060,7 +1060,7 @@
     </div>
 
     <!-- Payment Dialog -->
-    <div *ngIf="showPaymentModal()" class="modal-overlay">
+    <div *ngIf="showPaymentModal()" class="modal-overlay" (keydown.enter)="onPaymentDialogEnter($event)">
       <div class="payment-dialog">
         <div class="dialog-header">
           <h3>💳 {{ 'pos.paymentProcessing' | translate }}</h3>
@@ -1119,12 +1119,15 @@
           <button 
             type="button"
             class="btn-secondary"
+            #cancelPaymentButton
             (click)="closePaymentDialog()">
             {{ 'buttons.cancel' | translate }}
           </button>
           <button 
             type="button"
             class="btn-primary"
+            #processPaymentButton
+            autofocus
             (click)="processPayment()">
             {{ 'pos.processPayment' | translate }}
           </button>

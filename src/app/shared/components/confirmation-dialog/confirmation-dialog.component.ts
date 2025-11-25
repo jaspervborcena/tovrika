@@ -1,4 +1,4 @@
-import { Component, signal, output, input, HostListener } from '@angular/core';
+import { Component, signal, output, input, HostListener, ViewChild, ElementRef, AfterViewChecked } from '@angular/core';
 import { CommonModule } from '@angular/common';
 
 export interface ConfirmationDialogData {
@@ -423,6 +423,9 @@ export class ConfirmationDialogComponent {
   confirmed = output<void>();
   cancelled = output<void>();
 
+  @ViewChild('confirmButton', { read: ElementRef }) confirmButton?: ElementRef<HTMLButtonElement>;
+  private hasFocusedConfirm = false;
+
   onConfirm(): void {
     this.confirmed.emit();
   }
@@ -445,6 +448,23 @@ export class ConfirmationDialogComponent {
     } else {
       // Default to confirm button if no button is focused
       this.onConfirm();
+    }
+  }
+
+  ngAfterViewChecked(): void {
+    // Ensure the confirm button receives focus when the dialog first appears
+    if (this.dialogData() && this.confirmButton && !this.hasFocusedConfirm) {
+      try {
+        this.confirmButton.nativeElement.focus();
+      } catch (e) {
+        // ignore focus errors in some environments
+      }
+      this.hasFocusedConfirm = true;
+    }
+
+    // Reset flag when dialog is closed
+    if (!this.dialogData()) {
+      this.hasFocusedConfirm = false;
     }
   }
 

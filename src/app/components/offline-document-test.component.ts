@@ -118,6 +118,7 @@ export class OfflineDocumentTestComponent {
         category: 'Test',
         totalStock: 100,
         sellingPrice: 25.99,
+        originalPrice: 25.99,
         companyId: 'test-company-id', // Required field
         storeId: 'test-store-id',
         barcodeId: `BAR-${Date.now()}`,

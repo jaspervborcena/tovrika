@@ -42,7 +42,9 @@ import { AppConstants } from '../../../shared/enums/app-constants.enum';
                 <div class="item-header-row">
                   <div class="item-info">
                     <div class="item-name">{{ item.productName }}</div>
-                    <div class="item-sku">{{ item.skuId }} - ₱{{ item.sellingPrice.toFixed(2) }} each</div>
+                    <div class="item-sku">{{ item.skuId }} - ₱{{ item.sellingPrice.toFixed(2) }} each
+                      <small class="text-muted" style="display:block">base ₱{{ (item.originalPrice || 0).toFixed(2) }}</small>
+                    </div>
                   </div>
                   <button 
                     (click)="removeFromCart(item.productId)" 
@@ -152,7 +154,9 @@ import { AppConstants } from '../../../shared/enums/app-constants.enum';
                     <div class="product-name">{{ item.productName }}</div>
                     <div class="product-sku">{{ item.skuId }}</div>
                   </div>
-                  <div class="product-price">₱{{ item.sellingPrice.toFixed(2) }}</div>
+                  <div class="product-price">₱{{ item.sellingPrice.toFixed(2) }}
+                    <div class="text-muted small">base ₱{{ (item.originalPrice || 0).toFixed(2) }}</div>
+                  </div>
                 </div>
                 
                 <!-- Quantity Row -->

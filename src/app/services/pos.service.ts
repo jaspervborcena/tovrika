@@ -756,6 +756,7 @@ export class PosService {
       unitType: product.unitType,
       quantity,
       sellingPrice: product.sellingPrice,
+      originalPrice: (product as any).originalPrice || product.sellingPrice,
       total: discountedTotal + vatAmount,
       isVatApplicable: product.isVatApplicable,
   vatRate: vatRate,

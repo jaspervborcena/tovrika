@@ -88,6 +88,7 @@ export interface CartItem {
   unitType?: string; // Added for display like "1 pc(s)", "2 boxes"
   quantity: number;
   sellingPrice: number;
+  originalPrice?: number;
   total: number;
   isVatApplicable: boolean;
   vatRate: number;

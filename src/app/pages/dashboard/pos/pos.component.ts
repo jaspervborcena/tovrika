@@ -1,4 +1,4 @@
-import { Component, OnInit, AfterViewInit, OnDestroy, HostListener, computed, signal, inject } from '@angular/core';
+import { Component, OnInit, AfterViewInit, OnDestroy, HostListener, ViewChild, ElementRef, computed, signal, inject } from '@angular/core';
 import { Firestore, doc, getDoc, collection, query, where, getDocs } from '@angular/fire/firestore';
 import { ProductStatus } from '../../../interfaces/product.interface';
 import { CommonModule } from '@angular/common';
@@ -44,6 +44,7 @@ import { DomSanitizer, SafeUrl } from '@angular/platform-browser';
   styleUrls: ['./pos.component.css']
 })
 export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
+  @ViewChild('processPaymentButton', { read: ElementRef }) processPaymentButton?: ElementRef<HTMLButtonElement>;
 
   // Services
   private productService = inject(ProductService);
@@ -59,6 +60,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   private userRoleService = inject(UserRoleService);
   private customerService = inject(CustomerService);
   private companyService = inject(CompanyService);
+  
   private translationService = inject(TranslationService);
   private subscriptionService = inject(SubscriptionService);
   private firestore = inject(Firestore);
@@ -2275,6 +2277,14 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       this.paymentDescription = '';
     }
     this.paymentModalVisible.set(true);
+    // Ensure the primary action button receives focus when dialog opens
+    setTimeout(() => {
+      try {
+        this.processPaymentButton?.nativeElement?.focus();
+      } catch (e) {
+        // ignore focus errors
+      }
+    }, 50);
   }
 
   closePaymentDialog(): void {
@@ -3622,6 +3632,58 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
         cancelText: '',
         type: 'danger'
       });
+    }
+  }
+
+  // When payment dialog is open, pressing Enter should activate the focused button
+  onPaymentDialogEnter(event: Event): void {
+    event.preventDefault();
+    event.stopPropagation();
+    const activeElement = document.activeElement as HTMLElement;
+    if (activeElement && activeElement.tagName === 'BUTTON') {
+      activeElement.click();
+    } else {
+      // Default to processing payment if nothing specific is focused
+      this.processPayment();
+    }
+  }
+
+  @HostListener('document:keydown.enter', ['$event'])
+  onGlobalEnterForModals(event: KeyboardEvent): void {
+    try {
+      if (this.showPaymentModal()) {
+        event.preventDefault();
+        event.stopPropagation();
+        const active = document.activeElement as HTMLElement;
+        if (active && active.tagName === 'BUTTON') {
+          active.click();
+        } else {
+          this.processPayment();
+        }
+        return;
+      }
+
+      if (this.isReceiptModalVisible()) {
+        event.preventDefault();
+        event.stopPropagation();
+        const active = document.activeElement as HTMLElement;
+        if (active && active.tagName === 'BUTTON') {
+          active.click();
+        } else {
+          this.printReceipt();
+        }
+        return;
+      }
+    } catch (err) {
+      console.warn('Enter key global handler error:', err);
+    }
+  }
+
+  @HostListener('document:keydown.enter', ['$event'])
+  handleGlobalEnterForPayment(event: Event): void {
+    // If payment dialog is visible, delegate Enter to the payment handler
+    if (this.paymentModalVisible && this.paymentModalVisible()) {
+      this.onPaymentDialogEnter(event);
     }
   }
 
