@@ -125,6 +125,7 @@
           [ngModel]="searchQuery()"
           (ngModelChange)="setSearchQuery($event)"
           (input)="onSearch()"
+          (keydown.enter)="handleBarcodeSearch(searchQuery())"
           [placeholder]="accessTab() === 'Orders' ? 'Search Orders...' : 'Search Products...'"
           class="mobile-search">
         <button *ngIf="searchQuery()" (click)="clearSearch()" class="clear-btn">×</button>
@@ -167,11 +168,19 @@
           class="product-row"
           [class.disabled]="isOrderCompleted()"
           [class.out-of-stock]="product.totalStock <= 0">
-          <img [src]="product.imageUrl || 'assets/noimage.png'" class="product-thumb" onerror="this.src='assets/noimage.png'">
+          <div class="product-image-container-mobile">
+            <img [src]="product.imageUrl || 'assets/noimage.png'" class="product-thumb" onerror="this.src='assets/noimage.png'">
+            <div class="product-barcode-mobile" *ngIf="product.barcodeId">
+              <img [src]="generateBarcodeImage(product.barcodeId)" alt="Barcode" class="barcode-image-mobile">
+            </div>
+          </div>
           <div class="product-details">
             <div class="product-name">{{ product.productName }}</div>
             <div class="product-sku">SKU: {{ product.skuId }}</div>
-            <div class="product-stock">{{ 'products.stock' | translate }}: {{ product.totalStock }}</div>
+            <div class="product-category-stock">
+              <span class="product-category">{{ product.category }}</span>
+              <span class="stock-badge-mobile">Stock: {{ product.totalStock || 0 }}</span>
+            </div>
           </div>
           <div class="product-pricing">
             <div class="product-price">₱{{ (product.sellingPrice || 0).toFixed(2) }}</div>
@@ -191,12 +200,20 @@
           class="product-card"
           [class.disabled]="isOrderCompleted()"
           [class.out-of-stock]="product.totalStock <= 0">
-          <img [src]="product.imageUrl || 'assets/noimage.png'" class="product-image" onerror="this.src='assets/noimage.png'">
+          <div class="product-image-container-grid-mobile">
+            <img [src]="product.imageUrl || 'assets/noimage.png'" class="product-image" onerror="this.src='assets/noimage.png'">
+            <div class="product-barcode-grid-mobile" *ngIf="product.barcodeId">
+              <img [src]="generateBarcodeImage(product.barcodeId)" alt="Barcode" class="barcode-image-grid-mobile">
+            </div>
+          </div>
           <div class="product-card-info">
             <div class="product-name">{{ product.productName }}</div>
             <div class="product-price">₱{{ (product.sellingPrice || 0).toFixed(2) }}</div>
-            <div class="product-stock">Stock: {{ product.totalStock }}</div>
-            <div *ngIf="product.hasDiscount" class="promo-badge">PROMO</div>
+            <div class="product-category-stock">
+              <span class="product-category-grid">{{ product.category }}</span>
+              <span class="stock-badge-mobile">Stock: {{ product.totalStock || 0 }}</span>
+            </div>
+            <div *ngIf="product.hasDiscount && product.discountValue && product.discountValue > 0" class="promo-badge">PROMO</div>
           </div>
           <div *ngIf="isOrderCompleted()" class="order-completed-overlay">
             <span>Order Completed</span>
@@ -215,11 +232,20 @@
             [class.disabled]="isOrderCompleted()"
             [class.out-of-stock]="product.totalStock <= 0">
             <div class="promo-flag">PROMO</div>
-            <img [src]="product.imageUrl || 'assets/noimage.png'" class="product-image" onerror="this.src='assets/noimage.png'">
+            <div class="product-image-container-grid-mobile">
+              <img [src]="product.imageUrl || 'assets/noimage.png'" class="product-image" onerror="this.src='assets/noimage.png'">
+              <div class="product-barcode-grid-mobile" *ngIf="product.barcodeId">
+                <img [src]="generateBarcodeImage(product.barcodeId)" alt="Barcode" class="barcode-image-grid-mobile">
+              </div>
+            </div>
             <div class="product-card-info">
               <div class="product-name">{{ product.productName }}</div>
               <div class="product-price">₱{{ (product.sellingPrice || 0).toFixed(2) }}</div>
-              <div class="discount-info">{{ product.discountValue }}% OFF</div>
+              <div class="product-category-stock">
+                <span class="product-category-grid">{{ product.category }}</span>
+                <span class="stock-badge-mobile">Stock: {{ product.totalStock || 0 }}</span>
+              </div>
+              <div *ngIf="product.discountValue && product.discountValue > 0" class="discount-info">{{ product.discountValue }}% OFF</div>
             </div>
             <div *ngIf="isOrderCompleted()" class="order-completed-overlay">
               <span>Order Completed</span>
@@ -392,7 +418,7 @@
 
 
 <!-- Confirmation Dialog -->
-<div *ngIf="isConfirmationDialogVisible()" class="modal-overlay">
+<div *ngIf="isConfirmationDialogVisible()" class="modal-overlay" (keydown.enter)="onConfirmationEnterKey($event)">
   <div class="confirmation-modal" (click)="$event.stopPropagation()">
     <div class="modal-header">
       <h3>{{ confirmationDialogData()?.title }}</h3>
@@ -405,13 +431,16 @@
     <div class="modal-footer">
       <button 
         *ngIf="confirmationDialogData()?.cancelText"
+        #cancelButton
         (click)="confirmationDialogData()?.onCancel?.()" 
         class="mobile-btn secondary-btn">
         {{ confirmationDialogData()?.cancelText }}
       </button>
       <button 
+        #confirmButton
         (click)="confirmationDialogData()?.onConfirm?.()" 
-        [class]="'mobile-btn ' + (confirmationDialogData()?.type === 'danger' ? 'danger-btn' : confirmationDialogData()?.type === 'warning' ? 'warning-btn' : 'primary-btn')">
+        [class]="'mobile-btn ' + (confirmationDialogData()?.type === 'danger' ? 'danger-btn' : confirmationDialogData()?.type === 'warning' ? 'warning-btn' : 'primary-btn')"
+        autofocus>
         {{ confirmationDialogData()?.confirmText }}
       </button>
     </div>

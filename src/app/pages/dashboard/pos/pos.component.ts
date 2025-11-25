@@ -30,11 +30,16 @@ import { Product } from '../../../interfaces/product.interface';
 import { ProductViewType, OrderDiscount, ReceiptValidityNotice, CartItem, CartItemTaxDiscount } from '../../../interfaces/pos.interface';
 import { Customer, CustomerFormData } from '../../../interfaces/customer.interface';
 import { SubscriptionService } from '../../../services/subscription.service';
+import { toDateValue } from '../../../core/utils/date-utils';
+
+import { NgxBarcode6Module } from 'ngx-barcode6';
+import JsBarcode from 'jsbarcode';
+import { DomSanitizer, SafeUrl } from '@angular/platform-browser';
 
 @Component({
   selector: 'app-pos',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterModule, HeaderComponent, ReceiptComponent, DiscountModalComponent, ConfirmationDialogComponent, TranslateModule],
+  imports: [CommonModule, FormsModule, RouterModule, HeaderComponent, ReceiptComponent, DiscountModalComponent, ConfirmationDialogComponent, TranslateModule, NgxBarcode6Module],
   templateUrl: './pos.component.html',
   styleUrls: ['./pos.component.css']
 })
@@ -58,8 +63,12 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   private subscriptionService = inject(SubscriptionService);
   private firestore = inject(Firestore);
   private router = inject(Router);
+  private sanitizer = inject(DomSanitizer);
 
   private routerSubscription: any;
+  
+  // Barcode image cache
+  private barcodeImageCache = new Map<string, SafeUrl>();
 
   constructor() {
     console.log('🏗️ POS COMPONENT: Constructor called - Component is being created!');
@@ -1768,6 +1777,13 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
         console.log('🔍 DELAYED CHECK - sample filtered products:', this.filteredProducts().slice(0, 3).map(p => ({ name: p.productName, storeId: p.storeId })));
       }, 500);
       
+      // Sync local order state with service (for switching between desktop/mobile)
+      const serviceOrderActive = this.posService.isOrderActive();
+      if (serviceOrderActive && !this.isNewOrderActive()) {
+        this.isNewOrderActive.set(true);
+        console.log('🔄 Synced order state from service: order is active');
+      }
+      
       console.log('🎉 POS INITIALIZATION COMPLETED SUCCESSFULLY!');
     } catch (error) {
       console.error('❌ Error initializing POS:', error);
@@ -1776,7 +1792,51 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   async ngAfterViewInit(): Promise<void> {
-  
+    // Generate barcode images for all products
+    setTimeout(() => {
+      const products = this.products();
+      products.forEach(product => {
+        if (product.barcodeId) {
+          this.generateBarcodeImage(product.barcodeId);
+        }
+      });
+    }, 500);
+  }
+
+  // Generate barcode as PNG image
+  generateBarcodeImage(barcodeValue: string): SafeUrl {
+    // Check cache first
+    if (this.barcodeImageCache.has(barcodeValue)) {
+      return this.barcodeImageCache.get(barcodeValue)!;
+    }
+
+    try {
+      // Create a temporary canvas
+      const canvas = document.createElement('canvas');
+      
+      // Generate barcode on canvas with smaller dimensions
+      JsBarcode(canvas, barcodeValue, {
+        format: 'CODE128',
+        displayValue: true,
+        width: 1.5,
+        height: 40,
+        margin: 5,
+        fontSize: 12,
+        textMargin: 3
+      });
+
+      // Convert canvas to PNG data URL
+      const pngDataUrl = canvas.toDataURL('image/png');
+      const safeUrl = this.sanitizer.bypassSecurityTrustUrl(pngDataUrl);
+      
+      // Cache the result
+      this.barcodeImageCache.set(barcodeValue, safeUrl);
+      
+      return safeUrl;
+    } catch (error) {
+      console.error('Error generating barcode:', error);
+      return this.sanitizer.bypassSecurityTrustUrl('');
+    }
   }
 
   ngOnDestroy(): void {
@@ -2056,8 +2116,10 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     this.isOrderCompleted.set(false);
     this.completedOrderData.set(null);
     
-    // Set new order as active
+    // Set new order as active (both local and shared)
     this.isNewOrderActive.set(true);
+    this.posService.setOrderActive(true);
+    this.posService.setOrderCompleted(false);
     
     // Clear cart and all order-related data
     this.posService.clearCart();
@@ -2075,6 +2137,11 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     
     this.invoiceNumber = nextInvoice === 'Loading...' ? 'INV-0000-000000' : nextInvoice;
     this.datetime = new Date().toISOString().slice(0, 16);
+    
+    // Auto-focus search input after new order
+    setTimeout(() => {
+      this.focusSearchInput();
+    }, 100);
     
     console.log('🆕 New order started directly - next invoice:', this.invoiceNumber);
   }
@@ -2149,21 +2216,28 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
         return false;
       }
 
-      // Expiry check using denormalized end date
-      let endDate: Date | null | undefined = store.subscriptionEndDate as any;
+      // Expiry check using denormalized end date (normalize various shapes)
+      const rawEndDate = store.subscriptionEndDate as any;
+      let endDate: Date | null | undefined = toDateValue(rawEndDate) ?? undefined;
 
-      // If missing, try to fetch the latest subscription
+      // If raw value is a string (ISO) and toDateValue returned null, attempt Date conversion
+      if (!endDate && typeof rawEndDate === 'string') {
+        const parsed = new Date(rawEndDate);
+        if (!isNaN(parsed.getTime())) endDate = parsed;
+      }
+
+      // If still missing, try to fetch the latest subscription
       if (!endDate && store.companyId && store.id) {
         try {
           const latest = await this.subscriptionService.getSubscriptionForStore(store.companyId, store.id);
-          endDate = latest?.data.endDate as any;
+          endDate = toDateValue(latest?.data?.endDate) ?? (latest?.data?.endDate instanceof Date ? latest.data.endDate : (latest?.data?.endDate ? new Date(latest.data.endDate) : undefined));
         } catch (e) {
           // ignore fetch errors; treat as unknown
         }
       }
 
       const now = new Date();
-      if (!endDate || (endDate instanceof Date && endDate.getTime() < now.getTime())) {
+      if (!endDate || endDate.getTime() < now.getTime()) {
         const when = endDate instanceof Date ? endDate.toLocaleDateString() : 'unavailable';
         await this.showConfirmationDialog({
           title: 'Subscription Required',
@@ -3090,6 +3164,46 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     this.posSharedService.updateSearchQuery('');
   }
 
+  // Focus on search input
+  focusSearchInput(): void {
+    const searchInput = document.querySelector('.search-input') as HTMLInputElement;
+    if (searchInput) {
+      searchInput.focus();
+    }
+  }
+
+  // Ctrl+F hotkey to focus search
+  @HostListener('document:keydown.control.f', ['$event'])
+  onCtrlF(event: KeyboardEvent): void {
+    event.preventDefault();
+    this.focusSearchInput();
+  }
+
+  // Handle barcode scanner input (only triggered by Enter key)
+  handleBarcodeSearch(barcodeValue: string): void {
+    if (!barcodeValue || barcodeValue.length < 8) {
+      return;
+    }
+
+    // Find product by exact barcode match
+    const products = this.products();
+    const matchedProduct = products.find(p => 
+      p.barcodeId && p.barcodeId.trim() === barcodeValue.trim()
+    );
+
+    if (matchedProduct) {
+      console.log('🔍 Barcode matched:', matchedProduct.productName);
+      
+      // Add to cart
+      this.addToCart(matchedProduct);
+      
+      // Clear search after adding
+      setTimeout(() => {
+        this.clearSearch();
+      }, 100);
+    }
+  }
+
   // Customer panel methods
   toggleSoldToPanel(): void {
     this.isSoldToCollapsedSignal.set(!this.isSoldToCollapsedSignal());
@@ -3388,10 +3502,8 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
 
     if (confirmed) {
       this.posService.clearCart();
-      // Reset invoice number to default placeholder
-      this.nextInvoiceNumber.set('INV-0000-000000');
-      this.invoiceNumber = 'INV-0000-000000';
-      console.log('📋 Invoice number reset to default after clearing cart');
+      // Keep order active - don't reset state, user can continue adding items
+      console.log('🗑️ Cart cleared - order still active for new items');
     }
   }
 

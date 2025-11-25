@@ -15,6 +15,7 @@ import {
 } from '@angular/fire/firestore';
 import { runTransaction, getFirestore } from 'firebase/firestore';
 import { AuthService } from './auth.service';
+import { toDateValue } from '../core/utils/date-utils';
 import { FirestoreSecurityService } from '../core/services/firestore-security.service';
 import { OfflineDocumentService } from '../core/services/offline-document.service';
 import { IndexedDBService } from '../core/services/indexeddb.service';
@@ -34,6 +35,7 @@ export class StoreService {
   // Public signals and computed values
   readonly stores = computed(() => {
     const currentStores = this.storesSignal();
+    console.log('📊 StoreService: current stores =', currentStores);
     // Log when stores change
     if (currentStores.length === 0 && this.loadTimestamp > 0) {
       console.warn('🚨 STORES SIGNAL IS EMPTY! Last loaded:', new Date(this.loadTimestamp).toLocaleTimeString());
@@ -96,8 +98,8 @@ export class StoreService {
           email: data.email || '',
           uid: data.uid || '',
           status: data.status || 'inactive',
-          createdAt: data.createdAt?.toDate() || new Date(),
-          updatedAt: data.updatedAt?.toDate() || new Date(),
+          createdAt: toDateValue(data.createdAt) || new Date(),
+          updatedAt: toDateValue(data.updatedAt) || new Date(),
           logoUrl: data.logoUrl || '',
           // BIR Compliance
           isBirAccredited: data.isBirAccredited || false,
@@ -112,7 +114,7 @@ export class StoreService {
           },
           tinNumber: data.tinNumber || '',
           // Effective subscription end date (synced from subscriptions collection)
-          subscriptionEndDate: data.subscriptionEndDate?.toDate ? data.subscriptionEndDate.toDate() : (data.subscriptionEndDate || undefined),
+          subscriptionEndDate: toDateValue(data.subscriptionEndDate) || (data.subscriptionEndDate || undefined),
           promoUsage: data.promoUsage || undefined,
           subscriptionPopupShown: data.subscriptionPopupShown || false
         };
@@ -143,7 +145,13 @@ export class StoreService {
         if (currentCompanyId) {
           const saved = await this.indexedDb.getSetting(`stores_${currentCompanyId}`);
           if (saved && Array.isArray(saved)) {
-            this.storesSignal.set(saved);
+            const normalized = saved.map((s: any) => ({
+              ...s,
+              createdAt: toDateValue(s.createdAt) || (s.createdAt || new Date()),
+              updatedAt: toDateValue(s.updatedAt) || (s.updatedAt || new Date()),
+              subscriptionEndDate: toDateValue(s.subscriptionEndDate) || (s.subscriptionEndDate || undefined)
+            }));
+            this.storesSignal.set(normalized);
             return;
           }
         }
@@ -191,8 +199,8 @@ export class StoreService {
           email: data.email || '',
           uid: data.uid || '',
           status: data.status || 'inactive',
-          createdAt: data.createdAt?.toDate() || new Date(),
-          updatedAt: data.updatedAt?.toDate() || new Date(),
+          createdAt: toDateValue(data.createdAt) || new Date(),
+          updatedAt: toDateValue(data.updatedAt) || new Date(),
           logoUrl: data.logoUrl || '',
           // BIR Compliance
           isBirAccredited: data.isBirAccredited || false,
@@ -207,7 +215,7 @@ export class StoreService {
           },
           tinNumber: data.tinNumber || '',
           // Effective subscription end date (synced from subscriptions collection)
-          subscriptionEndDate: data.subscriptionEndDate?.toDate ? data.subscriptionEndDate.toDate() : (data.subscriptionEndDate || undefined),
+          subscriptionEndDate: toDateValue(data.subscriptionEndDate) || (data.subscriptionEndDate || undefined),
           promoUsage: data.promoUsage || undefined,
           subscriptionPopupShown: data.subscriptionPopupShown || false
         };
@@ -258,8 +266,8 @@ export class StoreService {
               email: data.email || '',
               uid: data.uid || '',
               status: data.status || 'inactive',
-              createdAt: data.createdAt?.toDate() || new Date(),
-              updatedAt: data.updatedAt?.toDate() || new Date(),
+              createdAt: toDateValue(data.createdAt) || new Date(),
+              updatedAt: toDateValue(data.updatedAt) || new Date(),
               logoUrl: data.logoUrl || '',
               isBirAccredited: data.isBirAccredited || false,
               tempInvoiceNumber: data.tempInvoiceNumber || '',
@@ -272,7 +280,7 @@ export class StoreService {
                 maxNumber: ''
               },
               tinNumber: data.tinNumber || '',
-              subscriptionEndDate: data.subscriptionEndDate?.toDate ? data.subscriptionEndDate.toDate() : (data.subscriptionEndDate || undefined),
+              subscriptionEndDate: toDateValue(data.subscriptionEndDate) || (data.subscriptionEndDate || undefined),
               promoUsage: data.promoUsage || undefined,
               subscriptionPopupShown: data.subscriptionPopupShown || false
             };
@@ -295,7 +303,13 @@ export class StoreService {
       try {
         const saved = await this.indexedDb.getSetting(`stores_${companyId}`);
         if (saved && Array.isArray(saved)) {
-          this.storesSignal.set(saved);
+          const normalized = saved.map((s: any) => ({
+            ...s,
+            createdAt: toDateValue(s.createdAt) || (s.createdAt || new Date()),
+            updatedAt: toDateValue(s.updatedAt) || (s.updatedAt || new Date()),
+            subscriptionEndDate: toDateValue(s.subscriptionEndDate) || (s.subscriptionEndDate || undefined)
+          }));
+          this.storesSignal.set(normalized);
           return;
         }
       } catch (e) {
@@ -390,12 +404,18 @@ export class StoreService {
     try {
       const storeRef = doc(this.firestore, 'stores', storeId);
       
-      const updateData = await this.firestoreSecurityService.addUpdateSecurityFields({
+      const rawUpdate = {
         ...updates,
         updatedAt: new Date()
-      });
+      } as any;
 
-  await this.offlineDocService.updateDocument('stores', storeId, updateData);
+      // Normalize any date-like fields in the update before persisting and applying to signal
+      const updateData = await this.firestoreSecurityService.addUpdateSecurityFields(rawUpdate);
+      if (updateData.subscriptionEndDate !== undefined) {
+        updateData.subscriptionEndDate = toDateValue(updateData.subscriptionEndDate) || updateData.subscriptionEndDate;
+      }
+
+      await this.offlineDocService.updateDocument('stores', storeId, updateData);
 
       // Update the signal
       this.storesSignal.update(stores =>
@@ -610,13 +630,13 @@ export class StoreService {
           email: data.email || '',
           uid: data.uid || '',
           status: data.status || 'inactive',
-          createdAt: data.createdAt?.toDate() || new Date(),
-          updatedAt: data.updatedAt?.toDate() || new Date(),
+          createdAt: toDateValue(data.createdAt) || new Date(),
+          updatedAt: toDateValue(data.updatedAt) || new Date(),
           logoUrl: data.logoUrl || '',
           isBirAccredited: data.isBirAccredited || false,
           birAccreditationStatus: data.birAccreditationStatus,
-          birAccreditationSubmittedAt: data.birAccreditationSubmittedAt?.toDate(),
-          birAccreditationApprovedAt: data.birAccreditationApprovedAt?.toDate(),
+          birAccreditationSubmittedAt: toDateValue(data.birAccreditationSubmittedAt),
+          birAccreditationApprovedAt: toDateValue(data.birAccreditationApprovedAt),
           birAccreditationRejectedReason: data.birAccreditationRejectedReason,
           tinNumber: data.tinNumber || '',
           birDetails: data.birDetails || {
@@ -630,7 +650,7 @@ export class StoreService {
             permitDateIssued: new Date(),
             validityNotice: ''
           },
-          subscriptionEndDate: data.subscriptionEndDate?.toDate ? data.subscriptionEndDate.toDate() : (data.subscriptionEndDate || undefined),
+          subscriptionEndDate: toDateValue(data.subscriptionEndDate) || (data.subscriptionEndDate || undefined),
           subscriptionPopupShown: data.subscriptionPopupShown || false,
           tempInvoiceNumber: data.tempInvoiceNumber
         };

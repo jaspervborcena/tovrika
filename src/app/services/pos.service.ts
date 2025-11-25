@@ -31,6 +31,8 @@ export class PosService {
   private readonly selectedStoreIdSignal = signal<string>('');
   private readonly isProcessingSignal = signal<boolean>(false);
   private readonly orderDiscountSignal = signal<OrderDiscount | null>(null);
+  private readonly isOrderActiveSignal = signal<boolean>(false); // Shared order state
+  private readonly isOrderCompletedSignal = signal<boolean>(false); // Shared completion state
   private readonly offlineDocService = inject(OfflineDocumentService);
   private readonly injector = inject(Injector);
 
@@ -39,6 +41,8 @@ export class PosService {
   readonly selectedStoreId = computed(() => this.selectedStoreIdSignal());
   readonly isProcessing = computed(() => this.isProcessingSignal());
   readonly orderDiscount = computed(() => this.orderDiscountSignal());
+  readonly isOrderActive = computed(() => this.isOrderActiveSignal());
+  readonly isOrderCompleted = computed(() => this.isOrderCompletedSignal());
 
   readonly cartSummary = computed((): CartSummary => {
     const items = this.cartItems();
@@ -165,12 +169,32 @@ export class PosService {
   clearCart(): void {
     this.cartItemsSignal.set([]);
     this.orderDiscountSignal.set(null); // Clear order discount when clearing cart
+    // Note: We don't reset order state here - that should be done explicitly via resetOrderState()
+    console.log('🗑️ Cart cleared');
+  }
+
+  // Shared order state management
+  setOrderActive(active: boolean): void {
+    this.isOrderActiveSignal.set(active);
+    console.log('📝 Order active state set to:', active);
+  }
+
+  setOrderCompleted(completed: boolean): void {
+    this.isOrderCompletedSignal.set(completed);
+    console.log('✅ Order completed state set to:', completed);
+  }
+
+  resetOrderState(): void {
+    this.isOrderActiveSignal.set(false);
+    this.isOrderCompletedSignal.set(false);
+    console.log('🔄 Order state reset');
   }
 
   // Reset all POS state (called on logout)
   resetAll(): void {
     console.log('🔍 [POSService] Resetting all POS data');
     this.clearCart();
+    this.resetOrderState();
     this.selectedStoreIdSignal.set('');
     this.isProcessingSignal.set(false);
   }

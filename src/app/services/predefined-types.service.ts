@@ -1,7 +1,8 @@
-import { Injectable } from '@angular/core';
+import { Injectable, inject } from '@angular/core';
 import { collection, query, where, getDocs, QuerySnapshot, DocumentData } from 'firebase/firestore';
 import { db } from '../firebase.config';
 import { OfflineDocumentService } from '../core/services/offline-document.service';
+import { AuthService } from './auth.service';
 
 export interface PredefinedType {
   id: string;
@@ -23,6 +24,8 @@ export interface UnitTypeOption {
   providedIn: 'root'
 })
 export class PredefinedTypesService {
+
+  private readonly auth = inject(AuthService);
 
   constructor(private offlineDocService: OfflineDocumentService) { }
 
@@ -92,7 +95,65 @@ export class PredefinedTypesService {
    * Get store types specifically (storeId='global', typeCategory='storeType')
    */
   async getStoreTypes(): Promise<PredefinedType[]> {
-    return this.getPredefinedTypes('global', 'storeType');
+    let types = await this.getPredefinedTypes('global', 'storeType');
+    const defaultCount = this.getDefaultStoreTypes().length;
+    // If some defaults are missing, add them and re-fetch so UI shows full list
+    if (types.length === 0 || types.length < defaultCount) {
+      await this.addMissingStoreTypes(false);
+      types = await this.getPredefinedTypes('global', 'storeType');
+    }
+    return types;
+  }
+
+  /**
+   * Default list of common store types to seed when none exist
+   */
+  private getDefaultStoreTypes(): Array<{ value: string; label: string; description: string }> {
+    return [
+      { value: 'store_barbershop', label: 'Barbershop', description: 'Haircuts and grooming services' },
+      { value: 'store_restaurant', label: 'Restaurant', description: 'Food and beverage establishment' },
+      { value: 'store_retail', label: 'Retail Store', description: 'General retail store' },
+      { value: 'store_grocery', label: 'Grocery', description: 'Supermarket or grocery store' },
+      { value: 'store_pharmacy', label: 'Pharmacy', description: 'Medicine and healthcare retail' },
+      { value: 'store_cafe', label: 'Cafe', description: 'Coffee shop and light meals' },
+      { value: 'store_salon', label: 'Salon', description: 'Beauty and hair salon' },
+      { value: 'store_bakery', label: 'Bakery', description: 'Bakery and pastries' },
+      { value: 'store_convenience', label: 'Convenience Store', description: '24/7 convenience items' }
+    ];
+  }
+
+  /**
+   * Add missing store types to `predefinedTypes` collection. If comprehensive is true,
+   * add an extended list; otherwise add a small default set.
+   */
+  async addMissingStoreTypes(comprehensive: boolean = false): Promise<void> {
+    try {
+      const target = comprehensive ? this.getDefaultStoreTypes() : this.getDefaultStoreTypes();
+      const existing = await this.getPredefinedTypes('global', 'storeType');
+      const existingIds = new Set(existing.map(t => t.typeId));
+
+      const toAdd = target.filter(t => !existingIds.has(t.value));
+      if (toAdd.length === 0) return;
+
+      const currentUid = this.auth.getCurrentUser()?.uid || 'system';
+      for (const s of toAdd) {
+        const docData = {
+          storeId: 'global',
+          typeId: s.value,
+          typeCategory: 'storeType',
+          typeLabel: s.label,
+          typeDescription: s.description,
+          createdAt: new Date(),
+          uid: currentUid,
+          iconName: s.value,
+          isActive: true
+        };
+        await this.offlineDocService.createDocument('predefinedTypes', docData);
+      }
+    } catch (error) {
+      console.error('Error adding missing store types:', error);
+      throw error;
+    }
   }
 
   /**

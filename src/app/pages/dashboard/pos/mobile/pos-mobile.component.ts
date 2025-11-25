@@ -1,6 +1,8 @@
 import { Component, OnInit, AfterViewInit, OnDestroy, computed, signal, inject, ViewChild, HostListener } from '@angular/core';
 import { Firestore, collection, query, where, getDocs } from '@angular/fire/firestore';
 import { CommonModule } from '@angular/common';
+import JsBarcode from 'jsbarcode';
+import { DomSanitizer, SafeUrl } from '@angular/platform-browser';
 import { FormsModule } from '@angular/forms';
 import { RouterModule, Router, NavigationEnd } from '@angular/router';
 import { Subscription } from 'rxjs';
@@ -61,6 +63,8 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
   private translationService = inject(TranslationService);
   private subscriptionService = inject(SubscriptionService);
   private firestore = inject(Firestore);
+  private sanitizer = inject(DomSanitizer);
+  private barcodeImageCache = new Map<string, SafeUrl>();
 
   private routerSubscription: Subscription | undefined;
 
@@ -877,6 +881,17 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
     this.confirmationDialogDataSignal.set(null);
   }
 
+  onConfirmationEnterKey(event: Event): void {
+    event.preventDefault();
+    const activeElement = document.activeElement as HTMLElement;
+    if (activeElement && activeElement.tagName === 'BUTTON') {
+      activeElement.click();
+    } else {
+      // Default to confirm if no button is focused
+      this.confirmationDialogData()?.onConfirm?.();
+    }
+  }
+
   toggleCashSale(): void {
     this.salesTypeCashSignal.update(value => !value);
   }
@@ -911,6 +926,88 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
 
+
+  // Generate barcode image as PNG data URL
+  generateBarcodeImage(barcodeValue: string): SafeUrl {
+    if (!barcodeValue) {
+      return '';
+    }
+
+    // Return cached image if available
+    if (this.barcodeImageCache.has(barcodeValue)) {
+      return this.barcodeImageCache.get(barcodeValue)!;
+    }
+
+    try {
+      // Create a temporary canvas element
+      const canvas = document.createElement('canvas');
+      
+      // Generate barcode on canvas (matching desktop settings)
+      JsBarcode(canvas, barcodeValue, {
+        format: 'CODE128',
+        displayValue: true,
+        width: 1.5,
+        height: 40,
+        margin: 5,
+        fontSize: 12,
+        textMargin: 3
+      });
+      
+      // Convert canvas to PNG data URL
+      const pngDataUrl = canvas.toDataURL('image/png');
+      
+      // Sanitize the data URL for Angular security
+      const safeUrl = this.sanitizer.bypassSecurityTrustUrl(pngDataUrl);
+      
+      // Cache the result
+      this.barcodeImageCache.set(barcodeValue, safeUrl);
+      
+      return safeUrl;
+    } catch (error) {
+      console.error('Error generating barcode:', error);
+      return '';
+    }
+  }
+
+  // Handle barcode scanner search (triggered by Enter key)
+  handleBarcodeSearch(barcodeValue: string): void {
+    if (!barcodeValue || !barcodeValue.trim()) {
+      return;
+    }
+
+    const trimmedValue = barcodeValue.trim();
+    const products = this.products();
+    
+    // Find exact match by barcodeId
+    const matchedProduct = products.find(p => 
+      p.barcodeId && p.barcodeId.trim() === trimmedValue
+    );
+
+    if (matchedProduct) {
+      // Add to cart
+      this.addToCart(matchedProduct);
+      
+      // Clear search after a short delay
+      setTimeout(() => {
+        this.clearSearch();
+      }, 100);
+    }
+  }
+
+  // Focus search input
+  focusSearchInput(): void {
+    const searchInput = document.querySelector('.mobile-search') as HTMLInputElement;
+    if (searchInput) {
+      searchInput.focus();
+    }
+  }
+
+  // Ctrl+F hotkey to focus search
+  @HostListener('document:keydown.control.f', ['$event'])
+  onCtrlF(event: Event): void {
+    event.preventDefault();
+    this.focusSearchInput();
+  }
 
   // F4 Hotkey for Clear Data
   @HostListener('document:keydown.f4', ['$event'])
@@ -965,7 +1062,7 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
 
   // Simple state checks - like desktop
   canClearCart(): boolean {
-    return this.cartItems().length > 0;
+    return this.hasActiveOrder() && !this.isOrderCompleted() && this.cartItems().length > 0;
   }
 
   // Simple new order - like desktop
@@ -994,8 +1091,12 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
     // Reset order completion status to allow cart editing
     this.isOrderCompletedSignal.set(false);
     
-    // Set active order state
+    // Set active order state to allow cart operations (both local and shared)
     this.hasActiveOrderSignal.set(true);
+    this.posService.setOrderActive(true);
+    this.posService.setOrderCompleted(false);
+    
+    console.log('✅ New order started - cart operations enabled');
     
     this.customerInfo = {
       soldTo: '',
@@ -1006,6 +1107,11 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
     
     // Update date/time to current
     this.updateCurrentDateTime();
+    
+    // Auto-focus search input for barcode scanning
+    setTimeout(() => {
+      this.focusSearchInput();
+    }, 100);
     
     console.log('🆕 Mobile New order started via FAB');
   }
@@ -1070,6 +1176,10 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
 
   // Enhanced clear cart with confirmation
   async clearCartWithConfirmation(): Promise<void> {
+    if (!this.canClearCart()) {
+      console.warn('❌ Cannot clear cart: No active order or cart is empty');
+      return;
+    }
     if (confirm('Are you sure you want to clear the cart?')) {
       this.posService.clearCart();
       // Reset active order state when cart is cleared
@@ -1251,6 +1361,15 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
       
       // Initialize active order state based on existing cart
       this.initializeOrderState();
+      
+      // Pre-generate barcode images for all products
+      const products = this.products();
+      products.forEach(product => {
+        if (product.barcodeId) {
+          this.generateBarcodeImage(product.barcodeId);
+        }
+      });
+      console.log('📊 Mobile Pre-generated barcodes for', products.filter(p => p.barcodeId).length, 'products');
     } catch (error) {
       console.error('Error initializing POS Mobile:', error);
     }
@@ -1260,18 +1379,24 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
   private initializeOrderState(): void {
     const cartItems = this.posService.cartItems();
     
-    // If there are items in cart, assume there's an active or completed order
-    if (cartItems && cartItems.length > 0) {
-      // Check if this is a completed order by checking some completion indicator
-      // For now, assume if cart exists but no active order, it's completed
-      this.hasActiveOrderSignal.set(false);
-      this.isOrderCompletedSignal.set(true);
-      console.log('🔄 Found existing completed order - cart disabled');
+    // Sync with shared service state (for switching between desktop/mobile)
+    const serviceOrderActive = this.posService.isOrderActive();
+    const serviceOrderCompleted = this.posService.isOrderCompleted();
+    
+    if (serviceOrderActive) {
+      // Order is active in service, sync local state
+      this.hasActiveOrderSignal.set(true);
+      this.isOrderCompletedSignal.set(serviceOrderCompleted);
+      console.log('🔄 Synced order state from service: active =', serviceOrderActive, ', completed =', serviceOrderCompleted);
     } else {
-      // No items, fresh start
+      // No active order in service, start fresh
       this.hasActiveOrderSignal.set(false);
       this.isOrderCompletedSignal.set(false);
-      console.log('🔄 Order state initialized - waiting for user to start new order');
+      console.log('🔄 Order state initialized - ready for new order');
+    }
+    
+    if (cartItems && cartItems.length > 0) {
+      console.log('🔄 Found', cartItems.length, 'cart items');
     }
   }
 
@@ -1697,10 +1822,20 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   removeFromCart(productId: string): void {
+    // Check if removal is allowed (order must be active, not completed)
+    if (!this.hasActiveOrder() || this.isOrderCompleted()) {
+      console.warn('❌ Cannot remove items: No active order or order is completed');
+      return;
+    }
     this.posService.removeFromCart(productId);
   }
 
   updateQuantity(productId: string, quantity: number): void {
+    // Check if quantity change is allowed (order must be active, not completed)
+    if (!this.hasActiveOrder() || this.isOrderCompleted()) {
+      console.warn('❌ Cannot change quantity: No active order or order is completed');
+      return;
+    }
     this.posService.updateCartItemQuantity(productId, quantity);
   }
 
@@ -1708,11 +1843,24 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
     this.posService.toggleVatExemption(productId);
   }
 
-  clearCart(): void {
-    if (confirm('Are you sure you want to clear the cart?')) {
+  async clearCart(): Promise<void> {
+    if (!this.canClearCart()) {
+      console.warn('❌ Cannot clear cart: No active order or cart is empty');
+      return;
+    }
+    
+    const confirmed = await this.showConfirmationDialog({
+      title: 'Clear Cart',
+      message: 'Are you sure you want to clear all items from the cart?',
+      confirmText: 'Clear Cart',
+      cancelText: 'Cancel',
+      type: 'warning'
+    });
+    
+    if (confirmed) {
       this.posService.clearCart();
-      // Reset active order state when cart is cleared
-      this.hasActiveOrderSignal.set(false);
+      // Keep order active - don't reset state, user can continue adding items
+      console.log('🗑️ Cart cleared - order still active for new items');
     }
   }
 
@@ -1761,12 +1909,14 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
         // Update the invoice number with the new result
         this.invoiceNumber = result.invoiceNumber;
 
-        // Mark order as completed to prevent cart editing
+        // Mark order as completed to prevent cart editing (both local and shared)
         this.isOrderCompletedSignal.set(true);
+        this.posService.setOrderCompleted(true);
         // orderDetails.status is set at creation time in the invoice/offline flows
         
-        // Reset active order state since order is now complete
-        this.hasActiveOrderSignal.set(false);
+        // Keep active order state true so completed order receipt can be shown
+        // Will be reset when starting new order
+        this.hasActiveOrderSignal.set(true);
 
         // Prepare receipt data and show receipt modal immediately (like desktop)
         const receiptData = await this.prepareReceiptDataEnhanced(result.orderId);

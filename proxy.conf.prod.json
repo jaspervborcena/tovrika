@@ -1,9 +1,9 @@
 {
   "/api": {
-    "target": "https://asia-east1-jasperpos-dev.cloudfunctions.net",
+    "target": "https://asia-east1-jasperpos-1dfd5.cloudfunctions.net",
     "secure": true,
     "changeOrigin": true,
-    "logLevel": "debug",
+    "logLevel": "info",
     "pathRewrite": {
       "^/api": ""
     }
