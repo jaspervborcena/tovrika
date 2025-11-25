@@ -2,7 +2,7 @@
 <div 
   *ngIf="isVisible" 
   class="receipt-modal-overlay"
-  (keydown.enter)="onPrintReceipt($event)">
+  (keydown.enter)="onPrintReceipt()">
   
   <div 
     class="receipt-modal-content"
@@ -207,7 +207,7 @@
         class="btn-primary"
         #printBtn
         autofocus
-        (click)="onPrintReceipt($event)"
+        (click)="onPrintReceipt()"
         [disabled]="isPrinting">
         <span *ngIf="!isPrinting">Print Receipt</span>
         <span *ngIf="isPrinting">Saving & Printing...</span>
