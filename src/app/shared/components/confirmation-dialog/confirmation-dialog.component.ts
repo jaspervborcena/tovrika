@@ -1,4 +1,4 @@
-import { Component, signal, output, input } from '@angular/core';
+import { Component, signal, output, input, HostListener } from '@angular/core';
 import { CommonModule } from '@angular/common';
 
 export interface ConfirmationDialogData {
@@ -16,7 +16,7 @@ export interface ConfirmationDialogData {
   imports: [CommonModule],
   template: `
     <div class="confirmation-overlay" (click)="onCancel()" *ngIf="dialogData()">
-      <div class="confirmation-content" (click)="$event.stopPropagation()" [class]="'type-' + (dialogData().type || 'info')">
+      <div class="confirmation-content" (click)="$event.stopPropagation()" [class]="'type-' + (dialogData().type || 'info')" (keydown.enter)="onEnterKey($event)">
         <!-- Header with Icon -->
         <div class="confirmation-header">
           <div class="confirmation-icon" [class]="'icon-' + (dialogData().type || 'info')">
@@ -45,6 +45,7 @@ export interface ConfirmationDialogData {
             *ngIf="dialogData().cancelText" 
             type="button" 
             class="btn btn-secondary" 
+            #cancelButton
             (click)="onCancel()">
             {{ dialogData().cancelText || 'Cancel' }}
           </button>
@@ -52,6 +53,8 @@ export interface ConfirmationDialogData {
             type="button" 
             class="btn btn-confirm" 
             [class]="'btn-' + (dialogData().type || 'info')"
+            #confirmButton
+            autofocus
             (click)="onConfirm()">
             {{ dialogData().confirmText || 'Confirm' }}
           </button>
@@ -426,5 +429,31 @@ export class ConfirmationDialogComponent {
 
   onCancel(): void {
     this.cancelled.emit();
+  }
+
+  // Handle Enter key press - trigger the focused button or default to confirm
+  onEnterKey(event: Event): void {
+    event.preventDefault();
+    event.stopPropagation();
+    
+    // Get the currently focused element
+    const activeElement = document.activeElement as HTMLElement;
+    
+    // If a button has focus, click it
+    if (activeElement && activeElement.tagName === 'BUTTON') {
+      activeElement.click();
+    } else {
+      // Default to confirm button if no button is focused
+      this.onConfirm();
+    }
+  }
+
+  // Global Enter key listener for the entire dialog
+  @HostListener('document:keydown.enter', ['$event'])
+  onGlobalEnter(event: Event): void {
+    // Check if this dialog is visible
+    if (this.dialogData()) {
+      this.onEnterKey(event);
+    }
   }
 }

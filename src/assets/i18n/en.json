@@ -125,6 +125,7 @@
     "add": "Add",
     "remove": "Remove",
     "clear": "Clear",
+    "clearCart": "Clear Cart",
     "reset": "Reset",
     "submit": "Submit",
     "apply": "Apply",

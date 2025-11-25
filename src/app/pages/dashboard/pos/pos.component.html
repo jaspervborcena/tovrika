@@ -146,6 +146,7 @@
                     [ngModel]="searchQuery()"
                     (ngModelChange)="setSearchQuery($event)"
                     (input)="onSearch()"
+                    (keydown.enter)="handleBarcodeSearch(searchQuery())"
                     [placeholder]="accessTab() === 'Orders' ? 'Search Orders (Invoice #, Customer Name, Address, Date YYYYMMDD)' : 'Search by barcode, SKU, or name...'"
                     class="search-input">
                   <button *ngIf="searchQuery()" (click)="clearSearch()" class="clear-btn" title="Clear">×</button>
@@ -265,11 +266,16 @@
                 (click)="addToCart(product)"
                 class="product-grid-item"
                 [class.disabled]="!canInteractWithProducts()">
-                <img 
-                  [src]="product.imageUrl || 'assets/noimage.png'"
-                  [alt]="product.productName"
-                  class="product-image"
-                  onerror="this.src='assets/noimage.png'">
+                <div class="product-image-container">
+                  <img 
+                    [src]="product.imageUrl || 'assets/noimage.png'"
+                    [alt]="product.productName"
+                    class="product-image"
+                    onerror="this.src='assets/noimage.png'">
+                </div>
+                <div class="product-barcode" *ngIf="product.barcodeId">
+                  <img [src]="generateBarcodeImage(product.barcodeId)" alt="Barcode" class="barcode-image">
+                </div>
                 <div class="product-details">
                   <div class="product-name-price">
                     <h4>{{ product.productName }}</h4>
@@ -277,6 +283,7 @@
                   </div>
                   <div class="product-category-stock">
                     <p class="product-description">{{ product.category }}</p>
+                    <span class="stock-badge">Stock: {{ product.totalStock || 0 }}</span>
                   </div>
                 </div>
               </div>
@@ -289,11 +296,16 @@
                 (click)="addToCart(product)"
                 class="product-grid-item"
                 [class.disabled]="!canInteractWithProducts()">
-                <img 
-                  [src]="product.imageUrl || 'assets/noimage.png'"
-                  [alt]="product.productName"
-                  class="product-image"
-                  onerror="this.src='assets/noimage.png'">
+                <div class="product-image-container">
+                  <img 
+                    [src]="product.imageUrl || 'assets/noimage.png'"
+                    [alt]="product.productName"
+                    class="product-image"
+                    onerror="this.src='assets/noimage.png'">
+                </div>
+                <div class="product-barcode" *ngIf="product.barcodeId">
+                  <img [src]="generateBarcodeImage(product.barcodeId)" alt="Barcode" class="barcode-image">
+                </div>
                 <div class="product-details">
                   <div class="product-name-price">
                     <h4>{{ product.productName }}</h4>
@@ -301,6 +313,7 @@
                   </div>
                   <div class="product-category-stock">
                     <p class="product-description">{{ product.category }}</p>
+                    <span class="stock-badge">Stock: {{ product.totalStock || 0 }}</span>
                   </div>
                 </div>
               </div>
@@ -322,16 +335,24 @@
                     class="product-grid-item promo"
                     [class.disabled]="!canInteractWithProducts()">
                     <div class="promo-badge">PROMO</div>
-                    <img 
-                      [src]="product.imageUrl || 'assets/noimage.png'"
-                      [alt]="product.productName"
-                      class="product-image"
-                      onerror="this.src='assets/noimage.png'">
+                    <div class="product-image-container">
+                      <img 
+                        [src]="product.imageUrl || 'assets/noimage.png'"
+                        [alt]="product.productName"
+                        class="product-image"
+                        onerror="this.src='assets/noimage.png'">
+                    </div>
+                    <div class="product-barcode" *ngIf="product.barcodeId">
+                      <img [src]="generateBarcodeImage(product.barcodeId)" alt="Barcode" class="barcode-image">
+                    </div>
                     <div class="product-details">
                       <h4>{{ product.productName }}</h4>
                       <div class="product-pricing">
                         <span class="price">₱{{ product.sellingPrice.toFixed(2) }}</span>
                         <span class="discount">{{ product.discountValue }}% OFF</span>
+                      </div>
+                      <div class="product-category-stock">
+                        <span class="stock-badge">Stock: {{ product.totalStock || 0 }}</span>
                       </div>
                     </div>
                   </div>

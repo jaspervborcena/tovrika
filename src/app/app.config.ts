@@ -1,6 +1,7 @@
 import { ApplicationConfig, APP_INITIALIZER } from '@angular/core';
-import { provideHttpClient } from '@angular/common/http';
+import { provideHttpClient, withInterceptors } from '@angular/common/http';
 import { provideFirebaseApp, initializeApp } from '@angular/fire/app';
+import { authInterceptor } from './interceptors/auth.interceptor';
 import { getApp, getApps } from 'firebase/app';
 import { provideFirestore, getFirestore } from '@angular/fire/firestore';
 import { enableIndexedDbPersistence, enableMultiTabIndexedDbPersistence } from 'firebase/firestore';
@@ -18,7 +19,9 @@ export const appConfig: ApplicationConfig = {
   providers: [
     provideRouter(routes),
     provideAnimations(),
-    provideHttpClient(),
+    provideHttpClient(
+      withInterceptors([authInterceptor])
+    ),
     // Translation module
     importProvidersFrom(
       TranslateModule.forRoot({
