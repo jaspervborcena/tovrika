@@ -292,8 +292,12 @@ export class PosService {
         total: item.total,
         vat: item.vatAmount,
         discount: item.discountAmount,
-        isVatExempt: item.isVatExempt
-      }));
+        isVatExempt: item.isVatExempt,
+        // Per-item customer info (optional)
+        customerName: (item as any).customerName || null,
+        pwdId: (item as any).pwdId || null,
+        customerDiscountType: (item as any).customerDiscountType || null
+      } as any));
       // Prepare complete order data (without invoice number - will be assigned by transaction)
       const orderData = {
         companyId: company.id!,
@@ -730,24 +734,27 @@ export class PosService {
 
   // Helper Methods
   private createCartItem(product: Product, quantity: number): CartItem {
-    const baseTotal = product.sellingPrice * quantity;
-    let discountAmount = 0;
-    
+    // Derive per-unit values from originalPrice: apply discount to originalPrice, then apply VAT
+    const original = (product as any).originalPrice ?? product.sellingPrice;
+    const vatRate = Number(product.vatRate ?? 0);
+
+    // Per-unit discount
+    let discountPerUnit = 0;
     if (product.hasDiscount) {
       if (product.discountType === 'percentage') {
-        discountAmount = (baseTotal * product.discountValue) / 100;
+        discountPerUnit = (original * (product.discountValue || 0)) / 100;
       } else {
-        discountAmount = product.discountValue * quantity;
+        discountPerUnit = product.discountValue || 0;
       }
     }
 
-    const discountedTotal = baseTotal - discountAmount;
-    let vatAmount = 0;
-    const vatRate = Number(product.vatRate ?? 0);
-    
-    if (product.isVatApplicable) {
-      vatAmount = (discountedTotal * vatRate) / 100;
-    }
+    const netBasePerUnit = Math.max(0, original - discountPerUnit);
+    const vatAmountPerUnit = (product.isVatApplicable && !false) ? (netBasePerUnit * vatRate) / 100 : 0;
+    const sellingPricePerUnit = netBasePerUnit + vatAmountPerUnit;
+
+    const discountAmount = discountPerUnit * quantity;
+    const vatAmount = vatAmountPerUnit * quantity;
+    const total = sellingPricePerUnit * quantity;
 
     return {
       productId: product.id!,
@@ -755,11 +762,12 @@ export class PosService {
       skuId: product.skuId,
       unitType: product.unitType,
       quantity,
-      sellingPrice: product.sellingPrice,
-      originalPrice: (product as any).originalPrice || product.sellingPrice,
-      total: discountedTotal + vatAmount,
+      // Store derived sellingPrice so UI can show it; keep originalPrice for display and two-way sync
+      sellingPrice: sellingPricePerUnit,
+      originalPrice: original,
+      total,
       isVatApplicable: product.isVatApplicable,
-  vatRate: vatRate,
+      vatRate: vatRate,
       vatAmount,
       hasDiscount: product.hasDiscount,
       discountType: product.discountType,
@@ -771,29 +779,32 @@ export class PosService {
   }
 
   private recalculateCartItem(item: CartItem): CartItem {
-    const baseTotal = item.sellingPrice * item.quantity;
-    let discountAmount = 0;
-    
+    // Recalculate sellingPrice, discountAmount, vatAmount and total based on originalPrice
+    const original = (item.originalPrice ?? item.sellingPrice) as number;
+    const vatRate = Number(item.vatRate ?? 0);
+
+    // Per-unit discount
+    let discountPerUnit = 0;
     if (item.hasDiscount) {
       if (item.discountType === 'percentage') {
-        // Percentage discount: apply percentage to base total
-        discountAmount = (baseTotal * item.discountValue) / 100;
+        discountPerUnit = (original * (item.discountValue || 0)) / 100;
       } else {
-        // Fixed amount discount: use the fixed discount value directly
-        discountAmount = item.discountValue;
+        discountPerUnit = item.discountValue || 0;
       }
     }
 
-    const discountedTotal = baseTotal - discountAmount;
-    let vatAmount = 0;
-    
-    if (item.isVatApplicable && !item.isVatExempt) {
-      vatAmount = (discountedTotal * item.vatRate) / 100;
-    }
+    const netBasePerUnit = Math.max(0, original - discountPerUnit);
+    const vatAmountPerUnit = (item.isVatApplicable && !item.isVatExempt) ? (netBasePerUnit * vatRate) / 100 : 0;
+    const sellingPricePerUnit = netBasePerUnit + vatAmountPerUnit;
+
+    const discountAmount = discountPerUnit * item.quantity;
+    const vatAmount = vatAmountPerUnit * item.quantity;
+    const total = sellingPricePerUnit * item.quantity;
 
     return {
       ...item,
-      total: discountedTotal + vatAmount,
+      sellingPrice: sellingPricePerUnit,
+      total,
       vatAmount,
       discountAmount
     };

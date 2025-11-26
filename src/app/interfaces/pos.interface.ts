@@ -99,6 +99,11 @@ export interface CartItem {
   discountAmount: number;
   isVatExempt: boolean;
   imageUrl?: string;
+  // Per-item customer fields (optional)
+  pwdId?: string;
+  customerName?: string;
+  customerDiscount?: string; // e.g., 'PWD'|'SENIOR' or empty
+  customerDiscountType?: string; // internal marker for applied discount
 }
 
 export interface OrderDiscount {
