@@ -987,7 +987,8 @@
     <app-discount-modal 
       *ngIf="isDiscountModalVisible()"
       (discountApplied)="applyOrderDiscount($event)"
-      (modalClosed)="closeDiscountModal()">
+      (modalClosed)="closeDiscountModal()"
+      (liveCustomerChange)="onDiscountModalLiveCustomer($event)">
     </app-discount-modal>
 
     <!-- Confirmation Dialog -->
@@ -1060,7 +1061,7 @@
     </div>
 
     <!-- Payment Dialog -->
-    <div *ngIf="showPaymentModal()" class="modal-overlay">
+    <div *ngIf="showPaymentModal()" class="modal-overlay" (keydown.enter)="onPaymentDialogEnter($event)">
       <div class="payment-dialog">
         <div class="dialog-header">
           <h3>💳 {{ 'pos.paymentProcessing' | translate }}</h3>
@@ -1119,12 +1120,15 @@
           <button 
             type="button"
             class="btn-secondary"
+            #cancelPaymentButton
             (click)="closePaymentDialog()">
             {{ 'buttons.cancel' | translate }}
           </button>
           <button 
             type="button"
             class="btn-primary"
+            #processPaymentButton
+            autofocus
             (click)="processPayment()">
             {{ 'pos.processPayment' | translate }}
           </button>
@@ -1152,16 +1156,20 @@
               <div class="cart-item-header-extended">
                 <span>{{ 'pos.product' | translate }}</span>
                 <span>{{ 'pos.quantity' | translate }}</span>
+                <span>Original Price</span>
                 <span>{{ 'pos.price' | translate }}</span>
-                <span>{{ 'pos.total' | translate }}</span>
+               
                 <span>{{ 'pos.vatApplicable' | translate }}</span>
                 <span>{{ 'pos.vatRate' | translate }}</span>
                 <span>{{ 'pos.hasDiscount' | translate }}</span>
                 <span>{{ 'pos.discountType' | translate }}</span>
                 <span>{{ 'pos.discountValue' | translate }}</span>
-                <span>Unit Total</span>
+                 <span>{{ 'pos.total' | translate }}</span>
+                 <span>Identification</span>
+                 <span>ID Type</span>
+                 <span>Customer Name</span>
               </div>
-              <div class="cart-item-row-extended" *ngFor="let item of cartItems(); let i = index">
+              <div class="cart-item-row-extended" *ngFor="let item of cartItems(); let i = index; trackBy: trackByCartItem">
                 <!-- Product Info -->
                 <div class="item-details-dialog">
                   <span class="item-name">{{ item.productName }}</span>
@@ -1174,12 +1182,12 @@
                   <span class="quantity">{{ item.quantity }}</span>
                   <button (click)="updateQuantity(item.productId, item.quantity + 1)" class="qty-btn">+</button>
                 </div>
+                <!-- Original Price -->
+                <div class="item-original-price">₱{{ (item.originalPrice || 0).toFixed(2) }}</div>
                 
                 <!-- Price -->
                 <div class="item-price-dialog">₱{{ item.sellingPrice.toFixed(2) }}</div>
                 
-                <!-- Total -->
-                <div class="item-total-dialog">₱{{ (item.total || (item.sellingPrice * item.quantity)).toFixed(2) }}</div>
                 
                 <!-- VAT Applicable Checkbox -->
                 <div class="cart-item-field">
@@ -1240,16 +1248,27 @@
                 </div>
 
                 <!-- Final Total - Editable -->
-                <div class="cart-item-field">
-                  <input 
-                    type="number" 
-                    [(ngModel)]="item.total"
-                    (change)="updateCartItemField(i, 'total', item.total)"
-                    min="0"
-                    step="0.01"
-                    class="cart-item-input cart-item-total-input"
-                    placeholder="0.00">
+                <!-- Total -->
+                <div class="item-total-dialog">₱{{ (item.total || (item.sellingPrice * item.quantity)).toFixed(2) }}</div>
+                <!-- PWD ID (per-item) - editable -->
+                <div class="item-pwd-id">
+                  <input type="text" class="cart-item-input" [(ngModel)]="item.pwdId" (ngModelChange)="updateCartItemField(i, 'pwdId', $event)" placeholder="">
                 </div>
+                <!-- Customer Name (per-item) - editable -->
+                <div class="item-customer-name">
+                  <input type="text" class="cart-item-input" [(ngModel)]="item.customerName" (ngModelChange)="updateCartItemField(i, 'customerName', $event)" placeholder="Customer Name">
+                </div>
+                <!-- Customer Discount selector (per-item) -->
+                <div class="cart-item-field">
+                  <select class="cart-item-select" [(ngModel)]="item.customerDiscount" (change)="updateCartItemField(i, 'customerDiscount', $any($event.target).value)">
+                    <option value=""></option>
+                    <option value="PWD">PWD</option>
+                    <option value="SENIOR">Senior</option>
+                    <option value="ATHLETE">Athlete</option>
+                    <option value="OTHERS">Others</option>
+                  </select>
+                </div>
+               
               </div>
               <div *ngIf="cartItems().length === 0" class="empty-cart-message">
                 {{ 'pos.cartEmpty' | translate }}
@@ -1462,7 +1481,7 @@
               </div>
               <div class="detail-content">
                 <div class="cart-items-list">
-                  <div class="cart-item-row" *ngFor="let item of cartItems()">
+                  <div class="cart-item-row" *ngFor="let item of cartItems(); trackBy: trackByCartItem">
                     <div class="item-basic-info">
                       <div class="item-name">{{ item.productName }}</div>
                       <div class="item-details">{{ item.quantity }}x ₱{{ item.sellingPrice.toFixed(2) }} = ₱{{ item.total.toFixed(2) }}</div>

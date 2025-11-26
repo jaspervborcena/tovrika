@@ -191,6 +191,7 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
   customerInfo = {
     soldTo: '',
     tin: '',
+    pwdId: '',
     businessAddress: '',
     customerId: '' // NEW: for existing/new customers
   };
@@ -1101,6 +1102,7 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
     this.customerInfo = {
       soldTo: '',
       tin: '',
+      pwdId: '',
       businessAddress: '',
       customerId: ''
     };
@@ -1966,6 +1968,7 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
     this.customerInfo = {
       soldTo: '',
       tin: '',
+      pwdId: '',
       businessAddress: '',
       customerId: ''
     };

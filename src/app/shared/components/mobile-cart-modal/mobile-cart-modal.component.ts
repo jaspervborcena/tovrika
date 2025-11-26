@@ -42,7 +42,13 @@ import { AppConstants } from '../../../shared/enums/app-constants.enum';
                 <div class="item-header-row">
                   <div class="item-info">
                     <div class="item-name">{{ item.productName }}</div>
-                    <div class="item-sku">{{ item.skuId }} - ₱{{ item.sellingPrice.toFixed(2) }} each</div>
+                    <div class="item-sku">
+                      {{ item.skuId }} - ₱{{ item.sellingPrice.toFixed(2) }} each
+                      <div class="original-price-line">
+                        <span class="original-price-label">Original Price</span>
+                        <span class="original-price">₱{{ (item.originalPrice || 0).toFixed(2) }}</span>
+                      </div>
+                    </div>
                   </div>
                   <button 
                     (click)="removeFromCart(item.productId)" 
@@ -152,7 +158,13 @@ import { AppConstants } from '../../../shared/enums/app-constants.enum';
                     <div class="product-name">{{ item.productName }}</div>
                     <div class="product-sku">{{ item.skuId }}</div>
                   </div>
-                  <div class="product-price">₱{{ item.sellingPrice.toFixed(2) }}</div>
+                  <div class="product-price">
+                    <div class="price-row">₱{{ item.sellingPrice.toFixed(2) }}</div>
+                    <div class="original-price-row">
+                      <span class="original-price-label">Original Price</span>
+                      <span class="original-price">₱{{ (item.originalPrice || 0).toFixed(2) }}</span>
+                    </div>
+                  </div>
                 </div>
                 
                 <!-- Quantity Row -->
@@ -677,6 +689,29 @@ import { AppConstants } from '../../../shared/enums/app-constants.enum';
       font-weight: 600;
       color: #059669;
       font-size: 1rem;
+    }
+
+    .original-price-line,
+    .original-price-row {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-top: 0.25rem;
+    }
+
+    .original-price-label {
+      background: #eef2ff;
+      color: #1f2937;
+      padding: 0.15rem 0.4rem;
+      border-radius: 6px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      letter-spacing: 0.2px;
+    }
+
+    .original-price {
+      color: #6b7280;
+      font-size: 0.875rem;
     }
 
     .control-row {

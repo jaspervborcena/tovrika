@@ -88,6 +88,7 @@ export interface CartItem {
   unitType?: string; // Added for display like "1 pc(s)", "2 boxes"
   quantity: number;
   sellingPrice: number;
+  originalPrice?: number;
   total: number;
   isVatApplicable: boolean;
   vatRate: number;
@@ -98,6 +99,11 @@ export interface CartItem {
   discountAmount: number;
   isVatExempt: boolean;
   imageUrl?: string;
+  // Per-item customer fields (optional)
+  pwdId?: string;
+  customerName?: string;
+  customerDiscount?: string; // e.g., 'PWD'|'SENIOR' or empty
+  customerDiscountType?: string; // internal marker for applied discount
 }
 
 export interface OrderDiscount {

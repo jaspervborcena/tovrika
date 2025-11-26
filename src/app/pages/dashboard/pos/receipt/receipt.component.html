@@ -2,7 +2,7 @@
 <div 
   *ngIf="isVisible" 
   class="receipt-modal-overlay"
-  (keydown.enter)="onPrintReceipt($event)">
+  (keydown.enter)="onPrintReceipt()">
   
   <div 
     class="receipt-modal-content"
@@ -75,8 +75,17 @@
 
       <!-- Sold To Section -->
       <div class="sold-to-section">
-        <h3 class="sold-to-header">SOLD TO: {{ getCustomerDisplayName() }}</h3>
-        <div class="customer-info" *ngIf="hasCustomerDetails()">
+        <h3 class="sold-to-header">SOLD TO: 
+          <ng-container *ngIf="receiptData?.customerNames && receiptData.customerNames.length > 0; else singleCustomer">
+            <span *ngFor="let n of receiptData.customerNames; let i = index">
+              {{ n }}<span *ngIf="i < (receiptData.customerNames.length - 1)">, </span>
+            </span>
+          </ng-container>
+          <ng-template #singleCustomer>{{ getCustomerDisplayName() }}</ng-template>
+        </h3>
+
+        <!-- Only show address/TIN when there's a single recognized customer (keeps layout predictable) -->
+        <div class="customer-info" *ngIf="hasCustomerDetails() && (!receiptData?.customerNames || receiptData.customerNames.length <= 1)">
           <div *ngIf="receiptData?.customerAddress && receiptData?.customerAddress !== 'N/A'">
             <p><strong>Address:</strong> {{ receiptData.customerAddress }}</p>
           </div>
@@ -147,41 +156,73 @@
         </div>
       </div>
 
-      <!-- Discount Information Section (for PWD/Senior/Special Discounts) -->
-      <div class="discount-info-section" *ngIf="receiptData?.orderDiscount">
+      <!-- Discount Information Section (supports multiple per-customer discounts) -->
+      <div class="discount-info-section" *ngIf="(receiptData?.customerDiscounts && receiptData.customerDiscounts.length > 0); else legacyDiscount">
         <div class="discount-details">
           <h4>Discount Information</h4>
           <div class="discount-grid">
-            <div class="discount-line">
-              {{ receiptData.orderDiscount.type }} 
-              <ng-container *ngIf="receiptData.orderDiscount.customType">
-                ({{ receiptData.orderDiscount.customType }})
-              </ng-container>
-              Discount
-            </div>
-            <div class="discount-line" *ngIf="receiptData.orderDiscount.exemptionId">
-              ID: {{ receiptData.orderDiscount.exemptionId }}
-            </div>
-            <div class="discount-line" *ngIf="receiptData.orderDiscount.customerName">
-              {{ receiptData.orderDiscount.customerName }}
-            </div>
-            <div class="discount-line">
-              Discount Amount: ₱{{ receiptData?.discount?.toFixed(2) || '0.00' }}
-            </div>
+            <ng-container *ngFor="let cd of receiptData.customerDiscounts">
+              <div class="discount-block">
+                <div class="discount-line">
+                  {{ cd.type || 'CUSTOM' }} Discount
+                </div>
+                <div class="discount-line" *ngIf="cd.exemptionId">
+                  ID: {{ cd.exemptionId }}
+                </div>
+                <div class="discount-line" *ngIf="cd.customerName">
+                  {{ cd.customerName }}
+                </div>
+                <div class="discount-line">
+                  Discount Amount: ₱{{ (cd.discountAmount || 0).toFixed(2) }}
+                </div>
+                <div class="signature-section" *ngIf="cd.type === 'PWD' || cd.type === 'SENIOR'">
+                  <div class="signature-box">
+                    <p class="signature-label">Customer Signature:</p>
+                    <div class="signature-line">_________________________</div>
+                  </div>
+                </div>
+              </div>
+            </ng-container>
           </div>
-          
-          <!-- Signature Section -->
-          <div class="signature-section" *ngIf="receiptData.orderDiscount.type === 'PWD' || receiptData.orderDiscount.type === 'SENIOR'">
-            <div class="signature-box">
-              <p class="signature-label">Customer Signature:</p>
-              <div class="signature-line">
-                <span *ngIf="receiptData.orderDiscount.signature">{{ receiptData.orderDiscount.signature }}</span>
-                <span *ngIf="!receiptData.orderDiscount.signature">_________________________</span>
+        </div>
+      </div>
+      <ng-template #legacyDiscount>
+        <!-- Fallback single orderDiscount block for older receipts -->
+        <div class="discount-info-section" *ngIf="receiptData?.orderDiscount">
+          <div class="discount-details">
+            <h4>Discount Information</h4>
+            <div class="discount-grid">
+              <div class="discount-line">
+                {{ receiptData.orderDiscount.type }} 
+                <ng-container *ngIf="receiptData.orderDiscount.customType">
+                  ({{ receiptData.orderDiscount.customType }})
+                </ng-container>
+                Discount
+              </div>
+              <div class="discount-line" *ngIf="receiptData.orderDiscount.exemptionId">
+                ID: {{ receiptData.orderDiscount.exemptionId }}
+              </div>
+              <div class="discount-line" *ngIf="receiptData.orderDiscount.customerName">
+                {{ receiptData.orderDiscount.customerName }}
+              </div>
+              <div class="discount-line">
+                Discount Amount: ₱{{ receiptData?.discount?.toFixed(2) || '0.00' }}
+              </div>
+            </div>
+            
+            <!-- Signature Section -->
+            <div class="signature-section" *ngIf="receiptData.orderDiscount.type === 'PWD' || receiptData.orderDiscount.type === 'SENIOR'">
+              <div class="signature-box">
+                <p class="signature-label">Customer Signature:</p>
+                <div class="signature-line">
+                  <span *ngIf="receiptData.orderDiscount.signature">{{ receiptData.orderDiscount.signature }}</span>
+                  <span *ngIf="!receiptData.orderDiscount.signature">_________________________</span>
+                </div>
               </div>
             </div>
           </div>
         </div>
-      </div>
+      </ng-template>
 
       <!-- Footer -->
       <div class="receipt-footer">
@@ -207,7 +248,7 @@
         class="btn-primary"
         #printBtn
         autofocus
-        (click)="onPrintReceipt($event)"
+        (click)="onPrintReceipt()"
         [disabled]="isPrinting">
         <span *ngIf="!isPrinting">Print Receipt</span>
         <span *ngIf="isPrinting">Saving & Printing...</span>

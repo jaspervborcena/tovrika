@@ -27,6 +27,17 @@ export const policyGuard: CanActivateFn = async (route, state) => {
     return false;
   }
 
+  // If user has previously accepted policy & terms (persisted via IndexedDB), allow.
+  try {
+    const accepted = await authService.hasAcceptedPolicyAndTerms(currentUser.uid);
+    if (accepted) {
+      console.log('🛡️ PolicyGuard: User has accepted policy & terms (IndexedDB), allowing access');
+      return true;
+    }
+  } catch (e) {
+    console.warn('🛡️ PolicyGuard: Error checking acceptance flags, falling back to existing checks', e);
+  }
+
   // Check if user is a visitor based on current permission (more reliable than user.roleId)
   const currentPermission = authService.getCurrentPermission();
   const isVisitor = !currentPermission || 

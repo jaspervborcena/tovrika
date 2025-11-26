@@ -14,6 +14,8 @@ export interface ProductInventoryEntry {
   quantity: number;
   initialQuantity?: number; // Original quantity for tracking deductions
   unitPrice: number;
+  // Selling price for this batch (may include VAT or other adjustments)
+  sellingPrice?: number;
   costPrice?: number;
   receivedAt: Date; // stored as Firestore Timestamp
   expiryDate?: Date; // stored as Firestore Timestamp
