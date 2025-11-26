@@ -1,4 +1,4 @@
-import { Component, OnInit, AfterViewInit, OnDestroy, HostListener, computed, signal, inject } from '@angular/core';
+import { Component, OnInit, AfterViewInit, OnDestroy, HostListener, ViewChild, ElementRef, computed, signal, inject } from '@angular/core';
 import { Firestore, doc, getDoc, collection, query, where, getDocs } from '@angular/fire/firestore';
 import { ProductStatus } from '../../../interfaces/product.interface';
 import { CommonModule } from '@angular/common';
@@ -44,6 +44,7 @@ import { DomSanitizer, SafeUrl } from '@angular/platform-browser';
   styleUrls: ['./pos.component.css']
 })
 export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
+  @ViewChild('processPaymentButton', { read: ElementRef }) processPaymentButton?: ElementRef<HTMLButtonElement>;
 
   // Services
   private productService = inject(ProductService);
@@ -59,6 +60,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   private userRoleService = inject(UserRoleService);
   private customerService = inject(CustomerService);
   private companyService = inject(CompanyService);
+  
   private translationService = inject(TranslationService);
   private subscriptionService = inject(SubscriptionService);
   private firestore = inject(Firestore);
@@ -472,6 +474,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   customerInfo = {
     soldTo: '',
     tin: '',
+    pwdId: '',
     businessAddress: '',
     customerId: '' // NEW: for existing/new customers
   };
@@ -1471,6 +1474,69 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       }
     }
 
+    // Normalize and compute items first so we can derive customer-level discounts for legacy orders
+    const itemsList: any[] = await (async () => {
+      try {
+        let itemsSource = Array.isArray(order.items) && order.items.length > 0 ? order.items : [];
+        if ((!itemsSource || itemsSource.length === 0) && order.id) {
+          try {
+            const fetched = await this.orderService.fetchOrderItems(order.id);
+            if (Array.isArray(fetched) && fetched.length > 0) itemsSource = fetched;
+          } catch (e) {
+            console.warn('Failed to fetch order items for order', order.id, e);
+          }
+        }
+
+        return (itemsSource || []).map((item: any) => ({
+          productName: item.productName || item.name,
+          skuId: item.skuId || item.sku,
+          quantity: item.quantity || 1,
+          unitType: item.unitType || 'pc',
+          sellingPrice: item.sellingPrice || item.price || item.amount,
+          total: item.total || (item.quantity * (item.sellingPrice || item.price || item.amount)),
+          vatAmount: item.vatAmount || 0,
+          discountAmount: item.discountAmount || 0,
+          // Preserve any per-item customer name/pwdId if present on historical orders
+          customerName: item.customerName || (item as any).discountCustomerName || null,
+          pwdId: item.pwdId || null,
+          customerDiscount: item.customerDiscount || (item as any).customerDiscount || null
+        }));
+      } catch (err) {
+        console.warn('Error normalizing order items', err);
+        return [];
+      }
+    })();
+
+    // Group discounts by customer identity for legacy/converted orders
+    const customerDiscounts = (() => {
+      try {
+        const groups = new Map<string, any>();
+        for (const it of itemsList) {
+          const name = (it.customerName || '').toString().trim();
+          const pwd = it.pwdId || '';
+          const key = name || pwd || '__WALKIN__';
+          const discountAmt = Number(it.discountAmount || 0) || 0;
+          if (!groups.has(key)) {
+            groups.set(key, {
+              customerName: name || null,
+              exemptionId: pwd || null,
+              discountAmount: 0,
+              type: it.customerDiscount || null
+            });
+          }
+          const g = groups.get(key);
+          g.discountAmount += discountAmt;
+          if (!g.type && it.customerDiscount) g.type = it.customerDiscount;
+        }
+        return Array.from(groups.values()).filter(g => g.discountAmount && g.discountAmount > 0).map(g => ({
+          ...g,
+          discountAmount: Number(g.discountAmount.toFixed ? g.discountAmount.toFixed(2) : Math.round((g.discountAmount + Number.EPSILON) * 100) / 100)
+        }));
+      } catch (e) {
+        return [];
+      }
+    })();
+
     return {
       orderId: order.id,
       invoiceNumber: order.invoiceNumber,
@@ -1494,34 +1560,26 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       paymentMethod: order.cashSale ? 'Cash' : 'Charge',
       isCashSale: order.cashSale || true,
       isChargeSale: !order.cashSale || false,
-      items: await (async () => {
+      items: itemsList,
+      // For legacy orders, extract unique customer names from embedded items or order-level fields
+      customerNames: ((): string[] => {
         try {
-          let itemsSource = Array.isArray(order.items) && order.items.length > 0 ? order.items : [];
-          // If no items embedded in order, fetch from orderDetails collection (may be batched)
-          if ((!itemsSource || itemsSource.length === 0) && order.id) {
-            try {
-              const fetched = await this.orderService.fetchOrderItems(order.id);
-              if (Array.isArray(fetched) && fetched.length > 0) itemsSource = fetched;
-            } catch (e) {
-              console.warn('Failed to fetch order items for order', order.id, e);
-            }
+          const names = [] as string[];
+          let sourceItems: any[] = itemsList && itemsList.length > 0 ? itemsList : [];
+          if (sourceItems.length === 0 && order.id) {
+            if (order.discountCustomerName) sourceItems.push({ customerName: order.discountCustomerName });
+            if (order.soldTo && order.soldTo !== 'Walk-in Customer') sourceItems.push({ customerName: order.soldTo });
           }
-
-          return (itemsSource || []).map((item: any) => ({
-            productName: item.productName || item.name,
-            skuId: item.skuId || item.sku,
-            quantity: item.quantity || 1,
-            unitType: item.unitType || 'pc',
-            sellingPrice: item.sellingPrice || item.price || item.amount,
-            total: item.total || (item.quantity * (item.sellingPrice || item.price || item.amount)),
-            vatAmount: item.vatAmount || 0,
-            discountAmount: item.discountAmount || 0
-          }));
-        } catch (err) {
-          console.warn('Error normalizing order items', err);
+          for (const it of sourceItems) {
+            const n = (it.customerName || it.discountCustomerName || '').toString().trim();
+            if (n) names.push(n);
+          }
+          return Array.from(new Set(names));
+        } catch (e) {
           return [];
         }
       })(),
+      customerDiscounts: customerDiscounts,
       subtotal: order.grossAmount || order.subtotal || order.totalAmount,
       vatAmount: order.vatAmount || 0,
       vatExempt: order.vatExemptAmount || 0,
@@ -2131,6 +2189,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     this.customerInfo = {
       soldTo: '',
       tin: '',
+      pwdId: '',
       businessAddress: '',
       customerId: ''
     };
@@ -2275,6 +2334,14 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       this.paymentDescription = '';
     }
     this.paymentModalVisible.set(true);
+    // Ensure the primary action button receives focus when dialog opens
+    setTimeout(() => {
+      try {
+        this.processPaymentButton?.nativeElement?.focus();
+      } catch (e) {
+        // ignore focus errors
+      }
+    }, 50);
   }
 
   closePaymentDialog(): void {
@@ -2315,50 +2382,41 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   public async openCartInformationDialog(): Promise<void> {
-    console.log('🛒 Opening cart information dialog - fetching latest VAT rates from Firestore');
+    console.log('🛒 Opening cart information dialog - using cart VAT settings as source-of-truth');
 
-    // Ensure each cart item picks up the latest tax settings from the products collection (Firestore)
+    // Do NOT pull VAT rates from product collection here. Prefer the user/cart-level VAT settings.
+    // Precedence for VAT values when opening the dialog:
+    // 1. item.vatRate / item.isVatApplicable if already set (user previously edited)
+    // 2. cartVatSettings values if the user saved a cart-level VAT
+    // 3. AppConstants.DEFAULT_VAT_RATE / true as fallback
     try {
       const items = this.cartItems();
+      const defaultVatRate = this.cartVatSettings?.vatRate ?? AppConstants.DEFAULT_VAT_RATE;
+      const defaultIsVat = this.cartVatSettings?.isVatApplicable ?? true;
+
       for (const item of items) {
         try {
-          // Try to read the authoritative product doc directly from Firestore
-          if (item.productId) {
-            const prodRef = doc(this.firestore, 'products', item.productId as string);
-            const snap = await getDoc(prodRef as any);
-            if (snap && snap.exists && snap.exists()) {
-              const data: any = snap.data();
-              const isVatApplicable = typeof data.isVatApplicable === 'boolean' ? data.isVatApplicable : (item.isVatApplicable ?? true);
-              const vatRate = typeof data.vatRate === 'number' ? Number(data.vatRate) : (item.vatRate ?? 12);
+          const updatedItem: any = { ...item };
 
-              const updatedItem = {
-                ...item,
-                isVatApplicable,
-                vatRate
-              } as any;
+          // Prefer existing item settings if present
+          updatedItem.isVatApplicable = (item.isVatApplicable !== undefined && item.isVatApplicable !== null)
+            ? item.isVatApplicable
+            : defaultIsVat;
 
-              // Update via PosService so totals are recalculated consistently
-              this.posService.updateCartItem(updatedItem);
-              continue; // next item
-            }
-          }
+          updatedItem.vatRate = (item.vatRate !== undefined && item.vatRate !== null)
+            ? item.vatRate
+            : defaultVatRate;
 
-          // Fallback to cached product if Firestore read failed or productId missing
-          const product = this.productService.getProduct(item.productId);
-          if (product) {
-            const updatedItem = {
-              ...item,
-              isVatApplicable: typeof product.isVatApplicable === 'boolean' ? product.isVatApplicable : (item.isVatApplicable ?? true),
-              vatRate: typeof product.vatRate === 'number' ? Number(product.vatRate) : (item.vatRate ?? 12)
-            } as any;
+          // Only update through service if values actually change to avoid unnecessary recalcs
+          if (updatedItem.isVatApplicable !== item.isVatApplicable || updatedItem.vatRate !== item.vatRate) {
             this.posService.updateCartItem(updatedItem);
           }
         } catch (err) {
-          console.warn('Failed to sync VAT for cart item', item.productId, err);
+          console.warn('Failed to apply cart VAT settings for cart item', item.productId, err);
         }
       }
     } catch (err) {
-      console.warn('Error while syncing cart VAT settings:', err);
+      console.warn('Error while applying cart VAT settings to items:', err);
     }
 
     this.cartInformationModalVisible.set(true);
@@ -2384,6 +2442,36 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
         
         // Update the specific field
         (updatedItem as any)[field] = value;
+
+        // Handle per-item customer fields and discounts
+        if (field === 'customerName') {
+          // nothing extra to do here; saved on item
+        }
+
+        if (field === 'pwdId') {
+          // nothing extra to do here; saved on item
+        }
+
+        // If customerDiscount (PWD/SENIOR) is set, apply default discount settings
+        if (field === 'customerDiscount') {
+          const cd = (value || '').toString();
+          if (cd === 'PWD' || cd === 'SENIOR') {
+            updatedItem.hasDiscount = true;
+            updatedItem.discountType = AppConstants.DEFAULT_DISCOUNT_TYPE as 'percentage' | 'fixed';
+            updatedItem.discountValue = AppConstants.DEFAULT_DISCOUNT_VALUE;
+            // store marker for later reference
+            (updatedItem as any).customerDiscountType = cd;
+          } else {
+            // clear any customer-applied discount marker but keep item-level manual discounts intact only if they differ
+            (updatedItem as any).customerDiscountType = '';
+            // Conservative approach: if the discount was introduced by this customer selector, clear it
+            if (updatedItem.discountValue === AppConstants.DEFAULT_DISCOUNT_VALUE && (updatedItem as any).discountType === AppConstants.DEFAULT_DISCOUNT_TYPE) {
+              updatedItem.hasDiscount = false;
+              updatedItem.discountValue = 0;
+              updatedItem.discountType = 'percentage';
+            }
+          }
+        }
         
         // Handle VAT logic
         if (field === 'isVatApplicable') {
@@ -2427,6 +2515,19 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     this.closeCartInformationDialog();
     
     console.log('✅ Cart information dialog closed - individual item settings preserved');
+  }
+
+  // Handler for editable order-level customer fields inside Cart Information dialog
+  public onCustomerInfoChange(field: 'pwdId' | 'soldTo', value: string): void {
+    try {
+      if (!this.customerInfo) this.customerInfo = { soldTo: '', tin: '', pwdId: '', businessAddress: '', customerId: '' } as any;
+      // update local object
+      (this.customerInfo as any)[field] = value;
+      console.log(`✏️ Customer info updated: ${field} =`, value);
+      // No immediate persistence required here; the value will be used when saving/processing the order
+    } catch (err) {
+      console.error('Error updating customer info field:', err);
+    }
   }
 
   public saveCartVatDiscountSettings(): void {
@@ -3303,6 +3404,25 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       return;
     }
     this.posService.addToCart(product);
+
+    // If user has saved a cart-level VAT rate, ensure the newly added/updated cart item uses it
+    try {
+      const cartVat = this.cartVatSettings?.vatRate;
+      const cartVatApplicable = this.cartVatSettings?.isVatApplicable;
+      if (cartVat !== undefined && cartVat !== null) {
+        const updatedItems = this.cartItems();
+        const matching = updatedItems.find(i => i.productId === product.id);
+        if (matching) {
+          const shouldUpdateVat = (matching.vatRate !== cartVat) || (matching.isVatApplicable !== (cartVatApplicable ?? matching.isVatApplicable));
+          if (shouldUpdateVat) {
+            const updated = { ...matching, vatRate: cartVat, isVatApplicable: (cartVatApplicable ?? matching.isVatApplicable) } as any;
+            this.posService.updateCartItem(updated);
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('Failed to apply cart-level VAT to newly added item:', err);
+    }
   }
 
   removeFromCart(productId: string): void {
@@ -3459,7 +3579,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       const updatedItem = {
         ...item,
         isVatApplicable: true,
-        vatRate: 12
+        vatRate: this.cartVatSettings?.vatRate ?? AppConstants.DEFAULT_VAT_RATE
       };
       this.posService.updateCartItem(updatedItem);
     });
@@ -3625,6 +3745,58 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     }
   }
 
+  // When payment dialog is open, pressing Enter should activate the focused button
+  onPaymentDialogEnter(event: Event): void {
+    event.preventDefault();
+    event.stopPropagation();
+    const activeElement = document.activeElement as HTMLElement;
+    if (activeElement && activeElement.tagName === 'BUTTON') {
+      activeElement.click();
+    } else {
+      // Default to processing payment if nothing specific is focused
+      this.processPayment();
+    }
+  }
+
+  @HostListener('document:keydown.enter', ['$event'])
+  onGlobalEnterForModals(event: KeyboardEvent): void {
+    try {
+      if (this.showPaymentModal()) {
+        event.preventDefault();
+        event.stopPropagation();
+        const active = document.activeElement as HTMLElement;
+        if (active && active.tagName === 'BUTTON') {
+          active.click();
+        } else {
+          this.processPayment();
+        }
+        return;
+      }
+
+      if (this.isReceiptModalVisible()) {
+        event.preventDefault();
+        event.stopPropagation();
+        const active = document.activeElement as HTMLElement;
+        if (active && active.tagName === 'BUTTON') {
+          active.click();
+        } else {
+          this.printReceipt();
+        }
+        return;
+      }
+    } catch (err) {
+      console.warn('Enter key global handler error:', err);
+    }
+  }
+
+  @HostListener('document:keydown.enter', ['$event'])
+  handleGlobalEnterForPayment(event: Event): void {
+    // If payment dialog is visible, delegate Enter to the payment handler
+    if (this.paymentModalVisible && this.paymentModalVisible()) {
+      this.onPaymentDialogEnter(event);
+    }
+  }
+
   private async prepareReceiptData(orderId: string): Promise<any> {
     const cartItems = this.cartItems();
     const cartSummary = this.cartSummary();
@@ -3656,6 +3828,50 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     // Whether they're a cashier, manager, or higher - they are the one processing the sale
     const cashierName = currentUser?.displayName || currentUser?.email || 'Unknown Cashier';
 
+    // Build receipt items list first so we can compute per-customer discount groups
+    const itemsList = cartItems.map(item => ({
+      productName: item.productName,
+      skuId: item.skuId,
+      quantity: item.quantity,
+      unitType: item.unitType,
+      sellingPrice: item.sellingPrice,
+      total: item.total,
+      vatAmount: item.vatAmount,
+      discountAmount: item.discountAmount,
+      quantityWithUnit: `${item.quantity} ${this.getUnitTypeDisplay(item.unitType)}`,
+      // Per-item customer fields (support multiple customers per receipt)
+      customerName: (item as any).customerName || null,
+      pwdId: (item as any).pwdId || null,
+      customerDiscount: (item as any).customerDiscount || null
+    }));
+
+    const customerNamesList = Array.from(new Set(itemsList.map(i => ((i as any).customerName || '').toString().trim()).filter(n => !!n)));
+
+    // Compute per-customer discount aggregation
+    const customerDiscounts = (() => {
+      try {
+        const groups = new Map<string, any>();
+        for (const it of itemsList) {
+          const name = (it.customerName || '').toString().trim();
+          const pwd = it.pwdId || '';
+          const key = name || pwd || '__WALKIN__';
+          const discountAmt = Number(it.discountAmount || 0) || 0;
+          if (!groups.has(key)) {
+            groups.set(key, { customerName: name || null, exemptionId: pwd || null, discountAmount: 0, type: it.customerDiscount || null });
+          }
+          const g = groups.get(key);
+          g.discountAmount += discountAmt;
+          if (!g.type && it.customerDiscount) g.type = it.customerDiscount;
+        }
+        return Array.from(groups.values()).filter(g => g.discountAmount && g.discountAmount > 0).map(g => ({
+          ...g,
+          discountAmount: Number(g.discountAmount.toFixed ? g.discountAmount.toFixed(2) : Math.round((g.discountAmount + Number.EPSILON) * 100) / 100)
+        }));
+      } catch (e) {
+        return [];
+      }
+    })();
+
     return {
       orderId,
       invoiceNumber: invoiceNumber || this.invoiceNumber,
@@ -3679,23 +3895,16 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       paymentMethod: paymentMethod, // Add payment method
       isCashSale: this.isCashSale(),
       isChargeSale: this.isChargeSale(),
-      items: cartItems.map(item => ({
-        productName: item.productName,
-        skuId: item.skuId,
-        quantity: item.quantity,
-        unitType: item.unitType,
-        sellingPrice: item.sellingPrice,
-        total: item.total,
-        vatAmount: item.vatAmount,
-        discountAmount: item.discountAmount,
-        quantityWithUnit: `${item.quantity} ${this.getUnitTypeDisplay(item.unitType)}`
-      })),
+      items: itemsList,
+      // Collect unique customer names across items and include them for receipt display
+      customerNames: customerNamesList,
+      customerDiscounts: customerDiscounts,
       subtotal: cartSummary.grossAmount,
       vatAmount: cartSummary.vatAmount,
       vatExempt: cartSummary.vatExemptSales,
       discount: cartSummary.productDiscountAmount + cartSummary.orderDiscountAmount,
       totalAmount: cartSummary.netAmount,
-      vatRate: 12, // Standard VAT rate
+      vatRate: this.cartVatSettings?.vatRate ?? AppConstants.DEFAULT_VAT_RATE, // Use latest user-set VAT if available
       // Validity notice based on store BIR accreditation
       validityNotice: (storeInfo as any)?.isBirAccredited 
         ? ReceiptValidityNotice.BIR_ACCREDITED 
@@ -3863,11 +4072,122 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
 
   applyOrderDiscount(discount: OrderDiscount): void {
     this.posService.setOrderDiscount(discount);
+
+    // Propagate the order discount to each cart item so Cart Information shows it
+    try {
+      const items = this.cartItems();
+      if (Array.isArray(items) && items.length > 0) {
+        // Compute gross amount for proportional distribution of fixed discounts
+        const gross = items.reduce((s: number, it: any) => s + ((it.sellingPrice || 0) * (it.quantity || 1)), 0);
+
+        for (const it of items) {
+          const updated: any = { ...it };
+          updated.hasDiscount = true;
+
+          if ((discount as any).percentage) {
+            updated.discountType = 'percentage';
+            updated.discountValue = Number((discount as any).percentage) || 0;
+          } else if ((discount as any).fixedAmount) {
+            updated.discountType = 'fixed';
+            const fixed = Number((discount as any).fixedAmount) || 0;
+            if (gross > 0) {
+              // Distribute fixed amount proportionally based on item's line gross
+              const lineGross = (it.sellingPrice || 0) * (it.quantity || 1);
+              const lineShare = lineGross / gross;
+              const lineDiscountTotal = fixed * lineShare;
+              // Store per-unit discount value so item controls accept it
+              updated.discountValue = Number((lineDiscountTotal / (it.quantity || 1)).toFixed(2));
+            } else {
+              // Fallback: split equally per item unit
+              const perUnit = fixed / Math.max(1, items.reduce((c: number, x: any) => c + (x.quantity || 1), 0));
+              updated.discountValue = Number(perUnit.toFixed(2));
+            }
+          }
+
+          // Also propagate exemption ID and customer name into each item (so multiple customers per receipt show up)
+          if (discount.exemptionId) {
+            updated.pwdId = discount.exemptionId;
+          }
+          if (discount.customerName) {
+            updated.customerName = discount.customerName;
+          }
+          // Mark the per-item customer discount type (PWD/SENIOR/CUSTOM)
+          if (discount.type) {
+            updated.customerDiscount = discount.type;
+          }
+
+          // Use PosService API to update the cart item (this will recalc totals)
+          this.posService.updateCartItem(updated);
+        }
+      }
+    } catch (err) {
+      console.warn('Failed to propagate order discount to items:', err);
+    }
+
     this.closeDiscountModal();
   }
 
+  // Live handler for discount modal's live customer changes (as-you-type)
+  public onDiscountModalLiveCustomer(payload: { exemptionId: string; customerName: string; discountType: string }): void {
+    try {
+      const { exemptionId, customerName, discountType } = payload || { exemptionId: '', customerName: '', discountType: '' };
+      const items = this.cartItems();
+      if (!Array.isArray(items) || items.length === 0) return;
+
+      for (const it of items) {
+        // Only update if there's an actual change to avoid unnecessary updates
+        const updated: any = { ...it };
+        let changed = false;
+
+        if (exemptionId !== undefined && String(updated.pwdId || '') !== String(exemptionId || '')) {
+          updated.pwdId = exemptionId || '';
+          changed = true;
+        }
+
+        if (customerName !== undefined && String(updated.customerName || '') !== String(customerName || '')) {
+          updated.customerName = customerName || '';
+          changed = true;
+        }
+
+        if (discountType !== undefined && String(updated.customerDiscount || '') !== String(discountType || '')) {
+          updated.customerDiscount = discountType || '';
+          changed = true;
+        }
+
+        if (changed) {
+          this.posService.updateCartItem(updated);
+        }
+      }
+    } catch (err) {
+      console.warn('Failed to apply live customer info to cart items:', err);
+    }
+  }
+
   removeOrderDiscount(): void {
+    // Clear the order discount and remove propagated per-item discounts
+    const existing = this.posService.orderDiscount();
     this.posService.removeOrderDiscount();
+
+    try {
+      const items = this.cartItems();
+      if (Array.isArray(items) && items.length > 0) {
+        for (const it of items) {
+          const updated: any = { ...it };
+          // Only clear the per-item discount fields if they were set by order-level discount
+          // Conservative approach: clear hasDiscount and discountValue for all items
+          updated.hasDiscount = false;
+          updated.discountValue = 0;
+          updated.discountType = 'percentage';
+          // Also clear propagated customer identification fields
+          if ((updated as any).pwdId) updated.pwdId = '';
+          if ((updated as any).customerName) updated.customerName = '';
+          if ((updated as any).customerDiscount) updated.customerDiscount = '';
+          this.posService.updateCartItem(updated);
+        }
+      }
+    } catch (err) {
+      console.warn('Failed to clear per-item discounts after removing order discount:', err);
+    }
   }
 
   // Confirmation dialog methods
@@ -4079,6 +4399,15 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       return `${discount.customType} Discount${discountMethod}`;
     }
     return `Custom Discount${discountMethod}`;
+  }
+
+  // trackBy function for cart item ngFor to preserve DOM nodes (prevents input losing focus)
+  public trackByCartItem(index: number, item: any): string | number {
+    try {
+      return item?.productId || item?.skuId || index;
+    } catch (err) {
+      return index;
+    }
   }
 
   /**

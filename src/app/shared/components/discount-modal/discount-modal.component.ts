@@ -346,6 +346,8 @@ export class DiscountModalComponent {
   // Outputs
   discountApplied = output<OrderDiscount>();
   modalClosed = output<void>();
+  // Live emit customer info as the user types (exemptionId, customerName, discountType)
+  liveCustomerChange = output<{ exemptionId: string; customerName: string; discountType: string }>();
 
   // Setters for template two-way binding
   setDiscountTypeValue(value: string): void {
@@ -371,10 +373,24 @@ export class DiscountModalComponent {
 
   setExemptionIdValue(value: string): void {
     this.exemptionIdSignal.set(value);
+    this.emitLiveCustomerChange();
   }
 
   setCustomerNameValue(value: string): void {
     this.customerNameSignal.set(value);
+    this.emitLiveCustomerChange();
+  }
+
+  private emitLiveCustomerChange(): void {
+    try {
+      this.liveCustomerChange.emit({
+        exemptionId: this.exemptionIdValue() || '',
+        customerName: this.customerNameValue() || '',
+        discountType: this.discountTypeValue() || ''
+      });
+    } catch (err) {
+      console.warn('Failed to emit live customer change:', err);
+    }
   }
 
   onDiscountTypeChange(value: string): void {

@@ -2804,10 +2804,10 @@
   color: #374151;
 }
 
-/* Extended Cart Items Grid - 10 columns for individual VAT/discount controls */
+/* Extended Cart Items Grid - extended columns for identification, ID type, customer name */
 .cart-item-header-extended {
   display: grid;
-  grid-template-columns: 2fr 0.8fr 0.8fr 1fr 0.8fr 0.8fr 1fr 0.8fr 1fr 1fr;
+  grid-template-columns: 2fr 0.8fr 0.9fr 0.8fr 1fr 0.8fr 0.8fr 1fr 0.8fr 1fr 0.9fr 0.9fr 1.2fr;
   gap: 0.5rem;
   padding: 0.5rem;
   background: #f8fafc;
@@ -2815,19 +2815,19 @@
   font-size: 0.75rem;
   color: #374151;
   border-bottom: 1px solid #e5e7eb;
-  min-width: 1200px; /* Ensure minimum width for all columns */
+  min-width: 1550px; /* Increased width to accommodate added columns */
   white-space: nowrap;
 }
 
 .cart-item-row-extended {
   display: grid;
-  grid-template-columns: 2fr 0.8fr 0.8fr 1fr 0.8fr 0.8fr 1fr 0.8fr 1fr 1fr;
+  grid-template-columns: 2fr 0.8fr 0.9fr 0.8fr 1fr 0.8fr 0.8fr 1fr 0.8fr 1fr 0.9fr 0.9fr 1.2fr;
   gap: 0.5rem;
   padding: 0.5rem;
   border-bottom: 1px solid #f3f4f6;
   font-size: 0.875rem;
   align-items: center;
-  min-width: 1200px; /* Match header width */
+  min-width: 1550px; /* Match header width */
 }
 
 .cart-item-row-extended:last-child {
@@ -2913,6 +2913,31 @@
   text-align: center;
   padding: 0.25rem;
   font-size: 0.875rem;
+}
+
+.item-original-price {
+  font-weight: 600;
+  color: #6b7280;
+  text-align: center;
+  padding: 0.25rem;
+  font-size: 0.875rem;
+}
+
+/* PWD ID and Customer Name columns */
+.item-pwd-id {
+  font-weight: 500;
+  color: #374151;
+  text-align: center;
+  padding: 0.25rem;
+  font-size: 0.85rem;
+}
+
+.item-customer-name {
+  font-weight: 500;
+  color: #374151;
+  text-align: center;
+  padding: 0.25rem;
+  font-size: 0.85rem;
 }
 
 /* Form control styles for individual cart items */

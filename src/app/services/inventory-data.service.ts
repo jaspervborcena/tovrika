@@ -220,6 +220,7 @@ export class InventoryDataService {
             storeId: permission.storeId || '',
             totalStock: newTotal,
             sellingPrice: Number(cleanBatchData.unitPrice) || 0,
+            originalPrice: Number(cleanBatchData.unitPrice) || 0,
             status: 'active',
             createdAt: new Date(),
             updatedAt: new Date(),
@@ -248,6 +249,18 @@ export class InventoryDataService {
         // This will correctly calculate sellingPrice from the latest batch by receivedAt.
         const summary = await this.productSummaryService.recomputeProductSummary(productId);
         console.log('🔁 Post-commit product summary recompute completed for', productId, 'with summary:', summary);
+        // After recompute, refresh products cache so UI reflects latest product doc
+        try {
+          const prod = this.productService.getProduct(productId);
+          const permission = this.auth.getCurrentPermission();
+          const storeId = prod?.storeId || permission?.storeId;
+          if (storeId) {
+            await this.productService.refreshProducts(storeId);
+            console.log('🔁 Refreshed products for store after batch add:', storeId);
+          }
+        } catch (refreshErr) {
+          console.warn('⚠️ Failed to refresh products after post-commit recompute (addBatch):', refreshErr);
+        }
       } catch (recomputeErr) {
         console.warn('⚠️ Post-commit recompute failed:', recomputeErr);
       }
@@ -288,19 +301,36 @@ export class InventoryDataService {
       transaction.update(batchRef, cleanUpdates);
       console.log('� Batch update queued in transaction:', batchDocId);
 
-      // 2. Update product summary using ProductSummaryService
-      await this.productSummaryService.recomputeProductSummaryInTransaction(
-        transaction,
-        productId
-      );
-
-      console.log('📊 Product summary update queued in transaction');
-    }).then(() => {
-      console.log('✅ Batch update transaction committed successfully:', batchDocId);
-    }).catch((error) => {
-      console.error('❌ Batch update transaction failed - no changes made:', error);
-      throw new Error(`Failed to update batch: ${error.message}`);
+      // NOTE: Do not perform summary recompute inside the transaction here because
+      // recomputeProductSummaryInTransaction performs additional reads (queries)
+      // which would violate Firestore's requirement that all reads must happen
+      // before any writes in a transaction. We'll perform a post-commit recompute
+      // after the transaction completes successfully.
     });
+
+    // After successful transaction, refresh product cache so UI shows updated summary immediately
+    try {
+      console.log('✅ Batch update transaction committed successfully:', batchDocId);
+      // Recompute product summary from committed batches to ensure product doc reflects
+      // latest originalPrice and sellingPrice (based on latest batch by receivedAt)
+      try {
+        const summary = await this.productSummaryService.recomputeProductSummary(productId);
+        console.log('🔁 Post-commit product summary recompute completed for', productId, 'with summary:', summary);
+      } catch (recomputeErr) {
+        console.warn('⚠️ Post-commit recompute after batch update failed:', recomputeErr);
+      }
+
+      // Then refresh product cache so UI shows updated summary immediately
+      const prod = this.productService.getProduct(productId);
+      const permission = this.auth.getCurrentPermission();
+      const storeId = prod?.storeId || permission?.storeId;
+      if (storeId) {
+        await this.productService.refreshProducts(storeId);
+        console.log('🔁 Refreshed products for store after batch update:', storeId);
+      }
+    } catch (err) {
+      console.warn('⚠️ Failed to refresh products after batch update:', err);
+    }
   }
 
   async removeBatch(productId: string, batchDocId: string): Promise<void> {

@@ -140,3 +140,11 @@
     }
   </div>
 </app-content-layout>
+
+<!-- Confirmation Dialog -->
+<app-confirmation-dialog
+  *ngIf="isConfirmationDialogVisible() && confirmationDialogData()"
+  [dialogData]="confirmationDialogData()!"
+  (confirmed)="onConfirmationConfirmed()"
+  (cancelled)="onConfirmationCancelled()">
+</app-confirmation-dialog>
