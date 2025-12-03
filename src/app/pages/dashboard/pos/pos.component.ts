@@ -205,7 +205,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   @HostListener('document:keydown.escape', ['$event'])
-  onEscapeKey(event: Event | KeyboardEvent): void {
+  onEscapeKey(event: KeyboardEvent): void {
     event.stopPropagation();
     this.closeSortMenu();
   }
@@ -569,11 +569,9 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   private confirmationDialogDataSignal = signal<ConfirmationDialogData | null>(null);
   readonly confirmationDialogData = computed(() => this.confirmationDialogDataSignal());
 
-  // Sales type state - now supports both cash and charge
-  private salesTypeCashSignal = signal<boolean>(true);  // Default to cash enabled
-  private salesTypeChargeSignal = signal<boolean>(false); // Default to charge disabled
-  readonly isCashSale = computed(() => this.salesTypeCashSignal());
-  readonly isChargeSale = computed(() => this.salesTypeChargeSignal());
+  // Sales type state - delegated to PosService so multiple UI elements stay in sync
+  readonly isCashSale = computed(() => this.posService.isCashSale());
+  readonly isChargeSale = computed(() => this.posService.isChargeSale());
 
   setAccessTab(tab: string): void {
     console.log('🎯 Setting access tab to:', tab);
@@ -605,11 +603,15 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   toggleCashSale(): void {
-    this.salesTypeCashSignal.update(value => !value);
+    this.posService.toggleCashSale();
   }
 
   toggleChargeSale(): void {
-    this.salesTypeChargeSignal.update(value => !value);
+    this.posService.toggleChargeSale();
+  }
+
+  setPaymentMethod(method: 'cash' | 'charge' | 'both'): void {
+    this.posService.setPaymentMethod(method);
   }
 
   async searchOrders(): Promise<void> {
@@ -1906,7 +1908,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
 
   // F4 Hotkey for Clear Data
   @HostListener('document:keydown.f4', ['$event'])
-  async onF4KeyPress(event: Event | KeyboardEvent): Promise<void> {
+  async onF4KeyPress(event: KeyboardEvent): Promise<void> {
     event.preventDefault(); // Prevent default F4 behavior
     
     // Check if order is already completed
@@ -1944,7 +1946,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
 
   // F5 Hotkey for New Order
   @HostListener('document:keydown.f5', ['$event'])
-  async onF5KeyPress(event: Event | KeyboardEvent): Promise<void> {
+  async onF5KeyPress(event: KeyboardEvent): Promise<void> {
     event.preventDefault(); // Prevent page refresh
     // Use unified flow so hotkey, button, and item-click behave the same
     await this.requestStartNewOrder('hotkey');
@@ -1952,7 +1954,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
 
   // F6 Hotkey for Complete Order
   @HostListener('document:keydown.f6', ['$event'])
-  async onF6KeyPress(event: Event | KeyboardEvent): Promise<void> {
+  async onF6KeyPress(event: KeyboardEvent): Promise<void> {
     event.preventDefault(); // Prevent default F6 behavior
     
     // If order is already completed, just show receipt
@@ -1979,7 +1981,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
 
   // F7 Hotkey for Add Discount (mirrors Add Discount button behavior)
   @HostListener('document:keydown.f7', ['$event'])
-  async onF7KeyPress(event: Event | KeyboardEvent): Promise<void> {
+  async onF7KeyPress(event: KeyboardEvent): Promise<void> {
     event.preventDefault(); // Prevent default F7 behavior
 
     // Block on completed orders
@@ -2494,6 +2496,19 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
             // When discount is disabled, reset values
             updatedItem.discountType = 'percentage';
             updatedItem.discountValue = 0;
+          }
+        }
+
+        // If the discount value itself was changed, enforce hasDiscount flag accordingly
+        if (field === 'discountValue') {
+          const num = Number(value) || 0;
+          if (num <= 0) {
+            updatedItem.hasDiscount = false;
+            updatedItem.discountValue = 0;
+            updatedItem.discountType = 'percentage';
+          } else {
+            updatedItem.hasDiscount = true;
+            updatedItem.discountValue = num;
           }
         }
         
@@ -3900,7 +3915,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       customerNames: customerNamesList,
       customerDiscounts: customerDiscounts,
       subtotal: cartSummary.grossAmount,
-      vatAmount: cartSummary.vatAmount,
+      vatAmount: Number(((cartSummary.vatAmount || 0)).toFixed(2)),
       vatExempt: cartSummary.vatExemptSales,
       discount: cartSummary.productDiscountAmount + cartSummary.orderDiscountAmount,
       totalAmount: cartSummary.netAmount,

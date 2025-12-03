@@ -1,8 +1,8 @@
 import { Product } from './product.interface';
 
 export enum ReceiptValidityNotice {
-  BIR_ACCREDITED = 'This serves as your official receipt.',
-  NON_ACCREDITED = 'This receipt serves as a sales acknowledgment and is not valid for BIR audit purposes.'
+  BIR_ACCREDITED = 'This serves as your invoice.',
+  NON_ACCREDITED = 'This receipt serves as a sales acknowledgment receipt.This document is not valid for claim of input tax.'
 }
 
 export interface Order {
@@ -104,6 +104,8 @@ export interface CartItem {
   customerName?: string;
   customerDiscount?: string; // e.g., 'PWD'|'SENIOR' or empty
   customerDiscountType?: string; // internal marker for applied discount
+  // Identification type (optional) - e.g., SSS, UMID, DriverLicense, Passport
+  idType?: string;
 }
 
 export interface OrderDiscount {
