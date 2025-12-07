@@ -537,10 +537,26 @@
                 📄 Open Receipt
               </button>
               <button *ngIf="selectedOrder()?.status !== 'cancelled'" class="btn cancel-order-btn" (click)="authorizeAndUpdateOrderStatus(selectedOrder()?.id, 'cancelled')">Cancel Order</button>
-              <button *ngIf="selectedOrder()" class="btn btn-warning return-btn" (click)="authorizeAndUpdateOrderStatus(selectedOrder()?.id, 'cancelled')">Return</button>
-              <button *ngIf="selectedOrder()?.status !== 'refunded'" class="btn btn-primary" (click)="authorizeAndUpdateOrderStatus(selectedOrder()?.id, 'refunded')">Refund</button>
-              <button *ngIf="selectedOrder()" class="btn btn-danger damage-btn" (click)="authorizeAndUpdateOrderStatus(selectedOrder()?.id, 'cancelled')">Damage</button>
-              <button class="btn btn-secondary manage-status-btn" (click)="openManageItemStatusAuthorized()">Manage Item Status</button>
+              <!-- Disable action buttons when order is cancelled -->
+              <button *ngIf="selectedOrder()" class="btn btn-warning return-btn"
+                      [disabled]="selectedOrder()?.status === 'cancelled'"
+                      [title]="selectedOrder()?.status === 'cancelled' ? 'Action disabled for cancelled orders' : 'Return'"
+                      (click)="openManageItemStatusAuthorized('return')">Return</button>
+
+              <button *ngIf="selectedOrder()?.status !== 'refunded'" class="btn btn-primary"
+                      [disabled]="selectedOrder()?.status === 'cancelled'"
+                      [title]="selectedOrder()?.status === 'cancelled' ? 'Action disabled for cancelled orders' : 'Refund'"
+                      (click)="authorizeAndUpdateOrderStatus(selectedOrder()?.id, 'refunded')">Refund</button>
+
+              <button *ngIf="selectedOrder()" class="btn btn-danger damage-btn"
+                      [disabled]="selectedOrder()?.status === 'cancelled'"
+                      [title]="selectedOrder()?.status === 'cancelled' ? 'Action disabled for cancelled orders' : 'Damage'"
+                      (click)="openManageItemStatusAuthorized('damage')">Damage</button>
+
+              <button class="btn btn-secondary manage-status-btn"
+                      [disabled]="selectedOrder()?.status === 'cancelled'"
+                      [title]="selectedOrder()?.status === 'cancelled' ? 'Action disabled for cancelled orders' : 'Manage Item Status'"
+                      (click)="openManageItemStatusAuthorized()">Manage Item Status</button>
             </div>
 
             <!-- Manager Authorization Modal (collect userCode + pin) -->

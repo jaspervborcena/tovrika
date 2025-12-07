@@ -77,6 +77,63 @@ export class OrdersSellingTrackingService {
   }
 
   /**
+   * Mark all ordersSellingTracking docs for a given orderId as 'cancelled'.
+   * This updates both online documents and any pending offline queued docs.
+   */
+  async markOrderTrackingCancelled(orderId: string, cancelledBy?: string): Promise<{ updated: number; errors: any[] }> {
+    const errors: any[] = [];
+    let updated = 0;
+    try {
+      const q = query(collection(this.firestore, 'ordersSellingTracking'), where('orderId', '==', orderId));
+      const snaps = await getDocs(q as any);
+      for (const s of snaps.docs) {
+        const id = s.id;
+        const data: any = s.data() || {};
+        // Skip if already cancelled
+        if (data.status === 'cancelled') continue;
+
+        const updates: any = {
+          status: 'cancelled',
+          updatedBy: cancelledBy || data.updatedBy || cancelledBy || data.createdBy || 'system'
+        };
+
+        try {
+          if (navigator.onLine && !id.startsWith('temp_')) {
+            const ref = doc(this.firestore, 'ordersSellingTracking', id);
+            await setDoc(ref as any, updates as any, { merge: true } as any);
+          } else {
+            await this.offlineDocService.updateDocument('ordersSellingTracking', id, updates);
+          }
+          updated++;
+        } catch (e) {
+          errors.push({ id, error: e });
+        }
+      }
+    } catch (e) {
+      errors.push({ id: 'query', error: e });
+    }
+
+    // ALSO update any pending offline queued tracking documents so local UI reflects the cancelled status immediately.
+    try {
+      const pending = await this.offlineDocService.getPendingDocuments();
+      for (const pd of pending) {
+        try {
+          if (pd.collectionName === 'ordersSellingTracking' && pd.data && pd.data.orderId === orderId && pd.data.status !== 'cancelled') {
+            await this.offlineDocService.updateDocument('ordersSellingTracking', pd.id, { status: 'cancelled', updatedBy: cancelledBy || pd.data.createdBy || 'system' });
+            updated++;
+          }
+        } catch (e) {
+          errors.push({ id: pd.id, error: e });
+        }
+      }
+    } catch (e) {
+      errors.push({ id: 'pending-check', error: e });
+    }
+
+    return { updated, errors };
+  }
+
+  /**
    * Log a batch of sale items for later reconciliation and apply stock deltas to products.
    * Best-effort per item; continues on individual failures, returns summary.
    */

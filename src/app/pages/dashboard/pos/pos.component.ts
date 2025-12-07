@@ -1288,6 +1288,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     const creds = await this.showManagerAuthDialog();
     if (!creds) return; // cancelled
     // TODO: validate creds before proceeding (server-side validation recommended)
+    
     await this.updateOrderStatus(orderId, status);
   }
 

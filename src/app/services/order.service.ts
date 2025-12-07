@@ -2,7 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import { environment } from '../../environments/environment';
 import { HttpClient } from '@angular/common/http';
 import { Firestore, collection, query, where, orderBy, limit } from '@angular/fire/firestore';
-import { getDocs, Timestamp } from 'firebase/firestore';
+import { getDocs, Timestamp, doc as clientDoc, runTransaction, serverTimestamp } from 'firebase/firestore';
 import { User } from '@angular/fire/auth';
 import { Order } from '../interfaces/pos.interface';
 import { AuthService } from './auth.service';
@@ -12,6 +12,8 @@ import { FirestoreSecurityService } from '../core/services/firestore-security.se
 import { OfflineDocumentService } from '../core/services/offline-document.service';
 import { IndexedDBService } from '../core/services/indexeddb.service';
 import { toDateValue } from '../core/utils/date-utils';
+import { OrdersSellingTrackingDoc } from '../interfaces/orders-selling-tracking.interface';
+
 // Client-side logging is currently disabled for this service.
 // Logging will be handled server-side (Cloud Function) by passing the authenticated UID.
 
@@ -400,11 +402,140 @@ export class OrderService {
   async updateOrderStatus(orderId: string, status: string): Promise<void> {
     try {
       await this.offlineDocService.updateDocument('orders', orderId, { status });
+
+      // If we're online and the order was cancelled, attempt a client-side transactional restock.
+      // This is a best-effort attempt — the server-side Cloud Function still exists as authoritative.
+      if (navigator.onLine && status === 'cancelled') {
+        const currentUser = this.authService.getCurrentUser();
+        const performedBy = currentUser?.uid || currentUser?.email || 'system';
+        try {
+          await this.restockOrderAndInventoryTransactional(orderId, performedBy);
+        } catch (e) {
+          this.logger.warn('Client-side restock attempt failed (server function may handle it)', { area: 'orders', docId: orderId, payload: { error: String(e) } });
+        }
+
+        // Mark ordersSellingTracking entries as cancelled so UI and analytics reflect the cancellation
+        try {
+          await this.ordersSellingTrackingService.markOrderTrackingCancelled(orderId, performedBy);
+        } catch (e) {
+          this.logger.warn('Failed to mark ordersSellingTracking entries as cancelled', { area: 'orders', docId: orderId, payload: { error: String(e) } });
+        }
+      }
     } catch (error) {
       this.logger.error('Error updating order status', { area: 'orders', docId: orderId, payload: { status } }, error);
       throw error;
     }
   }
+
+  /**
+   * Attempt to restock products and inventory batches for an order atomically from the client.
+   * This will: read `ordersSellingTracking` for the order, sum quantities per product,
+   * find the latest `productInventory` batch per product, then run a transaction that
+   * re-reads each tracking doc and only applies increments for rows that are not yet restocked.
+   * The method is defensive and idempotent when tracking rows are already marked `restocked`.
+   */
+
+
+public async restockOrderAndInventoryTransactional(orderId: string, performedBy = 'system'): Promise<void> {
+  try {
+    // 1) Query tracking entries for this order
+    const trackingRef = collection(this.firestore, 'ordersSellingTracking');
+    const trackingQ = query(trackingRef, where('orderId', '==', orderId));
+    const trackingSnap = await getDocs(trackingQ);
+
+    if (!trackingSnap || trackingSnap.empty) {
+      this.logger.info('restock: no tracking entries found for order', { area: 'orders', docId: orderId });
+      console.log(`No tracking entries found for order ${orderId}`);
+      return;
+    }
+
+    // Collect candidate tracking docs (skip zero qty and missing productId)
+    const candidates = trackingSnap.docs
+      .map(d => {
+        const data = d.data() as OrdersSellingTrackingDoc;
+        return {
+          id: d.id,
+          ref: d.ref,
+          productId: data.productId,
+          quantity: Number(data.quantity || 0),
+        };
+      })
+      .filter(c => !!c.productId && c.quantity > 0);
+
+    if (candidates.length === 0) {
+      this.logger.info('restock: nothing to restock (all entries have zero qty)', { area: 'orders', docId: orderId });
+      console.log(`Nothing to restock for order ${orderId} (all entries have zero qty)`);
+      return;
+    }
+
+    // 2) Pre-collect inventory refs (outside transaction, only refs)
+    const inventoryRefsByProduct = new Map<string, any>();
+    for (const c of candidates) {
+      try {
+        const invQ = query(
+          collection(this.firestore, 'productInventory'),
+          where('productId', '==', c.productId),
+          orderBy('updatedAt', 'desc'),
+          limit(1)
+        );
+        const invSnap = await getDocs(invQ);
+        if (invSnap && !invSnap.empty) {
+          inventoryRefsByProduct.set(c.productId, invSnap.docs[0].ref);
+        }
+      } catch (e) {
+        this.logger.warn('restock: failed to pre-query inventory batch', { area: 'orders', payload: { productId: c.productId, error: String(e) } });
+      }
+    }
+
+    // 3) Run transaction
+    await runTransaction(this.firestore, async (tx) => {
+      console.log(`Transaction start for order ${orderId}`);
+
+      const orderRef = clientDoc(this.firestore, 'orders', orderId);
+      const orderSnap = await tx.get(orderRef);
+      if (!orderSnap.exists()) throw new Error('Order not found inside transaction: ' + orderId);
+
+      const currentStatus = (orderSnap.data() as any).status;
+      if (currentStatus !== 'cancelled') throw new Error('Order status changed during restock processing');
+
+      // Process each tracking row individually
+      for (const c of candidates) {
+        const tdSnap = await tx.get(c.ref);
+        if (!tdSnap.exists()) continue;
+
+        console.log(`Tracking doc ${c.id} product=${c.productId}, qty=${c.quantity}`);
+
+        // Update product stock
+        const prodRef = clientDoc(this.firestore, 'products', c.productId);
+        const prodSnap = await tx.get(prodRef);
+        const currentTotal = prodSnap.exists() ? Number((prodSnap.data() as any).totalStock || 0) : 0;
+        const newTotal = currentTotal + c.quantity;
+        console.log(`Updating product ${c.productId}: currentTotal=${currentTotal}, newTotal=${newTotal}`);
+        tx.update(prodRef, { totalStock: newTotal, lastUpdated: serverTimestamp(), updatedBy: performedBy });
+
+        // Update inventory batch (using pre-collected ref)
+        const invRef = inventoryRefsByProduct.get(c.productId);
+        if (invRef) {
+          const invSnap = await tx.get(invRef);
+          const currentInvQty = invSnap.exists() ? Number((invSnap.data() as any).quantity || 0) : 0;
+          const newInvQty = currentInvQty + c.quantity;
+          console.log(`Updating inventory for product ${c.productId}: currentInvQty=${currentInvQty}, newInvQty=${newInvQty}`);
+          tx.update(invRef, { quantity: newInvQty, lastUpdated: serverTimestamp(), updatedBy: performedBy });
+        }
+      }
+
+      // Touch order metadata
+      tx.update(orderRef, { updatedAt: serverTimestamp(), updatedBy: performedBy });
+    });
+
+    this.logger.info('restock: client-side restock transaction completed', { area: 'orders', docId: orderId });
+    console.log(`Restock transaction completed for order ${orderId}`);
+  } catch (err) {
+    this.logger.error('restock: client-side restock failed', { area: 'orders', docId: orderId }, err);
+    console.error(`Restock transaction failed for order ${orderId}:`, err);
+    throw err;
+  }
+}
 
   async getOrdersByDateRange(storeId: string, startDate: Date, endDate: Date): Promise<Order[]> {
     try {
