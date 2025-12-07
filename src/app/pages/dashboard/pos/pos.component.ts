@@ -1,5 +1,6 @@
 import { Component, OnInit, AfterViewInit, OnDestroy, HostListener, ViewChild, ElementRef, computed, signal, inject } from '@angular/core';
-import { Firestore, doc, getDoc, collection, query, where, getDocs } from '@angular/fire/firestore';
+import { Firestore, doc, getDoc, collection, query, where } from '@angular/fire/firestore';
+import { getDocs } from 'firebase/firestore';
 import { ProductStatus } from '../../../interfaces/product.interface';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -20,6 +21,7 @@ import { IndexedDBService } from '../../../core/services/indexeddb.service';
 import { AppConstants } from '../../../shared/enums/app-constants.enum';
 
 import { OrderService } from '../../../services/order.service';
+import { OrdersSellingTrackingService } from '../../../services/orders-selling-tracking.service';
 import { StoreService } from '../../../services/store.service';
 import { UserRoleService } from '../../../services/user-role.service';
 import { CustomerService } from '../../../services/customer.service';
@@ -57,6 +59,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   private indexedDBService = inject(IndexedDBService);
   private storeService = inject(StoreService);
   private orderService = inject(OrderService);
+  private ordersSellingTrackingService = inject(OrdersSellingTrackingService);
   private userRoleService = inject(UserRoleService);
   private customerService = inject(CustomerService);
   private companyService = inject(CompanyService);
@@ -1280,6 +1283,34 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   async openManageItemStatusAuthorized(mode?: 'return' | 'damage' | null): Promise<void> {
     const creds = await this.showManagerAuthDialog();
     if (!creds) return; // cancelled
+
+    // If caller requested damage mode, run the damaged flow immediately
+    if (mode === 'damage') {
+      try {
+        const order = this.selectedOrder();
+        const orderId = order?.id || order?.orderId || '';
+        if (!orderId) {
+          await this.showConfirmationDialog({ title: 'No Order', message: 'No order selected.', confirmText: 'OK', cancelText: '', type: 'info' });
+          return;
+        }
+
+        const res = await this.ordersSellingTrackingService.markOrderTrackingDamaged(orderId, creds.userCode || undefined);
+        const created = res?.created ?? 0;
+        const errors = res?.errors ?? [];
+        const msg = `Created ${created} damaged record(s). ${errors.length ? 'Errors: ' + errors.length : ''}`;
+        await this.showConfirmationDialog({ title: 'Damage Applied', message: msg, confirmText: 'OK', cancelText: '', type: 'info' });
+
+        // Refresh tracking modal to show latest entries
+        await this.openManageItemStatus();
+        return;
+      } catch (e) {
+        console.error('Failed to apply damage tracking', e);
+        await this.showConfirmationDialog({ title: 'Error', message: 'Failed to mark items as damaged. See console for details.', confirmText: 'OK', cancelText: '', type: 'danger' });
+        return;
+      }
+    }
+
+    // Default: open the Manage Item Status modal (return mode or manual manage)
     await this.openManageItemStatus(mode);
   }
 

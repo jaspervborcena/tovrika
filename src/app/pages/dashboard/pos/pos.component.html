@@ -539,9 +539,9 @@
               <button *ngIf="selectedOrder()?.status !== 'cancelled'" class="btn cancel-order-btn" (click)="authorizeAndUpdateOrderStatus(selectedOrder()?.id, 'cancelled')">Cancel Order</button>
               <!-- Disable action buttons when order is cancelled -->
               <button *ngIf="selectedOrder()" class="btn btn-warning return-btn"
-                      [disabled]="selectedOrder()?.status === 'cancelled'"
-                      [title]="selectedOrder()?.status === 'cancelled' ? 'Action disabled for cancelled orders' : 'Return'"
-                      (click)="openManageItemStatusAuthorized('return')">Return</button>
+                      [disabled]="selectedOrder()?.status === 'returned' || selectedOrder()?.status === 'returned'"
+                      [title]="selectedOrder()?.status === 'returned' ? 'Action disabled for returned orders' : 'Return'"
+                     (click)="authorizeAndUpdateOrderStatus(selectedOrder()?.id, 'returned')">Return</button>
 
               <button *ngIf="selectedOrder()?.status !== 'refunded'" class="btn btn-primary"
                       [disabled]="selectedOrder()?.status === 'cancelled'"

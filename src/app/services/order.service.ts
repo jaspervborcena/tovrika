@@ -398,34 +398,56 @@ export class OrderService {
       return [];
     }
   }
+async updateOrderStatus(orderId: string, status: string): Promise<void> {
+  try {
+    await this.offlineDocService.updateDocument('orders', orderId, { status });
 
-  async updateOrderStatus(orderId: string, status: string): Promise<void> {
+    // If we're online and the order was cancelled or returned, attempt a client-side transactional restock.
+    // This is a best-effort attempt — the server-side Cloud Function still exists as authoritative.
+   if (navigator.onLine && (status === 'cancelled' || status === 'returned' || status === 'refunded')) {
+  const currentUser = this.authService.getCurrentUser();
+  const performedBy = currentUser?.uid || currentUser?.email || 'system';
+
+  // For cancelled/returned orders, attempt restock
+  if (status === 'cancelled' || status === 'returned') {
     try {
-      await this.offlineDocService.updateDocument('orders', orderId, { status });
-
-      // If we're online and the order was cancelled, attempt a client-side transactional restock.
-      // This is a best-effort attempt — the server-side Cloud Function still exists as authoritative.
-      if (navigator.onLine && status === 'cancelled') {
-        const currentUser = this.authService.getCurrentUser();
-        const performedBy = currentUser?.uid || currentUser?.email || 'system';
-        try {
-          await this.restockOrderAndInventoryTransactional(orderId, performedBy);
-        } catch (e) {
-          this.logger.warn('Client-side restock attempt failed (server function may handle it)', { area: 'orders', docId: orderId, payload: { error: String(e) } });
-        }
-
-        // Mark ordersSellingTracking entries as cancelled so UI and analytics reflect the cancellation
-        try {
-          await this.ordersSellingTrackingService.markOrderTrackingCancelled(orderId, performedBy);
-        } catch (e) {
-          this.logger.warn('Failed to mark ordersSellingTracking entries as cancelled', { area: 'orders', docId: orderId, payload: { error: String(e) } });
-        }
-      }
-    } catch (error) {
-      this.logger.error('Error updating order status', { area: 'orders', docId: orderId, payload: { status } }, error);
-      throw error;
+      await this.restockOrderAndInventoryTransactional(orderId, performedBy);
+    } catch (e) {
+      this.logger.warn(
+        'Client-side restock attempt failed (server function may handle it)',
+        { area: 'orders', docId: orderId, payload: { error: String(e) } }
+      );
     }
   }
+
+  // Mark ordersSellingTracking entries appropriately
+  try {
+    if (status === 'cancelled') {
+      await this.ordersSellingTrackingService.markOrderTrackingCancelled(orderId, performedBy);
+    } else if (status === 'returned') {
+      await this.ordersSellingTrackingService.markOrderTrackingReturned(orderId, performedBy);
+    } else if (status === 'refunded') {
+      await this.ordersSellingTrackingService.markOrderTrackingRefunded(orderId, performedBy);
+    } else if (status === 'damage') {
+      await this.ordersSellingTrackingService.markOrderTrackingDamaged(orderId, performedBy);
+    }
+  } catch (e) {
+    this.logger.warn(
+      `Failed to mark ordersSellingTracking entries as ${status}`,
+      { area: 'orders', docId: orderId, payload: { error: String(e) } }
+    );
+  }
+}
+
+  } catch (error) {
+    this.logger.error(
+      'Error updating order status',
+      { area: 'orders', docId: orderId, payload: { status } },
+      error
+    );
+    throw error;
+  }
+}
 
   /**
    * Attempt to restock products and inventory batches for an order atomically from the client.
@@ -487,7 +509,7 @@ public async restockOrderAndInventoryTransactional(orderId: string, performedBy 
       }
     }
 
-    // 3) Run transaction
+    // 3) Run transaction: first read everything, then perform writes.
     await runTransaction(this.firestore, async (tx) => {
       console.log(`Transaction start for order ${orderId}`);
 
@@ -496,32 +518,71 @@ public async restockOrderAndInventoryTransactional(orderId: string, performedBy 
       if (!orderSnap.exists()) throw new Error('Order not found inside transaction: ' + orderId);
 
       const currentStatus = (orderSnap.data() as any).status;
-      if (currentStatus !== 'cancelled') throw new Error('Order status changed during restock processing');
+      // Allow restock for multiple terminal statuses (cancelled, returned, refunded)
+      const restockableStatuses = ['cancelled', 'returned', 'refunded'];
+      if (!restockableStatuses.includes(currentStatus)) {
+        throw new Error('Order status changed during restock processing');
+      }
 
-      // Process each tracking row individually
+      // FIRST: perform all reads (tracking row snap, product snap, inventory snap)
+      const trackingSnaps = new Map<string, any>();
+      const productSnaps = new Map<string, { ref: any; snap: any }>();
+      const inventorySnaps = new Map<string, { ref: any; snap: any }>();
+
       for (const c of candidates) {
+        // Read tracking doc snapshot
         const tdSnap = await tx.get(c.ref);
-        if (!tdSnap.exists()) continue;
+        trackingSnaps.set(c.id, tdSnap);
 
-        console.log(`Tracking doc ${c.id} product=${c.productId}, qty=${c.quantity}`);
-
-        // Update product stock
+        // Read product snapshot
         const prodRef = clientDoc(this.firestore, 'products', c.productId);
         const prodSnap = await tx.get(prodRef);
-        const currentTotal = prodSnap.exists() ? Number((prodSnap.data() as any).totalStock || 0) : 0;
+        productSnaps.set(c.productId, { ref: prodRef, snap: prodSnap });
+
+        // Read inventory batch snapshot (if pre-collected)
+        const invRef = inventoryRefsByProduct.get(c.productId);
+        if (invRef) {
+          const invSnap = await tx.get(invRef);
+          inventorySnaps.set(c.productId, { ref: invRef, snap: invSnap });
+        }
+      }
+
+      // SECOND: perform all writes based on the reads above
+      for (const c of candidates) {
+        const tdSnap = trackingSnaps.get(c.id);
+        if (!tdSnap || !tdSnap.exists()) continue;
+
+        const tdData: any = tdSnap.data() || {};
+        if (tdData.restocked) {
+          // Already restocked — skip
+          console.log(`Skipping already-restocked tracking doc ${c.id}`);
+          continue;
+        }
+
+        console.log(`Processing restock for tracking doc ${c.id} product=${c.productId}, qty=${c.quantity}`);
+
+        // Update product stock
+        const prodEntry = productSnaps.get(c.productId);
+        const prodRef = prodEntry?.ref;
+        const prodSnap = prodEntry?.snap;
+        const currentTotal = prodSnap?.exists() ? Number((prodSnap.data() as any).totalStock || 0) : 0;
         const newTotal = currentTotal + c.quantity;
         console.log(`Updating product ${c.productId}: currentTotal=${currentTotal}, newTotal=${newTotal}`);
         tx.update(prodRef, { totalStock: newTotal, lastUpdated: serverTimestamp(), updatedBy: performedBy });
 
-        // Update inventory batch (using pre-collected ref)
-        const invRef = inventoryRefsByProduct.get(c.productId);
-        if (invRef) {
-          const invSnap = await tx.get(invRef);
-          const currentInvQty = invSnap.exists() ? Number((invSnap.data() as any).quantity || 0) : 0;
+        // Update inventory batch (if we have one)
+        const invEntry = inventorySnaps.get(c.productId);
+        if (invEntry) {
+          const invRef = invEntry.ref;
+          const invSnap = invEntry.snap;
+          const currentInvQty = invSnap?.exists() ? Number((invSnap.data() as any).quantity || 0) : 0;
           const newInvQty = currentInvQty + c.quantity;
           console.log(`Updating inventory for product ${c.productId}: currentInvQty=${currentInvQty}, newInvQty=${newInvQty}`);
           tx.update(invRef, { quantity: newInvQty, lastUpdated: serverTimestamp(), updatedBy: performedBy });
         }
+
+        // Mark tracking doc as restocked
+        tx.update(c.ref, { restocked: true, restockedAt: serverTimestamp(), restockedBy: performedBy });
       }
 
       // Touch order metadata
