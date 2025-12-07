@@ -57,6 +57,8 @@ export interface OrderDetails {
 }
 
 export interface OrderDetailItem {
+  // Unique item id for this order detail item (client-generated). Format: EPOCHMS-RANDOM10
+  itemId?: string;
   productId: string;
   productName: string;
   productSku?: string;
