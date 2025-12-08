@@ -1,8 +1,8 @@
 import { Product } from './product.interface';
 
 export enum ReceiptValidityNotice {
-  BIR_ACCREDITED = 'This serves as your official receipt.',
-  NON_ACCREDITED = 'This receipt serves as a sales acknowledgment and is not valid for BIR audit purposes.'
+  BIR_ACCREDITED = 'This serves as your invoice.',
+  NON_ACCREDITED = 'This receipt serves as a sales acknowledgment receipt.This document is not valid for claim of input tax.'
 }
 
 export interface Order {
@@ -88,6 +88,7 @@ export interface CartItem {
   unitType?: string; // Added for display like "1 pc(s)", "2 boxes"
   quantity: number;
   sellingPrice: number;
+  originalPrice?: number;
   total: number;
   isVatApplicable: boolean;
   vatRate: number;
@@ -98,6 +99,13 @@ export interface CartItem {
   discountAmount: number;
   isVatExempt: boolean;
   imageUrl?: string;
+  // Per-item customer fields (optional)
+  pwdId?: string;
+  customerName?: string;
+  customerDiscount?: string; // e.g., 'PWD'|'SENIOR' or empty
+  customerDiscountType?: string; // internal marker for applied discount
+  // Identification type (optional) - e.g., SSS, UMID, DriverLicense, Passport
+  idType?: string;
 }
 
 export interface OrderDiscount {

@@ -132,6 +132,10 @@ export class FIFOInventoryService {
     const result = await runTransaction(this.firestore, async (transaction) => {
       console.log('🔄 Starting FIFO deduction transaction...');
       const deductions: BatchDeductionDetail[] = [];
+      // Collect the updated batch snapshots (after applying deductions) so
+      // we can recompute product summary transactionally without doing
+      // non-transactional queries.
+      const updatedBatches: ProductInventoryEntry[] = [];
       
       for (const allocation of plan.batchAllocations) {
         const batchRef = doc(this.firestore, 'productInventory', allocation.batchId);
@@ -193,13 +197,25 @@ export class FIFOInventoryService {
           isOffline: false,
           synced: true
         });
+
+        // Prepare updated batch snapshot for transactional recompute
+        const updatedBatch: ProductInventoryEntry = {
+          ...batch,
+          quantity: newQuantity,
+          totalDeducted: newTotalDeducted,
+          status: newStatus
+        } as ProductInventoryEntry;
+
+        updatedBatches.push(updatedBatch);
       }
 
       // Update product summary using ProductSummaryService within the same transaction
       console.log('📊 Updating product summary within transaction...');
       await this.productSummaryService.recomputeProductSummaryInTransaction(
         transaction,
-        productId
+        productId,
+        undefined,
+        updatedBatches
       );
 
       console.log('✅ FIFO deduction transaction prepared successfully');

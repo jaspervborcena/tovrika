@@ -9,6 +9,8 @@ export interface CartItem {
   isVatApplicable?: boolean;
   isVatExempt?: boolean;
   vatAmount?: number;
+  // Optional identification type for per-item customer identification
+  idType?: string;
 }
 
 export interface Cart {

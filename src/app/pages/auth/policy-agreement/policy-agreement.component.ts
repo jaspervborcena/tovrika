@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router, NavigationEnd, NavigationError, NavigationCancel } from '@angular/router';
 import { OfflineStorageService } from '../../../core/services/offline-storage.service';
+import { IndexedDBService } from '../../../core/services/indexeddb.service';
 import { AuthService } from '../../../services/auth.service';
 import { AppConstants } from '../../../shared/enums';
 import { LogoComponent } from '../../../shared/components/logo/logo.component';
@@ -19,6 +20,7 @@ export class PolicyAgreementComponent implements OnInit {
   private offlineStorageService = inject(OfflineStorageService);
   private authService = inject(AuthService);
   private router = inject(Router);
+  private indexedDBService = inject(IndexedDBService);
 
   // App constants
   readonly appName = AppConstants.APP_NAME;
@@ -252,6 +254,17 @@ export class PolicyAgreementComponent implements OnInit {
       const userData = this.offlineStorageService.currentUser();
       if (!userData?.isAgreedToPolicy) {
         throw new Error('Policy agreement was not saved properly');
+      }
+
+      // Persist acceptance flags in IndexedDB settings so the guard can bypass next time
+      try {
+        const uid = currentAuthUser.uid;
+        // Save both flags under settings (TovrikaOfflineDB.settings)
+        await this.indexedDBService.saveSetting(`isPolicyAgree_${uid}`, true);
+        await this.indexedDBService.saveSetting(`isTermsAgree_${uid}`, true);
+        console.log('📝 Policy Agreement: Persisted isPolicyAgree and isTermsAgree in IndexedDB');
+      } catch (flagErr) {
+        console.warn('📝 Policy Agreement: Failed to persist acceptance flags to IndexedDB', flagErr);
       }
       
       // Determine where to redirect based on user status

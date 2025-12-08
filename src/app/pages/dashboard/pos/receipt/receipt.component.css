@@ -316,9 +316,10 @@
 }
 
 .circle {
-  width: 20px;
-  height: 20px;
-  border: 2px solid #374151;
+  /* Make the circle size relative to the surrounding font so it matches text size */
+  width: 1em;
+  height: 1em;
+  border: 1px solid #374151;
   border-radius: 50%;
   background-color: transparent;
   transition: all 0.2s ease;
@@ -337,8 +338,9 @@
 .circle.filled::after {
   content: '✓';
   color: white;
-  font-size: 12px;
-  font-weight: bold;
+  /* smaller checkmark sized relative to the circle/text */
+  font-size: 0.75em;
+  font-weight: 700;
 }
 
 .payment-option span {

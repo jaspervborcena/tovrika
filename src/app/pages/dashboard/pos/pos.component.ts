@@ -1,5 +1,6 @@
-import { Component, OnInit, AfterViewInit, OnDestroy, HostListener, computed, signal, inject } from '@angular/core';
-import { Firestore, doc, getDoc, collection, query, where, getDocs } from '@angular/fire/firestore';
+import { Component, OnInit, AfterViewInit, OnDestroy, HostListener, ViewChild, ElementRef, computed, signal, inject } from '@angular/core';
+import { Firestore, doc, getDoc, collection, query, where } from '@angular/fire/firestore';
+import { getDocs } from 'firebase/firestore';
 import { ProductStatus } from '../../../interfaces/product.interface';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -20,6 +21,7 @@ import { IndexedDBService } from '../../../core/services/indexeddb.service';
 import { AppConstants } from '../../../shared/enums/app-constants.enum';
 
 import { OrderService } from '../../../services/order.service';
+import { OrdersSellingTrackingService } from '../../../services/orders-selling-tracking.service';
 import { StoreService } from '../../../services/store.service';
 import { UserRoleService } from '../../../services/user-role.service';
 import { CustomerService } from '../../../services/customer.service';
@@ -44,6 +46,7 @@ import { DomSanitizer, SafeUrl } from '@angular/platform-browser';
   styleUrls: ['./pos.component.css']
 })
 export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
+  @ViewChild('processPaymentButton', { read: ElementRef }) processPaymentButton?: ElementRef<HTMLButtonElement>;
 
   // Services
   private productService = inject(ProductService);
@@ -56,9 +59,11 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   private indexedDBService = inject(IndexedDBService);
   private storeService = inject(StoreService);
   private orderService = inject(OrderService);
+  private ordersSellingTrackingService = inject(OrdersSellingTrackingService);
   private userRoleService = inject(UserRoleService);
   private customerService = inject(CustomerService);
   private companyService = inject(CompanyService);
+  
   private translationService = inject(TranslationService);
   private subscriptionService = inject(SubscriptionService);
   private firestore = inject(Firestore);
@@ -85,6 +90,23 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
         }
       }
     });
+  }
+
+  /**
+   * Returns true when there is at least one actionable partial adjustment
+   * (adjustmentType starts with 'partial_' and qtyToAdjust > 0).
+   */
+  hasActionableChanges(): boolean {
+    try {
+      const entries = this.trackingEntries() || [];
+      return entries.some((entry: any) => {
+        const adj = (entry.adjustmentType || '').toString().toLowerCase();
+        const qty = Number(entry.qtyToAdjust || entry.quantity || 0);
+        return adj.startsWith('partial_') && qty > 0;
+      });
+    } catch (e) {
+      return false;
+    }
   }
 
   // Use shared UI state for synchronization with mobile
@@ -203,7 +225,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   @HostListener('document:keydown.escape', ['$event'])
-  onEscapeKey(event: Event | KeyboardEvent): void {
+  onEscapeKey(event: KeyboardEvent): void {
     event.stopPropagation();
     this.closeSortMenu();
   }
@@ -472,6 +494,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   customerInfo = {
     soldTo: '',
     tin: '',
+    pwdId: '',
     businessAddress: '',
     customerId: '' // NEW: for existing/new customers
   };
@@ -521,6 +544,107 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   private selectedOrderSignal = signal<any | null>(null);
   readonly selectedOrder = computed(() => this.selectedOrderSignal());
 
+  // Convenience computed flags for order status checks used by the template
+  readonly isOrderCancelled = computed(() => {
+    const s = (this.selectedOrder()?.status || '').toString().toLowerCase();
+    return s === 'cancelled';
+  });
+
+  // Cancel is only allowed when the order is in 'completed' state
+  readonly canCancelOrder = computed(() => {
+    const s = (this.selectedOrder()?.status || '').toString().toLowerCase();
+    return s === 'completed';
+  });
+
+  // Additional order status flags used to control button visibility/enablement
+  readonly isOrderReturned = computed(() => {
+    const s = (this.selectedOrder()?.status || '').toString().toLowerCase();
+    return s === 'returned';
+  });
+
+  readonly isOrderRefunded = computed(() => {
+    const s = (this.selectedOrder()?.status || '').toString().toLowerCase();
+    return s === 'refunded';
+  });
+
+  readonly isOrderDamaged = computed(() => {
+    const s = (this.selectedOrder()?.status || '').toString().toLowerCase();
+    return s === 'damaged';
+  });
+
+  // Lock actions (Cancel / Manage Item Status) when order is in any final/adjusted state.
+  // Note: 'returned' is considered an adjusted state where Cancel/Manage should be locked,
+  // but Refund and Damage should still be allowed so we exclude 'returned' here.
+  readonly isOrderActionLocked = computed(() => {
+    const s = (this.selectedOrder()?.status || '').toString().toLowerCase();
+    return ['cancelled', 'refunded', 'damaged'].includes(s);
+  });
+
+  // Specific disable flags for Refund and Damage buttons. These are false for 'returned'
+  // so that refund/damage can be performed after a return.
+  readonly isRefundDisabled = computed(() => {
+    const s = (this.selectedOrder()?.status || '').toString().toLowerCase();
+    // Only cancel should block refund; refunded/damaged states should not block showing refund
+    return ['cancelled'].includes(s);
+  });
+
+  readonly isDamageDisabled = computed(() => {
+    const s = (this.selectedOrder()?.status || '').toString().toLowerCase();
+    // Only cancel should block damage action here; allow damage if order was refunded or returned
+    return ['cancelled'].includes(s);
+  });
+
+  // Disable Manage Item Status when order is in final/adjusted states including 'returned'
+  readonly isManageStatusDisabled = computed(() => {
+    const s = (this.selectedOrder()?.status || '').toString().toLowerCase();
+    return ['cancelled', 'returned', 'refunded', 'damaged'].includes(s);
+  });
+
+  // Whether the currently loaded tracking entries already contain a 'returned' row
+  readonly hasReturnTracking = computed(() => {
+    try {
+      const entries = this.trackingEntries() || [];
+      return entries.some((e: any) => ((e.status || '').toString().toLowerCase() === 'returned'));
+    } catch {
+      return false;
+    }
+  });
+
+  // Determine whether the Return button should be shown for the selected order
+  readonly shouldShowReturnButton = computed(() => {
+    const order = this.selectedOrder();
+    if (!order) return false;
+    const s = (order.status || '').toString().toLowerCase();
+
+    // Never show if order already marked returned
+    if (s === 'returned') return false;
+
+
+    // If order is refunded, show Return (user requested both Return and Damage visible/enabled)
+    if (s === 'refunded') {
+      return true;
+    }
+
+    // Default: show return when not already returned
+    return !this.isOrderReturned();
+  });
+
+  // Determine whether the Damage button should be shown for the selected order
+  readonly shouldShowDamageButton = computed(() => {
+    const order = this.selectedOrder();
+    if (!order) return false;
+    const s = (order.status || '').toString().toLowerCase();
+
+
+    // If order is refunded, show Damage as well (user requested both Return and Damage enabled)
+    if (s === 'refunded') {
+      return true;
+    }
+
+    // For all other statuses, keep previous behavior (show button)
+    return true;
+  });
+
   // Receipt modal state
   private isReceiptModalVisibleSignal = signal<boolean>(false);
   readonly isReceiptModalVisible = computed(() => this.isReceiptModalVisibleSignal());
@@ -538,6 +662,41 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   // Optional mode to indicate why Manage Item Status was opened (e.g., 'return' or 'damage')
   private trackingModeSignal = signal<string | null>(null);
   readonly trackingMode = computed(() => this.trackingModeSignal());
+
+  // Which tab is active in Manage Item Status modal: 'edit' => Completed editable, 'view' => All read-only
+  private trackingTabSignal = signal<'edit' | 'view'>('edit');
+  readonly trackingTab = computed(() => this.trackingTabSignal());
+
+  // Setter used from template to change tabs
+  setTrackingTab(tab: 'edit' | 'view'): void {
+    this.trackingTabSignal.set(tab);
+  }
+
+  // Computed list of entries based on selected tab
+  readonly displayedTrackingEntries = computed(() => {
+    const entries = this.trackingEntries() || [];
+    if (this.trackingTab() === 'edit') {
+      return entries.filter((e: any) => (e.status || '').toString().toLowerCase() === 'completed');
+    }
+
+    // view tab: sort by priority: completed, returned, refunded, damaged, others
+    const priority: Record<string, number> = {
+      completed: 0,
+      returned: 1,
+      refunded: 2,
+      damaged: 3
+    };
+
+    return entries.slice().sort((a: any, b: any) => {
+      const sa = (a.status || '').toString().toLowerCase();
+      const sb = (b.status || '').toString().toLowerCase();
+      const pa = priority.hasOwnProperty(sa) ? priority[sa] : 99;
+      const pb = priority.hasOwnProperty(sb) ? priority[sb] : 99;
+      if (pa !== pb) return pa - pb;
+      // fallback to product name
+      return (a.productName || '').localeCompare(b.productName || '');
+    });
+  });
 
   private loadingTrackingSignal = signal<boolean>(false);
   readonly loadingTracking = computed(() => this.loadingTrackingSignal());
@@ -566,11 +725,13 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   private confirmationDialogDataSignal = signal<ConfirmationDialogData | null>(null);
   readonly confirmationDialogData = computed(() => this.confirmationDialogDataSignal());
 
-  // Sales type state - now supports both cash and charge
-  private salesTypeCashSignal = signal<boolean>(true);  // Default to cash enabled
-  private salesTypeChargeSignal = signal<boolean>(false); // Default to charge disabled
-  readonly isCashSale = computed(() => this.salesTypeCashSignal());
-  readonly isChargeSale = computed(() => this.salesTypeChargeSignal());
+  // Store last entered reason from confirmation dialog when used with showReason
+  private lastConfirmationReasonSignal = signal<string | null>(null);
+  readonly lastConfirmationReason = computed(() => this.lastConfirmationReasonSignal());
+
+  // Sales type state - delegated to PosService so multiple UI elements stay in sync
+  readonly isCashSale = computed(() => this.posService.isCashSale());
+  readonly isChargeSale = computed(() => this.posService.isChargeSale());
 
   setAccessTab(tab: string): void {
     console.log('🎯 Setting access tab to:', tab);
@@ -602,11 +763,15 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   toggleCashSale(): void {
-    this.salesTypeCashSignal.update(value => !value);
+    this.posService.toggleCashSale();
   }
 
   toggleChargeSale(): void {
-    this.salesTypeChargeSignal.update(value => !value);
+    this.posService.toggleChargeSale();
+  }
+
+  setPaymentMethod(method: 'cash' | 'charge' | 'both'): void {
+    this.posService.setPaymentMethod(method);
   }
 
   async searchOrders(): Promise<void> {
@@ -969,12 +1134,17 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   async saveTrackingChanges(): Promise<void> {
     try {
       const entries = this.trackingEntries();
-      const modifiedEntries = entries.filter(entry => entry.isModified);
-      
-      if (modifiedEntries.length === 0) {
+      // Only consider entries actionable when user selected a partial adjustment AND qtyToAdjust > 0
+      const actionableEntries = entries.filter(entry => {
+        const adj = (entry.adjustmentType || '').toString().toLowerCase();
+        const qty = Number(entry.qtyToAdjust || entry.quantity || 0);
+        return adj.startsWith('partial_') && qty > 0;
+      });
+
+      if (actionableEntries.length === 0) {
         await this.showConfirmationDialog({
           title: 'No Changes',
-          message: 'No modifications were made to save.',
+          message: 'There are no changes for these Invoice.',
           confirmText: 'OK',
           cancelText: '',
           type: 'info'
@@ -982,9 +1152,25 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
         return;
       }
 
+      // Validate partial adjustments: qtyToAdjust must be >0 and <= original quantity
+      for (const e of actionableEntries) {
+        const qty = Number(e.qtyToAdjust || e.quantity || 0);
+        const orig = Number(e.quantity || 0);
+        if (qty <= 0 || qty > orig) {
+          await this.showConfirmationDialog({
+            title: 'Invalid Quantity',
+            message: `Quantity to adjust for "${e.productName || ''}" must be between 1 and ${orig}.`,
+            confirmText: 'OK',
+            cancelText: '',
+            type: 'danger'
+          });
+          return;
+        }
+      }
+
       const confirmed = await this.showConfirmationDialog({
         title: 'Save Changes',
-        message: `Are you sure you want to save changes to ${modifiedEntries.length} item(s)?`,
+        message: `Are you sure you want to save changes to ${actionableEntries.length} item(s)?`,
         confirmText: 'Yes, Save',
         cancelText: 'Cancel',
         type: 'info'
@@ -992,32 +1178,57 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
 
       if (!confirmed) return;
 
+      // If every actionable entry is requesting the full quantity, allow mapping
+      // partial_* -> full status. If there's any partial row, keep all entries
+      // as partial to preserve per-item partial adjustments.
+      const allFull = actionableEntries.every(ae => {
+        const qty = Number(ae.qtyToAdjust || ae.quantity || 0);
+        const orig = Number(ae.quantity || 0);
+        return qty === orig;
+      });
+
       this.loadingTrackingSignal.set(true);
 
       const order = this.selectedOrder();
       const orderId = order?.id || order?.orderId || '';
 
-      console.log('💾 Saving tracking changes:', {
-        orderId,
-        modifiedCount: modifiedEntries.length,
-        changes: modifiedEntries.map(e => ({
-          id: e.id,
-          productName: e.productName,
-          quantity: e.quantity,
-          status: e.status
-        }))
-      });
+      const currentUser = this.authService.getCurrentUser();
+      const userId = currentUser?.uid || undefined;
 
-      // TODO: Call API to save changes
-      // This would typically call a Cloud Function to update the tracking entries
-      // await this.orderService.updateOrderSellingTracking(orderId, modifiedEntries);
+      const results: { created: number; errors: any[] } = { created: 0, errors: [] };
 
-      // For now, simulate success
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // Process only actionable entries
+      for (const e of actionableEntries) {
+        try {
+          const adj = (e.adjustmentType || '').toString().toLowerCase();
+          const qty = Number(e.qtyToAdjust || e.quantity || 0);
+          // require the source tracking doc id
+          if (!e.id) {
+            results.errors.push({ id: e.id || null, error: 'Missing tracking id for partial adjustment' });
+            continue;
+          }
+          // determine target status: only map partial_* -> full when EVERY actionable
+          // entry is requesting the full quantity. If any row is partial, leave
+          // statuses as partial to avoid mixed partial/full behavior.
+          let targetStatus = adj;
+          if (allFull) {
+            if (adj === 'partial_return' && qty === Number(e.quantity || 0)) targetStatus = 'returned';
+            if (adj === 'partial_refund' && qty === Number(e.quantity || 0)) targetStatus = 'refunded';
+            if (adj === 'partial_damage' && qty === Number(e.quantity || 0)) targetStatus = 'damaged';
+          }
+
+          // create partial/full tracking doc via service which will also handle damage inventory deduction when needed
+          const r = await this.ordersSellingTrackingService.createPartialTrackingFromDoc(e.id, targetStatus, qty, userId);
+          if (r && r.created) results.created += r.created;
+          if (r && r.errors && r.errors.length) results.errors.push(...r.errors);
+        } catch (err) {
+          results.errors.push({ id: e.id || null, error: err });
+        }
+      }
 
       await this.showConfirmationDialog({
         title: 'Changes Saved',
-        message: 'Item status tracking changes have been saved successfully.',
+        message: `Processed ${results.created} partial adjustment(s). ${results.errors.length ? 'Errors: ' + results.errors.length : ''}`,
         confirmText: 'OK',
         cancelText: '',
         type: 'info'
@@ -1053,21 +1264,25 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
    */
   updateQtyToAdjust(index: number, newQty: string): void {
     const entries = this.trackingEntries();
-    
-    if (entries[index]) {
-      const qtyValue = Number(newQty) || 0;
+    let idx = typeof index === 'number' ? index : entries.findIndex(e => e.id === index || e.itemId === index);
+    if (idx === -1) return;
+
+    if (entries[idx]) {
+      const rawQty = Number(newQty) || 0;
+      const maxQty = Number(entries[idx].quantity || 0);
+      const qtyValue = Math.max(0, Math.min(rawQty, maxQty));
       const updatedEntry = { 
-        ...entries[index], 
+        ...entries[idx], 
         qtyToAdjust: qtyValue,
         // Mark as modified for saving
         isModified: true
       };
       
       const updatedEntries = [...entries];
-      updatedEntries[index] = updatedEntry;
+      updatedEntries[idx] = updatedEntry;
       this.trackingEntriesSignal.set(updatedEntries);
       
-      console.log('📝 Updated qty to adjust for item', index, 'to', qtyValue);
+      console.log('📝 Updated qty to adjust for item', idx, 'to', qtyValue);
     }
   }
 
@@ -1075,7 +1290,13 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
    * Get adjustment type for a tracking item (defaults to current status)
    */
   getAdjustmentType(item: any): string {
-    return item?.adjustmentType ?? item?.status ?? 'pending';
+    // In edit mode, prefer showing the explicit adjustmentType if set, otherwise show empty so
+    // the "Select action" placeholder is displayed. In view mode, show adjustmentType or fall
+    // back to the actual status for read-only display.
+    if (this.trackingTab() === 'edit') {
+      return item?.adjustmentType ?? '';
+    }
+    return item?.adjustmentType ?? item?.status ?? '';
   }
 
   /**
@@ -1083,20 +1304,22 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
    */
   updateAdjustmentType(index: number, newType: string): void {
     const entries = this.trackingEntries();
-    
-    if (entries[index]) {
+    let idx = typeof index === 'number' ? index : entries.findIndex(e => e.id === index || e.itemId === index);
+    if (idx === -1) return;
+
+    if (entries[idx]) {
       const updatedEntry = { 
-        ...entries[index], 
+        ...entries[idx], 
         adjustmentType: newType,
         // Mark as modified for saving
         isModified: true
       };
       
       const updatedEntries = [...entries];
-      updatedEntries[index] = updatedEntry;
+      updatedEntries[idx] = updatedEntry;
       this.trackingEntriesSignal.set(updatedEntries);
       
-      console.log('📝 Updated adjustment type for item', index, 'to', newType);
+      console.log('📝 Updated adjustment type for item', idx, 'to', newType);
     }
   }
 
@@ -1112,20 +1335,22 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
    */
   updateReason(index: number, newReason: string): void {
     const entries = this.trackingEntries();
-    
-    if (entries[index]) {
+    let idx = typeof index === 'number' ? index : entries.findIndex(e => e.id === index || e.itemId === index);
+    if (idx === -1) return;
+
+    if (entries[idx]) {
       const updatedEntry = { 
-        ...entries[index], 
+        ...entries[idx], 
         updateReason: newReason,
         // Mark as modified for saving
         isModified: true
       };
       
       const updatedEntries = [...entries];
-      updatedEntries[index] = updatedEntry;
+      updatedEntries[idx] = updatedEntry;
       this.trackingEntriesSignal.set(updatedEntries);
       
-      console.log('📝 Updated reason for item', index, 'to', newReason);
+      console.log('📝 Updated reason for item', idx, 'to', newReason);
     }
   }
 
@@ -1154,9 +1379,9 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     }
   }
 
-  async updateOrderStatus(orderId: string, status: string): Promise<void> {
+  async updateOrderStatus(orderId: string, status: string, reason?: string): Promise<void> {
     try {
-      await this.orderService.updateOrderStatus(orderId, status);
+      await this.orderService.updateOrderStatus(orderId, status, reason);
       // refresh
       await this.searchOrders();
       this.closeOrder();
@@ -1275,6 +1500,50 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   async openManageItemStatusAuthorized(mode?: 'return' | 'damage' | null): Promise<void> {
     const creds = await this.showManagerAuthDialog();
     if (!creds) return; // cancelled
+
+    // If caller requested damage mode, run the damaged flow immediately
+    if (mode === 'damage') {
+      try {
+        const order = this.selectedOrder();
+        const orderId = order?.id || order?.orderId || '';
+        if (!orderId) {
+          await this.showConfirmationDialog({ title: 'No Order', message: 'No order selected.', confirmText: 'OK', cancelText: '', type: 'info' });
+          return;
+        }
+
+        // Show confirmation with optional reason (patterned like refund flow)
+        const confirmed = await this.showConfirmationDialog({
+          title: 'Damage Items',
+          message: 'Are you sure you want to mark these items as damaged?',
+          confirmText: 'Yes, Damage',
+          cancelText: 'No',
+          type: 'warning',
+          showReason: true,
+          reasonLabel: 'Update Reason (optional)',
+          reasonPlaceholder: 'Enter reason for adjustment (optional)...'
+        });
+
+        if (!confirmed) return;
+
+        const reason = this.lastConfirmationReason();
+
+        const res = await this.ordersSellingTrackingService.markOrderTrackingDamaged(orderId, creds.userCode || undefined, reason || undefined);
+        const created = res?.created ?? 0;
+        const errors = res?.errors ?? [];
+        const msg = `Created ${created} damaged record(s). ${errors.length ? 'Errors: ' + errors.length : ''}`;
+        await this.showConfirmationDialog({ title: 'Damage Applied', message: msg, confirmText: 'OK', cancelText: '', type: 'info' });
+
+        // Refresh tracking modal to show latest entries
+        await this.openManageItemStatus();
+        return;
+      } catch (e) {
+        console.error('Failed to apply damage tracking', e);
+        await this.showConfirmationDialog({ title: 'Error', message: 'Failed to mark items as damaged. See console for details.', confirmText: 'OK', cancelText: '', type: 'danger' });
+        return;
+      }
+    }
+
+    // Default: open the Manage Item Status modal (return mode or manual manage)
     await this.openManageItemStatus(mode);
   }
 
@@ -1283,7 +1552,38 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     const creds = await this.showManagerAuthDialog();
     if (!creds) return; // cancelled
     // TODO: validate creds before proceeding (server-side validation recommended)
-    await this.updateOrderStatus(orderId, status);
+    // Ask for confirmation and optional update reason before applying status
+    const titleMap: any = {
+      cancelled: 'Cancel Order',
+      returned: 'Return Items',
+      refunded: 'Refund Order',
+      damaged: 'Mark as Damaged'
+    };
+    const messageMap: any = {
+      cancelled: 'Are you sure you want to cancel this order?',
+      returned: 'Are you sure you want to return these items?',
+      refunded: 'Are you sure you want to refund this order?',
+      damaged: 'Are you sure you want to mark these items as damaged?'
+    };
+
+    const title = titleMap[status] || 'Confirm Action';
+    const message = messageMap[status] || `Are you sure you want to set status to ${status}?`;
+
+    const confirmed = await this.showConfirmationDialog({
+      title,
+      message,
+      confirmText: 'Yes',
+      cancelText: 'No',
+      type: status === 'cancelled' || status === 'damaged' ? 'warning' : 'info',
+      showReason: true,
+      reasonLabel: 'Update Reason (optional)',
+      reasonPlaceholder: 'Enter reason for adjustment (optional)...'
+    });
+
+    if (!confirmed) return;
+
+    const reason = this.lastConfirmationReason() || undefined;
+    await this.updateOrderStatus(orderId, status, reason);
   }
 
   // Wrapper to require manager auth before processing item actions
@@ -1325,8 +1625,11 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
         title: `${action.charAt(0).toUpperCase() + action.slice(1)} Item`,
         message: `Are you sure you want to ${action} "${item.name || item.productName}"?`,
         confirmText: `Yes, ${action.charAt(0).toUpperCase() + action.slice(1)}`,
-        cancelText: 'Cancel',
-        type: action === 'cancel' || action === 'damage' ? 'warning' : 'info'
+        cancelText: 'No',
+        type: action === 'cancel' || action === 'damage' ? 'warning' : 'info',
+        showReason: true,
+        reasonLabel: 'Update Reason (optional)',
+        reasonPlaceholder: 'Enter reason for adjustment (optional)...'
       });
 
       if (confirmed) {
@@ -1337,7 +1640,8 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
             // TODO: Implement return logic (per-item) if needed
             // Per requirement: treat Return as equivalent to cancelling the order
             try {
-              await this.updateOrderStatus(orderId, 'cancelled');
+              const reason = this.lastConfirmationReason();
+              await this.updateOrderStatus(orderId, 'cancelled', reason || undefined);
             } catch (e) {
               console.error('Failed to set order to cancelled after return action', e);
             }
@@ -1347,7 +1651,8 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
             // TODO: Implement damage reporting logic (per-item) if needed
             // Per requirement: treat Damage as equivalent to cancelling the order
             try {
-              await this.updateOrderStatus(orderId, 'cancelled');
+              const reason = this.lastConfirmationReason();
+              await this.updateOrderStatus(orderId, 'cancelled', reason || undefined);
             } catch (e) {
               console.error('Failed to set order to cancelled after damage action', e);
             }
@@ -1360,7 +1665,8 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
             console.log('Processing cancellation for item:', item);
             // TODO: Implement item cancellation logic
             try {
-              await this.updateOrderStatus(orderId, 'cancelled');
+              const reason = this.lastConfirmationReason();
+              await this.updateOrderStatus(orderId, 'cancelled', reason || undefined);
             } catch (e) {
               console.error('Failed to set order to cancelled after cancel action', e);
             }
@@ -1471,6 +1777,69 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       }
     }
 
+    // Normalize and compute items first so we can derive customer-level discounts for legacy orders
+    const itemsList: any[] = await (async () => {
+      try {
+        let itemsSource = Array.isArray(order.items) && order.items.length > 0 ? order.items : [];
+        if ((!itemsSource || itemsSource.length === 0) && order.id) {
+          try {
+            const fetched = await this.orderService.fetchOrderItems(order.id);
+            if (Array.isArray(fetched) && fetched.length > 0) itemsSource = fetched;
+          } catch (e) {
+            console.warn('Failed to fetch order items for order', order.id, e);
+          }
+        }
+
+        return (itemsSource || []).map((item: any) => ({
+          productName: item.productName || item.name,
+          skuId: item.skuId || item.sku,
+          quantity: item.quantity || 1,
+          unitType: item.unitType || 'pc',
+          sellingPrice: item.sellingPrice || item.price || item.amount,
+          total: item.total || (item.quantity * (item.sellingPrice || item.price || item.amount)),
+          vatAmount: item.vatAmount || 0,
+          discountAmount: item.discountAmount || 0,
+          // Preserve any per-item customer name/pwdId if present on historical orders
+          customerName: item.customerName || (item as any).discountCustomerName || null,
+          pwdId: item.pwdId || null,
+          customerDiscount: item.customerDiscount || (item as any).customerDiscount || null
+        }));
+      } catch (err) {
+        console.warn('Error normalizing order items', err);
+        return [];
+      }
+    })();
+
+    // Group discounts by customer identity for legacy/converted orders
+    const customerDiscounts = (() => {
+      try {
+        const groups = new Map<string, any>();
+        for (const it of itemsList) {
+          const name = (it.customerName || '').toString().trim();
+          const pwd = it.pwdId || '';
+          const key = name || pwd || '__WALKIN__';
+          const discountAmt = Number(it.discountAmount || 0) || 0;
+          if (!groups.has(key)) {
+            groups.set(key, {
+              customerName: name || null,
+              exemptionId: pwd || null,
+              discountAmount: 0,
+              type: it.customerDiscount || null
+            });
+          }
+          const g = groups.get(key);
+          g.discountAmount += discountAmt;
+          if (!g.type && it.customerDiscount) g.type = it.customerDiscount;
+        }
+        return Array.from(groups.values()).filter(g => g.discountAmount && g.discountAmount > 0).map(g => ({
+          ...g,
+          discountAmount: Number(g.discountAmount.toFixed ? g.discountAmount.toFixed(2) : Math.round((g.discountAmount + Number.EPSILON) * 100) / 100)
+        }));
+      } catch (e) {
+        return [];
+      }
+    })();
+
     return {
       orderId: order.id,
       invoiceNumber: order.invoiceNumber,
@@ -1494,34 +1863,26 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       paymentMethod: order.cashSale ? 'Cash' : 'Charge',
       isCashSale: order.cashSale || true,
       isChargeSale: !order.cashSale || false,
-      items: await (async () => {
+      items: itemsList,
+      // For legacy orders, extract unique customer names from embedded items or order-level fields
+      customerNames: ((): string[] => {
         try {
-          let itemsSource = Array.isArray(order.items) && order.items.length > 0 ? order.items : [];
-          // If no items embedded in order, fetch from orderDetails collection (may be batched)
-          if ((!itemsSource || itemsSource.length === 0) && order.id) {
-            try {
-              const fetched = await this.orderService.fetchOrderItems(order.id);
-              if (Array.isArray(fetched) && fetched.length > 0) itemsSource = fetched;
-            } catch (e) {
-              console.warn('Failed to fetch order items for order', order.id, e);
-            }
+          const names = [] as string[];
+          let sourceItems: any[] = itemsList && itemsList.length > 0 ? itemsList : [];
+          if (sourceItems.length === 0 && order.id) {
+            if (order.discountCustomerName) sourceItems.push({ customerName: order.discountCustomerName });
+            if (order.soldTo && order.soldTo !== 'Walk-in Customer') sourceItems.push({ customerName: order.soldTo });
           }
-
-          return (itemsSource || []).map((item: any) => ({
-            productName: item.productName || item.name,
-            skuId: item.skuId || item.sku,
-            quantity: item.quantity || 1,
-            unitType: item.unitType || 'pc',
-            sellingPrice: item.sellingPrice || item.price || item.amount,
-            total: item.total || (item.quantity * (item.sellingPrice || item.price || item.amount)),
-            vatAmount: item.vatAmount || 0,
-            discountAmount: item.discountAmount || 0
-          }));
-        } catch (err) {
-          console.warn('Error normalizing order items', err);
+          for (const it of sourceItems) {
+            const n = (it.customerName || it.discountCustomerName || '').toString().trim();
+            if (n) names.push(n);
+          }
+          return Array.from(new Set(names));
+        } catch (e) {
           return [];
         }
       })(),
+      customerDiscounts: customerDiscounts,
       subtotal: order.grossAmount || order.subtotal || order.totalAmount,
       vatAmount: order.vatAmount || 0,
       vatExempt: order.vatExemptAmount || 0,
@@ -1848,7 +2209,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
 
   // F4 Hotkey for Clear Data
   @HostListener('document:keydown.f4', ['$event'])
-  async onF4KeyPress(event: Event | KeyboardEvent): Promise<void> {
+  async onF4KeyPress(event: KeyboardEvent): Promise<void> {
     event.preventDefault(); // Prevent default F4 behavior
     
     // Check if order is already completed
@@ -1886,7 +2247,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
 
   // F5 Hotkey for New Order
   @HostListener('document:keydown.f5', ['$event'])
-  async onF5KeyPress(event: Event | KeyboardEvent): Promise<void> {
+  async onF5KeyPress(event: KeyboardEvent): Promise<void> {
     event.preventDefault(); // Prevent page refresh
     // Use unified flow so hotkey, button, and item-click behave the same
     await this.requestStartNewOrder('hotkey');
@@ -1894,7 +2255,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
 
   // F6 Hotkey for Complete Order
   @HostListener('document:keydown.f6', ['$event'])
-  async onF6KeyPress(event: Event | KeyboardEvent): Promise<void> {
+  async onF6KeyPress(event: KeyboardEvent): Promise<void> {
     event.preventDefault(); // Prevent default F6 behavior
     
     // If order is already completed, just show receipt
@@ -1921,7 +2282,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
 
   // F7 Hotkey for Add Discount (mirrors Add Discount button behavior)
   @HostListener('document:keydown.f7', ['$event'])
-  async onF7KeyPress(event: Event | KeyboardEvent): Promise<void> {
+  async onF7KeyPress(event: KeyboardEvent): Promise<void> {
     event.preventDefault(); // Prevent default F7 behavior
 
     // Block on completed orders
@@ -2131,6 +2492,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     this.customerInfo = {
       soldTo: '',
       tin: '',
+      pwdId: '',
       businessAddress: '',
       customerId: ''
     };
@@ -2275,6 +2637,14 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       this.paymentDescription = '';
     }
     this.paymentModalVisible.set(true);
+    // Ensure the primary action button receives focus when dialog opens
+    setTimeout(() => {
+      try {
+        this.processPaymentButton?.nativeElement?.focus();
+      } catch (e) {
+        // ignore focus errors
+      }
+    }, 50);
   }
 
   closePaymentDialog(): void {
@@ -2315,50 +2685,41 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   public async openCartInformationDialog(): Promise<void> {
-    console.log('🛒 Opening cart information dialog - fetching latest VAT rates from Firestore');
+    console.log('🛒 Opening cart information dialog - using cart VAT settings as source-of-truth');
 
-    // Ensure each cart item picks up the latest tax settings from the products collection (Firestore)
+    // Do NOT pull VAT rates from product collection here. Prefer the user/cart-level VAT settings.
+    // Precedence for VAT values when opening the dialog:
+    // 1. item.vatRate / item.isVatApplicable if already set (user previously edited)
+    // 2. cartVatSettings values if the user saved a cart-level VAT
+    // 3. AppConstants.DEFAULT_VAT_RATE / true as fallback
     try {
       const items = this.cartItems();
+      const defaultVatRate = this.cartVatSettings?.vatRate ?? AppConstants.DEFAULT_VAT_RATE;
+      const defaultIsVat = this.cartVatSettings?.isVatApplicable ?? true;
+
       for (const item of items) {
         try {
-          // Try to read the authoritative product doc directly from Firestore
-          if (item.productId) {
-            const prodRef = doc(this.firestore, 'products', item.productId as string);
-            const snap = await getDoc(prodRef as any);
-            if (snap && snap.exists && snap.exists()) {
-              const data: any = snap.data();
-              const isVatApplicable = typeof data.isVatApplicable === 'boolean' ? data.isVatApplicable : (item.isVatApplicable ?? true);
-              const vatRate = typeof data.vatRate === 'number' ? Number(data.vatRate) : (item.vatRate ?? 12);
+          const updatedItem: any = { ...item };
 
-              const updatedItem = {
-                ...item,
-                isVatApplicable,
-                vatRate
-              } as any;
+          // Prefer existing item settings if present
+          updatedItem.isVatApplicable = (item.isVatApplicable !== undefined && item.isVatApplicable !== null)
+            ? item.isVatApplicable
+            : defaultIsVat;
 
-              // Update via PosService so totals are recalculated consistently
-              this.posService.updateCartItem(updatedItem);
-              continue; // next item
-            }
-          }
+          updatedItem.vatRate = (item.vatRate !== undefined && item.vatRate !== null)
+            ? item.vatRate
+            : defaultVatRate;
 
-          // Fallback to cached product if Firestore read failed or productId missing
-          const product = this.productService.getProduct(item.productId);
-          if (product) {
-            const updatedItem = {
-              ...item,
-              isVatApplicable: typeof product.isVatApplicable === 'boolean' ? product.isVatApplicable : (item.isVatApplicable ?? true),
-              vatRate: typeof product.vatRate === 'number' ? Number(product.vatRate) : (item.vatRate ?? 12)
-            } as any;
+          // Only update through service if values actually change to avoid unnecessary recalcs
+          if (updatedItem.isVatApplicable !== item.isVatApplicable || updatedItem.vatRate !== item.vatRate) {
             this.posService.updateCartItem(updatedItem);
           }
         } catch (err) {
-          console.warn('Failed to sync VAT for cart item', item.productId, err);
+          console.warn('Failed to apply cart VAT settings for cart item', item.productId, err);
         }
       }
     } catch (err) {
-      console.warn('Error while syncing cart VAT settings:', err);
+      console.warn('Error while applying cart VAT settings to items:', err);
     }
 
     this.cartInformationModalVisible.set(true);
@@ -2384,6 +2745,36 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
         
         // Update the specific field
         (updatedItem as any)[field] = value;
+
+        // Handle per-item customer fields and discounts
+        if (field === 'customerName') {
+          // nothing extra to do here; saved on item
+        }
+
+        if (field === 'pwdId') {
+          // nothing extra to do here; saved on item
+        }
+
+        // If customerDiscount (PWD/SENIOR) is set, apply default discount settings
+        if (field === 'customerDiscount') {
+          const cd = (value || '').toString();
+          if (cd === 'PWD' || cd === 'SENIOR') {
+            updatedItem.hasDiscount = true;
+            updatedItem.discountType = AppConstants.DEFAULT_DISCOUNT_TYPE as 'percentage' | 'fixed';
+            updatedItem.discountValue = AppConstants.DEFAULT_DISCOUNT_VALUE;
+            // store marker for later reference
+            (updatedItem as any).customerDiscountType = cd;
+          } else {
+            // clear any customer-applied discount marker but keep item-level manual discounts intact only if they differ
+            (updatedItem as any).customerDiscountType = '';
+            // Conservative approach: if the discount was introduced by this customer selector, clear it
+            if (updatedItem.discountValue === AppConstants.DEFAULT_DISCOUNT_VALUE && (updatedItem as any).discountType === AppConstants.DEFAULT_DISCOUNT_TYPE) {
+              updatedItem.hasDiscount = false;
+              updatedItem.discountValue = 0;
+              updatedItem.discountType = 'percentage';
+            }
+          }
+        }
         
         // Handle VAT logic
         if (field === 'isVatApplicable') {
@@ -2408,6 +2799,19 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
             updatedItem.discountValue = 0;
           }
         }
+
+        // If the discount value itself was changed, enforce hasDiscount flag accordingly
+        if (field === 'discountValue') {
+          const num = Number(value) || 0;
+          if (num <= 0) {
+            updatedItem.hasDiscount = false;
+            updatedItem.discountValue = 0;
+            updatedItem.discountType = 'percentage';
+          } else {
+            updatedItem.hasDiscount = true;
+            updatedItem.discountValue = num;
+          }
+        }
         
         // Update the cart item through the POS service using productId
         this.posService.updateCartItem(updatedItem);
@@ -2427,6 +2831,19 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     this.closeCartInformationDialog();
     
     console.log('✅ Cart information dialog closed - individual item settings preserved');
+  }
+
+  // Handler for editable order-level customer fields inside Cart Information dialog
+  public onCustomerInfoChange(field: 'pwdId' | 'soldTo', value: string): void {
+    try {
+      if (!this.customerInfo) this.customerInfo = { soldTo: '', tin: '', pwdId: '', businessAddress: '', customerId: '' } as any;
+      // update local object
+      (this.customerInfo as any)[field] = value;
+      console.log(`✏️ Customer info updated: ${field} =`, value);
+      // No immediate persistence required here; the value will be used when saving/processing the order
+    } catch (err) {
+      console.error('Error updating customer info field:', err);
+    }
   }
 
   public saveCartVatDiscountSettings(): void {
@@ -3303,6 +3720,25 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       return;
     }
     this.posService.addToCart(product);
+
+    // If user has saved a cart-level VAT rate, ensure the newly added/updated cart item uses it
+    try {
+      const cartVat = this.cartVatSettings?.vatRate;
+      const cartVatApplicable = this.cartVatSettings?.isVatApplicable;
+      if (cartVat !== undefined && cartVat !== null) {
+        const updatedItems = this.cartItems();
+        const matching = updatedItems.find(i => i.productId === product.id);
+        if (matching) {
+          const shouldUpdateVat = (matching.vatRate !== cartVat) || (matching.isVatApplicable !== (cartVatApplicable ?? matching.isVatApplicable));
+          if (shouldUpdateVat) {
+            const updated = { ...matching, vatRate: cartVat, isVatApplicable: (cartVatApplicable ?? matching.isVatApplicable) } as any;
+            this.posService.updateCartItem(updated);
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('Failed to apply cart-level VAT to newly added item:', err);
+    }
   }
 
   removeFromCart(productId: string): void {
@@ -3459,7 +3895,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       const updatedItem = {
         ...item,
         isVatApplicable: true,
-        vatRate: 12
+        vatRate: this.cartVatSettings?.vatRate ?? AppConstants.DEFAULT_VAT_RATE
       };
       this.posService.updateCartItem(updatedItem);
     });
@@ -3625,6 +4061,58 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     }
   }
 
+  // When payment dialog is open, pressing Enter should activate the focused button
+  onPaymentDialogEnter(event: Event): void {
+    event.preventDefault();
+    event.stopPropagation();
+    const activeElement = document.activeElement as HTMLElement;
+    if (activeElement && activeElement.tagName === 'BUTTON') {
+      activeElement.click();
+    } else {
+      // Default to processing payment if nothing specific is focused
+      this.processPayment();
+    }
+  }
+
+  @HostListener('document:keydown.enter', ['$event'])
+  onGlobalEnterForModals(event: KeyboardEvent): void {
+    try {
+      if (this.showPaymentModal()) {
+        event.preventDefault();
+        event.stopPropagation();
+        const active = document.activeElement as HTMLElement;
+        if (active && active.tagName === 'BUTTON') {
+          active.click();
+        } else {
+          this.processPayment();
+        }
+        return;
+      }
+
+      if (this.isReceiptModalVisible()) {
+        event.preventDefault();
+        event.stopPropagation();
+        const active = document.activeElement as HTMLElement;
+        if (active && active.tagName === 'BUTTON') {
+          active.click();
+        } else {
+          this.printReceipt();
+        }
+        return;
+      }
+    } catch (err) {
+      console.warn('Enter key global handler error:', err);
+    }
+  }
+
+  @HostListener('document:keydown.enter', ['$event'])
+  handleGlobalEnterForPayment(event: Event): void {
+    // If payment dialog is visible, delegate Enter to the payment handler
+    if (this.paymentModalVisible && this.paymentModalVisible()) {
+      this.onPaymentDialogEnter(event);
+    }
+  }
+
   private async prepareReceiptData(orderId: string): Promise<any> {
     const cartItems = this.cartItems();
     const cartSummary = this.cartSummary();
@@ -3656,6 +4144,50 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     // Whether they're a cashier, manager, or higher - they are the one processing the sale
     const cashierName = currentUser?.displayName || currentUser?.email || 'Unknown Cashier';
 
+    // Build receipt items list first so we can compute per-customer discount groups
+    const itemsList = cartItems.map(item => ({
+      productName: item.productName,
+      skuId: item.skuId,
+      quantity: item.quantity,
+      unitType: item.unitType,
+      sellingPrice: item.sellingPrice,
+      total: item.total,
+      vatAmount: item.vatAmount,
+      discountAmount: item.discountAmount,
+      quantityWithUnit: `${item.quantity} ${this.getUnitTypeDisplay(item.unitType)}`,
+      // Per-item customer fields (support multiple customers per receipt)
+      customerName: (item as any).customerName || null,
+      pwdId: (item as any).pwdId || null,
+      customerDiscount: (item as any).customerDiscount || null
+    }));
+
+    const customerNamesList = Array.from(new Set(itemsList.map(i => ((i as any).customerName || '').toString().trim()).filter(n => !!n)));
+
+    // Compute per-customer discount aggregation
+    const customerDiscounts = (() => {
+      try {
+        const groups = new Map<string, any>();
+        for (const it of itemsList) {
+          const name = (it.customerName || '').toString().trim();
+          const pwd = it.pwdId || '';
+          const key = name || pwd || '__WALKIN__';
+          const discountAmt = Number(it.discountAmount || 0) || 0;
+          if (!groups.has(key)) {
+            groups.set(key, { customerName: name || null, exemptionId: pwd || null, discountAmount: 0, type: it.customerDiscount || null });
+          }
+          const g = groups.get(key);
+          g.discountAmount += discountAmt;
+          if (!g.type && it.customerDiscount) g.type = it.customerDiscount;
+        }
+        return Array.from(groups.values()).filter(g => g.discountAmount && g.discountAmount > 0).map(g => ({
+          ...g,
+          discountAmount: Number(g.discountAmount.toFixed ? g.discountAmount.toFixed(2) : Math.round((g.discountAmount + Number.EPSILON) * 100) / 100)
+        }));
+      } catch (e) {
+        return [];
+      }
+    })();
+
     return {
       orderId,
       invoiceNumber: invoiceNumber || this.invoiceNumber,
@@ -3679,23 +4211,16 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       paymentMethod: paymentMethod, // Add payment method
       isCashSale: this.isCashSale(),
       isChargeSale: this.isChargeSale(),
-      items: cartItems.map(item => ({
-        productName: item.productName,
-        skuId: item.skuId,
-        quantity: item.quantity,
-        unitType: item.unitType,
-        sellingPrice: item.sellingPrice,
-        total: item.total,
-        vatAmount: item.vatAmount,
-        discountAmount: item.discountAmount,
-        quantityWithUnit: `${item.quantity} ${this.getUnitTypeDisplay(item.unitType)}`
-      })),
+      items: itemsList,
+      // Collect unique customer names across items and include them for receipt display
+      customerNames: customerNamesList,
+      customerDiscounts: customerDiscounts,
       subtotal: cartSummary.grossAmount,
-      vatAmount: cartSummary.vatAmount,
+      vatAmount: Number(((cartSummary.vatAmount || 0)).toFixed(2)),
       vatExempt: cartSummary.vatExemptSales,
       discount: cartSummary.productDiscountAmount + cartSummary.orderDiscountAmount,
       totalAmount: cartSummary.netAmount,
-      vatRate: 12, // Standard VAT rate
+      vatRate: this.cartVatSettings?.vatRate ?? AppConstants.DEFAULT_VAT_RATE, // Use latest user-set VAT if available
       // Validity notice based on store BIR accreditation
       validityNotice: (storeInfo as any)?.isBirAccredited 
         ? ReceiptValidityNotice.BIR_ACCREDITED 
@@ -3863,11 +4388,122 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
 
   applyOrderDiscount(discount: OrderDiscount): void {
     this.posService.setOrderDiscount(discount);
+
+    // Propagate the order discount to each cart item so Cart Information shows it
+    try {
+      const items = this.cartItems();
+      if (Array.isArray(items) && items.length > 0) {
+        // Compute gross amount for proportional distribution of fixed discounts
+        const gross = items.reduce((s: number, it: any) => s + ((it.sellingPrice || 0) * (it.quantity || 1)), 0);
+
+        for (const it of items) {
+          const updated: any = { ...it };
+          updated.hasDiscount = true;
+
+          if ((discount as any).percentage) {
+            updated.discountType = 'percentage';
+            updated.discountValue = Number((discount as any).percentage) || 0;
+          } else if ((discount as any).fixedAmount) {
+            updated.discountType = 'fixed';
+            const fixed = Number((discount as any).fixedAmount) || 0;
+            if (gross > 0) {
+              // Distribute fixed amount proportionally based on item's line gross
+              const lineGross = (it.sellingPrice || 0) * (it.quantity || 1);
+              const lineShare = lineGross / gross;
+              const lineDiscountTotal = fixed * lineShare;
+              // Store per-unit discount value so item controls accept it
+              updated.discountValue = Number((lineDiscountTotal / (it.quantity || 1)).toFixed(2));
+            } else {
+              // Fallback: split equally per item unit
+              const perUnit = fixed / Math.max(1, items.reduce((c: number, x: any) => c + (x.quantity || 1), 0));
+              updated.discountValue = Number(perUnit.toFixed(2));
+            }
+          }
+
+          // Also propagate exemption ID and customer name into each item (so multiple customers per receipt show up)
+          if (discount.exemptionId) {
+            updated.pwdId = discount.exemptionId;
+          }
+          if (discount.customerName) {
+            updated.customerName = discount.customerName;
+          }
+          // Mark the per-item customer discount type (PWD/SENIOR/CUSTOM)
+          if (discount.type) {
+            updated.customerDiscount = discount.type;
+          }
+
+          // Use PosService API to update the cart item (this will recalc totals)
+          this.posService.updateCartItem(updated);
+        }
+      }
+    } catch (err) {
+      console.warn('Failed to propagate order discount to items:', err);
+    }
+
     this.closeDiscountModal();
   }
 
+  // Live handler for discount modal's live customer changes (as-you-type)
+  public onDiscountModalLiveCustomer(payload: { exemptionId: string; customerName: string; discountType: string }): void {
+    try {
+      const { exemptionId, customerName, discountType } = payload || { exemptionId: '', customerName: '', discountType: '' };
+      const items = this.cartItems();
+      if (!Array.isArray(items) || items.length === 0) return;
+
+      for (const it of items) {
+        // Only update if there's an actual change to avoid unnecessary updates
+        const updated: any = { ...it };
+        let changed = false;
+
+        if (exemptionId !== undefined && String(updated.pwdId || '') !== String(exemptionId || '')) {
+          updated.pwdId = exemptionId || '';
+          changed = true;
+        }
+
+        if (customerName !== undefined && String(updated.customerName || '') !== String(customerName || '')) {
+          updated.customerName = customerName || '';
+          changed = true;
+        }
+
+        if (discountType !== undefined && String(updated.customerDiscount || '') !== String(discountType || '')) {
+          updated.customerDiscount = discountType || '';
+          changed = true;
+        }
+
+        if (changed) {
+          this.posService.updateCartItem(updated);
+        }
+      }
+    } catch (err) {
+      console.warn('Failed to apply live customer info to cart items:', err);
+    }
+  }
+
   removeOrderDiscount(): void {
+    // Clear the order discount and remove propagated per-item discounts
+    const existing = this.posService.orderDiscount();
     this.posService.removeOrderDiscount();
+
+    try {
+      const items = this.cartItems();
+      if (Array.isArray(items) && items.length > 0) {
+        for (const it of items) {
+          const updated: any = { ...it };
+          // Only clear the per-item discount fields if they were set by order-level discount
+          // Conservative approach: clear hasDiscount and discountValue for all items
+          updated.hasDiscount = false;
+          updated.discountValue = 0;
+          updated.discountType = 'percentage';
+          // Also clear propagated customer identification fields
+          if ((updated as any).pwdId) updated.pwdId = '';
+          if ((updated as any).customerName) updated.customerName = '';
+          if ((updated as any).customerDiscount) updated.customerDiscount = '';
+          this.posService.updateCartItem(updated);
+        }
+      }
+    } catch (err) {
+      console.warn('Failed to clear per-item discounts after removing order discount:', err);
+    }
   }
 
   // Confirmation dialog methods
@@ -3875,16 +4511,17 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     return new Promise((resolve) => {
       this.confirmationDialogDataSignal.set(data);
       this.isConfirmationDialogVisibleSignal.set(true);
-      
+      // Reset last reason
+      this.lastConfirmationReasonSignal.set(null);
       // Store the resolve function for use in dialog action handlers
       (this as any)._confirmationResolve = resolve;
     });
   }
-
-  onConfirmationConfirmed(): void {
+  onConfirmationConfirmed(event?: { reason?: string }): void {
     this.isConfirmationDialogVisibleSignal.set(false);
     this.confirmationDialogDataSignal.set(null);
-    
+    // Store reason if provided
+    if (event && event.reason) this.lastConfirmationReasonSignal.set(event.reason);
     // Resolve with true (confirmed)
     if ((this as any)._confirmationResolve) {
       (this as any)._confirmationResolve(true);
@@ -3895,7 +4532,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   onConfirmationCancelled(): void {
     this.isConfirmationDialogVisibleSignal.set(false);
     this.confirmationDialogDataSignal.set(null);
-    
+    this.lastConfirmationReasonSignal.set(null);
     // Resolve with false (cancelled)
     if ((this as any)._confirmationResolve) {
       (this as any)._confirmationResolve(false);
@@ -4079,6 +4716,15 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       return `${discount.customType} Discount${discountMethod}`;
     }
     return `Custom Discount${discountMethod}`;
+  }
+
+  // trackBy function for cart item ngFor to preserve DOM nodes (prevents input losing focus)
+  public trackByCartItem(index: number, item: any): string | number {
+    try {
+      return item?.productId || item?.skuId || index;
+    } catch (err) {
+      return index;
+    }
   }
 
   /**

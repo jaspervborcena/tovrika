@@ -42,7 +42,13 @@ import { AppConstants } from '../../../shared/enums/app-constants.enum';
                 <div class="item-header-row">
                   <div class="item-info">
                     <div class="item-name">{{ item.productName }}</div>
-                    <div class="item-sku">{{ item.skuId }} - ₱{{ item.sellingPrice.toFixed(2) }} each</div>
+                    <div class="item-sku">
+                      {{ item.skuId }} - ₱{{ item.sellingPrice.toFixed(2) }} each
+                      <div class="original-price-line">
+                        <span class="original-price-label">Original Price</span>
+                        <span class="original-price">₱{{ (item.originalPrice || 0).toFixed(2) }}</span>
+                      </div>
+                    </div>
                   </div>
                   <button 
                     (click)="removeFromCart(item.productId)" 
@@ -115,6 +121,16 @@ import { AppConstants } from '../../../shared/enums/app-constants.enum';
         
         <!-- Fixed Footer -->
         <div class="cart-modal-footer">
+          <div class="mobile-payment-methods" style="display:flex; gap:0.75rem; align-items:center; margin-right: 1rem;">
+            <label style="display:flex; align-items:center; gap:0.5rem; cursor:pointer;">
+              <input type="checkbox" class="mobile-checkbox" [checked]="isCashSale()" (change)="posService.toggleCashSale()">
+              <span>💵 {{ 'pos.cashPayment' | translate }}</span>
+            </label>
+            <label style="display:flex; align-items:center; gap:0.5rem; cursor:pointer;">
+              <input type="checkbox" class="mobile-checkbox" [checked]="isChargeSale()" (change)="posService.toggleChargeSale()">
+              <span>💳 {{ 'pos.cardPayment' | translate }}</span>
+            </label>
+          </div>
           <button 
             class="btn btn-secondary" 
             (click)="clearCart()" 
@@ -152,7 +168,13 @@ import { AppConstants } from '../../../shared/enums/app-constants.enum';
                     <div class="product-name">{{ item.productName }}</div>
                     <div class="product-sku">{{ item.skuId }}</div>
                   </div>
-                  <div class="product-price">₱{{ item.sellingPrice.toFixed(2) }}</div>
+                  <div class="product-price">
+                    <div class="price-row">₱{{ item.sellingPrice.toFixed(2) }}</div>
+                    <div class="original-price-row">
+                      <span class="original-price-label">Original Price</span>
+                      <span class="original-price">₱{{ (item.originalPrice || 0).toFixed(2) }}</span>
+                    </div>
+                  </div>
                 </div>
                 
                 <!-- Quantity Row -->
@@ -679,6 +701,29 @@ import { AppConstants } from '../../../shared/enums/app-constants.enum';
       font-size: 1rem;
     }
 
+    .original-price-line,
+    .original-price-row {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-top: 0.25rem;
+    }
+
+    .original-price-label {
+      background: #eef2ff;
+      color: #1f2937;
+      padding: 0.15rem 0.4rem;
+      border-radius: 6px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      letter-spacing: 0.2px;
+    }
+
+    .original-price {
+      color: #6b7280;
+      font-size: 0.875rem;
+    }
+
     .control-row {
       display: flex;
       justify-content: space-between;
@@ -847,7 +892,7 @@ import { AppConstants } from '../../../shared/enums/app-constants.enum';
   `]
 })
 export class MobileCartModalComponent {
-  private posService = inject(PosService);
+  public posService = inject(PosService);
   
   // Props
   isVisible = signal<boolean>(false);
@@ -869,6 +914,8 @@ export class MobileCartModalComponent {
   });
   readonly cartSummary = computed(() => this.posService.cartSummary());
   readonly isProcessing = computed(() => this.posService.isProcessing());
+  readonly isCashSale = computed(() => this.posService.isCashSale());
+  readonly isChargeSale = computed(() => this.posService.isChargeSale());
   
   // Cart Information Dialog Methods
   showCartInformationDialog(): boolean {

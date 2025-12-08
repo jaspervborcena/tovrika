@@ -191,6 +191,7 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
   customerInfo = {
     soldTo: '',
     tin: '',
+    pwdId: '',
     businessAddress: '',
     customerId: '' // NEW: for existing/new customers
   };
@@ -243,11 +244,9 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
   readonly isConfirmationDialogVisible = computed(() => this.isConfirmationDialogVisibleSignal());
   readonly confirmationDialogData = computed(() => this.confirmationDialogDataSignal());
 
-  // Sales type state - now supports both cash and charge
-  private salesTypeCashSignal = signal<boolean>(true);
-  private salesTypeChargeSignal = signal<boolean>(false);
-  readonly isCashSale = computed(() => this.salesTypeCashSignal());
-  readonly isChargeSale = computed(() => this.salesTypeChargeSignal());
+  // Sales type state - delegated to PosService so mobile stays in sync with desktop
+  readonly isCashSale = computed(() => this.posService.isCashSale());
+  readonly isChargeSale = computed(() => this.posService.isChargeSale());
 
   // Order completion state - track if order is completed to prevent cart editing
   private isOrderCompletedSignal = signal<boolean>(false);
@@ -893,11 +892,11 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   toggleCashSale(): void {
-    this.salesTypeCashSignal.update(value => !value);
+    this.posService.toggleCashSale();
   }
 
   toggleChargeSale(): void {
-    this.salesTypeChargeSignal.update(value => !value);
+    this.posService.toggleChargeSale();
   }
 
   // Get user-friendly error message for store loading issues
@@ -1011,7 +1010,7 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
 
   // F4 Hotkey for Clear Data
   @HostListener('document:keydown.f4', ['$event'])
-  async onF4KeyPress(event: Event | KeyboardEvent): Promise<void> {
+  async onF4KeyPress(event: KeyboardEvent): Promise<void> {
     event.preventDefault(); // Prevent default F4 behavior
     
     if (this.cartItems().length > 0) {
@@ -1021,7 +1020,7 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
 
   // F5 Hotkey for New Order
   @HostListener('document:keydown.f5', ['$event'])
-  async onF5KeyPress(event: Event | KeyboardEvent): Promise<void> {
+  async onF5KeyPress(event: KeyboardEvent): Promise<void> {
     event.preventDefault(); // Prevent page refresh
     // Subscription gate
     const canStart = await this.checkSubscriptionGate();
@@ -1042,7 +1041,7 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
 
   // F6 Hotkey for Complete Order
   @HostListener('document:keydown.f6', ['$event'])
-  async onF6KeyPress(event: Event | KeyboardEvent): Promise<void> {
+  async onF6KeyPress(event: KeyboardEvent): Promise<void> {
     event.preventDefault(); // Prevent default F6 behavior
     
     if (this.cartItems().length > 0 && !this.isProcessing()) {
@@ -1101,6 +1100,7 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
     this.customerInfo = {
       soldTo: '',
       tin: '',
+      pwdId: '',
       businessAddress: '',
       customerId: ''
     };
@@ -1265,7 +1265,7 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
         discountAmount: item.discountAmount || 0
       })),
       subtotal: cartSummary.grossAmount,
-      vatAmount: cartSummary.vatAmount,
+      vatAmount: Number(((cartSummary.vatAmount || 0)).toFixed(2)),
       vatExempt: cartSummary.vatExemptSales,
       discount: cartSummary.productDiscountAmount + cartSummary.orderDiscountAmount,
       totalAmount: cartSummary.netAmount,
@@ -1966,6 +1966,7 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
     this.customerInfo = {
       soldTo: '',
       tin: '',
+      pwdId: '',
       businessAddress: '',
       customerId: ''
     };
@@ -2026,7 +2027,7 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
         total: item.total
       })),
       subtotal: cartSummary.grossAmount,
-      vatAmount: cartSummary.vatAmount,
+      vatAmount: Number(((cartSummary.vatAmount || 0)).toFixed(2)),
       vatExempt: cartSummary.vatExemptSales,
       discount: cartSummary.productDiscountAmount + cartSummary.orderDiscountAmount,
       totalAmount: cartSummary.netAmount,

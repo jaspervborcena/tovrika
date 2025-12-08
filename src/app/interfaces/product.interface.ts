@@ -16,6 +16,7 @@ export interface Product {
   unitType: string;
   category: string;
   totalStock: number;
+  originalPrice: number;
   sellingPrice: number;
   companyId: string;
   storeId: string;
