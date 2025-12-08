@@ -529,65 +529,38 @@
               </div>
             </div>
             
-            <!-- Order Items -->
-            <div style="margin-bottom: 1rem;">
-              <h4 style="margin-bottom: 0.5rem; color: #374151;">Order Items</h4>
-              <div style="max-height: 300px; overflow-y: auto; border: 1px solid #e5e7eb; border-radius: 6px;">
-                <div *ngFor="let item of selectedOrder()?.items; let i = index; let last = last" 
-                     style="padding: 0.75rem; border-bottom: 1px solid #f3f4f6;"
-                     [style.border-bottom]="last ? 'none' : '1px solid #f3f4f6'">
-                  
-                  <!-- Item Info Row -->
-                  <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
-                    <div>
-                      <div style="font-weight: 500;">{{ item.name || item.productName }}</div>
-                      <div style="font-size: 0.85rem; color: #6b7280;">
-                        Quantity: {{ item.quantity }} | Unit Price: {{ item.price | currency:'PHP':'symbol':'1.2-2' }}
-                      </div>
-                    </div>
-                    <div style="text-align: right;">
-                      <div style="font-weight: 600;">{{ (item.price * item.quantity) | currency:'PHP':'symbol':'1.2-2' }}</div>
-                      <div style="font-size: 0.85rem; color: #6b7280;">{{ 'pos.total' | translate }}</div>
-                    </div>
-                  </div>
-                  
-                  <!-- Item Action Buttons -->
-                  <div style="display: flex; gap: 0.25rem; flex-wrap: wrap;">
-                    <button class="item-action-btn return-btn" 
-                            (click)="processItemActionAuthorized(selectedOrder()?.id, i, 'return', item)"
-                            title="Return Item">
-                      ↩️ Return
-                    </button>
-                    <button class="item-action-btn damage-btn" 
-                            (click)="processItemActionAuthorized(selectedOrder()?.id, i, 'damage', item)"
-                            title="Mark as Damaged">
-                      💥 Damage
-                    </button>
-                    <button class="item-action-btn refund-btn" 
-                            (click)="processItemActionAuthorized(selectedOrder()?.id, i, 'refund', item)"
-                            title="Refund Item">
-                      💰 Refund
-                    </button>
-                    <button class="item-action-btn cancel-btn" 
-                            (click)="processItemActionAuthorized(selectedOrder()?.id, i, 'cancel', item)"
-                            title="Cancel Item">
-                      ❌ Cancel
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
+         
             
             <!-- Action Buttons (manager authorization required for sensitive actions) -->
             <div style="display: flex; gap: 0.5rem; justify-content: flex-end; flex-wrap: wrap;">
-              <button class="btn open-receipt-btn" (click)="openOrderReceipt(selectedOrder())">
+                    <button class="btn open-receipt-btn" (click)="openOrderReceipt(selectedOrder())">
                 📄 Open Receipt
               </button>
-              <button *ngIf="selectedOrder()?.status !== 'cancelled'" class="btn cancel-order-btn" (click)="authorizeAndUpdateOrderStatus(selectedOrder()?.id, 'cancelled')">Cancel Order</button>
-              <button *ngIf="selectedOrder()" class="btn btn-warning return-btn" (click)="authorizeAndUpdateOrderStatus(selectedOrder()?.id, 'cancelled')">Return</button>
-              <button *ngIf="selectedOrder()?.status !== 'refunded'" class="btn btn-primary" (click)="authorizeAndUpdateOrderStatus(selectedOrder()?.id, 'refunded')">Refund</button>
-              <button *ngIf="selectedOrder()" class="btn btn-danger damage-btn" (click)="authorizeAndUpdateOrderStatus(selectedOrder()?.id, 'cancelled')">Damage</button>
-              <button class="btn btn-secondary manage-status-btn" (click)="openManageItemStatusAuthorized()">Manage Item Status</button>
+                    <button *ngIf="selectedOrder()" class="btn cancel-order-btn"
+                      [disabled]="!canCancelOrder() || isOrderActionLocked()"
+                      [title]="(!canCancelOrder() || isOrderActionLocked()) ? 'Cancel disabled for this order' : 'Cancel Order'"
+                      (click)="authorizeAndUpdateOrderStatus(selectedOrder()?.id, 'cancelled')">Cancel Order</button>
+
+                    <!-- Show or hide Return depending on order status and whether a return tracking row already exists -->
+                    <button *ngIf="shouldShowReturnButton()" class="btn btn-warning return-btn"
+                      [disabled]="isOrderActionLocked()"
+                      [title]="isOrderActionLocked() ? 'Action disabled for this order' : 'Return'"
+                      (click)="authorizeAndUpdateOrderStatus(selectedOrder()?.id, 'returned')">Return</button>
+
+                    <button *ngIf="selectedOrder()?.status !== 'refunded'" class="btn btn-primary"
+                      [disabled]="isRefundDisabled()"
+                      [title]="isRefundDisabled() ? 'Action disabled for this order' : 'Refund'"
+                      (click)="authorizeAndUpdateOrderStatus(selectedOrder()?.id, 'refunded')">Refund</button>
+
+                    <button *ngIf="shouldShowDamageButton()" class="btn btn-danger damage-btn"
+                      [disabled]="isDamageDisabled()"
+                      [title]="isDamageDisabled() ? 'Action disabled for this order' : 'Damage'"
+                      (click)="openManageItemStatusAuthorized('damage')">Damage</button>
+
+                    <button class="btn btn-secondary manage-status-btn"
+                      [disabled]="isManageStatusDisabled()"
+                      [title]="isManageStatusDisabled() ? 'Action disabled for this order' : 'Manage Item Status'"
+                      (click)="openManageItemStatusAuthorized()">Manage Item Status</button>
             </div>
 
             <!-- Manager Authorization Modal (collect userCode + pin) -->
@@ -651,7 +624,13 @@
             <!-- Items List -->
             <div *ngIf="!loadingTracking() && trackingEntries().length > 0" class="tracking-items-section">
               <label class="section-label">Items Status Tracking:</label>
-              
+
+              <!-- Tabs -->
+              <div class="tracking-tabs" style="display:flex; gap:0.5rem; margin-bottom:0.5rem;">
+                <button class="tab-btn" [class.active]="trackingTab() === 'edit'" (click)="setTrackingTab('edit')">Completed (editable)</button>
+                <button class="tab-btn" [class.active]="trackingTab() === 'view'" (click)="setTrackingTab('view')">All (read-only)</button>
+              </div>
+
               <div class="tracking-items-list">
                 <!-- Header Row -->
                 <div class="tracking-item-header">
@@ -669,7 +648,7 @@
                 </div>
                 
                 <!-- Data Rows -->
-                <div class="tracking-item-row" *ngFor="let item of trackingEntries(); let i = index">
+                <div class="tracking-item-row" *ngFor="let item of displayedTrackingEntries(); let i = index">
                   <!-- Product Info -->
                   <div class="col-product">
                     <div class="item-details-tracking">
@@ -724,36 +703,42 @@
                   
                   <!-- Qty to Adjust (Editable) -->
                   <div class="col-qty-adjust">
-                    <input type="number" 
-                           class="qty-adjust-input"
-                           [value]="getQtyToAdjust(item)"
-                           min="0"
-                           step="1"
-                           (input)="updateQtyToAdjust(i, $any($event.target).value)"
-                           placeholder="Qty">
+                        <input type="number" 
+                          class="qty-adjust-input"
+                          [value]="getQtyToAdjust(item)"
+                          min="1"
+                          [max]="item.quantity || 0"
+                          step="1"
+                           (input)="updateQtyToAdjust(item.id, $any($event.target).value)"
+                          placeholder="Qty"
+                          [disabled]="trackingTab() === 'view'">
                   </div>
                   
-                  <!-- Adjustment Type (Dropdown) -->
+                  <!-- Adjustment Type (Dropdown / Read-only) -->
                   <div class="col-adjustment-type">
-                    <select class="adjustment-type-select"
-                            [value]="getAdjustmentType(item)"
-                            (change)="updateAdjustmentType(i, $any($event.target).value)">
-                      <option value="processing">Processing</option>
-                      <option value="completed">Completed</option>
-                      <option value="cancelled">Cancelled</option>
-                      <option value="refunded">Refunded</option>
-                      <option value="damaged">Damaged</option>
-                      <option value="returned">Returned</option>
-                      <option value="partial_refund">Partial Refund</option>
-                      <option value="partial_return">Partial Return</option>
-                    </select>
+                    <!-- Edit mode: show select with partial-only options -->
+                    <ng-container *ngIf="trackingTab() === 'edit'">
+                      <select class="adjustment-type-select"
+                        [(ngModel)]="item.adjustmentType"
+                        (ngModelChange)="updateAdjustmentType(item.id, $event)">
+                        <option value="">Select action</option>
+                        <option value="partial_return">Partial Return</option>
+                        <option value="partial_refund">Partial Refund</option>
+                        <option value="partial_damage">Partial Damage</option>
+                      </select>
+                    </ng-container>
+
+                    <!-- View mode: read-only text (no 'processing' fallback) -->
+                    <ng-container *ngIf="trackingTab() === 'view'">
+                      <span class="adjustment-value">{{ getAdjustmentType(item) || (item.status || '-') }}</span>
+                    </ng-container>
                   </div>
                   
                   <!-- Update Reason (Textarea) -->
                   <div class="col-update-reason">
                     <textarea class="update-reason-textarea"
                               [value]="getUpdateReason(item)"
-                              (input)="updateReason(i, $any($event.target).value)"
+                              (input)="updateReason(item.id, $any($event.target).value)"
                               placeholder="Enter reason for adjustment..."
                               rows="2"></textarea>
                   </div>
@@ -764,12 +749,12 @@
           </div>
           
           <!-- Fixed Footer -->
-          <div class="cart-info-dialog-footer">
+            <div class="cart-info-dialog-footer">
             <button type="button" class="btn-secondary" (click)="closeTracking()">
               Close
             </button>
-            <button type="button" class="btn btn-primary" (click)="saveTrackingChanges()" 
-                    [disabled]="loadingTracking()">
+                    <button type="button" class="btn btn-primary" (click)="saveTrackingChanges()" 
+                      [disabled]="loadingTracking() || trackingTab() === 'view' || !hasActionableChanges()">
               Save Changes
             </button>
           </div>
@@ -995,7 +980,7 @@
     <app-confirmation-dialog 
       *ngIf="isConfirmationDialogVisible() && confirmationDialogData()"
       [dialogData]="confirmationDialogData()!"
-      (confirmed)="onConfirmationConfirmed()"
+      (confirmed)="onConfirmationConfirmed($event)"
       (cancelled)="onConfirmationCancelled()">
     </app-confirmation-dialog>
 
@@ -1069,6 +1054,18 @@
         </div>
         
         <div class="dialog-content">
+          <!-- Payment method selection (keeps in sync with POS via PosService) -->
+          <div class="payment-methods" style="display:flex; gap:1rem; margin-bottom:0.5rem; align-items:center;">
+            <label style="display:flex; align-items:center; gap:0.5rem; cursor:pointer;">
+              <input type="checkbox" [checked]="isCashSale()" (change)="toggleCashSale()">
+              <span>💵 {{ 'pos.cashPayment' | translate }}</span>
+            </label>
+            <label style="display:flex; align-items:center; gap:0.5rem; cursor:pointer;">
+              <input type="checkbox" [checked]="isChargeSale()" (change)="toggleChargeSale()">
+              <span>💳 {{ 'pos.cardPayment' | translate }}</span>
+            </label>
+          </div>
+
           <div class="payment-amounts">
             <div class="amount-field">
               <label for="total-amount">{{ 'pos.totalAmountDue' | translate }}:</label>
@@ -1153,7 +1150,7 @@
           <div class="cart-items-section">
             <label>{{ 'pos.itemsInCart' | translate }}:</label>
             <div class="cart-items-list-dialog">
-              <div class="cart-item-header-extended">
+              <div class="cart-item-header-extended" style="display: grid; grid-template-columns: 2.5fr 0.6fr 0.9fr 0.9fr 0.5fr 0.6fr 0.6fr 0.5fr 0.5fr 0.7fr 0.9fr 1.2fr 1.1fr 1.4fr 1.1fr; gap: 0.5rem; align-items: center;">
                 <span>{{ 'pos.product' | translate }}</span>
                 <span>{{ 'pos.quantity' | translate }}</span>
                 <span>Original Price</span>
@@ -1161,44 +1158,32 @@
                
                 <span>{{ 'pos.vatApplicable' | translate }}</span>
                 <span>{{ 'pos.vatRate' | translate }}</span>
+                <span>VAT Amount</span>
                 <span>{{ 'pos.hasDiscount' | translate }}</span>
                 <span>{{ 'pos.discountType' | translate }}</span>
                 <span>{{ 'pos.discountValue' | translate }}</span>
                  <span>{{ 'pos.total' | translate }}</span>
-                 <span>Identification</span>
+                 <span>Identification No.</span>
                  <span>ID Type</span>
-                 <span>Customer Name</span>
+                 <span>Name</span>
               </div>
-              <div class="cart-item-row-extended" *ngFor="let item of cartItems(); let i = index; trackBy: trackByCartItem">
+              <div class="cart-item-row-extended" *ngFor="let item of cartItems(); let i = index; trackBy: trackByCartItem" style="display: grid; grid-template-columns: 2.5fr 0.6fr 0.9fr 0.9fr 0.5fr 0.6fr 0.6fr 0.5fr 0.5fr 0.7fr 0.9fr 1.2fr 1.1fr 1.4fr 1.1fr; gap: 0.5rem; align-items: center;">
                 <!-- Product Info -->
                 <div class="item-details-dialog">
                   <span class="item-name">{{ item.productName }}</span>
                   <span class="item-sku">{{ item.skuId }}</span>
                 </div>
                 
-                <!-- Quantity Controls -->
+                <!-- Quantity (read-only in dialog) -->
                 <div class="quantity-controls-dialog">
-                  <button (click)="updateQuantity(item.productId, item.quantity - 1)" class="qty-btn">-</button>
                   <span class="quantity">{{ item.quantity }}</span>
-                  <button (click)="updateQuantity(item.productId, item.quantity + 1)" class="qty-btn">+</button>
                 </div>
                 <!-- Original Price -->
                 <div class="item-original-price">₱{{ (item.originalPrice || 0).toFixed(2) }}</div>
                 
                 <!-- Price -->
                 <div class="item-price-dialog">₱{{ item.sellingPrice.toFixed(2) }}</div>
-                
-                
-                <!-- VAT Applicable Checkbox -->
-                <div class="cart-item-field">
-                  <input 
-                    type="checkbox" 
-                    [(ngModel)]="item.isVatApplicable"
-                    (change)="updateCartItemField(i, 'isVatApplicable', item.isVatApplicable)"
-                    class="cart-item-checkbox">
-                </div>
-                
-                <!-- VAT Rate Input -->
+                <!-- VAT Rate Input (compact) -->
                 <div class="cart-item-field">
                   <input 
                     type="number" 
@@ -1209,31 +1194,45 @@
                     max="100"
                     step="0.01"
                     class="cart-item-input"
-                    placeholder="0">
+                    placeholder="0"
+                    style="width:4.5rem">
                 </div>
-                
-                <!-- Has Discount Checkbox -->
+                <!-- VAT Applicable Checkbox (compact) -->
+                <div class="cart-item-field" style="display:flex; align-items:center; justify-content:center;">
+                  <input 
+                    type="checkbox" 
+                    [(ngModel)]="item.isVatApplicable"
+                    (change)="updateCartItemField(i, 'isVatApplicable', item.isVatApplicable)"
+                    class="cart-item-checkbox">
+                </div>
+                <!-- VAT Amount Display -->
                 <div class="cart-item-field">
+                  <span class="vat-amount">₱{{ (item.vatAmount || 0).toFixed(2) }}</span>
+                </div>
+
+                <!-- Has Discount Checkbox (compact) -->
+                <div class="cart-item-field" style="display:flex; align-items:center; justify-content:center;">
                   <input 
                     type="checkbox" 
                     [(ngModel)]="item.hasDiscount"
                     (change)="updateCartItemField(i, 'hasDiscount', item.hasDiscount)"
                     class="cart-item-checkbox">
                 </div>
-                
-                <!-- Discount Type Dropdown -->
+
+                <!-- Discount Type Dropdown (compact) -->
                 <div class="cart-item-field">
                   <select 
                     [(ngModel)]="item.discountType"
                     (change)="updateCartItemField(i, 'discountType', item.discountType)"
                     [disabled]="!item.hasDiscount"
-                    class="cart-item-select">
+                    class="cart-item-select"
+                    style="width:3rem">
                     <option value="percentage">%</option>
                     <option value="fixed">₱</option>
                   </select>
                 </div>
-                
-                <!-- Discount Value Input -->
+
+                <!-- Discount Value Input (compact) -->
                 <div class="cart-item-field">
                   <input 
                     type="number" 
@@ -1244,7 +1243,8 @@
                     min="0"
                     step="0.01"
                     class="cart-item-input"
-                    placeholder="0">
+                    placeholder="0"
+                    style="width:4.5rem">
                 </div>
 
                 <!-- Final Total - Editable -->
@@ -1252,11 +1252,22 @@
                 <div class="item-total-dialog">₱{{ (item.total || (item.sellingPrice * item.quantity)).toFixed(2) }}</div>
                 <!-- PWD ID (per-item) - editable -->
                 <div class="item-pwd-id">
-                  <input type="text" class="cart-item-input" [(ngModel)]="item.pwdId" (ngModelChange)="updateCartItemField(i, 'pwdId', $event)" placeholder="">
+                  <input type="text" class="cart-item-input" style="width:6rem" [(ngModel)]="item.pwdId" (ngModelChange)="updateCartItemField(i, 'pwdId', $event)" placeholder="">
                 </div>
-                <!-- Customer Name (per-item) - editable -->
+                <!-- ID Type (per-item) - dropdown -->
+                <div class="item-id-type">
+                  <select class="cart-item-select" [ngModel]="$any(item).idType" (ngModelChange)="updateCartItemField(i, 'idType', $event)" style="width:7rem">
+                    <option value=""></option>
+                    <option value="SSS">SSS</option>
+                    <option value="UMID">UMID</option>
+                    <option value="DriverLicense">Driver License</option>
+                    <option value="Passport">Passport</option>
+                    <option value="Others">Others</option>
+                  </select>
+                </div>
+                <!-- Customer Name (per-item) - editable (compact) -->
                 <div class="item-customer-name">
-                  <input type="text" class="cart-item-input" [(ngModel)]="item.customerName" (ngModelChange)="updateCartItemField(i, 'customerName', $event)" placeholder="Customer Name">
+                  <input type="text" class="cart-item-input" style="width:8rem" [(ngModel)]="item.customerName" (ngModelChange)="updateCartItemField(i, 'customerName', $event)" placeholder="Name">
                 </div>
                 <!-- Customer Discount selector (per-item) -->
                 <div class="cart-item-field">

@@ -173,6 +173,7 @@ export class InventoryTransactionService {
         }
 
         const itemDeductions: BatchDeductionDetail[] = [];
+        const updatedBatchesForProduct: ProductInventoryEntry[] = [];
 
         // Process each batch allocation
         for (const allocation of plan.batchAllocations) {
@@ -233,6 +234,14 @@ export class InventoryTransactionService {
             isOffline: false,
             synced: true
           });
+
+          // Capture the updated batch state for transactional recompute
+          updatedBatchesForProduct.push({
+            ...batch,
+            quantity: newQuantity,
+            totalDeducted: newTotalDeducted,
+            status: newStatus
+          } as ProductInventoryEntry);
         }
 
         batchDeductions.push({
@@ -240,10 +249,13 @@ export class InventoryTransactionService {
           deductions: itemDeductions
         });
 
-        // Recompute product summary
+        // Recompute product summary using the batches we just updated within
+        // this transaction to ensure consistency.
         const summary = await this.productSummaryService.recomputeProductSummaryInTransaction(
           transaction,
-          item.productId
+          item.productId,
+          undefined,
+          updatedBatchesForProduct
         );
 
         productSummaries.push({
@@ -296,6 +308,8 @@ export class InventoryTransactionService {
       for (const productBatch of batchDeductions) {
         console.log(`📦 Reversing: ${productBatch.productId} (${productBatch.deductions.length} batches)`);
 
+        const updatedBatchesForProduct: ProductInventoryEntry[] = [];
+
         for (const deduction of productBatch.deductions) {
           const batchRef = doc(this.firestore, 'productInventory', deduction.batchId);
           const batchDoc = await transaction.get(batchRef);
@@ -333,12 +347,23 @@ export class InventoryTransactionService {
           transaction.set(reversalRef, reversalRecord);
 
           console.log(`   📦 Batch ${deduction.batchId}: restored ${deduction.quantity} units (now ${newQuantity})`);
+
+          // capture updated batch state for transactional recompute
+          updatedBatchesForProduct.push({
+            ...batch,
+            quantity: newQuantity,
+            totalDeducted: newTotalDeducted,
+            status: 'active'
+          } as ProductInventoryEntry);
         }
 
-        // Recompute product summary
+        // Recompute product summary using updated batch snapshots to ensure
+        // the summary is consistent with the changes made above.
         await this.productSummaryService.recomputeProductSummaryInTransaction(
           transaction,
-          productBatch.productId
+          productBatch.productId,
+          undefined,
+          updatedBatchesForProduct
         );
 
         console.log(`   📊 Product ${productBatch.productId} summary recomputed`);

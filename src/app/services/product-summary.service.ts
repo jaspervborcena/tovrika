@@ -32,7 +32,11 @@ export class ProductSummaryService {
   async recomputeProductSummaryInTransaction(
     transaction: Transaction,
     productId: string,
-    productRef?: DocumentReference
+    productRef?: DocumentReference,
+    // Optional: if the caller already has the up-to-date batch documents
+    // (for example, read inside the same transaction), pass them here so
+    // the recompute can avoid non-transactional queries.
+    updatedBatches?: ProductInventoryEntry[]
   ): Promise<{ totalStock: number; sellingPrice: number; originalPrice: number }> {
     const currentUser = this.authService.getCurrentUser();
     const permission = this.authService.getCurrentPermission();
@@ -41,8 +45,28 @@ export class ProductSummaryService {
       throw new Error('User not authenticated or no company permission');
     }
 
-    // Get all active batches for this product (FIFO order)
-    const activeBatches = await this.getActiveBatchesFIFO(productId);
+    // Use provided batches if available (transactional path), otherwise fall
+    // back to querying batches (non-transactional). Prefer using
+    // `updatedBatches` when calling from within a transaction.
+    let activeBatches: ProductInventoryEntry[];
+    if (updatedBatches && updatedBatches.length > 0) {
+      // Merge provided updated batches with existing active batches so we don't
+      // omit other active batches that weren't part of the caller's update.
+      console.log('🔁 Merging provided batch data with existing batches for recompute...');
+      const existing = await this.getActiveBatchesFIFO(productId);
+      const map = new Map<string, ProductInventoryEntry>();
+      for (const b of existing) {
+        if (b.batchId) map.set(b.batchId, b);
+      }
+      for (const ub of updatedBatches) {
+        if (ub.batchId) map.set(ub.batchId, ub);
+      }
+      activeBatches = Array.from(map.values()).filter(b => (b.quantity || 0) > 0).sort((a, b) => new Date(a.receivedAt).getTime() - new Date(b.receivedAt).getTime());
+      console.log('🔁 Active batches count after merge:', activeBatches.length);
+    } else {
+      // Get all active batches for this product (FIFO order)
+      activeBatches = await this.getActiveBatchesFIFO(productId);
+    }
     
     console.log('🔢 Product Summary Calculation for productId:', productId);
     console.log('📦 Active batches found:', activeBatches.length);

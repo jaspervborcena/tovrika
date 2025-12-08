@@ -219,7 +219,10 @@ export class InvoiceService {
           transaction.set(od.ref as any, od.data);
         }
 
-        // Validate and update product totals
+         // Validate product existence and availability only.
+         // NOTE: Do NOT mutate `products.totalStock` here — inventory writes
+         // (batch deductions and summary recompute) are handled by the
+         // dedicated FIFO/inventory flows so we avoid double-deduction.
         for (const prs of productReadSnapshots) {
           const item = prs.item;
           const productSnap = prs.snap;
@@ -245,14 +248,9 @@ export class InvoiceService {
             throw new Error(`Insufficient stock for product ${item.productId}. Available: ${currentTotal}, Requested: ${qty}`);
           }
 
-          const updatedTotal = Math.max(0, currentTotal - qty);
 
-          transaction.update(productRef, {
-            totalStock: updatedTotal,
-            lastUpdated: new Date()
-          });
 
-          console.log(`🔻 Product ${item.productId} totalStock: ${currentTotal} -> ${updatedTotal}`);
+            console.log(`✅ Product ${item.productId} validated for availability: ${currentTotal} available, ${qty} requested`);
         }
 
         // Finally, write main order document

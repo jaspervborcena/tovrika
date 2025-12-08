@@ -8,6 +8,10 @@ export interface ConfirmationDialogData {
   cancelText?: string;
   type?: 'warning' | 'danger' | 'info';
   isHtml?: boolean; // Flag to indicate if message contains HTML
+  // When true, show an optional "Update Reason" textarea below the message
+  showReason?: boolean;
+  reasonLabel?: string;
+  reasonPlaceholder?: string;
 }
 
 @Component({
@@ -37,6 +41,12 @@ export interface ConfirmationDialogData {
         <div class="confirmation-body">
           <p class="confirmation-message" *ngIf="!dialogData().isHtml">{{ dialogData().message || 'Are you sure?' }}</p>
           <div class="confirmation-message" *ngIf="dialogData().isHtml" [innerHTML]="dialogData().message || 'Are you sure?'"></div>
+
+          <!-- Optional Update Reason input -->
+          <div *ngIf="dialogData().showReason" style="margin-top:0.75rem">
+            <label style="display:block; font-weight:600; margin-bottom:0.25rem">{{ dialogData().reasonLabel || 'Update Reason (optional)' }}</label>
+            <textarea class="detail-input" rows="3" placeholder="{{ dialogData().reasonPlaceholder || 'Enter reason for adjustment (optional)...' }}" (input)="reason = $any($event.target).value"></textarea>
+          </div>
         </div>
         
         <!-- Action Buttons -->
@@ -259,12 +269,23 @@ export interface ConfirmationDialogData {
       padding: 0.5rem 0.75rem;
       border-radius: 0.375rem;
       border: 1px solid #d1d5db;
-      min-width: 200px;
-      flex: 1;
-      max-width: 300px;
+      min-width: 0;
+      box-sizing: border-box;
+      width: 100%;
+      max-width: 100%;
       outline: none;
       transition: all 0.2s ease;
       font-family: inherit;
+    }
+    /* Ensure the optional reason textarea inside the dialog body also fills available width */
+    .confirmation-body .detail-input,
+    .confirmation-body textarea.detail-input {
+      display: block;
+      width: 100%;
+      box-sizing: border-box;
+      min-width: 0;
+      max-width: 100%;
+      margin: 0;
     }
 
     .confirmation-message .detail-input:focus {
@@ -420,14 +441,22 @@ export class ConfirmationDialogComponent {
   dialogData = input.required<ConfirmationDialogData>();
 
   // Outputs for user actions
-  confirmed = output<void>();
+  // When confirmed, emit an object containing optional `reason` if provided
+  confirmed = output<{ reason?: string }>();
   cancelled = output<void>();
+
+  // Local reason state for the optional update reason input
+  reason: string = '';
 
   @ViewChild('confirmButton', { read: ElementRef }) confirmButton?: ElementRef<HTMLButtonElement>;
   private hasFocusedConfirm = false;
 
   onConfirm(): void {
-    this.confirmed.emit();
+    const payload: any = {};
+    if (this.reason && String(this.reason).trim().length > 0) payload.reason = String(this.reason).trim();
+    this.confirmed.emit(payload);
+    // reset local reason after emit
+    this.reason = '';
   }
 
   onCancel(): void {
