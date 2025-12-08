@@ -398,13 +398,15 @@ export class OrderService {
       return [];
     }
   }
-async updateOrderStatus(orderId: string, status: string): Promise<void> {
+async updateOrderStatus(orderId: string, status: string, reason?: string): Promise<void> {
   try {
-    await this.offlineDocService.updateDocument('orders', orderId, { status });
+    const updatePayload: any = { status };
+    if (reason !== undefined && reason !== null) updatePayload.updateReason = reason;
+    await this.offlineDocService.updateDocument('orders', orderId, updatePayload);
 
     // If we're online and the order was cancelled or returned, attempt a client-side transactional restock.
     // This is a best-effort attempt — the server-side Cloud Function still exists as authoritative.
-   if (navigator.onLine && (status === 'cancelled' || status === 'returned' || status === 'refunded')) {
+  if (navigator.onLine && (status === 'cancelled' || status === 'returned' || status === 'refunded')) {
   const currentUser = this.authService.getCurrentUser();
   const performedBy = currentUser?.uid || currentUser?.email || 'system';
 
@@ -423,13 +425,13 @@ async updateOrderStatus(orderId: string, status: string): Promise<void> {
   // Mark ordersSellingTracking entries appropriately
   try {
     if (status === 'cancelled') {
-      await this.ordersSellingTrackingService.markOrderTrackingCancelled(orderId, performedBy);
+      await this.ordersSellingTrackingService.markOrderTrackingCancelled(orderId, performedBy, reason);
     } else if (status === 'returned') {
-      await this.ordersSellingTrackingService.markOrderTrackingReturned(orderId, performedBy);
+      await this.ordersSellingTrackingService.markOrderTrackingReturned(orderId, performedBy, reason);
     } else if (status === 'refunded') {
-      await this.ordersSellingTrackingService.markOrderTrackingRefunded(orderId, performedBy);
+      await this.ordersSellingTrackingService.markOrderTrackingRefunded(orderId, performedBy, reason);
     } else if (status === 'damage') {
-      await this.ordersSellingTrackingService.markOrderTrackingDamaged(orderId, performedBy);
+      await this.ordersSellingTrackingService.markOrderTrackingDamaged(orderId, performedBy, reason);
     }
   } catch (e) {
     this.logger.warn(

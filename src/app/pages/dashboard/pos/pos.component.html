@@ -533,29 +533,33 @@
             
             <!-- Action Buttons (manager authorization required for sensitive actions) -->
             <div style="display: flex; gap: 0.5rem; justify-content: flex-end; flex-wrap: wrap;">
-              <button class="btn open-receipt-btn" (click)="openOrderReceipt(selectedOrder())">
+                    <button class="btn open-receipt-btn" (click)="openOrderReceipt(selectedOrder())">
                 📄 Open Receipt
               </button>
-              <button *ngIf="selectedOrder()?.status !== 'cancelled'" class="btn cancel-order-btn" (click)="authorizeAndUpdateOrderStatus(selectedOrder()?.id, 'cancelled')">Cancel Order</button>
-              <!-- Disable action buttons when order is cancelled -->
-              <button *ngIf="selectedOrder()" class="btn btn-warning return-btn"
-                      [disabled]="selectedOrder()?.status === 'returned' || selectedOrder()?.status === 'returned'"
-                      [title]="selectedOrder()?.status === 'returned' ? 'Action disabled for returned orders' : 'Return'"
-                     (click)="authorizeAndUpdateOrderStatus(selectedOrder()?.id, 'returned')">Return</button>
+                    <button *ngIf="selectedOrder()" class="btn cancel-order-btn"
+                      [disabled]="!canCancelOrder() || isOrderActionLocked()"
+                      [title]="(!canCancelOrder() || isOrderActionLocked()) ? 'Cancel disabled for this order' : 'Cancel Order'"
+                      (click)="authorizeAndUpdateOrderStatus(selectedOrder()?.id, 'cancelled')">Cancel Order</button>
 
-              <button *ngIf="selectedOrder()?.status !== 'refunded'" class="btn btn-primary"
-                      [disabled]="selectedOrder()?.status === 'cancelled'"
-                      [title]="selectedOrder()?.status === 'cancelled' ? 'Action disabled for cancelled orders' : 'Refund'"
+                    <!-- Show or hide Return depending on order status and whether a return tracking row already exists -->
+                    <button *ngIf="shouldShowReturnButton()" class="btn btn-warning return-btn"
+                      [disabled]="isOrderActionLocked()"
+                      [title]="isOrderActionLocked() ? 'Action disabled for this order' : 'Return'"
+                      (click)="authorizeAndUpdateOrderStatus(selectedOrder()?.id, 'returned')">Return</button>
+
+                    <button *ngIf="selectedOrder()?.status !== 'refunded'" class="btn btn-primary"
+                      [disabled]="isRefundDisabled()"
+                      [title]="isRefundDisabled() ? 'Action disabled for this order' : 'Refund'"
                       (click)="authorizeAndUpdateOrderStatus(selectedOrder()?.id, 'refunded')">Refund</button>
 
-              <button *ngIf="selectedOrder()" class="btn btn-danger damage-btn"
-                      [disabled]="selectedOrder()?.status === 'cancelled'"
-                      [title]="selectedOrder()?.status === 'cancelled' ? 'Action disabled for cancelled orders' : 'Damage'"
+                    <button *ngIf="shouldShowDamageButton()" class="btn btn-danger damage-btn"
+                      [disabled]="isDamageDisabled()"
+                      [title]="isDamageDisabled() ? 'Action disabled for this order' : 'Damage'"
                       (click)="openManageItemStatusAuthorized('damage')">Damage</button>
 
-              <button class="btn btn-secondary manage-status-btn"
-                      [disabled]="selectedOrder()?.status === 'cancelled'"
-                      [title]="selectedOrder()?.status === 'cancelled' ? 'Action disabled for cancelled orders' : 'Manage Item Status'"
+                    <button class="btn btn-secondary manage-status-btn"
+                      [disabled]="isManageStatusDisabled()"
+                      [title]="isManageStatusDisabled() ? 'Action disabled for this order' : 'Manage Item Status'"
                       (click)="openManageItemStatusAuthorized()">Manage Item Status</button>
             </div>
 
@@ -620,7 +624,13 @@
             <!-- Items List -->
             <div *ngIf="!loadingTracking() && trackingEntries().length > 0" class="tracking-items-section">
               <label class="section-label">Items Status Tracking:</label>
-              
+
+              <!-- Tabs -->
+              <div class="tracking-tabs" style="display:flex; gap:0.5rem; margin-bottom:0.5rem;">
+                <button class="tab-btn" [class.active]="trackingTab() === 'edit'" (click)="setTrackingTab('edit')">Completed (editable)</button>
+                <button class="tab-btn" [class.active]="trackingTab() === 'view'" (click)="setTrackingTab('view')">All (read-only)</button>
+              </div>
+
               <div class="tracking-items-list">
                 <!-- Header Row -->
                 <div class="tracking-item-header">
@@ -638,7 +648,7 @@
                 </div>
                 
                 <!-- Data Rows -->
-                <div class="tracking-item-row" *ngFor="let item of trackingEntries(); let i = index">
+                <div class="tracking-item-row" *ngFor="let item of displayedTrackingEntries(); let i = index">
                   <!-- Product Info -->
                   <div class="col-product">
                     <div class="item-details-tracking">
@@ -693,36 +703,42 @@
                   
                   <!-- Qty to Adjust (Editable) -->
                   <div class="col-qty-adjust">
-                    <input type="number" 
-                           class="qty-adjust-input"
-                           [value]="getQtyToAdjust(item)"
-                           min="0"
-                           step="1"
-                           (input)="updateQtyToAdjust(i, $any($event.target).value)"
-                           placeholder="Qty">
+                        <input type="number" 
+                          class="qty-adjust-input"
+                          [value]="getQtyToAdjust(item)"
+                          min="1"
+                          [max]="item.quantity || 0"
+                          step="1"
+                           (input)="updateQtyToAdjust(item.id, $any($event.target).value)"
+                          placeholder="Qty"
+                          [disabled]="trackingTab() === 'view'">
                   </div>
                   
-                  <!-- Adjustment Type (Dropdown) -->
+                  <!-- Adjustment Type (Dropdown / Read-only) -->
                   <div class="col-adjustment-type">
-                    <select class="adjustment-type-select"
-                            [value]="getAdjustmentType(item)"
-                            (change)="updateAdjustmentType(i, $any($event.target).value)">
-                      <option value="processing">Processing</option>
-                      <option value="completed">Completed</option>
-                      <option value="cancelled">Cancelled</option>
-                      <option value="refunded">Refunded</option>
-                      <option value="damaged">Damaged</option>
-                      <option value="returned">Returned</option>
-                      <option value="partial_refund">Partial Refund</option>
-                      <option value="partial_return">Partial Return</option>
-                    </select>
+                    <!-- Edit mode: show select with partial-only options -->
+                    <ng-container *ngIf="trackingTab() === 'edit'">
+                      <select class="adjustment-type-select"
+                        [(ngModel)]="item.adjustmentType"
+                        (ngModelChange)="updateAdjustmentType(item.id, $event)">
+                        <option value="">Select action</option>
+                        <option value="partial_return">Partial Return</option>
+                        <option value="partial_refund">Partial Refund</option>
+                        <option value="partial_damage">Partial Damage</option>
+                      </select>
+                    </ng-container>
+
+                    <!-- View mode: read-only text (no 'processing' fallback) -->
+                    <ng-container *ngIf="trackingTab() === 'view'">
+                      <span class="adjustment-value">{{ getAdjustmentType(item) || (item.status || '-') }}</span>
+                    </ng-container>
                   </div>
                   
                   <!-- Update Reason (Textarea) -->
                   <div class="col-update-reason">
                     <textarea class="update-reason-textarea"
                               [value]="getUpdateReason(item)"
-                              (input)="updateReason(i, $any($event.target).value)"
+                              (input)="updateReason(item.id, $any($event.target).value)"
                               placeholder="Enter reason for adjustment..."
                               rows="2"></textarea>
                   </div>
@@ -733,12 +749,12 @@
           </div>
           
           <!-- Fixed Footer -->
-          <div class="cart-info-dialog-footer">
+            <div class="cart-info-dialog-footer">
             <button type="button" class="btn-secondary" (click)="closeTracking()">
               Close
             </button>
-            <button type="button" class="btn btn-primary" (click)="saveTrackingChanges()" 
-                    [disabled]="loadingTracking()">
+                    <button type="button" class="btn btn-primary" (click)="saveTrackingChanges()" 
+                      [disabled]="loadingTracking() || trackingTab() === 'view' || !hasActionableChanges()">
               Save Changes
             </button>
           </div>
@@ -964,7 +980,7 @@
     <app-confirmation-dialog 
       *ngIf="isConfirmationDialogVisible() && confirmationDialogData()"
       [dialogData]="confirmationDialogData()!"
-      (confirmed)="onConfirmationConfirmed()"
+      (confirmed)="onConfirmationConfirmed($event)"
       (cancelled)="onConfirmationCancelled()">
     </app-confirmation-dialog>
 

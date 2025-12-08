@@ -1,6 +1,6 @@
 import { Injectable, inject } from '@angular/core';
 import { Firestore, collection, query, where } from '@angular/fire/firestore';
-import { getDocs, doc, setDoc, serverTimestamp, runTransaction, orderBy, limit } from 'firebase/firestore';
+import { getDocs, getDoc, doc, setDoc, serverTimestamp, runTransaction, orderBy, limit } from 'firebase/firestore';
 import { toDateValue } from '../core/utils/date-utils';
 import { OfflineDocumentService } from '../core/services/offline-document.service';
 import { OrdersSellingTrackingDoc } from '../interfaces/orders-selling-tracking.interface';
@@ -90,7 +90,7 @@ export class OrdersSellingTrackingService {
    * Mark all ordersSellingTracking docs for a given orderId as 'cancelled'.
    * This updates both online documents and any pending offline queued docs.
    */
-  async markOrderTrackingCancelled(orderId: string, cancelledBy?: string): Promise<{ updated: number; errors: any[] }> {
+  async markOrderTrackingCancelled(orderId: string, cancelledBy?: string, reason?: string): Promise<{ updated: number; errors: any[] }> {
     const errors: any[] = [];
     let updated = 0;
     try {
@@ -106,6 +106,7 @@ export class OrdersSellingTrackingService {
           status: 'cancelled',
           updatedBy: cancelledBy || data.updatedBy || cancelledBy || data.createdBy || 'system'
         };
+        if (reason) updates.updateReason = reason;
 
         try {
           if (navigator.onLine && !id.startsWith('temp_')) {
@@ -129,7 +130,9 @@ export class OrdersSellingTrackingService {
       for (const pd of pending) {
         try {
           if (pd.collectionName === 'ordersSellingTracking' && pd.data && pd.data.orderId === orderId && pd.data.status !== 'cancelled') {
-            await this.offlineDocService.updateDocument('ordersSellingTracking', pd.id, { status: 'cancelled', updatedBy: cancelledBy || pd.data.createdBy || 'system' });
+            const upd: any = { status: 'cancelled', updatedBy: cancelledBy || pd.data.createdBy || 'system' };
+            if (reason) upd.updateReason = reason;
+            await this.offlineDocService.updateDocument('ordersSellingTracking', pd.id, upd);
             updated++;
           }
         } catch (e) {
@@ -143,7 +146,7 @@ export class OrdersSellingTrackingService {
     return { updated, errors };
   }
 
-  async markOrderTrackingReturned(orderId: string, returnedBy?: string): Promise<{ updated: number; errors: any[] }> {
+  async markOrderTrackingReturned(orderId: string, returnedBy?: string, reason?: string): Promise<{ updated: number; errors: any[] }> {
   const errors: any[] = [];
   let updated = 0;
   try {
@@ -179,6 +182,8 @@ export class OrdersSellingTrackingService {
         updatedAt: navigator.onLine ? onlineCreatedAt : offlineCreatedAt,
         updatedBy: returnedBy || data.updatedBy || data.createdBy || 'system'
       };
+      if (reason) newDoc.updateReason = reason;
+      
 
       try {
         if (navigator.onLine && !id.startsWith('temp_')) {
@@ -216,11 +221,9 @@ export class OrdersSellingTrackingService {
           pd.data.orderId === orderId &&
           pd.data.status !== 'returned'
         ) {
-          await this.offlineDocService.updateDocument(
-            'ordersSellingTracking',
-            pd.id,
-            { status: 'returned', updatedBy: returnedBy || pd.data.createdBy || 'system' }
-          );
+          const upd: any = { status: 'returned', updatedBy: returnedBy || pd.data.createdBy || 'system' };
+          if (reason) upd.updateReason = reason;
+          await this.offlineDocService.updateDocument('ordersSellingTracking', pd.id, upd);
           updated++;
         }
       } catch (e) {
@@ -234,7 +237,7 @@ export class OrdersSellingTrackingService {
   return { updated, errors };
 }
 
-async markOrderTrackingRefunded(orderId: string, refundedBy?: string): Promise<{ created: number; errors: any[]; createdIds?: string[] }> {
+async markOrderTrackingRefunded(orderId: string, refundedBy?: string, reason?: string): Promise<{ created: number; errors: any[]; createdIds?: string[] }> {
   const errors: any[] = [];
   let created = 0;
   const createdIds: string[] = [];
@@ -275,6 +278,8 @@ async markOrderTrackingRefunded(orderId: string, refundedBy?: string): Promise<{
         updatedAt: navigator.onLine ? onlineCreatedAt : offlineCreatedAt,
         updatedBy: refundedBy || data.updatedBy || data.createdBy || 'system'
       };
+      if (reason) newDoc.updateReason = reason;
+      
 
       try {
         if (navigator.onLine) {
@@ -357,10 +362,233 @@ async markOrderTrackingRefunded(orderId: string, refundedBy?: string): Promise<{
 }
 
 /**
+ * Create a tracking record (partial or full) based on an existing tracking doc id.
+ * `newStatus` may be 'partial_return'|'partial_refund'|'partial_damage' or
+ * 'returned'|'refunded'|'damaged'. This method creates a new tracking doc and
+ * for damage statuses applies inventory deductions for the given quantity.
+ */
+async createPartialTrackingFromDoc(trackingId: string, newStatus: string, qty: number, createdBy?: string): Promise<{ created: number; errors: any[] }> {
+  const errors: any[] = [];
+  let created = 0;
+  try {
+    const ref = doc(this.firestore, 'ordersSellingTracking', trackingId);
+    const snap: any = await getDoc(ref as any);
+    let data: any = null;
+    if (snap && snap.exists && snap.exists()) {
+      data = snap.data() || {};
+    } else {
+      // Try pending offline docs as fallback
+      try {
+        const pending = await this.offlineDocService.getPendingDocuments();
+        const pd = pending.find((p: any) => p.collectionName === 'ordersSellingTracking' && (p.id === trackingId || p.data?.id === trackingId));
+        if (pd && pd.data) data = pd.data;
+      } catch (e) {
+        // ignore
+      }
+    }
+
+    if (!data) {
+      errors.push({ id: trackingId, error: 'Source tracking document not found' });
+      return { created, errors };
+    }
+
+    const onlineCreatedAt = serverTimestamp();
+    const offlineCreatedAt = new Date();
+
+    const unitPrice = Number(data.price || 0);
+    const origQty = Number(data.quantity || 0) || 1;
+    const discountTotal = Number(data.discount || 0) || 0;
+    const vatTotal = Number(data.vat || 0) || 0;
+
+    const perUnitDiscount = origQty ? (discountTotal / origQty) : 0;
+    const perUnitVat = origQty ? (vatTotal / origQty) : 0;
+
+    const newDiscount = perUnitDiscount * qty;
+    const newVat = perUnitVat * qty;
+    const total = Math.max(0, unitPrice * qty - newDiscount - newVat);
+
+    const newDoc: any = {
+      companyId: data.companyId || undefined,
+      storeId: data.storeId || undefined,
+      orderId: data.orderId || undefined,
+      batchNumber: data.batchNumber || 1,
+      itemIndex: data.itemIndex ?? 0,
+      orderDetailsId: data.orderDetailsId || undefined,
+      productId: data.productId,
+      productName: data.productName,
+      price: unitPrice,
+      quantity: qty,
+      total,
+      discount: newDiscount,
+      vat: newVat,
+      uid: data.uid || data.createdBy || undefined,
+      cashierId: data.cashierId || data.createdBy || undefined,
+      status: newStatus,
+      createdAt: navigator.onLine ? onlineCreatedAt : offlineCreatedAt,
+      createdBy: createdBy || data.updatedBy || data.createdBy || 'system',
+      updatedAt: navigator.onLine ? onlineCreatedAt : offlineCreatedAt,
+      updatedBy: createdBy || data.updatedBy || data.createdBy || 'system'
+    };
+
+    const newStatusLower = (newStatus || '').toString().toLowerCase();
+    const isDamage = newStatusLower.includes('damage');
+
+    if (navigator.onLine) {
+      const colRef = collection(this.firestore, 'ordersSellingTracking');
+      const newRef = doc(colRef as any);
+      const payload = this.sanitizeForFirestore(newDoc);
+      await setDoc(newRef as any, payload as any);
+      created++;
+
+      // If damage (partial or full), deduct inventory for the qty
+      if (isDamage) {
+        try {
+          const productId = data.productId;
+          const dedQty = qty;
+          if (productId && dedQty > 0) {
+            const batchQ = query(
+              collection(this.firestore, 'productInventory'),
+              where('productId', '==', productId),
+              orderBy('receivedAt', 'desc'),
+              limit(10)
+            );
+            let batchSnaps: any = null;
+            let latestBatch: any = null;
+            try {
+              batchSnaps = await getDocs(batchQ as any);
+              if (batchSnaps && !batchSnaps.empty) {
+                for (const b of batchSnaps.docs) {
+                  const bd: any = b.data() || {};
+                  if ((bd.status || 'active').toString().toLowerCase() === 'active') {
+                    latestBatch = b;
+                    break;
+                  }
+                }
+                if (!latestBatch) latestBatch = batchSnaps.docs[0];
+              }
+            } catch (queryErr) {
+              try {
+                const fallbackQ = query(
+                  collection(this.firestore, 'productInventory'),
+                  where('productId', '==', productId),
+                  limit(10)
+                );
+                const fallbackSnaps = await getDocs(fallbackQ as any);
+                if (fallbackSnaps && !fallbackSnaps.empty) {
+                  const docs = fallbackSnaps.docs.slice().sort((a: any, b: any) => {
+                    const ad = (a.data()?.receivedAt as any) || new Date(0);
+                    const bd = (b.data()?.receivedAt as any) || new Date(0);
+                    const at = ad instanceof Date ? ad.getTime() : (typeof ad === 'number' ? ad : new Date(ad).getTime());
+                    const bt = bd instanceof Date ? bd.getTime() : (typeof bd === 'number' ? bd : new Date(bd).getTime());
+                    return bt - at;
+                  });
+                  for (const b of docs) {
+                    const bd: any = b.data() || {};
+                    if ((bd.status || 'active').toString().toLowerCase() === 'active') {
+                      latestBatch = b;
+                      break;
+                    }
+                  }
+                  if (!latestBatch) latestBatch = docs[0];
+                }
+              } catch (fbErr) {
+                console.warn('createPartialTrackingFromDoc: fallback batch query failed', fbErr);
+              }
+            }
+
+            await runTransaction(this.firestore, async (transaction) => {
+              const productRef = doc(this.firestore, 'products', productId);
+              const productSnap = await transaction.get(productRef as any);
+              if (!productSnap.exists()) throw new Error(`Product ${productId} not found`);
+
+              let batchRef: any = null;
+              let batchSnap: any = null;
+              let batchData: any = null;
+              if (latestBatch) {
+                batchRef = doc(this.firestore, 'productInventory', latestBatch.id as any);
+                batchSnap = await transaction.get(batchRef as any);
+                if (!batchSnap.exists()) throw new Error(`Batch ${latestBatch.id} not found`);
+                batchData = batchSnap.data();
+              }
+
+              const prodData: any = productSnap.data();
+              const currentTotal = Number(prodData.totalStock || 0);
+              const newTotal = Math.max(0, currentTotal - dedQty);
+              transaction.update(productRef as any, { totalStock: newTotal, lastUpdated: new Date(), updatedBy: createdBy || 'system' } as any);
+
+              if (batchSnap && batchData) {
+                const currentQty = Number(batchData.quantity || 0);
+                const newBatchQty = Math.max(0, currentQty - dedQty);
+                const updateData: any = {
+                  quantity: newBatchQty,
+                  totalDeducted: (batchData.totalDeducted || 0) + dedQty,
+                  updatedAt: new Date(),
+                  status: newBatchQty === 0 ? 'inactive' : batchData.status
+                };
+                transaction.update(batchRef as any, updateData);
+
+                const dedRecord = {
+                  productId,
+                  batchId: batchData.batchId || null,
+                  quantity: dedQty,
+                  deductedAt: new Date(),
+                  note: 'DAMAGED - client',
+                  deductedBy: createdBy || null,
+                  orderId: data.orderId
+                };
+                const dedRef = doc(collection(this.firestore, 'inventoryDeductions'));
+                transaction.set(dedRef, dedRecord as any);
+              } else {
+                const dedRecord = {
+                  productId,
+                  batchId: null,
+                  quantity: dedQty,
+                  deductedAt: new Date(),
+                  note: 'DAMAGED - no-batch',
+                  deductedBy: createdBy || null,
+                  orderId: data.orderId
+                };
+                const dedRef = doc(collection(this.firestore, 'inventoryDeductions'));
+                transaction.set(dedRef, dedRecord as any);
+              }
+            });
+          }
+        } catch (invErr) {
+          errors.push({ id: newRef ? newRef.id : null, error: invErr });
+        }
+      }
+    } else {
+      const payload = this.sanitizeForFirestore(newDoc);
+      await this.offlineDocService.createDocument('ordersSellingTracking', payload as any);
+      created++;
+      if (isDamage) {
+        try {
+          // optimistic update locally
+          const productId = data.productId;
+          const dedQty = qty;
+          if (productId && dedQty > 0) {
+            const product = this.productService.getProduct(productId);
+            const current = product?.totalStock ?? 0;
+            const newTotal = Math.max(0, current - dedQty);
+            await this.productService.updateProduct(productId, { totalStock: newTotal, lastUpdated: new Date() } as any);
+          }
+        } catch (localErr) {
+          // ignore optimistic failure
+        }
+      }
+    }
+  } catch (e) {
+    errors.push({ id: trackingId, error: e });
+  }
+
+  return { created, errors };
+}
+
+/**
  * Create 'damaged' tracking records based on existing returned rows.
  * This does NOT modify the original docs; it creates new docs with status 'damaged'.
  */
-async markOrderTrackingDamaged(orderId: string, damagedBy?: string): Promise<{ created: number; errors: any[]; createdIds?: string[] }> {
+async markOrderTrackingDamaged(orderId: string, damagedBy?: string, reason?: string): Promise<{ created: number; errors: any[]; createdIds?: string[] }> {
   const errors: any[] = [];
   let created = 0;
   const createdIds: string[] = [];
@@ -399,6 +627,7 @@ async markOrderTrackingDamaged(orderId: string, damagedBy?: string): Promise<{ c
         updatedAt: navigator.onLine ? onlineCreatedAt : offlineCreatedAt,
         updatedBy: damagedBy || data.updatedBy || data.createdBy || 'system'
       };
+      if (reason) newDoc.updateReason = reason;
 
       try {
         if (navigator.onLine) {
