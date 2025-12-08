@@ -90,6 +90,18 @@ export class ReceiptComponent implements OnInit {
     return 'Walk-in Customer';
   }
 
+  // If multiple customer names present, return them as a single display string
+  getAllCustomerNamesDisplay(): string {
+    try {
+      if (Array.isArray(this.receiptData?.customerNames) && this.receiptData.customerNames.length > 0) {
+        return this.receiptData.customerNames.join(', ');
+      }
+      return this.getCustomerDisplayName();
+    } catch (e) {
+      return this.getCustomerDisplayName();
+    }
+  }
+
   // Check if we have customer details to show (address/TIN)
   hasCustomerDetails(): boolean {
     const customerName = this.getCustomerDisplayName();

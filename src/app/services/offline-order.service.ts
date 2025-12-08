@@ -19,6 +19,23 @@ export class OfflineOrderService {
 
   private offlineDocService = inject(OfflineDocumentService);
 
+  // Generate an item id in the format EPOCHMS-RANDOM10 (e.g., 1702012345678-0123456789)
+  private generateItemId(): string {
+    const epoch = Date.now();
+    try {
+      const cryptoObj: any = (typeof crypto !== 'undefined') ? crypto : (window as any).crypto;
+      const arr = new Uint32Array(2);
+      cryptoObj.getRandomValues(arr);
+      const big = (BigInt(arr[0]) << 32n) + BigInt(arr[1]);
+      const mod = big % 10000000000n;
+      const rand10 = mod.toString().padStart(10, '0');
+      return `${epoch}-${rand10}`;
+    } catch (e) {
+      const rnd = Math.floor(Math.random() * 10000000000).toString().padStart(10, '0');
+      return `${epoch}-${rnd}`;
+    }
+  }
+
   /**
    * Creates an order in offline mode (no inventory deduction)
    */
@@ -46,6 +63,7 @@ export class OfflineOrderService {
         );
 
         const orderItem: OrderDetailItem = {
+          itemId: this.generateItemId(),
           productId: cartItem.productId,
           productName: cartItem.name,
           productSku: cartItem.productId, // Assuming productId as SKU for now
@@ -65,6 +83,7 @@ export class OfflineOrderService {
         console.error(`Failed to plan deduction for product ${cartItem.productId}:`, error);
         // Create order item without batch deductions (will need manual adjustment)
         const orderItem: OrderDetailItem = {
+          itemId: this.generateItemId(),
           productId: cartItem.productId,
           productName: cartItem.name,
           productSku: cartItem.productId,
@@ -156,6 +175,7 @@ export class OfflineOrderService {
         );
 
         const orderItem: OrderDetailItem = {
+          itemId: this.generateItemId(),
           productId: cartItem.productId,
           productName: cartItem.name,
           productSku: cartItem.productId,

@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HeaderComponent } from '../../shared/components/header/header.component';
 import { ContentLayoutComponent } from '../../shared/components/content-layout/content-layout.component';
+import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../shared/components/confirmation-dialog/confirmation-dialog.component';
 import { AuthService, User } from '../../services/auth.service';
 import { IndexedDBService } from '../../core/services/indexeddb.service';
 import { CompanyService } from '../../services/company.service';
@@ -18,7 +19,7 @@ interface PermissionDisplay {
 @Component({
   selector: 'app-account-settings',
   standalone: true,
-  imports: [CommonModule, FormsModule, HeaderComponent, ContentLayoutComponent],
+  imports: [CommonModule, FormsModule, HeaderComponent, ContentLayoutComponent, ConfirmationDialogComponent],
   templateUrl: './account-settings.component.html',
   styleUrls: ['./account-settings.component.css']
 })
@@ -34,6 +35,13 @@ export class AccountSettingsComponent implements OnInit {
   pinError = '';
   
   permissionsDisplay = signal<PermissionDisplay[]>([]);
+
+  // Confirmation dialog signals
+  private isConfirmationDialogVisibleSignal = signal<boolean>(false);
+  readonly isConfirmationDialogVisible = () => this.isConfirmationDialogVisibleSignal();
+  private confirmationDialogDataSignal = signal<ConfirmationDialogData | null>(null);
+  readonly confirmationDialogData = () => this.confirmationDialogDataSignal();
+
 
   async ngOnInit() {
     // Load permission details with company and store names
@@ -183,13 +191,50 @@ export class AccountSettingsComponent implements OnInit {
       
       this.isEditingPin = false;
       this.pinError = '';
-      alert('PIN updated successfully!');
+      // Show standard confirmation dialog instead of alert
+      try {
+        await this.showConfirmationDialog({
+          title: 'PIN Updated',
+          message: 'PIN updated successfully!',
+          confirmText: 'OK',
+          type: 'info'
+        });
+      } catch (e) {
+        // ignore
+      }
     } catch (error: any) {
       console.error('Error updating PIN:', error);
       this.pinError = error?.message || 'Failed to update PIN. Please try again.';
       alert(this.pinError);
     } finally {
       this.isSaving = false;
+    }
+  }
+
+  // Confirmation dialog helpers (pattern used elsewhere in app)
+  showConfirmationDialog(data: ConfirmationDialogData): Promise<boolean> {
+    return new Promise((resolve) => {
+      this.confirmationDialogDataSignal.set(data);
+      this.isConfirmationDialogVisibleSignal.set(true);
+      (this as any)._confirmationResolve = resolve;
+    });
+  }
+
+  onConfirmationConfirmed(): void {
+    this.isConfirmationDialogVisibleSignal.set(false);
+    this.confirmationDialogDataSignal.set(null);
+    if ((this as any)._confirmationResolve) {
+      (this as any)._confirmationResolve(true);
+      (this as any)._confirmationResolve = null;
+    }
+  }
+
+  onConfirmationCancelled(): void {
+    this.isConfirmationDialogVisibleSignal.set(false);
+    this.confirmationDialogDataSignal.set(null);
+    if ((this as any)._confirmationResolve) {
+      (this as any)._confirmationResolve(false);
+      (this as any)._confirmationResolve = null;
     }
   }
 

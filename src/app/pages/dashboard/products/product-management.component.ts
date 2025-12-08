@@ -1377,6 +1377,13 @@ import { AppConstants } from '../../../shared/enums/app-constants.enum';
                           <small>Price from most recent inventory batch</small>
                         </div>
                       </div>
+                      <div class="summary-item">
+                        <label>Original Price</label>
+                        <div class="calculated-value">
+                          ₱{{ (selectedProduct?.originalPrice || 0) | number:'1.2-2' }}
+                          <small>Base/unit price (before VAT)</small>
+                        </div>
+                      </div>
                     </div>
 
                     <div class="inventory-actions" *ngIf="canManageInventory()">
@@ -1426,19 +1433,43 @@ import { AppConstants } from '../../../shared/enums/app-constants.enum';
 
                     <div class="form-row">
                       <div class="form-group">
-                        <label for="sellingPrice">Selling Price</label>
-                        <input 
-                          type="number" 
-                          id="sellingPrice"
-                          formControlName="initialUnitPrice"
+                        <label for="originalPrice">Original Price</label>
+                        <input
+                          type="number"
+                          id="originalPrice"
+                          formControlName="originalPrice"
                           placeholder="0.00"
                           class="form-input"
                           min="0"
                           step="0.01">
-                        <small class="text-muted">Price per unit (will be used for initial batch)</small>
+                        <small class="text-muted">Base/unit price (Without Tax)</small>
+                      </div>
+
+                      <div class="form-group">
+                        <label for="sellingPrice">Selling Price</label>
+                        <input 
+                          type="number" 
+                          id="sellingPrice"
+                          formControlName="sellingPrice"
+                          placeholder="0.00"
+                          class="form-input"
+                          min="0"
+                          step="0.01">
+                        <small class="text-muted">Price per unit (With tax and discount)</small>
                       </div>
 
                      
+
+                    </div>
+
+                    <div class="form-row" style="margin-top:0.5rem;">
+                      <div class="form-group">
+                        <label>Inventory Value</label>
+                        <div class="calculated-value">
+                          ₱{{ ((productForm.get('sellingPrice')?.value || 0) * (productForm.get('totalStock')?.value || 0)) | number:'1.2-2' }}
+                        </div>
+                        <small class="text-muted">Selling Price × Total Stock</small>
+                      </div>
                     </div>
 
                                     <!-- VAT controls: placed inside new-product-inventory for both Add/Edit -->
@@ -1644,7 +1675,8 @@ import { AppConstants } from '../../../shared/enums/app-constants.enum';
                     <tr>
                       <th>Batch ID</th>
                       <th>Quantity</th>
-                      <th>Unit Price</th>
+                      <th>Original Price</th>
+                      <th>Selling Price</th>
                       <th>Received Date</th>
                       <th>Status</th>
                       <th>Actions</th>
@@ -1655,6 +1687,7 @@ import { AppConstants } from '../../../shared/enums/app-constants.enum';
                       <td class="batch-id-cell">{{ batch.batchId }}</td>
                       <td class="quantity-cell">{{ batch.quantity }}</td>
                       <td class="price-cell">\${{ batch.unitPrice.toFixed(2) }}</td>
+                      <td class="price-cell">\${{ (batch.sellingPrice ?? batch.unitPrice).toFixed(2) }}</td>
                       <td class="date-cell">{{ batch.receivedAt | date:'short' }}</td>
                       <td class="status-cell">
                         <span class="status-badge" [class]="'status-' + batch.status">
@@ -1720,7 +1753,7 @@ import { AppConstants } from '../../../shared/enums/app-constants.enum';
                 </div>
                 
                 <form [formGroup]="inventoryForm" (ngSubmit)="saveBatch()" class="inventory-form">
-                  <div class="form-grid">
+                  <div class="form-grid" style="display:grid; grid-template-columns: 1fr 1fr; gap:16px; align-items:start;">
                     <div class="form-group">
                       <label for="quantity" class="form-label">Quantity *</label>
                       <input 
@@ -1749,7 +1782,7 @@ import { AppConstants } from '../../../shared/enums/app-constants.enum';
                     </div>
                     
                     <div class="form-group">
-                      <label for="unitPrice" class="form-label">Unit Price *</label>
+                      <label for="unitPrice" class="form-label">Original Price (Unit Price) *</label>
                       <input 
                         type="number" 
                         id="unitPrice"
@@ -1760,8 +1793,25 @@ import { AppConstants } from '../../../shared/enums/app-constants.enum';
                         min="0"
                         [class.error]="inventoryForm.get('unitPrice')?.invalid && inventoryForm.get('unitPrice')?.touched" />
                       <div class="error-message" *ngIf="inventoryForm.get('unitPrice')?.invalid && inventoryForm.get('unitPrice')?.touched">
-                        Unit price is required
+                        Original/unit price is required
                       </div>
+                    </div>
+
+                    <div class="form-group">
+                      <label for="sellingPrice" class="form-label">Selling Price *</label>
+                      <input 
+                        type="number" 
+                        id="sellingPrice"
+                        step="0.01" 
+                        class="form-input" 
+                        formControlName="sellingPrice" 
+                        placeholder="0.00"
+                        min="0"
+                        [class.error]="inventoryForm.get('sellingPrice')?.invalid && inventoryForm.get('sellingPrice')?.touched" />
+                      <div class="error-message" *ngIf="inventoryForm.get('sellingPrice')?.invalid && inventoryForm.get('sellingPrice')?.touched">
+                        Selling price is required
+                      </div>
+                      <small class="text-muted">Selling price may include VAT depending on product settings</small>
                     </div>
                     
                     <div class="form-group">
@@ -1777,7 +1827,7 @@ import { AppConstants } from '../../../shared/enums/app-constants.enum';
                       </div>
                     </div>
                     
-                    <div class="form-group">
+                    <div class="form-group" style="grid-column: 1 / -1;">
                       <label class="form-label">VAT</label>
                       <div style="display:flex; gap:8px; align-items:center;">
                         <input type="checkbox" id="isVatApplicable" formControlName="isVatApplicable" />
@@ -1787,7 +1837,7 @@ import { AppConstants } from '../../../shared/enums/app-constants.enum';
                       <small class="text-muted">VAT Rate (%)</small>
                     </div>
                     
-                    <div class="form-group">
+                    <div class="form-group" style="grid-column: 1 / -1;">
                       <label class="form-label">Discount</label>
                       <div style="display:flex; gap:8px; align-items:center;">
                         <input type="checkbox" id="hasDiscount" formControlName="hasDiscount" />
@@ -1958,6 +2008,110 @@ export class ProductManagementComponent implements OnInit {
     // Subscribe to VAT applicable checkbox changes to toggle vatRate
     const isVatCtrl = this.productForm.get('isVatApplicable');
     const vatRateCtrl = this.productForm.get('vatRate');
+
+    // Sync initial unit price (used for initial batch) into originalPrice so UI maps unit price to product.originalPrice
+    this.productForm.get('initialUnitPrice')?.valueChanges.subscribe(value => {
+      const origCtrl = this.productForm.get('originalPrice');
+      if (origCtrl && (origCtrl.value === null || origCtrl.value === undefined || origCtrl.value === 0)) {
+        const origVal = Number(value || 0);
+        origCtrl.setValue(origVal, { emitEvent: false });
+
+        // Also compute and set product-level sellingPrice so the UI reflects the batch unit price
+        const isVat = !!this.productForm.get('isVatApplicable')?.value;
+        const vatRate = Number(this.productForm.get('vatRate')?.value || 0);
+        const hasDisc = !!this.productForm.get('hasDiscount')?.value;
+        const discType = this.productForm.get('discountType')?.value || 'percentage';
+        const discValue = Number(this.productForm.get('discountValue')?.value || 0);
+        const selling = this.computeSellingFromOriginal(origVal, isVat, vatRate, hasDisc, discType, discValue);
+        this.productForm.get('sellingPrice')?.setValue(Number(selling.toFixed(2)), { emitEvent: false });
+      }
+    });
+
+    // Product form: keep originalPrice and sellingPrice in sync for Add/Edit Product dialog
+    const prodOrigCtrl = this.productForm.get('originalPrice');
+    const prodSellCtrl = this.productForm.get('sellingPrice');
+    const prodVatCtrl = this.productForm.get('isVatApplicable');
+    const prodVatRateCtrl = this.productForm.get('vatRate');
+    const prodHasDiscCtrl = this.productForm.get('hasDiscount');
+    const prodDiscTypeCtrl = this.productForm.get('discountType');
+    const prodDiscValueCtrl = this.productForm.get('discountValue');
+
+    const recomputeProdSelling = () => {
+      const orig = Number(prodOrigCtrl?.value || 0);
+      const isVat = !!prodVatCtrl?.value;
+      const vatRate = Number(prodVatRateCtrl?.value || 0);
+      const hasDisc = !!prodHasDiscCtrl?.value;
+      const discType = prodDiscTypeCtrl?.value || 'percentage';
+      const discValue = Number(prodDiscValueCtrl?.value || 0);
+      const selling = this.computeSellingFromOriginal(orig, isVat, vatRate, hasDisc, discType, discValue);
+      prodSellCtrl?.setValue(Number(selling.toFixed(2)), { emitEvent: false });
+    };
+
+    const recomputeProdOriginal = () => {
+      const selling = Number(prodSellCtrl?.value || 0);
+      const isVat = !!prodVatCtrl?.value;
+      const vatRate = Number(prodVatRateCtrl?.value || 0);
+      const hasDisc = !!prodHasDiscCtrl?.value;
+      const discType = prodDiscTypeCtrl?.value || 'percentage';
+      const discValue = Number(prodDiscValueCtrl?.value || 0);
+      const original = this.computeOriginalFromSelling(selling, isVat, vatRate, hasDisc, discType, discValue);
+      prodOrigCtrl?.setValue(Number(original.toFixed(2)), { emitEvent: false });
+    };
+
+    prodOrigCtrl?.valueChanges.subscribe(() => recomputeProdSelling());
+    prodSellCtrl?.valueChanges.subscribe(() => recomputeProdOriginal());
+    prodVatCtrl?.valueChanges.subscribe(() => recomputeProdSelling());
+    prodVatRateCtrl?.valueChanges.subscribe(() => recomputeProdSelling());
+    prodHasDiscCtrl?.valueChanges.subscribe(() => recomputeProdSelling());
+    prodDiscTypeCtrl?.valueChanges.subscribe(() => recomputeProdSelling());
+    prodDiscValueCtrl?.valueChanges.subscribe(() => recomputeProdSelling());
+
+    // Inventory form: keep unitPrice (originalPrice) and sellingPrice in sync according to VAT and discount rules
+    const unitCtrl = this.inventoryForm.get('unitPrice');
+    const sellCtrl = this.inventoryForm.get('sellingPrice');
+    const vatCtrl = this.inventoryForm.get('isVatApplicable');
+    const vatRateCtrlInv = this.inventoryForm.get('vatRate');
+    const hasDiscCtrl = this.inventoryForm.get('hasDiscount');
+    const discTypeCtrl = this.inventoryForm.get('discountType');
+    const discValueCtrl = this.inventoryForm.get('discountValue');
+
+    const recomputeSelling = () => {
+      const orig = Number(unitCtrl?.value || 0);
+      const isVat = !!vatCtrl?.value;
+      const vatRate = Number(vatRateCtrlInv?.value || 0);
+      const hasDisc = !!hasDiscCtrl?.value;
+      const discType = discTypeCtrl?.value || 'percentage';
+      const discValue = Number(discValueCtrl?.value || 0);
+      const selling = this.computeSellingFromOriginal(orig, isVat, vatRate, hasDisc, discType, discValue);
+      sellCtrl?.setValue(Number(selling.toFixed(2)), { emitEvent: false });
+    };
+
+    const recomputeOriginal = () => {
+      const selling = Number(sellCtrl?.value || 0);
+      const isVat = !!vatCtrl?.value;
+      const vatRate = Number(vatRateCtrlInv?.value || 0);
+      const hasDisc = !!hasDiscCtrl?.value;
+      const discType = discTypeCtrl?.value || 'percentage';
+      const discValue = Number(discValueCtrl?.value || 0);
+      const original = this.computeOriginalFromSelling(selling, isVat, vatRate, hasDisc, discType, discValue);
+      unitCtrl?.setValue(Number(original.toFixed(2)), { emitEvent: false });
+    };
+
+    // Wire subscriptions
+    unitCtrl?.valueChanges.subscribe(() => {
+      recomputeSelling();
+    });
+    sellCtrl?.valueChanges.subscribe(() => {
+      recomputeOriginal();
+    });
+    vatCtrl?.valueChanges.subscribe(() => {
+      // VAT toggle affects both directions
+      recomputeSelling();
+    });
+    vatRateCtrlInv?.valueChanges.subscribe(() => recomputeSelling());
+    hasDiscCtrl?.valueChanges.subscribe(() => recomputeSelling());
+    discTypeCtrl?.valueChanges.subscribe(() => recomputeSelling());
+    discValueCtrl?.valueChanges.subscribe(() => recomputeSelling());
     if (isVatCtrl && vatRateCtrl) {
       isVatCtrl.valueChanges.subscribe((applies: boolean) => {
         try {
@@ -1974,6 +2128,46 @@ export class ProductManagementComponent implements OnInit {
           // defensive: ignore errors during programmatic changes
         }
       });
+    }
+  }
+
+  // Helpers for price sync: compute sellingPrice from originalPrice and vice-versa
+  // selling = (original * (1 + vatRate/100)) - discountAmount
+  // discountAmount depends on discountType: percentage -> (original*(1+vatRate/100)) * (discPct/100)
+  private computeSellingFromOriginal(original: number, isVat: boolean, vatRate: number, hasDiscount: boolean, discountType: string, discountValue: number): number {
+    const base = Number(original) || 0;
+    const rate = isVat ? (Number(vatRate) || 0) : 0;
+    const withVat = base * (1 + rate / 100);
+    let discountAmount = 0;
+    if (hasDiscount && discountValue) {
+      if (discountType === 'percentage') {
+        discountAmount = withVat * (Number(discountValue) / 100);
+      } else {
+        discountAmount = Number(discountValue) || 0;
+      }
+    }
+    return Number((withVat - discountAmount));
+  }
+
+  private computeOriginalFromSelling(selling: number, isVat: boolean, vatRate: number, hasDiscount: boolean, discountType: string, discountValue: number): number {
+    const sell = Number(selling) || 0;
+    const rate = isVat ? (Number(vatRate) || 0) : 0;
+    const disc = Number(discountValue) || 0;
+    if (!hasDiscount || disc === 0) {
+      // original * (1 + rate/100) = selling -> original = selling / (1+rate/100)
+      const denom = (1 + rate / 100) || 1;
+      return sell / denom;
+    }
+
+    if (discountType === 'percentage') {
+      // selling = original * (1+rate/100) * (1 - disc/100)
+      const denom = (1 + rate / 100) * (1 - disc / 100);
+      if (denom === 0) return 0;
+      return sell / denom;
+    } else {
+      // fixed discount: selling = original * (1+rate/100) - fixed -> original = (selling + fixed) / (1+rate/100)
+      const denom = (1 + rate / 100) || 1;
+      return (sell + disc) / denom;
     }
   }
 
@@ -2031,11 +2225,11 @@ export class ProductManagementComponent implements OnInit {
       initialCostPrice: [0, Validators.min(0)],
       initialReceivedAt: [new Date().toISOString().split('T')[0]],
       initialExpiryDate: [''],
-      initialSupplier: ['']
-      ,
+      initialSupplier: [''],
       // Denormalized editable summary fields (available when product has no separate inventory)
       totalStock: [0, Validators.min(0)],
-      sellingPrice: [0, Validators.min(0)]
+      sellingPrice: [0, Validators.min(0)],
+      originalPrice: [0, Validators.min(0)],
     });
   }
 
@@ -2043,6 +2237,8 @@ export class ProductManagementComponent implements OnInit {
     return this.fb.group({
       quantity: [0, [Validators.required, Validators.min(1)]],
       unitPrice: [0, [Validators.required, Validators.min(0)]],
+      // unitPrice represents the base/unit price (originalPrice)
+      sellingPrice: [0, [Validators.required, Validators.min(0)]],
       costPrice: [0, [Validators.required, Validators.min(0)]],
       receivedAt: [new Date().toISOString().split('T')[0], Validators.required],
       expiryDate: [''],
@@ -2139,7 +2335,8 @@ export class ProductManagementComponent implements OnInit {
   openEditModal(product: Product): void {
     this.isEditMode = true;
     this.selectedProduct = product;
-    this.productForm.patchValue(product);
+    // Patch the form silently to avoid triggering valueChange subscriptions
+    this.productForm.patchValue(product, { emitEvent: false });
     // Ensure vatRate defaults to 12 if the product doesn't include it
     const currentVat = this.productForm.get('vatRate')?.value;
     if (currentVat === null || currentVat === undefined || currentVat === '') {
@@ -2152,8 +2349,29 @@ export class ProductManagementComponent implements OnInit {
       this.productForm.get('totalStock')?.setValue(product.totalStock || 0);
     }
 
+    // Ensure the form fields reflect the authoritative product document values
     if (this.productForm.get('sellingPrice')) {
-      this.productForm.get('sellingPrice')?.setValue(product.sellingPrice || 0);
+      this.productForm.get('sellingPrice')?.setValue(product.sellingPrice ?? 0, { emitEvent: false });
+    }
+    if (this.productForm.get('originalPrice')) {
+      // Prefer stored originalPrice; if missing, derive from sellingPrice using VAT/discount
+      const orig = product.originalPrice ?? null;
+      if (orig !== null && orig !== undefined) {
+        this.productForm.get('originalPrice')?.setValue(orig, { emitEvent: false });
+      } else {
+        // Derive original from sellingPrice if needed
+        try {
+          const isVat = !!product.isVatApplicable;
+          const vatRate = Number(product.vatRate ?? AppConstants.DEFAULT_VAT_RATE);
+          const hasDisc = !!product.hasDiscount;
+          const discType = product.discountType ?? 'percentage';
+          const discValue = Number(product.discountValue ?? 0);
+          const computedOriginal = this.computeOriginalFromSelling(Number(product.sellingPrice || 0), isVat, vatRate, hasDisc, discType, discValue);
+          this.productForm.get('originalPrice')?.setValue(Number(computedOriginal.toFixed(2)), { emitEvent: false });
+        } catch (e) {
+          this.productForm.get('originalPrice')?.setValue(product.originalPrice ?? 0, { emitEvent: false });
+        }
+      }
     }
     
     // Enable/disable summary controls depending on whether product uses separate inventory
@@ -2166,11 +2384,13 @@ export class ProductManagementComponent implements OnInit {
     if (isMultiple) {
       this.productForm.get('totalStock')?.disable({ emitEvent: false });
       this.productForm.get('sellingPrice')?.disable({ emitEvent: false });
+      this.productForm.get('originalPrice')?.disable({ emitEvent: false });
       // Calculate total stock from inventory when switching to multiple inventory mode
       this.updateTotalStockFromInventory();
     } else {
       this.productForm.get('totalStock')?.enable({ emitEvent: false });
       this.productForm.get('sellingPrice')?.enable({ emitEvent: false });
+      this.productForm.get('originalPrice')?.enable({ emitEvent: false });
     }
   }
 
@@ -2211,6 +2431,8 @@ export class ProductManagementComponent implements OnInit {
   }
 
   async openInventoryModal(product: Product): Promise<void> {
+    // Close product modal if open to avoid conflicting UI/state
+    this.showModal = false;
     this.selectedProduct = product;
     this.inventoryForm.reset();
     this.inventoryForm.patchValue({
@@ -2236,10 +2458,27 @@ export class ProductManagementComponent implements OnInit {
     this.productForm.reset();
   }
 
-  closeInventoryModal(): void {
+  async closeInventoryModal(): Promise<void> {
+    // Close inventory modal and refresh product data so product list reflects changes
+    const storeId = this.selectedProduct?.storeId || this.authService.getCurrentPermission()?.storeId || null;
     this.showInventoryModal = false;
-    this.selectedProduct = null;
     this.inventoryForm.reset();
+
+    try {
+      if (storeId) {
+        // Refresh products for this store to update the product list
+        await this.productService.refreshProducts(storeId);
+      } else if (this.selectedProduct?.id) {
+        // As a fallback, refresh the single product
+        await this.productService.refreshProducts(this.selectedProduct.storeId || '');
+      }
+    } catch (e) {
+      console.warn('Failed to refresh products after closing inventory modal:', e);
+    } finally {
+      // Clear selected product after refresh to preserve behavior
+      this.selectedProduct = null;
+      this.cdr.detectChanges();
+    }
   }
 
   async submitProduct(): Promise<void> {
@@ -2292,6 +2531,10 @@ export class ProductManagementComponent implements OnInit {
       const computedSellingPrice = formValue.initialUnitPrice || 
         (this.selectedProduct ? (this.selectedProduct.sellingPrice || 0) : 0) || 
         formValue.sellingPrice || 0;
+      // Compute original/base price (unit price before VAT) similarly
+      const computedOriginalPrice = formValue.initialUnitPrice || 
+        (this.selectedProduct ? (this.selectedProduct.originalPrice || 0) : 0) || 
+        formValue.originalPrice || 0;
 
       if (this.isEditMode && this.selectedProduct) {
         // Update existing product
@@ -2304,6 +2547,8 @@ export class ProductManagementComponent implements OnInit {
           category: formValue.category,
           // sellingPrice: for products with existing inventory, prefer the stored summary (cannot edit)
           sellingPrice: this.hasExistingInventory() ? (this.selectedProduct.sellingPrice || computedSellingPrice) : computedSellingPrice,
+          // originalPrice: base/unit price stored alongside sellingPrice
+          originalPrice: this.hasExistingInventory() ? (this.selectedProduct.originalPrice || computedOriginalPrice) : computedOriginalPrice,
           storeId: storeId,  // Use storeId from permission
           barcodeId: formValue.barcodeId,
           imageUrl: formValue.imageUrl,
@@ -2358,6 +2603,7 @@ export class ProductManagementComponent implements OnInit {
           unitType: formValue.unitType,
           category: formValue.category,
           sellingPrice: computedSellingPrice,
+          originalPrice: computedOriginalPrice,
           companyId: '', // Will be set by service
           storeId: storeId,  // Use storeId from permission
           barcodeId: formValue.barcodeId,
@@ -2396,6 +2642,7 @@ export class ProductManagementComponent implements OnInit {
               batchId: initialBatch!.batchId,
               quantity: initialBatch!.quantity,
               unitPrice: initialBatch!.unitPrice,
+              sellingPrice: Number(formValue.initialUnitPrice || computedSellingPrice || 0),
               costPrice: initialBatch!.costPrice,
               receivedAt: initialBatch!.receivedAt,
               expiryDate: initialBatch!.expiryDate,
@@ -2637,10 +2884,12 @@ export class ProductManagementComponent implements OnInit {
     this.isEditingBatch = true;
     this.editingBatchOriginalId = batch.batchId || null;
     this.editingBatchDocId = batch.id || null;
+    // Patch form values without emitting valueChanges to avoid triggering recompute subscriptions
     this.inventoryForm.patchValue({
       batchId: batch.batchId,
       quantity: Number(batch.quantity ?? 0),
       unitPrice: Number(batch.unitPrice ?? 0),
+      sellingPrice: Number(batch.sellingPrice ?? batch.unitPrice ?? 0),
       costPrice: Number(batch.costPrice ?? 0),
       receivedAt: this.toDateInputValue(batch.receivedAt, true),
       expiryDate: batch.expiryDate ? this.toDateInputValue(batch.expiryDate, false) : '',
@@ -2651,17 +2900,37 @@ export class ProductManagementComponent implements OnInit {
       hasDiscount: !!batch.hasDiscount,
       discountType: batch.discountType ?? 'percentage',
       discountValue: batch.discountValue ?? 0
-    });
+    }, { emitEvent: false });
 
-    // Force angular to update view so form fields appear immediately
     try {
-      this.inventoryForm.updateValueAndValidity({ onlySelf: false, emitEvent: true });
+      // Ensure consistent values: if a batch.sellingPrice was stored, compute original (unitPrice) from it
+      const storedSelling = batch.sellingPrice;
+      const isVat = typeof batch.isVatApplicable === 'boolean' ? batch.isVatApplicable : true;
+      const vatRate = batch.vatRate ?? AppConstants.DEFAULT_VAT_RATE;
+      const hasDisc = !!batch.hasDiscount;
+      const discType = batch.discountType ?? 'percentage';
+      const discValue = Number(batch.discountValue ?? 0);
+
+      if (storedSelling !== undefined && storedSelling !== null) {
+        // Compute original/unit price from saved selling price and set both fields without emitting
+        const computedOriginal = this.computeOriginalFromSelling(Number(storedSelling), isVat, Number(vatRate), hasDisc, discType, discValue);
+        this.inventoryForm.get('unitPrice')?.setValue(Number(computedOriginal.toFixed(2)), { emitEvent: false });
+        this.inventoryForm.get('sellingPrice')?.setValue(Number(Number(storedSelling).toFixed(2)), { emitEvent: false });
+      } else {
+        // No stored selling price: compute selling from unitPrice
+        const unitVal = Number(batch.unitPrice ?? 0);
+        const computedSelling = this.computeSellingFromOriginal(unitVal, isVat, Number(vatRate), hasDisc, discType, discValue);
+        this.inventoryForm.get('unitPrice')?.setValue(Number(unitVal.toFixed(2)), { emitEvent: false });
+        this.inventoryForm.get('sellingPrice')?.setValue(Number(computedSelling.toFixed(2)), { emitEvent: false });
+      }
+
+      // Now update validity and UI
+      this.inventoryForm.updateValueAndValidity({ onlySelf: false, emitEvent: false });
       this.cdr.detectChanges();
-      // Focus first field for better UX
       setTimeout(() => {
         const el = document.getElementById('quantity') as HTMLInputElement | null;
         el?.focus();
-        el?.select?.();
+        el?.select();
       }, 0);
     } catch (e) { /* ignore */ }
   }
@@ -2686,9 +2955,10 @@ export class ProductManagementComponent implements OnInit {
       if (this.isEditingBatch && this.editingBatchOriginalId) {
         // Edit existing batch (only quantity and price allowed)
         if (!this.editingBatchDocId) throw new Error('Missing batch document ID');
-        await this.inventoryDataService.updateBatch(this.selectedProduct.id!, this.editingBatchDocId, {
+          await this.inventoryDataService.updateBatch(this.selectedProduct.id!, this.editingBatchDocId, {
           quantity: Number(formValue.quantity),
           unitPrice: Number(formValue.unitPrice),
+          sellingPrice: Number(formValue.sellingPrice || formValue.unitPrice),
           costPrice: Number(formValue.costPrice || 0),
           receivedAt: new Date(formValue.receivedAt),
           expiryDate: formValue.expiryDate ? new Date(formValue.expiryDate) : undefined,
@@ -2716,6 +2986,7 @@ export class ProductManagementComponent implements OnInit {
           batchId: this.generatedBatchId,
           quantity: Number(formValue.quantity),
           unitPrice: Number(formValue.unitPrice),
+          sellingPrice: Number(formValue.sellingPrice || formValue.unitPrice),
           costPrice: Number(formValue.costPrice || 0),
           receivedAt: new Date(formValue.receivedAt),
           expiryDate: formValue.expiryDate ? new Date(formValue.expiryDate) : undefined,
@@ -3181,12 +3452,16 @@ export class ProductManagementComponent implements OnInit {
       // Get current permission to access storeId
       const currentPermission = this.authService.getCurrentPermission();
       if (currentPermission?.storeId) {
-        // reset paging and reload first page
+        // Force reload products from Firestore (real-time listener) so UI reflects latest product docs
         this.currentPage = 1;
-        const count = await this.productService.loadProducts(currentPermission.storeId, this.pageSize, this.currentPage);
+        await this.productService.refreshProducts(currentPermission.storeId);
+        // Update pagination state based on loaded products
+        const count = this.productService.getProducts().length;
         this.hasMore = (count >= this.pageSize);
+        // Ensure change detection updates the UI
+        try { this.cdr.detectChanges(); } catch {}
       } else {
-        console.warn('No storeId available - cannot refresh products from BigQuery API');
+        console.warn('No storeId available - cannot refresh products from Firestore');
       }
       
       // No need to manually filter - computed signal handles this automatically
@@ -3518,6 +3793,8 @@ export class ProductManagementComponent implements OnInit {
       return;
     }
     
+    // Close the product Edit/Add modal (if open) and open inventory modal so we don't have conflicting forms
+    this.showModal = false;
     // Set the selected product and open inventory modal
     this.showInventoryModal = true;
     this.inventoryTab = 'list';
