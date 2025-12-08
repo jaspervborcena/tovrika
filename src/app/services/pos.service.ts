@@ -56,11 +56,18 @@ export class PosService {
     // Calculate VAT amounts
     const vatableItems = items.filter(item => item.isVatApplicable && !item.isVatExempt);
     const vatExemptItems = items.filter(item => item.vatRate === 0 || item.isVatExempt || !item.isVatApplicable);
-    
-    const vatableSales = vatableItems.reduce((sum, item) => 
-      sum + ((item.sellingPrice * item.quantity) - item.discountAmount), 0);
-    const vatExemptSales = vatExemptItems.reduce((sum, item) => 
-      sum + ((item.sellingPrice * item.quantity) - item.discountAmount), 0);
+
+    // Vatable sales should represent the base amount BEFORE VAT (i.e., original price after product-level discounts)
+    // Use originalPrice * quantity minus the item's total discountAmount to avoid including VAT in the vatableSales sum.
+    const vatableSales = vatableItems.reduce((sum, item) => {
+      const baseTotal = (Number(item.originalPrice || 0) * Number(item.quantity || 0)) - Number(item.discountAmount || 0);
+      return sum + Math.max(0, baseTotal);
+    }, 0);
+
+    const vatExemptSales = vatExemptItems.reduce((sum, item) => {
+      const baseTotal = (Number(item.originalPrice || 0) * Number(item.quantity || 0)) - Number(item.discountAmount || 0);
+      return sum + Math.max(0, baseTotal);
+    }, 0);
     const zeroRatedSales = 0; // Can be added later for specific business needs
     
     const vatAmount = vatableItems.reduce((sum, item) => sum + item.vatAmount, 0);
@@ -90,6 +97,39 @@ export class PosService {
       netAmount
     };
   });
+
+  // Shared payment type signals so different POS components/dialogs can stay in sync
+  private readonly salesTypeCashSignal = signal<boolean>(true);
+  private readonly salesTypeChargeSignal = signal<boolean>(false);
+  readonly isCashSale = computed(() => this.salesTypeCashSignal());
+  readonly isChargeSale = computed(() => this.salesTypeChargeSignal());
+
+  /**
+   * Set payment method. Use 'cash' or 'charge' to make exclusive selection,
+   * or 'both' to allow both to be true.
+   */
+  setPaymentMethod(method: 'cash' | 'charge' | 'both'): void {
+    if (method === 'cash') {
+      this.salesTypeCashSignal.set(true);
+      this.salesTypeChargeSignal.set(false);
+    } else if (method === 'charge') {
+      this.salesTypeCashSignal.set(false);
+      this.salesTypeChargeSignal.set(true);
+    } else {
+      this.salesTypeCashSignal.set(true);
+      this.salesTypeChargeSignal.set(true);
+    }
+  }
+
+  toggleCashSale(): void {
+    // Toggle cash independently: do not force the other payment type.
+    this.salesTypeCashSignal.update(current => !current);
+  }
+
+  toggleChargeSale(): void {
+    // Toggle charge independently: do not force the other payment type.
+    this.salesTypeChargeSignal.update(current => !current);
+  }
 
   private invoiceService = inject(InvoiceService);
   private storeService = inject(StoreService);
@@ -290,7 +330,7 @@ export class PosService {
         quantity: item.quantity,
         price: item.sellingPrice,
         total: item.total,
-        vat: item.vatAmount,
+        vat: Number(((item.vatAmount || 0)).toFixed(2)),
         discount: item.discountAmount,
         isVatExempt: item.isVatExempt,
         // Per-item customer info (optional)
@@ -326,7 +366,7 @@ export class PosService {
         
         // Financial Calculations
         vatableSales: summary.vatableSales,
-        vatAmount: summary.vatAmount,
+        vatAmount: Number(((summary.vatAmount || 0)).toFixed(2)),
         zeroRatedSales: summary.zeroRatedSales,
         vatExemptAmount: summary.vatExemptSales,
         discountAmount: summary.productDiscountAmount + summary.orderDiscountAmount,
@@ -450,7 +490,7 @@ export class PosService {
         quantity: item.quantity,
         price: item.sellingPrice,
         total: item.total,
-        vat: item.vatAmount,
+        vat: Number(((item.vatAmount || 0)).toFixed(2)),
         discount: item.discountAmount,
         isVatExempt: item.isVatExempt
       }));
@@ -482,7 +522,7 @@ export class PosService {
         // Financial Information
         grossAmount: cartSummary.grossAmount,
         discountAmount: cartSummary.productDiscountAmount + cartSummary.orderDiscountAmount,
-        vatAmount: cartSummary.vatAmount,
+        vatAmount: Number(((cartSummary.vatAmount || 0)).toFixed(2)),
         vatExemptAmount: cartSummary.vatExemptSales,
         totalAmount: cartSummary.netAmount,
         netAmount: cartSummary.netAmount,
@@ -620,7 +660,7 @@ export class PosService {
         // Financial Information
         grossAmount: cartSummary.grossAmount,
         discountAmount: cartSummary.productDiscountAmount + cartSummary.orderDiscountAmount,
-        vatAmount: cartSummary.vatAmount,
+        vatAmount: Number(((cartSummary.vatAmount || 0)).toFixed(2)),
         vatExemptAmount: cartSummary.vatExemptSales,
         totalAmount: cartSummary.netAmount,
         netAmount: cartSummary.netAmount,
@@ -750,11 +790,13 @@ export class PosService {
 
     const netBasePerUnit = Math.max(0, original - discountPerUnit);
     const vatAmountPerUnit = (product.isVatApplicable && !false) ? (netBasePerUnit * vatRate) / 100 : 0;
-    const sellingPricePerUnit = netBasePerUnit + vatAmountPerUnit;
+    // Round per-unit VAT and selling price to 2 decimals to avoid floating rounding differences
+    const vatAmountPerUnitRounded = Number(vatAmountPerUnit.toFixed(2));
+    const sellingPricePerUnitRounded = Number((netBasePerUnit + vatAmountPerUnitRounded).toFixed(2));
 
-    const discountAmount = discountPerUnit * quantity;
-    const vatAmount = vatAmountPerUnit * quantity;
-    const total = sellingPricePerUnit * quantity;
+    const discountAmount = Number((discountPerUnit * quantity).toFixed(2));
+    const vatAmount = Number((vatAmountPerUnitRounded * quantity).toFixed(2));
+    const total = Number((sellingPricePerUnitRounded * quantity).toFixed(2));
 
     return {
       productId: product.id!,
@@ -763,7 +805,7 @@ export class PosService {
       unitType: product.unitType,
       quantity,
       // Store derived sellingPrice so UI can show it; keep originalPrice for display and two-way sync
-      sellingPrice: sellingPricePerUnit,
+      sellingPrice: sellingPricePerUnitRounded,
       originalPrice: original,
       total,
       isVatApplicable: product.isVatApplicable,
@@ -795,15 +837,17 @@ export class PosService {
 
     const netBasePerUnit = Math.max(0, original - discountPerUnit);
     const vatAmountPerUnit = (item.isVatApplicable && !item.isVatExempt) ? (netBasePerUnit * vatRate) / 100 : 0;
-    const sellingPricePerUnit = netBasePerUnit + vatAmountPerUnit;
+    // Round per-unit VAT and selling price to 2 decimals for consistent totals
+    const vatAmountPerUnitRounded = Number(vatAmountPerUnit.toFixed(2));
+    const sellingPricePerUnitRounded = Number((netBasePerUnit + vatAmountPerUnitRounded).toFixed(2));
 
-    const discountAmount = discountPerUnit * item.quantity;
-    const vatAmount = vatAmountPerUnit * item.quantity;
-    const total = sellingPricePerUnit * item.quantity;
+    const discountAmount = Number((discountPerUnit * item.quantity).toFixed(2));
+    const vatAmount = Number((vatAmountPerUnitRounded * item.quantity).toFixed(2));
+    const total = Number((sellingPricePerUnitRounded * item.quantity).toFixed(2));
 
     return {
       ...item,
-      sellingPrice: sellingPricePerUnit,
+      sellingPrice: sellingPricePerUnitRounded,
       total,
       vatAmount,
       discountAmount

@@ -121,6 +121,16 @@ import { AppConstants } from '../../../shared/enums/app-constants.enum';
         
         <!-- Fixed Footer -->
         <div class="cart-modal-footer">
+          <div class="mobile-payment-methods" style="display:flex; gap:0.75rem; align-items:center; margin-right: 1rem;">
+            <label style="display:flex; align-items:center; gap:0.5rem; cursor:pointer;">
+              <input type="checkbox" class="mobile-checkbox" [checked]="isCashSale()" (change)="posService.toggleCashSale()">
+              <span>💵 {{ 'pos.cashPayment' | translate }}</span>
+            </label>
+            <label style="display:flex; align-items:center; gap:0.5rem; cursor:pointer;">
+              <input type="checkbox" class="mobile-checkbox" [checked]="isChargeSale()" (change)="posService.toggleChargeSale()">
+              <span>💳 {{ 'pos.cardPayment' | translate }}</span>
+            </label>
+          </div>
           <button 
             class="btn btn-secondary" 
             (click)="clearCart()" 
@@ -882,7 +892,7 @@ import { AppConstants } from '../../../shared/enums/app-constants.enum';
   `]
 })
 export class MobileCartModalComponent {
-  private posService = inject(PosService);
+  public posService = inject(PosService);
   
   // Props
   isVisible = signal<boolean>(false);
@@ -904,6 +914,8 @@ export class MobileCartModalComponent {
   });
   readonly cartSummary = computed(() => this.posService.cartSummary());
   readonly isProcessing = computed(() => this.posService.isProcessing());
+  readonly isCashSale = computed(() => this.posService.isCashSale());
+  readonly isChargeSale = computed(() => this.posService.isChargeSale());
   
   // Cart Information Dialog Methods
   showCartInformationDialog(): boolean {

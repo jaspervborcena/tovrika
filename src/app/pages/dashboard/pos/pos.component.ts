@@ -1,5 +1,6 @@
 import { Component, OnInit, AfterViewInit, OnDestroy, HostListener, ViewChild, ElementRef, computed, signal, inject } from '@angular/core';
-import { Firestore, doc, getDoc, collection, query, where, getDocs } from '@angular/fire/firestore';
+import { Firestore, doc, getDoc, collection, query, where } from '@angular/fire/firestore';
+import { getDocs } from 'firebase/firestore';
 import { ProductStatus } from '../../../interfaces/product.interface';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -20,6 +21,7 @@ import { IndexedDBService } from '../../../core/services/indexeddb.service';
 import { AppConstants } from '../../../shared/enums/app-constants.enum';
 
 import { OrderService } from '../../../services/order.service';
+import { OrdersSellingTrackingService } from '../../../services/orders-selling-tracking.service';
 import { StoreService } from '../../../services/store.service';
 import { UserRoleService } from '../../../services/user-role.service';
 import { CustomerService } from '../../../services/customer.service';
@@ -57,6 +59,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   private indexedDBService = inject(IndexedDBService);
   private storeService = inject(StoreService);
   private orderService = inject(OrderService);
+  private ordersSellingTrackingService = inject(OrdersSellingTrackingService);
   private userRoleService = inject(UserRoleService);
   private customerService = inject(CustomerService);
   private companyService = inject(CompanyService);
@@ -87,6 +90,23 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
         }
       }
     });
+  }
+
+  /**
+   * Returns true when there is at least one actionable partial adjustment
+   * (adjustmentType starts with 'partial_' and qtyToAdjust > 0).
+   */
+  hasActionableChanges(): boolean {
+    try {
+      const entries = this.trackingEntries() || [];
+      return entries.some((entry: any) => {
+        const adj = (entry.adjustmentType || '').toString().toLowerCase();
+        const qty = Number(entry.qtyToAdjust || entry.quantity || 0);
+        return adj.startsWith('partial_') && qty > 0;
+      });
+    } catch (e) {
+      return false;
+    }
   }
 
   // Use shared UI state for synchronization with mobile
@@ -205,7 +225,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   @HostListener('document:keydown.escape', ['$event'])
-  onEscapeKey(event: Event | KeyboardEvent): void {
+  onEscapeKey(event: KeyboardEvent): void {
     event.stopPropagation();
     this.closeSortMenu();
   }
@@ -524,6 +544,107 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   private selectedOrderSignal = signal<any | null>(null);
   readonly selectedOrder = computed(() => this.selectedOrderSignal());
 
+  // Convenience computed flags for order status checks used by the template
+  readonly isOrderCancelled = computed(() => {
+    const s = (this.selectedOrder()?.status || '').toString().toLowerCase();
+    return s === 'cancelled';
+  });
+
+  // Cancel is only allowed when the order is in 'completed' state
+  readonly canCancelOrder = computed(() => {
+    const s = (this.selectedOrder()?.status || '').toString().toLowerCase();
+    return s === 'completed';
+  });
+
+  // Additional order status flags used to control button visibility/enablement
+  readonly isOrderReturned = computed(() => {
+    const s = (this.selectedOrder()?.status || '').toString().toLowerCase();
+    return s === 'returned';
+  });
+
+  readonly isOrderRefunded = computed(() => {
+    const s = (this.selectedOrder()?.status || '').toString().toLowerCase();
+    return s === 'refunded';
+  });
+
+  readonly isOrderDamaged = computed(() => {
+    const s = (this.selectedOrder()?.status || '').toString().toLowerCase();
+    return s === 'damaged';
+  });
+
+  // Lock actions (Cancel / Manage Item Status) when order is in any final/adjusted state.
+  // Note: 'returned' is considered an adjusted state where Cancel/Manage should be locked,
+  // but Refund and Damage should still be allowed so we exclude 'returned' here.
+  readonly isOrderActionLocked = computed(() => {
+    const s = (this.selectedOrder()?.status || '').toString().toLowerCase();
+    return ['cancelled', 'refunded', 'damaged'].includes(s);
+  });
+
+  // Specific disable flags for Refund and Damage buttons. These are false for 'returned'
+  // so that refund/damage can be performed after a return.
+  readonly isRefundDisabled = computed(() => {
+    const s = (this.selectedOrder()?.status || '').toString().toLowerCase();
+    // Only cancel should block refund; refunded/damaged states should not block showing refund
+    return ['cancelled'].includes(s);
+  });
+
+  readonly isDamageDisabled = computed(() => {
+    const s = (this.selectedOrder()?.status || '').toString().toLowerCase();
+    // Only cancel should block damage action here; allow damage if order was refunded or returned
+    return ['cancelled'].includes(s);
+  });
+
+  // Disable Manage Item Status when order is in final/adjusted states including 'returned'
+  readonly isManageStatusDisabled = computed(() => {
+    const s = (this.selectedOrder()?.status || '').toString().toLowerCase();
+    return ['cancelled', 'returned', 'refunded', 'damaged'].includes(s);
+  });
+
+  // Whether the currently loaded tracking entries already contain a 'returned' row
+  readonly hasReturnTracking = computed(() => {
+    try {
+      const entries = this.trackingEntries() || [];
+      return entries.some((e: any) => ((e.status || '').toString().toLowerCase() === 'returned'));
+    } catch {
+      return false;
+    }
+  });
+
+  // Determine whether the Return button should be shown for the selected order
+  readonly shouldShowReturnButton = computed(() => {
+    const order = this.selectedOrder();
+    if (!order) return false;
+    const s = (order.status || '').toString().toLowerCase();
+
+    // Never show if order already marked returned
+    if (s === 'returned') return false;
+
+
+    // If order is refunded, show Return (user requested both Return and Damage visible/enabled)
+    if (s === 'refunded') {
+      return true;
+    }
+
+    // Default: show return when not already returned
+    return !this.isOrderReturned();
+  });
+
+  // Determine whether the Damage button should be shown for the selected order
+  readonly shouldShowDamageButton = computed(() => {
+    const order = this.selectedOrder();
+    if (!order) return false;
+    const s = (order.status || '').toString().toLowerCase();
+
+
+    // If order is refunded, show Damage as well (user requested both Return and Damage enabled)
+    if (s === 'refunded') {
+      return true;
+    }
+
+    // For all other statuses, keep previous behavior (show button)
+    return true;
+  });
+
   // Receipt modal state
   private isReceiptModalVisibleSignal = signal<boolean>(false);
   readonly isReceiptModalVisible = computed(() => this.isReceiptModalVisibleSignal());
@@ -541,6 +662,41 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   // Optional mode to indicate why Manage Item Status was opened (e.g., 'return' or 'damage')
   private trackingModeSignal = signal<string | null>(null);
   readonly trackingMode = computed(() => this.trackingModeSignal());
+
+  // Which tab is active in Manage Item Status modal: 'edit' => Completed editable, 'view' => All read-only
+  private trackingTabSignal = signal<'edit' | 'view'>('edit');
+  readonly trackingTab = computed(() => this.trackingTabSignal());
+
+  // Setter used from template to change tabs
+  setTrackingTab(tab: 'edit' | 'view'): void {
+    this.trackingTabSignal.set(tab);
+  }
+
+  // Computed list of entries based on selected tab
+  readonly displayedTrackingEntries = computed(() => {
+    const entries = this.trackingEntries() || [];
+    if (this.trackingTab() === 'edit') {
+      return entries.filter((e: any) => (e.status || '').toString().toLowerCase() === 'completed');
+    }
+
+    // view tab: sort by priority: completed, returned, refunded, damaged, others
+    const priority: Record<string, number> = {
+      completed: 0,
+      returned: 1,
+      refunded: 2,
+      damaged: 3
+    };
+
+    return entries.slice().sort((a: any, b: any) => {
+      const sa = (a.status || '').toString().toLowerCase();
+      const sb = (b.status || '').toString().toLowerCase();
+      const pa = priority.hasOwnProperty(sa) ? priority[sa] : 99;
+      const pb = priority.hasOwnProperty(sb) ? priority[sb] : 99;
+      if (pa !== pb) return pa - pb;
+      // fallback to product name
+      return (a.productName || '').localeCompare(b.productName || '');
+    });
+  });
 
   private loadingTrackingSignal = signal<boolean>(false);
   readonly loadingTracking = computed(() => this.loadingTrackingSignal());
@@ -569,11 +725,13 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   private confirmationDialogDataSignal = signal<ConfirmationDialogData | null>(null);
   readonly confirmationDialogData = computed(() => this.confirmationDialogDataSignal());
 
-  // Sales type state - now supports both cash and charge
-  private salesTypeCashSignal = signal<boolean>(true);  // Default to cash enabled
-  private salesTypeChargeSignal = signal<boolean>(false); // Default to charge disabled
-  readonly isCashSale = computed(() => this.salesTypeCashSignal());
-  readonly isChargeSale = computed(() => this.salesTypeChargeSignal());
+  // Store last entered reason from confirmation dialog when used with showReason
+  private lastConfirmationReasonSignal = signal<string | null>(null);
+  readonly lastConfirmationReason = computed(() => this.lastConfirmationReasonSignal());
+
+  // Sales type state - delegated to PosService so multiple UI elements stay in sync
+  readonly isCashSale = computed(() => this.posService.isCashSale());
+  readonly isChargeSale = computed(() => this.posService.isChargeSale());
 
   setAccessTab(tab: string): void {
     console.log('🎯 Setting access tab to:', tab);
@@ -605,11 +763,15 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   toggleCashSale(): void {
-    this.salesTypeCashSignal.update(value => !value);
+    this.posService.toggleCashSale();
   }
 
   toggleChargeSale(): void {
-    this.salesTypeChargeSignal.update(value => !value);
+    this.posService.toggleChargeSale();
+  }
+
+  setPaymentMethod(method: 'cash' | 'charge' | 'both'): void {
+    this.posService.setPaymentMethod(method);
   }
 
   async searchOrders(): Promise<void> {
@@ -972,12 +1134,17 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   async saveTrackingChanges(): Promise<void> {
     try {
       const entries = this.trackingEntries();
-      const modifiedEntries = entries.filter(entry => entry.isModified);
-      
-      if (modifiedEntries.length === 0) {
+      // Only consider entries actionable when user selected a partial adjustment AND qtyToAdjust > 0
+      const actionableEntries = entries.filter(entry => {
+        const adj = (entry.adjustmentType || '').toString().toLowerCase();
+        const qty = Number(entry.qtyToAdjust || entry.quantity || 0);
+        return adj.startsWith('partial_') && qty > 0;
+      });
+
+      if (actionableEntries.length === 0) {
         await this.showConfirmationDialog({
           title: 'No Changes',
-          message: 'No modifications were made to save.',
+          message: 'There are no changes for these Invoice.',
           confirmText: 'OK',
           cancelText: '',
           type: 'info'
@@ -985,9 +1152,25 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
         return;
       }
 
+      // Validate partial adjustments: qtyToAdjust must be >0 and <= original quantity
+      for (const e of actionableEntries) {
+        const qty = Number(e.qtyToAdjust || e.quantity || 0);
+        const orig = Number(e.quantity || 0);
+        if (qty <= 0 || qty > orig) {
+          await this.showConfirmationDialog({
+            title: 'Invalid Quantity',
+            message: `Quantity to adjust for "${e.productName || ''}" must be between 1 and ${orig}.`,
+            confirmText: 'OK',
+            cancelText: '',
+            type: 'danger'
+          });
+          return;
+        }
+      }
+
       const confirmed = await this.showConfirmationDialog({
         title: 'Save Changes',
-        message: `Are you sure you want to save changes to ${modifiedEntries.length} item(s)?`,
+        message: `Are you sure you want to save changes to ${actionableEntries.length} item(s)?`,
         confirmText: 'Yes, Save',
         cancelText: 'Cancel',
         type: 'info'
@@ -995,32 +1178,57 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
 
       if (!confirmed) return;
 
+      // If every actionable entry is requesting the full quantity, allow mapping
+      // partial_* -> full status. If there's any partial row, keep all entries
+      // as partial to preserve per-item partial adjustments.
+      const allFull = actionableEntries.every(ae => {
+        const qty = Number(ae.qtyToAdjust || ae.quantity || 0);
+        const orig = Number(ae.quantity || 0);
+        return qty === orig;
+      });
+
       this.loadingTrackingSignal.set(true);
 
       const order = this.selectedOrder();
       const orderId = order?.id || order?.orderId || '';
 
-      console.log('💾 Saving tracking changes:', {
-        orderId,
-        modifiedCount: modifiedEntries.length,
-        changes: modifiedEntries.map(e => ({
-          id: e.id,
-          productName: e.productName,
-          quantity: e.quantity,
-          status: e.status
-        }))
-      });
+      const currentUser = this.authService.getCurrentUser();
+      const userId = currentUser?.uid || undefined;
 
-      // TODO: Call API to save changes
-      // This would typically call a Cloud Function to update the tracking entries
-      // await this.orderService.updateOrderSellingTracking(orderId, modifiedEntries);
+      const results: { created: number; errors: any[] } = { created: 0, errors: [] };
 
-      // For now, simulate success
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // Process only actionable entries
+      for (const e of actionableEntries) {
+        try {
+          const adj = (e.adjustmentType || '').toString().toLowerCase();
+          const qty = Number(e.qtyToAdjust || e.quantity || 0);
+          // require the source tracking doc id
+          if (!e.id) {
+            results.errors.push({ id: e.id || null, error: 'Missing tracking id for partial adjustment' });
+            continue;
+          }
+          // determine target status: only map partial_* -> full when EVERY actionable
+          // entry is requesting the full quantity. If any row is partial, leave
+          // statuses as partial to avoid mixed partial/full behavior.
+          let targetStatus = adj;
+          if (allFull) {
+            if (adj === 'partial_return' && qty === Number(e.quantity || 0)) targetStatus = 'returned';
+            if (adj === 'partial_refund' && qty === Number(e.quantity || 0)) targetStatus = 'refunded';
+            if (adj === 'partial_damage' && qty === Number(e.quantity || 0)) targetStatus = 'damaged';
+          }
+
+          // create partial/full tracking doc via service which will also handle damage inventory deduction when needed
+          const r = await this.ordersSellingTrackingService.createPartialTrackingFromDoc(e.id, targetStatus, qty, userId);
+          if (r && r.created) results.created += r.created;
+          if (r && r.errors && r.errors.length) results.errors.push(...r.errors);
+        } catch (err) {
+          results.errors.push({ id: e.id || null, error: err });
+        }
+      }
 
       await this.showConfirmationDialog({
         title: 'Changes Saved',
-        message: 'Item status tracking changes have been saved successfully.',
+        message: `Processed ${results.created} partial adjustment(s). ${results.errors.length ? 'Errors: ' + results.errors.length : ''}`,
         confirmText: 'OK',
         cancelText: '',
         type: 'info'
@@ -1056,21 +1264,25 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
    */
   updateQtyToAdjust(index: number, newQty: string): void {
     const entries = this.trackingEntries();
-    
-    if (entries[index]) {
-      const qtyValue = Number(newQty) || 0;
+    let idx = typeof index === 'number' ? index : entries.findIndex(e => e.id === index || e.itemId === index);
+    if (idx === -1) return;
+
+    if (entries[idx]) {
+      const rawQty = Number(newQty) || 0;
+      const maxQty = Number(entries[idx].quantity || 0);
+      const qtyValue = Math.max(0, Math.min(rawQty, maxQty));
       const updatedEntry = { 
-        ...entries[index], 
+        ...entries[idx], 
         qtyToAdjust: qtyValue,
         // Mark as modified for saving
         isModified: true
       };
       
       const updatedEntries = [...entries];
-      updatedEntries[index] = updatedEntry;
+      updatedEntries[idx] = updatedEntry;
       this.trackingEntriesSignal.set(updatedEntries);
       
-      console.log('📝 Updated qty to adjust for item', index, 'to', qtyValue);
+      console.log('📝 Updated qty to adjust for item', idx, 'to', qtyValue);
     }
   }
 
@@ -1078,7 +1290,13 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
    * Get adjustment type for a tracking item (defaults to current status)
    */
   getAdjustmentType(item: any): string {
-    return item?.adjustmentType ?? item?.status ?? 'pending';
+    // In edit mode, prefer showing the explicit adjustmentType if set, otherwise show empty so
+    // the "Select action" placeholder is displayed. In view mode, show adjustmentType or fall
+    // back to the actual status for read-only display.
+    if (this.trackingTab() === 'edit') {
+      return item?.adjustmentType ?? '';
+    }
+    return item?.adjustmentType ?? item?.status ?? '';
   }
 
   /**
@@ -1086,20 +1304,22 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
    */
   updateAdjustmentType(index: number, newType: string): void {
     const entries = this.trackingEntries();
-    
-    if (entries[index]) {
+    let idx = typeof index === 'number' ? index : entries.findIndex(e => e.id === index || e.itemId === index);
+    if (idx === -1) return;
+
+    if (entries[idx]) {
       const updatedEntry = { 
-        ...entries[index], 
+        ...entries[idx], 
         adjustmentType: newType,
         // Mark as modified for saving
         isModified: true
       };
       
       const updatedEntries = [...entries];
-      updatedEntries[index] = updatedEntry;
+      updatedEntries[idx] = updatedEntry;
       this.trackingEntriesSignal.set(updatedEntries);
       
-      console.log('📝 Updated adjustment type for item', index, 'to', newType);
+      console.log('📝 Updated adjustment type for item', idx, 'to', newType);
     }
   }
 
@@ -1115,20 +1335,22 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
    */
   updateReason(index: number, newReason: string): void {
     const entries = this.trackingEntries();
-    
-    if (entries[index]) {
+    let idx = typeof index === 'number' ? index : entries.findIndex(e => e.id === index || e.itemId === index);
+    if (idx === -1) return;
+
+    if (entries[idx]) {
       const updatedEntry = { 
-        ...entries[index], 
+        ...entries[idx], 
         updateReason: newReason,
         // Mark as modified for saving
         isModified: true
       };
       
       const updatedEntries = [...entries];
-      updatedEntries[index] = updatedEntry;
+      updatedEntries[idx] = updatedEntry;
       this.trackingEntriesSignal.set(updatedEntries);
       
-      console.log('📝 Updated reason for item', index, 'to', newReason);
+      console.log('📝 Updated reason for item', idx, 'to', newReason);
     }
   }
 
@@ -1157,9 +1379,9 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     }
   }
 
-  async updateOrderStatus(orderId: string, status: string): Promise<void> {
+  async updateOrderStatus(orderId: string, status: string, reason?: string): Promise<void> {
     try {
-      await this.orderService.updateOrderStatus(orderId, status);
+      await this.orderService.updateOrderStatus(orderId, status, reason);
       // refresh
       await this.searchOrders();
       this.closeOrder();
@@ -1278,6 +1500,50 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   async openManageItemStatusAuthorized(mode?: 'return' | 'damage' | null): Promise<void> {
     const creds = await this.showManagerAuthDialog();
     if (!creds) return; // cancelled
+
+    // If caller requested damage mode, run the damaged flow immediately
+    if (mode === 'damage') {
+      try {
+        const order = this.selectedOrder();
+        const orderId = order?.id || order?.orderId || '';
+        if (!orderId) {
+          await this.showConfirmationDialog({ title: 'No Order', message: 'No order selected.', confirmText: 'OK', cancelText: '', type: 'info' });
+          return;
+        }
+
+        // Show confirmation with optional reason (patterned like refund flow)
+        const confirmed = await this.showConfirmationDialog({
+          title: 'Damage Items',
+          message: 'Are you sure you want to mark these items as damaged?',
+          confirmText: 'Yes, Damage',
+          cancelText: 'No',
+          type: 'warning',
+          showReason: true,
+          reasonLabel: 'Update Reason (optional)',
+          reasonPlaceholder: 'Enter reason for adjustment (optional)...'
+        });
+
+        if (!confirmed) return;
+
+        const reason = this.lastConfirmationReason();
+
+        const res = await this.ordersSellingTrackingService.markOrderTrackingDamaged(orderId, creds.userCode || undefined, reason || undefined);
+        const created = res?.created ?? 0;
+        const errors = res?.errors ?? [];
+        const msg = `Created ${created} damaged record(s). ${errors.length ? 'Errors: ' + errors.length : ''}`;
+        await this.showConfirmationDialog({ title: 'Damage Applied', message: msg, confirmText: 'OK', cancelText: '', type: 'info' });
+
+        // Refresh tracking modal to show latest entries
+        await this.openManageItemStatus();
+        return;
+      } catch (e) {
+        console.error('Failed to apply damage tracking', e);
+        await this.showConfirmationDialog({ title: 'Error', message: 'Failed to mark items as damaged. See console for details.', confirmText: 'OK', cancelText: '', type: 'danger' });
+        return;
+      }
+    }
+
+    // Default: open the Manage Item Status modal (return mode or manual manage)
     await this.openManageItemStatus(mode);
   }
 
@@ -1286,7 +1552,38 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     const creds = await this.showManagerAuthDialog();
     if (!creds) return; // cancelled
     // TODO: validate creds before proceeding (server-side validation recommended)
-    await this.updateOrderStatus(orderId, status);
+    // Ask for confirmation and optional update reason before applying status
+    const titleMap: any = {
+      cancelled: 'Cancel Order',
+      returned: 'Return Items',
+      refunded: 'Refund Order',
+      damaged: 'Mark as Damaged'
+    };
+    const messageMap: any = {
+      cancelled: 'Are you sure you want to cancel this order?',
+      returned: 'Are you sure you want to return these items?',
+      refunded: 'Are you sure you want to refund this order?',
+      damaged: 'Are you sure you want to mark these items as damaged?'
+    };
+
+    const title = titleMap[status] || 'Confirm Action';
+    const message = messageMap[status] || `Are you sure you want to set status to ${status}?`;
+
+    const confirmed = await this.showConfirmationDialog({
+      title,
+      message,
+      confirmText: 'Yes',
+      cancelText: 'No',
+      type: status === 'cancelled' || status === 'damaged' ? 'warning' : 'info',
+      showReason: true,
+      reasonLabel: 'Update Reason (optional)',
+      reasonPlaceholder: 'Enter reason for adjustment (optional)...'
+    });
+
+    if (!confirmed) return;
+
+    const reason = this.lastConfirmationReason() || undefined;
+    await this.updateOrderStatus(orderId, status, reason);
   }
 
   // Wrapper to require manager auth before processing item actions
@@ -1328,8 +1625,11 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
         title: `${action.charAt(0).toUpperCase() + action.slice(1)} Item`,
         message: `Are you sure you want to ${action} "${item.name || item.productName}"?`,
         confirmText: `Yes, ${action.charAt(0).toUpperCase() + action.slice(1)}`,
-        cancelText: 'Cancel',
-        type: action === 'cancel' || action === 'damage' ? 'warning' : 'info'
+        cancelText: 'No',
+        type: action === 'cancel' || action === 'damage' ? 'warning' : 'info',
+        showReason: true,
+        reasonLabel: 'Update Reason (optional)',
+        reasonPlaceholder: 'Enter reason for adjustment (optional)...'
       });
 
       if (confirmed) {
@@ -1340,7 +1640,8 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
             // TODO: Implement return logic (per-item) if needed
             // Per requirement: treat Return as equivalent to cancelling the order
             try {
-              await this.updateOrderStatus(orderId, 'cancelled');
+              const reason = this.lastConfirmationReason();
+              await this.updateOrderStatus(orderId, 'cancelled', reason || undefined);
             } catch (e) {
               console.error('Failed to set order to cancelled after return action', e);
             }
@@ -1350,7 +1651,8 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
             // TODO: Implement damage reporting logic (per-item) if needed
             // Per requirement: treat Damage as equivalent to cancelling the order
             try {
-              await this.updateOrderStatus(orderId, 'cancelled');
+              const reason = this.lastConfirmationReason();
+              await this.updateOrderStatus(orderId, 'cancelled', reason || undefined);
             } catch (e) {
               console.error('Failed to set order to cancelled after damage action', e);
             }
@@ -1363,7 +1665,8 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
             console.log('Processing cancellation for item:', item);
             // TODO: Implement item cancellation logic
             try {
-              await this.updateOrderStatus(orderId, 'cancelled');
+              const reason = this.lastConfirmationReason();
+              await this.updateOrderStatus(orderId, 'cancelled', reason || undefined);
             } catch (e) {
               console.error('Failed to set order to cancelled after cancel action', e);
             }
@@ -1906,7 +2209,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
 
   // F4 Hotkey for Clear Data
   @HostListener('document:keydown.f4', ['$event'])
-  async onF4KeyPress(event: Event | KeyboardEvent): Promise<void> {
+  async onF4KeyPress(event: KeyboardEvent): Promise<void> {
     event.preventDefault(); // Prevent default F4 behavior
     
     // Check if order is already completed
@@ -1944,7 +2247,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
 
   // F5 Hotkey for New Order
   @HostListener('document:keydown.f5', ['$event'])
-  async onF5KeyPress(event: Event | KeyboardEvent): Promise<void> {
+  async onF5KeyPress(event: KeyboardEvent): Promise<void> {
     event.preventDefault(); // Prevent page refresh
     // Use unified flow so hotkey, button, and item-click behave the same
     await this.requestStartNewOrder('hotkey');
@@ -1952,7 +2255,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
 
   // F6 Hotkey for Complete Order
   @HostListener('document:keydown.f6', ['$event'])
-  async onF6KeyPress(event: Event | KeyboardEvent): Promise<void> {
+  async onF6KeyPress(event: KeyboardEvent): Promise<void> {
     event.preventDefault(); // Prevent default F6 behavior
     
     // If order is already completed, just show receipt
@@ -1979,7 +2282,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
 
   // F7 Hotkey for Add Discount (mirrors Add Discount button behavior)
   @HostListener('document:keydown.f7', ['$event'])
-  async onF7KeyPress(event: Event | KeyboardEvent): Promise<void> {
+  async onF7KeyPress(event: KeyboardEvent): Promise<void> {
     event.preventDefault(); // Prevent default F7 behavior
 
     // Block on completed orders
@@ -2494,6 +2797,19 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
             // When discount is disabled, reset values
             updatedItem.discountType = 'percentage';
             updatedItem.discountValue = 0;
+          }
+        }
+
+        // If the discount value itself was changed, enforce hasDiscount flag accordingly
+        if (field === 'discountValue') {
+          const num = Number(value) || 0;
+          if (num <= 0) {
+            updatedItem.hasDiscount = false;
+            updatedItem.discountValue = 0;
+            updatedItem.discountType = 'percentage';
+          } else {
+            updatedItem.hasDiscount = true;
+            updatedItem.discountValue = num;
           }
         }
         
@@ -3900,7 +4216,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       customerNames: customerNamesList,
       customerDiscounts: customerDiscounts,
       subtotal: cartSummary.grossAmount,
-      vatAmount: cartSummary.vatAmount,
+      vatAmount: Number(((cartSummary.vatAmount || 0)).toFixed(2)),
       vatExempt: cartSummary.vatExemptSales,
       discount: cartSummary.productDiscountAmount + cartSummary.orderDiscountAmount,
       totalAmount: cartSummary.netAmount,
@@ -4195,16 +4511,17 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     return new Promise((resolve) => {
       this.confirmationDialogDataSignal.set(data);
       this.isConfirmationDialogVisibleSignal.set(true);
-      
+      // Reset last reason
+      this.lastConfirmationReasonSignal.set(null);
       // Store the resolve function for use in dialog action handlers
       (this as any)._confirmationResolve = resolve;
     });
   }
-
-  onConfirmationConfirmed(): void {
+  onConfirmationConfirmed(event?: { reason?: string }): void {
     this.isConfirmationDialogVisibleSignal.set(false);
     this.confirmationDialogDataSignal.set(null);
-    
+    // Store reason if provided
+    if (event && event.reason) this.lastConfirmationReasonSignal.set(event.reason);
     // Resolve with true (confirmed)
     if ((this as any)._confirmationResolve) {
       (this as any)._confirmationResolve(true);
@@ -4215,7 +4532,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   onConfirmationCancelled(): void {
     this.isConfirmationDialogVisibleSignal.set(false);
     this.confirmationDialogDataSignal.set(null);
-    
+    this.lastConfirmationReasonSignal.set(null);
     // Resolve with false (cancelled)
     if ((this as any)._confirmationResolve) {
       (this as any)._confirmationResolve(false);
