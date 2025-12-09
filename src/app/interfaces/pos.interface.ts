@@ -20,6 +20,7 @@ export interface Order {
   
   // Customer Information
   cashSale?: boolean;
+  chargeSale?: boolean;
   soldTo?: string;
   tin?: string;
   businessAddress?: string;
@@ -58,6 +59,30 @@ export interface Order {
   message: string; // Receipt message - Required
   // Optional items array (orderDetails may be attached from API or fetched separately)
   items?: OrderItem[];
+}
+
+// Ledger entry for order-level accounting events (order, return, refund, cancel, damage)
+export interface OrderAccountingLedger {
+  id?: string;
+  companyId: string;
+  storeId: string;
+  orderId: string;
+  // Event type describing the kind of ledger entry
+  eventType: 'order' | 'return' | 'refund' | 'cancel' | 'damage';
+
+  // Monetary and quantity impact of this event
+  amount: number;
+  quantity: number;
+
+  // Running balances immediately after this event is applied
+  runningBalanceAmount: number;
+  runningBalanceQty: number;
+  // Running balance for 'order' events only (cumulative across orders)
+  runningBalanceOrderQty?: number;
+
+  // Audit fields
+  createdAt: Date;
+  createdBy?: string;
 }
 
 export interface OrderDetail {

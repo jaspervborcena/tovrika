@@ -22,6 +22,7 @@ import { AppConstants } from '../../../shared/enums/app-constants.enum';
 
 import { OrderService } from '../../../services/order.service';
 import { OrdersSellingTrackingService } from '../../../services/orders-selling-tracking.service';
+import { LedgerService } from '../../../services/ledger.service';
 import { StoreService } from '../../../services/store.service';
 import { UserRoleService } from '../../../services/user-role.service';
 import { CustomerService } from '../../../services/customer.service';
@@ -60,6 +61,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   private storeService = inject(StoreService);
   private orderService = inject(OrderService);
   private ordersSellingTrackingService = inject(OrdersSellingTrackingService);
+  private ledgerService = inject(LedgerService);
   private userRoleService = inject(UserRoleService);
   private customerService = inject(CustomerService);
   private companyService = inject(CompanyService);
@@ -599,6 +601,12 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     const s = (this.selectedOrder()?.status || '').toString().toLowerCase();
     return ['cancelled', 'returned', 'refunded', 'damaged'].includes(s);
   });
+
+  // Signal to indicate we've applied damage action and need to lock UI accordingly
+  private damageAppliedSignal = signal<boolean>(false);
+
+  // When damage has been applied, lock other actions (except Open Receipt)
+  readonly postDamageLock = computed(() => this.damageAppliedSignal());
 
   // Whether the currently loaded tracking entries already contain a 'returned' row
   readonly hasReturnTracking = computed(() => {
@@ -1198,6 +1206,8 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       const results: { created: number; errors: any[] } = { created: 0, errors: [] };
 
       // Process only actionable entries
+      // We'll aggregate totals by eventType (return/refund/damage) and write a single ledger entry per eventType
+      const totalsByEvent: Record<string, { amount: number; qty: number }> = {};
       for (const e of actionableEntries) {
         try {
           const adj = (e.adjustmentType || '').toString().toLowerCase();
@@ -1221,6 +1231,24 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
           const r = await this.ordersSellingTrackingService.createPartialTrackingFromDoc(e.id, targetStatus, qty, userId);
           if (r && r.created) results.created += r.created;
           if (r && r.errors && r.errors.length) results.errors.push(...r.errors);
+          // Aggregate totals for ledger per event type when partial adjustments were created
+          try {
+            const adjType = (e.adjustmentType || '').toString().toLowerCase();
+            const mapPartial: any = {
+              partial_return: 'return',
+              partial_refund: 'refund',
+              partial_damage: 'damage'
+            };
+            const eventType = mapPartial[adjType];
+            if (eventType && r && r.created && r.created > 0) {
+              const amount = Number(e.lineTotal || ((e.unitPrice || e.price || 0) * qty) || 0);
+              if (!totalsByEvent[eventType]) totalsByEvent[eventType] = { amount: 0, qty: 0 };
+              totalsByEvent[eventType].amount += amount;
+              totalsByEvent[eventType].qty += Number(qty || 0);
+            }
+          } catch (ledgerEx) {
+            console.warn('Unexpected error while aggregating partial adjustments for ledger', ledgerEx);
+          }
         } catch (err) {
           results.errors.push({ id: e.id || null, error: err });
         }
@@ -1236,6 +1264,26 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
 
       // Refresh the tracking data
       await this.openManageItemStatus();
+
+      // After refreshing, write aggregated ledger entries per event type (non-blocking)
+      try {
+        const companyId = order?.companyId || '';
+        const storeId = order?.storeId || '';
+        const performedBy = userId || this.authService.getCurrentUser()?.uid || 'system';
+        for (const [eventType, sums] of Object.entries(totalsByEvent)) {
+          try {
+            // `eventType` is derived from keys and TypeScript treats it as string;
+            // cast to the allowed union to satisfy the LedgerService signature.
+            const typedEvent = eventType as 'order' | 'return' | 'refund' | 'cancel' | 'damage';
+            const res: any = await this.ledgerService.recordEvent(companyId, storeId, orderId, typedEvent, Number((sums as any).amount || 0), Number((sums as any).qty || 0), performedBy);
+            console.log('LedgerService: aggregated entry created', { orderId, eventType, amount: (sums as any).amount, qty: (sums as any).qty, id: res?.id });
+          } catch (ledgerErr) {
+            console.warn('LedgerService: failed to create aggregated ledger entry', ledgerErr);
+          }
+        }
+      } catch (aggErr) {
+        console.warn('Failed to write aggregated ledger entries after saving tracking changes', aggErr);
+      }
 
     } catch (error) {
       console.error('❌ Error saving tracking changes:', error);
@@ -1531,14 +1579,18 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
         const created = res?.created ?? 0;
         const errors = res?.errors ?? [];
         const msg = `Created ${created} damaged record(s). ${errors.length ? 'Errors: ' + errors.length : ''}`;
-        await this.showConfirmationDialog({ title: 'Damage Applied', message: msg, confirmText: 'OK', cancelText: '', type: 'info' });
+        await this.showConfirmationDialog({ title: 'Success', message: 'Successfully marked damage. ' + msg, confirmText: 'OK', cancelText: '', type: 'info' });
 
-        // Refresh tracking modal to show latest entries
-        await this.openManageItemStatus();
+        // Mark that damage has been applied so UI will hide/lock actions as required
+        this.damageAppliedSignal.set(true);
+
+        // Do NOT open the Manage Item Status dialog automatically after damage
         return;
       } catch (e) {
         console.error('Failed to apply damage tracking', e);
-        await this.showConfirmationDialog({ title: 'Error', message: 'Failed to mark items as damaged. See console for details.', confirmText: 'OK', cancelText: '', type: 'danger' });
+        await this.showConfirmationDialog({ title: 'Failed', message: 'Failed to mark damage. See console for details.', confirmText: 'OK', cancelText: '', type: 'danger' });
+        // Even on failure, lock/hide damage to avoid repeated attempts until user refreshes
+        this.damageAppliedSignal.set(true);
         return;
       }
     }
@@ -1569,6 +1621,11 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     const title = titleMap[status] || 'Confirm Action';
     const message = messageMap[status] || `Are you sure you want to set status to ${status}?`;
 
+    // Capture order totals before we close the order (updateOrderStatus will refresh/close)
+    const currentOrder = this.selectedOrder();
+    const orderAmount = Number(currentOrder?.netAmount ?? currentOrder?.totalAmount ?? 0);
+    const orderQty = (currentOrder?.items || []).reduce((s: number, it: any) => s + Number(it.quantity || 0), 0);
+
     const confirmed = await this.showConfirmationDialog({
       title,
       message,
@@ -1584,6 +1641,25 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
 
     const reason = this.lastConfirmationReason() || undefined;
     await this.updateOrderStatus(orderId, status, reason);
+
+    // Show a simple success dialog for the status change. Ledger writes are handled
+    // inside `OrderService.updateOrderStatus` to avoid duplicate entries.
+    const map: any = { returned: 'return', refunded: 'refund', damaged: 'damage', cancelled: 'cancel' };
+    const eventType = map[status] || status;
+    const statusSuccessMap: any = {
+      return: 'Successfully marked items as returned.',
+      refund: 'Successfully refunded the order.',
+      damage: 'Successfully marked items as damaged.',
+      cancel: 'Order successfully cancelled.'
+    };
+    const successMessage = statusSuccessMap[eventType] || 'Action completed successfully.';
+    await this.showConfirmationDialog({
+      title: 'Success',
+      message: successMessage,
+      confirmText: 'OK',
+      cancelText: '',
+      type: 'info'
+    });
   }
 
   // Wrapper to require manager auth before processing item actions
