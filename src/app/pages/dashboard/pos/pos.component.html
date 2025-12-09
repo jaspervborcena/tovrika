@@ -537,29 +537,29 @@
                 📄 Open Receipt
               </button>
                     <button *ngIf="selectedOrder()" class="btn cancel-order-btn"
-                      [disabled]="!canCancelOrder() || isOrderActionLocked()"
-                      [title]="(!canCancelOrder() || isOrderActionLocked()) ? 'Cancel disabled for this order' : 'Cancel Order'"
+                      [disabled]="!canCancelOrder() || isOrderActionLocked() || postDamageLock()"
+                      [title]="(!canCancelOrder() || isOrderActionLocked() || postDamageLock()) ? 'Cancel disabled for this order' : 'Cancel Order'"
                       (click)="authorizeAndUpdateOrderStatus(selectedOrder()?.id, 'cancelled')">Cancel Order</button>
 
                     <!-- Show or hide Return depending on order status and whether a return tracking row already exists -->
                     <button *ngIf="shouldShowReturnButton()" class="btn btn-warning return-btn"
-                      [disabled]="isOrderActionLocked()"
-                      [title]="isOrderActionLocked() ? 'Action disabled for this order' : 'Return'"
+                      [disabled]="isOrderActionLocked() || postDamageLock()"
+                      [title]="(isOrderActionLocked() || postDamageLock()) ? 'Action disabled for this order' : 'Return'"
                       (click)="authorizeAndUpdateOrderStatus(selectedOrder()?.id, 'returned')">Return</button>
 
                     <button *ngIf="selectedOrder()?.status !== 'refunded'" class="btn btn-primary"
-                      [disabled]="isRefundDisabled()"
-                      [title]="isRefundDisabled() ? 'Action disabled for this order' : 'Refund'"
+                      [disabled]="isRefundDisabled() || postDamageLock()"
+                      [title]="(isRefundDisabled() || postDamageLock()) ? 'Action disabled for this order' : 'Refund'"
                       (click)="authorizeAndUpdateOrderStatus(selectedOrder()?.id, 'refunded')">Refund</button>
 
                     <button *ngIf="shouldShowDamageButton()" class="btn btn-danger damage-btn"
-                      [disabled]="isDamageDisabled()"
-                      [title]="isDamageDisabled() ? 'Action disabled for this order' : 'Damage'"
+                      [disabled]="isDamageDisabled() || postDamageLock()"
+                      [title]="(isDamageDisabled() || postDamageLock()) ? 'Action disabled for this order' : 'Damage'"
                       (click)="openManageItemStatusAuthorized('damage')">Damage</button>
 
                     <button class="btn btn-secondary manage-status-btn"
-                      [disabled]="isManageStatusDisabled()"
-                      [title]="isManageStatusDisabled() ? 'Action disabled for this order' : 'Manage Item Status'"
+                      [disabled]="isManageStatusDisabled() || postDamageLock()"
+                      [title]="(isManageStatusDisabled() || postDamageLock()) ? 'Action disabled for this order' : 'Manage Item Status'"
                       (click)="openManageItemStatusAuthorized()">Manage Item Status</button>
             </div>
 
