@@ -1,10 +1,11 @@
 import { Injectable, inject } from '@angular/core';
 import { Firestore, collection, query, where } from '@angular/fire/firestore';
-import { getDocs, getDoc, doc, setDoc, serverTimestamp, runTransaction, orderBy, limit } from 'firebase/firestore';
+import { getDocs, getDoc, doc, setDoc, serverTimestamp, runTransaction, orderBy, limit, getAggregateFromServer, count } from 'firebase/firestore';
 import { toDateValue } from '../core/utils/date-utils';
 import { OfflineDocumentService } from '../core/services/offline-document.service';
 import { OrdersSellingTrackingDoc } from '../interfaces/orders-selling-tracking.interface';
 import { ProductService } from './product.service';
+import { LedgerService } from './ledger.service';
 
 @Injectable({ providedIn: 'root' })
 export class OrdersSellingTrackingService {
@@ -20,7 +21,8 @@ export class OrdersSellingTrackingService {
   }
   constructor(
     private firestore: Firestore,
-    private productService: ProductService
+    private productService: ProductService,
+    private ledgerService: LedgerService
   ) {}
 
   /**
@@ -557,6 +559,20 @@ async createPartialTrackingFromDoc(trackingId: string, newStatus: string, qty: n
           errors.push({ id: newRef ? newRef.id : null, error: invErr });
         }
       }
+      // If we created an online damaged/partial-damage tracking row, record a ledger 'damage' event
+      try {
+        if (isDamage && navigator.onLine) {
+          const companyId = data.companyId || newDoc.companyId;
+          const storeId = data.storeId || newDoc.storeId;
+          const orderId = newDoc.orderId || data.orderId;
+          const amount = Number(newDoc.total || 0);
+          const quantity = Number(newDoc.quantity || 0);
+          await this.ledgerService.recordEvent(companyId, storeId, orderId, 'damage' as any, amount, quantity, createdBy || newDoc.createdBy || 'system');
+          console.log(`createPartialTrackingFromDoc: recorded ledger damage for order ${orderId}`);
+        }
+      } catch (ledgerErr) {
+        console.warn('createPartialTrackingFromDoc: ledger recordEvent failed', ledgerErr);
+      }
     } else {
       const payload = this.sanitizeForFirestore(newDoc);
       await this.offlineDocService.createDocument('ordersSellingTracking', payload as any);
@@ -775,6 +791,21 @@ async markOrderTrackingDamaged(orderId: string, damagedBy?: string, reason?: str
             errors.push({ id: ref.id, error: (invErr && (invErr as any).message) ? (invErr as any).message : String(invErr) });
           }
 
+          // Record ledger entry for damage (online only)
+          try {
+            if (navigator.onLine) {
+              const companyId = data.companyId || newDoc.companyId;
+              const storeId = data.storeId || newDoc.storeId;
+              const ledgerOrderId = newDoc.orderId || data.orderId || orderId;
+              const amount = Number(data.total || 0);
+              const quantity = Number(data.quantity || 0);
+              await this.ledgerService.recordEvent(companyId, storeId, ledgerOrderId, 'damage' as any, amount, quantity, damagedBy || data.updatedBy || data.createdBy || 'system');
+              console.log(`markOrderTrackingDamaged: ledger damage recorded for order ${ledgerOrderId}`);
+            }
+          } catch (ledgerErr) {
+            console.warn('markOrderTrackingDamaged: ledger recordEvent failed', ledgerErr);
+          }
+
           created++;
           console.log(`markOrderTrackingDamaged: success created=${created}, pushed id=${ref.id}`);
         } else {
@@ -986,6 +1017,93 @@ async markOrderTrackingDamaged(orderId: string, damagedBy?: string, reason?: str
       }
       return results;
     } catch (e) {
+      return [];
+    }
+  }
+
+  /**
+   * Get top products ordered by number of completed tracking records.
+   * Returns an array of { productId, productName, skuId, completedCount } sorted desc.
+   */
+  async getTopProductsCompletedCounts(
+    companyId: string,
+    storeId?: string,
+    topN: number = 100
+  ): Promise<{ productId: string; productName: string; skuId: string; completedCount: number }[]> {
+    try {
+      // Step 1: fetch topN product documents (most recently updated first)
+      // Build product query: include storeId when provided, otherwise query by company only
+      let productsQ: any;
+      if (storeId && storeId !== 'all') {
+        productsQ = query(
+          collection(this.firestore, 'products'),
+          where('companyId', '==', companyId),
+          where('storeId', '==', storeId),
+          orderBy('updatedAt', 'desc'),
+          limit(topN)
+        );
+      } else {
+        productsQ = query(
+          collection(this.firestore, 'products'),
+          where('companyId', '==', companyId),
+          orderBy('updatedAt', 'desc'),
+          limit(topN)
+        );
+      }
+
+      const productSnaps: any = await getDocs(productsQ as any);
+      console.log(`getTopProductsCompletedCounts: fetched ${productSnaps?.docs?.length || 0} products for company=${companyId} store=${storeId || 'ALL'}`);
+      const results: { productId: string; productName: string; skuId: string; completedCount: number }[] = [];
+
+      for (const p of productSnaps.docs) {
+        const pdata: any = p.data() || {};
+        const productId = p.id;
+        const productName = pdata.productName || pdata.name || '';
+        const skuId = pdata.skuId || pdata.sku || '';
+
+        // Step 2: aggregate completed count for this product
+        // Build orders query, include storeId filter only when provided
+        let ordersQ: any;
+        if (storeId && storeId !== 'all') {
+          ordersQ = query(
+            collection(this.firestore, 'ordersSellingTracking'),
+            where('companyId', '==', companyId),
+            where('storeId', '==', storeId),
+            where('productId', '==', productId),
+            where('status', '==', 'completed')
+          );
+        } else {
+          ordersQ = query(
+            collection(this.firestore, 'ordersSellingTracking'),
+            where('companyId', '==', companyId),
+            where('productId', '==', productId),
+            where('status', '==', 'completed')
+          );
+        }
+
+        let completedCount = 0;
+        try {
+          const aggSnap: any = await getAggregateFromServer(ordersQ as any, { count: count() } as any);
+          completedCount = Number(aggSnap.data().count || 0);
+        } catch (e) {
+          // If aggregation fails (indexing or unsupported), fallback to fetching docs
+          try {
+            const snaps = await getDocs(ordersQ as any);
+            completedCount = snaps?.docs?.length || 0;
+          } catch (e2) {
+            completedCount = 0;
+          }
+        }
+
+        console.log(`getTopProductsCompletedCounts: product=${productId} name=${productName} completedCount=${completedCount}`);
+        results.push({ productId, productName, skuId, completedCount });
+      }
+
+      // sort desc by completedCount
+      results.sort((a, b) => b.completedCount - a.completedCount);
+      return results;
+    } catch (err) {
+      console.warn('getTopProductsCompletedCounts error', err);
       return [];
     }
   }

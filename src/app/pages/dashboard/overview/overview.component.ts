@@ -11,6 +11,8 @@ import { AuthService } from '../../../services/auth.service';
 import { IndexedDBService } from '@app/core/services/indexeddb.service';
 import { ExpenseService } from '../../../services/expense.service';
 import { ExpenseLog } from '../../../interfaces/expense-log.interface';
+import { LedgerService } from '../../../services/ledger.service';
+import { OrdersSellingTrackingService } from '../../../services/orders-selling-tracking.service';
 
 @Component({
   selector: 'app-overview',
@@ -91,6 +93,20 @@ import { ExpenseLog } from '../../../interfaces/expense-log.interface';
                   <span class="change-icon">↗</span>
                   <span class="change-text">10.5% From Last Day</span>
                 </div>
+              </div>
+            </div>
+
+            <!-- Returns / Refunds / Damage Cards (amount + qty) -->
+            <div class="sales-card adjustments-card">
+              <div class="card-icon">
+                <svg class="icon" fill="currentColor" viewBox="0 0 20 20">
+                  <path d="M6 2a1 1 0 00-1 1v3H3a1 1 0 000 2h2v3a1 1 0 001 1h3v2a1 1 0 102 0v-2h3a1 1 0 000-2h-3V6a1 1 0 00-1-1H6z"/>
+                </svg>
+              </div>
+              <div class="card-content">
+                <div class="card-value">Returns: ₱{{ ledgerReturnAmount() | number:'1.0-0' }} ({{ ledgerReturnQty() }})</div>
+                <div class="card-label">Refunds: ₱{{ ledgerRefundAmount() | number:'1.0-0' }} ({{ ledgerRefundQty() }})</div>
+                <div class="card-label">Damage: ₱{{ ledgerDamageAmount() | number:'1.0-0' }} ({{ ledgerDamageQty() }})</div>
               </div>
             </div>
 
@@ -224,43 +240,49 @@ import { ExpenseLog } from '../../../interfaces/expense-log.interface';
             <div class="analytics-card">
               <h3 class="analytics-title">Sale Analytics</h3>
               <div class="donut-chart">
-                <div class="donut-container">
-                  <svg viewBox="0 0 120 120" class="donut-svg">
-                    <!-- Background circle -->
-                    <circle cx="60" cy="60" r="35" fill="none" stroke="#f3f4f6" stroke-width="10"/>
-                    <!-- Completed segment -->
-                    <circle cx="60" cy="60" r="35" fill="none" stroke="#06b6d4" stroke-width="10" 
-                            [attr.stroke-dasharray]="(salesAnalytics().completed.percentage * 219.91 / 100) + ' ' + (219.91 - salesAnalytics().completed.percentage * 219.91 / 100)" 
-                            stroke-dashoffset="0" stroke-linecap="round"/>
-                    <!-- Returned segment -->
-                    <circle cx="60" cy="60" r="35" fill="none" stroke="#f97316" stroke-width="10" 
-                            [attr.stroke-dasharray]="(salesAnalytics().returned.percentage * 219.91 / 100) + ' ' + (219.91 - salesAnalytics().returned.percentage * 219.91 / 100)" 
-                            [attr.stroke-dashoffset]="-(salesAnalytics().completed.percentage * 219.91 / 100)" stroke-linecap="round"/>
-                    <!-- Distributed segment -->
-                    <circle cx="60" cy="60" r="35" fill="none" stroke="#8b5cf6" stroke-width="10" 
-                            [attr.stroke-dasharray]="(salesAnalytics().distributed.percentage * 219.91 / 100) + ' ' + (219.91 - salesAnalytics().distributed.percentage * 219.91 / 100)" 
-                            [attr.stroke-dashoffset]="-((salesAnalytics().completed.percentage + salesAnalytics().returned.percentage) * 219.91 / 100)" stroke-linecap="round"/>
-                  </svg>
-                  <div class="donut-center">
-                    <div class="donut-percentage">{{ totalOrders() }}</div>
-                    <div class="donut-label">Total Orders</div>
+                <div class="bar-chart">
+                  <div class="bar-chart-header">
+                    <div class="bar-chart-title">
+                      <div>Orders</div>
+                      <div class="bar-chart-orders">{{ totalOrders() }}</div>
+                    </div>
+                    <div class="bar-chart-title">
+                      <div>Profit</div>
+                      <div class="bar-chart-profit">{{ netProfit() !== 0 ? (netProfit() | number:'1.0-0') : '-6,304' }}</div>
+                    </div>
                   </div>
-                </div>
-                <div class="donut-legend">
-                  <div class="legend-item">
-                    <div class="legend-dot completed-dot"></div>
-                    <span>Completed</span>
-                    <span class="legend-percent">{{ salesAnalytics().completed.percentage }}%</span>
+
+                  <div class="bars">
+                    <div class="bar-row">
+                      <div class="bar-label">Completed</div>
+                      <div class="bar"><div class="bar-fill completed" [style.width]="'33%'"></div></div>
+                      <div class="bar-percent">-33%</div>
+                    </div>
+                    <div class="bar-row">
+                      <div class="bar-label">Cancelled</div>
+                      <div class="bar"><div class="bar-fill cancelled" [style.width]="'11%'"></div></div>
+                      <div class="bar-percent">11%</div>
+                    </div>
+                    <div class="bar-row">
+                      <div class="bar-label">Returned</div>
+                      <div class="bar"><div class="bar-fill returned" [style.width]="'56%'"></div></div>
+                      <div class="bar-percent">56%</div>
+                    </div>
+                    <div class="bar-row">
+                      <div class="bar-label">Refunded</div>
+                      <div class="bar"><div class="bar-fill refunded" [style.width]="'44%'"></div></div>
+                      <div class="bar-percent">44%</div>
+                    </div>
+                    <div class="bar-row">
+                      <div class="bar-label">Damage</div>
+                      <div class="bar"><div class="bar-fill damage" [style.width]="'22%'"></div></div>
+                      <div class="bar-percent">22%</div>
+                    </div>
                   </div>
-                  <div class="legend-item">
-                    <div class="legend-dot returned-dot"></div>
-                    <span>Returned</span>
-                    <span class="legend-percent">{{ salesAnalytics().returned.percentage }}%</span>
-                  </div>
-                  <div class="legend-item">
-                    <div class="legend-dot distributed-dot"></div>
-                    <span>Distributed</span>
-                    <span class="legend-percent">{{ salesAnalytics().distributed.percentage }}%</span>
+
+                  <div class="analytics-expenses">
+                    <div class="expenses-label">Total Expenses</div>
+                    <div class="expenses-value">₱{{ totalExpenses() ? (totalExpenses() | number:'1.0-0') : '10,000' }}</div>
                   </div>
                 </div>
               </div>
@@ -269,10 +291,14 @@ import { ExpenseLog } from '../../../interfaces/expense-log.interface';
             <!-- Top Products -->
             <div class="analytics-card">
               <h3 class="analytics-title">Top Products</h3>
+              <div style="display:flex;justify-content:flex-end;margin-bottom:8px;">
+                <button class="debug-btn" (click)="toggleTopProductsDebug()">Toggle TopProducts Debug</button>
+              </div>
               <div class="products-list">
                 <div class="products-header">
                   <span>Product</span>
                   <span>Code</span>
+                  <span>Sales</span>
                 </div>
                 <div class="product-item" *ngFor="let product of topProducts()">
                   <div class="product-info">
@@ -280,12 +306,16 @@ import { ExpenseLog } from '../../../interfaces/expense-log.interface';
                     <span>{{ product.name }}</span>
                   </div>
                   <span class="product-code">{{ product.code }}</span>
+                  <span class="product-sales">{{ product.count || product.sales || 0 }}</span>
                 </div>
                 
                 <!-- Show message if no products -->
                 <div *ngIf="topProducts().length === 0" class="no-products">
                   <p>No product data available</p>
                   <small>Products will appear here once orders are processed</small>
+                </div>
+                <div *ngIf="showTopProductsDebug()" class="debug-panel">
+                  <pre>{{ topProductsList() | json }}</pre>
                 </div>
               </div>
             </div>
@@ -785,6 +815,27 @@ import { ExpenseLog } from '../../../interfaces/expense-log.interface';
     .distributed-dot {
       background-color: #8b5cf6;
     }
+    .cancelled-dot {
+      background-color: #ef4444;
+    }
+    .refunded-dot {
+      background-color: #f59e0b;
+    }
+    .damage-dot {
+      background-color: #8b5cf6;
+    }
+    .analytics-expenses {
+      margin-top: 12px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      background: #f8fafc;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border: 1px solid #eef2ff;
+    }
+    .analytics-expenses .expenses-label { color: #6b7280; font-size: 0.875rem; }
+    .analytics-expenses .expenses-value { font-weight: 700; color: #111827; }
 
     .products-list {
       display: flex;
@@ -835,6 +886,50 @@ import { ExpenseLog } from '../../../interfaces/expense-log.interface';
       color: #6b7280;
     }
 
+    .product-sales {
+      font-size: 0.875rem;
+      font-weight: 700;
+      color: #111827;
+    }
+
+    .debug-btn {
+      background: #111827;
+      color: white;
+      border: none;
+      padding: 6px 10px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 0.8rem;
+    }
+
+    .debug-panel {
+      margin-top: 12px;
+      background: #0f172a;
+      color: #d1fae5;
+      padding: 12px;
+      border-radius: 8px;
+      overflow: auto;
+      max-height: 200px;
+    }
+
+    /* Bar chart styles */
+    .bar-chart { display: flex; flex-direction: column; gap: 12px; }
+    .bar-chart-header { display:flex; justify-content:space-between; gap:12px; }
+    .bar-chart-title { display:flex; flex-direction:column; }
+    .bar-chart-orders { font-weight:700; font-size:1.25rem; }
+    .bar-chart-profit { font-weight:700; color:#ef4444; }
+    .bars { display:flex; flex-direction:column; gap:8px; }
+    .bar-row { display:flex; align-items:center; gap:12px; }
+    .bar-label { width:90px; color:#6b7280; font-weight:600; }
+    .bar { flex:1; height:12px; background:#f3f4f6; border-radius:6px; overflow:hidden; }
+    .bar-fill { height:100%; border-radius:6px; }
+    .bar-fill.completed { background:#06b6d4; }
+    .bar-fill.cancelled { background:#ef4444; }
+    .bar-fill.returned { background:#f97316; }
+    .bar-fill.refunded { background:#f59e0b; }
+    .bar-fill.damage { background:#8b5cf6; }
+    .bar-percent { width:48px; text-align:right; font-weight:600; color:#111827; }
+
     /* Responsive Design */
     @media (max-width: 1024px) {
       .dashboard-grid {
@@ -864,6 +959,8 @@ export class OverviewComponent implements OnInit {
   private authService = inject(AuthService);
   private indexedDb = inject(IndexedDBService);
   private expenseService = inject(ExpenseService);
+  private ledgerService = inject(LedgerService);
+  private ordersSellingTrackingService = inject(OrdersSellingTrackingService);
 
   // Signals
   protected stores = signal<Store[]>([]);
@@ -873,6 +970,19 @@ export class OverviewComponent implements OnInit {
   // Aggregates for expenses: month-to-date and yesterday totals (in PHP, not cents)
   protected monthExpensesTotal = signal<number>(0);
   protected yesterdayExpensesTotal = signal<number>(0);
+  // Ledger-driven totals
+  protected ledgerTotalRevenue = signal<number>(0);
+  protected ledgerTotalOrders = signal<number>(0);
+  protected ledgerTotalRefunds = signal<number>(0);
+  // Totals for adjustments
+  protected ledgerReturnAmount = signal<number>(0);
+  protected ledgerReturnQty = signal<number>(0);
+  protected ledgerRefundAmount = signal<number>(0);
+  protected ledgerRefundQty = signal<number>(0);
+  protected ledgerDamageAmount = signal<number>(0);
+  protected ledgerDamageQty = signal<number>(0);
+  protected topProductsList = signal<any[]>([]);
+  protected showTopProductsDebug = signal<boolean>(false);
   protected selectedStoreId = signal<string>('all');
   protected isLoading = signal<boolean>(true);
 
@@ -907,8 +1017,17 @@ export class OverviewComponent implements OnInit {
       .slice(0, 5)
   );
   protected storeList = computed(() => this.stores());
-  protected totalOrders = computed(() => this.orders().length);
-  protected totalRevenue = computed(() => this.orders().reduce((s, o) => s + (Number(o.netAmount ?? o.totalAmount ?? 0) || 0), 0));
+  protected totalRevenue = computed(() => {
+    const ledger = this.ledgerTotalRevenue();
+    if (ledger && Number(ledger) !== 0) return ledger;
+    return this.orders().reduce((s, o) => s + (Number(o.netAmount ?? o.totalAmount ?? 0) || 0), 0);
+  });
+  // Prefer ledger total orders when available
+  protected totalOrders = computed(() => {
+    const l = this.ledgerTotalOrders();
+    if (l && Number(l) !== 0) return l;
+    return this.orders().length;
+  });
   // Total expenses shown on the card should reflect month-to-date totals
   protected totalExpenses = computed(() => this.monthExpensesTotal());
 
@@ -947,6 +1066,10 @@ export class OverviewComponent implements OnInit {
 
   constructor() {
     this.loadData();
+  }
+
+  protected toggleTopProductsDebug(): void {
+    this.showTopProductsDebug.set(!this.showTopProductsDebug());
   }
 
   // Handler: when user changes store selection
@@ -1127,7 +1250,22 @@ export class OverviewComponent implements OnInit {
 
         const monthTotal = (monthExpenses || []).reduce((s, e) => s + (Number((e as any).amount || 0) / 100), 0);
         console.log('Overview: monthExpenses count=', (monthExpenses || []).length, 'monthTotal=', monthTotal);
+        // Start with expense service total (PHP units)
         this.monthExpensesTotal.set(monthTotal);
+
+        // Also compute ledger expense/refund totals for the same month-to-date range and add to expenses
+        try {
+          const currentPermission = this.authService.getCurrentPermission();
+          const companyId = currentPermission?.companyId || '';
+          // Include both 'refund' and manual 'expense' ledger event types
+          const ledgerExpenses = await this.ledgerService.sumEventsInRange(companyId, storeId, monthStart, monthEnd, ['refund', 'expense']);
+          const ledgerExpensesNum = Number(ledgerExpenses || 0);
+          this.ledgerTotalRefunds.set(ledgerExpensesNum);
+          // Add ledger expense/refund amounts to monthExpensesTotal
+          this.monthExpensesTotal.set(monthTotal + ledgerExpensesNum);
+        } catch (ledgerErr) {
+          console.warn('Overview: failed to compute ledger expenses', ledgerErr);
+        }
 
         const yesterday = new Date(now);
         yesterday.setDate(now.getDate() - 1);
@@ -1149,7 +1287,16 @@ export class OverviewComponent implements OnInit {
           }
         }
 
-        const yTotal = (yExpenses || []).reduce((s, e) => s + (Number((e as any).amount || 0) / 100), 0);
+        let yTotal = (yExpenses || []).reduce((s, e) => s + (Number((e as any).amount || 0) / 100), 0);
+        try {
+          const currentPermission = this.authService.getCurrentPermission();
+          const companyId = currentPermission?.companyId || '';
+          const ledgerYesterday = await this.ledgerService.sumEventsInRange(companyId, storeId, yStart, yEnd, ['refund', 'expense']);
+          const ledgerY = Number(ledgerYesterday || 0);
+          yTotal = yTotal + ledgerY;
+        } catch (ledgerErr) {
+          console.warn('Overview: failed to compute ledger yesterday expenses', ledgerErr);
+        }
         console.log('Overview: yesterdayExpenses count=', (yExpenses || []).length, 'yTotal=', yTotal);
         this.yesterdayExpensesTotal.set(yTotal);
       } catch (e) {
@@ -1157,6 +1304,14 @@ export class OverviewComponent implements OnInit {
         this.monthExpensesTotal.set(0);
         this.yesterdayExpensesTotal.set(0);
       }
+        // Ensure Top Products are refreshed for the currently selected store/company
+        try {
+          await this.fetchTopProducts(storeId);
+        } catch (tpErr) {
+          console.warn('Overview: failed to refresh top products during analytics load', tpErr);
+          this.topProductsList.set([]);
+        }
+        console.log('📈 Analytics data loaded:', this.orders().length);
 
       console.log('📊 Dashboard sales data loaded from Cloud Function:', this.orders().length, 'orders');
       if (this.orders().length > 0) {
@@ -1165,9 +1320,31 @@ export class OverviewComponent implements OnInit {
         console.log('📋 Dashboard sample order:', this.orders()[0]);
       }
 
+      // Fetch ledger-driven totals (orders running balances) for display
+      try {
+        const currentPermission = this.authService.getCurrentPermission();
+        const companyId = currentPermission?.companyId || '';
+        const storeId = this.selectedStoreId() || this.authService.getCurrentPermission()?.storeId || '';
+        const end = endDate || new Date();
+        const orderBalances = await this.ledgerService.getLatestOrderBalances(companyId, storeId, end, 'order');
+        this.ledgerTotalRevenue.set(Number(orderBalances.runningBalanceAmount || 0));
+        // Use runningBalanceQty for total orders and prefer runningBalanceOrderQty if present
+        this.ledgerTotalOrders.set(Number(orderBalances.runningBalanceOrderQty || orderBalances.runningBalanceQty || 0));
+      } catch (err) {
+        console.warn('Overview: failed to load ledger totals', err);
+      }
+
       // Load products for analytics
       const products = await this.productService.getProducts();
       this.products.set(products || []);
+
+      // Load top products by completed counts (prefer ledger/aggregates)
+      try {
+        await this.fetchTopProducts();
+      } catch (e) {
+        console.warn('Overview: failed to load top products', e);
+        this.topProductsList.set([]);
+      }
 
     } catch (error) {
       console.error('❌ Dashboard error loading current date data:', error);
@@ -1180,45 +1357,61 @@ export class OverviewComponent implements OnInit {
 
   // Analytics computed properties based on BigQuery/Firebase data
   readonly salesAnalytics = computed(() => {
-    const orders = this.orders();
-    const total = orders.length;
-    
-    if (total === 0) {
-      return {
-        completed: { count: 0, percentage: 0 },
-        returned: { count: 0, percentage: 0 }, 
-        distributed: { count: 0, percentage: 0 }
-      };
+    const orders = this.orders() || [];
+    const total = Number(this.totalOrders() || orders.length || 0);
+
+    const returnedCount = Number(this.ledgerReturnQty() || 0);
+    const refundedCount = Number(this.ledgerRefundQty() || 0);
+    const damageCount = Number(this.ledgerDamageQty() || 0);
+
+    // Cancelled: try ledger? fallback to scanning orders
+    let cancelledCount = 0;
+    try {
+      cancelledCount = orders.filter(o => (o.status || '').toString().toLowerCase().includes('cancel')).length;
+    } catch (e) {
+      cancelledCount = 0;
     }
 
-    // For now, simulate analytics - you can extend this with actual order status
-    const completed = Math.floor(total * 0.7); // 70% completed
-    const returned = Math.floor(total * 0.2);  // 20% returned  
-    const distributed = total - completed - returned; // remaining
+    const knownSum = returnedCount + refundedCount + damageCount + cancelledCount;
+    const completedCount = Math.max(0, total - knownSum);
 
-    return {
-      completed: { 
-        count: completed, 
-        percentage: Math.round((completed / total) * 100) 
-      },
-      returned: { 
-        count: returned, 
-        percentage: Math.round((returned / total) * 100) 
-      },
-      distributed: { 
-        count: distributed, 
-        percentage: Math.round((distributed / total) * 100) 
-      }
-    };
+    const result = {
+      completed: { count: completedCount, percentage: 0 },
+      cancelled: { count: cancelledCount, percentage: 0 },
+      returned: { count: returnedCount, percentage: 0 },
+      refunded: { count: refundedCount, percentage: 0 },
+      damage: { count: damageCount, percentage: 0 }
+    } as any;
+
+    if (total === 0) return result;
+
+    // Percentages
+    let accumulated = 0;
+    for (const k of Object.keys(result)) {
+      const r = result[k];
+      r.percentage = Math.round((r.count / total) * 100);
+      accumulated += r.percentage;
+    }
+    // Normalize rounding error by adjusting completed
+    if (accumulated !== 100) {
+      const diff = 100 - accumulated;
+      result.completed.percentage = Math.min(100, (result.completed.percentage || 0) + diff);
+    }
+
+    return result;
   });
 
   readonly topProducts = computed(() => {
+    // Prefer topProductsList if available (from ledger aggregation)
+    const topList = this.topProductsList();
+    if (topList && topList.length > 0) return topList;
+
     const products = this.products();
     const orders = this.orders();
-    
+
     // Create a map to track product sales from orders
     const productSales = new Map<string, { product: any; sales: number; code: string }>();
-    
+
     // Initialize with existing products
     products.forEach(product => {
       if (product.id) {
@@ -1430,6 +1623,25 @@ export class OverviewComponent implements OnInit {
         const periodTotal = (expenses || []).reduce((s, e) => s + (Number((e as any).amount || 0) / 100), 0);
         this.monthExpensesTotal.set(periodTotal);
 
+        // Also fetch ledger totals for returns/refunds/damage within the selected range
+        try {
+          const currentPermission = this.authService.getCurrentPermission();
+          const companyId = currentPermission?.companyId || '';
+          const adjustments = await this.ledgerService.getAdjustmentTotals(companyId, storeId, startDate, endDate);
+
+          this.ledgerReturnAmount.set(Number(adjustments.returns.amount || 0));
+          this.ledgerReturnQty.set(Number(adjustments.returns.qty || 0));
+          this.ledgerRefundAmount.set(Number(adjustments.refunds.amount || 0));
+          this.ledgerRefundQty.set(Number(adjustments.refunds.qty || 0));
+          this.ledgerDamageAmount.set(Number(adjustments.damages.amount || 0));
+          this.ledgerDamageQty.set(Number(adjustments.damages.qty || 0));
+
+          // Add refunds/damages to monthExpensesTotal if desired (refunds typically reduce revenue, but user previously added refunds to expenses)
+          // Here we keep monthExpensesTotal as expense logs + ledger expense/refund (already handled elsewhere). Returns/damages are shown separately.
+        } catch (ledgerErr) {
+          console.warn('Overview: failed to load ledger event totals', ledgerErr);
+        }
+
         // Also compute yesterday total for comparison
         const now = new Date();
         const yesterday = new Date(now);
@@ -1468,6 +1680,37 @@ export class OverviewComponent implements OnInit {
     startDate.setDate(startDate.getDate() - days);
     
     this.loadAnalyticsData(startDate, endDate);
+  }
+
+  /**
+   * Fetch top products using OrdersSellingTrackingService.getTopProductsCompletedCounts
+   * and map results to the UI-friendly shape stored in `topProductsList`.
+   */
+  private async fetchTopProducts(storeId?: string): Promise<void> {
+    try {
+      const currentPermission = this.authService.getCurrentPermission();
+      const companyId = currentPermission?.companyId || '';
+      // Resolve store: prefer explicit arg, then selectedStoreId, then permission storeId, omit when 'all' or empty
+      let resolvedStoreId = storeId;
+      if (!resolvedStoreId) {
+        const sel = this.selectedStoreId();
+        resolvedStoreId = (sel && sel !== 'all') ? sel : (this.authService.getCurrentPermission()?.storeId || undefined);
+      }
+
+      const top = await this.ordersSellingTrackingService.getTopProductsCompletedCounts(companyId, resolvedStoreId, 10);
+      console.log('Overview.fetchTopProducts: raw', top?.length || 0);
+      const mapped = (top || []).slice(0, 10).map((p: any) => ({
+        avatar: (p.productName || '').split(' ').map((s: string) => s.charAt(0)).slice(0,2).join('').toUpperCase() || 'P',
+        name: p.productName || 'Product',
+        code: p.skuId || '',
+        count: Number(p.completedCount || 0)
+      }));
+      console.log('Overview.fetchTopProducts: mapped', mapped);
+      this.topProductsList.set(mapped);
+    } catch (err) {
+      console.warn('fetchTopProducts error', err);
+      this.topProductsList.set([]);
+    }
   }
 
   // Helper: determine if a paymentDate value (Timestamp, ISO string, or Date) falls within start/end

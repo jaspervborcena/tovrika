@@ -102,6 +102,208 @@ export class LedgerService {
 }
 
   /**
+   * Get the latest running balances for 'order' eventType (or any provided eventType)
+   */
+  async getLatestOrderBalances(
+    companyId: string,
+    storeId: string,
+    date: Date = new Date(),
+    eventType: 'order' | 'return' | 'refund' | 'cancel' | 'damage' = 'order'
+  ): Promise<{ runningBalanceAmount: number; runningBalanceQty: number; runningBalanceOrderQty: number }> {
+    try {
+      const res = await this.getLatestBalance(companyId, storeId, date, eventType);
+      // getLatestBalance returns amount/qty for that eventType; for order-specific order qty we do another quick fetch
+      const startOfDay = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+      const q = query(
+        collection(this.firestore, 'orderAccountingLedger'),
+        where('companyId', '==', companyId),
+        where('storeId', '==', storeId),
+        where('createdAtClient', '>=', startOfDay),
+        orderBy('createdAtClient', 'desc'),
+        limit(1)
+      );
+      const snaps = await getDocs(q);
+      if (!snaps.empty) {
+        const d: any = snaps.docs[0].data();
+        return {
+          runningBalanceAmount: Number(d.runningBalanceAmount || res.amount || 0),
+          runningBalanceQty: Number(d.runningBalanceQty || res.qty || 0),
+          runningBalanceOrderQty: Number(d.runningBalanceOrderQty || 0)
+        };
+      }
+      return { runningBalanceAmount: res.amount || 0, runningBalanceQty: res.qty || 0, runningBalanceOrderQty: 0 };
+    } catch (err) {
+      console.warn('LedgerService.getLatestOrderBalances fallback', err);
+      return { runningBalanceAmount: 0, runningBalanceQty: 0, runningBalanceOrderQty: 0 };
+    }
+  }
+
+  /**
+   * Sum ledger amounts for given eventTypes within a date range.
+   * Uses client-side filtering after querying by company/store + createdAtClient range.
+   */
+  async sumEventsInRange(
+    companyId: string,
+    storeId: string,
+    startDate: Date,
+    endDate: Date,
+    eventTypes: string[] = ['refund']
+  ): Promise<number> {
+    try {
+      const q = query(
+        collection(this.firestore, 'orderAccountingLedger'),
+        where('companyId', '==', companyId),
+        where('storeId', '==', storeId),
+        where('createdAtClient', '>=', startDate),
+        where('createdAtClient', '<=', endDate),
+        orderBy('createdAtClient', 'asc'),
+        limit(2000)
+      );
+
+      const snaps = await getDocs(q);
+      if (!snaps || snaps.empty) return 0;
+      let sum = 0;
+      for (const s of snaps.docs) {
+        const d: any = s.data();
+        if (!d) continue;
+        if (!d.eventType || eventTypes.indexOf(d.eventType) === -1) continue;
+        sum += Number(d.amount || 0);
+      }
+      return sum;
+    } catch (err) {
+      console.warn('LedgerService.sumEventsInRange error', err);
+      return 0;
+    }
+  }
+
+  /**
+   * Sum both amount and quantity for given event types within date range.
+   */
+  async sumEventsAmountAndQty(
+    companyId: string,
+    storeId: string,
+    startDate: Date,
+    endDate: Date,
+    eventTypes: string[] = ['refund']
+  ): Promise<{ amount: number; qty: number }> {
+    try {
+      const q = query(
+        collection(this.firestore, 'orderAccountingLedger'),
+        where('companyId', '==', companyId),
+        where('storeId', '==', storeId),
+        where('createdAtClient', '>=', startDate),
+        where('createdAtClient', '<=', endDate),
+        orderBy('createdAtClient', 'asc'),
+        limit(2000)
+      );
+
+      const snaps = await getDocs(q);
+      if (!snaps || snaps.empty) return { amount: 0, qty: 0 };
+      let sumAmount = 0;
+      let sumQty = 0;
+      for (const s of snaps.docs) {
+        const d: any = s.data();
+        if (!d) continue;
+        if (!d.eventType || eventTypes.indexOf(d.eventType) === -1) continue;
+        sumAmount += Number(d.amount || 0);
+        sumQty += Number(d.quantity || d.qty || 0);
+      }
+      return { amount: sumAmount, qty: sumQty };
+    } catch (err) {
+      console.warn('LedgerService.sumEventsAmountAndQty error', err);
+      return { amount: 0, qty: 0 };
+    }
+  }
+
+  /**
+   * Get aggregate totals for common adjustment event types (return, refund, damage).
+   * Returns amounts and quantities grouped by eventType.
+   */
+ async getAdjustmentTotals(
+  companyId: string,
+  storeId: string,
+  startDate: Date,
+  endDate: Date
+): Promise<{
+  returns: { amount: number; qty: number };
+  refunds: { amount: number; qty: number };
+  damages: { amount: number; qty: number };
+}> {
+  try {
+    const types = ['return', 'refund', 'damage'];
+      const result = {
+        returns: { amount: 0, qty: 0 },
+        refunds: { amount: 0, qty: 0 },
+        damages: { amount: 0, qty: 0 }
+      };
+
+      // For each event type, fetch the latest ledger row (if any) and include it if within range
+      for (const et of types) {
+        try {
+          const qType = query(
+            collection(this.firestore, 'orderAccountingLedger'),
+            where('companyId', '==', companyId),
+            where('storeId', '==', storeId),
+            where('eventType', '==', et),
+            orderBy('createdAtClient', 'desc'),
+            limit(1)
+          );
+
+          const snapsType = await getDocs(qType);
+          if (!snapsType || snapsType.empty) continue;
+
+          const d: any = snapsType.docs[0].data();
+          if (!d) continue;
+
+          // Normalize createdAtClient to Date where possible
+          let created: Date | null = null;
+          try {
+            if (d.createdAtClient) {
+              created = (d.createdAtClient instanceof Date) ? d.createdAtClient : new Date(d.createdAtClient);
+            } else if (d.createdAt && typeof d.createdAt.toDate === 'function') {
+              created = d.createdAt.toDate();
+            } else if (d.createdAt) {
+              created = new Date(d.createdAt);
+            }
+          } catch (e) {
+            created = null;
+          }
+
+          if (!created) continue;
+          if (created.getTime() < startDate.getTime() || created.getTime() > endDate.getTime()) continue;
+
+          // Prefer running balance fields (these reflect cumulative values at this ledger row).
+          const amt = Number(d.runningBalanceAmount ?? d.amount ?? 0);
+          const qty = Number(d.runningBalanceQty ?? d.quantity ?? d.qty ?? 0);
+
+          if (et === 'return') {
+            result.returns.amount += amt;
+            result.returns.qty += qty;
+          } else if (et === 'refund') {
+            result.refunds.amount += amt;
+            result.refunds.qty += qty;
+          } else if (et === 'damage') {
+            result.damages.amount += amt;
+            result.damages.qty += qty;
+          }
+        } catch (e) {
+          console.warn(`LedgerService.getAdjustmentTotals: failed to fetch latest ${et}`, e);
+          continue;
+        }
+      }
+
+      return result;
+  } catch (err) {
+    console.warn('LedgerService.getAdjustmentTotals error', err);
+    return {
+      returns: { amount: 0, qty: 0 },
+      refunds: { amount: 0, qty: 0 },
+      damages: { amount: 0, qty: 0 }
+    };
+  }
+}
+
+  /**
    * Get the latest running balance for a given company, store, date, and eventType.
    */
   async getLatestBalance(
