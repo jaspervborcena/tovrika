@@ -2,12 +2,13 @@ import { Injectable, inject } from '@angular/core';
 import { environment } from '../../environments/environment';
 import { HttpClient } from '@angular/common/http';
 import { Firestore, collection, query, where, orderBy, limit } from '@angular/fire/firestore';
-import { getDocs, Timestamp, doc as clientDoc, runTransaction, serverTimestamp } from 'firebase/firestore';
+import { getDocs, getDoc, Timestamp, doc as clientDoc, runTransaction, serverTimestamp } from 'firebase/firestore';
 import { User } from '@angular/fire/auth';
 import { Order } from '../interfaces/pos.interface';
 import { AuthService } from './auth.service';
 import { OrdersSellingTrackingService } from './orders-selling-tracking.service';
 import { LoggerService } from '../core/services/logger.service';
+import { LedgerService } from './ledger.service';
 import { FirestoreSecurityService } from '../core/services/firestore-security.service';
 import { OfflineDocumentService } from '../core/services/offline-document.service';
 import { IndexedDBService } from '../core/services/indexeddb.service';
@@ -25,6 +26,7 @@ export class OrderService {
   private offlineDocService = inject(OfflineDocumentService);
   // Use centralized LoggerService so logs include authenticated uid/company/store via context provider
   private logger = inject(LoggerService);
+  private ledgerService = inject(LedgerService);
   
   constructor(
     private firestore: Firestore,
@@ -438,6 +440,66 @@ async updateOrderStatus(orderId: string, status: string, reason?: string): Promi
       `Failed to mark ordersSellingTracking entries as ${status}`,
       { area: 'orders', docId: orderId, payload: { error: String(e) } }
     );
+  }
+
+  // Create ledger entry for cancelled/returned/refunded/damage statuses so accounting stays in sync
+  try {
+    const map: any = { cancelled: 'cancel', returned: 'return', refunded: 'refund', damage: 'damage', damaged: 'damage' };
+    if (['cancelled', 'returned', 'refunded', 'damage', 'damaged'].includes(status)) {
+      // Prefer summing authoritative tracking documents created/updated for this order
+      const mappedStatus = map[status] || status;
+      let amount = 0;
+      let qty = 0;
+      let companyId = '';
+      let storeId = '';
+      try {
+        const trackingRef = collection(this.firestore, 'ordersSellingTracking');
+        // Support multiple possible status spellings (eg. 'return' vs 'returned')
+        const statusesToQuery: string[] = [mappedStatus];
+        if (mappedStatus === 'return') statusesToQuery.push('returned');
+        if (mappedStatus === 'refund') statusesToQuery.push('refunded');
+        if (mappedStatus === 'cancel') statusesToQuery.push('cancelled');
+        if (mappedStatus === 'damage') statusesToQuery.push('damaged');
+
+        // Use 'in' query to match any of the expected status variants
+        const trackingQ = query(trackingRef, where('orderId', '==', orderId), where('status', 'in', statusesToQuery));
+        const trackingSnap = await getDocs(trackingQ as any);
+        if (trackingSnap && !trackingSnap.empty) {
+          for (const d of trackingSnap.docs) {
+            const data: any = d.data() || {};
+            const lineTotal = Number(data.total || data.lineTotal || (Number(data.price || 0) * Number(data.quantity || 0)) || 0);
+            amount += lineTotal;
+            qty += Number(data.quantity || 0);
+            companyId = companyId || data.companyId || '';
+            storeId = storeId || data.storeId || '';
+          }
+        } else {
+          // Fallback to order document if tracking entries are not yet present
+          const orderRef = clientDoc(this.firestore, 'orders', orderId);
+          const orderSnap = await getDoc(orderRef as any);
+          if (orderSnap && orderSnap.exists()) {
+            const data: any = orderSnap.data();
+            amount = Number(data.netAmount || data.totalAmount || 0);
+            qty = Array.isArray(data.items) ? data.items.reduce((s: number, it: any) => s + Number(it.quantity || 0), 0) : 0;
+            companyId = data.companyId || '';
+            storeId = data.storeId || '';
+          }
+        }
+
+        try {
+          const safeAmount = Number(amount || 0);
+          const safeQty = Number(qty || 0);
+          await this.ledgerService.recordEvent(companyId, storeId, orderId, mappedStatus as any, safeAmount, safeQty, performedBy);
+          this.logger.info('Ledger entry created for status change', { area: 'orders', docId: orderId, payload: { status, amount: safeAmount, qty: safeQty } });
+        } catch (ledgerErr) {
+          this.logger.warn('Failed to create ledger entry for status change', { area: 'orders', docId: orderId, payload: { error: String(ledgerErr) } });
+        }
+      } catch (e) {
+        this.logger.warn('Failed while attempting to compute tracking totals for ledger', { area: 'orders', docId: orderId, payload: { error: String(e) } });
+      }
+    }
+  } catch (e) {
+    this.logger.warn('Failed while attempting to write ledger for status change', { area: 'orders', docId: orderId, payload: { error: String(e) } });
   }
 }
 

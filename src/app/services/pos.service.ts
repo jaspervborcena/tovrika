@@ -21,6 +21,7 @@ import { Product } from '../interfaces/product.interface';
 import { Store } from '../interfaces/store.interface';
 import { Device } from '../interfaces/device.interface';
 import { OrdersSellingTrackingService } from './orders-selling-tracking.service';
+import { LedgerService } from './ledger.service';
 import { environment } from '../../environments/environment';
 
 @Injectable({
@@ -134,6 +135,7 @@ export class PosService {
   private invoiceService = inject(InvoiceService);
   private storeService = inject(StoreService);
   private deviceService = inject(DeviceService);
+  private ledgerService = inject(LedgerService);
 
   constructor(
     private firestore: Firestore,
@@ -348,7 +350,8 @@ export class PosService {
         status: 'paid',
         
         // Customer Information
-        cashSale: true,
+        cashSale: this.salesTypeCashSignal(),
+        chargeSale: this.salesTypeChargeSignal(),
         soldTo: customerInfo?.soldTo || 'Walk-in Customer',
         tin: customerInfo?.tin || '',
         businessAddress: customerInfo?.businessAddress || '',
@@ -378,9 +381,9 @@ export class PosService {
         items: orderItems,
         
         // BIR Required Fields - from store BIR details
-        atpOrOcn: store.birDetails?.atpOrOcn || 'OCN-2025-001234',
-        birPermitNo: store.birDetails?.birPermitNo || 'BIR-PERMIT-2025-56789',
-        inclusiveSerialNumber: store.birDetails?.inclusiveSerialNumber || '000001-000999',
+        atpOrOcn: store.birDetails?.atpOrOcn || '',
+        birPermitNo: store.birDetails?.birPermitNo || '',
+        inclusiveSerialNumber: store.birDetails?.inclusiveSerialNumber || '',
         
         // System Fields
         message: 'Thank you! See you again!',
@@ -404,6 +407,23 @@ export class PosService {
         invoiceNumber: invoiceResult.invoiceNumber,
         orderId: invoiceResult.orderId
       });
+
+      // Record accounting ledger entry for the created order (non-blocking)
+      try {
+        // Use the locally computed `summary` from above (not an undefined `cartSummary`)
+        const ledgerRes: any = await this.ledgerService.recordEvent(
+          company.id || '',
+          storeId,
+          invoiceResult.orderId!,
+          'order',
+          Number(summary.netAmount || 0),
+          Number(summary.totalQuantity || 0),
+          user.uid
+        );
+        console.log('LedgerService: order ledger entry created for', invoiceResult.orderId, 'docId=', ledgerRes?.id, 'runningBalance=', ledgerRes?.runningBalanceAmount, ledgerRes?.runningBalanceQty);
+      } catch (ledgerErr) {
+        console.warn('LedgerService: failed to create ledger entry', ledgerErr);
+      }
 
       // Sync local product summaries with server values so UI reflects Firestore state
       try {
@@ -507,6 +527,7 @@ export class PosService {
         
         // Payment type determination
         cashSale: payments.paymentDescription.toLowerCase().includes('cash') || !payments.paymentDescription,
+        chargeSale: payments.paymentDescription.toLowerCase().includes('card') || payments.paymentDescription.toLowerCase().includes('charge') || this.salesTypeChargeSignal(),
         
         // Invoice Information (invoiceNumber will be set by transaction)
         invoiceNumber: '',  // Will be filled by transaction
@@ -563,6 +584,22 @@ export class PosService {
         invoiceNumber: invoiceResult.invoiceNumber,
         orderId: invoiceResult.orderId
       });
+
+      // Record accounting ledger entry for the created order (non-blocking)
+      try {
+        const ledgerRes: any = await this.ledgerService.recordEvent(
+          company.id!,
+          storeId,
+          invoiceResult.orderId!,
+          'order',
+          Number(cartSummary.netAmount || 0),
+          Number(cartSummary.totalQuantity || 0),
+          user.uid
+        );
+        console.log('LedgerService: order ledger entry created for', invoiceResult.orderId, 'docId=', ledgerRes?.id, 'runningBalance=', ledgerRes?.runningBalanceAmount, ledgerRes?.runningBalanceQty);
+      } catch (ledgerErr) {
+        console.warn('LedgerService: failed to create ledger entry', ledgerErr);
+      }
 
       // Update product inventory
       try {
@@ -642,6 +679,7 @@ export class PosService {
         
         // Customer Information
         cashSale: !customerInfo?.soldTo,
+        chargeSale: this.salesTypeChargeSignal(),
         soldTo: customerInfo?.soldTo || '',
         tin: customerInfo?.tin || '',
         businessAddress: customerInfo?.businessAddress || '',
