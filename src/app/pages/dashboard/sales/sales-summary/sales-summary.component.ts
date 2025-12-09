@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { OrderService } from '../../../../services/order.service';
 import { AuthService } from '../../../../services/auth.service';
 import { StoreService, Store } from '../../../../services/store.service';
+import { LedgerService } from '../../../../services/ledger.service';
 import { Order as PosOrder, OrderItem } from '../../../../interfaces/pos.interface';
 import { IndexedDBService } from '../../../../core/services/indexeddb.service';
 
@@ -1383,6 +1384,7 @@ export class SalesSummaryComponent implements OnInit {
   private authService = inject(AuthService);
   private storeService = inject(StoreService);
   private indexedDb = inject(IndexedDBService);
+  private ledgerService = inject(LedgerService);
 
   // Signals for reactive state management
   orders = signal<Order[]>([]);
@@ -1495,11 +1497,19 @@ export class SalesSummaryComponent implements OnInit {
   });
 
   // Original computed values
+  // Ledger-backed totals (preferred)
+  ledgerTotalRevenue = signal<number>(0);
+  ledgerTotalOrders = signal<number>(0);
+
   totalSales = computed(() => {
+    const l = this.ledgerTotalRevenue();
+    if (l && Number(l) !== 0) return l;
     return this.orders().reduce((total, order) => total + order.totalAmount, 0);
   });
 
   totalOrders = computed(() => {
+    const l = this.ledgerTotalOrders();
+    if (l && Number(l) !== 0) return l;
     return this.orders().length;
   });
 
@@ -1526,7 +1536,24 @@ export class SalesSummaryComponent implements OnInit {
     // Wait a bit for stores to be set, then load today's data automatically from Firebase
     setTimeout(() => {
       this.loadCurrentDateData();
+      // Also load ledger totals for the selected store
+      this.loadLedgerTotalsForStore();
     }, 100);
+  }
+
+  // Load ledger totals when loading current date data
+  private async loadLedgerTotalsForStore(): Promise<void> {
+    try {
+      const currentPermission = this.authService.getCurrentPermission();
+      const companyId = currentPermission?.companyId || '';
+      const storeId = this.selectedStoreId() || currentPermission?.storeId || '';
+      if (!companyId || !storeId) return;
+      const balances = await this.ledgerService.getLatestOrderBalances(companyId, storeId, new Date(), 'order');
+      this.ledgerTotalRevenue.set(Number(balances.runningBalanceAmount || 0));
+      this.ledgerTotalOrders.set(Number(balances.runningBalanceOrderQty || balances.runningBalanceQty || 0));
+    } catch (err) {
+      console.warn('SalesSummary: failed to load ledger totals', err);
+    }
   }
 
   async loadStores(): Promise<void> {

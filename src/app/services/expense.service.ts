@@ -2,11 +2,15 @@ import { Injectable, inject } from '@angular/core';
 import { Firestore, collection, query, where, getDocs, Timestamp } from '@angular/fire/firestore';
 import { ExpenseLog } from '../interfaces/expense-log.interface';
 import { OfflineDocumentService } from '../core/services/offline-document.service';
+import { LedgerService } from './ledger.service';
+import { AuthService } from './auth.service';
 
 @Injectable({ providedIn: 'root' })
 export class ExpenseService {
   private firestore = inject(Firestore);
   private offlineDocService = inject(OfflineDocumentService);
+  private ledgerService = inject(LedgerService);
+  private authService = inject(AuthService);
 
   constructor() {}
 
@@ -43,6 +47,23 @@ export class ExpenseService {
     try {
       // Ensure collection name matches reads
       const id = await this.offlineDocService.createDocument('expenseLogs', payload);
+
+      // After successfully creating an expense log, write an 'expense' ledger entry.
+      // ExpenseLog.amount is stored in centavos; convert to PHP (divide by 100).
+      try {
+        const companyId = this.authService.getCurrentPermission()?.companyId || '';
+        const storeId = (payload as any)?.storeId || '';
+        const performedBy = (payload as any)?.createdBy || this.authService.getCurrentUser()?.uid || 'system';
+        const amountCentavos = Number((payload as any)?.amount || 0);
+        const amountPhp = amountCentavos / 100;
+
+        // Call ledger service - qty is 0 for expense entries
+        await this.ledgerService.recordEvent(companyId, storeId, id, 'expense' as any, amountPhp, 0, performedBy);
+        console.log('ExpenseService: ledger expense entry created for', id, 'amountPhp=', amountPhp);
+      } catch (ledgerErr) {
+        console.warn('ExpenseService: failed to write expense ledger entry', ledgerErr);
+      }
+
       return id;
     } catch (error) {
       console.error('ExpenseService.createExpense failed', error);
