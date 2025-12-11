@@ -1274,7 +1274,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
           try {
             // `eventType` is derived from keys and TypeScript treats it as string;
             // cast to the allowed union to satisfy the LedgerService signature.
-            const typedEvent = eventType as 'order' | 'return' | 'refund' | 'cancel' | 'damage';
+            const typedEvent = eventType as 'completed' | 'return' | 'refund' | 'cancel' | 'damage';
             const res: any = await this.ledgerService.recordEvent(companyId, storeId, orderId, typedEvent, Number((sums as any).amount || 0), Number((sums as any).qty || 0), performedBy);
             console.log('LedgerService: aggregated entry created', { orderId, eventType, amount: (sums as any).amount, qty: (sums as any).qty, id: res?.id });
           } catch (ledgerErr) {

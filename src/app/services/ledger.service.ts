@@ -29,7 +29,7 @@ export class LedgerService {
   companyId: string,
   storeId: string,
   orderId: string,
-  eventType: 'order' | 'return' | 'refund' | 'cancel' | 'damage',
+  eventType: 'completed' | 'return' | 'refund' | 'cancel' | 'damage',
   amount: number,
   qty: number,
   performedBy: string
@@ -63,7 +63,7 @@ export class LedgerService {
 
     // Only add to order-specific balance if eventType is 'order'
     const newOrderBalanceQty =
-      latestOrderBalanceQty + (eventType === 'order' ? qty : 0);
+      latestOrderBalanceQty + (eventType === 'completed' ? qty : 0);
 
     const newDoc = {
       companyId,
@@ -108,7 +108,7 @@ export class LedgerService {
     companyId: string,
     storeId: string,
     date: Date = new Date(),
-    eventType: 'order' | 'return' | 'refund' | 'cancel' | 'damage' = 'order'
+    eventType: 'completed' | 'return' | 'refund' | 'cancel' | 'damage' = 'completed'
   ): Promise<{ runningBalanceAmount: number; runningBalanceQty: number; runningBalanceOrderQty: number }> {
     try {
       const res = await this.getLatestBalance(companyId, storeId, date, eventType);
@@ -230,8 +230,9 @@ export class LedgerService {
   damages: { amount: number; qty: number };
 }> {
   try {
-    const types = ['return', 'refund', 'damage'];
+    const types = ['completed','return', 'refund', 'damage'];
       const result = {
+        completed: { amount: 0, qty: 0 },
         returns: { amount: 0, qty: 0 },
         refunds: { amount: 0, qty: 0 },
         damages: { amount: 0, qty: 0 }
@@ -276,8 +277,11 @@ export class LedgerService {
           const amt = Number(d.runningBalanceAmount ?? d.amount ?? 0);
           const qty = Number(d.runningBalanceQty ?? d.quantity ?? d.qty ?? 0);
 
-          if (et === 'return') {
-            result.returns.amount += amt;
+          if (et === 'completed') {
+            result.completed.amount += amt;
+            result.completed.qty += qty;
+          } else if (et === 'return') {
+             result.returns.amount += amt;
             result.returns.qty += qty;
           } else if (et === 'refund') {
             result.refunds.amount += amt;
@@ -310,7 +314,7 @@ export class LedgerService {
     companyId: string,
     storeId: string,
     date: Date,
-    eventType: 'order' | 'return' | 'refund' | 'cancel' | 'damage'
+    eventType: 'completed' | 'return' | 'refund' | 'cancel' | 'damage'
   ): Promise<{ amount: number; qty: number }> {
     try {
       const startOfDay = new Date(date.getFullYear(), date.getMonth(), date.getDate());
