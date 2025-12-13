@@ -225,9 +225,6 @@ import { OrdersSellingTrackingService } from '../../../services/orders-selling-t
             <div class="analytics-card">
               <h3 class="analytics-title">Sale Analytics</h3>
               <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-                <div class="analytics-summary" style="display:flex;gap:12px;align-items:center;">
-                  <div><strong>Completed:</strong> {{ salesAnalytics().completed.count }} ({{ salesAnalytics().completed.percentage | number:'1.1-1' }}%)</div>
-                </div>
                 <div style="display:flex;gap:8px;align-items:center;">
                 </div>
               </div>
@@ -439,7 +436,7 @@ import { OrdersSellingTrackingService } from '../../../services/orders-selling-t
       color: #111827;
       margin-bottom: 8px;
       /* Tab background to match pie chart "Completed" color */
-      background: #06b6d4;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
       color: #ffffff;
       display: inline-block;
       padding: 6px 10px;
@@ -464,19 +461,23 @@ import { OrdersSellingTrackingService } from '../../../services/orders-selling-t
       align-items: center;
     }
 
-    .expenses-card { background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%); }
-    .profit-card { background: linear-gradient(135deg, #d1fae5 0%, #bbf7d0 100%); }
+    .expenses-card { background: #ef4444; }
+    .profit-card { background: #10b981; }
 
     .revenue-card {
-      background: linear-gradient(135deg, #fef3c7 0%, #fed7aa 100%);
+      background: #06b6d4;
     }
 
     .orders-card {
-      background: linear-gradient(135deg, #e0e7ff 0%, #c7d2fe 100%);
+      background: #8b5cf6;
     }
 
     .customers-card {
-      background: linear-gradient(135deg, #cffafe 0%, #bfdbfe 100%);
+      background: #38bdf8;
+    }
+
+    .adjustments-card {
+      background: #f97316;
     }
 
     .card-icon {
@@ -499,13 +500,13 @@ import { OrdersSellingTrackingService } from '../../../services/orders-selling-t
     .card-value {
       font-size: 1.625rem;
       font-weight: 700;
-      color: #111827;
+      color: #ffffff;
       margin-bottom: 0;
     }
 
     .card-label {
       font-size: 0.875rem;
-      color: #6b7280;
+      color: #ffffff;
       margin-bottom: 0;
     }
 
@@ -522,7 +523,7 @@ import { OrdersSellingTrackingService } from '../../../services/orders-selling-t
     }
 
     .change-text {
-      color: #6b7280;
+      color: #ffffff;
     }
 
     .stats-card {
@@ -532,7 +533,7 @@ import { OrdersSellingTrackingService } from '../../../services/orders-selling-t
     .stats-title {
       font-size: 1rem;
       font-weight: 600;
-      color: #111827;
+      color: #ffffff;
       margin-bottom: 16px;
     }
 
@@ -1000,11 +1001,13 @@ export class OverviewComponent implements OnInit {
 
   // UI controls for overview filtering
   protected periodOptions = [
+    { key: 'today', label: 'Today' },
+    { key: 'yesterday', label: 'Yesterday' },
     { key: 'this_month', label: 'This Month' },
     { key: 'previous_month', label: 'Previous Month' },
     { key: 'date_range', label: 'Date Range' }
   ];
-  protected selectedPeriod = signal<'this_month' | 'previous_month' | 'date_range'>('this_month');
+  protected selectedPeriod = signal<'today' | 'yesterday' | 'this_month' | 'previous_month' | 'date_range'>('today');
   protected dateFrom = signal<string | null>(null); // YYYY-MM-DD
   protected dateTo = signal<string | null>(null);
 
@@ -1145,7 +1148,7 @@ export class OverviewComponent implements OnInit {
   protected onOverviewPeriodChange(event: Event) {
     const target = event.target as HTMLSelectElement;
     if (!target) return;
-    const v = target.value as 'this_month' | 'previous_month' | 'date_range';
+    const v = target.value as 'today' | 'yesterday' | 'this_month' | 'previous_month' | 'date_range';
     this.selectedPeriod.set(v);
     if (v === 'date_range') {
       // default dateTo = today, dateFrom = today - 30 days
@@ -1180,7 +1183,16 @@ export class OverviewComponent implements OnInit {
     const now = new Date();
     let start: Date | undefined;
     let end: Date | undefined;
-    if (period === 'this_month') {
+    if (period === 'today') {
+      const today = new Date();
+      start = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0, 0);
+      end = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999);
+    } else if (period === 'yesterday') {
+      const today = new Date();
+      const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1);
+      start = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate(), 0, 0, 0, 0);
+      end = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate(), 23, 59, 59, 999);
+    } else if (period === 'this_month') {
       start = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
       end = new Date(now.getFullYear(), now.getMonth(), new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate(), 23, 59, 59, 999);
     } else if (period === 'previous_month') {
