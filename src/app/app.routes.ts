@@ -182,12 +182,12 @@ export const routes: Routes = [
   canActivate: [onboardingGuard, roleGuard],
   data: { roles: ['creator', 'store_manager'] }
       },
-      {
-  path: 'inventory',
-  loadComponent: () => import('./pages/dashboard/inventory/inventory.component').then(m => m.InventoryComponent),
-  canActivate: [onboardingGuard, roleGuard],
-  data: { roles: ['creator', 'store_manager'] }
-      },
+        {
+      path: 'inventory',
+      loadComponent: () => import('./pages/inventory/inventory.component').then(m => m.InventoryComponent),
+      canActivate: [onboardingGuard, roleGuard],
+      data: { roles: ['creator', 'store_manager'] }
+        },
 
       {
         path: 'sales/summary',
