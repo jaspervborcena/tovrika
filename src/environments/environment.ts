@@ -11,13 +11,11 @@ export const environment = {
     measurementId: "G-5BLXC1688Z"
   },
   api: {
-    // During local development we route Cloud Function calls through the Angular dev proxy
-    // so the browser sees same-origin requests (avoids CORS preflight failures).
-    baseUrl: "/api",
-    ordersApi: "/api/orders", // Uses proxy in development
+    // Disabled API endpoints for frontend; use Firestore-first flows instead.
+    baseUrl: "",
+    ordersApi: "",
     // directOrdersApi intentionally disabled for Firestore-only Sales Summary to avoid accidental external calls
     directOrdersApi: "",
-    // productsApi removed - now using Firestore real-time updates
   },
   inventory: {
     // reconciliationMode: 'legacy' uses client-side FIFO; 'recon' defers to Cloud Function with tracking
