@@ -415,7 +415,7 @@ export class PosService {
           company.id || '',
           storeId,
           invoiceResult.orderId!,
-          'order',
+          'completed',
           Number(summary.netAmount || 0),
           Number(summary.totalQuantity || 0),
           user.uid
@@ -591,7 +591,7 @@ export class PosService {
           company.id!,
           storeId,
           invoiceResult.orderId!,
-          'order',
+          'completed',
           Number(cartSummary.netAmount || 0),
           Number(cartSummary.totalQuantity || 0),
           user.uid

@@ -11,12 +11,11 @@ export const environment = {
     measurementId: "G-MG8T2RZ051"
   },
   api: {
-    // Production uses direct Cloud Function endpoints
-    baseUrl: "/api",
-    ordersApi: "/api/orders",
+    // Disabled in frontend; production builds should avoid calling Cloud Functions from the UI directly.
+    baseUrl: "",
+    ordersApi: "",
     // directOrdersApi intentionally disabled for Firestore-only Sales Summary
     directOrdersApi: "",
-    // productsApi removed - now using Firestore real-time updates
   },
   inventory: {
     // reconciliationMode: 'legacy' uses client-side FIFO; 'recon' defers to Cloud Function with tracking

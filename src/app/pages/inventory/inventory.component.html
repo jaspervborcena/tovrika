@@ -1,0 +1,117 @@
+<div class="inventory-container">
+  <!-- Header (patterned after Sales Summary) -->
+  <div class="header">
+    <div class="header-content">
+      <h1 class="page-title">Inventory</h1>
+      <p class="page-subtitle">View and analyze your inventory performance</p>
+    </div>
+  </div>
+  <!-- Controls: Store (single) + Period (select) - patterned after Overview -->
+  <div class="overview-controls">
+    <div class="control-row">
+      <label class="control-label">Store</label>
+      <div class="single-store">
+        <span class="store-name">{{ storeName }}</span>
+      </div>
+    </div>
+
+    <div class="control-row">
+      <label class="control-label">Period</label>
+      <select class="control-select" [(ngModel)]="selectedPeriod" (change)="onPeriodChange($event)">
+        <option *ngFor="let p of periodOptions" [value]="p.key">{{ p.label }}</option>
+      </select>
+
+      <div *ngIf="selectedPeriod === 'date_range'" class="date-range-inputs">
+        <input type="date" class="control-input" [(ngModel)]="dateFrom" />
+        <input type="date" class="control-input" [(ngModel)]="dateTo" />
+        <button class="control-go" (click)="onApplyDateRange()">Go</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="table-wrap mat-elevation">
+    <table mat-table [dataSource]="dataSource" class="mat-elevation-z8">
+
+      <!-- Invoice No. (was Batch ID) -->
+      <ng-container matColumnDef="batchId">
+        <th mat-header-cell *matHeaderCellDef> Invoice No. </th>
+        <td mat-cell *matCellDef="let row"> {{row.batchId}} </td>
+      </ng-container>
+
+      <!-- Product Code -->
+      <ng-container matColumnDef="productCode">
+        <th mat-header-cell *matHeaderCellDef> Product Code </th>
+        <td mat-cell *matCellDef="let row"> {{row.productCode}} </td>
+      </ng-container>
+
+      <!-- SKU -->
+      <ng-container matColumnDef="sku">
+        <th mat-header-cell *matHeaderCellDef> SKU </th>
+        <td mat-cell *matCellDef="let row"> {{row.sku}} </td>
+      </ng-container>
+
+      <!-- Cost Price -->
+      <ng-container matColumnDef="costPrice">
+        <th mat-header-cell *matHeaderCellDef> Cost Price </th>
+        <td mat-cell *matCellDef="let row"> {{row.costPrice}} </td>
+      </ng-container>
+
+      <!-- Selling Price -->
+      <ng-container matColumnDef="sellingPrice">
+        <th mat-header-cell *matHeaderCellDef> Selling Price </th>
+        <td mat-cell *matCellDef="let row"> {{row.sellingPrice}} </td>
+      </ng-container>
+
+      <!-- Quantity -->
+      <ng-container matColumnDef="quantity">
+        <th mat-header-cell *matHeaderCellDef> Quantity </th>
+        <td mat-cell *matCellDef="let row"> {{row.quantity}} </td>
+      </ng-container>
+
+      <!-- Profit Per Unit -->
+      <ng-container matColumnDef="profitPerUnit">
+        <th mat-header-cell *matHeaderCellDef> Profit/Unit </th>
+        <td mat-cell *matCellDef="let row"> {{profitPerUnit(row)}} </td>
+      </ng-container>
+
+      <!-- Total Gross -->
+      <ng-container matColumnDef="totalGross">
+        <th mat-header-cell *matHeaderCellDef> Total Gross </th>
+        <td mat-cell *matCellDef="let row"> ₱{{ totalGross(row) | number:'1.0-0' }} </td>
+      </ng-container>
+
+      <!-- Total Profit -->
+      <ng-container matColumnDef="totalProfit">
+        <th mat-header-cell *matHeaderCellDef> Total Profit </th>
+        <td mat-cell *matCellDef="let row"> ₱{{ totalProfit(row) | number:'1.0-0' }} </td>
+      </ng-container>
+
+      <!-- Render rows -->
+      <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+      <tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>
+    </table>
+  </div>
+  <!-- Empty state when no rows for selected period -->
+  <div *ngIf="!inventoryService.isLoading() && dataSource.data.length === 0" style="padding:24px; text-align:center; color:#718096;">
+    <div style="font-size:1.25rem; margin-bottom:8px;">No data for the selected period</div>
+    <div style="margin-bottom:12px;">Try a different period or refresh.</div>
+  </div>
+
+  <!-- Pagination controls -->
+  <div *ngIf="inventoryService.totalCount() > 0" class="pagination" style="display:flex; gap:8px; align-items:center; margin-top:12px;">
+    <button (click)="goToPage(inventoryService.currentPage() - 1)" [disabled]="inventoryService.currentPage() === 1">Prev</button>
+
+    <ng-container *ngFor="let p of pagesToShow()">
+      <button *ngIf="p !== '...'" (click)="goToPage(p)" [class.active]="(inventoryService.currentPage() === p)" style="min-width:36px;">
+        {{ p }}
+      </button>
+      <span *ngIf="p === '...'" style="padding:0 8px;">…</span>
+    </ng-container>
+
+    <button (click)="goToPage(inventoryService.currentPage() + 1)" [disabled]="inventoryService.currentPage() === inventoryService.totalPages()">Next</button>
+
+    <div style="margin-left:auto; color:#6b7280; font-size:0.9rem;">
+      Showing page {{ inventoryService.currentPage() }} of {{ inventoryService.totalPages() }} — total {{ inventoryService.totalCount() }} rows
+    </div>
+  </div>
+</div>
