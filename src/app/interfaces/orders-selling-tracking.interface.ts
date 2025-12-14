@@ -23,6 +23,9 @@ export interface OrdersSellingTrackingDoc {
   orderDetailsId?: string; // reference to the orderDetails document for this line
   productId: string;
   productName?: string;
+  productCode: string;
+  sku: string;
+  cost:number;
   price: number; // unit price
   quantity: number;
   discount?: number; // absolute discount amount
@@ -35,18 +38,4 @@ export interface OrdersSellingTrackingDoc {
   cashierId?: string;
   cashierEmail?: string;
   cashierName?: string;
-}
-
-export interface OrdersSellingTracking {
-  id?: string;
-  companyId: string;
-  storeId: string;
-  productId: string;
-  quantity: number;
-  soldAt: Date;
-  orderId?: string;
-  cashierId?: string;
-  cashierEmail?: string;
-  cashierName?: string;
-  createdAt?: Date;
 }

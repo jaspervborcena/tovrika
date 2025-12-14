@@ -1,5 +1,4 @@
-import { Component, inject, signal, computed, OnInit } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { Component, inject, signal, computed, OnInit, effect } from '@angular/core';
 import { environment } from '../../../../environments/environment';
 import { CommonModule } from '@angular/common';
 import { StoreService, Store } from '../../../services/store.service';
@@ -28,11 +27,18 @@ import { OrdersSellingTrackingService } from '../../../services/orders-selling-t
           <!-- Overview controls: store selector and period -->
           <div class="overview-controls">
             <div class="control-row">
-              <label class="control-label">Store</label>
-              <select class="control-select" (change)="onOverviewStoreChange($event)">
-                <option *ngFor="let s of storeList()" [value]="s.id" [selected]="selectedStoreId()===s.id">{{ s.storeName || s.storeName }}</option>
-              </select>
-            </div>
+                <label class="control-label">Store</label>
+                <ng-container *ngIf="storeList().length > 1; else singleStore">
+                  <select class="control-select" (change)="onOverviewStoreChange($event)">
+                    <option *ngFor="let s of storeList()" [value]="s.id" [selected]="selectedStoreId()===s.id">{{ s.storeName || s.storeName }}</option>
+                  </select>
+                </ng-container>
+                <ng-template #singleStore>
+                  <div class="single-store">
+                    <span class="store-name">{{ storeList().length ? (storeList()[0].storeName | uppercase) : 'All Stores' }}</span>
+                  </div>
+                </ng-template>
+              </div>
 
             <div class="control-row">
               <label class="control-label">Period</label>
@@ -73,8 +79,8 @@ import { OrdersSellingTrackingService } from '../../../services/orders-selling-t
                 <div class="card-value">₱{{ totalRevenue() | number:'1.0-0' }}</div>
                 <div class="card-label">Total Revenue</div>
                 <div class="card-change">
-                  <span class="change-icon">↗</span>
-                  <span class="change-text">10.5% From Last Day</span>
+                  <span class="change-icon">{{ revenueChange().symbol }}</span>
+                  <span class="change-text">{{ revenueChange().percent | number:'1.1-1' }}% From Last Day</span>
                 </div>
               </div>
             </div>
@@ -161,28 +167,7 @@ import { OrdersSellingTrackingService } from '../../../services/orders-selling-t
               </div>
             </div>
 
-            <!-- Sales Stats Card -->
-            <div class="sales-card stats-card">
-              <h3 class="stats-title">Sales</h3>
-              <div class="stats-grid">
-                <div class="stat-item">
-                  <span class="stat-label">Total Sales</span>
-                  <span class="stat-value">{{ totalOrders() }}</span>
-                </div>
-                <div class="stat-item">
-                  <span class="stat-label">This Month</span>
-                  <span class="stat-value">{{ monthOrders() }}</span>
-                </div>
-                <div class="stat-item">
-                  <span class="stat-label">Today</span>
-                  <span class="stat-value">{{ todayOrders() }}</span>
-                </div>
-              </div>
-              <div class="stats-footer">
-                <span class="change-icon">↗</span>
-                <span class="change-text">20% increased</span>
-              </div>
-            </div>
+            <!-- Sales Stats Card removed -->
           </div>
         </div>
 
@@ -192,17 +177,9 @@ import { OrdersSellingTrackingService } from '../../../services/orders-selling-t
           <div class="chart-container">
             <div class="chart-header">
               <h3 class="chart-title">Orders Overview</h3>
-              <div class="chart-legend">
-                <div class="legend-item">
-                  <div class="legend-dot orders-dot"></div>
-                  <span>Orders</span>
-                </div>
-                <div class="legend-item">
-                  <div class="legend-dot profit-dot"></div>
-                  <span>Profit</span>
-                </div>
-              </div>
+              <!-- chart legend removed -->
             </div>
+            <!-- Orders donut (no debug output) -->
             <div class="chart-content">
               <!-- Chart placeholder - can be replaced with actual chart library -->
               <div class="chart-placeholder">
@@ -226,11 +203,25 @@ import { OrdersSellingTrackingService } from '../../../services/orders-selling-t
                   <text x="440" y="145" class="chart-label">{{ netProfit() | number:'1.0-0' }}</text>
                 </svg>
                 
-                <!-- Dynamic labels: show days if single-month period, otherwise months -->
-                <div class="chart-labels">
-                  <span *ngFor="let l of chartLabels()">{{ l }}</span>
+                <!-- Orders donut (CSS conic-gradient) -->
+                <div class="orders-pie-wrapper">
+                  <div class="orders-pie">
+                    <div class="orders-donut" [style.background]="pieGradient()">
+                      <div class="orders-donut-hole"></div>
+                    </div>
+                    <div class="orders-pie-center">
+                      <div class="orders-count">{{ totalOrders() || 0 }}</div>
+                      <div class="orders-profit">₱{{ (netProfit() !== 0 ? netProfit() : 0) | number:'1.0-0' }}</div>
+                    </div>
+                  </div>
+                    <div class="orders-pie-legend">
+                    <div class="legend-item"><div class="legend-dot completed-dot"></div><span>Completed</span><span class="legend-percent">{{ salesAnalytics().completed.percentage | number:'1.1-1' }}%</span></div>
+                    <div class="legend-item"><div class="legend-dot cancelled-dot"></div><span>Cancelled</span><span class="legend-percent">{{ salesAnalytics().cancelled.percentage | number:'1.1-1' }}%</span></div>
+                    <div class="legend-item"><div class="legend-dot returned-dot"></div><span>Returned</span><span class="legend-percent">{{ salesAnalytics().returned.percentage | number:'1.1-1' }}%</span></div>
+                    <div class="legend-item"><div class="legend-dot refunded-dot"></div><span>Refunded</span><span class="legend-percent">{{ salesAnalytics().refunded.percentage | number:'1.1-1' }}%</span></div>
+                    <div class="legend-item"><div class="legend-dot damage-dot"></div><span>Damage</span><span class="legend-percent">{{ salesAnalytics().damage.percentage | number:'1.1-1' }}%</span></div>
+                  </div>
                 </div>
-              </div>
             </div>
           </div>
 
@@ -239,51 +230,45 @@ import { OrdersSellingTrackingService } from '../../../services/orders-selling-t
             <!-- Sale Analytics -->
             <div class="analytics-card">
               <h3 class="analytics-title">Sale Analytics</h3>
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                <div style="display:flex;gap:8px;align-items:center;">
+                </div>
+              </div>
               <div class="donut-chart">
                 <div class="bar-chart">
-                  <div class="bar-chart-header">
-                    <div class="bar-chart-title">
-                      <div>Orders</div>
-                      <div class="bar-chart-orders">{{ totalOrders() }}</div>
-                    </div>
-                    <div class="bar-chart-title">
-                      <div>Profit</div>
-                      <div class="bar-chart-profit">{{ netProfit() !== 0 ? (netProfit() | number:'1.0-0') : '-6,304' }}</div>
-                    </div>
-                  </div>
+                  <!-- Sale Analytics header removed -->
 
                   <div class="bars">
                     <div class="bar-row">
                       <div class="bar-label">Completed</div>
-                      <div class="bar"><div class="bar-fill completed" [style.width]="'33%'"></div></div>
-                      <div class="bar-percent">-33%</div>
+                      <div class="bar"><div class="bar-fill completed" [style.width.%]="salesAnalytics().completed.percentage"></div></div>
+                      <div class="bar-percent">{{ salesAnalytics().completed.percentage | number:'1.1-1' }}%</div>
                     </div>
                     <div class="bar-row">
                       <div class="bar-label">Cancelled</div>
-                      <div class="bar"><div class="bar-fill cancelled" [style.width]="'11%'"></div></div>
-                      <div class="bar-percent">11%</div>
+                      <div class="bar"><div class="bar-fill cancelled" [style.width.%]="salesAnalytics().cancelled.percentage"></div></div>
+                      <div class="bar-percent">{{ salesAnalytics().cancelled.percentage | number:'1.1-1' }}%</div>
                     </div>
                     <div class="bar-row">
                       <div class="bar-label">Returned</div>
-                      <div class="bar"><div class="bar-fill returned" [style.width]="'56%'"></div></div>
-                      <div class="bar-percent">56%</div>
+                      <div class="bar"><div class="bar-fill returned" [style.width.%]="salesAnalytics().returned.percentage"></div></div>
+                      <div class="bar-percent">{{ salesAnalytics().returned.percentage | number:'1.1-1' }}%</div>
                     </div>
                     <div class="bar-row">
                       <div class="bar-label">Refunded</div>
-                      <div class="bar"><div class="bar-fill refunded" [style.width]="'44%'"></div></div>
-                      <div class="bar-percent">44%</div>
+                      <div class="bar"><div class="bar-fill refunded" [style.width.%]="salesAnalytics().refunded.percentage"></div></div>
+                      <div class="bar-percent">{{ salesAnalytics().refunded.percentage | number:'1.1-1' }}%</div>
                     </div>
                     <div class="bar-row">
                       <div class="bar-label">Damage</div>
-                      <div class="bar"><div class="bar-fill damage" [style.width]="'22%'"></div></div>
-                      <div class="bar-percent">22%</div>
+                      <div class="bar"><div class="bar-fill damage" [style.width.%]="salesAnalytics().damage.percentage"></div></div>
+                      <div class="bar-percent">{{ salesAnalytics().damage.percentage | number:'1.1-1' }}%</div>
                     </div>
                   </div>
 
-                  <div class="analytics-expenses">
-                    <div class="expenses-label">Total Expenses</div>
-                    <div class="expenses-value">₱{{ totalExpenses() ? (totalExpenses() | number:'1.0-0') : '10,000' }}</div>
-                  </div>
+                  
+
+                  <!-- Total Expenses removed -->
                 </div>
               </div>
             </div>
@@ -292,12 +277,11 @@ import { OrdersSellingTrackingService } from '../../../services/orders-selling-t
             <div class="analytics-card">
               <h3 class="analytics-title">Top Products</h3>
               <div style="display:flex;justify-content:flex-end;margin-bottom:8px;">
-                <button class="debug-btn" (click)="toggleTopProductsDebug()">Toggle TopProducts Debug</button>
               </div>
               <div class="products-list">
                 <div class="products-header">
                   <span>Product</span>
-                  <span>Code</span>
+                  <span>SKU</span>
                   <span>Sales</span>
                 </div>
                 <div class="product-item" *ngFor="let product of topProducts()">
@@ -314,9 +298,7 @@ import { OrdersSellingTrackingService } from '../../../services/orders-selling-t
                   <p>No product data available</p>
                   <small>Products will appear here once orders are processed</small>
                 </div>
-                <div *ngIf="showTopProductsDebug()" class="debug-panel">
-                  <pre>{{ topProductsList() | json }}</pre>
-                </div>
+                
               </div>
             </div>
           </div>
@@ -459,6 +441,12 @@ import { OrdersSellingTrackingService } from '../../../services/orders-selling-t
       font-weight: 600;
       color: #111827;
       margin-bottom: 8px;
+      /* Tab background to match pie chart "Completed" color */
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: #ffffff;
+      display: inline-block;
+      padding: 6px 10px;
+      border-radius: 8px;
     }
 
     .sales-cards {
@@ -479,19 +467,23 @@ import { OrdersSellingTrackingService } from '../../../services/orders-selling-t
       align-items: center;
     }
 
-    .expenses-card { background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%); }
-    .profit-card { background: linear-gradient(135deg, #d1fae5 0%, #bbf7d0 100%); }
+    .expenses-card { background: #ef4444; }
+    .profit-card { background: #10b981; }
 
     .revenue-card {
-      background: linear-gradient(135deg, #fef3c7 0%, #fed7aa 100%);
+      background: #06b6d4;
     }
 
     .orders-card {
-      background: linear-gradient(135deg, #e0e7ff 0%, #c7d2fe 100%);
+      background: #8b5cf6;
     }
 
     .customers-card {
-      background: linear-gradient(135deg, #cffafe 0%, #bfdbfe 100%);
+      background: #38bdf8;
+    }
+
+    .adjustments-card {
+      background: #f97316;
     }
 
     .card-icon {
@@ -514,13 +506,13 @@ import { OrdersSellingTrackingService } from '../../../services/orders-selling-t
     .card-value {
       font-size: 1.625rem;
       font-weight: 700;
-      color: #111827;
+      color: #ffffff;
       margin-bottom: 0;
     }
 
     .card-label {
       font-size: 0.875rem;
-      color: #6b7280;
+      color: #ffffff;
       margin-bottom: 0;
     }
 
@@ -537,7 +529,7 @@ import { OrdersSellingTrackingService } from '../../../services/orders-selling-t
     }
 
     .change-text {
-      color: #6b7280;
+      color: #ffffff;
     }
 
     .stats-card {
@@ -547,7 +539,7 @@ import { OrdersSellingTrackingService } from '../../../services/orders-selling-t
     .stats-title {
       font-size: 1rem;
       font-weight: 600;
-      color: #111827;
+      color: #ffffff;
       margin-bottom: 16px;
     }
 
@@ -700,11 +692,20 @@ import { OrdersSellingTrackingService } from '../../../services/orders-selling-t
 
     .chart-content {
       height: 300px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 24px;
     }
 
     .chart-placeholder {
       height: 100%;
       position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex: 0 0 auto;
+      width: 520px;
     }
 
     .chart-svg {
@@ -930,6 +931,20 @@ import { OrdersSellingTrackingService } from '../../../services/orders-selling-t
     .bar-fill.damage { background:#8b5cf6; }
     .bar-percent { width:48px; text-align:right; font-weight:600; color:#111827; }
 
+    /* Orders Overview pie chart */
+    .orders-pie-wrapper { display:flex; gap:20px; align-items:center; margin-top:12px; }
+    .orders-pie { position: relative; width:220px; height:220px; }
+    /* Donut via CSS conic-gradient */
+    .orders-donut { width:220px; height:220px; border-radius:50%; position:relative; }
+    .orders-donut-hole { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); width:110px; height:110px; background:white; border-radius:50%; box-shadow:0 1px 3px rgba(0,0,0,0.05); display:flex; align-items:center; justify-content:center; }
+    .orders-pie-center { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); text-align:center; }
+    .orders-count { font-weight:700; font-size:1.25rem; }
+    .orders-profit { font-size:0.95rem; color:#ef4444; }
+    .orders-pie-legend { display:flex; flex-direction:column; gap:6px; }
+    .orders-pie-legend .legend-item { display:flex; align-items:center; gap:8px; }
+
+    /* orders-pie-debug removed */
+
     /* Responsive Design */
     @media (max-width: 1024px) {
       .dashboard-grid {
@@ -952,7 +967,6 @@ import { OrdersSellingTrackingService } from '../../../services/orders-selling-t
   `]
 })
 export class OverviewComponent implements OnInit {
-  private http = inject(HttpClient);
   private storeService = inject(StoreService);
   private productService = inject(ProductService);
   private orderService = inject(OrderService);
@@ -981,18 +995,24 @@ export class OverviewComponent implements OnInit {
   protected ledgerRefundQty = signal<number>(0);
   protected ledgerDamageAmount = signal<number>(0);
   protected ledgerDamageQty = signal<number>(0);
+  protected ledgerCompletedAmount = signal<number>(0);
+  // Ledger-sourced order counts
+  protected ledgerOrderQty = signal<number>(0);
+  protected ledgerCancelQty = signal<number>(0);
+  protected ledgerCompletedQty = signal<number>(0);
   protected topProductsList = signal<any[]>([]);
-  protected showTopProductsDebug = signal<boolean>(false);
   protected selectedStoreId = signal<string>('all');
   protected isLoading = signal<boolean>(true);
 
   // UI controls for overview filtering
   protected periodOptions = [
+    { key: 'today', label: 'Today' },
+    { key: 'yesterday', label: 'Yesterday' },
     { key: 'this_month', label: 'This Month' },
     { key: 'previous_month', label: 'Previous Month' },
     { key: 'date_range', label: 'Date Range' }
   ];
-  protected selectedPeriod = signal<'this_month' | 'previous_month' | 'date_range'>('this_month');
+  protected selectedPeriod = signal<'today' | 'yesterday' | 'this_month' | 'previous_month' | 'date_range'>('today');
   protected dateFrom = signal<string | null>(null); // YYYY-MM-DD
   protected dateTo = signal<string | null>(null);
 
@@ -1017,16 +1037,59 @@ export class OverviewComponent implements OnInit {
       .slice(0, 5)
   );
   protected storeList = computed(() => this.stores());
-  protected totalRevenue = computed(() => {
-    const ledger = this.ledgerTotalRevenue();
-    if (ledger && Number(ledger) !== 0) return ledger;
-    return this.orders().reduce((s, o) => s + (Number(o.netAmount ?? o.totalAmount ?? 0) || 0), 0);
+  
+  // Filtered orders based on selected period for client-side safety
+  protected filteredOrders = computed(() => {
+    const allOrders = this.orders();
+    const period = this.selectedPeriod();
+    const now = new Date();
+    
+    let start: Date;
+    let end: Date;
+    
+    if (period === 'today') {
+      start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+      end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+    } else if (period === 'yesterday') {
+      const yesterday = new Date(now);
+      yesterday.setDate(now.getDate() - 1);
+      start = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate(), 0, 0, 0, 0);
+      end = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate(), 23, 59, 59, 999);
+    } else if (period === 'this_month') {
+      start = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+      end = new Date(now.getFullYear(), now.getMonth(), new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate(), 23, 59, 59, 999);
+    } else if (period === 'previous_month') {
+      const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      start = new Date(prev.getFullYear(), prev.getMonth(), 1, 0, 0, 0, 0);
+      end = new Date(prev.getFullYear(), prev.getMonth(), new Date(prev.getFullYear(), prev.getMonth() + 1, 0).getDate(), 23, 59, 59, 999);
+    } else if (period === 'date_range') {
+      const from = this.dateFrom();
+      const to = this.dateTo();
+      if (from && to) {
+        start = new Date(from + 'T00:00:00');
+        end = new Date(to + 'T23:59:59.999');
+      } else {
+        return allOrders; // If no date range set, return all
+      }
+    } else {
+      return allOrders; // Fallback
+    }
+    
+    // Filter orders by createdAt within the date range
+    return allOrders.filter(o => {
+      const orderDate = o.createdAt ? new Date(o.createdAt) : null;
+      if (!orderDate) return false;
+      return orderDate >= start && orderDate <= end;
+    });
   });
-  // Prefer ledger total orders when available
+  
+  protected totalRevenue = computed(() => {
+    // Always use filtered orders to reflect the selected period
+    return this.filteredOrders().reduce((s, o) => s + (Number(o.netAmount ?? o.totalAmount ?? 0) || 0), 0);
+  });
+  // Always use filtered orders count to reflect the selected period
   protected totalOrders = computed(() => {
-    const l = this.ledgerTotalOrders();
-    if (l && Number(l) !== 0) return l;
-    return this.orders().length;
+    return this.filteredOrders().length;
   });
   // Total expenses shown on the card should reflect month-to-date totals
   protected totalExpenses = computed(() => this.monthExpensesTotal());
@@ -1036,7 +1099,11 @@ export class OverviewComponent implements OnInit {
     const month = this.monthExpensesTotal();
     const yesterday = this.yesterdayExpensesTotal();
     const diff = month - yesterday;
-    const percent = yesterday === 0 ? (month === 0 ? 0 : 100) : Math.round((Math.abs(diff) / yesterday) * 100);
+    const percent = (() => {
+      if (yesterday === 0) return (month === 0 ? 0 : 100);
+      const raw = (Math.abs(diff) / yesterday) * 100;
+      return Math.round(raw * 10) / 10; // one decimal place
+    })();
     const symbol = diff > 0 ? '↗' : (diff < 0 ? '↘' : '→');
     return { symbol, percent, diff };
   });
@@ -1055,6 +1122,46 @@ export class OverviewComponent implements OnInit {
       return dd.getTime() === today.getTime();
     }).length;
   });
+
+  // Revenue for a specific day (sums netAmount/totalAmount)
+  protected revenueForDay = (date: Date) => {
+    const start = new Date(date); start.setHours(0,0,0,0);
+    const end = new Date(date); end.setHours(23,59,59,999);
+    const orders = this.orders() || [];
+    return orders.reduce((s, o) => {
+      const d = o.createdAt ? new Date(o.createdAt) : null;
+      if (!d) return s;
+      const t = d.getTime();
+      if (t >= start.getTime() && t <= end.getTime()) {
+        return s + (Number(o.netAmount ?? o.totalAmount ?? 0) || 0);
+      }
+      return s;
+    }, 0);
+  }
+
+  // Compute percent change for revenue: compare today vs yesterday
+  protected revenueChange = computed(() => {
+    try {
+      const now = new Date();
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0,0,0,0);
+      const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1);
+
+      const revToday = this.revenueForDay(today);
+      const revYesterday = this.revenueForDay(yesterday);
+      const diff = revToday - revYesterday;
+
+      const percent = (() => {
+        if (revYesterday === 0) return (revToday === 0 ? 0 : 100);
+        const raw = (Math.abs(diff) / revYesterday) * 100;
+        return Math.round(raw * 10) / 10; // one decimal place
+      })();
+
+      const symbol = diff > 0 ? '↗' : (diff < 0 ? '↘' : '→');
+      return { symbol, percent, diff, revToday, revYesterday };
+    } catch (e) {
+      return { symbol: '→', percent: 0, diff: 0, revToday: 0, revYesterday: 0 };
+    }
+  });
   protected monthOrders = computed(() => {
     const now = new Date();
     const m = now.getMonth(); const y = now.getFullYear();
@@ -1066,11 +1173,15 @@ export class OverviewComponent implements OnInit {
 
   constructor() {
     this.loadData();
+
+    // Re-fetch top products whenever the selected store changes
+    effect(() => {
+      const sid = this.selectedStoreId();
+      // If 'all' or empty, let fetchTopProducts resolve storeId itself
+      void this.fetchTopProducts(sid && sid !== 'all' ? sid : undefined);
+    });
   }
 
-  protected toggleTopProductsDebug(): void {
-    this.showTopProductsDebug.set(!this.showTopProductsDebug());
-  }
 
   // Handler: when user changes store selection
   protected onOverviewStoreChange(event: Event) {
@@ -1085,7 +1196,7 @@ export class OverviewComponent implements OnInit {
   protected onOverviewPeriodChange(event: Event) {
     const target = event.target as HTMLSelectElement;
     if (!target) return;
-    const v = target.value as 'this_month' | 'previous_month' | 'date_range';
+    const v = target.value as 'today' | 'yesterday' | 'this_month' | 'previous_month' | 'date_range';
     this.selectedPeriod.set(v);
     if (v === 'date_range') {
       // default dateTo = today, dateFrom = today - 30 days
@@ -1120,7 +1231,16 @@ export class OverviewComponent implements OnInit {
     const now = new Date();
     let start: Date | undefined;
     let end: Date | undefined;
-    if (period === 'this_month') {
+    if (period === 'today') {
+      const today = new Date();
+      start = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0, 0);
+      end = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999);
+    } else if (period === 'yesterday') {
+      const today = new Date();
+      const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1);
+      start = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate(), 0, 0, 0, 0);
+      end = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate(), 23, 59, 59, 999);
+    } else if (period === 'this_month') {
       start = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
       end = new Date(now.getFullYear(), now.getMonth(), new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate(), 23, 59, 59, 999);
     } else if (period === 'previous_month') {
@@ -1167,6 +1287,8 @@ export class OverviewComponent implements OnInit {
       this.isLoading.set(false);
     }
   }
+
+  // Note: SVG pie helpers removed — Chart.js (ng2-charts) canvas is used instead.
 
   async loadStores(): Promise<void> {
     try {
@@ -1326,7 +1448,7 @@ export class OverviewComponent implements OnInit {
         const companyId = currentPermission?.companyId || '';
         const storeId = this.selectedStoreId() || this.authService.getCurrentPermission()?.storeId || '';
         const end = endDate || new Date();
-        const orderBalances = await this.ledgerService.getLatestOrderBalances(companyId, storeId, end, 'order');
+        const orderBalances = await this.ledgerService.getLatestOrderBalances(companyId, storeId, end, 'completed');
         this.ledgerTotalRevenue.set(Number(orderBalances.runningBalanceAmount || 0));
         // Use runningBalanceQty for total orders and prefer runningBalanceOrderQty if present
         this.ledgerTotalOrders.set(Number(orderBalances.runningBalanceOrderQty || orderBalances.runningBalanceQty || 0));
@@ -1357,49 +1479,101 @@ export class OverviewComponent implements OnInit {
 
   // Analytics computed properties based on BigQuery/Firebase data
   readonly salesAnalytics = computed(() => {
-    const orders = this.orders() || [];
-    const total = Number(this.totalOrders() || orders.length || 0);
+    const orders = this.filteredOrders() || [];
 
-    const returnedCount = Number(this.ledgerReturnQty() || 0);
-    const refundedCount = Number(this.ledgerRefundQty() || 0);
-    const damageCount = Number(this.ledgerDamageQty() || 0);
+    // Prefer ledger-sourced per-range order totals when available.
+    // Otherwise prefer the local `orders.length` (range-loaded) before falling back to global ledgerTotalOrders.
+    const ledgerOrderQty = Math.max(0, Number(this.ledgerOrderQty() || 0));
+    const ledgerCancelQty = Math.max(0, Number(this.ledgerCancelQty() || 0));
+    const ledgerCompletedQty = Math.max(0, Number(this.ledgerCompletedQty() || 0));
+    const ordersLen = Array.isArray(orders) ? orders.length : 0;
+    const reportedTotal = ledgerOrderQty > 0 ? ledgerOrderQty : (ordersLen > 0 ? ordersLen : Number(this.totalOrders() || 0));
 
-    // Cancelled: try ledger? fallback to scanning orders
+    // Sanitize adjustment counts (ensure non-negative)
+    const returnedCount = Math.max(0, Number(this.ledgerReturnQty() || 0));
+    const refundedCount = Math.max(0, Number(this.ledgerRefundQty() || 0));
+    const damageCount = Math.max(0, Number(this.ledgerDamageQty() || 0));
+
+    // Cancelled: prefer ledger cancel qty when available, otherwise fallback to scanning orders
     let cancelledCount = 0;
     try {
-      cancelledCount = orders.filter(o => (o.status || '').toString().toLowerCase().includes('cancel')).length;
+      cancelledCount = ledgerCancelQty > 0 ? ledgerCancelQty : Math.max(0, orders.filter(o => (o.status || '').toString().toLowerCase().includes('cancel')).length);
     } catch (e) {
       cancelledCount = 0;
     }
 
+    // Compute completed count: prefer ledger-computed completedQty when available (orders - cancels), otherwise infer from reported total
     const knownSum = returnedCount + refundedCount + damageCount + cancelledCount;
-    const completedCount = Math.max(0, total - knownSum);
+    let completedCount = ledgerCompletedQty > 0 ? ledgerCompletedQty : Math.max(0, reportedTotal - knownSum);
 
-    const result = {
+    // Base total for percentages: prefer ledgerOrderQty if available
+    let baseTotal = ledgerOrderQty > 0 ? ledgerOrderQty : reportedTotal;
+    // If we don't have a per-range ledger order total but we do have ledger-computed completed qty,
+    // derive the base from ledgerCompletedQty + known adjustments so percentages are meaningful.
+    if (ledgerOrderQty === 0 && ledgerCompletedQty > 0) {
+      baseTotal = Math.max(1, ledgerCompletedQty + knownSum);
+    }
+    if (baseTotal <= 0) baseTotal = Math.max(1, knownSum + completedCount);
+
+    const result: any = {
       completed: { count: completedCount, percentage: 0 },
       cancelled: { count: cancelledCount, percentage: 0 },
       returned: { count: returnedCount, percentage: 0 },
       refunded: { count: refundedCount, percentage: 0 },
       damage: { count: damageCount, percentage: 0 }
-    } as any;
+    };
 
-    if (total === 0) return result;
-
-    // Percentages
+    // Compute percentages with one decimal place
     let accumulated = 0;
     for (const k of Object.keys(result)) {
       const r = result[k];
-      r.percentage = Math.round((r.count / total) * 100);
+      const raw = (Number(r.count || 0) / baseTotal) * 100;
+      r.percentage = Math.max(0, Math.round(raw * 10) / 10); // one decimal
       accumulated += r.percentage;
     }
-    // Normalize rounding error by adjusting completed
-    if (accumulated !== 100) {
-      const diff = 100 - accumulated;
-      result.completed.percentage = Math.min(100, (result.completed.percentage || 0) + diff);
-    }
 
+    // Normalize rounding error by adjusting completed (allow small fractional diff)
+    const roundedAccum = Math.round(accumulated * 10) / 10;
+    if (roundedAccum !== 100) {
+      const diff = Math.round((100 - roundedAccum) * 10) / 10;
+      result.completed.percentage = Math.min(100, Math.max(0, (result.completed.percentage || 0) + diff));
+    }
+    
     return result;
   });
+
+  // Generate CSS conic-gradient string for donut based on salesAnalytics
+  protected pieGradient(): string {
+    const sa: any = this.salesAnalytics();
+    const segments = [
+      { color: '#06b6d4', pct: Number(sa.completed?.percentage || 0) },
+      { color: '#ef4444', pct: Number(sa.cancelled?.percentage || 0) },
+      { color: '#f97316', pct: Number(sa.returned?.percentage || 0) },
+      { color: '#f59e0b', pct: Number(sa.refunded?.percentage || 0) },
+      { color: '#8b5cf6', pct: Number(sa.damage?.percentage || 0) }
+    ];
+
+    // Ensure values are numeric and normalize rounding if needed
+    const total = segments.reduce((s, x) => s + (isFinite(x.pct) ? x.pct : 0), 0) || 100;
+    // If total is not 100, scale values to fit 100
+    const scale = total === 0 ? 0 : 100 / total;
+    let acc = 0;
+    const stops: string[] = [];
+    for (const seg of segments) {
+      // scale and keep one decimal place
+      const raw = (seg.pct || 0) * scale;
+      const p = Math.max(0, Math.round(raw * 10) / 10);
+      const start = Math.round(acc * 10) / 10;
+      const end = Math.round((acc + p) * 10) / 10;
+      stops.push(`${seg.color} ${start}% ${end}%`);
+      acc += p;
+    }
+
+    // If rounding left a tiny gap, fill with white at end
+    if (Math.round(acc * 10) / 10 < 100) stops.push(`#ffffff ${Math.round(acc * 10) / 10}% 100%`);
+
+    return `conic-gradient(${stops.join(', ')})`;
+  }
 
   readonly topProducts = computed(() => {
     // Prefer topProductsList if available (from ledger aggregation)
@@ -1491,102 +1665,38 @@ export class OverviewComponent implements OnInit {
 
   protected chartLabels = computed(() => this.monthlyChartData().map(d => d.label));
 
-  // Method to load sales data from Cloud Function API
+  // Rewritten: avoid calling Cloud Function / BigQuery API and use Firestore-first flows.
   async loadSalesFromCloudFunction(storeId: string, startDate?: Date, endDate?: Date, status: string = 'completed'): Promise<void> {
-    // Ensure we have a reference date available both in try and catch blocks
     const refDate = startDate || new Date();
     try {
-      // Format dates for API (YYYYMM for month queries)
-      const year = refDate.getFullYear();
-      const month = refDate.getMonth() + 1;
-      const monthStr = `${year}${month.toString().padStart(2, '0')}`; // e.g. 202511
+      // Use orderService's hybrid date-range loader (it prefers Firestore and falls back to API if configured)
+      const orders = await this.orderService.getOrdersByDateRange(storeId, startDate || refDate, endDate || refDate);
 
-  const apiBase = environment.api?.baseUrl || '';
-  const apiUrl = `${apiBase}/sales_summary_by_store?month=${monthStr}&storeId=${storeId}&status=${encodeURIComponent(status)}`;
-      
-      console.log('🌐 Fetching sales data from Cloud Function:', apiUrl);
-      console.log('🔐 Auth interceptor will automatically attach Firebase ID token');
+      const normalized = (orders || []).map((o: any, idx: number) => ({
+        ...o,
+        id: o.id || `order-${idx}`,
+        customerName: o.soldTo || o.customerName || 'Cash Sale',
+        items: o.items || []
+      }));
 
-      // Use HttpClient so auth interceptor can automatically add Authorization header
-      const salesData = await this.http.get<any>(apiUrl, {
-        headers: { 'Accept': 'application/json' }
-      }).toPromise();
-      console.log('📊 Cloud Function response (raw):', salesData);
-      console.log('📊 Cloud Function response structure check:', {
-        hasSuccess: !!salesData?.success,
-        hasRows: !!salesData?.rows,
-        rowsLength: salesData?.rows?.length || 0,
-        firstRow: salesData?.rows?.[0] || null,
-        hasSummary: !!salesData?.summary
-      });
+      this.orders.set(normalized);
 
-      if (salesData && (salesData.summary || (salesData.success && salesData.rows))) {
-        // Extract data from Cloud Function response
-        let totalRevenue = 0;
-        let totalOrders = 0;
-        let totalCustomers = 0;
-        
-        if (salesData.summary) {
-          // Legacy format: use summary object
-          totalRevenue = Number(salesData.summary.totalRevenue || 0);
-          totalOrders = Number(salesData.summary.totalOrders || 0);
-          totalCustomers = Number(salesData.summary.uniqueCustomers || 0);
-        } else if (salesData.success && salesData.rows && salesData.rows.length > 0) {
-          // New format: use rows array
-          const firstRow = salesData.rows[0];
-          totalRevenue = Number(firstRow.totalAmount || 0);
-          totalOrders = Number(salesData.count || 0);
-          totalCustomers = Number(firstRow.uniqueCustomers || 0);
+      // Populate ledger-driven aggregates where possible
+      try {
+        const companyId = this.authService.getCurrentPermission()?.companyId || '';
+        const ledger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, refDate, status as any);
+        if (ledger) {
+          this.ledgerTotalRevenue.set(Number(ledger.runningBalanceAmount || 0));
+          this.ledgerTotalOrders.set(Number(ledger.runningBalanceOrderQty || ledger.runningBalanceQty || 0));
         }
-        
-        console.log('📊 Extracted values:', { totalRevenue, totalOrders, totalCustomers });
-
-        // Create synthetic orders array for computed values
-        // This maintains compatibility with existing template
-        const syntheticOrders: any[] = Array.from({ length: totalOrders }, (_, index) => ({
-          id: `cf-order-${index}`,
-          orderId: `cf-order-${index}`,
-          companyId: '',
-          storeId: storeId,
-          assignedCashierId: '',
-          status: 'completed',
-          netAmount: totalRevenue / Math.max(1, totalOrders), // Average order value
-          totalAmount: totalRevenue / Math.max(1, totalOrders),
-          vatAmount: 0,
-          vatExemptAmount: 0,
-          discountAmount: 0,
-          grossAmount: totalRevenue / Math.max(1, totalOrders),
-          atpOrOcn: '',
-          birPermitNo: '',
-          inclusiveSerialNumber: '',
-          message: '',
-          soldTo: index < totalCustomers ? `Customer ${index + 1}` : '',
-          createdAt: new Date(refDate.getTime() + (index * 86400000)), // Spread across period (use refDate when startDate may be undefined)
-          customerName: index < totalCustomers ? `Customer ${index + 1}` : 'Cash Sale',
-          items: [],
-          paymentMethod: 'cash' as const
-        }));
-
-        this.orders.set(syntheticOrders);
-        
-        console.log(`✅ Loaded sales data: ₱${totalRevenue} revenue, ${totalOrders} orders, ${totalCustomers} customers`);
-      } else {
-        console.warn('⚠️ Cloud Function returned unexpected data format');
-        this.orders.set([]);
+      } catch (ledgerErr) {
+        console.warn('Ledger lookup failed in overview loader', ledgerErr);
       }
 
-    } catch (error) {
-      console.error('❌ Error loading from Cloud Function, falling back to Firebase:', error);
-      
-      // Fallback to original Firebase/BigQuery approach
-  const orders = await this.orderService.getOrdersByDateRange(storeId, startDate || refDate, endDate || refDate);
-      this.orders.set(orders.map((order: any) => ({
-        ...order,
-        id: order.id || '',
-        customerName: order.soldTo || 'Cash Sale',
-        items: [],
-        paymentMethod: 'cash'
-      })));
+      console.log(`✅ Loaded ${normalized.length} orders for store=${storeId} (Firestore-first)`);
+    } catch (err) {
+      console.error('❌ Failed to load orders for overview:', err);
+      this.orders.set([]);
     }
   }
 
@@ -1635,6 +1745,37 @@ export class OverviewComponent implements OnInit {
           this.ledgerRefundQty.set(Number(adjustments.refunds.qty || 0));
           this.ledgerDamageAmount.set(Number(adjustments.damages.amount || 0));
           this.ledgerDamageQty.set(Number(adjustments.damages.qty || 0));
+          // If getAdjustmentTotals now returns completed totals, prefer that for completed qty
+          const adjAny: any = adjustments as any;
+          if (adjAny && adjAny.completed) {
+            this.ledgerCompletedQty.set(Number(adjAny.completed.qty || 0));
+            this.ledgerCompletedAmount.set(Number(adjAny.completed.amount || 0));
+          }
+
+          // Also compute ledger order / cancel / completed qty for the selected range
+          try {
+            // Query ledger for completed events (service now uses 'completed' eventType)
+            const ordersAgg = await this.ledgerService.sumEventsAmountAndQty(companyId, storeId, startDate, endDate, ['completed']);
+            const cancelsAgg = await this.ledgerService.sumEventsAmountAndQty(companyId, storeId, startDate, endDate, ['cancel']);
+            const orderQty = Number(ordersAgg.qty || 0);
+            const cancelQty = Number(cancelsAgg.qty || 0);
+            // If adjustments.completed was not present, compute completed as order - cancel
+            this.ledgerOrderQty.set(orderQty);
+            this.ledgerCancelQty.set(cancelQty);
+            // Use the aggregation amount if adjustments.completed.amount wasn't provided
+            if (!this.ledgerCompletedAmount() || this.ledgerCompletedAmount() === 0) {
+              this.ledgerCompletedAmount.set(Number(ordersAgg.amount || 0));
+            }
+            if (!this.ledgerCompletedQty() || this.ledgerCompletedQty() === 0) {
+              const completedQty = Math.max(0, orderQty - cancelQty);
+              this.ledgerCompletedQty.set(completedQty);
+            }
+          } catch (e) {
+            console.warn('Overview: failed to compute ledger order/cancel totals', e);
+            this.ledgerOrderQty.set(0);
+            this.ledgerCancelQty.set(0);
+            this.ledgerCompletedQty.set(0);
+          }
 
           // Add refunds/damages to monthExpensesTotal if desired (refunds typically reduce revenue, but user previously added refunds to expenses)
           // Here we keep monthExpensesTotal as expense logs + ledger expense/refund (already handled elsewhere). Returns/damages are shown separately.

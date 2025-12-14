@@ -5,7 +5,6 @@ import { FirestoreSecurityService } from './firestore-security.service';
 import { LoggerService } from './logger.service';
 import { logFirestore } from '../utils/firestore-logger';
 import { applyCreateTimestamps, applyUpdateTimestamp } from '../utils/firestore-timestamps';
-import { serverTimestamp } from 'firebase/firestore';
 
 export interface OfflineDocument {
   id: string;
@@ -492,8 +491,9 @@ export class OfflineDocumentService {
           
           // When syncing offline-created documents, replace client timestamps with server timestamps
           try {
-            (offlineDoc.data as any)['createdAt'] = serverTimestamp() as any;
-            (offlineDoc.data as any)['updatedAt'] = serverTimestamp() as any;
+            // Use concrete dates so synced documents have immediate timestamps
+            (offlineDoc.data as any)['createdAt'] = new Date();
+            (offlineDoc.data as any)['updatedAt'] = new Date();
           } catch {}
           // Create document online with real Firestore ID
           const realDocId = await this.createOnlineDocument(offlineDoc.collectionName, offlineDoc.data);

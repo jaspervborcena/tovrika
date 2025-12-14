@@ -2,7 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import { environment } from '../../environments/environment';
 import { HttpClient } from '@angular/common/http';
 import { Firestore, collection, query, where, orderBy, limit } from '@angular/fire/firestore';
-import { getDocs, getDoc, Timestamp, doc as clientDoc, runTransaction, serverTimestamp } from 'firebase/firestore';
+import { getDocs, getDoc, Timestamp, doc as clientDoc, runTransaction } from 'firebase/firestore';
 import { User } from '@angular/fire/auth';
 import { Order } from '../interfaces/pos.interface';
 import { AuthService } from './auth.service';
@@ -632,7 +632,7 @@ public async restockOrderAndInventoryTransactional(orderId: string, performedBy 
         const currentTotal = prodSnap?.exists() ? Number((prodSnap.data() as any).totalStock || 0) : 0;
         const newTotal = currentTotal + c.quantity;
         console.log(`Updating product ${c.productId}: currentTotal=${currentTotal}, newTotal=${newTotal}`);
-        tx.update(prodRef, { totalStock: newTotal, lastUpdated: serverTimestamp(), updatedBy: performedBy });
+        tx.update(prodRef, { totalStock: newTotal, lastUpdated: new Date(), updatedBy: performedBy });
 
         // Update inventory batch (if we have one)
         const invEntry = inventorySnaps.get(c.productId);
@@ -642,15 +642,15 @@ public async restockOrderAndInventoryTransactional(orderId: string, performedBy 
           const currentInvQty = invSnap?.exists() ? Number((invSnap.data() as any).quantity || 0) : 0;
           const newInvQty = currentInvQty + c.quantity;
           console.log(`Updating inventory for product ${c.productId}: currentInvQty=${currentInvQty}, newInvQty=${newInvQty}`);
-          tx.update(invRef, { quantity: newInvQty, lastUpdated: serverTimestamp(), updatedBy: performedBy });
+          tx.update(invRef, { quantity: newInvQty, lastUpdated: new Date(), updatedBy: performedBy });
         }
 
         // Mark tracking doc as restocked
-        tx.update(c.ref, { restocked: true, restockedAt: serverTimestamp(), restockedBy: performedBy });
+        tx.update(c.ref, { restocked: true, restockedAt: new Date(), restockedBy: performedBy });
       }
 
       // Touch order metadata
-      tx.update(orderRef, { updatedAt: serverTimestamp(), updatedBy: performedBy });
+      tx.update(orderRef, { updatedAt: new Date(), updatedBy: performedBy });
     });
 
     this.logger.info('restock: client-side restock transaction completed', { area: 'orders', docId: orderId });
