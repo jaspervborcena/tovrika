@@ -1,5 +1,4 @@
 import { Component, inject, signal, computed, OnInit, effect } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
 import { environment } from '../../../../environments/environment';
 import { CommonModule } from '@angular/common';
 import { StoreService, Store } from '../../../services/store.service';
@@ -28,11 +27,18 @@ import { OrdersSellingTrackingService } from '../../../services/orders-selling-t
           <!-- Overview controls: store selector and period -->
           <div class="overview-controls">
             <div class="control-row">
-              <label class="control-label">Store</label>
-              <select class="control-select" (change)="onOverviewStoreChange($event)">
-                <option *ngFor="let s of storeList()" [value]="s.id" [selected]="selectedStoreId()===s.id">{{ s.storeName || s.storeName }}</option>
-              </select>
-            </div>
+                <label class="control-label">Store</label>
+                <ng-container *ngIf="storeList().length > 1; else singleStore">
+                  <select class="control-select" (change)="onOverviewStoreChange($event)">
+                    <option *ngFor="let s of storeList()" [value]="s.id" [selected]="selectedStoreId()===s.id">{{ s.storeName || s.storeName }}</option>
+                  </select>
+                </ng-container>
+                <ng-template #singleStore>
+                  <div class="single-store">
+                    <span class="store-name">{{ storeList().length ? (storeList()[0].storeName | uppercase) : 'All Stores' }}</span>
+                  </div>
+                </ng-template>
+              </div>
 
             <div class="control-row">
               <label class="control-label">Period</label>
@@ -961,7 +967,6 @@ import { OrdersSellingTrackingService } from '../../../services/orders-selling-t
   `]
 })
 export class OverviewComponent implements OnInit {
-  private http = inject(HttpClient);
   private storeService = inject(StoreService);
   private productService = inject(ProductService);
   private orderService = inject(OrderService);
@@ -1032,16 +1037,59 @@ export class OverviewComponent implements OnInit {
       .slice(0, 5)
   );
   protected storeList = computed(() => this.stores());
-  protected totalRevenue = computed(() => {
-    const ledger = this.ledgerTotalRevenue();
-    if (ledger && Number(ledger) !== 0) return ledger;
-    return this.orders().reduce((s, o) => s + (Number(o.netAmount ?? o.totalAmount ?? 0) || 0), 0);
+  
+  // Filtered orders based on selected period for client-side safety
+  protected filteredOrders = computed(() => {
+    const allOrders = this.orders();
+    const period = this.selectedPeriod();
+    const now = new Date();
+    
+    let start: Date;
+    let end: Date;
+    
+    if (period === 'today') {
+      start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+      end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+    } else if (period === 'yesterday') {
+      const yesterday = new Date(now);
+      yesterday.setDate(now.getDate() - 1);
+      start = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate(), 0, 0, 0, 0);
+      end = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate(), 23, 59, 59, 999);
+    } else if (period === 'this_month') {
+      start = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+      end = new Date(now.getFullYear(), now.getMonth(), new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate(), 23, 59, 59, 999);
+    } else if (period === 'previous_month') {
+      const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      start = new Date(prev.getFullYear(), prev.getMonth(), 1, 0, 0, 0, 0);
+      end = new Date(prev.getFullYear(), prev.getMonth(), new Date(prev.getFullYear(), prev.getMonth() + 1, 0).getDate(), 23, 59, 59, 999);
+    } else if (period === 'date_range') {
+      const from = this.dateFrom();
+      const to = this.dateTo();
+      if (from && to) {
+        start = new Date(from + 'T00:00:00');
+        end = new Date(to + 'T23:59:59.999');
+      } else {
+        return allOrders; // If no date range set, return all
+      }
+    } else {
+      return allOrders; // Fallback
+    }
+    
+    // Filter orders by createdAt within the date range
+    return allOrders.filter(o => {
+      const orderDate = o.createdAt ? new Date(o.createdAt) : null;
+      if (!orderDate) return false;
+      return orderDate >= start && orderDate <= end;
+    });
   });
-  // Prefer ledger total orders when available
+  
+  protected totalRevenue = computed(() => {
+    // Always use filtered orders to reflect the selected period
+    return this.filteredOrders().reduce((s, o) => s + (Number(o.netAmount ?? o.totalAmount ?? 0) || 0), 0);
+  });
+  // Always use filtered orders count to reflect the selected period
   protected totalOrders = computed(() => {
-    const l = this.ledgerTotalOrders();
-    if (l && Number(l) !== 0) return l;
-    return this.orders().length;
+    return this.filteredOrders().length;
   });
   // Total expenses shown on the card should reflect month-to-date totals
   protected totalExpenses = computed(() => this.monthExpensesTotal());
@@ -1431,7 +1479,7 @@ export class OverviewComponent implements OnInit {
 
   // Analytics computed properties based on BigQuery/Firebase data
   readonly salesAnalytics = computed(() => {
-    const orders = this.orders() || [];
+    const orders = this.filteredOrders() || [];
 
     // Prefer ledger-sourced per-range order totals when available.
     // Otherwise prefer the local `orders.length` (range-loaded) before falling back to global ledgerTotalOrders.
@@ -1617,102 +1665,38 @@ export class OverviewComponent implements OnInit {
 
   protected chartLabels = computed(() => this.monthlyChartData().map(d => d.label));
 
-  // Method to load sales data from Cloud Function API
+  // Rewritten: avoid calling Cloud Function / BigQuery API and use Firestore-first flows.
   async loadSalesFromCloudFunction(storeId: string, startDate?: Date, endDate?: Date, status: string = 'completed'): Promise<void> {
-    // Ensure we have a reference date available both in try and catch blocks
     const refDate = startDate || new Date();
     try {
-      // Format dates for API (YYYYMM for month queries)
-      const year = refDate.getFullYear();
-      const month = refDate.getMonth() + 1;
-      const monthStr = `${year}${month.toString().padStart(2, '0')}`; // e.g. 202511
+      // Use orderService's hybrid date-range loader (it prefers Firestore and falls back to API if configured)
+      const orders = await this.orderService.getOrdersByDateRange(storeId, startDate || refDate, endDate || refDate);
 
-  const apiBase = environment.api?.baseUrl || '';
-  const apiUrl = `${apiBase}/sales_summary_by_store?month=${monthStr}&storeId=${storeId}&status=${encodeURIComponent(status)}`;
-      
-      console.log('🌐 Fetching sales data from Cloud Function:', apiUrl);
-      console.log('🔐 Auth interceptor will automatically attach Firebase ID token');
+      const normalized = (orders || []).map((o: any, idx: number) => ({
+        ...o,
+        id: o.id || `order-${idx}`,
+        customerName: o.soldTo || o.customerName || 'Cash Sale',
+        items: o.items || []
+      }));
 
-      // Use HttpClient so auth interceptor can automatically add Authorization header
-      const salesData = await this.http.get<any>(apiUrl, {
-        headers: { 'Accept': 'application/json' }
-      }).toPromise();
-      console.log('📊 Cloud Function response (raw):', salesData);
-      console.log('📊 Cloud Function response structure check:', {
-        hasSuccess: !!salesData?.success,
-        hasRows: !!salesData?.rows,
-        rowsLength: salesData?.rows?.length || 0,
-        firstRow: salesData?.rows?.[0] || null,
-        hasSummary: !!salesData?.summary
-      });
+      this.orders.set(normalized);
 
-      if (salesData && (salesData.summary || (salesData.success && salesData.rows))) {
-        // Extract data from Cloud Function response
-        let totalRevenue = 0;
-        let totalOrders = 0;
-        let totalCustomers = 0;
-        
-        if (salesData.summary) {
-          // Legacy format: use summary object
-          totalRevenue = Number(salesData.summary.totalRevenue || 0);
-          totalOrders = Number(salesData.summary.totalOrders || 0);
-          totalCustomers = Number(salesData.summary.uniqueCustomers || 0);
-        } else if (salesData.success && salesData.rows && salesData.rows.length > 0) {
-          // New format: use rows array
-          const firstRow = salesData.rows[0];
-          totalRevenue = Number(firstRow.totalAmount || 0);
-          totalOrders = Number(salesData.count || 0);
-          totalCustomers = Number(firstRow.uniqueCustomers || 0);
+      // Populate ledger-driven aggregates where possible
+      try {
+        const companyId = this.authService.getCurrentPermission()?.companyId || '';
+        const ledger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, refDate, status as any);
+        if (ledger) {
+          this.ledgerTotalRevenue.set(Number(ledger.runningBalanceAmount || 0));
+          this.ledgerTotalOrders.set(Number(ledger.runningBalanceOrderQty || ledger.runningBalanceQty || 0));
         }
-        
-        console.log('📊 Extracted values:', { totalRevenue, totalOrders, totalCustomers });
-
-        // Create synthetic orders array for computed values
-        // This maintains compatibility with existing template
-        const syntheticOrders: any[] = Array.from({ length: totalOrders }, (_, index) => ({
-          id: `cf-order-${index}`,
-          orderId: `cf-order-${index}`,
-          companyId: '',
-          storeId: storeId,
-          assignedCashierId: '',
-          status: 'completed',
-          netAmount: totalRevenue / Math.max(1, totalOrders), // Average order value
-          totalAmount: totalRevenue / Math.max(1, totalOrders),
-          vatAmount: 0,
-          vatExemptAmount: 0,
-          discountAmount: 0,
-          grossAmount: totalRevenue / Math.max(1, totalOrders),
-          atpOrOcn: '',
-          birPermitNo: '',
-          inclusiveSerialNumber: '',
-          message: '',
-          soldTo: index < totalCustomers ? `Customer ${index + 1}` : '',
-          createdAt: new Date(refDate.getTime() + (index * 86400000)), // Spread across period (use refDate when startDate may be undefined)
-          customerName: index < totalCustomers ? `Customer ${index + 1}` : 'Cash Sale',
-          items: [],
-          paymentMethod: 'cash' as const
-        }));
-
-        this.orders.set(syntheticOrders);
-        
-        console.log(`✅ Loaded sales data: ₱${totalRevenue} revenue, ${totalOrders} orders, ${totalCustomers} customers`);
-      } else {
-        console.warn('⚠️ Cloud Function returned unexpected data format');
-        this.orders.set([]);
+      } catch (ledgerErr) {
+        console.warn('Ledger lookup failed in overview loader', ledgerErr);
       }
 
-    } catch (error) {
-      console.error('❌ Error loading from Cloud Function, falling back to Firebase:', error);
-      
-      // Fallback to original Firebase/BigQuery approach
-  const orders = await this.orderService.getOrdersByDateRange(storeId, startDate || refDate, endDate || refDate);
-      this.orders.set(orders.map((order: any) => ({
-        ...order,
-        id: order.id || '',
-        customerName: order.soldTo || 'Cash Sale',
-        items: [],
-        paymentMethod: 'cash'
-      })));
+      console.log(`✅ Loaded ${normalized.length} orders for store=${storeId} (Firestore-first)`);
+    } catch (err) {
+      console.error('❌ Failed to load orders for overview:', err);
+      this.orders.set([]);
     }
   }
 

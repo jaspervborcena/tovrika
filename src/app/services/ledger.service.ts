@@ -8,7 +8,6 @@ import {
   getDocs,
   doc,
   setDoc,
-  serverTimestamp,
   Firestore
 } from '@angular/fire/firestore';
 
@@ -75,7 +74,7 @@ export class LedgerService {
       runningBalanceAmount: newBalanceAmount,
       runningBalanceQty: newBalanceQty,
       runningBalanceOrderQty: newOrderBalanceQty,
-      createdAt: serverTimestamp(),
+      createdAt: new Date(),
       createdAtClient: new Date(),
       createdBy: performedBy
     };

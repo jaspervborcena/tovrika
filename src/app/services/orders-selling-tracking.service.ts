@@ -1,6 +1,6 @@
 import { Injectable, inject } from '@angular/core';
 import { Firestore, collection, query, where } from '@angular/fire/firestore';
-import { getDocs, getDoc, doc, setDoc, serverTimestamp, runTransaction, orderBy, limit, getAggregateFromServer, count } from 'firebase/firestore';
+import { getDocs, getDoc, doc, setDoc, runTransaction, orderBy, limit, getAggregateFromServer, count } from 'firebase/firestore';
 import { toDateValue } from '../core/utils/date-utils';
 import { OfflineDocumentService } from '../core/services/offline-document.service';
 import { OrdersSellingTrackingDoc } from '../interfaces/orders-selling-tracking.interface';
@@ -15,9 +15,56 @@ export class OrdersSellingTrackingService {
     const out: any = {};
     for (const k of Object.keys(obj || {})) {
       const v = obj[k];
-      if (v !== undefined) out[k] = v;
+      if (v !== undefined) {
+        // For *At fields (createdAt/updatedAt) store a human-readable string
+        // with epoch in parentheses: "December 9, 2025 at 1:52:05 PM UTC+8 (170...)"
+        if (k && typeof k === 'string' && /At$/.test(k)) {
+          let d: Date | null = null;
+          if (v instanceof Date) d = v;
+          else if (v && typeof v.toDate === 'function') {
+            try { d = v.toDate(); } catch (e) { d = null; }
+          } else if (typeof v === 'number' || typeof v === 'string') {
+            const parsed = new Date(v as any);
+            d = isNaN(parsed.getTime()) ? null : parsed;
+          }
+          if (d) out[k] = this.formatDateForFirestore(d);
+          else out[k] = v;
+        } else {
+          // Keep other values unchanged
+          if (v instanceof Date) out[k] = v.getTime();
+          else out[k] = v;
+        }
+      }
     }
     return out;
+  }
+
+  // Format a Date as: "Month D, YYYY at h:mm:ss AM/PM UTC±H (epoch)"
+  private formatDateForFirestore(d: Date): string {
+    const months = [
+      'January','February','March','April','May','June','July','August','September','October','November','December'
+    ];
+    const month = months[d.getUTCMonth()];
+    const day = d.getUTCDate();
+    const year = d.getUTCFullYear();
+
+    // compute time in local offset (so it matches user's zone display like UTC+8)
+    const tzOffsetMin = -d.getTimezoneOffset(); // minutes east of UTC
+    const tzSign = tzOffsetMin >= 0 ? '+' : '-';
+    const tzHours = Math.floor(Math.abs(tzOffsetMin) / 60);
+
+    // time components in local time
+    const hours = d.getHours();
+    const minutes = d.getMinutes();
+    const seconds = d.getSeconds();
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    const hour12 = ((hours + 11) % 12) + 1;
+
+    const two = (n: number) => (n < 10 ? '0' + n : String(n));
+    const timePart = `${hour12}:${two(minutes)}:${two(seconds)} ${ampm}`;
+    const tzPart = `UTC${tzSign}${tzHours}`;
+    const epoch = String(d.getTime());
+    return `${month} ${day}, ${year} at ${timePart} ${tzPart} (${epoch})`;
   }
   constructor(
     private firestore: Firestore,
@@ -85,7 +132,58 @@ export class OrdersSellingTrackingService {
       errors.push({ id: 'pending-check', error: e });
     }
 
+    // Ensure updatedAt matches createdAt for any docs that still have serverTimestamp sentinels
+    try {
+      await this.alignUpdatedAtToCreatedAtForOrder(orderId);
+    } catch (e) {
+      // non-fatal
+      console.warn('markOrderTrackingCompleted: alignUpdatedAtToCreatedAtForOrder failed', e);
+    }
+
     return { updated, errors };
+  }
+
+  /**
+   * Align updatedAt to createdAt for all tracking docs of an order when updatedAt is a serverTimestamp sentinel
+   * or missing. This will perform an online setDoc merge when online, otherwise it will queue an update.
+   */
+  private async alignUpdatedAtToCreatedAtForOrder(orderId: string): Promise<void> {
+    try {
+      const q = query(collection(this.firestore, 'ordersSellingTracking'), where('orderId', '==', orderId));
+      const snaps = await getDocs(q as any);
+      for (const s of snaps.docs) {
+        const data: any = s.data() || {};
+        const createdAt = data.createdAt;
+        const updatedAt = data.updatedAt;
+
+        // Normalize createdAt to Date
+        let createdDate: Date | null = null;
+        if (!createdAt) continue;
+        if (typeof createdAt.toDate === 'function') createdDate = createdAt.toDate();
+        else if (createdAt instanceof Date) createdDate = createdAt as Date;
+        else createdDate = new Date(createdAt);
+        if (!createdDate) continue;
+
+        // Detect serverTimestamp sentinel (Firestore represents it as a map with _methodName)
+        const isServerTimestamp = updatedAt && typeof updatedAt === 'object' && (updatedAt._methodName === 'serverTimestamp' || updatedAt._methodName === 'ServerTimestamp');
+
+        if (!updatedAt || isServerTimestamp) {
+          try {
+            if (navigator.onLine) {
+              const ref = doc(this.firestore, 'ordersSellingTracking', s.id);
+              await setDoc(ref as any, { updatedAt: createdDate }, { merge: true } as any);
+            } else {
+              // Queue update for later sync; offline update will set updatedAt when synced.
+              await this.offlineDocService.updateDocument('ordersSellingTracking', s.id, { updatedAt: createdDate as any });
+            }
+          } catch (e) {
+            console.warn('alignUpdatedAtToCreatedAtForOrder: failed to set updatedAt for', s.id, e);
+          }
+        }
+      }
+    } catch (e) {
+      console.error('alignUpdatedAtToCreatedAtForOrder failed', e);
+    }
   }
 
   /**
@@ -157,22 +255,24 @@ export class OrdersSellingTrackingService {
     for (const s of snaps.docs) {
       const id = s.id;
       const data: any = s.data() || {};
+      const product = this.productService.getProduct(data.productId);
       // If already returned, skip
       if (data.status === 'returned') continue;
 
       // Build a copy of the existing record but mark it as 'returned'.
-      const onlineCreatedAt = serverTimestamp();
+      const onlineCreatedAt = new Date();
       const offlineCreatedAt = new Date();
 
       const newDoc: any = {
         companyId: data.companyId || undefined,
         storeId: data.storeId || undefined,
-        orderId: data.orderId || orderId,
         batchNumber: data.batchNumber || 1,
         itemIndex: data.itemIndex ?? 0,
         orderDetailsId: data.orderDetailsId || undefined,
         productId: data.productId,
         productName: data.productName,
+        productCode: data.productCode || product?.productCode,
+        sku: data.sku || product?.skuId,
         price: data.price,
         quantity: data.quantity,
         total: data.total,
@@ -238,7 +338,6 @@ export class OrdersSellingTrackingService {
 
   return { updated, errors };
 }
-
 async markOrderTrackingRefunded(orderId: string, refundedBy?: string, reason?: string): Promise<{ created: number; errors: any[]; createdIds?: string[] }> {
   const errors: any[] = [];
   let created = 0;
@@ -254,9 +353,10 @@ async markOrderTrackingRefunded(orderId: string, refundedBy?: string, reason?: s
       console.log(`markOrderTrackingRefunded: found ${snaps.docs.length} tracking docs for order ${orderId}`);
       console.log(`markOrderTrackingRefunded: doc=${s.id} status=${status}`);
       if (status !== 'returned' && status !== 'return') continue; // be lenient
+      const product = this.productService.getProduct(data.productId);
 
       // Prepare timestamps appropriate for online vs offline storage
-      const onlineCreatedAt = serverTimestamp();
+          const onlineCreatedAt = new Date();
       const offlineCreatedAt = new Date();
 
       // Build a clean refund record (avoid copying internal metadata like doc id)
@@ -269,6 +369,8 @@ async markOrderTrackingRefunded(orderId: string, refundedBy?: string, reason?: s
         orderDetailsId: data.orderDetailsId || undefined,
         productId: data.productId,
         productName: data.productName,
+        productCode: data.productCode || product?.productCode,
+        sku: data.sku || product?.skuId,
         price: data.price,
         quantity: data.quantity,
         total: data.total,
@@ -333,6 +435,8 @@ async markOrderTrackingRefunded(orderId: string, refundedBy?: string, reason?: s
             orderDetailsId: pd.data.orderDetailsId || undefined,
             productId: pd.data.productId,
             productName: pd.data.productName,
+            productCode: pd.data.productCode || (this.productService.getProduct(pd.data.productId)?.productCode),
+            sku: pd.data.sku || (this.productService.getProduct(pd.data.productId)?.skuId),
             price: pd.data.price,
             quantity: pd.data.quantity,
             total: pd.data.total,
@@ -394,7 +498,7 @@ async createPartialTrackingFromDoc(trackingId: string, newStatus: string, qty: n
       return { created, errors };
     }
 
-    const onlineCreatedAt = serverTimestamp();
+    const onlineCreatedAt = new Date();
     const offlineCreatedAt = new Date();
 
     const unitPrice = Number(data.price || 0);
@@ -620,7 +724,7 @@ async markOrderTrackingDamaged(orderId: string, damagedBy?: string, reason?: str
       // Only create damaged copies for returned items (same source as refunds)
       if (status !== 'returned' && status !== 'return') continue;
 
-      const onlineCreatedAt = serverTimestamp();
+      const onlineCreatedAt = new Date();
       const offlineCreatedAt = new Date();
 
       const newDoc: any = {
@@ -950,6 +1054,12 @@ async markOrderTrackingDamaged(orderId: string, damagedBy?: string, reason?: str
         cashierId: ctx.cashierId,
         cashierEmail: ctx.cashierEmail,
         cashierName: ctx.cashierName
+        // include optional fields expected by interface
+        ,
+        productCode: (it as any).productCode || undefined,
+        sku: (it as any).sku || undefined,
+        cost: (it as any).cost || undefined,
+        number: (it as any).number || undefined
       } as OrdersSellingTrackingDoc;
 
       try {
