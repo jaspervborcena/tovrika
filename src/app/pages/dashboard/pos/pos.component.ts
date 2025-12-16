@@ -1579,6 +1579,48 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
         const created = res?.created ?? 0;
         const errors = res?.errors ?? [];
         const msg = `Created ${created} damaged record(s). ${errors.length ? 'Errors: ' + errors.length : ''}`;
+        
+        // Record damage event in orderAccountingLedger using orderSellingTracking data
+        try {
+          let amount = 0;
+          let qty = 0;
+          const companyId = this.authService.getCurrentPermission()?.companyId || '';
+          const storeId = order?.storeId || this.authService.getCurrentPermission()?.storeId || '';
+          
+          // Query ordersSellingTracking to get actual damaged quantities
+          const trackingRef = collection(this.firestore, 'ordersSellingTracking');
+          const trackingQ = query(trackingRef, where('orderId', '==', orderId), where('status', 'in', ['damage', 'damaged']));
+          const trackingSnap = await getDocs(trackingQ);
+          
+          if (!trackingSnap.empty) {
+            for (const d of trackingSnap.docs) {
+              const data: any = d.data();
+              const lineTotal = Number(data.total || data.lineTotal || (Number(data.price || 0) * Number(data.quantity || 0)) || 0);
+              amount += lineTotal;
+              qty += Number(data.quantity || 0);
+            }
+          } else {
+            // Fallback to order totals if no tracking entries yet
+            amount = Number(order?.netAmount ?? order?.totalAmount ?? 0);
+            qty = (order?.items || []).reduce((s: number, it: any) => s + Number(it.quantity || 0), 0);
+          }
+          
+          if (companyId && storeId) {
+            await this.ledgerService.recordEvent(
+              companyId,
+              storeId,
+              orderId,
+              'damage',
+              amount,
+              qty,
+              creds.userCode || 'system'
+            );
+            console.log('✅ Damage event recorded in ledger:', { orderId, amount, qty });
+          }
+        } catch (ledgerErr) {
+          console.error('Failed to record damage event in ledger:', ledgerErr);
+        }
+        
         await this.showConfirmationDialog({ title: 'Success', message: 'Successfully marked damage. ' + msg, confirmText: 'OK', cancelText: '', type: 'info' });
 
         // Mark that damage has been applied so UI will hide/lock actions as required

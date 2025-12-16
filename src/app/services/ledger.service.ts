@@ -87,9 +87,17 @@ export class LedgerService {
     await setDoc(ref, newDoc);
 
     console.log(
-      `LedgerService: recorded ${eventType} for order ${orderId}, ` +
-      `new balance=${newBalanceAmount}, qty=${newBalanceQty}, ` +
-      `orderBalance=${newOrderBalanceQty}, docId=${ref.id}`
+      `✅ LedgerService: recorded ${eventType} for order ${orderId}:`,
+      {
+        amount,
+        qty,
+        runningBalanceAmount: newBalanceAmount,
+        runningBalanceQty: newBalanceQty,
+        runningBalanceOrderQty: newOrderBalanceQty,
+        docId: ref.id,
+        companyId,
+        storeId
+      }
     );
 
     return {

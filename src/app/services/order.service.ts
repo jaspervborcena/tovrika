@@ -454,26 +454,36 @@ async updateOrderStatus(orderId: string, status: string, reason?: string): Promi
       let storeId = '';
       try {
         const trackingRef = collection(this.firestore, 'ordersSellingTracking');
-        // Support multiple possible status spellings (eg. 'return' vs 'returned')
-        const statusesToQuery: string[] = [mappedStatus];
-        if (mappedStatus === 'return') statusesToQuery.push('returned');
-        if (mappedStatus === 'refund') statusesToQuery.push('refunded');
-        if (mappedStatus === 'cancel') statusesToQuery.push('cancelled');
-        if (mappedStatus === 'damage') statusesToQuery.push('damaged');
-
-        // Use 'in' query to match any of the expected status variants
-        const trackingQ = query(trackingRef, where('orderId', '==', orderId), where('status', 'in', statusesToQuery));
+        
+        // Query ALL tracking entries for this order (don't filter by status)
+        // We'll sum up all original quantities regardless of current status
+        const trackingQ = query(trackingRef, where('orderId', '==', orderId));
         const trackingSnap = await getDocs(trackingQ as any);
+        
+        console.log(`🔍 OrderService: Querying ALL ordersSellingTracking for orderId=${orderId}`);
+        console.log(`📊 Found ${trackingSnap?.docs?.length || 0} total tracking entries`);
+        
         if (trackingSnap && !trackingSnap.empty) {
           for (const d of trackingSnap.docs) {
             const data: any = d.data() || {};
             const lineTotal = Number(data.total || data.lineTotal || (Number(data.price || 0) * Number(data.quantity || 0)) || 0);
+            const itemQty = Number(data.quantity || 0);
+            console.log(`  📦 Tracking entry:`, { 
+              id: d.id, 
+              status: data.status, 
+              quantity: itemQty, 
+              lineTotal,
+              productName: data.productName 
+            });
             amount += lineTotal;
-            qty += Number(data.quantity || 0);
+            qty += itemQty;
             companyId = companyId || data.companyId || '';
             storeId = storeId || data.storeId || '';
           }
+          console.log(`✅ Total from tracking: amount=${amount}, qty=${qty}`);
         } else {
+          console.log(`⚠️ No tracking entries found, falling back to order document`);
+
           // Fallback to order document if tracking entries are not yet present
           const orderRef = clientDoc(this.firestore, 'orders', orderId);
           const orderSnap = await getDoc(orderRef as any);
@@ -483,12 +493,14 @@ async updateOrderStatus(orderId: string, status: string, reason?: string): Promi
             qty = Array.isArray(data.items) ? data.items.reduce((s: number, it: any) => s + Number(it.quantity || 0), 0) : 0;
             companyId = data.companyId || '';
             storeId = data.storeId || '';
+            console.log(`📄 Fallback order data: amount=${amount}, qty=${qty}, items=${data.items?.length || 0}`);
           }
         }
 
         try {
           const safeAmount = Number(amount || 0);
           const safeQty = Number(qty || 0);
+          console.log(`💾 Recording ledger event: eventType=${mappedStatus}, amount=${safeAmount}, qty=${safeQty}`);
           await this.ledgerService.recordEvent(companyId, storeId, orderId, mappedStatus as any, safeAmount, safeQty, performedBy);
           this.logger.info('Ledger entry created for status change', { area: 'orders', docId: orderId, payload: { status, amount: safeAmount, qty: safeQty } });
         } catch (ledgerErr) {
