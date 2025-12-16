@@ -12,6 +12,7 @@ import { ExpenseService } from '../../../services/expense.service';
 import { ExpenseLog } from '../../../interfaces/expense-log.interface';
 import { LedgerService } from '../../../services/ledger.service';
 import { OrdersSellingTrackingService } from '../../../services/orders-selling-tracking.service';
+import { Firestore, collection, query, where, orderBy, limit, getDocs } from '@angular/fire/firestore';
 
 @Component({
   selector: 'app-overview',
@@ -96,8 +97,8 @@ import { OrdersSellingTrackingService } from '../../../services/orders-selling-t
                 <div class="card-value">{{ totalOrders() }}</div>
                 <div class="card-label">Total Orders</div>
                 <div class="card-change">
-                  <span class="change-icon">↗</span>
-                  <span class="change-text">10.5% From Last Day</span>
+                  <span class="change-icon">{{ ordersChange().symbol }}</span>
+                  <span class="change-text">{{ ordersChange().percent | number:'1.1-1' }}% From Last Day</span>
                 </div>
               </div>
             </div>
@@ -161,8 +162,8 @@ import { OrdersSellingTrackingService } from '../../../services/orders-selling-t
                 <div class="card-value">{{ totalCustomers() }}</div>
                 <div class="card-label">Total Customers</div>
                 <div class="card-change">
-                  <span class="change-icon">↗</span>
-                  <span class="change-text">10.5% From Last Day</span>
+                  <span class="change-icon">{{ customersChange().symbol }}</span>
+                  <span class="change-text">{{ customersChange().percent | number:'1.1-1' }}% From Last Day</span>
                 </div>
               </div>
             </div>
@@ -241,27 +242,52 @@ import { OrdersSellingTrackingService } from '../../../services/orders-selling-t
                   <div class="bars">
                     <div class="bar-row">
                       <div class="bar-label">Completed</div>
-                      <div class="bar"><div class="bar-fill completed" [style.width.%]="salesAnalytics().completed.percentage"></div></div>
+                      <div class="bar">
+                        <div class="bar-fill" 
+                             [class.completed]="salesAnalytics().completed.percentage > 0"
+                             [class.no-data]="salesAnalytics().completed.percentage === 0"
+                             [style.width.%]="salesAnalytics().completed.percentage || 100"></div>
+                      </div>
                       <div class="bar-percent">{{ salesAnalytics().completed.percentage | number:'1.1-1' }}%</div>
                     </div>
                     <div class="bar-row">
                       <div class="bar-label">Cancelled</div>
-                      <div class="bar"><div class="bar-fill cancelled" [style.width.%]="salesAnalytics().cancelled.percentage"></div></div>
+                      <div class="bar">
+                        <div class="bar-fill" 
+                             [class.cancelled]="salesAnalytics().cancelled.percentage > 0"
+                             [class.no-data]="salesAnalytics().cancelled.percentage === 0"
+                             [style.width.%]="salesAnalytics().cancelled.percentage || 100"></div>
+                      </div>
                       <div class="bar-percent">{{ salesAnalytics().cancelled.percentage | number:'1.1-1' }}%</div>
                     </div>
                     <div class="bar-row">
                       <div class="bar-label">Returned</div>
-                      <div class="bar"><div class="bar-fill returned" [style.width.%]="salesAnalytics().returned.percentage"></div></div>
+                      <div class="bar">
+                        <div class="bar-fill" 
+                             [class.returned]="salesAnalytics().returned.percentage > 0"
+                             [class.no-data]="salesAnalytics().returned.percentage === 0"
+                             [style.width.%]="salesAnalytics().returned.percentage || 100"></div>
+                      </div>
                       <div class="bar-percent">{{ salesAnalytics().returned.percentage | number:'1.1-1' }}%</div>
                     </div>
                     <div class="bar-row">
                       <div class="bar-label">Refunded</div>
-                      <div class="bar"><div class="bar-fill refunded" [style.width.%]="salesAnalytics().refunded.percentage"></div></div>
+                      <div class="bar">
+                        <div class="bar-fill" 
+                             [class.refunded]="salesAnalytics().refunded.percentage > 0"
+                             [class.no-data]="salesAnalytics().refunded.percentage === 0"
+                             [style.width.%]="salesAnalytics().refunded.percentage || 100"></div>
+                      </div>
                       <div class="bar-percent">{{ salesAnalytics().refunded.percentage | number:'1.1-1' }}%</div>
                     </div>
                     <div class="bar-row">
                       <div class="bar-label">Damage</div>
-                      <div class="bar"><div class="bar-fill damage" [style.width.%]="salesAnalytics().damage.percentage"></div></div>
+                      <div class="bar">
+                        <div class="bar-fill" 
+                             [class.damage]="salesAnalytics().damage.percentage > 0"
+                             [class.no-data]="salesAnalytics().damage.percentage === 0"
+                             [style.width.%]="salesAnalytics().damage.percentage || 100"></div>
+                      </div>
                       <div class="bar-percent">{{ salesAnalytics().damage.percentage | number:'1.1-1' }}%</div>
                     </div>
                   </div>
@@ -929,6 +955,7 @@ import { OrdersSellingTrackingService } from '../../../services/orders-selling-t
     .bar-fill.returned { background:#f97316; }
     .bar-fill.refunded { background:#f59e0b; }
     .bar-fill.damage { background:#8b5cf6; }
+    .bar-fill.no-data { background:#eab308; }
     .bar-percent { width:48px; text-align:right; font-weight:600; color:#111827; }
 
     /* Orders Overview pie chart */
@@ -975,6 +1002,7 @@ export class OverviewComponent implements OnInit {
   private expenseService = inject(ExpenseService);
   private ledgerService = inject(LedgerService);
   private ordersSellingTrackingService = inject(OrdersSellingTrackingService);
+  private firestore = inject(Firestore);
 
   // Signals
   protected stores = signal<Store[]>([]);
@@ -1084,12 +1112,12 @@ export class OverviewComponent implements OnInit {
   });
   
   protected totalRevenue = computed(() => {
-    // Always use filtered orders to reflect the selected period
-    return this.filteredOrders().reduce((s, o) => s + (Number(o.netAmount ?? o.totalAmount ?? 0) || 0), 0);
+    // Use ledger balance from orderAccountingLedger
+    return this.ledgerTotalRevenue();
   });
-  // Always use filtered orders count to reflect the selected period
+  // Use ledger order count from orderAccountingLedger
   protected totalOrders = computed(() => {
-    return this.filteredOrders().length;
+    return this.ledgerTotalOrders();
   });
   // Total expenses shown on the card should reflect month-to-date totals
   protected totalExpenses = computed(() => this.monthExpensesTotal());
@@ -1123,7 +1151,6 @@ export class OverviewComponent implements OnInit {
     }).length;
   });
 
-  // Revenue for a specific day (sums netAmount/totalAmount)
   protected revenueForDay = (date: Date) => {
     const start = new Date(date); start.setHours(0,0,0,0);
     const end = new Date(date); end.setHours(23,59,59,999);
@@ -1139,19 +1166,20 @@ export class OverviewComponent implements OnInit {
     }, 0);
   }
 
-  // Compute percent change for revenue: compare today vs yesterday
+  // Store yesterday's revenue and orders for comparison
+  protected yesterdayRevenue = signal<number>(0);
+  protected yesterdayOrders = signal<number>(0);
+
   protected revenueChange = computed(() => {
     try {
-      const now = new Date();
-      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0,0,0,0);
-      const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1);
-
-      const revToday = this.revenueForDay(today);
-      const revYesterday = this.revenueForDay(yesterday);
+      // Use ledger total revenue for the current selected period
+      const revToday = this.ledgerTotalRevenue();
+      const revYesterday = this.yesterdayRevenue();
       const diff = revToday - revYesterday;
 
       const percent = (() => {
-        if (revYesterday === 0) return (revToday === 0 ? 0 : 100);
+        if (revYesterday === 0 && revToday === 0) return 0;
+        if (revYesterday === 0) return 100;
         const raw = (Math.abs(diff) / revYesterday) * 100;
         return Math.round(raw * 10) / 10; // one decimal place
       })();
@@ -1162,6 +1190,69 @@ export class OverviewComponent implements OnInit {
       return { symbol: '→', percent: 0, diff: 0, revToday: 0, revYesterday: 0 };
     }
   });
+
+  protected ordersChange = computed(() => {
+    try {
+      const ordersToday = this.ledgerTotalOrders();
+      const ordersYesterday = this.yesterdayOrders();
+      const diff = ordersToday - ordersYesterday;
+
+      const percent = (() => {
+        if (ordersYesterday === 0 && ordersToday === 0) return 0;
+        if (ordersYesterday === 0) return 100;
+        const raw = (Math.abs(diff) / ordersYesterday) * 100;
+        return Math.round(raw * 10) / 10;
+      })();
+
+      const symbol = diff > 0 ? '↗' : (diff < 0 ? '↘' : '→');
+      return { symbol, percent };
+    } catch (e) {
+      return { symbol: '→', percent: 0 };
+    }
+  });
+
+  protected customersChange = computed(() => {
+    try {
+      const customersToday = this.totalCustomers();
+      // For now, return neutral since we don't track yesterday's customers yet
+      return { symbol: '→', percent: 0 };
+    } catch (e) {
+      return { symbol: '→', percent: 0 };
+    }
+  });
+
+  // Fetch yesterday's revenue for comparison
+  protected async fetchYesterdayRevenue(): Promise<void> {
+    try {
+      const companyId = this.authService.getCurrentPermission()?.companyId || '';
+      const storeId = this.selectedStoreId() || this.authService.getCurrentPermission()?.storeId;
+      if (!companyId || !storeId) {
+        this.yesterdayRevenue.set(0);
+        this.yesterdayOrders.set(0);
+        return;
+      }
+
+      // Calculate yesterday's date (today - 1 day)
+      const today = new Date();
+      const yesterday = new Date(today);
+      yesterday.setDate(today.getDate() - 1);
+
+      // Use the same ledger service method as today's data, but with yesterday's date
+      const ledger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, yesterday, 'completed');
+      
+      if (ledger) {
+        this.yesterdayRevenue.set(Number(ledger.runningBalanceAmount || 0));
+        this.yesterdayOrders.set(Number(ledger.runningBalanceOrderQty || ledger.runningBalanceQty || 0));
+      } else {
+        this.yesterdayRevenue.set(0);
+        this.yesterdayOrders.set(0);
+      }
+    } catch (error) {
+      console.error('Error fetching yesterday revenue:', error);
+      this.yesterdayRevenue.set(0);
+      this.yesterdayOrders.set(0);
+    }
+  }
   protected monthOrders = computed(() => {
     const now = new Date();
     const m = now.getMonth(); const y = now.getFullYear();
@@ -1442,16 +1533,9 @@ export class OverviewComponent implements OnInit {
         console.log('📋 Dashboard sample order:', this.orders()[0]);
       }
 
-      // Fetch ledger-driven totals (orders running balances) for display
+      // Fetch ledger-driven totals from orderAccountingLedger for the selected period
       try {
-        const currentPermission = this.authService.getCurrentPermission();
-        const companyId = currentPermission?.companyId || '';
-        const storeId = this.selectedStoreId() || this.authService.getCurrentPermission()?.storeId || '';
-        const end = endDate || new Date();
-        const orderBalances = await this.ledgerService.getLatestOrderBalances(companyId, storeId, end, 'completed');
-        this.ledgerTotalRevenue.set(Number(orderBalances.runningBalanceAmount || 0));
-        // Use runningBalanceQty for total orders and prefer runningBalanceOrderQty if present
-        this.ledgerTotalOrders.set(Number(orderBalances.runningBalanceOrderQty || orderBalances.runningBalanceQty || 0));
+        await this.fetchLedgerTotalsForPeriod(startDate, endDate);
       } catch (err) {
         console.warn('Overview: failed to load ledger totals', err);
       }
@@ -1523,6 +1607,14 @@ export class OverviewComponent implements OnInit {
       damage: { count: damageCount, percentage: 0 }
     };
 
+    // If there's no actual data (all counts are 0), show 0% for all
+    const hasData = completedCount > 0 || cancelledCount > 0 || returnedCount > 0 || refundedCount > 0 || damageCount > 0;
+    
+    if (!hasData) {
+      // No data - show all 0%
+      return result;
+    }
+
     // Compute percentages with one decimal place
     let accumulated = 0;
     for (const k of Object.keys(result)) {
@@ -1553,10 +1645,16 @@ export class OverviewComponent implements OnInit {
       { color: '#8b5cf6', pct: Number(sa.damage?.percentage || 0) }
     ];
 
-    // Ensure values are numeric and normalize rounding if needed
-    const total = segments.reduce((s, x) => s + (isFinite(x.pct) ? x.pct : 0), 0) || 100;
+    // Check if there's any data
+    const total = segments.reduce((s, x) => s + (isFinite(x.pct) ? x.pct : 0), 0);
+    
+    // If no data, show default yellow color
+    if (total === 0) {
+      return `conic-gradient(#eab308 0% 100%)`;
+    }
+
     // If total is not 100, scale values to fit 100
-    const scale = total === 0 ? 0 : 100 / total;
+    const scale = 100 / total;
     let acc = 0;
     const stops: string[] = [];
     for (const seg of segments) {
@@ -1807,6 +1905,9 @@ export class OverviewComponent implements OnInit {
 
       console.log('📈 Analytics data loaded:', this.orders().length, 'orders');
       
+      // Fetch yesterday's revenue for comparison (don't block on this)
+      this.fetchYesterdayRevenue().catch(err => console.error('Failed to fetch yesterday revenue:', err));
+      
     } catch (error) {
       console.error('❌ Error loading analytics data:', error);
     } finally {
@@ -1920,4 +2021,77 @@ export class OverviewComponent implements OnInit {
       return '';
     }
   });
+
+  /**
+   * Fetch ledger totals from orderAccountingLedger for the selected period.
+   * Gets the last ledger entry for each day and sums their running balances.
+   * This gives accurate daily totals that accumulate to monthly totals.
+   */
+  private async fetchLedgerTotalsForPeriod(startDate: Date | null, endDate: Date | null): Promise<void> {
+    try {
+      const currentPermission = this.authService.getCurrentPermission();
+      const companyId = currentPermission?.companyId || '';
+      const storeId = this.selectedStoreId() || this.authService.getCurrentPermission()?.storeId || '';
+      
+      if (!startDate || !endDate) {
+        this.ledgerTotalRevenue.set(0);
+        this.ledgerTotalOrders.set(0);
+        return;
+      }
+
+      console.log(`🔍 Querying daily ledger balances from ${startDate.toISOString()} to ${endDate.toISOString()}`);
+      
+      // Query all ledger entries within the date range
+      const q = query(
+        collection(this.firestore, 'orderAccountingLedger'),
+        where('companyId', '==', companyId),
+        where('storeId', '==', storeId),
+        where('eventType', '==', 'completed'),
+        where('createdAt', '>=', startDate),
+        where('createdAt', '<=', endDate),
+        orderBy('createdAt', 'desc'),
+        limit(2000)
+      );
+
+      const snaps = await getDocs(q);
+      console.log(`📦 Found ${snaps.docs.length} ledger entries`);
+      
+      // Group by day and get the latest (first in desc order) entry for each day
+      const dailyBalances = new Map<string, { amount: number; orders: number }>();
+      
+      snaps.docs.forEach(doc => {
+        const d: any = doc.data();
+        if (d && d.createdAt) {
+          const createdDate = d.createdAt?.toDate ? d.createdAt.toDate() : new Date(d.createdAt);
+          const dayKey = createdDate.toISOString().split('T')[0]; // YYYY-MM-DD
+          
+          // Only take the first (latest) entry for each day since we sorted desc
+          if (!dailyBalances.has(dayKey)) {
+            dailyBalances.set(dayKey, {
+              amount: Number(d.runningBalanceAmount || 0),
+              orders: Number(d.runningBalanceOrderQty || d.runningBalanceQty || 0)
+            });
+            console.log(`  📅 ${dayKey}: ₱${d.runningBalanceAmount} (${d.runningBalanceOrderQty || d.runningBalanceQty} orders)`);
+          }
+        }
+      });
+
+      // Sum all daily running balances
+      let totalAmount = 0;
+      let totalOrders = 0;
+      dailyBalances.forEach((balance, day) => {
+        totalAmount += balance.amount;
+        totalOrders += balance.orders;
+      });
+
+      this.ledgerTotalRevenue.set(totalAmount);
+      this.ledgerTotalOrders.set(totalOrders);
+      
+      console.log(`📊 Total for ${dailyBalances.size} days: Revenue=₱${totalAmount}, Orders=${totalOrders}`);
+    } catch (err) {
+      console.error('fetchLedgerTotalsForPeriod error:', err);
+      this.ledgerTotalRevenue.set(0);
+      this.ledgerTotalOrders.set(0);
+    }
+  }
 }

@@ -83,8 +83,10 @@ export class InventoryService {
       const productCode = (product && product.productCode) ? product.productCode : (data.productCode || '');
       const sku = (product && product.skuId) ? product.skuId : (data.sku || '');
 
-      const costPrice = Number(product?.originalPrice ?? 0) || 0;
-      const batchId: string | null = data.batchNumber ? String(data.batchNumber) : null;
+      // Use costPrice directly from inventoryDeductions (per-batch cost)
+      const costPrice = Number(data.costPrice || 0) || 0;
+      
+      const batchId: string | null = data.batchId ? String(data.batchId) : null;
 
       const sellingPrice = Number(product?.sellingPrice ?? data.price ?? 0) || 0;
       const profitPerUnit = +(sellingPrice - costPrice);
@@ -137,8 +139,10 @@ export class InventoryService {
         const productCode = (product && product.productCode) ? product.productCode : (data.productCode || '');
         const sku = (product && product.skuId) ? product.skuId : (data.sku || '');
 
-        const costPrice = Number(product?.originalPrice ?? 0) || 0;
-        const batchId: string | null = data.batchNumber ? String(data.batchNumber) : null;
+        // Use costPrice directly from inventoryDeductions (per-batch cost)
+        const costPrice = Number(data.costPrice || 0) || 0;
+        
+        const batchId: string | null = data.batchId ? String(data.batchId) : null;
 
         const sellingPrice = Number(product?.sellingPrice ?? data.price ?? 0) || 0;
         const profitPerUnit = +(sellingPrice - costPrice);
@@ -173,8 +177,8 @@ async loadRowsForPeriod(period: string, page: number = 1): Promise<void> {
   this.currentPage.set(page);
 
   try {
-    const trackingColName = 'ordersSellingTracking';
-    const filters: any[] = [where('status', '==', 'completed')];
+    const trackingColName = 'inventoryDeductions';
+    const filters: any[] = [];
 
     const now = new Date();
     let updatedAtRange: { start?: Date | null; end?: Date | null } | undefined;

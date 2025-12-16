@@ -70,8 +70,8 @@ export class OrderService {
       // BIR Fields
       exemptionId: data.exemptionId,
       signature: data.signature,
-      atpOrOcn: data.atpOrOcn || 'OCN-2025-001234',
-      birPermitNo: data.birPermitNo || 'BIR-PERMIT-2025-56789',
+      atpOrOcn: data.atpOrOcn || 'OCN-0000-00000',
+      birPermitNo: data.birPermitNo || 'BIR-PERMIT-0000-00000',
       inclusiveSerialNumber: data.inclusiveSerialNumber || '000001-000999',
       
       // System Fields

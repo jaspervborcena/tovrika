@@ -34,13 +34,18 @@ export class LedgerService {
   performedBy: string
 ): Promise<any> {
   try {
-    // Query latest ledger entry for this company/store (any eventType)
+    // Get start of today to reset balances daily
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+    
+    // Query latest ledger entry for this company/store/eventType from TODAY only
     const q = query(
       collection(this.firestore, 'orderAccountingLedger'),
       where('companyId', '==', companyId),
       where('storeId', '==', storeId),
       where('eventType', '==', eventType),
-      orderBy('createdAtClient', 'desc'),
+      where('createdAt', '>=', startOfToday),
+      orderBy('createdAt', 'desc'),
       limit(1)
     );
 
@@ -75,7 +80,6 @@ export class LedgerService {
       runningBalanceQty: newBalanceQty,
       runningBalanceOrderQty: newOrderBalanceQty,
       createdAt: new Date(),
-      createdAtClient: new Date(),
       createdBy: performedBy
     };
 
@@ -110,27 +114,38 @@ export class LedgerService {
     eventType: 'completed' | 'return' | 'refund' | 'cancel' | 'damage' = 'completed'
   ): Promise<{ runningBalanceAmount: number; runningBalanceQty: number; runningBalanceOrderQty: number }> {
     try {
-      const res = await this.getLatestBalance(companyId, storeId, date, eventType);
-      // getLatestBalance returns amount/qty for that eventType; for order-specific order qty we do another quick fetch
-      const startOfDay = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+      const startOfDay = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0, 0);
+      const endOfDay = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59, 999);
+      
+      // Query for the latest ledger entry for the specified eventType on the specified date
       const q = query(
         collection(this.firestore, 'orderAccountingLedger'),
         where('companyId', '==', companyId),
         where('storeId', '==', storeId),
-        where('createdAtClient', '>=', startOfDay),
-        orderBy('createdAtClient', 'desc'),
-        limit(1)
+        where('eventType', '==', eventType),
+        orderBy('createdAt', 'desc')
       );
+      
       const snaps = await getDocs(q);
-      if (!snaps.empty) {
-        const d: any = snaps.docs[0].data();
+      
+      // Filter client-side for the specific date range
+      const filteredDocs = snaps.docs.filter(doc => {
+        const data = doc.data();
+        const createdAt = data['createdAt']?.toDate?.();
+        if (!createdAt) return false;
+        return createdAt >= startOfDay && createdAt <= endOfDay;
+      });
+      
+      if (filteredDocs.length > 0) {
+        const d: any = filteredDocs[0].data();
         return {
-          runningBalanceAmount: Number(d.runningBalanceAmount || res.amount || 0),
-          runningBalanceQty: Number(d.runningBalanceQty || res.qty || 0),
+          runningBalanceAmount: Number(d.runningBalanceAmount || 0),
+          runningBalanceQty: Number(d.runningBalanceQty || 0),
           runningBalanceOrderQty: Number(d.runningBalanceOrderQty || 0)
         };
       }
-      return { runningBalanceAmount: res.amount || 0, runningBalanceQty: res.qty || 0, runningBalanceOrderQty: 0 };
+      
+      return { runningBalanceAmount: 0, runningBalanceQty: 0, runningBalanceOrderQty: 0 };
     } catch (err) {
       console.warn('LedgerService.getLatestOrderBalances fallback', err);
       return { runningBalanceAmount: 0, runningBalanceQty: 0, runningBalanceOrderQty: 0 };
@@ -139,7 +154,7 @@ export class LedgerService {
 
   /**
    * Sum ledger amounts for given eventTypes within a date range.
-   * Uses client-side filtering after querying by company/store + createdAtClient range.
+   * Uses client-side filtering after querying by company/store + createdAt range.
    */
   async sumEventsInRange(
     companyId: string,
@@ -153,9 +168,9 @@ export class LedgerService {
         collection(this.firestore, 'orderAccountingLedger'),
         where('companyId', '==', companyId),
         where('storeId', '==', storeId),
-        where('createdAtClient', '>=', startDate),
-        where('createdAtClient', '<=', endDate),
-        orderBy('createdAtClient', 'asc'),
+        where('createdAt', '>=', startDate),
+        where('createdAt', '<=', endDate),
+        orderBy('createdAt', 'asc'),
         limit(2000)
       );
 
@@ -190,10 +205,10 @@ export class LedgerService {
         collection(this.firestore, 'orderAccountingLedger'),
         where('companyId', '==', companyId),
         where('storeId', '==', storeId),
-        where('createdAtClient', '>=', startDate),
-        where('createdAtClient', '<=', endDate),
-        orderBy('createdAtClient', 'asc'),
-        limit(2000)
+        where('createdAt', '>=', startDate),
+        where('createdAt', '<=', endDate),
+        orderBy('createdAt', 'desc'),
+        limit(1)
       );
 
       const snaps = await getDocs(q);
@@ -245,7 +260,9 @@ export class LedgerService {
             where('companyId', '==', companyId),
             where('storeId', '==', storeId),
             where('eventType', '==', et),
-            orderBy('createdAtClient', 'desc'),
+            where('createdAt', '>=', startDate),
+            where('createdAt', '<=', endDate),
+            orderBy('createdAt', 'desc'),
             limit(1)
           );
 
@@ -255,12 +272,10 @@ export class LedgerService {
           const d: any = snapsType.docs[0].data();
           if (!d) continue;
 
-          // Normalize createdAtClient to Date where possible
+          // Normalize createdAt to Date
           let created: Date | null = null;
           try {
-            if (d.createdAtClient) {
-              created = (d.createdAtClient instanceof Date) ? d.createdAtClient : new Date(d.createdAtClient);
-            } else if (d.createdAt && typeof d.createdAt.toDate === 'function') {
+            if (d.createdAt && typeof d.createdAt.toDate === 'function') {
               created = d.createdAt.toDate();
             } else if (d.createdAt) {
               created = new Date(d.createdAt);
@@ -323,8 +338,8 @@ export class LedgerService {
         where('companyId', '==', companyId),
         where('storeId', '==', storeId),
         where('eventType', '==', eventType),
-        where('createdAtClient', '>=', startOfDay),
-        orderBy('createdAtClient', 'desc'),
+        where('createdAt', '>=', startOfDay),
+        orderBy('createdAt', 'desc'),
         limit(1)
       );
 
@@ -354,7 +369,7 @@ export class LedgerService {
           for (const d of recentSnaps.docs) {
             const data: any = d.data();
             if (data.companyId !== companyId || data.storeId !== storeId || data.eventType !== eventType) continue;
-            const created = data.createdAtClient ? new Date(data.createdAtClient) : (data.createdAt && typeof data.createdAt.toDate === 'function' ? data.createdAt.toDate() : new Date(data.createdAt));
+            const created = data.createdAt && typeof data.createdAt.toDate === 'function' ? data.createdAt.toDate() : new Date(data.createdAt);
             if (created >= startOfDay) {
               return { amount: Number(data.runningBalanceAmount || 0), qty: Number(data.runningBalanceQty || 0) };
             }

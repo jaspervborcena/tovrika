@@ -1,6 +1,6 @@
 import { Injectable, inject } from '@angular/core';
 import { Firestore, collection, query, where } from '@angular/fire/firestore';
-import { getDocs, getDoc, doc, setDoc, runTransaction, orderBy, limit, getAggregateFromServer, count } from 'firebase/firestore';
+import { getDocs, getDoc, doc, setDoc, updateDoc, runTransaction, orderBy, limit, getAggregateFromServer, count } from 'firebase/firestore';
 import { toDateValue } from '../core/utils/date-utils';
 import { OfflineDocumentService } from '../core/services/offline-document.service';
 import { OrdersSellingTrackingDoc } from '../interfaces/orders-selling-tracking.interface';
@@ -1024,73 +1024,197 @@ async markOrderTrackingDamaged(orderId: string, damagedBy?: string, reason?: str
 
     let idx = 0;
     for (const it of items) {
-      const docData: OrdersSellingTrackingDoc = {
-        companyId: ctx.companyId,
-        storeId: ctx.storeId,
-        orderId: ctx.orderId,
-        // Use provided invoiceNumber where available
-        // batchNumber defaults to 1 for now (can be set by caller)
-        batchNumber: (it as any).batchNumber || 1,
-        createdAt: new Date(),
-        createdBy: ctx.cashierId,
-        uid: ctx.cashierId,
-        status: 'processing',
-
-        // item details
-        itemIndex: idx,
-        orderDetailsId: (it as any).orderDetailsId || undefined,
-        productId: it.productId,
-        productName: it.productName,
-        price: it.unitPrice,
-        quantity: it.quantity,
-        // Defaults for fields not provided by caller
-        discount: (it as any).discount ?? 0,
-        discountType: (it as any).discountType ?? 'none',
-        vat: (it as any).vat ?? 0,
-        total: it.lineTotal,
-        isVatExempt: !!((it as any).isVatExempt),
-
-        // legacy cashier info
-        cashierId: ctx.cashierId,
-        cashierEmail: ctx.cashierEmail,
-        cashierName: ctx.cashierName
-        // include optional fields expected by interface
-        ,
-        productCode: (it as any).productCode || undefined,
-        sku: (it as any).sku || undefined,
-        cost: (it as any).cost || undefined,
-        number: (it as any).number || undefined
-      } as OrdersSellingTrackingDoc;
-
       try {
+        // Step 1: Find batches for this product using FIFO (oldest first, active only)
+        // Ultra-simplified query to avoid ANY composite index - only use equality filters
+        const batchesQuery = query(
+          collection(this.firestore, 'productInventory'),
+          where('productId', '==', it.productId),
+          where('storeId', '==', ctx.storeId),
+          limit(100) // Get more batches since we're filtering/sorting client-side
+        );
+
+        const batchesSnapshot = await getDocs(batchesQuery);
+        const allBatches = batchesSnapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        })) as Array<any>;
+        
+        // Filter and sort client-side: active status, quantity > 0, matching companyId, FIFO order
+        const batches = allBatches
+          .filter(b => 
+            b.companyId === ctx.companyId &&
+            (b.status || '').toLowerCase() === 'active' &&
+            (b.quantity || 0) > 0
+          )
+          .sort((a, b) => {
+            // Sort by batchId ascending (FIFO - oldest first, batchId contains timestamp)
+            const aBatchId = String(a.batchId || '');
+            const bBatchId = String(b.batchId || '');
+            if (aBatchId && bBatchId) {
+              return aBatchId.localeCompare(bBatchId);
+            }
+            // Fallback to receivedAt if batchId not available
+            const aTime = a.receivedAt?.toDate?.()?.getTime() || a.receivedAt?.getTime?.() || 0;
+            const bTime = b.receivedAt?.toDate?.()?.getTime() || b.receivedAt?.getTime?.() || 0;
+            return aTime - bTime;
+          })
+          .slice(0, 20); // Take first 20 after filtering and sorting
+
+        console.log(`📦 Found ${batches.length} active batches with stock for product ${it.productId} (FIFO sorted)`);
+
+        // Step 2: Deduct quantity from batches using FIFO and track deductions
+        let remainingQty = it.quantity;
+        const batchDeductions: Array<{
+          batchId: string;
+          refId: string;
+          costPrice: number;
+          deductedQty: number;
+        }> = [];
+
+        for (const batch of batches) {
+          if (remainingQty <= 0) break;
+
+          const availableQty = batch.quantity || 0;
+          const deductQty = Math.min(remainingQty, availableQty);
+
+          // Update the batch quantity in productInventory
+          const batchRef = doc(this.firestore, 'productInventory', batch.id);
+          const newQty = availableQty - deductQty;
+          const newTotalDeducted = (batch.totalDeducted || 0) + deductQty;
+
+          await updateDoc(batchRef, {
+            quantity: newQty,
+            totalDeducted: newTotalDeducted,
+            status: newQty === 0 ? 'depleted' : 'active',
+            updatedAt: new Date(),
+            updatedBy: ctx.cashierId
+          });
+
+          // Only record deductions for batches where we actually deducted (qty > 0)
+          if (deductQty > 0) {
+            batchDeductions.push({
+              batchId: batch.batchId || batch.id,
+              refId: batch.id, // productInventory document ID
+              costPrice: batch.costPrice || batch.unitPrice || 0,
+              deductedQty: deductQty
+            });
+          }
+
+          remainingQty -= deductQty;
+
+          console.log(`✅ Deducted ${deductQty} from batch ${batch.batchId}, remaining in batch: ${newQty}`);
+        }
+
+        // Step 3: Create inventoryDeductions records (one per batch used, sorted by batchId asc)
+        // Sort by batchId ascending before creating records
+        batchDeductions.sort((a, b) => a.batchId.localeCompare(b.batchId));
+
+        for (const deduction of batchDeductions) {
+          const deductionDoc = {
+            companyId: ctx.companyId,
+            storeId: ctx.storeId,
+            orderId: ctx.orderId,
+            invoiceNumber: ctx.invoiceNumber || '',
+            productId: it.productId,
+            productCode: (it as any).productCode || '',
+            sku: (it as any).sku || it.productId,
+            productName: it.productName || '',
+            
+            // Batch info
+            batchId: deduction.batchId,
+            refId: deduction.refId, // productInventory document ID
+            costPrice: deduction.costPrice,
+            
+            // Deduction details
+            quantity: deduction.deductedQty,
+            deductedAt: this.sanitizeForFirestore(new Date()),
+            
+            // Audit
+            deductedBy: ctx.cashierId,
+            createdAt: this.sanitizeForFirestore(new Date())
+          };
+
+          await this.offlineDocService.createDocument('inventoryDeductions', deductionDoc as any);
+          console.log(`📝 Created deduction log: batch=${deduction.batchId}, qty=${deduction.deductedQty}, cost=₱${deduction.costPrice}`);
+        }
+
+        if (remainingQty > 0) {
+          console.warn(`⚠️ Insufficient stock for product ${it.productId}. Short by ${remainingQty} units.`);
+          errors.push({
+            productId: it.productId,
+            error: `Insufficient stock. Short by ${remainingQty} units.`
+          });
+        }
+
+        // Calculate weighted average cost from all batches used
+        console.log(`💰 Calculating weighted average for ${it.productId}:`);
+        let totalCost = 0;
+        batchDeductions.forEach((d, idx) => {
+          const batchTotal = d.costPrice * d.deductedQty;
+          console.log(`  Batch ${idx + 1}: ₱${d.costPrice} × ${d.deductedQty} = ₱${batchTotal}`);
+          totalCost += batchTotal;
+        });
+        const actualCost = batchDeductions.length > 0 ? totalCost / it.quantity : 0;
+        console.log(`  Total: ₱${totalCost} ÷ ${it.quantity} = ₱${actualCost.toFixed(2)} weighted average`);
+
+        // Step 4: Create ordersSellingTracking record with actual cost
+        const docData: OrdersSellingTrackingDoc = {
+          companyId: ctx.companyId,
+          storeId: ctx.storeId,
+          orderId: ctx.orderId,
+          batchNumber: (it as any).batchNumber || 1,
+          createdAt: new Date(),
+          createdBy: ctx.cashierId,
+          uid: ctx.cashierId,
+          status: 'processing',
+
+          itemIndex: idx,
+          orderDetailsId: (it as any).orderDetailsId || undefined,
+          productId: it.productId,
+          productName: it.productName,
+          productCode: (it as any).productCode || undefined,
+          sku: (it as any).sku || undefined,
+          cost: actualCost, // Actual weighted average cost from batches
+          price: it.unitPrice,
+          quantity: it.quantity,
+          discount: (it as any).discount ?? 0,
+          discountType: (it as any).discountType ?? 'none',
+          vat: (it as any).vat ?? 0,
+          total: it.lineTotal,
+          isVatExempt: !!((it as any).isVatExempt),
+
+          cashierId: ctx.cashierId,
+          cashierEmail: ctx.cashierEmail,
+          cashierName: ctx.cashierName,
+          number: (it as any).number || undefined
+        } as OrdersSellingTrackingDoc;
+
         await this.offlineDocService.createDocument(colName, docData as any);
         tracked++;
-      } catch (e) {
-        errors.push({ productId: it.productId, error: e });
-      }
 
-      idx++;
-
-      // Apply delta to product totalStock immediately (optimistic)
-      try {
+        // Step 5: Update product totalStock
         const product = this.productService.getProduct(it.productId);
-        const current = product?.totalStock ?? 0;
-        const newTotal = Math.max(0, current - it.quantity);
-        try {
+        if (product) {
+          const current = product.totalStock ?? 0;
+          const newTotal = Math.max(0, current - it.quantity);
+          
           await this.productService.updateProduct(it.productId, {
             totalStock: newTotal,
-            lastUpdated: new Date()
+            lastUpdated: new Date(),
+            updatedBy: ctx.cashierId
           } as any);
 
           console.log(`✅ Adjusted product ${it.productId} stock: ${current} -> ${newTotal}`);
           adjusted++;
-        } catch (updateErr) {
-          console.error(`⚠️ Failed to update product ${it.productId} totalStock. current=${current} calculatedNew=${newTotal}`, updateErr);
-          errors.push({ productId: it.productId, error: updateErr });
         }
+
       } catch (e) {
+        console.error(`❌ Error processing product ${it.productId}:`, e);
         errors.push({ productId: it.productId, error: e });
       }
+
+      idx++;
     }
 
     return { success: errors.length === 0, tracked, adjusted, errors };
