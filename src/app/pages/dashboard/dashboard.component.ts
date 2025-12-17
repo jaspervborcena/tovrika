@@ -102,35 +102,27 @@ export class DashboardComponent implements OnInit {
     if (!user) return;
 
     const currentPermission = this.authService.getCurrentPermission();
-    console.log('🔍 [Dashboard Debug] currentPermission:', currentPermission);
-    console.log('🔍 [Dashboard Debug] user.permissions:', user.permissions);
     
     // Check if BOTH companyId AND storeId exist
     if (!currentPermission?.companyId || !currentPermission?.storeId) {
-      console.log('🔍 [Dashboard Debug] Missing companyId or storeId, checking user permissions for role');
       
       // If either companyId or storeId is missing, check user's role directly from permissions
       if (currentPermission?.roleId) {
-        console.log('🔍 [Dashboard Debug] Found roleId in permissions:', currentPermission.roleId);
         
         if (currentPermission.roleId === 'cashier') {
-          console.log('🔍 [Dashboard Debug] Setting cashier permissions (no storeId/companyId required)');
           this.accessService.setPermissions({}, 'cashier');
           return;
         } else if (currentPermission.roleId === 'store_manager') {
-          console.log('🔍 [Dashboard Debug] Setting store_manager permissions (no storeId/companyId required)');
           this.accessService.setPermissions({}, 'store_manager');
           return;
         }
       }
       
       // If no specific role found or role is creator, default to creator (show all)
-      console.log('🔍 [Dashboard Debug] No specific role or creator role, setting as creator (show all)');
       this.accessService.setPermissions({}, 'creator');
       return;
     }
 
-    console.log('🔍 [Dashboard Debug] Both companyId and storeId exist, proceeding with userRoles lookup');
 
     // Try to get roleId from userRoles collection
     const userRolesRef = collection(this.firestore, 'userRoles');
@@ -142,16 +134,13 @@ export class DashboardComponent implements OnInit {
     );
     const userRolesSnap = await getDocs(userRolesQuery);
     let roleId: string | undefined;
-    console.log('🔍 [Dashboard Debug] userRolesSnap.empty:', userRolesSnap.empty);
     if (!userRolesSnap.empty) {
       const userRoleData = userRolesSnap.docs[0].data();
       roleId = userRoleData['roleId'];
-      console.log('🔍 [Dashboard Debug] Found roleId from userRoles:', roleId);
     } else {
       // Fallback: use roleId from permissions array if available
       if (currentPermission?.roleId) {
         roleId = currentPermission.roleId;
-        console.log('🔍 [Dashboard Debug] Using roleId from permissions array:', roleId);
       } else {
         // Final fallback: get user doc from Firestore and check permission field
         const userDocRef = collection(this.firestore, 'users');
@@ -160,7 +149,6 @@ export class DashboardComponent implements OnInit {
           const userDoc = userDocSnap.docs[0].data();
           if (userDoc['permission'] && userDoc['permission']['roleId']) {
             roleId = userDoc['permission']['roleId'];
-            console.log('🔍 [Dashboard Debug] Found roleId from user doc:', roleId);
           }
         }
       }
@@ -168,20 +156,15 @@ export class DashboardComponent implements OnInit {
 
     if (!roleId) {
       // If no roleId found, treat as creator
-      console.log('🔍 [Dashboard Debug] No roleId found, setting as creator');
       this.accessService.setPermissions({}, 'creator');
       return;
     }
 
-    console.log('🔍 [Dashboard Debug] Final roleId:', roleId);
     if (roleId === 'cashier') {
-      console.log('🔍 [Dashboard Debug] Setting cashier permissions');
       this.accessService.setPermissions({}, 'cashier');
     } else if (roleId === 'store_manager') {
-      console.log('🔍 [Dashboard Debug] Setting store_manager permissions');
       this.accessService.setPermissions({}, 'store_manager');
     } else if (roleId === 'creator') {
-      console.log('🔍 [Dashboard Debug] Setting creator permissions (built-in role)');
       this.accessService.setPermissions({}, 'creator');
     } else {
       // For other custom roles, use roledefinition permissions
@@ -195,14 +178,11 @@ export class DashboardComponent implements OnInit {
       if (!roleDefSnap.empty) {
         const roleDefData = roleDefSnap.docs[0].data();
         if (roleDefData['permissions']) {
-          console.log('🔍 [Dashboard Debug] Setting custom role permissions for:', roleId);
           this.accessService.setPermissions(roleDefData['permissions'], roleId);
         } else {
-          console.log('🔍 [Dashboard Debug] No custom permissions found, setting as creator');
           this.accessService.setPermissions({}, 'creator');
         }
       } else {
-        console.log('🔍 [Dashboard Debug] No role definition found, setting as creator');
         this.accessService.setPermissions({}, 'creator');
       }
     }
@@ -239,9 +219,6 @@ export class DashboardComponent implements OnInit {
 
   get permissions() {
     const currentPermissions = this.accessService.permissions || {};
-    console.log('🔍 [Dashboard] Current permissions getter called:', currentPermissions);
-    console.log('🔍 [Dashboard] canViewProducts:', currentPermissions.canViewProducts);
-    console.log('🔍 [Dashboard] canViewPOS:', currentPermissions.canViewPOS);
     return currentPermissions;
   }
 

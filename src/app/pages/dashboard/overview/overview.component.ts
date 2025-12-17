@@ -12,6 +12,7 @@ import { ExpenseService } from '../../../services/expense.service';
 import { ExpenseLog } from '../../../interfaces/expense-log.interface';
 import { LedgerService } from '../../../services/ledger.service';
 import { OrdersSellingTrackingService } from '../../../services/orders-selling-tracking.service';
+import { Firestore, collection, query, where, orderBy, limit, getDocs } from '@angular/fire/firestore';
 
 @Component({
   selector: 'app-overview',
@@ -80,7 +81,7 @@ import { OrdersSellingTrackingService } from '../../../services/orders-selling-t
                 <div class="card-label">Total Revenue</div>
                 <div class="card-change">
                   <span class="change-icon">{{ revenueChange().symbol }}</span>
-                  <span class="change-text">{{ revenueChange().percent | number:'1.1-1' }}% From Last Day</span>
+                  <span class="change-text">{{ revenueChange().percent | number:'1.1-1' }}% {{ comparisonLabel() }}</span>
                 </div>
               </div>
             </div>
@@ -96,8 +97,8 @@ import { OrdersSellingTrackingService } from '../../../services/orders-selling-t
                 <div class="card-value">{{ totalOrders() }}</div>
                 <div class="card-label">Total Orders</div>
                 <div class="card-change">
-                  <span class="change-icon">↗</span>
-                  <span class="change-text">10.5% From Last Day</span>
+                  <span class="change-icon">{{ ordersChange().symbol }}</span>
+                  <span class="change-text">{{ ordersChange().percent | number:'1.1-1' }}% {{ comparisonLabel() }}</span>
                 </div>
               </div>
             </div>
@@ -161,8 +162,8 @@ import { OrdersSellingTrackingService } from '../../../services/orders-selling-t
                 <div class="card-value">{{ totalCustomers() }}</div>
                 <div class="card-label">Total Customers</div>
                 <div class="card-change">
-                  <span class="change-icon">↗</span>
-                  <span class="change-text">10.5% From Last Day</span>
+                  <span class="change-icon">{{ customersChange().symbol }}</span>
+                  <span class="change-text">{{ customersChange().percent | number:'1.1-1' }}% From Last Day</span>
                 </div>
               </div>
             </div>
@@ -241,27 +242,52 @@ import { OrdersSellingTrackingService } from '../../../services/orders-selling-t
                   <div class="bars">
                     <div class="bar-row">
                       <div class="bar-label">Completed</div>
-                      <div class="bar"><div class="bar-fill completed" [style.width.%]="salesAnalytics().completed.percentage"></div></div>
+                      <div class="bar">
+                        <div class="bar-fill" 
+                             [class.completed]="salesAnalytics().completed.percentage > 0"
+                             [class.no-data]="salesAnalytics().completed.percentage === 0"
+                             [style.width.%]="salesAnalytics().completed.percentage || 100"></div>
+                      </div>
                       <div class="bar-percent">{{ salesAnalytics().completed.percentage | number:'1.1-1' }}%</div>
                     </div>
                     <div class="bar-row">
                       <div class="bar-label">Cancelled</div>
-                      <div class="bar"><div class="bar-fill cancelled" [style.width.%]="salesAnalytics().cancelled.percentage"></div></div>
+                      <div class="bar">
+                        <div class="bar-fill" 
+                             [class.cancelled]="salesAnalytics().cancelled.percentage > 0"
+                             [class.no-data]="salesAnalytics().cancelled.percentage === 0"
+                             [style.width.%]="salesAnalytics().cancelled.percentage || 100"></div>
+                      </div>
                       <div class="bar-percent">{{ salesAnalytics().cancelled.percentage | number:'1.1-1' }}%</div>
                     </div>
                     <div class="bar-row">
                       <div class="bar-label">Returned</div>
-                      <div class="bar"><div class="bar-fill returned" [style.width.%]="salesAnalytics().returned.percentage"></div></div>
+                      <div class="bar">
+                        <div class="bar-fill" 
+                             [class.returned]="salesAnalytics().returned.percentage > 0"
+                             [class.no-data]="salesAnalytics().returned.percentage === 0"
+                             [style.width.%]="salesAnalytics().returned.percentage || 100"></div>
+                      </div>
                       <div class="bar-percent">{{ salesAnalytics().returned.percentage | number:'1.1-1' }}%</div>
                     </div>
                     <div class="bar-row">
                       <div class="bar-label">Refunded</div>
-                      <div class="bar"><div class="bar-fill refunded" [style.width.%]="salesAnalytics().refunded.percentage"></div></div>
+                      <div class="bar">
+                        <div class="bar-fill" 
+                             [class.refunded]="salesAnalytics().refunded.percentage > 0"
+                             [class.no-data]="salesAnalytics().refunded.percentage === 0"
+                             [style.width.%]="salesAnalytics().refunded.percentage || 100"></div>
+                      </div>
                       <div class="bar-percent">{{ salesAnalytics().refunded.percentage | number:'1.1-1' }}%</div>
                     </div>
                     <div class="bar-row">
                       <div class="bar-label">Damage</div>
-                      <div class="bar"><div class="bar-fill damage" [style.width.%]="salesAnalytics().damage.percentage"></div></div>
+                      <div class="bar">
+                        <div class="bar-fill" 
+                             [class.damage]="salesAnalytics().damage.percentage > 0"
+                             [class.no-data]="salesAnalytics().damage.percentage === 0"
+                             [style.width.%]="salesAnalytics().damage.percentage || 100"></div>
+                      </div>
                       <div class="bar-percent">{{ salesAnalytics().damage.percentage | number:'1.1-1' }}%</div>
                     </div>
                   </div>
@@ -929,6 +955,7 @@ import { OrdersSellingTrackingService } from '../../../services/orders-selling-t
     .bar-fill.returned { background:#f97316; }
     .bar-fill.refunded { background:#f59e0b; }
     .bar-fill.damage { background:#8b5cf6; }
+    .bar-fill.no-data { background:#eab308; }
     .bar-percent { width:48px; text-align:right; font-weight:600; color:#111827; }
 
     /* Orders Overview pie chart */
@@ -975,6 +1002,7 @@ export class OverviewComponent implements OnInit {
   private expenseService = inject(ExpenseService);
   private ledgerService = inject(LedgerService);
   private ordersSellingTrackingService = inject(OrdersSellingTrackingService);
+  private firestore = inject(Firestore);
 
   // Signals
   protected stores = signal<Store[]>([]);
@@ -1012,9 +1040,13 @@ export class OverviewComponent implements OnInit {
     { key: 'previous_month', label: 'Previous Month' },
     { key: 'date_range', label: 'Date Range' }
   ];
-  protected selectedPeriod = signal<'today' | 'yesterday' | 'this_month' | 'previous_month' | 'date_range'>('today');
+  protected selectedPeriod = signal<'today' | 'yesterday' | 'this_month' | 'previous_month' | 'date_range'>('date_range');
   protected dateFrom = signal<string | null>(null); // YYYY-MM-DD
   protected dateTo = signal<string | null>(null);
+  protected dateRangeRevenue = signal<number>(0);
+  protected dateRangeOrders = signal<number>(0);
+  protected previousDateRangeRevenue = signal<number>(0);
+  protected previousDateRangeOrders = signal<number>(0);
 
   // Computed values
   protected currentUserName = computed(() => {
@@ -1084,12 +1116,30 @@ export class OverviewComponent implements OnInit {
   });
   
   protected totalRevenue = computed(() => {
-    // Always use filtered orders to reflect the selected period
-    return this.filteredOrders().reduce((s, o) => s + (Number(o.netAmount ?? o.totalAmount ?? 0) || 0), 0);
+    const period = this.selectedPeriod();
+    // Use monthly totals for this_month and previous_month periods
+    if (period === 'this_month') {
+      return this.currentMonthRevenue();
+    } else if (period === 'previous_month') {
+      return this.previousMonthRevenue();
+    } else if (period === 'date_range') {
+      return this.dateRangeRevenue();
+    }
+    // Use ledger balance from orderAccountingLedger for other periods
+    return this.ledgerTotalRevenue();
   });
-  // Always use filtered orders count to reflect the selected period
+  // Use ledger order count from orderAccountingLedger
   protected totalOrders = computed(() => {
-    return this.filteredOrders().length;
+    const period = this.selectedPeriod();
+    // Use monthly totals for this_month and previous_month periods
+    if (period === 'this_month') {
+      return this.currentMonthOrders();
+    } else if (period === 'previous_month') {
+      return this.previousMonthOrders();
+    } else if (period === 'date_range') {
+      return this.dateRangeOrders();
+    }
+    return this.ledgerTotalOrders();
   });
   // Total expenses shown on the card should reflect month-to-date totals
   protected totalExpenses = computed(() => this.monthExpensesTotal());
@@ -1123,7 +1173,6 @@ export class OverviewComponent implements OnInit {
     }).length;
   });
 
-  // Revenue for a specific day (sums netAmount/totalAmount)
   protected revenueForDay = (date: Date) => {
     const start = new Date(date); start.setHours(0,0,0,0);
     const end = new Date(date); end.setHours(23,59,59,999);
@@ -1139,29 +1188,509 @@ export class OverviewComponent implements OnInit {
     }, 0);
   }
 
-  // Compute percent change for revenue: compare today vs yesterday
+  // Store yesterday's revenue and orders for comparison
+  protected yesterdayRevenue = signal<number>(0);
+  protected yesterdayOrders = signal<number>(0);
+  protected currentMonthRevenue = signal<number>(0);
+  protected currentMonthOrders = signal<number>(0);
+  protected previousMonthRevenue = signal<number>(0);
+  protected previousMonthOrders = signal<number>(0);
+
   protected revenueChange = computed(() => {
     try {
-      const now = new Date();
-      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0,0,0,0);
-      const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1);
-
-      const revToday = this.revenueForDay(today);
-      const revYesterday = this.revenueForDay(yesterday);
-      const diff = revToday - revYesterday;
+      const period = this.selectedPeriod();
+      let revCurrent: number;
+      let revPrevious: number;
+      
+      // Use month-over-month comparison for monthly periods
+      if (period === 'this_month') {
+        revCurrent = this.currentMonthRevenue();
+        revPrevious = this.previousMonthRevenue();
+      } else if (period === 'previous_month') {
+        // When viewing previous month, compare to 2 months ago
+        revCurrent = this.previousMonthRevenue();
+        revPrevious = 0; // Could implement 2-months-ago if needed
+      } else if (period === 'date_range') {
+        // Compare selected date range with previous equivalent period
+        revCurrent = this.dateRangeRevenue();
+        revPrevious = this.previousDateRangeRevenue();
+      } else {
+        // Day-over-day comparison for today/yesterday
+        revCurrent = this.ledgerTotalRevenue();
+        revPrevious = this.yesterdayRevenue();
+      }
+      
+      const diff = revCurrent - revPrevious;
 
       const percent = (() => {
-        if (revYesterday === 0) return (revToday === 0 ? 0 : 100);
-        const raw = (Math.abs(diff) / revYesterday) * 100;
+        if (revPrevious === 0 && revCurrent === 0) return 0;
+        if (revPrevious === 0) return 100;
+        const raw = (Math.abs(diff) / revPrevious) * 100;
         return Math.round(raw * 10) / 10; // one decimal place
       })();
 
       const symbol = diff > 0 ? '↗' : (diff < 0 ? '↘' : '→');
-      return { symbol, percent, diff, revToday, revYesterday };
+      return { symbol, percent, diff, revToday: revCurrent, revYesterday: revPrevious };
     } catch (e) {
       return { symbol: '→', percent: 0, diff: 0, revToday: 0, revYesterday: 0 };
     }
   });
+
+  protected ordersChange = computed(() => {
+    try {
+      const period = this.selectedPeriod();
+      let ordersCurrent: number;
+      let ordersPrevious: number;
+      
+      // Use month-over-month comparison for monthly periods
+      if (period === 'this_month') {
+        ordersCurrent = this.currentMonthOrders();
+        ordersPrevious = this.previousMonthOrders();
+      } else if (period === 'previous_month') {
+        ordersCurrent = this.previousMonthOrders();
+        ordersPrevious = 0; // Could implement 2-months-ago if needed
+      } else if (period === 'date_range') {
+        // Compare selected date range with previous equivalent period
+        ordersCurrent = this.dateRangeOrders();
+        ordersPrevious = this.previousDateRangeOrders();
+      } else {
+        // Day-over-day comparison
+        ordersCurrent = this.ledgerTotalOrders();
+        ordersPrevious = this.yesterdayOrders();
+      }
+      
+      const diff = ordersCurrent - ordersPrevious;
+
+      const percent = (() => {
+        if (ordersPrevious === 0 && ordersCurrent === 0) return 0;
+        if (ordersPrevious === 0) return 100;
+        const raw = (Math.abs(diff) / ordersPrevious) * 100;
+        return Math.round(raw * 10) / 10;
+      })();
+
+      const symbol = diff > 0 ? '↗' : (diff < 0 ? '↘' : '→');
+      return { symbol, percent };
+    } catch (e) {
+      return { symbol: '→', percent: 0 };
+    }
+  });
+
+  protected customersChange = computed(() => {
+    try {
+      const customersToday = this.totalCustomers();
+      // For now, return neutral since we don't track yesterday's customers yet
+      return { symbol: '→', percent: 0 };
+    } catch (e) {
+      return { symbol: '→', percent: 0 };
+    }
+  });
+
+  // Computed label for comparison text
+  protected comparisonLabel = computed(() => {
+    const period = this.selectedPeriod();
+    if (period === 'this_month' || period === 'previous_month') {
+      return 'From Last Month';
+    } else if (period === 'date_range') {
+      return 'From Previous Period';
+    }
+    return 'From Last Day';
+  });
+
+  // Fetch yesterday's revenue for comparison
+  protected async fetchYesterdayRevenue(): Promise<void> {
+    try {
+      const companyId = this.authService.getCurrentPermission()?.companyId || '';
+      const storeId = this.selectedStoreId() || this.authService.getCurrentPermission()?.storeId;
+      if (!companyId || !storeId) {
+        this.yesterdayRevenue.set(0);
+        this.yesterdayOrders.set(0);
+        return;
+      }
+
+      // Calculate yesterday's date (today - 1 day)
+      const today = new Date();
+      const yesterday = new Date(today);
+      yesterday.setDate(today.getDate() - 1);
+
+      // Use the same ledger service method as today's data, but with yesterday's date
+      const ledger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, yesterday, 'completed');
+      
+      if (ledger) {
+        this.yesterdayRevenue.set(Number(ledger.runningBalanceAmount || 0));
+        this.yesterdayOrders.set(Number(ledger.runningBalanceOrderQty || ledger.runningBalanceQty || 0));
+      } else {
+        this.yesterdayRevenue.set(0);
+        this.yesterdayOrders.set(0);
+      }
+
+      // Note: returns/refunds/damage/cancel quantities are fetched by fetchTodayAnalytics() when period is 'today'
+      // We only fetch yesterday's revenue and order count here for comparison purposes
+      
+      // Set completed and order quantities
+      this.ledgerCompletedQty.set(Number(ledger?.runningBalanceOrderQty || ledger?.runningBalanceQty || 0));
+      this.ledgerOrderQty.set(Number(ledger?.runningBalanceOrderQty || ledger?.runningBalanceQty || 0));
+    } catch (error) {
+      console.error('Error fetching yesterday revenue:', error);
+      this.yesterdayRevenue.set(0);
+      this.yesterdayOrders.set(0);
+    }
+  }
+
+  // Fetch today's analytics data (all event types for Sale Analytics)
+  protected async fetchTodayAnalytics(): Promise<void> {
+    console.log('🔍 fetchTodayAnalytics called');
+    try {
+      const companyId = this.authService.getCurrentPermission()?.companyId || '';
+      const storeId = this.selectedStoreId() || this.authService.getCurrentPermission()?.storeId;
+      console.log('🔍 fetchTodayAnalytics - companyId:', companyId, 'storeId:', storeId);
+      if (!companyId || !storeId) {
+        console.log('🔍 fetchTodayAnalytics - returning early, missing companyId or storeId');
+        return;
+      }
+
+      const today = new Date();
+      console.log('🔍 fetchTodayAnalytics - today date:', today);
+
+      // Fetch completed orders for today
+      const ledger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, today, 'completed');
+      if (ledger) {
+        this.ledgerTotalRevenue.set(Number(ledger.runningBalanceAmount || 0));
+        this.ledgerTotalOrders.set(Number(ledger.runningBalanceOrderQty || ledger.runningBalanceQty || 0));
+        this.ledgerCompletedQty.set(Number(ledger.runningBalanceOrderQty || ledger.runningBalanceQty || 0));
+        this.ledgerOrderQty.set(Number(ledger.runningBalanceOrderQty || ledger.runningBalanceQty || 0));
+      }
+
+      // Fetch returns for today
+      const returnsLedger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, today, 'returned');
+      console.log('Returns Ledger for today:', returnsLedger);
+      if (returnsLedger && (returnsLedger.runningBalanceAmount || returnsLedger.runningBalanceQty)) {
+        const amt = Number(returnsLedger.runningBalanceAmount || 0);
+        const qty = Number(returnsLedger.runningBalanceQty || 0);
+        console.log('🟡 fetchTodayAnalytics setting returns - Amount:', amt, 'Qty:', qty);
+        this.ledgerReturnAmount.set(amt);
+        this.ledgerReturnQty.set(qty);
+        console.log('✅ After set - ledgerReturnAmount():', this.ledgerReturnAmount(), 'ledgerReturnQty():', this.ledgerReturnQty());
+      } else if (!returnsLedger) {
+        // Only set to 0 if we explicitly got no ledger data (meaning no returns at all)
+        console.log('🔴 fetchTodayAnalytics: No returns ledger found for today, setting to 0');
+        this.ledgerReturnAmount.set(0);
+        this.ledgerReturnQty.set(0);
+      } else {
+        console.log('⚪ fetchTodayAnalytics: Empty returns ledger, keeping current values');
+      }
+
+      // Fetch refunds for today
+      const refundsLedger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, today, 'refunded');
+      if (refundsLedger && (refundsLedger.runningBalanceAmount || refundsLedger.runningBalanceQty)) {
+        this.ledgerRefundAmount.set(Number(refundsLedger.runningBalanceAmount || 0));
+        this.ledgerRefundQty.set(Number(refundsLedger.runningBalanceQty || 0));
+      } else if (!refundsLedger) {
+        this.ledgerRefundAmount.set(0);
+        this.ledgerRefundQty.set(0);
+      }
+
+      // Fetch damage for today
+      const damageLedger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, today, 'damaged');
+      if (damageLedger && (damageLedger.runningBalanceAmount || damageLedger.runningBalanceQty || damageLedger.runningBalanceOrderQty)) {
+        this.ledgerDamageAmount.set(Number(damageLedger.runningBalanceAmount || 0));
+        this.ledgerDamageQty.set(Number(damageLedger.runningBalanceQty || damageLedger.runningBalanceOrderQty || 0));
+      } else if (!damageLedger) {
+        this.ledgerDamageAmount.set(0);
+        this.ledgerDamageQty.set(0);
+      }
+
+      // Fetch cancels for today
+      const cancelLedger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, today, 'cancelled');
+      if (cancelLedger && cancelLedger.runningBalanceQty) {
+        this.ledgerCancelQty.set(Number(cancelLedger.runningBalanceQty || 0));
+      } else if (!cancelLedger) {
+        this.ledgerCancelQty.set(0);
+      }
+    } catch (error) {
+      console.error('Error fetching today analytics:', error);
+    }
+  }
+
+  // Fetch monthly revenue comparison (current month vs previous month)
+  protected async fetchMonthlyComparison(): Promise<void> {
+    try {
+      const companyId = this.authService.getCurrentPermission()?.companyId || '';
+      const storeId = this.selectedStoreId() || this.authService.getCurrentPermission()?.storeId;
+      if (!companyId || !storeId) {
+        this.currentMonthRevenue.set(0);
+        this.currentMonthOrders.set(0);
+        this.previousMonthRevenue.set(0);
+        this.previousMonthOrders.set(0);
+        return;
+      }
+
+      const now = new Date();
+      const currentMonth = now.getMonth();
+      const currentYear = now.getFullYear();
+      const currentDay = now.getDate();
+
+      // Calculate previous month
+      const previousMonth = currentMonth === 0 ? 11 : currentMonth - 1;
+      const previousYear = currentMonth === 0 ? currentYear - 1 : currentYear;
+      const daysInPreviousMonth = new Date(previousYear, previousMonth + 1, 0).getDate();
+
+      // Sum up current month (day 1 to current day)
+      let currentMonthRevenueTotal = 0;
+      let currentMonthOrdersTotal = 0;
+      let currentMonthCompletedQty = 0;
+      let currentMonthReturnsAmount = 0;
+      let currentMonthReturnsQty = 0;
+      let currentMonthRefundsAmount = 0;
+      let currentMonthRefundsQty = 0;
+      let currentMonthDamageAmount = 0;
+      let currentMonthDamageQty = 0;
+      let currentMonthCancelQty = 0;
+
+      for (let day = 1; day <= currentDay; day++) {
+        const date = new Date(currentYear, currentMonth, day);
+        
+        // Completed orders
+        const ledger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, date, 'completed');
+        if (ledger) {
+          currentMonthRevenueTotal += Number(ledger.runningBalanceAmount || 0);
+          currentMonthOrdersTotal += Number(ledger.runningBalanceOrderQty || ledger.runningBalanceQty || 0);
+          currentMonthCompletedQty += Number(ledger.runningBalanceOrderQty || ledger.runningBalanceQty || 0);
+        }
+
+        // Returns
+        const returnsLedger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, date, 'returned');
+        if (returnsLedger) {
+          currentMonthReturnsAmount += Number(returnsLedger.runningBalanceAmount || 0);
+          currentMonthReturnsQty += Number(returnsLedger.runningBalanceQty || 0);
+        }
+
+        // Refunds
+        const refundsLedger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, date, 'refunded');
+        if (refundsLedger) {
+          currentMonthRefundsAmount += Number(refundsLedger.runningBalanceAmount || 0);
+          currentMonthRefundsQty += Number(refundsLedger.runningBalanceQty || 0);
+        }
+
+        // Damage
+        const damageLedger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, date, 'damaged');
+        if (damageLedger) {
+          currentMonthDamageAmount += Number(damageLedger.runningBalanceAmount || 0);
+          currentMonthDamageQty += Number(damageLedger.runningBalanceQty || damageLedger.runningBalanceOrderQty || 0);
+        }
+
+        // Cancels
+        const cancelLedger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, date, 'cancelled');
+        if (cancelLedger) {
+          currentMonthCancelQty += Number(cancelLedger.runningBalanceQty || 0);
+        }
+      }
+
+      // Sum up previous month (day 1 to end of month)
+      let previousMonthRevenueTotal = 0;
+      let previousMonthOrdersTotal = 0;
+
+      for (let day = 1; day <= daysInPreviousMonth; day++) {
+        const date = new Date(previousYear, previousMonth, day);
+        const ledger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, date, 'completed');
+        if (ledger) {
+          previousMonthRevenueTotal += Number(ledger.runningBalanceAmount || 0);
+          previousMonthOrdersTotal += Number(ledger.runningBalanceOrderQty || ledger.runningBalanceQty || 0);
+        }
+      }
+
+      this.currentMonthRevenue.set(currentMonthRevenueTotal);
+      this.currentMonthOrders.set(currentMonthOrdersTotal);
+      this.previousMonthRevenue.set(previousMonthRevenueTotal);
+      this.previousMonthOrders.set(previousMonthOrdersTotal);
+
+      // Set ledger signals for Sale Analytics
+      this.ledgerCompletedQty.set(currentMonthCompletedQty);
+      this.ledgerOrderQty.set(currentMonthOrdersTotal);
+      this.ledgerCancelQty.set(currentMonthCancelQty);
+      console.log('🔵 fetchMonthlyComparison setting returns:', currentMonthReturnsAmount, currentMonthReturnsQty);
+      this.ledgerReturnAmount.set(currentMonthReturnsAmount);
+      this.ledgerReturnQty.set(currentMonthReturnsQty);
+      this.ledgerRefundAmount.set(currentMonthRefundsAmount);
+      this.ledgerRefundQty.set(currentMonthRefundsQty);
+      this.ledgerDamageAmount.set(currentMonthDamageAmount);
+      this.ledgerDamageQty.set(currentMonthDamageQty);
+
+      console.log('Monthly comparison:', {
+        currentMonth: { revenue: currentMonthRevenueTotal, orders: currentMonthOrdersTotal },
+        previousMonth: { revenue: previousMonthRevenueTotal, orders: previousMonthOrdersTotal },
+        analytics: { returns: currentMonthReturnsQty, refunds: currentMonthRefundsQty, damage: currentMonthDamageQty, cancel: currentMonthCancelQty }
+      });
+    } catch (error) {
+      console.error('Error fetching monthly comparison:', error);
+      this.currentMonthRevenue.set(0);
+      this.currentMonthOrders.set(0);
+      this.previousMonthRevenue.set(0);
+      this.previousMonthOrders.set(0);
+    }
+  }
+
+  // Fetch date range comparison (selected range vs previous equivalent period)
+  protected async fetchDateRangeComparison(): Promise<void> {
+    try {
+      const companyId = this.authService.getCurrentPermission()?.companyId || '';
+      const storeId = this.selectedStoreId() || this.authService.getCurrentPermission()?.storeId;
+      const fromStr = this.dateFrom();
+      const toStr = this.dateTo();
+      
+      if (!companyId || !storeId || !fromStr || !toStr) {
+        this.dateRangeRevenue.set(0);
+        this.dateRangeOrders.set(0);
+        this.previousDateRangeRevenue.set(0);
+        this.previousDateRangeOrders.set(0);
+        return;
+      }
+
+      const startDate = new Date(fromStr + 'T00:00:00');
+      const endDate = new Date(toStr + 'T23:59:59.999');
+      
+      // Calculate the number of days in the selected range
+      const daysDiff = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
+      
+      // Calculate previous period (same number of days, immediately before start date)
+      const prevEndDate = new Date(startDate);
+      prevEndDate.setDate(prevEndDate.getDate() - 1);
+      const prevStartDate = new Date(prevEndDate);
+      prevStartDate.setDate(prevStartDate.getDate() - daysDiff + 1);
+
+      // Sum up selected date range
+      let currentRangeRevenueTotal = 0;
+      let currentRangeOrdersTotal = 0;
+      let currentRangeCompletedQty = 0;
+      let currentRangeReturnsAmount = 0;
+      let currentRangeReturnsQty = 0;
+      let currentRangeRefundsAmount = 0;
+      let currentRangeRefundsQty = 0;
+      let currentRangeDamageAmount = 0;
+      let currentRangeDamageQty = 0;
+      let currentRangeCancelQty = 0;
+      
+      console.log(`📊 Fetching date range data from ${startDate.toISOString().slice(0, 10)} to ${endDate.toISOString().slice(0, 10)}`);
+      
+      for (let date = new Date(startDate); date <= endDate; date.setDate(date.getDate() + 1)) {
+        const dateStr = new Date(date).toISOString().slice(0, 10);
+        
+        // Fetch completed orders for this day
+        const ledger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, new Date(date), 'completed');
+        if (ledger && (ledger.runningBalanceAmount > 0 || ledger.runningBalanceOrderQty > 0)) {
+          console.log(`  ${dateStr} completed:`, ledger);
+          currentRangeRevenueTotal += Number(ledger.runningBalanceAmount || 0);
+          currentRangeOrdersTotal += Number(ledger.runningBalanceOrderQty || ledger.runningBalanceQty || 0);
+          currentRangeCompletedQty += Number(ledger.runningBalanceOrderQty || ledger.runningBalanceQty || 0);
+        }
+        
+        // Fetch returns for this day
+        const returnsLedger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, new Date(date), 'returned');
+        if (returnsLedger && (returnsLedger.runningBalanceAmount > 0 || returnsLedger.runningBalanceQty > 0)) {
+          console.log(`  ${dateStr} returns:`, returnsLedger);
+          currentRangeReturnsAmount += Number(returnsLedger.runningBalanceAmount || 0);
+          currentRangeReturnsQty += Number(returnsLedger.runningBalanceQty || 0);
+        }
+        
+        // Fetch refunds for this day
+        const refundsLedger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, new Date(date), 'refunded');
+        if (refundsLedger && (refundsLedger.runningBalanceAmount > 0 || refundsLedger.runningBalanceQty > 0)) {
+          console.log(`  ${dateStr} refunds:`, refundsLedger);
+          currentRangeRefundsAmount += Number(refundsLedger.runningBalanceAmount || 0);
+          currentRangeRefundsQty += Number(refundsLedger.runningBalanceQty || 0);
+        }
+        
+        // Fetch damage for this day
+        const damageLedger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, new Date(date), 'damaged');
+        if (damageLedger) {
+          const damageAmt = Number(damageLedger.runningBalanceAmount || 0);
+          const damageQty = Number(damageLedger.runningBalanceQty || damageLedger.runningBalanceOrderQty || 0);
+          if (damageAmt > 0 || damageQty > 0) {
+            console.log(`  ${dateStr} damage:`, { amount: damageAmt, qty: damageQty, raw: damageLedger });
+          }
+          currentRangeDamageAmount += damageAmt;
+          currentRangeDamageQty += damageQty;
+        }
+        
+        // Fetch cancels for this day
+        const cancelLedger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, new Date(date), 'cancelled');
+        if (cancelLedger && cancelLedger.runningBalanceQty > 0) {
+          console.log(`  ${dateStr} cancel:`, cancelLedger);
+          currentRangeCancelQty += Number(cancelLedger.runningBalanceQty || 0);
+        }
+      }
+      
+      console.log(`📊 Date range totals:`, {
+        completed: { revenue: currentRangeRevenueTotal, orders: currentRangeOrdersTotal },
+        returns: { amount: currentRangeReturnsAmount, qty: currentRangeReturnsQty },
+        refunds: { amount: currentRangeRefundsAmount, qty: currentRangeRefundsQty },
+        damage: { amount: currentRangeDamageAmount, qty: currentRangeDamageQty },
+        cancel: { qty: currentRangeCancelQty }
+      });
+
+      // Sum up previous period
+      let previousRangeRevenueTotal = 0;
+      let previousRangeOrdersTotal = 0;
+      
+      for (let date = new Date(prevStartDate); date <= prevEndDate; date.setDate(date.getDate() + 1)) {
+        const ledger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, new Date(date), 'completed');
+        if (ledger) {
+          previousRangeRevenueTotal += Number(ledger.runningBalanceAmount || 0);
+          previousRangeOrdersTotal += Number(ledger.runningBalanceOrderQty || ledger.runningBalanceQty || 0);
+        }
+      }
+
+      this.dateRangeRevenue.set(currentRangeRevenueTotal);
+      this.dateRangeOrders.set(currentRangeOrdersTotal);
+      this.previousDateRangeRevenue.set(previousRangeRevenueTotal);
+      this.previousDateRangeOrders.set(previousRangeOrdersTotal);
+      
+      // Set all ledger signals for the date range
+      this.ledgerTotalRevenue.set(currentRangeRevenueTotal);
+      this.ledgerTotalOrders.set(currentRangeOrdersTotal);
+      this.ledgerCompletedQty.set(currentRangeCompletedQty);
+      this.ledgerCompletedAmount.set(currentRangeRevenueTotal);
+      this.ledgerOrderQty.set(currentRangeOrdersTotal);
+      this.ledgerCancelQty.set(currentRangeCancelQty);
+      this.ledgerReturnAmount.set(currentRangeReturnsAmount);
+      this.ledgerReturnQty.set(currentRangeReturnsQty);
+      this.ledgerRefundAmount.set(currentRangeRefundsAmount);
+      this.ledgerRefundQty.set(currentRangeRefundsQty);
+      this.ledgerDamageAmount.set(currentRangeDamageAmount);
+      this.ledgerDamageQty.set(currentRangeDamageQty);
+
+      console.log('Date range comparison:', {
+        selected: { 
+          from: fromStr, 
+          to: toStr, 
+          revenue: currentRangeRevenueTotal, 
+          orders: currentRangeOrdersTotal,
+          returns: { amount: currentRangeReturnsAmount, qty: currentRangeReturnsQty },
+          refunds: { amount: currentRangeRefundsAmount, qty: currentRangeRefundsQty },
+          damage: { amount: currentRangeDamageAmount, qty: currentRangeDamageQty }
+        },
+        previous: { from: prevStartDate.toISOString().slice(0, 10), to: prevEndDate.toISOString().slice(0, 10), revenue: previousRangeRevenueTotal, orders: previousRangeOrdersTotal }
+      });
+    } catch (error) {
+      console.error('Error fetching date range comparison:', error);
+      this.dateRangeRevenue.set(0);
+      this.dateRangeOrders.set(0);
+      this.previousDateRangeRevenue.set(0);
+      this.previousDateRangeOrders.set(0);
+      this.ledgerTotalRevenue.set(0);
+      this.ledgerTotalOrders.set(0);
+      this.ledgerCompletedQty.set(0);
+      this.ledgerCompletedAmount.set(0);
+      this.ledgerOrderQty.set(0);
+      this.ledgerCancelQty.set(0);
+      this.ledgerReturnAmount.set(0);
+      this.ledgerReturnQty.set(0);
+      this.ledgerRefundAmount.set(0);
+      this.ledgerRefundQty.set(0);
+      this.ledgerDamageAmount.set(0);
+      this.ledgerDamageQty.set(0);
+    }
+  }
+  
   protected monthOrders = computed(() => {
     const now = new Date();
     const m = now.getMonth(); const y = now.getFullYear();
@@ -1172,6 +1701,15 @@ export class OverviewComponent implements OnInit {
   });
 
   constructor() {
+    // Initialize default date range (last 30 days)
+    const now = new Date();
+    const toIso = now.toISOString().slice(0, 10);
+    const from = new Date(now);
+    from.setDate(from.getDate() - 30);
+    const fromIso = from.toISOString().slice(0, 10);
+    this.dateFrom.set(fromIso);
+    this.dateTo.set(toIso);
+    
     this.loadData();
 
     // Re-fetch top products whenever the selected store changes
@@ -1197,7 +1735,24 @@ export class OverviewComponent implements OnInit {
     const target = event.target as HTMLSelectElement;
     if (!target) return;
     const v = target.value as 'today' | 'yesterday' | 'this_month' | 'previous_month' | 'date_range';
+    console.log('🔄 Period changed to:', v);
+    
+    // Reset all ledger signals to 0 when period changes to prevent stale data
+    this.ledgerReturnAmount.set(0);
+    this.ledgerReturnQty.set(0);
+    this.ledgerRefundAmount.set(0);
+    this.ledgerRefundQty.set(0);
+    this.ledgerDamageAmount.set(0);
+    this.ledgerDamageQty.set(0);
+    this.ledgerCancelQty.set(0);
+    this.ledgerCompletedQty.set(0);
+    this.ledgerOrderQty.set(0);
+    this.ledgerTotalRevenue.set(0);
+    this.ledgerTotalOrders.set(0);
+    console.log('🔄 Reset all ledger signals to 0');
+    
     this.selectedPeriod.set(v);
+    console.log('✅ selectedPeriod() is now:', this.selectedPeriod());
     if (v === 'date_range') {
       // default dateTo = today, dateFrom = today - 30 days
       const now = new Date();
@@ -1223,11 +1778,25 @@ export class OverviewComponent implements OnInit {
     const start = new Date(from + 'T00:00:00');
     const end = new Date(to + 'T23:59:59.999');
     this.loadAnalyticsData(start, end);
+    // Fetch date range comparison data
+    this.fetchDateRangeComparison().catch(err => console.error('Failed to fetch date range comparison:', err));
   }
 
   // Compute start/end dates for selected period and call analytics loader
   protected applyPeriodAndLoad() {
     const period = this.selectedPeriod();
+    console.log('⚡ applyPeriodAndLoad called with period:', period, 'at', new Date().toISOString());
+    
+    // Reset all ledger signals to 0 before loading new data
+    this.ledgerReturnAmount.set(0);
+    this.ledgerReturnQty.set(0);
+    this.ledgerRefundAmount.set(0);
+    this.ledgerRefundQty.set(0);
+    this.ledgerDamageAmount.set(0);
+    this.ledgerDamageQty.set(0);
+    this.ledgerCancelQty.set(0);
+    console.log('🔄 applyPeriodAndLoad: Reset ledger signals to 0');
+    
     const now = new Date();
     let start: Date | undefined;
     let end: Date | undefined;
@@ -1380,7 +1949,7 @@ export class OverviewComponent implements OnInit {
           const currentPermission = this.authService.getCurrentPermission();
           const companyId = currentPermission?.companyId || '';
           // Include both 'refund' and manual 'expense' ledger event types
-          const ledgerExpenses = await this.ledgerService.sumEventsInRange(companyId, storeId, monthStart, monthEnd, ['refund', 'expense']);
+          const ledgerExpenses = await this.ledgerService.sumEventsInRange(companyId, storeId, monthStart, monthEnd, ['refunded', 'expense']);
           const ledgerExpensesNum = Number(ledgerExpenses || 0);
           this.ledgerTotalRefunds.set(ledgerExpensesNum);
           // Add ledger expense/refund amounts to monthExpensesTotal
@@ -1413,7 +1982,7 @@ export class OverviewComponent implements OnInit {
         try {
           const currentPermission = this.authService.getCurrentPermission();
           const companyId = currentPermission?.companyId || '';
-          const ledgerYesterday = await this.ledgerService.sumEventsInRange(companyId, storeId, yStart, yEnd, ['refund', 'expense']);
+          const ledgerYesterday = await this.ledgerService.sumEventsInRange(companyId, storeId, yStart, yEnd, ['refunded', 'expense']);
           const ledgerY = Number(ledgerYesterday || 0);
           yTotal = yTotal + ledgerY;
         } catch (ledgerErr) {
@@ -1442,16 +2011,9 @@ export class OverviewComponent implements OnInit {
         console.log('📋 Dashboard sample order:', this.orders()[0]);
       }
 
-      // Fetch ledger-driven totals (orders running balances) for display
+      // Fetch ledger-driven totals from orderAccountingLedger for the selected period
       try {
-        const currentPermission = this.authService.getCurrentPermission();
-        const companyId = currentPermission?.companyId || '';
-        const storeId = this.selectedStoreId() || this.authService.getCurrentPermission()?.storeId || '';
-        const end = endDate || new Date();
-        const orderBalances = await this.ledgerService.getLatestOrderBalances(companyId, storeId, end, 'completed');
-        this.ledgerTotalRevenue.set(Number(orderBalances.runningBalanceAmount || 0));
-        // Use runningBalanceQty for total orders and prefer runningBalanceOrderQty if present
-        this.ledgerTotalOrders.set(Number(orderBalances.runningBalanceOrderQty || orderBalances.runningBalanceQty || 0));
+        await this.fetchLedgerTotalsForPeriod(startDate, endDate);
       } catch (err) {
         console.warn('Overview: failed to load ledger totals', err);
       }
@@ -1523,6 +2085,14 @@ export class OverviewComponent implements OnInit {
       damage: { count: damageCount, percentage: 0 }
     };
 
+    // If there's no actual data (all counts are 0), show 0% for all
+    const hasData = completedCount > 0 || cancelledCount > 0 || returnedCount > 0 || refundedCount > 0 || damageCount > 0;
+    
+    if (!hasData) {
+      // No data - show all 0%
+      return result;
+    }
+
     // Compute percentages with one decimal place
     let accumulated = 0;
     for (const k of Object.keys(result)) {
@@ -1553,10 +2123,16 @@ export class OverviewComponent implements OnInit {
       { color: '#8b5cf6', pct: Number(sa.damage?.percentage || 0) }
     ];
 
-    // Ensure values are numeric and normalize rounding if needed
-    const total = segments.reduce((s, x) => s + (isFinite(x.pct) ? x.pct : 0), 0) || 100;
+    // Check if there's any data
+    const total = segments.reduce((s, x) => s + (isFinite(x.pct) ? x.pct : 0), 0);
+    
+    // If no data, show default yellow color
+    if (total === 0) {
+      return `conic-gradient(#eab308 0% 100%)`;
+    }
+
     // If total is not 100, scale values to fit 100
-    const scale = total === 0 ? 0 : 100 / total;
+    const scale = 100 / total;
     let acc = 0;
     const stops: string[] = [];
     for (const seg of segments) {
@@ -1708,7 +2284,14 @@ export class OverviewComponent implements OnInit {
       const storeId = this.selectedStoreId() || this.authService.getCurrentPermission()?.storeId;
       if (!storeId) return;
 
-      console.log('📊 Loading analytics data from Cloud Function API...', { storeId, startDate, endDate });
+      console.log('📊 Loading analytics data from Cloud Function API...', { 
+        storeId, 
+        startDate, 
+        endDate, 
+        timestamp: new Date().toISOString(),
+        period: this.selectedPeriod()
+      });
+      console.trace('📍 loadAnalyticsData called from:');
       
   // Use Cloud Function API for sales data (same as sales summary)
   // Explicitly request completed sales for analytics/overview
@@ -1733,55 +2316,9 @@ export class OverviewComponent implements OnInit {
         const periodTotal = (expenses || []).reduce((s, e) => s + (Number((e as any).amount || 0) / 100), 0);
         this.monthExpensesTotal.set(periodTotal);
 
-        // Also fetch ledger totals for returns/refunds/damage within the selected range
-        try {
-          const currentPermission = this.authService.getCurrentPermission();
-          const companyId = currentPermission?.companyId || '';
-          const adjustments = await this.ledgerService.getAdjustmentTotals(companyId, storeId, startDate, endDate);
-
-          this.ledgerReturnAmount.set(Number(adjustments.returns.amount || 0));
-          this.ledgerReturnQty.set(Number(adjustments.returns.qty || 0));
-          this.ledgerRefundAmount.set(Number(adjustments.refunds.amount || 0));
-          this.ledgerRefundQty.set(Number(adjustments.refunds.qty || 0));
-          this.ledgerDamageAmount.set(Number(adjustments.damages.amount || 0));
-          this.ledgerDamageQty.set(Number(adjustments.damages.qty || 0));
-          // If getAdjustmentTotals now returns completed totals, prefer that for completed qty
-          const adjAny: any = adjustments as any;
-          if (adjAny && adjAny.completed) {
-            this.ledgerCompletedQty.set(Number(adjAny.completed.qty || 0));
-            this.ledgerCompletedAmount.set(Number(adjAny.completed.amount || 0));
-          }
-
-          // Also compute ledger order / cancel / completed qty for the selected range
-          try {
-            // Query ledger for completed events (service now uses 'completed' eventType)
-            const ordersAgg = await this.ledgerService.sumEventsAmountAndQty(companyId, storeId, startDate, endDate, ['completed']);
-            const cancelsAgg = await this.ledgerService.sumEventsAmountAndQty(companyId, storeId, startDate, endDate, ['cancel']);
-            const orderQty = Number(ordersAgg.qty || 0);
-            const cancelQty = Number(cancelsAgg.qty || 0);
-            // If adjustments.completed was not present, compute completed as order - cancel
-            this.ledgerOrderQty.set(orderQty);
-            this.ledgerCancelQty.set(cancelQty);
-            // Use the aggregation amount if adjustments.completed.amount wasn't provided
-            if (!this.ledgerCompletedAmount() || this.ledgerCompletedAmount() === 0) {
-              this.ledgerCompletedAmount.set(Number(ordersAgg.amount || 0));
-            }
-            if (!this.ledgerCompletedQty() || this.ledgerCompletedQty() === 0) {
-              const completedQty = Math.max(0, orderQty - cancelQty);
-              this.ledgerCompletedQty.set(completedQty);
-            }
-          } catch (e) {
-            console.warn('Overview: failed to compute ledger order/cancel totals', e);
-            this.ledgerOrderQty.set(0);
-            this.ledgerCancelQty.set(0);
-            this.ledgerCompletedQty.set(0);
-          }
-
-          // Add refunds/damages to monthExpensesTotal if desired (refunds typically reduce revenue, but user previously added refunds to expenses)
-          // Here we keep monthExpensesTotal as expense logs + ledger expense/refund (already handled elsewhere). Returns/damages are shown separately.
-        } catch (ledgerErr) {
-          console.warn('Overview: failed to load ledger event totals', ledgerErr);
-        }
+        // Ledger totals for returns/refunds/damage/cancel will be handled by fetch methods
+        // (fetchTodayAnalytics, fetchYesterdayRevenue, fetchMonthlyComparison, fetchDateRangeComparison)
+        // Remove duplicate logic here to avoid incorrect values
 
         // Also compute yesterday total for comparison
         const now = new Date();
@@ -1806,6 +2343,21 @@ export class OverviewComponent implements OnInit {
       }
 
       console.log('📈 Analytics data loaded:', this.orders().length, 'orders');
+      
+      // Fetch comparison data based on selected period (await to ensure Sale Analytics has data)
+      const period = this.selectedPeriod();
+      if (period === 'date_range') {
+        await this.fetchDateRangeComparison();
+      } else if (period === 'this_month' || period === 'previous_month') {
+        await this.fetchMonthlyComparison();
+      } else if (period === 'today') {
+        await Promise.all([
+          this.fetchTodayAnalytics(),
+          this.fetchYesterdayRevenue()
+        ]);
+      } else if (period === 'yesterday') {
+        await this.fetchYesterdayRevenue();
+      }
       
     } catch (error) {
       console.error('❌ Error loading analytics data:', error);
@@ -1920,4 +2472,77 @@ export class OverviewComponent implements OnInit {
       return '';
     }
   });
+
+  /**
+   * Fetch ledger totals from orderAccountingLedger for the selected period.
+   * Gets the last ledger entry for each day and sums their running balances.
+   * This gives accurate daily totals that accumulate to monthly totals.
+   */
+  private async fetchLedgerTotalsForPeriod(startDate: Date | null, endDate: Date | null): Promise<void> {
+    try {
+      const currentPermission = this.authService.getCurrentPermission();
+      const companyId = currentPermission?.companyId || '';
+      const storeId = this.selectedStoreId() || this.authService.getCurrentPermission()?.storeId || '';
+      
+      if (!startDate || !endDate) {
+        this.ledgerTotalRevenue.set(0);
+        this.ledgerTotalOrders.set(0);
+        return;
+      }
+
+      console.log(`🔍 Querying daily ledger balances from ${startDate.toISOString()} to ${endDate.toISOString()}`);
+      
+      // Query all ledger entries within the date range
+      const q = query(
+        collection(this.firestore, 'orderAccountingLedger'),
+        where('companyId', '==', companyId),
+        where('storeId', '==', storeId),
+        where('eventType', '==', 'completed'),
+        where('createdAt', '>=', startDate),
+        where('createdAt', '<=', endDate),
+        orderBy('createdAt', 'desc'),
+        limit(2000)
+      );
+
+      const snaps = await getDocs(q);
+      console.log(`📦 Found ${snaps.docs.length} ledger entries`);
+      
+      // Group by day and get the latest (first in desc order) entry for each day
+      const dailyBalances = new Map<string, { amount: number; orders: number }>();
+      
+      snaps.docs.forEach(doc => {
+        const d: any = doc.data();
+        if (d && d.createdAt) {
+          const createdDate = d.createdAt?.toDate ? d.createdAt.toDate() : new Date(d.createdAt);
+          const dayKey = createdDate.toISOString().split('T')[0]; // YYYY-MM-DD
+          
+          // Only take the first (latest) entry for each day since we sorted desc
+          if (!dailyBalances.has(dayKey)) {
+            dailyBalances.set(dayKey, {
+              amount: Number(d.runningBalanceAmount || 0),
+              orders: Number(d.runningBalanceOrderQty || d.runningBalanceQty || 0)
+            });
+            console.log(`  📅 ${dayKey}: ₱${d.runningBalanceAmount} (${d.runningBalanceOrderQty || d.runningBalanceQty} orders)`);
+          }
+        }
+      });
+
+      // Sum all daily running balances
+      let totalAmount = 0;
+      let totalOrders = 0;
+      dailyBalances.forEach((balance, day) => {
+        totalAmount += balance.amount;
+        totalOrders += balance.orders;
+      });
+
+      this.ledgerTotalRevenue.set(totalAmount);
+      this.ledgerTotalOrders.set(totalOrders);
+      
+      console.log(`📊 Total for ${dailyBalances.size} days: Revenue=₱${totalAmount}, Orders=${totalOrders}`);
+    } catch (err) {
+      console.error('fetchLedgerTotalsForPeriod error:', err);
+      this.ledgerTotalRevenue.set(0);
+      this.ledgerTotalOrders.set(0);
+    }
+  }
 }
