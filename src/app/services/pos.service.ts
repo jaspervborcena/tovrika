@@ -468,7 +468,7 @@ export class PosService {
    */
   async processOrderWithInvoiceAndPayment(
     customerInfo: { fullName: string; address: string; tin: string; customerId: string }, 
-    payments: { amountTendered: number; changeAmount: number; paymentDescription: string }
+    payments: { amountTendered: number; changeAmount: number; paymentDescription: string; paymentType: string }
   ): Promise<{ orderId: string; invoiceNumber: string } | null> {
     try {
       this.isProcessingSignal.set(true);
@@ -525,9 +525,9 @@ export class PosService {
         assignedCashierEmail: user.email || 'Unknown Cashier',
         assignedCashierName: user.displayName || user.email || 'Unknown Cashier',
         
-        // Payment type determination
-        cashSale: payments.paymentDescription.toLowerCase().includes('cash') || !payments.paymentDescription,
-        chargeSale: payments.paymentDescription.toLowerCase().includes('card') || payments.paymentDescription.toLowerCase().includes('charge') || this.salesTypeChargeSignal(),
+        // Payment type determination (only cashSale/chargeSale at root, paymentType goes in payments object)
+        cashSale: payments.paymentType !== 'Credit Card',
+        chargeSale: payments.paymentType === 'Credit Card',
         
         // Invoice Information (invoiceNumber will be set by transaction)
         invoiceNumber: '',  // Will be filled by transaction
