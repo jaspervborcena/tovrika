@@ -406,6 +406,7 @@ export class OrderService {
   }
 async updateOrderStatus(orderId: string, status: string, reason?: string): Promise<void> {
   try {
+    console.log(`🚀 updateOrderStatus called: orderId=${orderId}, status=${status}, reason=${reason}, online=${navigator.onLine}`);
     const currentUser = this.authService.getCurrentUser();
     const currentUserId = currentUser?.uid || 'system';
     const now = new Date();
@@ -495,14 +496,32 @@ async updateOrderStatus(orderId: string, status: string, reason?: string): Promi
 
   // Create ledger entry for cancelled/returned/refunded/damage statuses so accounting stays in sync
   try {
-    const map: any = { cancelled: 'cancel', returned: 'return', refunded: 'refund', damage: 'damage', damaged: 'damage' };
+    console.log(`🔔 Starting ledger recording section for orderId=${orderId}, status=${status}, online=${navigator.onLine}`);
+    const map: any = { cancelled: 'cancelled', returned: 'returned', refunded: 'refunded', damage: 'damaged', damaged: 'damaged' };
     if (['cancelled', 'returned', 'refunded', 'damage', 'damaged'].includes(status)) {
+      console.log(`✅ Status ${status} is in the list, proceeding with ledger entry...`);
       // Prefer summing authoritative tracking documents created/updated for this order
       const mappedStatus = map[status] || status;
+      console.log(`📝 Mapped status: ${status} → ${mappedStatus}`);
       let amount = 0;
       let qty = 0;
       let companyId = '';
       let storeId = '';
+      
+      // First, always get companyId and storeId from the order document
+      try {
+        const orderRef = clientDoc(this.firestore, 'orders', orderId);
+        const orderSnap = await getDoc(orderRef as any);
+        if (orderSnap && orderSnap.exists()) {
+          const orderData: any = orderSnap.data();
+          companyId = orderData.companyId || '';
+          storeId = orderData.storeId || '';
+          console.log(`📄 Order document: companyId=${companyId}, storeId=${storeId}`);
+        }
+      } catch (orderFetchErr) {
+        console.error(`❌ Failed to fetch order document:`, orderFetchErr);
+      }
+      
       try {
         const trackingRef = collection(this.firestore, 'ordersSellingTracking');
         
@@ -528,12 +547,10 @@ async updateOrderStatus(orderId: string, status: string, reason?: string): Promi
             });
             amount += lineTotal;
             qty += itemQty;
-            companyId = companyId || data.companyId || '';
-            storeId = storeId || data.storeId || '';
           }
           console.log(`✅ Total from tracking: amount=${amount}, qty=${qty}`);
         } else {
-          console.log(`⚠️ No tracking entries found, falling back to order document`);
+          console.log(`⚠️ No tracking entries found, using order document for amounts`);
 
           // Fallback to order document if tracking entries are not yet present
           const orderRef = clientDoc(this.firestore, 'orders', orderId);
@@ -542,19 +559,30 @@ async updateOrderStatus(orderId: string, status: string, reason?: string): Promi
             const data: any = orderSnap.data();
             amount = Number(data.netAmount || data.totalAmount || 0);
             qty = Array.isArray(data.items) ? data.items.reduce((s: number, it: any) => s + Number(it.quantity || 0), 0) : 0;
-            companyId = data.companyId || '';
-            storeId = data.storeId || '';
-            console.log(`📄 Fallback order data: amount=${amount}, qty=${qty}, items=${data.items?.length || 0}`);
+            console.log(`📄 Fallback amounts: amount=${amount}, qty=${qty}, items=${data.items?.length || 0}`);
           }
         }
 
         try {
           const safeAmount = Number(amount || 0);
           const safeQty = Number(qty || 0);
-          console.log(`💾 Recording ledger event: eventType=${mappedStatus}, amount=${safeAmount}, qty=${safeQty}`);
-          await this.ledgerService.recordEvent(companyId, storeId, orderId, mappedStatus as any, safeAmount, safeQty, performedBy);
-          this.logger.info('Ledger entry created for status change', { area: 'orders', docId: orderId, payload: { status, amount: safeAmount, qty: safeQty } });
+          
+          // Validate required fields before recording ledger
+          if (!companyId || !storeId) {
+            console.error(`❌ Cannot record ledger: missing companyId=${companyId} or storeId=${storeId}`);
+            this.logger.warn('Cannot record ledger entry: missing companyId or storeId', { 
+              area: 'orders', 
+              docId: orderId, 
+              payload: { companyId, storeId, status } 
+            });
+          } else {
+            console.log(`💾 Recording ledger event: eventType=${mappedStatus}, amount=${safeAmount}, qty=${safeQty}, companyId=${companyId}, storeId=${storeId}`);
+            await this.ledgerService.recordEvent(companyId, storeId, orderId, mappedStatus as any, safeAmount, safeQty, performedBy);
+            console.log(`✅ Ledger entry created successfully for orderId=${orderId}, eventType=${mappedStatus}`);
+            this.logger.info('Ledger entry created for status change', { area: 'orders', docId: orderId, payload: { status, amount: safeAmount, qty: safeQty } });
+          }
         } catch (ledgerErr) {
+          console.error(`❌ Ledger recording failed:`, ledgerErr);
           this.logger.warn('Failed to create ledger entry for status change', { area: 'orders', docId: orderId, payload: { error: String(ledgerErr) } });
         }
       } catch (e) {

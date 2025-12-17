@@ -671,7 +671,7 @@ async createPartialTrackingFromDoc(trackingId: string, newStatus: string, qty: n
           const orderId = newDoc.orderId || data.orderId;
           const amount = Number(newDoc.total || 0);
           const quantity = Number(newDoc.quantity || 0);
-          await this.ledgerService.recordEvent(companyId, storeId, orderId, 'damage' as any, amount, quantity, createdBy || newDoc.createdBy || 'system');
+          await this.ledgerService.recordEvent(companyId, storeId, orderId, 'damaged' as any, amount, quantity, createdBy || newDoc.createdBy || 'system');
           console.log(`createPartialTrackingFromDoc: recorded ledger damage for order ${orderId}`);
         }
       } catch (ledgerErr) {
@@ -903,7 +903,7 @@ async markOrderTrackingDamaged(orderId: string, damagedBy?: string, reason?: str
               const ledgerOrderId = newDoc.orderId || data.orderId || orderId;
               const amount = Number(data.total || 0);
               const quantity = Number(data.quantity || 0);
-              await this.ledgerService.recordEvent(companyId, storeId, ledgerOrderId, 'damage' as any, amount, quantity, damagedBy || data.updatedBy || data.createdBy || 'system');
+              await this.ledgerService.recordEvent(companyId, storeId, ledgerOrderId, 'damaged' as any, amount, quantity, damagedBy || data.updatedBy || data.createdBy || 'system');
               console.log(`markOrderTrackingDamaged: ledger damage recorded for order ${ledgerOrderId}`);
             }
           } catch (ledgerErr) {

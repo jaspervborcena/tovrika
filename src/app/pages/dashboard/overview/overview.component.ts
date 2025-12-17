@@ -1324,28 +1324,28 @@ export class OverviewComponent implements OnInit {
       }
 
       // Fetch returns for yesterday
-      const returnsLedger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, yesterday, 'return');
+      const returnsLedger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, yesterday, 'returned');
       if (returnsLedger) {
         this.ledgerReturnAmount.set(Number(returnsLedger.runningBalanceAmount || 0));
         this.ledgerReturnQty.set(Number(returnsLedger.runningBalanceQty || 0));
       }
 
       // Fetch refunds for yesterday
-      const refundsLedger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, yesterday, 'refund');
+      const refundsLedger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, yesterday, 'refunded');
       if (refundsLedger) {
         this.ledgerRefundAmount.set(Number(refundsLedger.runningBalanceAmount || 0));
         this.ledgerRefundQty.set(Number(refundsLedger.runningBalanceQty || 0));
       }
 
       // Fetch damage for yesterday
-      const damageLedger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, yesterday, 'damage');
+      const damageLedger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, yesterday, 'damaged');
       if (damageLedger) {
         this.ledgerDamageAmount.set(Number(damageLedger.runningBalanceAmount || 0));
         this.ledgerDamageQty.set(Number(damageLedger.runningBalanceQty || damageLedger.runningBalanceOrderQty || 0));
       }
 
       // Fetch cancels for yesterday
-      const cancelLedger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, yesterday, 'cancel');
+      const cancelLedger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, yesterday, 'cancelled');
       if (cancelLedger) {
         this.ledgerCancelQty.set(Number(cancelLedger.runningBalanceQty || 0));
       }
@@ -1379,28 +1379,28 @@ export class OverviewComponent implements OnInit {
       }
 
       // Fetch returns for today
-      const returnsLedger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, today, 'return');
+      const returnsLedger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, today, 'returned');
       if (returnsLedger) {
         this.ledgerReturnAmount.set(Number(returnsLedger.runningBalanceAmount || 0));
         this.ledgerReturnQty.set(Number(returnsLedger.runningBalanceQty || 0));
       }
 
       // Fetch refunds for today
-      const refundsLedger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, today, 'refund');
+      const refundsLedger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, today, 'refunded');
       if (refundsLedger) {
         this.ledgerRefundAmount.set(Number(refundsLedger.runningBalanceAmount || 0));
         this.ledgerRefundQty.set(Number(refundsLedger.runningBalanceQty || 0));
       }
 
       // Fetch damage for today
-      const damageLedger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, today, 'damage');
+      const damageLedger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, today, 'damaged');
       if (damageLedger) {
         this.ledgerDamageAmount.set(Number(damageLedger.runningBalanceAmount || 0));
         this.ledgerDamageQty.set(Number(damageLedger.runningBalanceQty || damageLedger.runningBalanceOrderQty || 0));
       }
 
       // Fetch cancels for today
-      const cancelLedger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, today, 'cancel');
+      const cancelLedger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, today, 'cancelled');
       if (cancelLedger) {
         this.ledgerCancelQty.set(Number(cancelLedger.runningBalanceQty || 0));
       }
@@ -1456,28 +1456,28 @@ export class OverviewComponent implements OnInit {
         }
 
         // Returns
-        const returnsLedger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, date, 'return');
+        const returnsLedger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, date, 'returned');
         if (returnsLedger) {
           currentMonthReturnsAmount += Number(returnsLedger.runningBalanceAmount || 0);
           currentMonthReturnsQty += Number(returnsLedger.runningBalanceQty || 0);
         }
 
         // Refunds
-        const refundsLedger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, date, 'refund');
+        const refundsLedger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, date, 'refunded');
         if (refundsLedger) {
           currentMonthRefundsAmount += Number(refundsLedger.runningBalanceAmount || 0);
           currentMonthRefundsQty += Number(refundsLedger.runningBalanceQty || 0);
         }
 
         // Damage
-        const damageLedger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, date, 'damage');
+        const damageLedger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, date, 'damaged');
         if (damageLedger) {
           currentMonthDamageAmount += Number(damageLedger.runningBalanceAmount || 0);
           currentMonthDamageQty += Number(damageLedger.runningBalanceQty || damageLedger.runningBalanceOrderQty || 0);
         }
 
         // Cancels
-        const cancelLedger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, date, 'cancel');
+        const cancelLedger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, date, 'cancelled');
         if (cancelLedger) {
           currentMonthCancelQty += Number(cancelLedger.runningBalanceQty || 0);
         }
@@ -1581,7 +1581,7 @@ export class OverviewComponent implements OnInit {
         }
         
         // Fetch returns for this day
-        const returnsLedger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, new Date(date), 'return');
+        const returnsLedger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, new Date(date), 'returned');
         if (returnsLedger && (returnsLedger.runningBalanceAmount > 0 || returnsLedger.runningBalanceQty > 0)) {
           console.log(`  ${dateStr} returns:`, returnsLedger);
           currentRangeReturnsAmount += Number(returnsLedger.runningBalanceAmount || 0);
@@ -1589,7 +1589,7 @@ export class OverviewComponent implements OnInit {
         }
         
         // Fetch refunds for this day
-        const refundsLedger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, new Date(date), 'refund');
+        const refundsLedger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, new Date(date), 'refunded');
         if (refundsLedger && (refundsLedger.runningBalanceAmount > 0 || refundsLedger.runningBalanceQty > 0)) {
           console.log(`  ${dateStr} refunds:`, refundsLedger);
           currentRangeRefundsAmount += Number(refundsLedger.runningBalanceAmount || 0);
@@ -1597,7 +1597,7 @@ export class OverviewComponent implements OnInit {
         }
         
         // Fetch damage for this day
-        const damageLedger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, new Date(date), 'damage');
+        const damageLedger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, new Date(date), 'damaged');
         if (damageLedger) {
           const damageAmt = Number(damageLedger.runningBalanceAmount || 0);
           const damageQty = Number(damageLedger.runningBalanceQty || damageLedger.runningBalanceOrderQty || 0);
@@ -1609,7 +1609,7 @@ export class OverviewComponent implements OnInit {
         }
         
         // Fetch cancels for this day
-        const cancelLedger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, new Date(date), 'cancel');
+        const cancelLedger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, new Date(date), 'cancelled');
         if (cancelLedger && cancelLedger.runningBalanceQty > 0) {
           console.log(`  ${dateStr} cancel:`, cancelLedger);
           currentRangeCancelQty += Number(cancelLedger.runningBalanceQty || 0);
@@ -1917,7 +1917,7 @@ export class OverviewComponent implements OnInit {
           const currentPermission = this.authService.getCurrentPermission();
           const companyId = currentPermission?.companyId || '';
           // Include both 'refund' and manual 'expense' ledger event types
-          const ledgerExpenses = await this.ledgerService.sumEventsInRange(companyId, storeId, monthStart, monthEnd, ['refund', 'expense']);
+          const ledgerExpenses = await this.ledgerService.sumEventsInRange(companyId, storeId, monthStart, monthEnd, ['refunded', 'expense']);
           const ledgerExpensesNum = Number(ledgerExpenses || 0);
           this.ledgerTotalRefunds.set(ledgerExpensesNum);
           // Add ledger expense/refund amounts to monthExpensesTotal
@@ -1950,7 +1950,7 @@ export class OverviewComponent implements OnInit {
         try {
           const currentPermission = this.authService.getCurrentPermission();
           const companyId = currentPermission?.companyId || '';
-          const ledgerYesterday = await this.ledgerService.sumEventsInRange(companyId, storeId, yStart, yEnd, ['refund', 'expense']);
+          const ledgerYesterday = await this.ledgerService.sumEventsInRange(companyId, storeId, yStart, yEnd, ['refunded', 'expense']);
           const ledgerY = Number(ledgerYesterday || 0);
           yTotal = yTotal + ledgerY;
         } catch (ledgerErr) {

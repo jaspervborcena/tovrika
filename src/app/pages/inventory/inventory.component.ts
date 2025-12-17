@@ -85,14 +85,81 @@ export interface InventoryRow {
       .store-name { text-transform: uppercase; }
 
       /* Table / wrapper */
-      .table-wrap { width:100%; overflow:auto }
-      table { width:100%; min-width:800px }
-      .mat-elevation { padding: 12px; border-radius: 8px }
+      .table-wrap { 
+        width: 100%; 
+        overflow-x: auto; 
+        overflow-y: auto;
+        max-height: calc(100vh - 300px);
+        background: white;
+        border-radius: 8px;
+        box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+      }
+      
+      table { 
+        width: 100%; 
+        min-width: 1200px;
+        border-collapse: collapse;
+      }
+      
+      .mat-elevation { 
+        padding: 0;
+        border-radius: 8px;
+      }
+
+      /* Table cell styles */
+      th.mat-header-cell, td.mat-cell {
+        white-space: nowrap;
+        padding: 12px 16px !important;
+        font-size: 0.875rem;
+      }
+
+      th.mat-header-cell {
+        background: #f9fafb;
+        font-weight: 600;
+        color: #374151;
+        border-bottom: 2px solid #e5e7eb;
+        position: sticky;
+        top: 0;
+        z-index: 10;
+      }
+
+      td.mat-cell {
+        border-bottom: 1px solid #f3f4f6;
+        color: #1f2937;
+      }
+
+      tr.mat-row:hover {
+        background-color: #f9fafb;
+      }
+
+      /* Duplicate row highlighting */
+      tr.mat-row.duplicate-row {
+        background-color: #ffeb3b !important;
+      }
+
+      tr.mat-row.duplicate-row:hover {
+        background-color: #fdd835 !important;
+      }
+
+      /* Column-specific widths */
+      .mat-column-orderId { min-width: 150px; }
+      .mat-column-batchId { min-width: 120px; }
+      .mat-column-date { min-width: 160px; }
+      .mat-column-performedBy { min-width: 150px; }
+      .mat-column-productCode { min-width: 120px; }
+      .mat-column-sku { min-width: 150px; }
+      .mat-column-costPrice { min-width: 100px; text-align: right; }
+      .mat-column-sellingPrice { min-width: 100px; text-align: right; }
+      .mat-column-quantity { min-width: 80px; text-align: center; }
+      .mat-column-profitPerUnit { min-width: 100px; text-align: right; }
+      .mat-column-totalGross { min-width: 120px; text-align: right; }
+      .mat-column-totalProfit { min-width: 120px; text-align: right; }
     `
   ]
 })
 export class InventoryComponent implements OnInit {
   displayedColumns: string[] = [
+    'orderId',
     'batchId',
     'date',
     'performedBy',
@@ -123,6 +190,8 @@ export class InventoryComponent implements OnInit {
       const mapped = (rows || []).map(r => ({
         orderId: r.invoiceNo,
         batchId: r.batchId || '',
+        date: r.date,
+        performedBy: r.performedBy,
         productCode: r.productCode || '',
         sku: r.sku || '',
         costPrice: r.costPrice || 0,
@@ -224,5 +293,32 @@ export class InventoryComponent implements OnInit {
 
   totalGross(row: InventoryRow): number {
     return row.sellingPrice * (row.quantity || 0);
+  }
+
+  isDuplicateRow(row: InventoryRow): boolean {
+    // Check if there's another row with same Invoice No, Performed By, Product Code, and SKU
+    const matches = this.dataSource.data.filter(r => {
+      if (r === row) return false; // Don't compare with itself
+      
+      const sameInvoice = r.orderId === row.orderId;
+      const samePerformedBy = r.performedBy === row.performedBy;
+      const sameProductCode = r.productCode === row.productCode;
+      const sameSku = r.sku === row.sku;
+      
+      // Debug log
+      if (sameInvoice && sameProductCode && sameSku) {
+        console.log('Found potential duplicate:', {
+          invoice: row.orderId,
+          product: row.productCode,
+          sku: row.sku,
+          performedBy: row.performedBy,
+          match: { performedBy: r.performedBy }
+        });
+      }
+      
+      return sameInvoice && samePerformedBy && sameProductCode && sameSku;
+    });
+    
+    return matches.length > 0;
   }
 }

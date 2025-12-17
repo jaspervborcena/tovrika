@@ -79,7 +79,7 @@ export interface OrderAccountingLedger {
   storeId: string;
   orderId: string;
   // Event type describing the kind of ledger entry
-  eventType: 'order' | 'return' | 'refund' | 'cancel' | 'damage';
+  eventType: 'order' | 'returned' | 'refunded' | 'cancelled' | 'damaged';
 
   // Monetary and quantity impact of this event
   amount: number;

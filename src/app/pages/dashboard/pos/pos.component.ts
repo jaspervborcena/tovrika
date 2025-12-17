@@ -1236,9 +1236,9 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
           try {
             const adjType = (e.adjustmentType || '').toString().toLowerCase();
             const mapPartial: any = {
-              partial_return: 'return',
-              partial_refund: 'refund',
-              partial_damage: 'damage'
+              partial_return: 'returned',
+              partial_refund: 'refunded',
+              partial_damage: 'damaged'
             };
             const eventType = mapPartial[adjType];
             if (eventType && r && r.created && r.created > 0) {
@@ -1275,7 +1275,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
           try {
             // `eventType` is derived from keys and TypeScript treats it as string;
             // cast to the allowed union to satisfy the LedgerService signature.
-            const typedEvent = eventType as 'completed' | 'return' | 'refund' | 'cancel' | 'damage';
+            const typedEvent = eventType as 'completed' | 'returned' | 'refunded' | 'cancelled' | 'damaged';
             const res: any = await this.ledgerService.recordEvent(companyId, storeId, orderId, typedEvent, Number((sums as any).amount || 0), Number((sums as any).qty || 0), performedBy);
             console.log('LedgerService: aggregated entry created', { orderId, eventType, amount: (sums as any).amount, qty: (sums as any).qty, id: res?.id });
           } catch (ledgerErr) {
@@ -1653,7 +1653,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
 
     // Show a simple success dialog for the status change. Ledger writes are handled
     // inside `OrderService.updateOrderStatus` to avoid duplicate entries.
-    const map: any = { returned: 'return', refunded: 'refund', damaged: 'damage', cancelled: 'cancel' };
+    const map: any = { returned: 'returned', refunded: 'refunded', damaged: 'damaged', cancelled: 'cancelled' };
     const eventType = map[status] || status;
     const statusSuccessMap: any = {
       return: 'Successfully marked items as returned.',

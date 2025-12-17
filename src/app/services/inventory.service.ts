@@ -5,9 +5,10 @@ import {
   query,
   where,
   orderBy,
-  limit
+  limit,
+  doc
 } from '@angular/fire/firestore';
-import { getDocs, getAggregateFromServer, count } from 'firebase/firestore';
+import { getDocs, getAggregateFromServer, count, getDoc } from 'firebase/firestore';
 import { ProductService } from './product.service';
 import { OfflineDocumentService } from '../core/services/offline-document.service';
 
@@ -59,7 +60,41 @@ export class InventoryService {
   readonly lowStockItems = computed(() => this.inventory().filter(item => item.quantity <= (item.minStock ?? 0)));
   readonly outOfStockItems = computed(() => this.inventory().filter(item => item.quantity === 0));
 
+  // Cache for user display names to avoid repeated queries
+  private userDisplayNameCache = new Map<string, string>();
+
   constructor() {}
+
+  /**
+   * Get user display name from Firestore users collection by UID
+   */
+  private async getUserDisplayName(uid: string | undefined): Promise<string | null> {
+    if (!uid) return null;
+    
+    // Check cache first
+    if (this.userDisplayNameCache.has(uid)) {
+      return this.userDisplayNameCache.get(uid) || null;
+    }
+
+    try {
+      const userDoc = await getDocs(query(
+        collection(this.firestore, 'users'),
+        where('uid', '==', uid),
+        limit(1)
+      ) as any);
+
+      if (!userDoc.empty) {
+        const userData = userDoc.docs[0].data() as any;
+        const displayName = userData?.displayName || userData?.email || uid;
+        this.userDisplayNameCache.set(uid, displayName);
+        return displayName;
+      }
+    } catch (error) {
+      console.warn('Failed to fetch user display name:', error);
+    }
+
+    return null;
+  }
 
   /**
    * Fetch and map rows from any collection with optional filters.
@@ -74,7 +109,7 @@ export class InventoryService {
     const col = collection(this.firestore, collectionName);
     const out: InventoryRow[] = [];
     try {
-      const q = query(col, ...baseFilters, orderBy('updatedAt', 'desc'), limit(fetchLimit));
+      const q = query(col, ...baseFilters, orderBy('createdAt', 'desc'), limit(fetchLimit));
       const snaps = await getDocs(q as any);
       for (const s of snaps.docs) {
         const data: any = s.data() || {};
@@ -99,7 +134,7 @@ export class InventoryService {
       const outSku = (sku && sku.trim().length > 0) ? sku : '';
       const finalProductCode = outProductCode || outSku ? outProductCode : productId;
 
-      // Extract date and performedBy from deduction data
+      // Extract date and performedBy from inventoryDeductions data
       let deductionDate: Date | string | undefined = undefined;
       if (data.deductedAt) {
         if (typeof data.deductedAt === 'string') {
@@ -111,10 +146,11 @@ export class InventoryService {
         }
       }
 
-      const performedBy = data.deductedBy || '';
+      // Get user displayName from deductedBy (uid)
+      const performedBy = await this.getUserDisplayName(data.deductedBy) || data.deductedBy || '';
 
       out.push({
-        invoiceNo: data.orderId || data.invoiceNumber || '',
+        invoiceNo: data.invoiceNumber || data.orderId || '',
         batchId,
         date: deductionDate,
         performedBy,
@@ -132,23 +168,23 @@ export class InventoryService {
     } catch (err) {
       // Likely index required or other query error — fall back to a simpler query and client-side filter
       console.warn('fetchRowsFromCollection primary query failed, falling back:', err);
-      // Attempt to use the first filter (commonly status equality) and order by updatedAt
+      // Attempt to use the first filter (commonly status equality) and order by createdAt
       const fallbackFilters = baseFilters && baseFilters.length > 0 ? [baseFilters[0]] : [];
-      const fallbackQ = query(col, ...fallbackFilters, orderBy('updatedAt', 'desc'), limit(fetchLimit));
+      const fallbackQ = query(col, ...fallbackFilters, orderBy('createdAt', 'desc'), limit(fetchLimit));
       const snapsFallback = await getDocs(fallbackQ as any);
       for (const s of snapsFallback.docs) {
         const data: any = s.data() || {};
           // if updatedAtRange provided, enforce it client-side
           if (updatedAtRange && (updatedAtRange.start || updatedAtRange.end)) {
-            const ua = data.updatedAt;
-            let updatedAtDate: Date | null = null;
-            if (!ua) continue;
-            if (typeof ua.toDate === 'function') updatedAtDate = ua.toDate();
-            else if (ua instanceof Date) updatedAtDate = ua as Date;
-            else updatedAtDate = new Date(ua);
-            if (!updatedAtDate) continue;
-            if (updatedAtRange.start && updatedAtDate < updatedAtRange.start) continue;
-            if (updatedAtRange.end && updatedAtDate > updatedAtRange.end) continue;
+            const ca = data.createdAt;
+            let createdAtDate: Date | null = null;
+            if (!ca) continue;
+            if (typeof ca.toDate === 'function') createdAtDate = ca.toDate();
+            else if (ca instanceof Date) createdAtDate = ca as Date;
+            else createdAtDate = new Date(ca);
+            if (!createdAtDate) continue;
+            if (updatedAtRange.start && createdAtDate < updatedAtRange.start) continue;
+            if (updatedAtRange.end && createdAtDate > updatedAtRange.end) continue;
           }
         const productId: string = data.productId;
         const quantity: number = Number(data.quantity || 0);
@@ -171,7 +207,7 @@ export class InventoryService {
         const outSku = (sku && sku.trim().length > 0) ? sku : '';
         const finalProductCode = outProductCode || outSku ? outProductCode : productId;
 
-        // Extract date and performedBy from deduction data
+        // Extract date and performedBy from inventoryDeductions data
         let deductionDate: Date | string | undefined = undefined;
         if (data.deductedAt) {
           if (typeof data.deductedAt === 'string') {
@@ -183,10 +219,11 @@ export class InventoryService {
           }
         }
 
-        const performedBy = data.deductedBy || '';
+        // Get user displayName from deductedBy (uid)
+        const performedBy = await this.getUserDisplayName(data.deductedBy) || data.deductedBy || '';
 
         out.push({
-          invoiceNo: data.orderId || data.invoiceNumber || '',
+          invoiceNo: data.invoiceNumber || data.orderId || '',
           batchId,
           date: deductionDate,
           performedBy,
@@ -229,8 +266,8 @@ async loadRowsForPeriod(period: string, page: number = 1): Promise<void> {
       const month = targetMonth.getMonth();
       const start = new Date(year, month, 1, 0, 0, 0, 0);
       const end = new Date(year, month + 1, 0, 23, 59, 59, 999);
-      filters.push(where('updatedAt', '>=', start));
-      filters.push(where('updatedAt', '<=', end));
+      filters.push(where('createdAt', '>=', start));
+      filters.push(where('createdAt', '<=', end));
       updatedAtRange = { start, end };
     } else if (period === 'today' || period === 'yesterday') {
       // keep using exact date range for daily queries
@@ -245,13 +282,13 @@ async loadRowsForPeriod(period: string, page: number = 1): Promise<void> {
         end = new Date(y.getFullYear(), y.getMonth(), y.getDate(), 23, 59, 59, 999);
       }
       if (start && end) {
-        filters.push(where('updatedAt', '>=', start));
-        filters.push(where('updatedAt', '<=', end));
+        filters.push(where('createdAt', '>=', start));
+        filters.push(where('createdAt', '<=', end));
         updatedAtRange = { start, end };
       }
     }
     // Note: we intentionally do not rely on a `yearMonth` field here because historical
-    // tracking documents may lack it. Instead we filter by `updatedAt` ranges above.
+    // tracking documents may lack it. Instead we filter by `createdAt` ranges above.
 
     const pageSize = this.pageSize;
     const fetchLimit = Math.max(page * pageSize, pageSize);
