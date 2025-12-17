@@ -38,6 +38,18 @@
         <td mat-cell *matCellDef="let row"> {{row.batchId}} </td>
       </ng-container>
 
+      <!-- Date -->
+      <ng-container matColumnDef="date">
+        <th mat-header-cell *matHeaderCellDef> Date </th>
+        <td mat-cell *matCellDef="let row"> {{row.date | date:'short'}} </td>
+      </ng-container>
+
+      <!-- Performed By -->
+      <ng-container matColumnDef="performedBy">
+        <th mat-header-cell *matHeaderCellDef> Performed By </th>
+        <td mat-cell *matCellDef="let row"> {{row.performedBy}} </td>
+      </ng-container>
+
       <!-- Product Code -->
       <ng-container matColumnDef="productCode">
         <th mat-header-cell *matHeaderCellDef> Product Code </th>

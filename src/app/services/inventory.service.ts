@@ -14,6 +14,8 @@ import { OfflineDocumentService } from '../core/services/offline-document.servic
 export interface InventoryRow {
   invoiceNo: string;
   batchId?: string | null;
+  date?: Date | string;
+  performedBy?: string;
   productCode?: string;
   sku?: string;
   costPrice: number;
@@ -97,9 +99,25 @@ export class InventoryService {
       const outSku = (sku && sku.trim().length > 0) ? sku : '';
       const finalProductCode = outProductCode || outSku ? outProductCode : productId;
 
+      // Extract date and performedBy from deduction data
+      let deductionDate: Date | string | undefined = undefined;
+      if (data.deductedAt) {
+        if (typeof data.deductedAt === 'string') {
+          deductionDate = data.deductedAt;
+        } else if (data.deductedAt instanceof Date) {
+          deductionDate = data.deductedAt;
+        } else if (typeof data.deductedAt.toDate === 'function') {
+          deductionDate = data.deductedAt.toDate();
+        }
+      }
+
+      const performedBy = data.deductedBy || '';
+
       out.push({
         invoiceNo: data.orderId || data.invoiceNumber || '',
         batchId,
+        date: deductionDate,
+        performedBy,
         productCode: finalProductCode,
         sku: outSku,
         costPrice,
@@ -153,9 +171,25 @@ export class InventoryService {
         const outSku = (sku && sku.trim().length > 0) ? sku : '';
         const finalProductCode = outProductCode || outSku ? outProductCode : productId;
 
+        // Extract date and performedBy from deduction data
+        let deductionDate: Date | string | undefined = undefined;
+        if (data.deductedAt) {
+          if (typeof data.deductedAt === 'string') {
+            deductionDate = data.deductedAt;
+          } else if (data.deductedAt instanceof Date) {
+            deductionDate = data.deductedAt;
+          } else if (typeof data.deductedAt.toDate === 'function') {
+            deductionDate = data.deductedAt.toDate();
+          }
+        }
+
+        const performedBy = data.deductedBy || '';
+
         out.push({
           invoiceNo: data.orderId || data.invoiceNumber || '',
           batchId,
+          date: deductionDate,
+          performedBy,
           productCode: finalProductCode,
           sku: outSku,
           costPrice,

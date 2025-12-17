@@ -1814,18 +1814,6 @@ import { AppConstants } from '../../../shared/enums/app-constants.enum';
                       <small class="text-muted">Selling price may include VAT depending on product settings</small>
                     </div>
                     
-                    <div class="form-group">
-                      <label for="receivedAt" class="form-label">Received Date *</label>
-                      <input 
-                        type="date" 
-                        id="receivedAt"
-                        class="form-input" 
-                        formControlName="receivedAt"
-                        [class.error]="inventoryForm.get('receivedAt')?.invalid && inventoryForm.get('receivedAt')?.touched" />
-                      <div class="error-message" *ngIf="inventoryForm.get('receivedAt')?.invalid && inventoryForm.get('receivedAt')?.touched">
-                        Received date is required
-                      </div>
-                    </div>
                     
                     <div class="form-group" style="grid-column: 1 / -1;">
                       <label class="form-label">VAT</label>
@@ -1852,6 +1840,18 @@ import { AppConstants } from '../../../shared/enums/app-constants.enum';
                     </div>
                   </div>
                   
+                    <div class="form-group">
+                      <label for="receivedAt" class="form-label">Received Date *</label>
+                      <input 
+                        type="date" 
+                        id="receivedAt"
+                        class="form-input" 
+                        formControlName="receivedAt"
+                        [class.error]="inventoryForm.get('receivedAt')?.invalid && inventoryForm.get('receivedAt')?.touched" />
+                      <div class="error-message" *ngIf="inventoryForm.get('receivedAt')?.invalid && inventoryForm.get('receivedAt')?.touched">
+                        Received date is required
+                      </div>
+                    </div>
                   <div class="form-actions">
                     <button type="button" class="btn btn-secondary" (click)="cancelEdit()">
                       Cancel

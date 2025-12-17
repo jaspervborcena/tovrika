@@ -14,6 +14,8 @@ import { InventoryService as AppInventoryService } from '../../services/inventor
 export interface InventoryRow {
   orderId?: string;
   batchId: string;
+  date?: Date | string;
+  performedBy?: string;
   productCode: string;
   sku: string;
   costPrice: number;
@@ -92,6 +94,8 @@ export interface InventoryRow {
 export class InventoryComponent implements OnInit {
   displayedColumns: string[] = [
     'batchId',
+    'date',
+    'performedBy',
     'productCode',
     'sku',
     'costPrice',

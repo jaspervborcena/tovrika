@@ -339,6 +339,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   readonly paymentModalVisible = signal<boolean>(false);
   paymentAmountTendered: number = 0;
   paymentDescription: string = '';
+  paymentType: string = 'Cash';
 
   // Cart Information Dialog State
   readonly cartInformationModalVisible = signal<boolean>(false);
@@ -1580,51 +1581,17 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
         const errors = res?.errors ?? [];
         const msg = `Created ${created} damaged record(s). ${errors.length ? 'Errors: ' + errors.length : ''}`;
         
-        // Record damage event in orderAccountingLedger using orderSellingTracking data
-        try {
-          let amount = 0;
-          let qty = 0;
-          const companyId = this.authService.getCurrentPermission()?.companyId || '';
-          const storeId = order?.storeId || this.authService.getCurrentPermission()?.storeId || '';
-          
-          // Query ordersSellingTracking to get actual damaged quantities
-          const trackingRef = collection(this.firestore, 'ordersSellingTracking');
-          const trackingQ = query(trackingRef, where('orderId', '==', orderId), where('status', 'in', ['damage', 'damaged']));
-          const trackingSnap = await getDocs(trackingQ);
-          
-          if (!trackingSnap.empty) {
-            for (const d of trackingSnap.docs) {
-              const data: any = d.data();
-              const lineTotal = Number(data.total || data.lineTotal || (Number(data.price || 0) * Number(data.quantity || 0)) || 0);
-              amount += lineTotal;
-              qty += Number(data.quantity || 0);
-            }
-          } else {
-            // Fallback to order totals if no tracking entries yet
-            amount = Number(order?.netAmount ?? order?.totalAmount ?? 0);
-            qty = (order?.items || []).reduce((s: number, it: any) => s + Number(it.quantity || 0), 0);
-          }
-          
-          if (companyId && storeId) {
-            await this.ledgerService.recordEvent(
-              companyId,
-              storeId,
-              orderId,
-              'damage',
-              amount,
-              qty,
-              creds.userCode || 'system'
-            );
-            console.log('✅ Damage event recorded in ledger:', { orderId, amount, qty });
-          }
-        } catch (ledgerErr) {
-          console.error('Failed to record damage event in ledger:', ledgerErr);
-        }
+        // Update order status to "damaged" - this will also record to ledger automatically
+        await this.orderService.updateOrderStatus(orderId, 'damaged', reason || undefined);
         
         await this.showConfirmationDialog({ title: 'Success', message: 'Successfully marked damage. ' + msg, confirmText: 'OK', cancelText: '', type: 'info' });
 
         // Mark that damage has been applied so UI will hide/lock actions as required
         this.damageAppliedSignal.set(true);
+        
+        // Refresh orders list and close order details
+        await this.searchOrders();
+        this.closeOrder();
 
         // Do NOT open the Manage Item Status dialog automatically after damage
         return;
@@ -3002,11 +2969,21 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       }
       
       const change = this.calculateChange();
+      
+      // IMPORTANT: Capture payment info BEFORE closing dialog (dialog close resets these values)
+      const paymentInfo = {
+        amountTendered: tendered,
+        changeAmount: change,
+        paymentDescription: this.paymentDescription,
+        paymentType: this.paymentType
+      };
+      
       console.log('💳 Payment validated:', {
         totalAmount,
         tendered,
         change,
-        description: this.paymentDescription
+        description: paymentInfo.paymentDescription,
+        type: paymentInfo.paymentType
       });
       
       // Generate real invoice number when payment is being processed
@@ -3029,15 +3006,11 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
         realInvoiceNumber = 'INV-0000-000000';
       }
       
-      // Close payment dialog first
+      // Close payment dialog after capturing values
       this.closePaymentDialog();
       
-      // Now complete the order with payment information
-      await this.completeOrderWithPayment({
-        amountTendered: tendered,
-        changeAmount: change,
-        paymentDescription: this.paymentDescription
-      });
+      // Now complete the order with payment information (using captured values)
+      await this.completeOrderWithPayment(paymentInfo);
       
     } catch (error) {
       console.error('❌ Error processing payment:', error);
@@ -3056,6 +3029,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     amountTendered: number;
     changeAmount: number;
     paymentDescription: string;
+    paymentType: string;
   }): Promise<void> {
     try {
       console.log('💾 Completing order with payment info:', paymentInfo);
@@ -3065,7 +3039,8 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       const paymentsData = {
         amountTendered: paymentInfo.amountTendered,
         changeAmount: paymentInfo.changeAmount,
-        paymentDescription: paymentInfo.paymentDescription
+        paymentDescription: paymentInfo.paymentDescription,
+        paymentType: paymentInfo.paymentType
       };
       
       console.log('📝 Processed customer info:', processedCustomerInfo);

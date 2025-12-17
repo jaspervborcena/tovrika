@@ -46,6 +46,10 @@ export class OrderService {
       assignedCashierId: data.assignedCashierId,
       status: data.status,
       
+      // Status tracking
+      statusHistory: data.statusHistory || [],
+      statusTags: data.statusTags || [],
+      
       // Customer Information
       cashSale: data.cashSale,
       soldTo: data.soldTo,
@@ -402,13 +406,60 @@ export class OrderService {
   }
 async updateOrderStatus(orderId: string, status: string, reason?: string): Promise<void> {
   try {
-    const updatePayload: any = { status };
-    if (reason !== undefined && reason !== null) updatePayload.updateReason = reason;
+    const currentUser = this.authService.getCurrentUser();
+    const currentUserId = currentUser?.uid || 'system';
+    const now = new Date();
+    
+    // First, get the current order to retrieve existing statusHistory and statusTags
+    const orderRef = clientDoc(this.firestore, 'orders', orderId);
+    const orderSnap = await getDoc(orderRef as any);
+    
+    let existingStatusHistory: any[] = [];
+    let existingStatusTags: string[] = [];
+    
+    if (orderSnap && orderSnap.exists()) {
+      const orderData: any = orderSnap.data();
+      existingStatusHistory = orderData.statusHistory || [];
+      existingStatusTags = orderData.statusTags || [];
+    }
+    
+    // Append new status to history
+    const newHistoryEntry = {
+      status,
+      changedAt: now,
+      changedBy: currentUserId,
+      ...(reason && { reason })
+    };
+    
+    const updatedStatusHistory = [...existingStatusHistory, newHistoryEntry];
+    
+    // Add status to tags if not already present
+    const updatedStatusTags = existingStatusTags.includes(status) 
+      ? existingStatusTags 
+      : [...existingStatusTags, status];
+    
+    // Build update payload with updatedAt, never modify createdAt
+    // Root status field only updates for 'cancelled', otherwise it stays at initial value
+    const updatePayload: any = { 
+      updatedAt: now,
+      statusHistory: updatedStatusHistory,
+      statusTags: updatedStatusTags
+    };
+    
+    // Only update root status field if the new status is 'cancelled'
+    if (status === 'cancelled') {
+      updatePayload.status = status;
+    }
+    
+    if (reason !== undefined && reason !== null) {
+      updatePayload.updateReason = reason;
+    }
+    
+    // Update the order document
     await this.offlineDocService.updateDocument('orders', orderId, updatePayload);
-
     // If we're online and the order was cancelled or returned, attempt a client-side transactional restock.
     // This is a best-effort attempt — the server-side Cloud Function still exists as authoritative.
-  if (navigator.onLine && (status === 'cancelled' || status === 'returned' || status === 'refunded')) {
+  if (navigator.onLine && (status === 'cancelled' || status === 'returned' || status === 'refunded' || status === 'damage' || status === 'damaged')) {
   const currentUser = this.authService.getCurrentUser();
   const performedBy = currentUser?.uid || currentUser?.email || 'system';
 

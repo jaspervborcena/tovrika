@@ -37,7 +37,33 @@ export class LedgerService {
     // Get start of today to reset balances daily
     const now = new Date();
     const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+    const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
     
+    // Check if an entry already exists for this orderId + eventType today
+    const existingQ = query(
+      collection(this.firestore, 'orderAccountingLedger'),
+      where('companyId', '==', companyId),
+      where('storeId', '==', storeId),
+      where('orderId', '==', orderId),
+      where('eventType', '==', eventType),
+      where('createdAt', '>=', startOfToday),
+      where('createdAt', '<=', endOfToday)
+    );
+
+    const existingSnaps = await getDocs(existingQ);
+    
+    if (!existingSnaps.empty) {
+      console.log(`⚠️ LedgerService: Entry already exists for orderId=${orderId}, eventType=${eventType} today. Skipping duplicate.`);
+      const existing = existingSnaps.docs[0].data() as any;
+      return {
+        id: existingSnaps.docs[0].id,
+        runningBalanceAmount: existing.runningBalanceAmount,
+        runningBalanceQty: existing.runningBalanceQty,
+        runningBalanceOrderQty: existing.runningBalanceOrderQty,
+        duplicate: true
+      };
+    }
+
     // Query latest ledger entry for this company/store/eventType from TODAY only
     const q = query(
       collection(this.firestore, 'orderAccountingLedger'),
@@ -65,7 +91,7 @@ export class LedgerService {
     const newBalanceAmount = latestBalanceAmount + amount;
     const newBalanceQty = latestBalanceQty + qty;
 
-    // Only add to order-specific balance if eventType is 'order'
+    // Only add to order-specific balance if eventType is 'completed'
     const newOrderBalanceQty =
       latestOrderBalanceQty + (eventType === 'completed' ? qty : 0);
 
