@@ -151,35 +151,66 @@ export class LedgerService {
       const startOfDay = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0, 0);
       const endOfDay = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59, 999);
       
-      // Query for the latest ledger entry for the specified eventType on the specified date
+      // Get the previous day to calculate the difference
+      const previousDay = new Date(date);
+      previousDay.setDate(previousDay.getDate() - 1);
+      const startOfPreviousDay = new Date(previousDay.getFullYear(), previousDay.getMonth(), previousDay.getDate(), 0, 0, 0, 0);
+      const endOfPreviousDay = new Date(previousDay.getFullYear(), previousDay.getMonth(), previousDay.getDate(), 23, 59, 59, 999);
+      
+      // Query for the latest ledger entry up to end of the specified date
       const q = query(
         collection(this.firestore, 'orderAccountingLedger'),
         where('companyId', '==', companyId),
         where('storeId', '==', storeId),
         where('eventType', '==', eventType),
-        orderBy('createdAt', 'desc')
+        where('createdAt', '<=', endOfDay),
+        orderBy('createdAt', 'desc'),
+        limit(1)
       );
       
       const snaps = await getDocs(q);
       
-      // Filter client-side for the specific date range
-      const filteredDocs = snaps.docs.filter(doc => {
-        const data = doc.data();
-        const createdAt = data['createdAt']?.toDate?.();
-        if (!createdAt) return false;
-        return createdAt >= startOfDay && createdAt <= endOfDay;
-      });
-      
-      if (filteredDocs.length > 0) {
-        const d: any = filteredDocs[0].data();
-        return {
+      // Get running balance at end of specified date
+      let currentBalance = { runningBalanceAmount: 0, runningBalanceQty: 0, runningBalanceOrderQty: 0 };
+      if (snaps.docs.length > 0) {
+        const d: any = snaps.docs[0].data();
+        currentBalance = {
           runningBalanceAmount: Number(d.runningBalanceAmount || 0),
           runningBalanceQty: Number(d.runningBalanceQty || 0),
           runningBalanceOrderQty: Number(d.runningBalanceOrderQty || 0)
         };
       }
       
-      return { runningBalanceAmount: 0, runningBalanceQty: 0, runningBalanceOrderQty: 0 };
+      // Query for the latest ledger entry up to end of previous day
+      const qPrev = query(
+        collection(this.firestore, 'orderAccountingLedger'),
+        where('companyId', '==', companyId),
+        where('storeId', '==', storeId),
+        where('eventType', '==', eventType),
+        where('createdAt', '<=', endOfPreviousDay),
+        orderBy('createdAt', 'desc'),
+        limit(1)
+      );
+      
+      const snapsPrev = await getDocs(qPrev);
+      
+      // Get running balance at end of previous date
+      let previousBalance = { runningBalanceAmount: 0, runningBalanceQty: 0, runningBalanceOrderQty: 0 };
+      if (snapsPrev.docs.length > 0) {
+        const d: any = snapsPrev.docs[0].data();
+        previousBalance = {
+          runningBalanceAmount: Number(d.runningBalanceAmount || 0),
+          runningBalanceQty: Number(d.runningBalanceQty || 0),
+          runningBalanceOrderQty: Number(d.runningBalanceOrderQty || 0)
+        };
+      }
+      
+      // Return the difference (activity for the specified day only)
+      return {
+        runningBalanceAmount: currentBalance.runningBalanceAmount - previousBalance.runningBalanceAmount,
+        runningBalanceQty: currentBalance.runningBalanceQty - previousBalance.runningBalanceQty,
+        runningBalanceOrderQty: currentBalance.runningBalanceOrderQty - previousBalance.runningBalanceOrderQty
+      };
     } catch (err) {
       console.warn('LedgerService.getLatestOrderBalances fallback', err);
       return { runningBalanceAmount: 0, runningBalanceQty: 0, runningBalanceOrderQty: 0 };

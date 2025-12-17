@@ -1736,6 +1736,21 @@ export class OverviewComponent implements OnInit {
     if (!target) return;
     const v = target.value as 'today' | 'yesterday' | 'this_month' | 'previous_month' | 'date_range';
     console.log('🔄 Period changed to:', v);
+    
+    // Reset all ledger signals to 0 when period changes to prevent stale data
+    this.ledgerReturnAmount.set(0);
+    this.ledgerReturnQty.set(0);
+    this.ledgerRefundAmount.set(0);
+    this.ledgerRefundQty.set(0);
+    this.ledgerDamageAmount.set(0);
+    this.ledgerDamageQty.set(0);
+    this.ledgerCancelQty.set(0);
+    this.ledgerCompletedQty.set(0);
+    this.ledgerOrderQty.set(0);
+    this.ledgerTotalRevenue.set(0);
+    this.ledgerTotalOrders.set(0);
+    console.log('🔄 Reset all ledger signals to 0');
+    
     this.selectedPeriod.set(v);
     console.log('✅ selectedPeriod() is now:', this.selectedPeriod());
     if (v === 'date_range') {
@@ -1771,7 +1786,17 @@ export class OverviewComponent implements OnInit {
   protected applyPeriodAndLoad() {
     const period = this.selectedPeriod();
     console.log('⚡ applyPeriodAndLoad called with period:', period, 'at', new Date().toISOString());
-    console.trace('⚡ applyPeriodAndLoad stack trace:');
+    
+    // Reset all ledger signals to 0 before loading new data
+    this.ledgerReturnAmount.set(0);
+    this.ledgerReturnQty.set(0);
+    this.ledgerRefundAmount.set(0);
+    this.ledgerRefundQty.set(0);
+    this.ledgerDamageAmount.set(0);
+    this.ledgerDamageQty.set(0);
+    this.ledgerCancelQty.set(0);
+    console.log('🔄 applyPeriodAndLoad: Reset ledger signals to 0');
+    
     const now = new Date();
     let start: Date | undefined;
     let end: Date | undefined;
