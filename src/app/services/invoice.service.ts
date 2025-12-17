@@ -149,13 +149,24 @@ export class InvoiceService {
       // Ensure companyTaxId is sourced from the store's tax id (tinNumber) when available
       const storeTaxId = storeDataOutside?.['tinNumber'] || storeDataOutside?.['taxId'] || orderDataWithoutItems?.companyTaxId || '';
 
+      const currentUser = this.authService.getCurrentUser();
+      const currentUserId = currentUser?.uid || 'system';
+      const now = new Date();
+      
       const orderWithSecurityPre = await this.securityService.addSecurityFields({
         ...orderDataWithoutItems,
         invoiceNumber: nextInvoiceNoOutside,
         storeId: storeId,
         companyTaxId: storeTaxId,
         status: 'completed',
-        createdBy: this.authService.getCurrentUser()?.uid || 'system'
+        createdBy: currentUserId,
+        // Initialize status tracking
+        statusHistory: [{
+          status: 'completed',
+          changedAt: now,
+          changedBy: currentUserId
+        }],
+        statusTags: ['completed']
       });
 
       const completeOrderDataPre = {
@@ -174,11 +185,13 @@ export class InvoiceService {
         payments: paymentsData ? {
           amountTendered: paymentsData.amountTendered || 0,
           changeAmount: paymentsData.changeAmount || 0,
-          paymentDescription: paymentsData.paymentDescription || 'Cash Payment'
+          paymentDescription: paymentsData.paymentDescription !== undefined && paymentsData.paymentDescription !== null ? paymentsData.paymentDescription : 'Cash Payment',
+          paymentType: paymentsData.paymentType || 'Cash'
         } : {
           amountTendered: 0,
           changeAmount: 0,
-          paymentDescription: 'Cash Payment'
+          paymentDescription: 'Cash Payment',
+          paymentType: 'Cash'
         }
       };
 

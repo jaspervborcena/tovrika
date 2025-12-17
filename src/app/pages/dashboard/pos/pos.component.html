@@ -454,7 +454,15 @@
                     {{ order.soldTo || 'Walk-in Customer' }}
                   </div>
                   <div style="font-size: 0.8rem; color: #6b7280; margin-top: 2px;">
-                    Status: <span [style.color]="getOrderStatusColor(order.status)">{{ order.status | titlecase }}</span>
+                    Status: 
+                    <ng-container *ngIf="order.statusTags && order.statusTags.length > 0; else singleStatus">
+                      <span *ngFor="let tag of order.statusTags; let last = last" [style.color]="getOrderStatusColor(tag)">
+                        {{ tag | titlecase }}<ng-container *ngIf="!last">, </ng-container>
+                      </span>
+                    </ng-container>
+                    <ng-template #singleStatus>
+                      <span [style.color]="getOrderStatusColor(order.status)">{{ order.status | titlecase }}</span>
+                    </ng-template>
                   </div>
                 </div>
                 
@@ -1102,6 +1110,22 @@
             </div>
           </div>
           
+          <div class="payment-type">
+            <label for="payment-type">Payment Type:</label>
+            <select 
+              id="payment-type"
+              [(ngModel)]="paymentType"
+              class="payment-select">
+              <option value="Cash">Cash</option>
+              <option value="GCash">GCash</option>
+              <option value="Maya">Maya</option>
+              <option value="Coins.ph">Coins.ph</option>
+              <option value="Credit Card">Credit Card</option>
+              <option value="Debit Card">Debit Card</option>
+              <option value="Others">Others</option>
+            </select>
+          </div>
+
           <div class="payment-description">
             <label for="payment-desc">{{ 'pos.paymentDescription' | translate }}:</label>
             <textarea 
