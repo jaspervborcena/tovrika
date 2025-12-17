@@ -5,6 +5,13 @@ export enum ReceiptValidityNotice {
   NON_ACCREDITED = 'This receipt serves as a sales acknowledgment receipt.This document is not valid for claim of input tax.'
 }
 
+export interface OrderStatusHistoryEntry {
+  status: string;
+  changedAt: Date | string;
+  changedBy: string;
+  reason?: string;
+}
+
 export interface Order {
   id?: string;
   /** Optional orderId coming from BigQuery / Cloud Function (documentId in storage) */
@@ -17,6 +24,10 @@ export interface Order {
   // Status can come from various data sources (Firestore, BigQuery). Keep as string to
   // preserve source-specific values like 'completed' while older code may expect specific values.
   status: string;
+  
+  // Status tracking
+  statusHistory?: OrderStatusHistoryEntry[];
+  statusTags?: string[];
   
   // Customer Information
   cashSale?: boolean;
@@ -68,7 +79,7 @@ export interface OrderAccountingLedger {
   storeId: string;
   orderId: string;
   // Event type describing the kind of ledger entry
-  eventType: 'order' | 'return' | 'refund' | 'cancel' | 'damage';
+  eventType: 'order' | 'returned' | 'refunded' | 'cancelled' | 'damaged';
 
   // Monetary and quantity impact of this event
   amount: number;

@@ -46,6 +46,10 @@ export class OrderService {
       assignedCashierId: data.assignedCashierId,
       status: data.status,
       
+      // Status tracking
+      statusHistory: data.statusHistory || [],
+      statusTags: data.statusTags || [],
+      
       // Customer Information
       cashSale: data.cashSale,
       soldTo: data.soldTo,
@@ -70,8 +74,8 @@ export class OrderService {
       // BIR Fields
       exemptionId: data.exemptionId,
       signature: data.signature,
-      atpOrOcn: data.atpOrOcn || 'OCN-2025-001234',
-      birPermitNo: data.birPermitNo || 'BIR-PERMIT-2025-56789',
+      atpOrOcn: data.atpOrOcn || 'OCN-0000-00000',
+      birPermitNo: data.birPermitNo || 'BIR-PERMIT-0000-00000',
       inclusiveSerialNumber: data.inclusiveSerialNumber || '000001-000999',
       
       // System Fields
@@ -402,13 +406,61 @@ export class OrderService {
   }
 async updateOrderStatus(orderId: string, status: string, reason?: string): Promise<void> {
   try {
-    const updatePayload: any = { status };
-    if (reason !== undefined && reason !== null) updatePayload.updateReason = reason;
+    console.log(`🚀 updateOrderStatus called: orderId=${orderId}, status=${status}, reason=${reason}, online=${navigator.onLine}`);
+    const currentUser = this.authService.getCurrentUser();
+    const currentUserId = currentUser?.uid || 'system';
+    const now = new Date();
+    
+    // First, get the current order to retrieve existing statusHistory and statusTags
+    const orderRef = clientDoc(this.firestore, 'orders', orderId);
+    const orderSnap = await getDoc(orderRef as any);
+    
+    let existingStatusHistory: any[] = [];
+    let existingStatusTags: string[] = [];
+    
+    if (orderSnap && orderSnap.exists()) {
+      const orderData: any = orderSnap.data();
+      existingStatusHistory = orderData.statusHistory || [];
+      existingStatusTags = orderData.statusTags || [];
+    }
+    
+    // Append new status to history
+    const newHistoryEntry = {
+      status,
+      changedAt: now,
+      changedBy: currentUserId,
+      ...(reason && { reason })
+    };
+    
+    const updatedStatusHistory = [...existingStatusHistory, newHistoryEntry];
+    
+    // Add status to tags if not already present
+    const updatedStatusTags = existingStatusTags.includes(status) 
+      ? existingStatusTags 
+      : [...existingStatusTags, status];
+    
+    // Build update payload with updatedAt, never modify createdAt
+    // Root status field only updates for 'cancelled', otherwise it stays at initial value
+    const updatePayload: any = { 
+      updatedAt: now,
+      statusHistory: updatedStatusHistory,
+      statusTags: updatedStatusTags
+    };
+    
+    // Only update root status field if the new status is 'cancelled'
+    if (status === 'cancelled') {
+      updatePayload.status = status;
+    }
+    
+    if (reason !== undefined && reason !== null) {
+      updatePayload.updateReason = reason;
+    }
+    
+    // Update the order document
     await this.offlineDocService.updateDocument('orders', orderId, updatePayload);
-
     // If we're online and the order was cancelled or returned, attempt a client-side transactional restock.
     // This is a best-effort attempt — the server-side Cloud Function still exists as authoritative.
-  if (navigator.onLine && (status === 'cancelled' || status === 'returned' || status === 'refunded')) {
+  if (navigator.onLine && (status === 'cancelled' || status === 'returned' || status === 'refunded' || status === 'damage' || status === 'damaged')) {
   const currentUser = this.authService.getCurrentUser();
   const performedBy = currentUser?.uid || currentUser?.email || 'system';
 
@@ -444,36 +496,62 @@ async updateOrderStatus(orderId: string, status: string, reason?: string): Promi
 
   // Create ledger entry for cancelled/returned/refunded/damage statuses so accounting stays in sync
   try {
-    const map: any = { cancelled: 'cancel', returned: 'return', refunded: 'refund', damage: 'damage', damaged: 'damage' };
+    console.log(`🔔 Starting ledger recording section for orderId=${orderId}, status=${status}, online=${navigator.onLine}`);
+    const map: any = { cancelled: 'cancelled', returned: 'returned', refunded: 'refunded', damage: 'damaged', damaged: 'damaged' };
     if (['cancelled', 'returned', 'refunded', 'damage', 'damaged'].includes(status)) {
+      console.log(`✅ Status ${status} is in the list, proceeding with ledger entry...`);
       // Prefer summing authoritative tracking documents created/updated for this order
       const mappedStatus = map[status] || status;
+      console.log(`📝 Mapped status: ${status} → ${mappedStatus}`);
       let amount = 0;
       let qty = 0;
       let companyId = '';
       let storeId = '';
+      
+      // First, always get companyId and storeId from the order document
+      try {
+        const orderRef = clientDoc(this.firestore, 'orders', orderId);
+        const orderSnap = await getDoc(orderRef as any);
+        if (orderSnap && orderSnap.exists()) {
+          const orderData: any = orderSnap.data();
+          companyId = orderData.companyId || '';
+          storeId = orderData.storeId || '';
+          console.log(`📄 Order document: companyId=${companyId}, storeId=${storeId}`);
+        }
+      } catch (orderFetchErr) {
+        console.error(`❌ Failed to fetch order document:`, orderFetchErr);
+      }
+      
       try {
         const trackingRef = collection(this.firestore, 'ordersSellingTracking');
-        // Support multiple possible status spellings (eg. 'return' vs 'returned')
-        const statusesToQuery: string[] = [mappedStatus];
-        if (mappedStatus === 'return') statusesToQuery.push('returned');
-        if (mappedStatus === 'refund') statusesToQuery.push('refunded');
-        if (mappedStatus === 'cancel') statusesToQuery.push('cancelled');
-        if (mappedStatus === 'damage') statusesToQuery.push('damaged');
-
-        // Use 'in' query to match any of the expected status variants
-        const trackingQ = query(trackingRef, where('orderId', '==', orderId), where('status', 'in', statusesToQuery));
+        
+        // Query ALL tracking entries for this order (don't filter by status)
+        // We'll sum up all original quantities regardless of current status
+        const trackingQ = query(trackingRef, where('orderId', '==', orderId));
         const trackingSnap = await getDocs(trackingQ as any);
+        
+        console.log(`🔍 OrderService: Querying ALL ordersSellingTracking for orderId=${orderId}`);
+        console.log(`📊 Found ${trackingSnap?.docs?.length || 0} total tracking entries`);
+        
         if (trackingSnap && !trackingSnap.empty) {
           for (const d of trackingSnap.docs) {
             const data: any = d.data() || {};
             const lineTotal = Number(data.total || data.lineTotal || (Number(data.price || 0) * Number(data.quantity || 0)) || 0);
+            const itemQty = Number(data.quantity || 0);
+            console.log(`  📦 Tracking entry:`, { 
+              id: d.id, 
+              status: data.status, 
+              quantity: itemQty, 
+              lineTotal,
+              productName: data.productName 
+            });
             amount += lineTotal;
-            qty += Number(data.quantity || 0);
-            companyId = companyId || data.companyId || '';
-            storeId = storeId || data.storeId || '';
+            qty += itemQty;
           }
+          console.log(`✅ Total from tracking: amount=${amount}, qty=${qty}`);
         } else {
+          console.log(`⚠️ No tracking entries found, using order document for amounts`);
+
           // Fallback to order document if tracking entries are not yet present
           const orderRef = clientDoc(this.firestore, 'orders', orderId);
           const orderSnap = await getDoc(orderRef as any);
@@ -481,17 +559,30 @@ async updateOrderStatus(orderId: string, status: string, reason?: string): Promi
             const data: any = orderSnap.data();
             amount = Number(data.netAmount || data.totalAmount || 0);
             qty = Array.isArray(data.items) ? data.items.reduce((s: number, it: any) => s + Number(it.quantity || 0), 0) : 0;
-            companyId = data.companyId || '';
-            storeId = data.storeId || '';
+            console.log(`📄 Fallback amounts: amount=${amount}, qty=${qty}, items=${data.items?.length || 0}`);
           }
         }
 
         try {
           const safeAmount = Number(amount || 0);
           const safeQty = Number(qty || 0);
-          await this.ledgerService.recordEvent(companyId, storeId, orderId, mappedStatus as any, safeAmount, safeQty, performedBy);
-          this.logger.info('Ledger entry created for status change', { area: 'orders', docId: orderId, payload: { status, amount: safeAmount, qty: safeQty } });
+          
+          // Validate required fields before recording ledger
+          if (!companyId || !storeId) {
+            console.error(`❌ Cannot record ledger: missing companyId=${companyId} or storeId=${storeId}`);
+            this.logger.warn('Cannot record ledger entry: missing companyId or storeId', { 
+              area: 'orders', 
+              docId: orderId, 
+              payload: { companyId, storeId, status } 
+            });
+          } else {
+            console.log(`💾 Recording ledger event: eventType=${mappedStatus}, amount=${safeAmount}, qty=${safeQty}, companyId=${companyId}, storeId=${storeId}`);
+            await this.ledgerService.recordEvent(companyId, storeId, orderId, mappedStatus as any, safeAmount, safeQty, performedBy);
+            console.log(`✅ Ledger entry created successfully for orderId=${orderId}, eventType=${mappedStatus}`);
+            this.logger.info('Ledger entry created for status change', { area: 'orders', docId: orderId, payload: { status, amount: safeAmount, qty: safeQty } });
+          }
         } catch (ledgerErr) {
+          console.error(`❌ Ledger recording failed:`, ledgerErr);
           this.logger.warn('Failed to create ledger entry for status change', { area: 'orders', docId: orderId, payload: { error: String(ledgerErr) } });
         }
       } catch (e) {
