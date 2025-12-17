@@ -1323,33 +1323,9 @@ export class OverviewComponent implements OnInit {
         this.yesterdayOrders.set(0);
       }
 
-      // Fetch returns for yesterday
-      const returnsLedger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, yesterday, 'returned');
-      if (returnsLedger) {
-        this.ledgerReturnAmount.set(Number(returnsLedger.runningBalanceAmount || 0));
-        this.ledgerReturnQty.set(Number(returnsLedger.runningBalanceQty || 0));
-      }
-
-      // Fetch refunds for yesterday
-      const refundsLedger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, yesterday, 'refunded');
-      if (refundsLedger) {
-        this.ledgerRefundAmount.set(Number(refundsLedger.runningBalanceAmount || 0));
-        this.ledgerRefundQty.set(Number(refundsLedger.runningBalanceQty || 0));
-      }
-
-      // Fetch damage for yesterday
-      const damageLedger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, yesterday, 'damaged');
-      if (damageLedger) {
-        this.ledgerDamageAmount.set(Number(damageLedger.runningBalanceAmount || 0));
-        this.ledgerDamageQty.set(Number(damageLedger.runningBalanceQty || damageLedger.runningBalanceOrderQty || 0));
-      }
-
-      // Fetch cancels for yesterday
-      const cancelLedger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, yesterday, 'cancelled');
-      if (cancelLedger) {
-        this.ledgerCancelQty.set(Number(cancelLedger.runningBalanceQty || 0));
-      }
-
+      // Note: returns/refunds/damage/cancel quantities are fetched by fetchTodayAnalytics() when period is 'today'
+      // We only fetch yesterday's revenue and order count here for comparison purposes
+      
       // Set completed and order quantities
       this.ledgerCompletedQty.set(Number(ledger?.runningBalanceOrderQty || ledger?.runningBalanceQty || 0));
       this.ledgerOrderQty.set(Number(ledger?.runningBalanceOrderQty || ledger?.runningBalanceQty || 0));
@@ -1362,12 +1338,18 @@ export class OverviewComponent implements OnInit {
 
   // Fetch today's analytics data (all event types for Sale Analytics)
   protected async fetchTodayAnalytics(): Promise<void> {
+    console.log('🔍 fetchTodayAnalytics called');
     try {
       const companyId = this.authService.getCurrentPermission()?.companyId || '';
       const storeId = this.selectedStoreId() || this.authService.getCurrentPermission()?.storeId;
-      if (!companyId || !storeId) return;
+      console.log('🔍 fetchTodayAnalytics - companyId:', companyId, 'storeId:', storeId);
+      if (!companyId || !storeId) {
+        console.log('🔍 fetchTodayAnalytics - returning early, missing companyId or storeId');
+        return;
+      }
 
       const today = new Date();
+      console.log('🔍 fetchTodayAnalytics - today date:', today);
 
       // Fetch completed orders for today
       const ledger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, today, 'completed');
@@ -1380,29 +1362,49 @@ export class OverviewComponent implements OnInit {
 
       // Fetch returns for today
       const returnsLedger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, today, 'returned');
-      if (returnsLedger) {
-        this.ledgerReturnAmount.set(Number(returnsLedger.runningBalanceAmount || 0));
-        this.ledgerReturnQty.set(Number(returnsLedger.runningBalanceQty || 0));
+      console.log('Returns Ledger for today:', returnsLedger);
+      if (returnsLedger && (returnsLedger.runningBalanceAmount || returnsLedger.runningBalanceQty)) {
+        const amt = Number(returnsLedger.runningBalanceAmount || 0);
+        const qty = Number(returnsLedger.runningBalanceQty || 0);
+        console.log('🟡 fetchTodayAnalytics setting returns - Amount:', amt, 'Qty:', qty);
+        this.ledgerReturnAmount.set(amt);
+        this.ledgerReturnQty.set(qty);
+        console.log('✅ After set - ledgerReturnAmount():', this.ledgerReturnAmount(), 'ledgerReturnQty():', this.ledgerReturnQty());
+      } else if (!returnsLedger) {
+        // Only set to 0 if we explicitly got no ledger data (meaning no returns at all)
+        console.log('🔴 fetchTodayAnalytics: No returns ledger found for today, setting to 0');
+        this.ledgerReturnAmount.set(0);
+        this.ledgerReturnQty.set(0);
+      } else {
+        console.log('⚪ fetchTodayAnalytics: Empty returns ledger, keeping current values');
       }
 
       // Fetch refunds for today
       const refundsLedger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, today, 'refunded');
-      if (refundsLedger) {
+      if (refundsLedger && (refundsLedger.runningBalanceAmount || refundsLedger.runningBalanceQty)) {
         this.ledgerRefundAmount.set(Number(refundsLedger.runningBalanceAmount || 0));
         this.ledgerRefundQty.set(Number(refundsLedger.runningBalanceQty || 0));
+      } else if (!refundsLedger) {
+        this.ledgerRefundAmount.set(0);
+        this.ledgerRefundQty.set(0);
       }
 
       // Fetch damage for today
       const damageLedger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, today, 'damaged');
-      if (damageLedger) {
+      if (damageLedger && (damageLedger.runningBalanceAmount || damageLedger.runningBalanceQty || damageLedger.runningBalanceOrderQty)) {
         this.ledgerDamageAmount.set(Number(damageLedger.runningBalanceAmount || 0));
         this.ledgerDamageQty.set(Number(damageLedger.runningBalanceQty || damageLedger.runningBalanceOrderQty || 0));
+      } else if (!damageLedger) {
+        this.ledgerDamageAmount.set(0);
+        this.ledgerDamageQty.set(0);
       }
 
       // Fetch cancels for today
       const cancelLedger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, today, 'cancelled');
-      if (cancelLedger) {
+      if (cancelLedger && cancelLedger.runningBalanceQty) {
         this.ledgerCancelQty.set(Number(cancelLedger.runningBalanceQty || 0));
+      } else if (!cancelLedger) {
+        this.ledgerCancelQty.set(0);
       }
     } catch (error) {
       console.error('Error fetching today analytics:', error);
@@ -1505,6 +1507,7 @@ export class OverviewComponent implements OnInit {
       this.ledgerCompletedQty.set(currentMonthCompletedQty);
       this.ledgerOrderQty.set(currentMonthOrdersTotal);
       this.ledgerCancelQty.set(currentMonthCancelQty);
+      console.log('🔵 fetchMonthlyComparison setting returns:', currentMonthReturnsAmount, currentMonthReturnsQty);
       this.ledgerReturnAmount.set(currentMonthReturnsAmount);
       this.ledgerReturnQty.set(currentMonthReturnsQty);
       this.ledgerRefundAmount.set(currentMonthRefundsAmount);
@@ -1732,7 +1735,9 @@ export class OverviewComponent implements OnInit {
     const target = event.target as HTMLSelectElement;
     if (!target) return;
     const v = target.value as 'today' | 'yesterday' | 'this_month' | 'previous_month' | 'date_range';
+    console.log('🔄 Period changed to:', v);
     this.selectedPeriod.set(v);
+    console.log('✅ selectedPeriod() is now:', this.selectedPeriod());
     if (v === 'date_range') {
       // default dateTo = today, dateFrom = today - 30 days
       const now = new Date();
@@ -1765,6 +1770,8 @@ export class OverviewComponent implements OnInit {
   // Compute start/end dates for selected period and call analytics loader
   protected applyPeriodAndLoad() {
     const period = this.selectedPeriod();
+    console.log('⚡ applyPeriodAndLoad called with period:', period, 'at', new Date().toISOString());
+    console.trace('⚡ applyPeriodAndLoad stack trace:');
     const now = new Date();
     let start: Date | undefined;
     let end: Date | undefined;
@@ -2252,7 +2259,14 @@ export class OverviewComponent implements OnInit {
       const storeId = this.selectedStoreId() || this.authService.getCurrentPermission()?.storeId;
       if (!storeId) return;
 
-      console.log('📊 Loading analytics data from Cloud Function API...', { storeId, startDate, endDate });
+      console.log('📊 Loading analytics data from Cloud Function API...', { 
+        storeId, 
+        startDate, 
+        endDate, 
+        timestamp: new Date().toISOString(),
+        period: this.selectedPeriod()
+      });
+      console.trace('📍 loadAnalyticsData called from:');
       
   // Use Cloud Function API for sales data (same as sales summary)
   // Explicitly request completed sales for analytics/overview

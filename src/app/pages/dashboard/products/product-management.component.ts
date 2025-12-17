@@ -1820,7 +1820,16 @@ import { AppConstants } from '../../../shared/enums/app-constants.enum';
                       <div style="display:flex; gap:8px; align-items:center;">
                         <input type="checkbox" id="isVatApplicable" formControlName="isVatApplicable" />
                         <label for="isVatApplicable" style="margin:0;">VAT applicable</label>
-                        <input type="number" formControlName="vatRate" min="0" max="100" step="0.01" class="form-input" style="width:120px; margin-left:8px;" />
+                        <input 
+                          type="number" 
+                          formControlName="vatRate" 
+                          min="0" 
+                          max="100" 
+                          step="0.01" 
+                          class="form-input" 
+                          style="width:120px; margin-left:8px;"
+                          [disabled]="!inventoryForm.get('isVatApplicable')?.value"
+                          placeholder="12" />
                       </div>
                       <small class="text-muted">VAT Rate (%)</small>
                     </div>
