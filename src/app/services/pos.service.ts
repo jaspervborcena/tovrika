@@ -821,8 +821,32 @@ export class PosService {
   // Helper Methods
   private createCartItem(product: Product, quantity: number): CartItem {
     // Derive per-unit values from originalPrice: apply discount to originalPrice, then apply VAT
-    const original = (product as any).originalPrice ?? product.sellingPrice;
+    // Ensure we have a valid price - try originalPrice, then sellingPrice, then 0
+    const originalPrice = (product as any).originalPrice;
+    const sellingPrice = product.sellingPrice;
+    const original = originalPrice ?? sellingPrice ?? 0;
     const vatRate = Number(product.vatRate ?? 0);
+
+    console.log('🛒 Creating cart item for:', product.productName, {
+      productId: product.id,
+      originalPrice: originalPrice,
+      sellingPrice: sellingPrice,
+      derivedOriginal: original,
+      hasDiscount: product.hasDiscount,
+      discountType: product.discountType,
+      discountValue: product.discountValue,
+      isVatApplicable: product.isVatApplicable,
+      vatRate: vatRate
+    });
+
+    if (original === 0) {
+      console.error('⚠️ WARNING: Product has zero price!', {
+        productName: product.productName,
+        productId: product.id,
+        originalPrice: originalPrice,
+        sellingPrice: sellingPrice
+      });
+    }
 
     // Per-unit discount
     let discountPerUnit = 0;
@@ -877,6 +901,19 @@ export class PosService {
     return tagIds
       .map(tagId => tagsMap.get(tagId) || tagId)
       .filter((label): label is string => label !== null && label !== undefined);
+  }
+
+  /**
+   * Get all active tags for a store from Firestore
+   */
+  async getTagsForStore(storeId: string): Promise<any[]> {
+    try {
+      const tags = await this.tagsService.getTagsByStore(storeId, false);
+      return tags;
+    } catch (error) {
+      console.error('❌ Failed to get tags for store:', error);
+      return [];
+    }
   }
 
   async loadProductTags(storeId: string): Promise<void> {

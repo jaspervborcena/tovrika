@@ -81,7 +81,7 @@ export class TagsService {
         collection(this.firestore, 'productTags'),
         where('storeId', '==', storeId),
         orderBy('group'),
-        orderBy('label')
+        orderBy('createdAt', 'asc')
       );
     } else {
       // Get only active tags
@@ -90,7 +90,7 @@ export class TagsService {
         where('storeId', '==', storeId),
         where('isActive', '==', true),
         orderBy('group'),
-        orderBy('label')
+        orderBy('createdAt', 'asc')
       );
     }
 

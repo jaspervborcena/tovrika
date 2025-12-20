@@ -1052,7 +1052,7 @@
 
     .products-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); /* Responsive grid with max tile width */
+      grid-template-columns: repeat(auto-fill, minmax(155px, 1fr)); /* Increased from 140px to accommodate price */
       gap: 0.5rem 0.75rem; /* Better spacing between tiles */
       width: 100%; /* Ensure grid stays within container */
       box-sizing: border-box;

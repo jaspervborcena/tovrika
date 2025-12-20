@@ -759,7 +759,13 @@ export class ProductService implements OnDestroy {
 
   private transformFirestoreDoc(doc: any): Product {
     const data = doc.data();
-    console.log('🔍 Transforming Firestore doc:', { id: doc.id, rawData: data });
+    console.log('🔍 Transforming Firestore doc:', { 
+      id: doc.id, 
+      productName: data['productName'],
+      sellingPrice: data['sellingPrice'],
+      originalPrice: data['originalPrice'],
+      unitPrice: data['unitPrice']
+    });
     
     try {
       const product: Product = {
@@ -773,12 +779,16 @@ export class ProductService implements OnDestroy {
         category: data['category'] || '',
         totalStock: Number(data['totalStock'] || 0),
         sellingPrice: Number(data['sellingPrice'] || 0),
-        originalPrice: Number((data['originalPrice'] ?? data['unitPrice'] ?? data['sellingPrice']) || 0),
+        originalPrice: Number(data['originalPrice'] ?? data['unitPrice'] ?? data['sellingPrice'] ?? 0),
         companyId: data['companyId'] || '',
         storeId: data['storeId'] || '',
         barcodeId: data['barcodeId'] || '',
         imageUrl: data['imageUrl'] || '',
         isFavorite: !!data['isFavorite'] || false,
+        
+        // Tags
+        tags: data['tags'] || undefined,
+        tagLabels: data['tagLabels'] || undefined,
         
         // Tax and Discount Fields with defaults
         isVatApplicable: !!data['isVatApplicable'] || false,

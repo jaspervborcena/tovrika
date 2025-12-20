@@ -1270,6 +1270,13 @@ import { AppConstants } from '../../../shared/enums/app-constants.enum';
                       📦
                     </button>
                     <button 
+                      class="btn-icon-action btn-primary" 
+                      (click)="duplicateProduct(product)"
+                      title="Duplicate product"
+                      aria-label="Duplicate product">
+                      📋
+                    </button>
+                    <button 
                       class="btn-icon-action btn-danger" 
                       (click)="deleteProduct(product)"
                       title="Delete product"
@@ -1406,12 +1413,23 @@ import { AppConstants } from '../../../shared/enums/app-constants.enum';
 
                 <div class="form-group">
                   <label for="barcodeId">Barcode ID</label>
-                  <input 
-                    type="text" 
-                    id="barcodeId"
-                    formControlName="barcodeId"
-                    placeholder="Enter barcode identifier (optional)"
-                    class="form-input">
+                  <div style="display: flex; gap: 0.5rem; align-items: center;">
+                    <input 
+                      type="text" 
+                      id="barcodeId"
+                      formControlName="barcodeId"
+                      placeholder="Enter barcode identifier (optional)"
+                      class="form-input"
+                      style="flex: 1;">
+                    <button 
+                      type="button"
+                      (click)="generateBarcode()"
+                      class="btn btn-secondary"
+                      style="white-space: nowrap; padding: 0.5rem 1rem;"
+                      title="Generate unique CODE128 barcode">
+                      Generate Barcode
+                    </button>
+                  </div>
                 </div>
 
                 <div class="form-group">
@@ -2265,24 +2283,6 @@ export class ProductManagementComponent implements OnInit {
     const isVatCtrl = this.productForm.get('isVatApplicable');
     const vatRateCtrl = this.productForm.get('vatRate');
 
-    // Sync initial unit price (used for initial batch) into originalPrice so UI maps unit price to product.originalPrice
-    this.productForm.get('initialUnitPrice')?.valueChanges.subscribe(value => {
-      const origCtrl = this.productForm.get('originalPrice');
-      if (origCtrl && (origCtrl.value === null || origCtrl.value === undefined || origCtrl.value === 0)) {
-        const origVal = Number(value || 0);
-        origCtrl.setValue(origVal, { emitEvent: false });
-
-        // Also compute and set product-level sellingPrice so the UI reflects the batch unit price
-        const isVat = !!this.productForm.get('isVatApplicable')?.value;
-        const vatRate = Number(this.productForm.get('vatRate')?.value || 0);
-        const hasDisc = !!this.productForm.get('hasDiscount')?.value;
-        const discType = this.productForm.get('discountType')?.value || 'percentage';
-        const discValue = Number(this.productForm.get('discountValue')?.value || 0);
-        const selling = this.computeSellingFromOriginal(origVal, isVat, vatRate, hasDisc, discType, discValue);
-        this.productForm.get('sellingPrice')?.setValue(Number(selling.toFixed(2)), { emitEvent: false });
-      }
-    });
-
     // Product form: keep originalPrice and sellingPrice in sync for Add/Edit Product dialog
     const prodOrigCtrl = this.productForm.get('originalPrice');
     const prodSellCtrl = this.productForm.get('sellingPrice');
@@ -2355,10 +2355,18 @@ export class ProductManagementComponent implements OnInit {
 
     // Wire subscriptions
     unitCtrl?.valueChanges.subscribe(() => {
-      recomputeSelling();
+      // Only recompute selling price if not in edit mode or if values are actually different
+      // This prevents unwanted recalculation when editing batches where prices are intentionally equal
+      if (!this.isEditingBatch) {
+        recomputeSelling();
+      }
     });
     sellCtrl?.valueChanges.subscribe(() => {
-      recomputeOriginal();
+      // Only recompute original price if not in edit mode or if values are actually different
+      // This prevents unwanted recalculation when editing batches where prices are intentionally equal
+      if (!this.isEditingBatch) {
+        recomputeOriginal();
+      }
     });
     vatCtrl?.valueChanges.subscribe(() => {
       // VAT toggle affects both directions
@@ -2490,7 +2498,6 @@ export class ProductManagementComponent implements OnInit {
       // Initial inventory fields (for new products)
       initialBatchId: [''],
       initialQuantity: [0, Validators.min(0)],
-      initialUnitPrice: [0, Validators.min(0)],
       initialCostPrice: [0, Validators.min(0)],
       initialReceivedAt: [new Date().toISOString().split('T')[0]],
       initialExpiryDate: [''],
@@ -2569,6 +2576,42 @@ export class ProductManagementComponent implements OnInit {
 
   // Note: filterProducts() method removed - filtering is now handled by the computed filteredProducts signal
 
+  /**
+   * Generate a unique UPC-A compatible barcode (12 digits)
+   * Format: Timestamp-based + random digits to ensure uniqueness
+   * Uses last 11 digits of timestamp + 1 check digit calculated via UPC-A algorithm
+   */
+  generateBarcode(): void {
+    const now = new Date();
+    
+    // Get timestamp in milliseconds and convert to string
+    const timestamp = now.getTime().toString();
+    
+    // Take last 11 digits of timestamp for uniqueness
+    // This gives us ~317 years of unique values (from 1970)
+    const timestampPart = timestamp.slice(-11);
+    
+    // Calculate UPC-A check digit (Luhn algorithm for UPC)
+    const digits = timestampPart.split('').map(Number);
+    let sum = 0;
+    
+    // UPC-A: multiply odd positions (1st, 3rd, 5th...) by 3, even by 1
+    for (let i = 0; i < digits.length; i++) {
+      sum += digits[i] * (i % 2 === 0 ? 3 : 1);
+    }
+    
+    // Check digit makes the sum a multiple of 10
+    const checkDigit = (10 - (sum % 10)) % 10;
+    
+    // Combine for 12-digit UPC-A barcode
+    const barcode = timestampPart + checkDigit;
+    
+    // Set the barcode value
+    this.productForm.patchValue({ barcodeId: barcode });
+    
+    console.log('🔢 Generated UPC-A barcode:', barcode, '(check digit:', checkDigit + ')');
+  }
+
   openAddModal(): void {
     console.log('openAddModal called');
     this.isEditMode = false;
@@ -2579,7 +2622,6 @@ export class ProductManagementComponent implements OnInit {
       isMultipleInventory: false,
       initialBatchId: '',
       initialQuantity: 0,
-      initialUnitPrice: 0,
       vatRate: AppConstants.DEFAULT_VAT_RATE,
       // Preserve discount defaults when opening the Add Product modal
       hasDiscount: true,
@@ -2800,15 +2842,38 @@ export class ProductManagementComponent implements OnInit {
         this.categoryService.debugCategoryStatus();
       }
       
-      // normalize sellingPrice to avoid undefined being written to Firestore
-      // Calculate selling price from active batch or form value
-      const computedSellingPrice = formValue.initialUnitPrice || 
-        (this.selectedProduct ? (this.selectedProduct.sellingPrice || 0) : 0) || 
-        formValue.sellingPrice || 0;
-      // Compute original/base price (unit price before VAT) similarly
-      const computedOriginalPrice = formValue.initialUnitPrice || 
-        (this.selectedProduct ? (this.selectedProduct.originalPrice || 0) : 0) || 
-        formValue.originalPrice || 0;
+      // Get the values directly from the form (which already has VAT computed via valueChanges)
+      const computedSellingPrice = Number(formValue.sellingPrice || 0);
+      let computedOriginalPrice = Number(formValue.originalPrice || 0);
+      
+      console.log('💵 Price calculation debug:', {
+        formOriginalPrice: formValue.originalPrice,
+        formSellingPrice: formValue.sellingPrice,
+        computedSellingPrice: computedSellingPrice,
+        computedOriginalPrice: computedOriginalPrice,
+        isEditMode: this.isEditMode
+      });
+      
+      // If originalPrice is not set but sellingPrice is, derive it by reversing VAT
+      if (computedOriginalPrice === 0 && computedSellingPrice > 0) {
+        const isVatApplicable = formValue.isVatApplicable ?? true;
+        const vatRate = formValue.vatRate ?? AppConstants.DEFAULT_VAT_RATE;
+        
+        if (isVatApplicable && vatRate > 0) {
+          // Reverse VAT calculation: originalPrice = sellingPrice / (1 + vatRate/100)
+          computedOriginalPrice = computedSellingPrice / (1 + vatRate / 100);
+        } else {
+          // No VAT, so selling price = original price
+          computedOriginalPrice = computedSellingPrice;
+        }
+        
+        console.log('💰 Derived originalPrice from sellingPrice:', {
+          sellingPrice: computedSellingPrice,
+          originalPrice: computedOriginalPrice,
+          vatRate: vatRate,
+          isVatApplicable: isVatApplicable
+        });
+      }
 
       if (this.isEditMode && this.selectedProduct) {
         // Update existing product
@@ -2838,6 +2903,12 @@ export class ProductManagementComponent implements OnInit {
           tagLabels: this.getSelectedTagLabels()
         };
 
+        console.log('📝 Updating product with tags:', {
+          tags: this.selectedTagIds(),
+          tagLabels: this.getSelectedTagLabels(),
+          availableTags: this.availableTags().length
+        });
+
         // totalStock: only allow editing when product has no separate inventory batches
         if (this.hasExistingInventory()) {
           updates.totalStock = this.selectedProduct.totalStock || 0;
@@ -2853,7 +2924,7 @@ export class ProductManagementComponent implements OnInit {
         const initialBatch = hasInitial ? {
           batchId: formValue.initialBatchId || this.generateBatchId(), // Use proper batch ID generator
           quantity: Number(formValue.initialQuantity || 0),
-          unitPrice: Number(formValue.initialUnitPrice || 0),
+          unitPrice: Number(formValue.originalPrice || 0),
           costPrice: Number(formValue.initialCostPrice || 0),
           receivedAt: formValue.initialReceivedAt ? new Date(formValue.initialReceivedAt) : new Date(), // Default to now if not specified
           expiryDate: formValue.initialExpiryDate ? new Date(formValue.initialExpiryDate) : undefined,
@@ -2903,6 +2974,11 @@ export class ProductManagementComponent implements OnInit {
         };
 
         console.log('🚀 About to create product with data:', newProduct);
+        console.log('📝 Creating product with tags:', {
+          tags: this.selectedTagIds(),
+          tagLabels: this.getSelectedTagLabels(),
+          availableTags: this.availableTags().length
+        });
         const productId = await this.productService.createProduct(newProduct);
         console.log('✅ Product created successfully with ID:', productId);
         
@@ -2912,7 +2988,7 @@ export class ProductManagementComponent implements OnInit {
           console.log('📦 Initial batch data:', initialBatch);
           console.log('🔍 Form values for initial batch:', {
             initialQuantity: formValue.initialQuantity,
-            initialUnitPrice: formValue.initialUnitPrice,
+            originalPrice: formValue.originalPrice,
             initialCostPrice: formValue.initialCostPrice,
             hasInitial,
             productId
@@ -2923,7 +2999,7 @@ export class ProductManagementComponent implements OnInit {
               batchId: initialBatch!.batchId,
               quantity: initialBatch!.quantity,
               unitPrice: initialBatch!.unitPrice,
-              sellingPrice: Number(formValue.initialUnitPrice || computedSellingPrice || 0),
+              sellingPrice: Number(formValue.originalPrice || computedSellingPrice || 0),
               costPrice: initialBatch!.costPrice,
               receivedAt: initialBatch!.receivedAt,
               expiryDate: initialBatch!.expiryDate,
@@ -3614,6 +3690,60 @@ export class ProductManagementComponent implements OnInit {
         this.loading = false;
       }
     }
+
+  duplicateProduct(product: Product): void {
+    console.log('Duplicating product:', product.productName);
+    this.isEditMode = false;
+    this.selectedProduct = null;
+    
+    // Reset tags for duplicate
+    this.selectedTagIds.set([]);
+    
+    // Copy product data but exclude specific fields
+    const duplicateData = {
+      ...product,
+      // Clear identification fields
+      productCode: '',
+      skuId: '',
+      barcodeId: '',
+      // Clear tags
+      tags: undefined,
+      tagLabels: undefined,
+      // Clear pricing & inventory fields
+      initialReceivedAt: new Date().toISOString().split('T')[0],
+      initialBatchId: '',
+      initialQuantity: 0,
+      totalStock: 0,
+      // Don't set prices here - let form initialization handle them
+      // Keep other fields like category, description, unit type, VAT settings, etc.
+    };
+    
+    // Reset form and patch with duplicate data
+    this.productForm.reset();
+    // Remove price fields from duplicateData to let form defaults take over
+    const { sellingPrice, originalPrice, ...dataWithoutPrices } = duplicateData;
+    this.productForm.patchValue(dataWithoutPrices);
+    
+    // Ensure defaults are set
+    this.productForm.patchValue({
+      unitType: duplicateData.unitType || 'pieces',
+      category: duplicateData.category || 'General',
+      status: ProductStatus.Active,
+      isVatApplicable: duplicateData.isVatApplicable ?? true,
+      vatRate: duplicateData.vatRate ?? AppConstants.DEFAULT_VAT_RATE,
+      hasDiscount: duplicateData.hasDiscount ?? true,
+      discountType: duplicateData.discountType || 'percentage',
+      discountValue: duplicateData.discountValue ?? 0
+    });
+    
+    // Apply control enabling/disabling based on isMultipleInventory
+    this.toggleControlsForInventory(this.productForm.get('isMultipleInventory')?.value);
+    
+    this.showModal = true;
+    this.cdr.detectChanges();
+    
+    this.toastService.info(`Duplicating "${product.productName}" - Please update product details`);
+  }
 
   async deleteProduct(product: Product): Promise<void> {
     // Set up confirmation dialog

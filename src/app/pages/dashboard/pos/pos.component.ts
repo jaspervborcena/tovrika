@@ -1902,6 +1902,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
           quantity: item.quantity || 1,
           unitType: item.unitType || 'pc',
           sellingPrice: item.sellingPrice || item.price || item.amount,
+          originalPrice: item.originalPrice || item.unitPrice || item.sellingPrice || item.price || item.amount,
           total: item.total || (item.quantity * (item.sellingPrice || item.price || item.amount)),
           vatAmount: item.vatAmount || 0,
           discountAmount: item.discountAmount || 0,
