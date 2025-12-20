@@ -196,6 +196,11 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   private sortMenuOpenSignal = signal<boolean>(false);
   readonly sortMenuOpen = computed(() => this.sortMenuOpenSignal());
 
+  // Tag filters
+  readonly activeTagFilters = signal<string[]>([]); // Track active tag label filters
+  readonly availableTagsByGroup = signal<{ group: string; tags: { id: string; label: string }[] }[]>([]); // Tags from database
+  readonly isTagFilterExpanded = signal<boolean>(true); // Track tag filter section collapse state
+
   setSortMode(mode: 'asc' | 'desc' | 'mid'): void {
     if (this.sortModeSignal() !== mode) {
       this.sortModeSignal.set(mode);
@@ -437,6 +442,22 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       console.log('🔍 After search filtering:', {
         query,
         beforeCount: beforeSearchCount,
+        afterCount: filtered.length
+      });
+    }
+
+    // Filter by active tag labels (OR logic - show products with ANY of the selected tags)
+    const activeTagFilters = this.activeTagFilters();
+    if (activeTagFilters.length > 0) {
+      const beforeTagCount = filtered.length;
+      filtered = filtered.filter(p => {
+        if (!p.tagLabels || p.tagLabels.length === 0) return false;
+        // Check if product has any of the active tag labels
+        return p.tagLabels.some(label => activeTagFilters.includes(label));
+      });
+      console.log('🔍 After tag filtering:', {
+        activeFilters: activeTagFilters,
+        beforeCount: beforeTagCount,
         afterCount: filtered.length
       });
     }
@@ -3589,6 +3610,10 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       await this.productService.initializeProducts(storeId);
       console.log('✅ Product loading completed');
       console.log('🛍️ Total products loaded:', this.productService.getProductsSignal()().length);
+      
+      // Load available tags for the store
+      await this.loadAvailableTags();
+      
   // Reset grid pagination when store changes
   this.gridRowsVisible.set(4);
       
@@ -4920,9 +4945,160 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   getProductTagLabels(product: Product): string[] {
     // Use denormalized tagLabels from product document for instant display
     if (product.tagLabels && product.tagLabels.length > 0) {
+      console.log('🏷️ Product', product.productName, 'has tagLabels:', product.tagLabels);
       return product.tagLabels;
     }
     // Fallback: if tagLabels not available, return empty (old products)
+    if (product.tags && product.tags.length > 0) {
+      console.log('⚠️ Product', product.productName, 'has tags but no tagLabels:', product.tags);
+    }
     return [];
+  }
+
+  /**
+   * Toggle tag filter section expand/collapse
+   */
+  toggleTagFilterSection(): void {
+    this.isTagFilterExpanded.set(!this.isTagFilterExpanded());
+  }
+
+  /**
+   * Toggle a tag label filter on/off
+   */
+  toggleTagFilter(tagLabel: string): void {
+    const currentFilters = this.activeTagFilters();
+    const index = currentFilters.indexOf(tagLabel);
+    
+    if (index > -1) {
+      // Remove filter if already active
+      this.activeTagFilters.set(currentFilters.filter(label => label !== tagLabel));
+      console.log('🏷️ Removed tag filter:', tagLabel, 'Active filters:', this.activeTagFilters());
+    } else {
+      // Add filter
+      this.activeTagFilters.set([...currentFilters, tagLabel]);
+      console.log('🏷️ Added tag filter:', tagLabel, 'Active filters:', this.activeTagFilters());
+    }
+  }
+
+  /**
+   * Check if a tag label is currently active in filters
+   */
+  isTagFilterActive(tagLabel: string): boolean {
+    return this.activeTagFilters().includes(tagLabel);
+  }
+
+  /**
+   * Load available tags from database for current store
+   */
+  async loadAvailableTags(): Promise<void> {
+    const storeId = this.selectedStoreId();
+    if (!storeId) {
+      this.availableTagsByGroup.set([]);
+      return;
+    }
+
+    try {
+      console.log('🏷️ Loading tags from database for store:', storeId);
+      const tags = await this.posService.getTagsForStore(storeId);
+      console.log('🏷️ Loaded tags from database:', tags);
+
+      // Group tags by their group field and track first createdAt per group
+      const groupMap = new Map<string, { id: string; label: string; createdAt?: any }[]>();
+      const groupFirstCreatedAt = new Map<string, any>();
+      
+      tags.forEach(tag => {
+        const group = tag.group || 'Other';
+        if (!groupMap.has(group)) {
+          groupMap.set(group, []);
+          // Track the first createdAt for this group
+          groupFirstCreatedAt.set(group, tag.createdAt);
+        }
+        groupMap.get(group)!.push({
+          id: tag.id || tag.tagId,
+          label: tag.label,
+          createdAt: tag.createdAt
+        });
+      });
+
+      // Convert to array and sort groups by their first createdAt (ascending)
+      const tagsByGroup = Array.from(groupMap.entries())
+        .map(([group, tags]) => ({
+          group: group.charAt(0).toUpperCase() + group.slice(1),
+          tags: tags, // Keep database order (createdAt asc within group)
+          firstCreatedAt: groupFirstCreatedAt.get(group)
+        }))
+        .sort((a, b) => {
+          // Sort by first createdAt of each group
+          const timeA = a.firstCreatedAt?.toMillis?.() || a.firstCreatedAt?.getTime?.() || 0;
+          const timeB = b.firstCreatedAt?.toMillis?.() || b.firstCreatedAt?.getTime?.() || 0;
+          return timeA - timeB;
+        });
+
+      console.log('🏷️ Tags grouped by category:', tagsByGroup);
+      this.availableTagsByGroup.set(tagsByGroup);
+    } catch (error) {
+      console.error('❌ Failed to load tags:', error);
+      this.availableTagsByGroup.set([]);
+    }
+  }
+
+  getAvailableTagGroups(): { group: string; labels: string[] }[] {
+    const storeId = this.selectedStoreId();
+    console.log('🏷️ getAvailableTagGroups called for storeId:', storeId);
+    if (!storeId) return [];
+
+    // Get all products for current store
+    const storeProducts = this.products().filter(p => p.storeId === storeId);
+    console.log('🏷️ Store products count:', storeProducts.length);
+    
+    // Debug: Log ALL products to see what they contain
+    storeProducts.forEach(product => {
+      console.log('🔍 Product:', product.productName, {
+        hasTags: !!product.tags,
+        hasTagLabels: !!product.tagLabels,
+        tagsLength: product.tags?.length || 0,
+        tagLabelsLength: product.tagLabels?.length || 0,
+        tags: product.tags,
+        tagLabels: product.tagLabels
+      });
+    });
+    
+    // Collect all tags with their IDs from products
+    const tagMap = new Map<string, Set<string>>(); // group -> Set of labels
+    
+    storeProducts.forEach(product => {
+      if (product.tags && product.tagLabels && product.tags.length === product.tagLabels.length) {
+        console.log('✅ Product', product.productName, 'has matching tags:', product.tags, 'labels:', product.tagLabels);
+        product.tags.forEach((tagId, index) => {
+          // Extract group from tagId (format: group_value)
+          const parts = tagId.split('_');
+          if (parts.length >= 2) {
+            const group = parts[0];
+            const label = product.tagLabels![index];
+            console.log('🏷️ Adding to group', group, 'label:', label);
+            
+            if (!tagMap.has(group)) {
+              tagMap.set(group, new Set());
+            }
+            tagMap.get(group)!.add(label);
+          }
+        });
+      } else if (product.tags || product.tagLabels) {
+        console.log('⚠️ Product', product.productName, 'has mismatched tags/labels:', { tags: product.tags, tagLabels: product.tagLabels });
+      }
+    });
+
+    console.log('🏷️ Final tagMap:', Array.from(tagMap.entries()));
+
+    // Convert to array format
+    const result = Array.from(tagMap.entries())
+      .map(([group, labels]) => ({
+        group: group.charAt(0).toUpperCase() + group.slice(1),
+        labels: Array.from(labels).sort()
+      }))
+      .sort((a, b) => a.group.localeCompare(b.group));
+    
+    console.log('🏷️ Returning tag groups:', result);
+    return result;
   }
 }
