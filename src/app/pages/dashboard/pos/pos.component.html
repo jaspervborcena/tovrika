@@ -277,13 +277,18 @@
                   <img [src]="generateBarcodeImage(product.barcodeId)" alt="Barcode" class="barcode-image">
                 </div>
                 <div class="product-details">
-                  <div class="product-name-price">
-                    <h4>{{ product.productName }}</h4>
-                    <span class="price">₱{{ (product.sellingPrice || 0).toFixed(2) }}</span>
-                  </div>
+                  <h4 class="product-name">{{ product.productName }}</h4>
                   <div class="product-category-stock">
-                    <p class="product-description">{{ product.category }}</p>
-                    <span class="stock-badge">Stock: {{ product.totalStock || 0 }}</span>
+                    <div style="flex: 1;">
+                      <p class="product-description">{{ product.category }}</p>
+                      <div class="product-tags" *ngIf="getProductTagLabels(product).length > 0" style="display: flex; gap: 4px; flex-wrap: wrap; margin-top: 4px;">
+                        <span *ngFor="let label of getProductTagLabels(product)" style="font-size: 10px; padding: 2px 6px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border-radius: 4px; font-weight: 500;">{{ label }}</span>
+                      </div>
+                    </div>
+                    <div class="price-stock-group">
+                      <span class="price">₱{{ (product.sellingPrice || 0).toFixed(2) }}</span>
+                      <span class="stock-badge">Stock: {{ product.totalStock || 0 }}</span>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -307,13 +312,18 @@
                   <img [src]="generateBarcodeImage(product.barcodeId)" alt="Barcode" class="barcode-image">
                 </div>
                 <div class="product-details">
-                  <div class="product-name-price">
-                    <h4>{{ product.productName }}</h4>
-                    <span class="price">₱{{ (product.sellingPrice || 0).toFixed(2) }}</span>
-                  </div>
+                  <h4 class="product-name">{{ product.productName }}</h4>
                   <div class="product-category-stock">
-                    <p class="product-description">{{ product.category }}</p>
-                    <span class="stock-badge">Stock: {{ product.totalStock || 0 }}</span>
+                    <div style="flex: 1;">
+                      <p class="product-description">{{ product.category }}</p>
+                      <div class="product-tags" *ngIf="getProductTagLabels(product).length > 0" style="display: flex; gap: 4px; flex-wrap: wrap; margin-top: 4px;">
+                        <span *ngFor="let label of getProductTagLabels(product)" style="font-size: 10px; padding: 2px 6px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border-radius: 4px; font-weight: 500;">{{ label }}</span>
+                      </div>
+                    </div>
+                    <div class="price-stock-group">
+                      <span class="price">₱{{ (product.sellingPrice || 0).toFixed(2) }}</span>
+                      <span class="stock-badge">Stock: {{ product.totalStock || 0 }}</span>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -853,6 +863,9 @@
                 <div class="item-details">
                   <span class="item-name">{{ item.productName }}</span>
                   <span class="item-sku">{{ item.skuId }}</span>
+                  <div class="item-tags" *ngIf="item.tagLabels && item.tagLabels.length > 0" style="display: flex; gap: 4px; margin-top: 4px; flex-wrap: wrap;">
+                    <span *ngFor="let label of item.tagLabels" style="font-size: 10px; padding: 2px 6px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border-radius: 4px; font-weight: 500;">{{ label }}</span>
+                  </div>
                 </div>
                 <div class="quantity-controls">
                   <button (click)="updateQuantity(item.productId, item.quantity - 1)" class="qty-btn">-</button>

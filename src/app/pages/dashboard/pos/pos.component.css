@@ -219,6 +219,8 @@
       background: white;
       border-right: 1px solid #e2e8f0;
       min-width: 400px; /* Ensure minimum width for categories */
+      max-width: calc(100% - 400px); /* Prevent overlap with receipt panel */
+      overflow: hidden; /* Contain all children within left panel */
     }
 
     .categories-panel {
@@ -838,7 +840,10 @@
     .products-display {
       flex: 1;
       padding: 1rem;
+      padding-right: 1.5rem; /* Extra right padding for better spacing */
       min-height: 350px; /* Increased minimum height to ensure complete rows are visible */
+      overflow-x: hidden; /* Prevent horizontal overflow */
+      overflow-y: auto; /* Allow vertical scrolling if needed */
     }
 
     .products-list {
@@ -926,21 +931,25 @@
 
     .products-grid {
       display: grid;
-      grid-template-columns: repeat(6, 1fr); /* 6 columns for denser grid */
-      gap: 0.4rem 0.5rem; /* tighter row gap (0.4rem), keep column gap (0.5rem) */
+      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); /* Responsive grid with max tile width */
+      gap: 0.5rem 0.75rem; /* Better spacing between tiles */
+      width: 100%; /* Ensure grid stays within container */
+      box-sizing: border-box;
+      max-width: 100%; /* Prevent overflow */
     }
 
     .product-grid-item {
       border: 1px solid #e5e7eb;
       border-radius: 8px;
-      padding: 0.25rem; /* tighter padding to reduce height */
+      padding: 0;
       cursor: pointer;
       transition: all 0.2s;
       background: white;
       position: relative;
-      aspect-ratio: 1.1; /* Slightly wider to reduce height */
       display: flex;
       flex-direction: column;
+      min-height: 180px; /* Ensure minimum consistent height */
+      height: auto; /* Allow dynamic height based on content */
     }
 
     .product-grid-item:hover {
@@ -970,11 +979,12 @@
       display: flex;
       flex-direction: column;
       gap: 0;
+      flex-shrink: 0; /* Don't allow shrinking */
     }
 
     .product-image {
       width: 100%;
-      height: 72px; /* reduce image height to trim vertical space */
+      height: 85px; /* Consistent image height */
       object-fit: cover;
       border-radius: 6px 6px 0 0;
       background: #f3f4f6;
@@ -987,7 +997,9 @@
       align-items: center;
       justify-content: center;
       padding: 2px 4px;
-      margin: 0;
+      margin: 0 0 0.5rem 0; /* Add space below barcode */
+      height: 30px; /* Fixed height for barcode area */
+      flex-shrink: 0; /* Don't allow shrinking */
     }
 
     .barcode-image {
@@ -1000,37 +1012,90 @@
       flex: 1;
       display: flex;
       flex-direction: column;
+      padding: 0.5rem;
+      padding-bottom: 0.75rem; /* Extra bottom padding */
+      min-height: 0; /* Allow shrinking */
+      overflow: visible; /* Allow content to show fully */
+      gap: 0.25rem;
+    }
+
+    .product-details .product-name {
+      margin: 0;
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: #1f2937;
+      line-height: 1.3;
+      word-wrap: break-word;
+      white-space: normal;
+      overflow: visible;
     }
 
     .product-name-price {
       display: flex;
       justify-content: space-between;
       align-items: flex-start;
-      margin-bottom: 0.2rem; /* tighten spacing between name and category */
+      margin-bottom: 0;
       gap: 0.5rem;
     }
 
     .product-name-price h4 {
       margin: 0;
-      font-size: 0.8rem; /* Slightly smaller title */
+      font-size: 0.875rem; /* Consistent font size */
       font-weight: 600;
       color: #1f2937;
-      line-height: 1.2;
+      line-height: 1.3;
       flex: 1;
+      overflow: visible; /* Show full text */
+      text-overflow: clip; /* Don't truncate */
+      display: block; /* Remove line clamping */
+      word-wrap: break-word; /* Break long words */
+      white-space: normal; /* Allow text wrapping */
     }
 
     .product-name-price .price {
       font-weight: 600;
       color: #059669;
-      font-size: 0.85rem; /* Slightly smaller price text */
+      font-size: 0.875rem; /* Match title font size */
+      white-space: nowrap;
+    }
+
+    .price-stock-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+      align-items: flex-end;
+    }
+
+    .price-stock-group .price {
+      font-weight: 600;
+      color: #059669;
+      font-size: 0.875rem;
+      white-space: nowrap;
+    }
+
+    .product-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.25rem;
+      margin: 0.25rem 0;
+    }
+
+    .product-tags .tag {
+      font-size: 0.7rem;
+      padding: 2px 6px;
+      background: #dbeafe;
+      color: #1e40af;
+      border-radius: 3px;
+      font-weight: 500;
       white-space: nowrap;
     }
 
     .product-category-stock {
       display: flex;
       justify-content: space-between;
-      align-items: center;
-      margin-bottom: 0; /* Remove margin to eliminate blank row */
+      align-items: flex-start;
+      margin-bottom: 0;
+      margin-top: 0;
       gap: 0.5rem;
     }
 
@@ -1043,19 +1108,22 @@
 
     .product-description {
       margin: 0;
-      font-size: 0.75rem;
+      font-size: 0.75rem; /* Consistent small font */
       color: #6b7280;
       flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
 
     .product-stock {
-      font-size: 0.75rem;
+      font-size: 0.75rem; /* Match description font size */
       color: #6b7280;
       white-space: nowrap;
     }
 
     .stock-badge {
-      font-size: 0.7rem;
+      font-size: 0.75rem; /* Consistent badge font */
       color: #059669;
       background: #d1fae5;
       padding: 2px 6px;
@@ -1065,7 +1133,7 @@
     }
 
     .discount {
-      font-size: 0.75rem;
+      font-size: 0.75rem; /* Consistent discount font */
       color: #dc2626;
       font-weight: 500;
       margin-top: 0; /* Remove margin to eliminate blank row */

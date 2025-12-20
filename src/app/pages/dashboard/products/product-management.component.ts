@@ -13,12 +13,14 @@ import { CategoryService, ProductCategory } from '../../../services/category.ser
 import { InventoryDataService } from '../../../services/inventory-data.service';
 import { PredefinedTypesService, UnitTypeOption, PredefinedType } from '../../../services/predefined-types.service';
 import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../shared/components/confirmation-dialog/confirmation-dialog.component';
+import { CreateTagModalComponent } from '../../../shared/components/create-tag-modal/create-tag-modal.component';
+import { TagsService, ProductTag } from '../../../services/tags.service';
 import { AppConstants } from '../../../shared/enums/app-constants.enum';
 
 @Component({
   selector: 'app-product-management',
   standalone: true,
-  imports: [CommonModule, FormsModule, ReactiveFormsModule, ConfirmationDialogComponent],
+  imports: [CommonModule, FormsModule, ReactiveFormsModule, ConfirmationDialogComponent, CreateTagModalComponent],
   styles: [
     `
     .products-management { 
@@ -848,6 +850,159 @@ import { AppConstants } from '../../../shared/enums/app-constants.enum';
       z-index: 100000 !important;
     }
 
+    /* Tags Management Styles */
+    .tags-grid {
+      padding: 1.5rem;
+    }
+
+    .tag-group {
+      margin-bottom: 1.5rem;
+    }
+
+    .tag-group-header {
+      font-weight: 600;
+      color: #2d3748;
+      margin-bottom: 0.75rem;
+      font-size: 0.875rem;
+      text-transform: uppercase;
+      letter-spacing: 0.025em;
+    }
+
+    .tag-items {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+
+    .tag-badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 0.375rem 0.75rem;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border-radius: 9999px;
+      font-size: 0.75rem;
+      font-weight: 500;
+      transition: all 0.2s;
+    }
+
+    .tag-badge:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 8px rgba(102, 126, 234, 0.3);
+    }
+
+    .tag-badge.inactive {
+      background: #cbd5e0;
+      color: #718096;
+    }
+
+    /* Product Tags Display Styles */
+    .tags-display {
+      margin-top: 1rem;
+    }
+
+    .tab-headers-style {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      align-items: center;
+    }
+
+    .tag-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.5rem 0.75rem;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border-radius: 9999px;
+      font-size: 0.875rem;
+      font-weight: 500;
+    }
+
+    .remove-tag-btn {
+      background: rgba(255, 255, 255, 0.2);
+      border: none;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      color: white;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.25rem;
+      line-height: 1;
+      transition: all 0.2s;
+    }
+
+    .remove-tag-btn:hover {
+      background: rgba(255, 255, 255, 0.3);
+      transform: scale(1.1);
+    }
+
+    .add-tag-btn {
+      padding: 0.5rem 1rem;
+      background: white;
+      border: 2px dashed #667eea;
+      color: #667eea;
+      border-radius: 9999px;
+      font-size: 0.875rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .add-tag-btn:hover {
+      background: #f0f4ff;
+      border-color: #5568d3;
+      transform: translateY(-1px);
+    }
+
+    .empty-tags-hint {
+      margin-top: 0.5rem;
+      font-size: 0.75rem;
+      color: #9ca3af;
+      font-style: italic;
+    }
+
+    .tags-selection-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+      gap: 0.75rem;
+      max-height: 300px;
+      overflow-y: auto;
+      padding: 0.5rem;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      background: #f9fafb;
+    }
+
+    .tag-radio-label {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.5rem;
+      background: white;
+      border: 1px solid #e5e7eb;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-size: 0.875rem;
+    }
+
+    .tag-radio-label:hover {
+      background: #f0f4ff;
+      border-color: #667eea;
+    }
+
+    .tag-radio-label input[type="radio"],
+    .tag-radio-label input[type="checkbox"] {
+      cursor: pointer;
+      width: 16px;
+      height: 16px;
+    }
+
     @media (max-width: 768px) {
       .modal {
         width: 95%;
@@ -1014,6 +1169,7 @@ import { AppConstants } from '../../../shared/enums/app-constants.enum';
           </div>
           <div class="header-actions">
             <button class="btn btn-primary" (click)="openAddModal()">📦 Add New Product</button>
+            <button class="btn btn-primary" (click)="onCreateTag()">🏷️ Create New Tag</button>
           </div>
         </div>
       </div>
@@ -1278,6 +1434,38 @@ import { AppConstants } from '../../../shared/enums/app-constants.enum';
                     <option value="inactive">Inactive</option>
                     <option value="expired">Expired</option>
                   </select>
+                </div>
+              </div>
+
+              <!-- Tags Section -->
+              <div class="form-section">
+                <h4 class="section-title">
+                  <span>🏷️</span>
+                  <span>Product Tags</span>
+                </h4>
+
+                <div class="tags-display">
+                  <div class="tab-headers-style">
+                    <div *ngFor="let tagId of selectedTagIds()" class="tag-chip">
+                      <span>{{ getTagLabel(tagId) }}</span>
+                      <button 
+                        type="button" 
+                        class="remove-tag-btn"
+                        (click)="removeTag(tagId)"
+                        title="Remove tag">
+                        ×
+                      </button>
+                    </div>
+                    <button 
+                      type="button" 
+                      class="add-tag-btn"
+                      (click)="openSelectTagModal()">
+                      <span>+ Add Tags</span>
+                    </button>
+                  </div>
+                  <div *ngIf="selectedTagIds().length === 0" class="empty-tags-hint">
+                    No tags selected. Click "+ Add Tags" to select tags for this product.
+                  </div>
                 </div>
               </div>
 
@@ -1888,6 +2076,53 @@ import { AppConstants } from '../../../shared/enums/app-constants.enum';
         (cancelled)="closeDeleteConfirmation()">
       </app-confirmation-dialog>
 
+      <!-- Select Tag Modal -->
+      <div class="modal-overlay" *ngIf="showSelectTagModal()" (click)="closeSelectTagModal()" style="z-index: 100000 !important;">
+        <div class="modal" (click)="$event.stopPropagation()" style="max-width: 500px;">
+          <div class="modal-header">
+            <h3>Select Tags</h3>
+            <button class="close-btn" (click)="closeSelectTagModal()">×</button>
+          </div>
+          <div class="modal-body">
+            <div class="form-group">
+              <label>Group</label>
+              <select class="form-input" [(ngModel)]="selectedTagGroup" (ngModelChange)="onTagGroupChange($event)">
+                <option value="">Select a group</option>
+                <option *ngFor="let group of tagGroups()" [value]="group">{{ group }}</option>
+              </select>
+            </div>
+
+            <div class="form-group" *ngIf="selectedTagGroup">
+              <label>Tags</label>
+              <div class="tags-selection-grid">
+                <label *ngFor="let tag of getFilteredTags()" class="tag-radio-label">
+                  <input 
+                    type="checkbox" 
+                    [checked]="isTagSelected(tag.tagId)"
+                    (change)="toggleTagSelection(tag.tagId)">
+                  <span>{{ tag.label }}</span>
+                </label>
+              </div>
+              <div *ngIf="getFilteredTags().length === 0" class="empty-state" style="padding: 1rem;">
+                <p style="margin: 0; color: #9ca3af; font-size: 0.875rem;">No tags available in this group</p>
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-secondary" (click)="closeSelectTagModal()">Cancel</button>
+            <button class="btn btn-primary" (click)="saveSelectedTags()">Add Tags</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Create Tag Modal -->
+      <app-create-tag-modal
+        *ngIf="showCreateTagModal()"
+        [storeId]="getCurrentStoreId()"
+        (saved)="onTagSaved($event)"
+        (cancelled)="onTagCancelled()"
+      />
+
       <!-- Hidden file input for per-row Add Photo action -->
       <input 
         type="file" 
@@ -1968,6 +2203,17 @@ export class ProductManagementComponent implements OnInit {
   // Row-level image upload context
   private pendingPhotoProduct: Product | null = null;
 
+  // Tags management state
+  showCreateTagModal = signal<boolean>(false);
+  availableTags = signal<ProductTag[]>([]);
+  tagGroups = signal<string[]>([]);
+  
+  // Select tag modal state
+  showSelectTagModal = signal<boolean>(false);
+  selectedTagGroup: string = '';
+  selectedTagIds = signal<string[]>([]);
+  tempSelectedTagIds: string[] = [];
+
   // Modal mode management
   modalMode: 'product' | 'category' = 'product';
   get isProductMode(): boolean { return this.modalMode === 'product'; }
@@ -1997,7 +2243,8 @@ export class ProductManagementComponent implements OnInit {
     private toastService: ToastService,
     private categoryService: CategoryService,
     private inventoryDataService: InventoryDataService,
-    private predefinedTypesService: PredefinedTypesService
+    private predefinedTypesService: PredefinedTypesService,
+    private tagsService: TagsService
   ) {
     this.productForm = this.createProductForm();
     this.inventoryForm = this.createInventoryForm();
@@ -2189,6 +2436,8 @@ export class ProductManagementComponent implements OnInit {
         // Initialize products with real-time updates
         if (currentPermission.storeId) {
           await this.productService.initializeProducts(currentPermission.storeId);
+          // Load tags for the current store
+          await this.loadTags(currentPermission.storeId);
         } else {
           console.warn('No storeId available - cannot load products');
         }
@@ -2203,6 +2452,17 @@ export class ProductManagementComponent implements OnInit {
       await this.loadUnitTypes();
     } catch (error) {
       console.error('Error loading data:', error);
+    }
+  }
+
+  private async loadTags(storeId: string): Promise<void> {
+    try {
+      const tags = await this.tagsService.getTagsByStore(storeId);
+      this.availableTags.set(tags);
+      const groups = await this.tagsService.getAllTagGroups(storeId);
+      this.tagGroups.set(groups);
+    } catch (error) {
+      console.error('Error loading tags:', error);
     }
   }
 
@@ -2239,6 +2499,8 @@ export class ProductManagementComponent implements OnInit {
       totalStock: [0, Validators.min(0)],
       sellingPrice: [0, Validators.min(0)],
       originalPrice: [0, Validators.min(0)],
+      // Product tags
+      tags: [[]],
     });
   }
 
@@ -2311,6 +2573,7 @@ export class ProductManagementComponent implements OnInit {
     console.log('openAddModal called');
     this.isEditMode = false;
     this.selectedProduct = null;
+    this.selectedTagIds.set([]); // Reset tags for new product
     this.productForm.reset({
       initialReceivedAt: new Date().toISOString().split('T')[0],
       isMultipleInventory: false,
@@ -2344,6 +2607,8 @@ export class ProductManagementComponent implements OnInit {
   openEditModal(product: Product): void {
     this.isEditMode = true;
     this.selectedProduct = product;
+    // Load product tags into signal
+    this.selectedTagIds.set(product.tags || []);
     // Patch the form silently to avoid triggering valueChange subscriptions
     this.productForm.patchValue(product, { emitEvent: false });
     // Ensure vatRate defaults to 12 if the product doesn't include it
@@ -2567,7 +2832,10 @@ export class ProductManagementComponent implements OnInit {
           vatRate: formValue.vatRate ?? AppConstants.DEFAULT_VAT_RATE,
           hasDiscount: formValue.hasDiscount || false,
           discountType: formValue.discountType || 'percentage',
-          discountValue: formValue.discountValue || 0
+          discountValue: formValue.discountValue || 0,
+          // Product tags
+          tags: this.selectedTagIds(),
+          tagLabels: this.getSelectedTagLabels()
         };
 
         // totalStock: only allow editing when product has no separate inventory batches
@@ -2626,6 +2894,10 @@ export class ProductManagementComponent implements OnInit {
           hasDiscount: formValue.hasDiscount || false,
           discountType: formValue.discountType || 'percentage',
           discountValue: formValue.discountValue || 0,
+          
+          // Product tags
+          tags: this.selectedTagIds(),
+          tagLabels: this.getSelectedTagLabels(),
           
           status: ProductStatus.Active
         };
@@ -3719,6 +3991,97 @@ export class ProductManagementComponent implements OnInit {
     } finally {
       this.loading = false;
     }
+  }
+
+  // ===========================
+  // Tag Management Methods
+  // ===========================
+
+  onCreateTag(): void {
+    this.showCreateTagModal.set(true);
+  }
+
+  async onTagSaved(tag: any): Promise<void> {
+    this.showCreateTagModal.set(false);
+    const storeId = this.authService.getCurrentPermission()?.storeId;
+    if (storeId) {
+      await this.loadTags(storeId);
+    }
+    this.toastService.success('Tag created successfully');
+  }
+
+  onTagCancelled(): void {
+    this.showCreateTagModal.set(false);
+  }
+
+  getTagsByGroup(group: string): any[] {
+    return this.availableTags().filter(t => t.group === group);
+  }
+
+  getCurrentStoreId(): string {
+    return this.authService.getCurrentPermission()?.storeId || '';
+  }
+
+  // ===========================
+  // Select Tags Modal Methods
+  // ===========================
+
+  openSelectTagModal(): void {
+    this.tempSelectedTagIds = [...this.selectedTagIds()];
+    this.selectedTagGroup = '';
+    this.showSelectTagModal.set(true);
+  }
+
+  closeSelectTagModal(): void {
+    this.showSelectTagModal.set(false);
+    this.selectedTagGroup = '';
+    this.tempSelectedTagIds = [];
+  }
+
+  onTagGroupChange(group: string): void {
+    this.selectedTagGroup = group;
+  }
+
+  getFilteredTags(): ProductTag[] {
+    if (!this.selectedTagGroup) return [];
+    return this.availableTags().filter(t => 
+      t.group === this.selectedTagGroup && t.isActive
+    );
+  }
+
+  isTagSelected(tagId: string): boolean {
+    return this.tempSelectedTagIds.includes(tagId);
+  }
+
+  toggleTagSelection(tagId: string): void {
+    const index = this.tempSelectedTagIds.indexOf(tagId);
+    if (index > -1) {
+      this.tempSelectedTagIds.splice(index, 1);
+    } else {
+      this.tempSelectedTagIds.push(tagId);
+    }
+  }
+
+  saveSelectedTags(): void {
+    // Merge new selections with existing tags (no duplicates)
+    const currentTags = this.selectedTagIds();
+    const newTags = this.tempSelectedTagIds.filter(tagId => !currentTags.includes(tagId));
+    this.selectedTagIds.set([...currentTags, ...newTags]);
+    this.closeSelectTagModal();
+  }
+
+  removeTag(tagId: string): void {
+    const currentTags = this.selectedTagIds();
+    this.selectedTagIds.set(currentTags.filter(id => id !== tagId));
+  }
+
+  getTagLabel(tagId: string): string {
+    const tag = this.availableTags().find(t => t.tagId === tagId);
+    return tag ? tag.label : tagId;
+  }
+
+  getSelectedTagLabels(): string[] {
+    return this.selectedTagIds().map(tagId => this.getTagLabel(tagId));
   }
 
   /**

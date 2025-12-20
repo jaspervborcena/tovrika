@@ -4916,4 +4916,13 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       console.error('❌ Firestore test error:', error);
     }
   }
+
+  getProductTagLabels(product: Product): string[] {
+    // Use denormalized tagLabels from product document for instant display
+    if (product.tagLabels && product.tagLabels.length > 0) {
+      return product.tagLabels;
+    }
+    // Fallback: if tagLabels not available, return empty (old products)
+    return [];
+  }
 }

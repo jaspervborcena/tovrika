@@ -22,6 +22,7 @@ import { Store } from '../interfaces/store.interface';
 import { Device } from '../interfaces/device.interface';
 import { OrdersSellingTrackingService } from './orders-selling-tracking.service';
 import { LedgerService } from './ledger.service';
+import { TagsService } from './tags.service';
 import { environment } from '../../environments/environment';
 
 @Injectable({
@@ -136,6 +137,9 @@ export class PosService {
   private storeService = inject(StoreService);
   private deviceService = inject(DeviceService);
   private ledgerService = inject(LedgerService);
+  
+  // Cache for product tags
+  private productTagsCache = signal<Map<string, string>>(new Map());
 
   constructor(
     private firestore: Firestore,
@@ -144,7 +148,8 @@ export class PosService {
     private productService: ProductService,
     private indexedDBService: IndexedDBService,
     private securityService: FirestoreSecurityService,
-    private ordersSellingTrackingService: OrdersSellingTrackingService
+    private ordersSellingTrackingService: OrdersSellingTrackingService,
+    private tagsService: TagsService
   ) {
     // Load persisted store selection on service initialization
     this.loadPersistedStoreSelection();
@@ -253,6 +258,9 @@ export class PosService {
   // Store Management
   async setSelectedStore(storeId: string, options?: { preserveCart?: boolean }): Promise<void> {
     this.selectedStoreIdSignal.set(storeId);
+    
+    // Load product tags for the selected store
+    await this.loadProductTags(storeId);
     
     // Save to IndexedDB for persistence
     try {
@@ -836,6 +844,9 @@ export class PosService {
     const vatAmount = Number((vatAmountPerUnitRounded * quantity).toFixed(2));
     const total = Number((sellingPricePerUnitRounded * quantity).toFixed(2));
 
+    // Use denormalized tag labels from product for instant display
+    const tagLabels = product.tagLabels || [];
+
     return {
       productId: product.id!,
       productName: product.productName,
@@ -854,8 +865,35 @@ export class PosService {
       discountValue: product.discountValue,
       discountAmount,
       isVatExempt: false,
-      imageUrl: product.imageUrl
+      imageUrl: product.imageUrl,
+      tags: product.tags,
+      tagLabels: tagLabels
     };
+  }
+
+  private getTagLabels(tagIds: string[]): string[] {
+    if (!tagIds || tagIds.length === 0) return [];
+    const tagsMap = this.productTagsCache();
+    return tagIds
+      .map(tagId => tagsMap.get(tagId) || tagId)
+      .filter((label): label is string => label !== null && label !== undefined);
+  }
+
+  async loadProductTags(storeId: string): Promise<void> {
+    try {
+      console.log('🏷️ Loading product tags for store:', storeId);
+      const tags = await this.tagsService.getTagsByStore(storeId, false);
+      console.log('🏷️ Loaded tags:', tags.length);
+      const tagsMap = new Map<string, string>();
+      tags.forEach(tag => {
+        tagsMap.set(tag.tagId, tag.label);
+        console.log('🏷️ Tag mapping:', tag.tagId, '->', tag.label);
+      });
+      this.productTagsCache.set(tagsMap);
+      console.log('🏷️ Tags cache updated. Total tags:', tagsMap.size);
+    } catch (error) {
+      console.error('❌ Error loading product tags:', error);
+    }
   }
 
   private recalculateCartItem(item: CartItem): CartItem {

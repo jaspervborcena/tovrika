@@ -13,11 +13,12 @@ import { ExpenseLog } from '../../../interfaces/expense-log.interface';
 import { LedgerService } from '../../../services/ledger.service';
 import { OrdersSellingTrackingService } from '../../../services/orders-selling-tracking.service';
 import { Firestore, collection, query, where, orderBy, limit, getDocs } from '@angular/fire/firestore';
+import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../shared/components/confirmation-dialog/confirmation-dialog.component';
 
 @Component({
   selector: 'app-overview',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, ConfirmationDialogComponent],
   template: `
     <div class="dashboard-container">
       <!-- Header -->
@@ -331,6 +332,14 @@ import { Firestore, collection, query, where, orderBy, limit, getDocs } from '@a
         </div>
       </div>
     </div>
+
+    <!-- Confirmation Dialog -->
+    <app-confirmation-dialog
+      *ngIf="showConfirmDialog()"
+      [dialogData]="confirmDialogData()"
+      (confirmed)="onConfirmDialog()"
+      (cancelled)="onCancelDialog()"
+    />
   `,
   styles: [`
     .dashboard-container {
@@ -1004,6 +1013,15 @@ export class OverviewComponent implements OnInit {
   private ordersSellingTrackingService = inject(OrdersSellingTrackingService);
   private firestore = inject(Firestore);
 
+  // Confirmation Dialog
+  protected showConfirmDialog = signal<boolean>(false);
+  protected confirmDialogData = signal<ConfirmationDialogData>({
+    title: '',
+    message: '',
+    confirmText: 'OK',
+    type: 'info'
+  });
+
   // Signals
   protected stores = signal<Store[]>([]);
   protected products = signal<Product[]>([]);
@@ -1040,7 +1058,7 @@ export class OverviewComponent implements OnInit {
     { key: 'previous_month', label: 'Previous Month' },
     { key: 'date_range', label: 'Date Range' }
   ];
-  protected selectedPeriod = signal<'today' | 'yesterday' | 'this_month' | 'previous_month' | 'date_range'>('date_range');
+  protected selectedPeriod = signal<'today' | 'yesterday' | 'this_month' | 'previous_month' | 'date_range'>('today');
   protected dateFrom = signal<string | null>(null); // YYYY-MM-DD
   protected dateTo = signal<string | null>(null);
   protected dateRangeRevenue = signal<number>(0);
@@ -1775,11 +1793,46 @@ export class OverviewComponent implements OnInit {
     const from = this.dateFrom();
     const to = this.dateTo();
     if (!from || !to) return;
+    
     const start = new Date(from + 'T00:00:00');
     const end = new Date(to + 'T23:59:59.999');
+    
+    // Validate date range: max 31 days
+    const daysDifference = Math.floor((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+    if (daysDifference > 31) {
+      this.confirmDialogData.set({
+        title: 'Invalid Date Range',
+        message: 'Date range cannot exceed 31 days. Please select a shorter period.',
+        confirmText: 'OK',
+        type: 'warning'
+      });
+      this.showConfirmDialog.set(true);
+      return;
+    }
+    
+    // Validate: end date must be >= start date
+    if (end < start) {
+      this.confirmDialogData.set({
+        title: 'Invalid Date Range',
+        message: 'End date must be after or equal to start date.',
+        confirmText: 'OK',
+        type: 'warning'
+      });
+      this.showConfirmDialog.set(true);
+      return;
+    }
+    
     this.loadAnalyticsData(start, end);
     // Fetch date range comparison data
     this.fetchDateRangeComparison().catch(err => console.error('Failed to fetch date range comparison:', err));
+  }
+
+  protected onConfirmDialog() {
+    this.showConfirmDialog.set(false);
+  }
+
+  protected onCancelDialog() {
+    this.showConfirmDialog.set(false);
   }
 
   // Compute start/end dates for selected period and call analytics loader
