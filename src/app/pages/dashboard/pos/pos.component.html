@@ -127,7 +127,7 @@
                       [class.active]="accessTab() === t"
                       class="tab-header">
                 <div class="tab-content">
-                  <span class="tab-label">{{ getAccessTabTranslation(t) }}</span>
+                  <span class="tab-label" [class.small-text]="t === 'Split Payments' || t === 'Discounts & Promotions'">{{ getAccessTabTranslation(t) }}</span>
                 </div>
               </button>
             </div>
@@ -194,17 +194,20 @@
               <span class="tag-filter-title">Classification</span>
               <span class="tag-filter-toggle" [class.expanded]="isTagFilterExpanded()">▼</span>
             </div>
-            <div class="tag-filter-content" *ngIf="isTagFilterExpanded()">
-              <div class="tag-filter-row" *ngFor="let tagGroup of availableTagsByGroup()">
-                <span class="tag-group-label">{{ tagGroup.group }}:</span>
-                <button 
-                  *ngFor="let tag of tagGroup.tags" 
-                  class="tag-filter-btn"
-                  [class.active]="isTagFilterActive(tag.label)"
-                  (click)="toggleTagFilter(tag.label)"
-                  [title]="isTagFilterActive(tag.label) ? 'Click to remove filter' : 'Click to filter by ' + tag.label">
-                  {{ tag.label }}
-                </button>
+            <div class="tag-filter-content" *ngIf="isTagFilterExpanded()" 
+                 [class.scrollable]="availableTagsByGroup().length > 12">
+              <div class="tag-filter-grid">
+                <div class="tag-filter-row" *ngFor="let tagGroup of availableTagsByGroup()">
+                  <span class="tag-group-label">{{ tagGroup.group }}:</span>
+                  <button 
+                    *ngFor="let tag of tagGroup.tags" 
+                    class="tag-filter-btn"
+                    [class.active]="isTagFilterActive(tag.label)"
+                    (click)="toggleTagFilter(tag.label)"
+                    [title]="isTagFilterActive(tag.label) ? 'Click to remove filter' : 'Click to filter by ' + tag.label">
+                    {{ tag.label }}
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -286,21 +289,28 @@
             <div *ngIf="currentView() === 'grid'" class="products-grid">
               <div 
                 *ngFor="let product of displayGridProducts()"
-                (click)="addToCart(product)"
                 class="product-grid-item"
                 [class.disabled]="!canInteractWithProducts()"
                 [title]="'SKU: ' + product.skuId">
-                <div class="product-image-container">
+                <div class="product-image-container" (click)="openProductPreviewModal(product, $event)">
                   <img 
                     [src]="product.imageUrl || 'assets/noimage.png'"
                     [alt]="product.productName"
                     class="product-image"
                     onerror="this.src='assets/noimage.png'">
+                  <div class="magnify-overlay">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <circle cx="11" cy="11" r="8"></circle>
+                      <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                      <line x1="11" y1="8" x2="11" y2="14"></line>
+                      <line x1="8" y1="11" x2="14" y2="11"></line>
+                    </svg>
+                  </div>
                 </div>
                 <div class="product-barcode" *ngIf="product.barcodeId">
                   <img [src]="generateBarcodeImage(product.barcodeId)" alt="Barcode" class="barcode-image">
                 </div>
-                <div class="product-details">
+                <div class="product-details" (click)="addToCart(product)">
                   <h4 class="product-name">{{ product.productName }}</h4>
                   <div class="product-category-row">
                     <span class="stock-badge">Stock: {{ product.totalStock || 0 }}</span>
@@ -318,56 +328,28 @@
             <div *ngIf="currentView() === 'favorites'" class="products-grid">
               <div 
                 *ngFor="let product of displayFavoriteGridProducts()"
-                (click)="addToCart(product)"
                 class="product-grid-item"
                 [class.disabled]="!canInteractWithProducts()"
                 [title]="'SKU: ' + product.skuId">
-                <div class="product-image-container">
+                <div class="product-image-container" (click)="openProductPreviewModal(product, $event)">
                   <img 
                     [src]="product.imageUrl || 'assets/noimage.png'"
                     [alt]="product.productName"
                     class="product-image"
                     onerror="this.src='assets/noimage.png'">
+                  <div class="magnify-overlay">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <circle cx="11" cy="11" r="8"></circle>
+                      <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                      <line x1="11" y1="8" x2="11" y2="14"></line>
+                      <line x1="8" y1="11" x2="14" y2="11"></line>
+                    </svg>
+                  </div>
                 </div>
                 <div class="product-barcode" *ngIf="product.barcodeId">
                   <img [src]="generateBarcodeImage(product.barcodeId)" alt="Barcode" class="barcode-image">
                 </div>
-                <div class="product-details">
-                  <h4 class="product-name">{{ product.productName }}</h4>
-                  <div class="product-category-row">
-                    <p class="product-category-label">{{ product.category }}</p>
-                    <span class="stock-badge">Stock: {{ product.totalStock || 0 }}</span>
-                  </div>
-                  <div class="product-tags-inline">
-                    <span class="tag-item">{{ product.category }}</span>
-                    <span class="tag-item" *ngFor="let label of getProductTagLabels(product)">{{ label }}</span>
-                  </div>
-                  <div class="product-price-row">
-                    <span class="price">₱{{ (product.sellingPrice || 0).toFixed(2) }}</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- Favorites View (same as Grid but filtered by isFavorite) -->
-            <div *ngIf="currentView() === 'favorites'" class="products-grid">
-              <div 
-                *ngFor="let product of displayFavoriteGridProducts()"
-                (click)="addToCart(product)"
-                class="product-grid-item"
-                [class.disabled]="!canInteractWithProducts()"
-                [title]="'SKU: ' + product.skuId">
-                <div class="product-image-container">
-                  <img 
-                    [src]="product.imageUrl || 'assets/noimage.png'"
-                    [alt]="product.productName"
-                    class="product-image"
-                    onerror="this.src='assets/noimage.png'">
-                </div>
-                <div class="product-barcode" *ngIf="product.barcodeId">
-                  <img [src]="generateBarcodeImage(product.barcodeId)" alt="Barcode" class="barcode-image">
-                </div>
-                <div class="product-details">
+                <div class="product-details" (click)="addToCart(product)">
                   <h4 class="product-name">{{ product.productName }}</h4>
                   <div class="product-category-row">
                     <span class="stock-badge">Stock: {{ product.totalStock || 0 }}</span>
@@ -393,28 +375,38 @@
                 <div class="products-grid">
                   <div 
                     *ngFor="let product of promoProducts()"
-                    (click)="addToCart(product)"
                     class="product-grid-item promo"
-                    [class.disabled]="!canInteractWithProducts()">
+                    [class.disabled]="!canInteractWithProducts()"
+                    [title]="'SKU: ' + product.skuId">
                     <div class="promo-badge">PROMO</div>
-                    <div class="product-image-container">
+                    <div class="discount-badge">{{ product.discountValue }}% OFF</div>
+                    <div class="product-image-container" (click)="openProductPreviewModal(product, $event)">
                       <img 
                         [src]="product.imageUrl || 'assets/noimage.png'"
                         [alt]="product.productName"
                         class="product-image"
                         onerror="this.src='assets/noimage.png'">
+                      <div class="magnify-overlay">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                          <circle cx="11" cy="11" r="8"></circle>
+                          <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                          <line x1="11" y1="8" x2="11" y2="14"></line>
+                          <line x1="8" y1="11" x2="14" y2="11"></line>
+                        </svg>
+                      </div>
                     </div>
                     <div class="product-barcode" *ngIf="product.barcodeId">
                       <img [src]="generateBarcodeImage(product.barcodeId)" alt="Barcode" class="barcode-image">
                     </div>
-                    <div class="product-details">
-                      <h4>{{ product.productName }}</h4>
-                      <div class="product-pricing">
-                        <span class="price">₱{{ product.sellingPrice.toFixed(2) }}</span>
-                        <span class="discount">{{ product.discountValue }}% OFF</span>
-                      </div>
-                      <div class="product-category-stock">
+                    <div class="product-details" (click)="addToCart(product)">
+                      <h4 class="product-name">{{ product.productName }}</h4>
+                      <div class="product-category-row">
                         <span class="stock-badge">Stock: {{ product.totalStock || 0 }}</span>
+                        <span class="price">₱{{ (product.sellingPrice || 0).toFixed(2) }}</span>
+                      </div>
+                      <div class="product-tags-inline">
+                        <span class="tag-item category-tag">{{ product.category }}</span>
+                        <span class="tag-item product-tag" *ngFor="let label of getProductTagLabels(product)">{{ label }}</span>
                       </div>
                     </div>
                   </div>
@@ -450,7 +442,7 @@
           </div>
 
           <!-- Orders results use the same display area when Orders tab is active -->
-          <div class="products-display" *ngIf="accessTab() === 'Orders'" style="padding:1rem;">
+          <div class="products-display" *ngIf="accessTab() === 'Orders' || accessTab() === 'Cancelled' || accessTab() === 'Returns' || accessTab() === 'Refunds' || accessTab() === 'Damage' || accessTab() === 'Split Payments' || accessTab() === 'Discounts & Promotions'" style="padding:1rem;">
             <!-- Control buttons for Orders tab -->
             <div style="margin-bottom: 1rem;">
               <!-- Refresh button -->
@@ -471,15 +463,35 @@
               <div style="font-size: 0.8rem; color: #6b7280;">Fetching recent orders from database</div>
             </div>
             
-            <div *ngIf="!isLoadingOrders() && orders().length === 0 && orderSearchQuery()" class="muted">
+            <div *ngIf="!isLoadingOrders() && filteredOrders().length === 0 && orderSearchQuery()" class="muted">
               No orders found for "{{ orderSearchQuery() }}"
             </div>
-            <div *ngIf="!isLoadingOrders() && orders().length === 0 && !orderSearchQuery()" class="muted">
-              No recent orders available. Orders will appear here once you start processing transactions.
+            <div *ngIf="!isLoadingOrders() && filteredOrders().length === 0 && !orderSearchQuery()" class="muted">
+              <ng-container *ngIf="accessTab() === 'Orders'">
+                No recent orders available. Orders will appear here once you start processing transactions.
+              </ng-container>
+              <ng-container *ngIf="accessTab() === 'Cancelled'">
+                No cancelled orders found.
+              </ng-container>
+              <ng-container *ngIf="accessTab() === 'Returns'">
+                No return orders found.
+              </ng-container>
+              <ng-container *ngIf="accessTab() === 'Refunds'">
+                No refund orders found.
+              </ng-container>
+              <ng-container *ngIf="accessTab() === 'Damage'">
+                No damage orders found.
+              </ng-container>
+              <ng-container *ngIf="accessTab() === 'Split Payments'">
+                No split payment orders found.
+              </ng-container>
+              <ng-container *ngIf="accessTab() === 'Discounts & Promotions'">
+                No orders with discounts or promotions found.
+              </ng-container>
             </div>
             
             <!-- Enhanced Order List Display -->
-            <div class="orders-list" *ngIf="!isLoadingOrders() && orders().length > 0">
+            <div class="orders-list" *ngIf="!isLoadingOrders() && filteredOrders().length > 0">
               <div class="orders-header" style="display: grid; grid-template-columns: 2fr 1fr 2fr 1fr; gap: 1rem; padding: 0.75rem; background: #f8fafc; border-radius: 6px; font-weight: 600; color: #374151; margin-bottom: 0.5rem;">
                 <div>Invoice Number</div>
                 <div>Date</div>
@@ -487,7 +499,7 @@
                 <div style="text-align: right;">Amount</div>
               </div>
               
-              <div *ngFor="let order of orders()" 
+              <div *ngFor="let order of filteredOrders()" 
                    class="order-list-item" 
                    (dblclick)="openOrder(order)" 
                    style="display: grid; grid-template-columns: 2fr 1fr 2fr 1fr; gap: 1rem; padding: 0.75rem; border-bottom: 1px solid #f1f5f9; cursor: pointer; transition: background-color 0.2s;"
@@ -954,9 +966,9 @@
                 <span>Zero-Rated Sales:</span>
                 <span>₱{{ cartSummary().zeroRatedSales.toFixed(2) }}</span>
               </div>
-              <div class="summary-line" *ngIf="cartSummary().productDiscountAmount > 0">
+              <div class="summary-line" *ngIf="cartSummary().productDiscountAmount > 0 || cartSummary().orderDiscountAmount > 0">
                 <span>{{ 'pos.productDiscounts' | translate }}:</span>
-                <span>-₱{{ cartSummary().productDiscountAmount.toFixed(2) }}</span>
+                <span>-₱{{ (cartSummary().productDiscountAmount + cartSummary().orderDiscountAmount).toFixed(2) }}</span>
               </div>
               <div class="summary-line">
                 <span>{{ 'pos.grossAmount' | translate }}:</span>
@@ -967,7 +979,7 @@
               <div class="order-discount-section" *ngIf="orderDiscount() || cartItems().length > 0">
                 <div class="summary-line" *ngIf="orderDiscount()">
                   <span>{{ getDiscountDisplayName() }}:</span>
-                  <span>-₱{{ cartSummary().orderDiscountAmount.toFixed(2) }}</span>
+                  <span>-₱{{ (cartSummary().productDiscountAmount + cartSummary().orderDiscountAmount).toFixed(2) }}</span>
                   <button (click)="removeOrderDiscount()" class="remove-discount-btn">×</button>
                 </div>
                 <button 
@@ -1632,3 +1644,73 @@
         </div>
       </div>
     </div>
+
+    <!-- Product Preview Modal -->
+    <div *ngIf="selectedPreviewProduct()" class="modal-overlay" (click)="closeProductPreviewModal()">
+      <div class="product-preview-modal" (click)="$event.stopPropagation()">
+        <button class="modal-close-btn" (click)="closeProductPreviewModal()">
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+        
+        <div class="product-preview-content">
+          <div class="preview-image-section">
+            <img 
+              [src]="selectedPreviewProduct().imageUrl || 'assets/noimage.png'"
+              [alt]="selectedPreviewProduct().productName"
+              class="preview-image"
+              onerror="this.src='assets/noimage.png'">
+            <div *ngIf="selectedPreviewProduct().barcodeId" class="preview-barcode">
+              <img [src]="generateBarcodeImage(selectedPreviewProduct().barcodeId)" alt="Barcode" class="barcode-image">
+            </div>
+          </div>
+          
+          <div class="preview-details-section">
+            <h3 class="preview-product-name">{{ selectedPreviewProduct().productName }}</h3>
+            
+            <div class="preview-info-grid">
+              <div class="preview-info-item">
+                <span class="preview-label">Category:</span>
+                <span class="preview-value">{{ selectedPreviewProduct().category || '-' }}</span>
+              </div>
+              
+              <div class="preview-info-item" *ngIf="selectedPreviewProduct().tagLabels && selectedPreviewProduct().tagLabels.length > 0">
+                <span class="preview-label">Tags:</span>
+                <div class="preview-tags">
+                  <span *ngFor="let tag of selectedPreviewProduct().tagLabels" class="preview-tag-badge">{{ tag }}</span>
+                </div>
+              </div>
+              
+              <div class="preview-info-item">
+                <span class="preview-label">Price:</span>
+                <span class="preview-value preview-price">₱{{ (selectedPreviewProduct().sellingPrice || 0).toFixed(2) }}</span>
+              </div>
+              
+              <div class="preview-info-item">
+                <span class="preview-label">Stock:</span>
+                <span class="preview-value" [class.low-stock]="(selectedPreviewProduct().totalStock || 0) < 10">
+                  {{ selectedPreviewProduct().totalStock || 0 }}
+                </span>
+              </div>
+              
+              <div class="preview-info-item" *ngIf="selectedPreviewProduct().discountValue && selectedPreviewProduct().discountValue > 0">
+                <span class="preview-label">Discount:</span>
+                <span class="preview-value preview-discount">{{ selectedPreviewProduct().discountValue }}% OFF</span>
+              </div>
+            </div>
+            
+            <button class="btn btn-primary add-to-cart-btn" (click)="addToCart(selectedPreviewProduct()); closeProductPreviewModal()">
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="9" cy="21" r="1"></circle>
+                <circle cx="20" cy="21" r="1"></circle>
+                <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path>
+              </svg>
+              Add to Cart
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
