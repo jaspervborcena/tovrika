@@ -13,12 +13,14 @@ import { CategoryService, ProductCategory } from '../../../services/category.ser
 import { InventoryDataService } from '../../../services/inventory-data.service';
 import { PredefinedTypesService, UnitTypeOption, PredefinedType } from '../../../services/predefined-types.service';
 import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../shared/components/confirmation-dialog/confirmation-dialog.component';
+import { CreateTagModalComponent } from '../../../shared/components/create-tag-modal/create-tag-modal.component';
+import { TagsService, ProductTag } from '../../../services/tags.service';
 import { AppConstants } from '../../../shared/enums/app-constants.enum';
 
 @Component({
   selector: 'app-product-management',
   standalone: true,
-  imports: [CommonModule, FormsModule, ReactiveFormsModule, ConfirmationDialogComponent],
+  imports: [CommonModule, FormsModule, ReactiveFormsModule, ConfirmationDialogComponent, CreateTagModalComponent],
   styles: [
     `
     .products-management { 
@@ -848,6 +850,159 @@ import { AppConstants } from '../../../shared/enums/app-constants.enum';
       z-index: 100000 !important;
     }
 
+    /* Tags Management Styles */
+    .tags-grid {
+      padding: 1.5rem;
+    }
+
+    .tag-group {
+      margin-bottom: 1.5rem;
+    }
+
+    .tag-group-header {
+      font-weight: 600;
+      color: #2d3748;
+      margin-bottom: 0.75rem;
+      font-size: 0.875rem;
+      text-transform: uppercase;
+      letter-spacing: 0.025em;
+    }
+
+    .tag-items {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+
+    .tag-badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 0.375rem 0.75rem;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border-radius: 9999px;
+      font-size: 0.75rem;
+      font-weight: 500;
+      transition: all 0.2s;
+    }
+
+    .tag-badge:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 8px rgba(102, 126, 234, 0.3);
+    }
+
+    .tag-badge.inactive {
+      background: #cbd5e0;
+      color: #718096;
+    }
+
+    /* Product Tags Display Styles */
+    .tags-display {
+      margin-top: 1rem;
+    }
+
+    .tab-headers-style {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      align-items: center;
+    }
+
+    .tag-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.5rem 0.75rem;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border-radius: 9999px;
+      font-size: 0.875rem;
+      font-weight: 500;
+    }
+
+    .remove-tag-btn {
+      background: rgba(255, 255, 255, 0.2);
+      border: none;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      color: white;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.25rem;
+      line-height: 1;
+      transition: all 0.2s;
+    }
+
+    .remove-tag-btn:hover {
+      background: rgba(255, 255, 255, 0.3);
+      transform: scale(1.1);
+    }
+
+    .add-tag-btn {
+      padding: 0.5rem 1rem;
+      background: white;
+      border: 2px dashed #667eea;
+      color: #667eea;
+      border-radius: 9999px;
+      font-size: 0.875rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .add-tag-btn:hover {
+      background: #f0f4ff;
+      border-color: #5568d3;
+      transform: translateY(-1px);
+    }
+
+    .empty-tags-hint {
+      margin-top: 0.5rem;
+      font-size: 0.75rem;
+      color: #9ca3af;
+      font-style: italic;
+    }
+
+    .tags-selection-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+      gap: 0.75rem;
+      max-height: 300px;
+      overflow-y: auto;
+      padding: 0.5rem;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      background: #f9fafb;
+    }
+
+    .tag-radio-label {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.5rem;
+      background: white;
+      border: 1px solid #e5e7eb;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-size: 0.875rem;
+    }
+
+    .tag-radio-label:hover {
+      background: #f0f4ff;
+      border-color: #667eea;
+    }
+
+    .tag-radio-label input[type="radio"],
+    .tag-radio-label input[type="checkbox"] {
+      cursor: pointer;
+      width: 16px;
+      height: 16px;
+    }
+
     @media (max-width: 768px) {
       .modal {
         width: 95%;
@@ -1014,6 +1169,7 @@ import { AppConstants } from '../../../shared/enums/app-constants.enum';
           </div>
           <div class="header-actions">
             <button class="btn btn-primary" (click)="openAddModal()">📦 Add New Product</button>
+            <button class="btn btn-primary" (click)="onCreateTag()">🏷️ Create New Tag</button>
           </div>
         </div>
       </div>
@@ -1112,6 +1268,13 @@ import { AppConstants } from '../../../shared/enums/app-constants.enum';
                       title="Manage inventory"
                       aria-label="Manage inventory">
                       📦
+                    </button>
+                    <button 
+                      class="btn-icon-action btn-primary" 
+                      (click)="duplicateProduct(product)"
+                      title="Duplicate product"
+                      aria-label="Duplicate product">
+                      📋
                     </button>
                     <button 
                       class="btn-icon-action btn-danger" 
@@ -1250,12 +1413,23 @@ import { AppConstants } from '../../../shared/enums/app-constants.enum';
 
                 <div class="form-group">
                   <label for="barcodeId">Barcode ID</label>
-                  <input 
-                    type="text" 
-                    id="barcodeId"
-                    formControlName="barcodeId"
-                    placeholder="Enter barcode identifier (optional)"
-                    class="form-input">
+                  <div style="display: flex; gap: 0.5rem; align-items: center;">
+                    <input 
+                      type="text" 
+                      id="barcodeId"
+                      formControlName="barcodeId"
+                      placeholder="Enter barcode identifier (optional)"
+                      class="form-input"
+                      style="flex: 1;">
+                    <button 
+                      type="button"
+                      (click)="generateBarcode()"
+                      class="btn btn-secondary"
+                      style="white-space: nowrap; padding: 0.5rem 1rem;"
+                      title="Generate unique CODE128 barcode">
+                      Generate Barcode
+                    </button>
+                  </div>
                 </div>
 
                 <div class="form-group">
@@ -1278,6 +1452,38 @@ import { AppConstants } from '../../../shared/enums/app-constants.enum';
                     <option value="inactive">Inactive</option>
                     <option value="expired">Expired</option>
                   </select>
+                </div>
+              </div>
+
+              <!-- Tags Section -->
+              <div class="form-section">
+                <h4 class="section-title">
+                  <span>🏷️</span>
+                  <span>Product Tags</span>
+                </h4>
+
+                <div class="tags-display">
+                  <div class="tab-headers-style">
+                    <div *ngFor="let tagId of selectedTagIds()" class="tag-chip">
+                      <span>{{ getTagLabel(tagId) }}</span>
+                      <button 
+                        type="button" 
+                        class="remove-tag-btn"
+                        (click)="removeTag(tagId)"
+                        title="Remove tag">
+                        ×
+                      </button>
+                    </div>
+                    <button 
+                      type="button" 
+                      class="add-tag-btn"
+                      (click)="openSelectTagModal()">
+                      <span>+ Add Tags</span>
+                    </button>
+                  </div>
+                  <div *ngIf="selectedTagIds().length === 0" class="empty-tags-hint">
+                    No tags selected. Click "+ Add Tags" to select tags for this product.
+                  </div>
                 </div>
               </div>
 
@@ -1888,6 +2094,53 @@ import { AppConstants } from '../../../shared/enums/app-constants.enum';
         (cancelled)="closeDeleteConfirmation()">
       </app-confirmation-dialog>
 
+      <!-- Select Tag Modal -->
+      <div class="modal-overlay" *ngIf="showSelectTagModal()" (click)="closeSelectTagModal()" style="z-index: 100000 !important;">
+        <div class="modal" (click)="$event.stopPropagation()" style="max-width: 500px;">
+          <div class="modal-header">
+            <h3>Select Tags</h3>
+            <button class="close-btn" (click)="closeSelectTagModal()">×</button>
+          </div>
+          <div class="modal-body">
+            <div class="form-group">
+              <label>Group</label>
+              <select class="form-input" [(ngModel)]="selectedTagGroup" (ngModelChange)="onTagGroupChange($event)">
+                <option value="">Select a group</option>
+                <option *ngFor="let group of tagGroups()" [value]="group">{{ group }}</option>
+              </select>
+            </div>
+
+            <div class="form-group" *ngIf="selectedTagGroup">
+              <label>Tags</label>
+              <div class="tags-selection-grid">
+                <label *ngFor="let tag of getFilteredTags()" class="tag-radio-label">
+                  <input 
+                    type="checkbox" 
+                    [checked]="isTagSelected(tag.tagId)"
+                    (change)="toggleTagSelection(tag.tagId)">
+                  <span>{{ tag.label }}</span>
+                </label>
+              </div>
+              <div *ngIf="getFilteredTags().length === 0" class="empty-state" style="padding: 1rem;">
+                <p style="margin: 0; color: #9ca3af; font-size: 0.875rem;">No tags available in this group</p>
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-secondary" (click)="closeSelectTagModal()">Cancel</button>
+            <button class="btn btn-primary" (click)="saveSelectedTags()">Add Tags</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Create Tag Modal -->
+      <app-create-tag-modal
+        *ngIf="showCreateTagModal()"
+        [storeId]="getCurrentStoreId()"
+        (saved)="onTagSaved($event)"
+        (cancelled)="onTagCancelled()"
+      />
+
       <!-- Hidden file input for per-row Add Photo action -->
       <input 
         type="file" 
@@ -1968,6 +2221,17 @@ export class ProductManagementComponent implements OnInit {
   // Row-level image upload context
   private pendingPhotoProduct: Product | null = null;
 
+  // Tags management state
+  showCreateTagModal = signal<boolean>(false);
+  availableTags = signal<ProductTag[]>([]);
+  tagGroups = signal<string[]>([]);
+  
+  // Select tag modal state
+  showSelectTagModal = signal<boolean>(false);
+  selectedTagGroup: string = '';
+  selectedTagIds = signal<string[]>([]);
+  tempSelectedTagIds: string[] = [];
+
   // Modal mode management
   modalMode: 'product' | 'category' = 'product';
   get isProductMode(): boolean { return this.modalMode === 'product'; }
@@ -1997,7 +2261,8 @@ export class ProductManagementComponent implements OnInit {
     private toastService: ToastService,
     private categoryService: CategoryService,
     private inventoryDataService: InventoryDataService,
-    private predefinedTypesService: PredefinedTypesService
+    private predefinedTypesService: PredefinedTypesService,
+    private tagsService: TagsService
   ) {
     this.productForm = this.createProductForm();
     this.inventoryForm = this.createInventoryForm();
@@ -2017,24 +2282,6 @@ export class ProductManagementComponent implements OnInit {
     // Subscribe to VAT applicable checkbox changes to toggle vatRate
     const isVatCtrl = this.productForm.get('isVatApplicable');
     const vatRateCtrl = this.productForm.get('vatRate');
-
-    // Sync initial unit price (used for initial batch) into originalPrice so UI maps unit price to product.originalPrice
-    this.productForm.get('initialUnitPrice')?.valueChanges.subscribe(value => {
-      const origCtrl = this.productForm.get('originalPrice');
-      if (origCtrl && (origCtrl.value === null || origCtrl.value === undefined || origCtrl.value === 0)) {
-        const origVal = Number(value || 0);
-        origCtrl.setValue(origVal, { emitEvent: false });
-
-        // Also compute and set product-level sellingPrice so the UI reflects the batch unit price
-        const isVat = !!this.productForm.get('isVatApplicable')?.value;
-        const vatRate = Number(this.productForm.get('vatRate')?.value || 0);
-        const hasDisc = !!this.productForm.get('hasDiscount')?.value;
-        const discType = this.productForm.get('discountType')?.value || 'percentage';
-        const discValue = Number(this.productForm.get('discountValue')?.value || 0);
-        const selling = this.computeSellingFromOriginal(origVal, isVat, vatRate, hasDisc, discType, discValue);
-        this.productForm.get('sellingPrice')?.setValue(Number(selling.toFixed(2)), { emitEvent: false });
-      }
-    });
 
     // Product form: keep originalPrice and sellingPrice in sync for Add/Edit Product dialog
     const prodOrigCtrl = this.productForm.get('originalPrice');
@@ -2108,10 +2355,18 @@ export class ProductManagementComponent implements OnInit {
 
     // Wire subscriptions
     unitCtrl?.valueChanges.subscribe(() => {
-      recomputeSelling();
+      // Only recompute selling price if not in edit mode or if values are actually different
+      // This prevents unwanted recalculation when editing batches where prices are intentionally equal
+      if (!this.isEditingBatch) {
+        recomputeSelling();
+      }
     });
     sellCtrl?.valueChanges.subscribe(() => {
-      recomputeOriginal();
+      // Only recompute original price if not in edit mode or if values are actually different
+      // This prevents unwanted recalculation when editing batches where prices are intentionally equal
+      if (!this.isEditingBatch) {
+        recomputeOriginal();
+      }
     });
     vatCtrl?.valueChanges.subscribe(() => {
       // VAT toggle affects both directions
@@ -2189,6 +2444,8 @@ export class ProductManagementComponent implements OnInit {
         // Initialize products with real-time updates
         if (currentPermission.storeId) {
           await this.productService.initializeProducts(currentPermission.storeId);
+          // Load tags for the current store
+          await this.loadTags(currentPermission.storeId);
         } else {
           console.warn('No storeId available - cannot load products');
         }
@@ -2203,6 +2460,17 @@ export class ProductManagementComponent implements OnInit {
       await this.loadUnitTypes();
     } catch (error) {
       console.error('Error loading data:', error);
+    }
+  }
+
+  private async loadTags(storeId: string): Promise<void> {
+    try {
+      const tags = await this.tagsService.getTagsByStore(storeId);
+      this.availableTags.set(tags);
+      const groups = await this.tagsService.getAllTagGroups(storeId);
+      this.tagGroups.set(groups);
+    } catch (error) {
+      console.error('Error loading tags:', error);
     }
   }
 
@@ -2230,7 +2498,6 @@ export class ProductManagementComponent implements OnInit {
       // Initial inventory fields (for new products)
       initialBatchId: [''],
       initialQuantity: [0, Validators.min(0)],
-      initialUnitPrice: [0, Validators.min(0)],
       initialCostPrice: [0, Validators.min(0)],
       initialReceivedAt: [new Date().toISOString().split('T')[0]],
       initialExpiryDate: [''],
@@ -2239,6 +2506,8 @@ export class ProductManagementComponent implements OnInit {
       totalStock: [0, Validators.min(0)],
       sellingPrice: [0, Validators.min(0)],
       originalPrice: [0, Validators.min(0)],
+      // Product tags
+      tags: [[]],
     });
   }
 
@@ -2307,16 +2576,52 @@ export class ProductManagementComponent implements OnInit {
 
   // Note: filterProducts() method removed - filtering is now handled by the computed filteredProducts signal
 
+  /**
+   * Generate a unique UPC-A compatible barcode (12 digits)
+   * Format: Timestamp-based + random digits to ensure uniqueness
+   * Uses last 11 digits of timestamp + 1 check digit calculated via UPC-A algorithm
+   */
+  generateBarcode(): void {
+    const now = new Date();
+    
+    // Get timestamp in milliseconds and convert to string
+    const timestamp = now.getTime().toString();
+    
+    // Take last 11 digits of timestamp for uniqueness
+    // This gives us ~317 years of unique values (from 1970)
+    const timestampPart = timestamp.slice(-11);
+    
+    // Calculate UPC-A check digit (Luhn algorithm for UPC)
+    const digits = timestampPart.split('').map(Number);
+    let sum = 0;
+    
+    // UPC-A: multiply odd positions (1st, 3rd, 5th...) by 3, even by 1
+    for (let i = 0; i < digits.length; i++) {
+      sum += digits[i] * (i % 2 === 0 ? 3 : 1);
+    }
+    
+    // Check digit makes the sum a multiple of 10
+    const checkDigit = (10 - (sum % 10)) % 10;
+    
+    // Combine for 12-digit UPC-A barcode
+    const barcode = timestampPart + checkDigit;
+    
+    // Set the barcode value
+    this.productForm.patchValue({ barcodeId: barcode });
+    
+    console.log('🔢 Generated UPC-A barcode:', barcode, '(check digit:', checkDigit + ')');
+  }
+
   openAddModal(): void {
     console.log('openAddModal called');
     this.isEditMode = false;
     this.selectedProduct = null;
+    this.selectedTagIds.set([]); // Reset tags for new product
     this.productForm.reset({
       initialReceivedAt: new Date().toISOString().split('T')[0],
       isMultipleInventory: false,
       initialBatchId: '',
       initialQuantity: 0,
-      initialUnitPrice: 0,
       vatRate: AppConstants.DEFAULT_VAT_RATE,
       // Preserve discount defaults when opening the Add Product modal
       hasDiscount: true,
@@ -2344,6 +2649,8 @@ export class ProductManagementComponent implements OnInit {
   openEditModal(product: Product): void {
     this.isEditMode = true;
     this.selectedProduct = product;
+    // Load product tags into signal
+    this.selectedTagIds.set(product.tags || []);
     // Patch the form silently to avoid triggering valueChange subscriptions
     this.productForm.patchValue(product, { emitEvent: false });
     // Ensure vatRate defaults to 12 if the product doesn't include it
@@ -2535,15 +2842,38 @@ export class ProductManagementComponent implements OnInit {
         this.categoryService.debugCategoryStatus();
       }
       
-      // normalize sellingPrice to avoid undefined being written to Firestore
-      // Calculate selling price from active batch or form value
-      const computedSellingPrice = formValue.initialUnitPrice || 
-        (this.selectedProduct ? (this.selectedProduct.sellingPrice || 0) : 0) || 
-        formValue.sellingPrice || 0;
-      // Compute original/base price (unit price before VAT) similarly
-      const computedOriginalPrice = formValue.initialUnitPrice || 
-        (this.selectedProduct ? (this.selectedProduct.originalPrice || 0) : 0) || 
-        formValue.originalPrice || 0;
+      // Get the values directly from the form (which already has VAT computed via valueChanges)
+      const computedSellingPrice = Number(formValue.sellingPrice || 0);
+      let computedOriginalPrice = Number(formValue.originalPrice || 0);
+      
+      console.log('💵 Price calculation debug:', {
+        formOriginalPrice: formValue.originalPrice,
+        formSellingPrice: formValue.sellingPrice,
+        computedSellingPrice: computedSellingPrice,
+        computedOriginalPrice: computedOriginalPrice,
+        isEditMode: this.isEditMode
+      });
+      
+      // If originalPrice is not set but sellingPrice is, derive it by reversing VAT
+      if (computedOriginalPrice === 0 && computedSellingPrice > 0) {
+        const isVatApplicable = formValue.isVatApplicable ?? true;
+        const vatRate = formValue.vatRate ?? AppConstants.DEFAULT_VAT_RATE;
+        
+        if (isVatApplicable && vatRate > 0) {
+          // Reverse VAT calculation: originalPrice = sellingPrice / (1 + vatRate/100)
+          computedOriginalPrice = computedSellingPrice / (1 + vatRate / 100);
+        } else {
+          // No VAT, so selling price = original price
+          computedOriginalPrice = computedSellingPrice;
+        }
+        
+        console.log('💰 Derived originalPrice from sellingPrice:', {
+          sellingPrice: computedSellingPrice,
+          originalPrice: computedOriginalPrice,
+          vatRate: vatRate,
+          isVatApplicable: isVatApplicable
+        });
+      }
 
       if (this.isEditMode && this.selectedProduct) {
         // Update existing product
@@ -2567,8 +2897,17 @@ export class ProductManagementComponent implements OnInit {
           vatRate: formValue.vatRate ?? AppConstants.DEFAULT_VAT_RATE,
           hasDiscount: formValue.hasDiscount || false,
           discountType: formValue.discountType || 'percentage',
-          discountValue: formValue.discountValue || 0
+          discountValue: formValue.discountValue || 0,
+          // Product tags
+          tags: this.selectedTagIds(),
+          tagLabels: this.getSelectedTagLabels()
         };
+
+        console.log('📝 Updating product with tags:', {
+          tags: this.selectedTagIds(),
+          tagLabels: this.getSelectedTagLabels(),
+          availableTags: this.availableTags().length
+        });
 
         // totalStock: only allow editing when product has no separate inventory batches
         if (this.hasExistingInventory()) {
@@ -2585,7 +2924,7 @@ export class ProductManagementComponent implements OnInit {
         const initialBatch = hasInitial ? {
           batchId: formValue.initialBatchId || this.generateBatchId(), // Use proper batch ID generator
           quantity: Number(formValue.initialQuantity || 0),
-          unitPrice: Number(formValue.initialUnitPrice || 0),
+          unitPrice: Number(formValue.originalPrice || 0),
           costPrice: Number(formValue.initialCostPrice || 0),
           receivedAt: formValue.initialReceivedAt ? new Date(formValue.initialReceivedAt) : new Date(), // Default to now if not specified
           expiryDate: formValue.initialExpiryDate ? new Date(formValue.initialExpiryDate) : undefined,
@@ -2627,10 +2966,19 @@ export class ProductManagementComponent implements OnInit {
           discountType: formValue.discountType || 'percentage',
           discountValue: formValue.discountValue || 0,
           
+          // Product tags
+          tags: this.selectedTagIds(),
+          tagLabels: this.getSelectedTagLabels(),
+          
           status: ProductStatus.Active
         };
 
         console.log('🚀 About to create product with data:', newProduct);
+        console.log('📝 Creating product with tags:', {
+          tags: this.selectedTagIds(),
+          tagLabels: this.getSelectedTagLabels(),
+          availableTags: this.availableTags().length
+        });
         const productId = await this.productService.createProduct(newProduct);
         console.log('✅ Product created successfully with ID:', productId);
         
@@ -2640,7 +2988,7 @@ export class ProductManagementComponent implements OnInit {
           console.log('📦 Initial batch data:', initialBatch);
           console.log('🔍 Form values for initial batch:', {
             initialQuantity: formValue.initialQuantity,
-            initialUnitPrice: formValue.initialUnitPrice,
+            originalPrice: formValue.originalPrice,
             initialCostPrice: formValue.initialCostPrice,
             hasInitial,
             productId
@@ -2651,7 +2999,7 @@ export class ProductManagementComponent implements OnInit {
               batchId: initialBatch!.batchId,
               quantity: initialBatch!.quantity,
               unitPrice: initialBatch!.unitPrice,
-              sellingPrice: Number(formValue.initialUnitPrice || computedSellingPrice || 0),
+              sellingPrice: Number(formValue.originalPrice || computedSellingPrice || 0),
               costPrice: initialBatch!.costPrice,
               receivedAt: initialBatch!.receivedAt,
               expiryDate: initialBatch!.expiryDate,
@@ -3343,6 +3691,60 @@ export class ProductManagementComponent implements OnInit {
       }
     }
 
+  duplicateProduct(product: Product): void {
+    console.log('Duplicating product:', product.productName);
+    this.isEditMode = false;
+    this.selectedProduct = null;
+    
+    // Reset tags for duplicate
+    this.selectedTagIds.set([]);
+    
+    // Copy product data but exclude specific fields
+    const duplicateData = {
+      ...product,
+      // Clear identification fields
+      productCode: '',
+      skuId: '',
+      barcodeId: '',
+      // Clear tags
+      tags: undefined,
+      tagLabels: undefined,
+      // Clear pricing & inventory fields
+      initialReceivedAt: new Date().toISOString().split('T')[0],
+      initialBatchId: '',
+      initialQuantity: 0,
+      totalStock: 0,
+      // Don't set prices here - let form initialization handle them
+      // Keep other fields like category, description, unit type, VAT settings, etc.
+    };
+    
+    // Reset form and patch with duplicate data
+    this.productForm.reset();
+    // Remove price fields from duplicateData to let form defaults take over
+    const { sellingPrice, originalPrice, ...dataWithoutPrices } = duplicateData;
+    this.productForm.patchValue(dataWithoutPrices);
+    
+    // Ensure defaults are set
+    this.productForm.patchValue({
+      unitType: duplicateData.unitType || 'pieces',
+      category: duplicateData.category || 'General',
+      status: ProductStatus.Active,
+      isVatApplicable: duplicateData.isVatApplicable ?? true,
+      vatRate: duplicateData.vatRate ?? AppConstants.DEFAULT_VAT_RATE,
+      hasDiscount: duplicateData.hasDiscount ?? true,
+      discountType: duplicateData.discountType || 'percentage',
+      discountValue: duplicateData.discountValue ?? 0
+    });
+    
+    // Apply control enabling/disabling based on isMultipleInventory
+    this.toggleControlsForInventory(this.productForm.get('isMultipleInventory')?.value);
+    
+    this.showModal = true;
+    this.cdr.detectChanges();
+    
+    this.toastService.info(`Duplicating "${product.productName}" - Please update product details`);
+  }
+
   async deleteProduct(product: Product): Promise<void> {
     // Set up confirmation dialog
     this.productToDelete = product;
@@ -3719,6 +4121,97 @@ export class ProductManagementComponent implements OnInit {
     } finally {
       this.loading = false;
     }
+  }
+
+  // ===========================
+  // Tag Management Methods
+  // ===========================
+
+  onCreateTag(): void {
+    this.showCreateTagModal.set(true);
+  }
+
+  async onTagSaved(tag: any): Promise<void> {
+    this.showCreateTagModal.set(false);
+    const storeId = this.authService.getCurrentPermission()?.storeId;
+    if (storeId) {
+      await this.loadTags(storeId);
+    }
+    this.toastService.success('Tag created successfully');
+  }
+
+  onTagCancelled(): void {
+    this.showCreateTagModal.set(false);
+  }
+
+  getTagsByGroup(group: string): any[] {
+    return this.availableTags().filter(t => t.group === group);
+  }
+
+  getCurrentStoreId(): string {
+    return this.authService.getCurrentPermission()?.storeId || '';
+  }
+
+  // ===========================
+  // Select Tags Modal Methods
+  // ===========================
+
+  openSelectTagModal(): void {
+    this.tempSelectedTagIds = [...this.selectedTagIds()];
+    this.selectedTagGroup = '';
+    this.showSelectTagModal.set(true);
+  }
+
+  closeSelectTagModal(): void {
+    this.showSelectTagModal.set(false);
+    this.selectedTagGroup = '';
+    this.tempSelectedTagIds = [];
+  }
+
+  onTagGroupChange(group: string): void {
+    this.selectedTagGroup = group;
+  }
+
+  getFilteredTags(): ProductTag[] {
+    if (!this.selectedTagGroup) return [];
+    return this.availableTags().filter(t => 
+      t.group === this.selectedTagGroup && t.isActive
+    );
+  }
+
+  isTagSelected(tagId: string): boolean {
+    return this.tempSelectedTagIds.includes(tagId);
+  }
+
+  toggleTagSelection(tagId: string): void {
+    const index = this.tempSelectedTagIds.indexOf(tagId);
+    if (index > -1) {
+      this.tempSelectedTagIds.splice(index, 1);
+    } else {
+      this.tempSelectedTagIds.push(tagId);
+    }
+  }
+
+  saveSelectedTags(): void {
+    // Merge new selections with existing tags (no duplicates)
+    const currentTags = this.selectedTagIds();
+    const newTags = this.tempSelectedTagIds.filter(tagId => !currentTags.includes(tagId));
+    this.selectedTagIds.set([...currentTags, ...newTags]);
+    this.closeSelectTagModal();
+  }
+
+  removeTag(tagId: string): void {
+    const currentTags = this.selectedTagIds();
+    this.selectedTagIds.set(currentTags.filter(id => id !== tagId));
+  }
+
+  getTagLabel(tagId: string): string {
+    const tag = this.availableTags().find(t => t.tagId === tagId);
+    return tag ? tag.label : tagId;
+  }
+
+  getSelectedTagLabels(): string[] {
+    return this.selectedTagIds().map(tagId => this.getTagLabel(tagId));
   }
 
   /**

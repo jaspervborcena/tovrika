@@ -135,6 +135,8 @@ export interface CartItem {
   discountAmount: number;
   isVatExempt: boolean;
   imageUrl?: string;
+  tags?: string[]; // Product tag IDs
+  tagLabels?: string[]; // Product tag labels for display
   // Per-item customer fields (optional)
   pwdId?: string;
   customerName?: string;

@@ -11,9 +11,11 @@
           <!-- NAVIGATION TOGGLE BUTTON -->
           <div class="navigation-toggle-row">
             <button class="navigation-toggle-btn" (click)="toggleNavigationPanel()">
+              <div style="display: flex; flex-direction: column; align-items: flex-start; flex: 1;">
+                <span class="toggle-text">{{ isNavigationCollapsed() ? ('pos.showControls' | translate) : ('pos.hideControls' | translate) }}</span>
+                <span class="controls-hint">{{ 'pos.controlsHint' | translate }}</span>
+              </div>
               <span class="toggle-icon" [class.expanded]="!isNavigationCollapsed()">▼</span>
-              <span class="toggle-text">{{ isNavigationCollapsed() ? ('pos.showControls' | translate) : ('pos.hideControls' | translate) }}</span>
-              <span class="controls-hint">{{ 'pos.controlsHint' | translate }}</span>
             </button>
           </div>
 
@@ -186,6 +188,27 @@
             </div>
           </div>
 
+          <!-- Tag Filter Tabs (shown before product tabs if tags exist) -->
+          <div class="tag-filter-section" *ngIf="accessTab() === 'New' && availableTagsByGroup().length > 0">
+            <div class="tag-filter-header" (click)="toggleTagFilterSection()">
+              <span class="tag-filter-title">Classification</span>
+              <span class="tag-filter-toggle" [class.expanded]="isTagFilterExpanded()">▼</span>
+            </div>
+            <div class="tag-filter-content" *ngIf="isTagFilterExpanded()">
+              <div class="tag-filter-row" *ngFor="let tagGroup of availableTagsByGroup()">
+                <span class="tag-group-label">{{ tagGroup.group }}:</span>
+                <button 
+                  *ngFor="let tag of tagGroup.tags" 
+                  class="tag-filter-btn"
+                  [class.active]="isTagFilterActive(tag.label)"
+                  (click)="toggleTagFilter(tag.label)"
+                  [title]="isTagFilterActive(tag.label) ? 'Click to remove filter' : 'Click to filter by ' + tag.label">
+                  {{ tag.label }}
+                </button>
+              </div>
+            </div>
+          </div>
+
           <!-- Product View Tabs -->
           <div class="product-tabs" *ngIf="accessTab() === 'New'">
             <button 
@@ -265,7 +288,8 @@
                 *ngFor="let product of displayGridProducts()"
                 (click)="addToCart(product)"
                 class="product-grid-item"
-                [class.disabled]="!canInteractWithProducts()">
+                [class.disabled]="!canInteractWithProducts()"
+                [title]="'SKU: ' + product.skuId">
                 <div class="product-image-container">
                   <img 
                     [src]="product.imageUrl || 'assets/noimage.png'"
@@ -277,13 +301,14 @@
                   <img [src]="generateBarcodeImage(product.barcodeId)" alt="Barcode" class="barcode-image">
                 </div>
                 <div class="product-details">
-                  <div class="product-name-price">
-                    <h4>{{ product.productName }}</h4>
+                  <h4 class="product-name">{{ product.productName }}</h4>
+                  <div class="product-category-row">
+                    <span class="stock-badge">Stock: {{ product.totalStock || 0 }}</span>
                     <span class="price">₱{{ (product.sellingPrice || 0).toFixed(2) }}</span>
                   </div>
-                  <div class="product-category-stock">
-                    <p class="product-description">{{ product.category }}</p>
-                    <span class="stock-badge">Stock: {{ product.totalStock || 0 }}</span>
+                  <div class="product-tags-inline">
+                    <span class="tag-item category-tag">{{ product.category }}</span>
+                    <span class="tag-item product-tag" *ngFor="let label of getProductTagLabels(product)">{{ label }}</span>
                   </div>
                 </div>
               </div>
@@ -295,7 +320,8 @@
                 *ngFor="let product of displayFavoriteGridProducts()"
                 (click)="addToCart(product)"
                 class="product-grid-item"
-                [class.disabled]="!canInteractWithProducts()">
+                [class.disabled]="!canInteractWithProducts()"
+                [title]="'SKU: ' + product.skuId">
                 <div class="product-image-container">
                   <img 
                     [src]="product.imageUrl || 'assets/noimage.png'"
@@ -307,13 +333,49 @@
                   <img [src]="generateBarcodeImage(product.barcodeId)" alt="Barcode" class="barcode-image">
                 </div>
                 <div class="product-details">
-                  <div class="product-name-price">
-                    <h4>{{ product.productName }}</h4>
+                  <h4 class="product-name">{{ product.productName }}</h4>
+                  <div class="product-category-row">
+                    <p class="product-category-label">{{ product.category }}</p>
+                    <span class="stock-badge">Stock: {{ product.totalStock || 0 }}</span>
+                  </div>
+                  <div class="product-tags-inline">
+                    <span class="tag-item">{{ product.category }}</span>
+                    <span class="tag-item" *ngFor="let label of getProductTagLabels(product)">{{ label }}</span>
+                  </div>
+                  <div class="product-price-row">
                     <span class="price">₱{{ (product.sellingPrice || 0).toFixed(2) }}</span>
                   </div>
-                  <div class="product-category-stock">
-                    <p class="product-description">{{ product.category }}</p>
+                </div>
+              </div>
+            </div>
+
+            <!-- Favorites View (same as Grid but filtered by isFavorite) -->
+            <div *ngIf="currentView() === 'favorites'" class="products-grid">
+              <div 
+                *ngFor="let product of displayFavoriteGridProducts()"
+                (click)="addToCart(product)"
+                class="product-grid-item"
+                [class.disabled]="!canInteractWithProducts()"
+                [title]="'SKU: ' + product.skuId">
+                <div class="product-image-container">
+                  <img 
+                    [src]="product.imageUrl || 'assets/noimage.png'"
+                    [alt]="product.productName"
+                    class="product-image"
+                    onerror="this.src='assets/noimage.png'">
+                </div>
+                <div class="product-barcode" *ngIf="product.barcodeId">
+                  <img [src]="generateBarcodeImage(product.barcodeId)" alt="Barcode" class="barcode-image">
+                </div>
+                <div class="product-details">
+                  <h4 class="product-name">{{ product.productName }}</h4>
+                  <div class="product-category-row">
                     <span class="stock-badge">Stock: {{ product.totalStock || 0 }}</span>
+                    <span class="price">₱{{ (product.sellingPrice || 0).toFixed(2) }}</span>
+                  </div>
+                  <div class="product-tags-inline">
+                    <span class="tag-item category-tag">{{ product.category }}</span>
+                    <span class="tag-item product-tag" *ngFor="let label of getProductTagLabels(product)">{{ label }}</span>
                   </div>
                 </div>
               </div>
