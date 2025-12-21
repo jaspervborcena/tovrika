@@ -219,6 +219,8 @@
       background: white;
       border-right: 1px solid #e2e8f0;
       min-width: 400px; /* Ensure minimum width for categories */
+      max-width: calc(100% - 400px); /* Prevent overlap with receipt panel */
+      overflow: hidden; /* Contain all children within left panel */
     }
 
     .categories-panel {
@@ -584,9 +586,9 @@
     }
 
     .search-section {
-      padding: 0 1rem; /* allow room for sort buttons */
+      padding: 0 0.5rem;
       border-bottom: 1px solid #e2e8f0;
-      margin-top: 10px;
+      margin-top: 5px;
     }
 
     /* New: separate containers for search and sort */
@@ -594,7 +596,7 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 0.75rem;
+      gap: 0.4rem;
     }
 
     .search-area {
@@ -620,12 +622,12 @@
 
     .search-input {
       width: 100%;
-      padding: 0.5rem 0.75rem 0.5rem 2.5rem;
+      padding: 0.35rem 0.65rem 0.35rem 2.5rem;
       border: 1px solid #d1d5db;
       border-radius: 8px;
       font-size: 0.875rem;
       background: white;
-      height: 36px;
+      height: 32px;
     }
 
     .search-input:focus {
@@ -719,9 +721,9 @@
     .product-tabs {
       display: flex;
       align-items: center;
-      gap: 0.5rem;
+      gap: 0.35rem;
       border-bottom: 1px solid #e2e8f0;
-      padding: 0.25rem 1rem 0.5rem;
+      padding: 0.25rem 0.5rem 0.35rem;
     }
 
     /* Product view tabs (List/Grid/Promos/Bestsellers) */
@@ -754,6 +756,127 @@
     .product-tabs .tab-btn svg {
       width: 1.1rem;
       height: 1.1rem;
+    }
+
+    /* Tag Filter Section (horizontal rows like product tabs) */
+    .tag-filter-section {
+      background: linear-gradient(135deg, #0ea5e9, #0284c7);
+      border-radius: 6px;
+      margin: 0.35rem 0.5rem 0.35rem 0.5rem;
+      box-shadow: 0 2px 8px rgba(14, 165, 233, 0.3);
+      border: none;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .tag-filter-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 12px;
+      cursor: pointer;
+      user-select: none;
+      background: none;
+      border: none;
+      border-radius: 6px;
+      transition: all 0.3s ease;
+    }
+
+    .tag-filter-header:hover {
+      background: rgba(255, 255, 255, 0.1);
+      transform: translateY(-1px);
+    }
+
+    .tag-filter-title {
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: white;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .tag-filter-toggle {
+      font-size: 0.75rem;
+      color: white;
+      transition: transform 0.3s ease;
+      display: inline-block;
+      line-height: 1;
+      margin-right: 5px;
+    }
+
+    .tag-filter-toggle.expanded {
+      transform: rotate(-180deg);
+    }
+
+    .tag-filter-content {
+      padding: 0.4rem 0.5rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.2rem;
+      background: rgba(255, 255, 255, 0.95);
+      border-radius: 0 0 6px 6px;
+    }
+
+    .tag-filter-row {
+      display: flex;
+      align-items: center;
+      gap: 0.3rem;
+      flex-wrap: wrap;
+      margin-bottom: 0;
+    }
+
+    .tag-group-label {
+      font-size: 0.7rem;
+      font-weight: 600;
+      color: #64748b;
+      min-width: 55px;
+      text-transform: capitalize;
+    }
+
+    .tag-filter-btn {
+      padding: 0.2rem 0.55rem;
+      background: white;
+      border: 1.5px solid #cbd5e1;
+      border-radius: 4px;
+      color: #64748b;
+      font-size: 0.7rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      user-select: none;
+      white-space: nowrap;
+      position: relative;
+    }
+
+    .tag-filter-btn:hover {
+      background: #f8fafc;
+      border-color: #cbd5e1;
+      color: #475569;
+    }
+
+    .tag-filter-btn.active {
+      background: white;
+      border-color: #3b82f6;
+      color: #3b82f6;
+      font-weight: 600;
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    }
+
+    .tag-filter-btn.active::after {
+      content: '';
+      position: absolute;
+      bottom: -2px;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: #3b82f6;
+      border-radius: 2px 2px 0 0;
+    }
+
+    .tag-filter-btn.active:hover {
+      background: #eff6ff;
+      border-color: #2563eb;
+      color: #2563eb;
     }
 
     /* Access tabs (horizontal row above search) */
@@ -838,7 +961,10 @@
     .products-display {
       flex: 1;
       padding: 1rem;
+      padding-right: 1.5rem; /* Extra right padding for better spacing */
       min-height: 350px; /* Increased minimum height to ensure complete rows are visible */
+      overflow-x: hidden; /* Prevent horizontal overflow */
+      overflow-y: auto; /* Allow vertical scrolling if needed */
     }
 
     .products-list {
@@ -926,21 +1052,25 @@
 
     .products-grid {
       display: grid;
-      grid-template-columns: repeat(6, 1fr); /* 6 columns for denser grid */
-      gap: 0.4rem 0.5rem; /* tighter row gap (0.4rem), keep column gap (0.5rem) */
+      grid-template-columns: repeat(auto-fill, minmax(155px, 1fr)); /* Increased from 140px to accommodate price */
+      gap: 0.5rem 0.75rem; /* Better spacing between tiles */
+      width: 100%; /* Ensure grid stays within container */
+      box-sizing: border-box;
+      max-width: 100%; /* Prevent overflow */
     }
 
     .product-grid-item {
       border: 1px solid #e5e7eb;
       border-radius: 8px;
-      padding: 0.25rem; /* tighter padding to reduce height */
+      padding: 0;
       cursor: pointer;
       transition: all 0.2s;
       background: white;
       position: relative;
-      aspect-ratio: 1.1; /* Slightly wider to reduce height */
       display: flex;
       flex-direction: column;
+      min-height: 180px; /* Ensure minimum consistent height */
+      height: auto; /* Allow dynamic height based on content */
     }
 
     .product-grid-item:hover {
@@ -970,11 +1100,12 @@
       display: flex;
       flex-direction: column;
       gap: 0;
+      flex-shrink: 0; /* Don't allow shrinking */
     }
 
     .product-image {
       width: 100%;
-      height: 72px; /* reduce image height to trim vertical space */
+      height: 85px; /* Consistent image height */
       object-fit: cover;
       border-radius: 6px 6px 0 0;
       background: #f3f4f6;
@@ -987,7 +1118,9 @@
       align-items: center;
       justify-content: center;
       padding: 2px 4px;
-      margin: 0;
+      margin: 0 0 0.35rem 0;
+      height: 25px;
+      flex-shrink: 0;
     }
 
     .barcode-image {
@@ -1000,38 +1133,160 @@
       flex: 1;
       display: flex;
       flex-direction: column;
+      padding: 0.4rem;
+      padding-bottom: 0.5rem;
+      padding-top: 0.5rem;
+      min-height: 0;
+      overflow: visible;
+      gap: 0.2rem;
+    }
+
+    .product-details .product-name {
+      margin: 0;
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: #1f2937;
+      line-height: 1.3;
+      word-wrap: break-word;
+      white-space: normal;
+      overflow: visible;
     }
 
     .product-name-price {
       display: flex;
       justify-content: space-between;
       align-items: flex-start;
-      margin-bottom: 0.2rem; /* tighten spacing between name and category */
+      margin-bottom: 0;
       gap: 0.5rem;
     }
 
     .product-name-price h4 {
       margin: 0;
-      font-size: 0.8rem; /* Slightly smaller title */
+      font-size: 0.875rem; /* Consistent font size */
       font-weight: 600;
       color: #1f2937;
-      line-height: 1.2;
+      line-height: 1.3;
       flex: 1;
+      overflow: visible; /* Show full text */
+      text-overflow: clip; /* Don't truncate */
+      display: block; /* Remove line clamping */
+      word-wrap: break-word; /* Break long words */
+      white-space: normal; /* Allow text wrapping */
     }
 
     .product-name-price .price {
       font-weight: 600;
       color: #059669;
-      font-size: 0.85rem; /* Slightly smaller price text */
+      font-size: 0.875rem; /* Match title font size */
+      white-space: nowrap;
+    }
+
+    .price-stock-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+      align-items: flex-end;
+    }
+
+    .price-stock-group .price {
+      font-weight: 600;
+      color: #059669;
+      font-size: 0.875rem;
+      white-space: nowrap;
+    }
+
+    .product-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.25rem;
+      margin: 0.25rem 0;
+    }
+
+    .product-tags .tag {
+      font-size: 0.7rem;
+      padding: 2px 6px;
+      background: #dbeafe;
+      color: #1e40af;
+      border-radius: 3px;
+      font-weight: 500;
       white-space: nowrap;
     }
 
     .product-category-stock {
       display: flex;
       justify-content: space-between;
-      align-items: center;
-      margin-bottom: 0; /* Remove margin to eliminate blank row */
+      align-items: flex-start;
+      margin-bottom: 0;
+      margin-top: 0;
       gap: 0.5rem;
+    }
+
+    .product-category-label {
+      background: linear-gradient(135deg, #fb923c 0%, #f97316 100%);
+      color: white;
+      padding: 0.25rem 0.5rem;
+      border-radius: 4px;
+      font-weight: 600;
+      text-transform: capitalize;
+      font-size: 0.65rem;
+      white-space: nowrap;
+      display: inline-block;
+      margin: 0;
+    }
+
+    .product-category-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 0.5rem;
+      gap: 0.5rem;
+    }
+
+    .product-category-row .price {
+      font-size: 0.9rem;
+      font-weight: 600;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    .product-category-row .stock-badge {
+      font-size: 0.8rem;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    .product-tags-inline {
+      display: flex;
+      gap: 0.25rem;
+      flex-wrap: wrap;
+      margin-bottom: 0.5rem;
+      font-size: 0.65rem;
+    }
+
+    .tag-item {
+      background: #f1f5f9;
+      color: #475569;
+      padding: 0.2rem 0.4rem;
+      border-radius: 3px;
+      font-weight: 500;
+      white-space: nowrap;
+    }
+
+    .tag-item.category-tag {
+      background: linear-gradient(135deg, #fb923c 0%, #f97316 100%);
+      color: white;
+      font-weight: 600;
+    }
+
+    .tag-item.product-tag {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      font-weight: 500;
+    }
+
+    .product-price-row {
+      display: flex;
+      justify-content: flex-start;
     }
 
     .product-details h4 {
@@ -1043,19 +1298,22 @@
 
     .product-description {
       margin: 0;
-      font-size: 0.75rem;
+      font-size: 0.75rem; /* Consistent small font */
       color: #6b7280;
       flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
 
     .product-stock {
-      font-size: 0.75rem;
+      font-size: 0.75rem; /* Match description font size */
       color: #6b7280;
       white-space: nowrap;
     }
 
     .stock-badge {
-      font-size: 0.7rem;
+      font-size: 0.75rem; /* Consistent badge font */
       color: #059669;
       background: #d1fae5;
       padding: 2px 6px;
@@ -1065,7 +1323,7 @@
     }
 
     .discount {
-      font-size: 0.75rem;
+      font-size: 0.75rem; /* Consistent discount font */
       color: #dc2626;
       font-weight: 500;
       margin-top: 0; /* Remove margin to eliminate blank row */
