@@ -22,6 +22,7 @@ import { Store } from '../interfaces/store.interface';
 import { Device } from '../interfaces/device.interface';
 import { OrdersSellingTrackingService } from './orders-selling-tracking.service';
 import { LedgerService } from './ledger.service';
+import { TagsService } from './tags.service';
 import { environment } from '../../environments/environment';
 
 @Injectable({
@@ -136,6 +137,9 @@ export class PosService {
   private storeService = inject(StoreService);
   private deviceService = inject(DeviceService);
   private ledgerService = inject(LedgerService);
+  
+  // Cache for product tags
+  private productTagsCache = signal<Map<string, string>>(new Map());
 
   constructor(
     private firestore: Firestore,
@@ -144,7 +148,8 @@ export class PosService {
     private productService: ProductService,
     private indexedDBService: IndexedDBService,
     private securityService: FirestoreSecurityService,
-    private ordersSellingTrackingService: OrdersSellingTrackingService
+    private ordersSellingTrackingService: OrdersSellingTrackingService,
+    private tagsService: TagsService
   ) {
     // Load persisted store selection on service initialization
     this.loadPersistedStoreSelection();
@@ -253,6 +258,9 @@ export class PosService {
   // Store Management
   async setSelectedStore(storeId: string, options?: { preserveCart?: boolean }): Promise<void> {
     this.selectedStoreIdSignal.set(storeId);
+    
+    // Load product tags for the selected store
+    await this.loadProductTags(storeId);
     
     // Save to IndexedDB for persistence
     try {
@@ -813,8 +821,32 @@ export class PosService {
   // Helper Methods
   private createCartItem(product: Product, quantity: number): CartItem {
     // Derive per-unit values from originalPrice: apply discount to originalPrice, then apply VAT
-    const original = (product as any).originalPrice ?? product.sellingPrice;
+    // Ensure we have a valid price - try originalPrice, then sellingPrice, then 0
+    const originalPrice = (product as any).originalPrice;
+    const sellingPrice = product.sellingPrice;
+    const original = originalPrice ?? sellingPrice ?? 0;
     const vatRate = Number(product.vatRate ?? 0);
+
+    console.log('🛒 Creating cart item for:', product.productName, {
+      productId: product.id,
+      originalPrice: originalPrice,
+      sellingPrice: sellingPrice,
+      derivedOriginal: original,
+      hasDiscount: product.hasDiscount,
+      discountType: product.discountType,
+      discountValue: product.discountValue,
+      isVatApplicable: product.isVatApplicable,
+      vatRate: vatRate
+    });
+
+    if (original === 0) {
+      console.error('⚠️ WARNING: Product has zero price!', {
+        productName: product.productName,
+        productId: product.id,
+        originalPrice: originalPrice,
+        sellingPrice: sellingPrice
+      });
+    }
 
     // Per-unit discount
     let discountPerUnit = 0;
@@ -836,6 +868,9 @@ export class PosService {
     const vatAmount = Number((vatAmountPerUnitRounded * quantity).toFixed(2));
     const total = Number((sellingPricePerUnitRounded * quantity).toFixed(2));
 
+    // Use denormalized tag labels from product for instant display
+    const tagLabels = product.tagLabels || [];
+
     return {
       productId: product.id!,
       productName: product.productName,
@@ -854,8 +889,48 @@ export class PosService {
       discountValue: product.discountValue,
       discountAmount,
       isVatExempt: false,
-      imageUrl: product.imageUrl
+      imageUrl: product.imageUrl,
+      tags: product.tags,
+      tagLabels: tagLabels
     };
+  }
+
+  private getTagLabels(tagIds: string[]): string[] {
+    if (!tagIds || tagIds.length === 0) return [];
+    const tagsMap = this.productTagsCache();
+    return tagIds
+      .map(tagId => tagsMap.get(tagId) || tagId)
+      .filter((label): label is string => label !== null && label !== undefined);
+  }
+
+  /**
+   * Get all active tags for a store from Firestore
+   */
+  async getTagsForStore(storeId: string): Promise<any[]> {
+    try {
+      const tags = await this.tagsService.getTagsByStore(storeId, false);
+      return tags;
+    } catch (error) {
+      console.error('❌ Failed to get tags for store:', error);
+      return [];
+    }
+  }
+
+  async loadProductTags(storeId: string): Promise<void> {
+    try {
+      console.log('🏷️ Loading product tags for store:', storeId);
+      const tags = await this.tagsService.getTagsByStore(storeId, false);
+      console.log('🏷️ Loaded tags:', tags.length);
+      const tagsMap = new Map<string, string>();
+      tags.forEach(tag => {
+        tagsMap.set(tag.tagId, tag.label);
+        console.log('🏷️ Tag mapping:', tag.tagId, '->', tag.label);
+      });
+      this.productTagsCache.set(tagsMap);
+      console.log('🏷️ Tags cache updated. Total tags:', tagsMap.size);
+    } catch (error) {
+      console.error('❌ Error loading product tags:', error);
+    }
   }
 
   private recalculateCartItem(item: CartItem): CartItem {
