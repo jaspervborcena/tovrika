@@ -23,6 +23,13 @@ export interface Product {
   barcodeId?: string;
   imageUrl?: string;
   /**
+   * Tags for product differentiation (e.g., size, color, variant).
+   * Used to differentiate products with same name but different characteristics.
+   * Example: ['Large', 'Venti', 'Red', 'XL']
+   */
+  tags?: string[]; // Tag IDs
+  tagLabels?: string[]; // Denormalized tag labels for quick display without loading productTags collection
+  /**
    * Mark product as favorite for quicker access in POS Favorites tab.
    * Optional to keep backward compatibility; defaults to false when missing.
    */
