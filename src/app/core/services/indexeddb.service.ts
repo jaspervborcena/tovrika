@@ -18,13 +18,31 @@ export interface OfflineUserData extends User {
 
 export interface OfflineProduct {
   id: string;
-  name: string;
-  price: number;
+  uid: string;
+  productName: string;
+  description?: string;
+  skuId: string;
+  productCode?: string;
+  unitType: string;
   category: string;
-  stock: number;
-  barcode?: string;
-  image?: string;
+  totalStock: number;
+  originalPrice: number;
+  sellingPrice: number;
+  companyId: string;
   storeId: string;
+  barcodeId?: string;
+  imageUrl?: string;
+  tags?: string[];
+  tagLabels?: string[];
+  isFavorite?: boolean;
+  isVatApplicable: boolean;
+  vatRate?: number;
+  hasDiscount: boolean;
+  discountType: 'percentage' | 'fixed';
+  discountValue: number;
+  status?: string;
+  createdAt?: Date;
+  updatedAt?: Date;
   lastUpdated: Date;
 }
 
@@ -545,19 +563,19 @@ export class IndexedDBService {
         getAllReq.onsuccess = () => {
           const existing: OfflineProduct[] = getAllReq.result || [];
 
-          // Build lookup by id and by skuKey (storeId|barcode|name)
+          // Build lookup by id and by skuKey (storeId|barcode|productName)
           const byId = new Map<string, OfflineProduct>();
           const bySkuKey = new Map<string, OfflineProduct>();
           existing.forEach(p => {
             if (p.id) byId.set(p.id, p);
-            const key = `${p.storeId}::${p.barcode || ''}::${p.name || ''}`;
+            const key = `${p.storeId}::${p.barcodeId || ''}::${p.productName || ''}`;
             bySkuKey.set(key, p);
           });
 
           let pending = 0;
           const finishIfDone = () => {
             if (pending === 0) {
-              console.log(`📦 IndexedDB: Saved/updated products (input ${products.length})`);
+              console.log(`📦 IndexedDB: Saved/updated ${products.length} products`);
               resolve();
             }
           };
@@ -586,8 +604,8 @@ export class IndexedDBService {
               return;
             }
 
-            // Try SKU key match (store + barcode + name) to catch duplicates from different sources
-            const skuKey = `${prod.storeId}::${prod.barcode || ''}::${prod.name || ''}`;
+            // Try SKU key match (store + barcode + productName) to catch duplicates from different sources
+            const skuKey = `${prod.storeId}::${prod.barcodeId || ''}::${prod.productName || ''}`;
             const existingBySku = bySkuKey.get(skuKey);
             if (existingBySku) {
               // Merge into existing record (keep existing id)

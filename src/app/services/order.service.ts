@@ -2,7 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import { environment } from '../../environments/environment';
 import { HttpClient } from '@angular/common/http';
 import { Firestore, collection, query, where, orderBy, limit } from '@angular/fire/firestore';
-import { getDocs, getDoc, Timestamp, doc as clientDoc, runTransaction } from 'firebase/firestore';
+import { getDocs, getDoc, Timestamp, doc as clientDoc, runTransaction, writeBatch } from 'firebase/firestore';
 import { User } from '@angular/fire/auth';
 import { Order } from '../interfaces/pos.interface';
 import { AuthService } from './auth.service';
@@ -52,6 +52,7 @@ export class OrderService {
       
       // Customer Information
       cashSale: data.cashSale,
+      chargeSale: data.chargeSale,
       soldTo: data.soldTo,
       tin: data.tin,
       businessAddress: data.businessAddress,
@@ -60,6 +61,11 @@ export class OrderService {
       invoiceNumber: data.invoiceNumber,
       logoUrl: data.logoUrl,
       date: toDateValue(data.date) ?? toDateValue(data.createdAt) ?? new Date(),
+      
+      // Payment Information
+      paymentMethod: data.paymentMethod || data.payment || 'cash',
+      cashAmount: data.cashAmount || 0,
+      cardAmount: data.cardAmount || 0,
       
       // Financial Calculations
       vatableSales: data.vatableSales || 0,
@@ -664,85 +670,87 @@ public async restockOrderAndInventoryTransactional(orderId: string, performedBy 
       }
     }
 
-    // 3) Run transaction: first read everything, then perform writes.
-    await runTransaction(this.firestore, async (tx) => {
-      console.log(`Transaction start for order ${orderId}`);
+    // 3) Use batch writes for offline support
+    const batch = writeBatch(this.firestore);
+    console.log(`Starting batch write for order ${orderId} restock`);
 
-      const orderRef = clientDoc(this.firestore, 'orders', orderId);
-      const orderSnap = await tx.get(orderRef);
-      if (!orderSnap.exists()) throw new Error('Order not found inside transaction: ' + orderId);
+    // Pre-read order to validate status
+    const orderRef = clientDoc(this.firestore, 'orders', orderId);
+    const orderSnap = await getDoc(orderRef);
+    if (!orderSnap.exists()) throw new Error('Order not found: ' + orderId);
 
-      const currentStatus = (orderSnap.data() as any).status;
-      // Allow restock for multiple terminal statuses (cancelled, returned, refunded)
-      const restockableStatuses = ['cancelled', 'returned', 'refunded'];
-      if (!restockableStatuses.includes(currentStatus)) {
-        throw new Error('Order status changed during restock processing');
+    const currentStatus = (orderSnap.data() as any).status;
+    const restockableStatuses = ['cancelled', 'returned', 'refunded'];
+    if (!restockableStatuses.includes(currentStatus)) {
+      throw new Error('Order status is not restockable: ' + currentStatus);
+    }
+
+    // Pre-read all tracking, product, and inventory docs
+    const trackingSnaps = new Map<string, any>();
+    const productSnaps = new Map<string, { ref: any; snap: any }>();
+    const inventorySnaps = new Map<string, { ref: any; snap: any }>();
+
+    for (const c of candidates) {
+      // Read tracking doc
+      const tdSnap = await getDoc(c.ref);
+      trackingSnaps.set(c.id, tdSnap);
+
+      // Read product
+      const prodRef = clientDoc(this.firestore, 'products', c.productId);
+      const prodSnap = await getDoc(prodRef);
+      productSnaps.set(c.productId, { ref: prodRef, snap: prodSnap });
+
+      // Read inventory batch (if available)
+      const invRef = inventoryRefsByProduct.get(c.productId);
+      if (invRef) {
+        const invSnap = await getDoc(invRef);
+        inventorySnaps.set(c.productId, { ref: invRef, snap: invSnap });
+      }
+    }
+
+    // Now perform all writes in the batch
+    for (const c of candidates) {
+      const tdSnap = trackingSnaps.get(c.id);
+      if (!tdSnap || !tdSnap.exists()) continue;
+
+      const tdData: any = tdSnap.data() || {};
+      if (tdData.restocked) {
+        console.log(`Skipping already-restocked tracking doc ${c.id}`);
+        continue;
       }
 
-      // FIRST: perform all reads (tracking row snap, product snap, inventory snap)
-      const trackingSnaps = new Map<string, any>();
-      const productSnaps = new Map<string, { ref: any; snap: any }>();
-      const inventorySnaps = new Map<string, { ref: any; snap: any }>();
+      console.log(`Processing restock for tracking doc ${c.id} product=${c.productId}, qty=${c.quantity}`);
 
-      for (const c of candidates) {
-        // Read tracking doc snapshot
-        const tdSnap = await tx.get(c.ref);
-        trackingSnaps.set(c.id, tdSnap);
+      // Update product stock
+      const prodEntry = productSnaps.get(c.productId);
+      const prodRef = prodEntry?.ref;
+      const prodSnap = prodEntry?.snap;
+      const currentTotal = prodSnap?.exists() ? Number((prodSnap.data() as any).totalStock || 0) : 0;
+      const newTotal = currentTotal + c.quantity;
+      console.log(`Updating product ${c.productId}: currentTotal=${currentTotal}, newTotal=${newTotal}`);
+      batch.update(prodRef, { totalStock: newTotal, lastUpdated: new Date(), updatedBy: performedBy });
 
-        // Read product snapshot
-        const prodRef = clientDoc(this.firestore, 'products', c.productId);
-        const prodSnap = await tx.get(prodRef);
-        productSnaps.set(c.productId, { ref: prodRef, snap: prodSnap });
-
-        // Read inventory batch snapshot (if pre-collected)
-        const invRef = inventoryRefsByProduct.get(c.productId);
-        if (invRef) {
-          const invSnap = await tx.get(invRef);
-          inventorySnaps.set(c.productId, { ref: invRef, snap: invSnap });
-        }
+      // Update inventory batch (if we have one)
+      const invEntry = inventorySnaps.get(c.productId);
+      if (invEntry) {
+        const invRef = invEntry.ref;
+        const invSnap = invEntry.snap;
+        const currentInvQty = invSnap?.exists() ? Number((invSnap.data() as any).quantity || 0) : 0;
+        const newInvQty = currentInvQty + c.quantity;
+        console.log(`Updating inventory for product ${c.productId}: currentInvQty=${currentInvQty}, newInvQty=${newInvQty}`);
+        batch.update(invRef, { quantity: newInvQty, lastUpdated: new Date(), updatedBy: performedBy });
       }
 
-      // SECOND: perform all writes based on the reads above
-      for (const c of candidates) {
-        const tdSnap = trackingSnaps.get(c.id);
-        if (!tdSnap || !tdSnap.exists()) continue;
+      // Mark tracking doc as restocked
+      batch.update(c.ref, { restocked: true, restockedAt: new Date(), restockedBy: performedBy });
+    }
 
-        const tdData: any = tdSnap.data() || {};
-        if (tdData.restocked) {
-          // Already restocked — skip
-          console.log(`Skipping already-restocked tracking doc ${c.id}`);
-          continue;
-        }
-
-        console.log(`Processing restock for tracking doc ${c.id} product=${c.productId}, qty=${c.quantity}`);
-
-        // Update product stock
-        const prodEntry = productSnaps.get(c.productId);
-        const prodRef = prodEntry?.ref;
-        const prodSnap = prodEntry?.snap;
-        const currentTotal = prodSnap?.exists() ? Number((prodSnap.data() as any).totalStock || 0) : 0;
-        const newTotal = currentTotal + c.quantity;
-        console.log(`Updating product ${c.productId}: currentTotal=${currentTotal}, newTotal=${newTotal}`);
-        tx.update(prodRef, { totalStock: newTotal, lastUpdated: new Date(), updatedBy: performedBy });
-
-        // Update inventory batch (if we have one)
-        const invEntry = inventorySnaps.get(c.productId);
-        if (invEntry) {
-          const invRef = invEntry.ref;
-          const invSnap = invEntry.snap;
-          const currentInvQty = invSnap?.exists() ? Number((invSnap.data() as any).quantity || 0) : 0;
-          const newInvQty = currentInvQty + c.quantity;
-          console.log(`Updating inventory for product ${c.productId}: currentInvQty=${currentInvQty}, newInvQty=${newInvQty}`);
-          tx.update(invRef, { quantity: newInvQty, lastUpdated: new Date(), updatedBy: performedBy });
-        }
-
-        // Mark tracking doc as restocked
-        tx.update(c.ref, { restocked: true, restockedAt: new Date(), restockedBy: performedBy });
-      }
-
-      // Touch order metadata
-      tx.update(orderRef, { updatedAt: new Date(), updatedBy: performedBy });
-    });
+    // Touch order metadata
+    batch.update(orderRef, { updatedAt: new Date(), updatedBy: performedBy });
+    
+    // Commit batch (queues offline, syncs when online)
+    await batch.commit();
+    console.log(`✅ Batch write committed for order ${orderId} restock`);
 
     this.logger.info('restock: client-side restock transaction completed', { area: 'orders', docId: orderId });
     console.log(`Restock transaction completed for order ${orderId}`);

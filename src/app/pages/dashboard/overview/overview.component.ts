@@ -1137,27 +1137,27 @@ export class OverviewComponent implements OnInit {
     const period = this.selectedPeriod();
     // Use monthly totals for this_month and previous_month periods
     if (period === 'this_month') {
-      return this.currentMonthRevenue();
+      return Math.max(0, this.currentMonthRevenue());
     } else if (period === 'previous_month') {
-      return this.previousMonthRevenue();
+      return Math.max(0, this.previousMonthRevenue());
     } else if (period === 'date_range') {
-      return this.dateRangeRevenue();
+      return Math.max(0, this.dateRangeRevenue());
     }
     // Use ledger balance from orderAccountingLedger for other periods
-    return this.ledgerTotalRevenue();
+    return Math.max(0, this.ledgerTotalRevenue());
   });
   // Use ledger order count from orderAccountingLedger
   protected totalOrders = computed(() => {
     const period = this.selectedPeriod();
     // Use monthly totals for this_month and previous_month periods
     if (period === 'this_month') {
-      return this.currentMonthOrders();
+      return Math.max(0, this.currentMonthOrders());
     } else if (period === 'previous_month') {
-      return this.previousMonthOrders();
+      return Math.max(0, this.previousMonthOrders());
     } else if (period === 'date_range') {
-      return this.dateRangeOrders();
+      return Math.max(0, this.dateRangeOrders());
     }
-    return this.ledgerTotalOrders();
+    return Math.max(0, this.ledgerTotalOrders());
   });
   // Total expenses shown on the card should reflect month-to-date totals
   protected totalExpenses = computed(() => this.monthExpensesTotal());
@@ -1372,10 +1372,10 @@ export class OverviewComponent implements OnInit {
       // Fetch completed orders for today
       const ledger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, today, 'completed');
       if (ledger) {
-        this.ledgerTotalRevenue.set(Number(ledger.runningBalanceAmount || 0));
-        this.ledgerTotalOrders.set(Number(ledger.runningBalanceOrderQty || ledger.runningBalanceQty || 0));
-        this.ledgerCompletedQty.set(Number(ledger.runningBalanceOrderQty || ledger.runningBalanceQty || 0));
-        this.ledgerOrderQty.set(Number(ledger.runningBalanceOrderQty || ledger.runningBalanceQty || 0));
+        this.ledgerTotalRevenue.set(Math.max(0, Number(ledger.runningBalanceAmount || 0)));
+        this.ledgerTotalOrders.set(Math.max(0, Number(ledger.runningBalanceOrderQty || ledger.runningBalanceQty || 0)));
+        this.ledgerCompletedQty.set(Math.max(0, Number(ledger.runningBalanceOrderQty || ledger.runningBalanceQty || 0)));
+        this.ledgerOrderQty.set(Math.max(0, Number(ledger.runningBalanceOrderQty || ledger.runningBalanceQty || 0)));
       }
 
       // Fetch returns for today
@@ -1596,9 +1596,9 @@ export class OverviewComponent implements OnInit {
         const ledger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, new Date(date), 'completed');
         if (ledger && (ledger.runningBalanceAmount > 0 || ledger.runningBalanceOrderQty > 0)) {
           console.log(`  ${dateStr} completed:`, ledger);
-          currentRangeRevenueTotal += Number(ledger.runningBalanceAmount || 0);
-          currentRangeOrdersTotal += Number(ledger.runningBalanceOrderQty || ledger.runningBalanceQty || 0);
-          currentRangeCompletedQty += Number(ledger.runningBalanceOrderQty || ledger.runningBalanceQty || 0);
+          currentRangeRevenueTotal += Math.max(0, Number(ledger.runningBalanceAmount || 0));
+          currentRangeOrdersTotal += Math.max(0, Number(ledger.runningBalanceOrderQty || ledger.runningBalanceQty || 0));
+          currentRangeCompletedQty += Math.max(0, Number(ledger.runningBalanceOrderQty || ledger.runningBalanceQty || 0));
         }
         
         // Fetch returns for this day
@@ -1652,8 +1652,8 @@ export class OverviewComponent implements OnInit {
       for (let date = new Date(prevStartDate); date <= prevEndDate; date.setDate(date.getDate() + 1)) {
         const ledger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, new Date(date), 'completed');
         if (ledger) {
-          previousRangeRevenueTotal += Number(ledger.runningBalanceAmount || 0);
-          previousRangeOrdersTotal += Number(ledger.runningBalanceOrderQty || ledger.runningBalanceQty || 0);
+          previousRangeRevenueTotal += Math.max(0, Number(ledger.runningBalanceAmount || 0));
+          previousRangeOrdersTotal += Math.max(0, Number(ledger.runningBalanceOrderQty || ledger.runningBalanceQty || 0));
         }
       }
 
@@ -1895,6 +1895,10 @@ export class OverviewComponent implements OnInit {
       this.isLoading.set(true);
       console.log('🚀 Dashboard: Starting data load...');
       
+      // Check if we're offline - Firestore will still work with cached data
+      const isOnline = navigator.onLine;
+      console.log('🌐 Dashboard: Network status:', isOnline ? 'ONLINE' : 'OFFLINE');
+      
       // EXACT same approach as sales-summary
       await this.loadStores();
       
@@ -1906,6 +1910,8 @@ export class OverviewComponent implements OnInit {
 
     } catch (error) {
       console.error('❌ Dashboard error loading data:', error);
+      // Don't block the UI - allow dashboard to render with whatever data is available
+      console.warn('⚠️ Dashboard will show with cached/available data');
       this.isLoading.set(false);
     }
   }
@@ -1918,7 +1924,7 @@ export class OverviewComponent implements OnInit {
       console.log('🔐 Dashboard permission:', currentPermission);
       
       if (!currentPermission?.companyId) {
-        console.warn('No companyId found in current permission');
+        console.warn('⚠️ No companyId found in current permission');
         return;
       }
 
@@ -1935,8 +1941,14 @@ export class OverviewComponent implements OnInit {
         console.log('🎯 Using first store ID:', stores[0].id);
       }
     } catch (error) {
-      console.error('Error loading stores:', error);
+      console.error('❌ Error loading stores:', error);
+      console.warn('⚠️ Will use cached store data if available');
       this.stores.set([]);
+      // Try to set selectedStoreId from permission even if store load failed
+      const currentPermission = this.authService.getCurrentPermission();
+      if (currentPermission?.storeId) {
+        this.selectedStoreId.set(currentPermission.storeId);
+      }
     }
   }
 

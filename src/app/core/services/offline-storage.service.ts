@@ -385,7 +385,7 @@ export class OfflineStorageService {
   }
 
   getProductByBarcode(barcode: string): OfflineProduct | undefined {
-    return this.products().find(p => p.barcode === barcode);
+    return this.products().find(p => p.barcodeId === barcode);
   }
 
   // Order Management (for offline transactions)

@@ -3113,6 +3113,12 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   async processPayment(): Promise<void> {
+    // Prevent double-submission
+    if (this.isProcessing()) {
+      console.log('⚠️ Payment already processing, ignoring duplicate request');
+      return;
+    }
+    
     try {
       console.log('💳 Processing payment and completing order...');
       const totalAmount = this.cartSummary().netAmount;
@@ -3144,20 +3150,25 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       });
       
       // Generate real invoice number when payment is being processed
+      // CRITICAL: Always fetch fresh from Firestore to avoid duplicate invoice numbers
       let realInvoiceNumber: string;
       try {
-        if (this.networkService.isOffline()) {
-          // In offline mode, use manual invoice handling
-          realInvoiceNumber = this.manualInvoiceInput || 'INV-0000-000000';
-        } else {
-          // In online mode, get next invoice number from service
+        console.log('📋 Fetching fresh invoice number from Firestore...');
+        // Force a fresh read from Firestore, not from cache
+        realInvoiceNumber = await this.posService.getNextInvoiceNumberPreview();
+        
+        // Validate the invoice number is not a placeholder or error
+        if (realInvoiceNumber.includes('ERROR') || realInvoiceNumber.includes('0000-000000')) {
+          console.warn('⚠️ Invalid invoice number received, retrying...');
+          // Wait a moment and try once more
+          await new Promise(resolve => setTimeout(resolve, 500));
           realInvoiceNumber = await this.posService.getNextInvoiceNumberPreview();
         }
         
         // Update the display immediately
         this.nextInvoiceNumber.set(realInvoiceNumber);
         this.invoiceNumber = realInvoiceNumber;
-        console.log('📋 Real invoice number generated:', realInvoiceNumber);
+        console.log('📋 Fresh invoice number generated from Firestore:', realInvoiceNumber);
       } catch (invoiceError) {
         console.warn('Warning: Could not generate invoice number:', invoiceError);
         realInvoiceNumber = 'INV-0000-000000';
@@ -3167,14 +3178,45 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       this.closePaymentDialog();
       
       // Now complete the order with payment information (using captured values)
-      await this.completeOrderWithPayment(paymentInfo);
+      // Add timeout to prevent indefinite hanging
+      const orderPromise = this.completeOrderWithPayment(paymentInfo);
+      const timeoutPromise = new Promise<never>((_, reject) => 
+        setTimeout(() => reject(new Error('Order processing timeout - please check your connection')), 15000)
+      );
+      
+      await Promise.race([orderPromise, timeoutPromise]);
       
     } catch (error) {
       console.error('❌ Error processing payment:', error);
-      // Show error dialog
+      
+      // Reset processing state in service if it got stuck
+      this.posService['isProcessingSignal']?.set(false);
+      
+      // Check if this is a duplicate invoice error
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const isDuplicateError = errorMessage.includes('Duplicate invoice number');
+      
+      // Reload the invoice number to get the latest from Firestore
+      // This prevents duplicate invoice number errors on retry
+      try {
+        console.log('🔄 Reloading invoice number after failed order...');
+        await this.loadNextInvoicePreview();
+        const freshInvoiceNumber = this.nextInvoiceNumber();
+        this.invoiceNumber = freshInvoiceNumber === 'Loading...' ? 'INV-0000-000000' : freshInvoiceNumber;
+        console.log('📋 Invoice number refreshed:', this.invoiceNumber);
+      } catch (invoiceReloadError) {
+        console.warn('⚠️ Failed to reload invoice number:', invoiceReloadError);
+      }
+      
+      // Show error dialog with appropriate message
+      const errorTitle = isDuplicateError ? 'Order Already Processed' : 'Payment Processing Failed';
+      const errorMsg = isDuplicateError 
+        ? 'This invoice number has already been used. The invoice number has been refreshed. Please start a new order or try again.'
+        : `Failed to process payment and save order. Please try again.\nReason: ${errorMessage}`;
+      
       await this.showConfirmationDialog({
-        title: 'Payment Processing Failed',
-        message: `Failed to process payment and save order. Please try again.\nReason: ${error instanceof Error ? error.message : String(error)}`,
+        title: errorTitle,
+        message: errorMsg,
         confirmText: 'OK',
         cancelText: ''
       });
@@ -3933,8 +3975,9 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
 
       console.log('🧾 Offline receipt modal opened with invoice:', this.invoiceNumber);
       
-      // Clear cart for next order
-      this.clearCart();
+      // Clear cart directly without confirmation (order is completed)
+      this.posService.clearCart();
+      console.log('🗑️ Cart cleared after successful offline order');
       
     } catch (error) {
       console.error('❌ Error processing offline order:', error);
@@ -4300,15 +4343,8 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
         return;
       }
       
-      // Handle offline mode - skip payment dialog and go directly to invoice preference
-      if (this.networkService.isOffline()) {
-        console.log('📱 Offline mode - showing invoice preference dialog...');
-        await this.showOfflineInvoicePreferenceDialog();
-        return;
-      }
-
-      // Online mode - Open payment dialog first (no Firestore save yet)
-      console.log('💳 Online mode - opening payment dialog for order completion...');
+      // Both online and offline modes - Open payment dialog first
+      console.log('💳 Opening payment dialog for order completion...');
       this.showPaymentDialog();
     } catch (error) {
       console.error('❌ Error processing order:', error);

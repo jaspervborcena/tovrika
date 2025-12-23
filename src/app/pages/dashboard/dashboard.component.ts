@@ -196,24 +196,58 @@ export class DashboardComponent implements OnInit {
   private async loadDashboardData() {
     try {
       const user = this.authService.getCurrentUser();
-      if (!user) return;
+      if (!user) {
+        console.warn('📊 Dashboard: No user found for dashboard data loading');
+        return;
+      }
 
       const currentPermission = this.authService.getCurrentPermission();
       if (currentPermission?.companyId) {
-        // Load company-specific data
-        await this.storeService.loadStoresByCompany(currentPermission.companyId);
-        // NOTE: productService.loadProducts expects a storeId for the BigQuery endpoint.
-        // Passing companyId caused the Cloud Run BigQuery endpoint to receive an incorrect
-        // storeId and return 403 when the token's store doesn't match the requested store.
-        const targetStoreId = currentPermission.storeId || this.storeService.getStores()?.[0]?.id;
-        await this.productService.loadProducts(targetStoreId as string);
+        // Load company-specific data with offline support
+        console.log('📊 Dashboard: Loading data...', { 
+          isOnline: this.isOnline(), 
+          companyId: currentPermission.companyId 
+        });
         
-        this.stores.set(this.storeService.getStores());
-        this.totalStores.set(this.stores().length);
-        this.totalProducts.set(this.productService.totalProducts());
+        try {
+          await this.storeService.loadStoresByCompany(currentPermission.companyId);
+          this.stores.set(this.storeService.getStores());
+          this.totalStores.set(this.stores().length);
+          console.log('✅ Dashboard: Stores loaded:', this.totalStores());
+        } catch (storeError) {
+          console.warn('⚠️ Dashboard: Failed to load stores (will use cached data):', storeError);
+          // Still set the stores from service in case there's cached data
+          this.stores.set(this.storeService.getStores());
+          this.totalStores.set(this.stores().length);
+        }
+        
+        try {
+          // NOTE: productService.loadProducts expects a storeId for the BigQuery endpoint.
+          // Passing companyId caused the Cloud Run BigQuery endpoint to receive an incorrect
+          // storeId and return 403 when the token's store doesn't match the requested store.
+          const targetStoreId = currentPermission.storeId || this.storeService.getStores()?.[0]?.id;
+          if (targetStoreId) {
+            await this.productService.loadProducts(targetStoreId as string);
+            this.totalProducts.set(this.productService.totalProducts());
+            console.log('✅ Dashboard: Products loaded:', this.totalProducts());
+          } else {
+            console.warn('⚠️ Dashboard: No storeId available to load products');
+          }
+        } catch (productError) {
+          console.warn('⚠️ Dashboard: Failed to load products (will use cached data):', productError);
+          // Still set the products count from service in case there's cached data
+          this.totalProducts.set(this.productService.totalProducts());
+        }
+        
+        console.log('📊 Dashboard: Data loading complete', {
+          stores: this.totalStores(),
+          products: this.totalProducts(),
+          isOnline: this.isOnline()
+        });
       }
     } catch (error) {
-      console.error('Error loading dashboard data:', error);
+      console.error('❌ Dashboard: Error loading dashboard data:', error);
+      // Don't throw - allow dashboard to render with whatever data is available
     }
   }
 

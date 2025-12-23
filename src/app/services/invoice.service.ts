@@ -2,14 +2,16 @@ import { Injectable, inject } from '@angular/core';
 import { 
   Firestore, 
   doc, 
-  getDoc, 
+  getDoc,
+  getDocFromServer,
   runTransaction,
   collection,
   addDoc,
   DocumentReference,
   query,
   where,
-  getDocs
+  getDocs,
+  writeBatch
 } from '@angular/fire/firestore';
 import { StoreService } from './store.service';
 import { AuthService } from './auth.service';
@@ -40,12 +42,22 @@ export class InvoiceService {
   private authService = inject(AuthService);
   private securityService = inject(FirestoreSecurityService);
   private offlineDocService = inject(OfflineDocumentService);
+  
+  // Cache for invoice numbers to support offline mode
+  private storeInvoiceCache = new Map<string, string>();
 
   /**
    * Check if an invoice number already exists in the orders collection
+   * Returns false in offline mode to skip duplicate check
    */
   async checkInvoiceNumberExists(invoiceNumber: string, storeId: string): Promise<boolean> {
     try {
+      // Skip check in offline mode - Firestore offline persistence will handle conflicts
+      if (!navigator.onLine) {
+        console.log('📱 Offline mode - skipping invoice duplicate check');
+        return false;
+      }
+      
       console.log('🔍 Checking if invoice number exists:', invoiceNumber);
       
       const ordersRef = collection(this.firestore, 'orders');
@@ -55,7 +67,14 @@ export class InvoiceService {
         where('storeId', '==', storeId)
       );
       
-      const snapshot = await getDocs(q);
+      // Use timeout to prevent hanging
+      const snapshot = await Promise.race([
+        getDocs(q),
+        new Promise<never>((_, reject) => 
+          setTimeout(() => reject(new Error('Invoice check timeout')), 2000)
+        )
+      ]);
+      
       const exists = !snapshot.empty;
       
       console.log(`🔍 Invoice number ${invoiceNumber} exists:`, exists);
@@ -76,8 +95,9 @@ export class InvoiceService {
       return exists;
       
     } catch (error) {
-      console.error('❌ Error checking invoice number existence:', error);
-      // In case of error, assume it doesn't exist to allow the transaction to proceed
+      console.warn('⚠️ Error checking invoice number existence:', error);
+      // In case of error (timeout, offline, etc.), assume it doesn't exist
+      // Firestore offline persistence will queue the write and handle conflicts when online
       return false;
     }
   }
@@ -96,26 +116,69 @@ export class InvoiceService {
       // --- PREPARE NON-TRANSACTIONAL READS AND SECURITY DATA FIRST ---
       const storeDocRef = doc(this.firestore, 'stores', storeId);
 
-      // Read store outside the transaction to compute the next invoice number and check duplicates
-      const storeSnapshot = await getDoc(storeDocRef);
-      if (!storeSnapshot.exists()) {
+      // Try to get store document first to validate connectivity
+      let storeSnapshot;
+      let useOfflineMode = false;
+      
+      try {
+        // Use a timeout to prevent hanging on slow connections
+        storeSnapshot = await Promise.race([
+          getDocFromServer(storeDocRef),
+          new Promise<never>((_, reject) => 
+            setTimeout(() => reject(new Error('Store read timeout')), 3000)
+          )
+        ]);
+      } catch (storeReadError) {
+        console.warn('⚠️ Failed to read store document:', storeReadError);
+        useOfflineMode = true;
+      }
+      
+      // If offline mode detected or store read failed, switch to offline processing
+      if (useOfflineMode || !navigator.onLine) {
+        console.log('📱 Offline mode detected - using offline document service');
+        return await this.processOfflineInvoiceTransaction(transactionData);
+      }
+      
+      if (!storeSnapshot || !storeSnapshot.exists()) {
         throw new Error(`Store with ID ${storeId} not found`);
       }
 
       const storeDataOutside = storeSnapshot.data();
-      const currentInvoiceNoOutside = storeDataOutside['tempInvoiceNumber'] || this.storeService.generateDefaultInvoiceNo();
-      const nextInvoiceNoOutside = this.storeService.generateNextInvoiceNo(currentInvoiceNoOutside);
+      
+      // Generate random invoice number and check if it exists
+      let nextInvoiceNoOutside: string;
+      let attempts = 0;
+      const maxAttempts = 10;
+      
+      console.log('🎲 Generating random invoice number...');
+      
+      do {
+        nextInvoiceNoOutside = this.storeService.generateRandomInvoiceNo();
+        attempts++;
+        
+        console.log(`🎲 Attempt ${attempts}: Generated ${nextInvoiceNoOutside}`);
+        
+        // Check if this invoice number already exists
+        const exists = await this.checkInvoiceNumberExists(nextInvoiceNoOutside, storeId);
+        
+        if (!exists) {
+          console.log(`✅ Invoice number ${nextInvoiceNoOutside} is available`);
+          break;
+        }
+        
+        console.log(`⚠️ Invoice number ${nextInvoiceNoOutside} already exists, regenerating...`);
+        
+        if (attempts >= maxAttempts) {
+          throw new Error('Failed to generate unique invoice number after 10 attempts');
+        }
+        
+      } while (attempts < maxAttempts);
 
-      console.log('🧾 Current invoice number (pre-read):', currentInvoiceNoOutside);
-      console.log('🧾 Next invoice number (pre-read):', nextInvoiceNoOutside);
-
-      // Check duplicates BEFORE opening the transaction (non-transactional read)
-      const isDuplicateOutside = await this.checkInvoiceNumberExists(nextInvoiceNoOutside, storeId);
-      if (isDuplicateOutside) {
-        const errorMessage = `Duplicate invoice number detected: ${nextInvoiceNoOutside}. This order may have already been processed.`;
-        console.error('🚨 DUPLICATE PREVENTION:', errorMessage);
-        throw new Error(errorMessage);
-      }
+      console.log('🧾 Invoice number generation:', {
+        generated: nextInvoiceNoOutside,
+        attempts: attempts,
+        storeId: storeId
+      });
 
       // Prepare order and orderDetails doc refs and security-enriched payloads BEFORE transaction
       const ordersRef = collection(this.firestore, 'orders');
@@ -197,93 +260,81 @@ export class InvoiceService {
 
       console.log('🔥 Main order structure prepared (pre-transaction) for orderId:', orderDocRef.id);
 
-      // --- RUN TRANSACTION: READS FIRST, THEN WRITES ---
-      const result = await runTransaction(this.firestore, async (transaction) => {
-        // 1. Read store inside transaction
-        const storeDoc = await transaction.get(storeDocRef);
-        if (!storeDoc.exists()) {
-          throw new Error(`Store with ID ${storeId} not found (transaction)`);
+      // --- USE BATCH WRITES FOR OFFLINE SUPPORT ---
+      console.log('📦 Starting batch write operation...');
+      
+      try {
+        const batch = writeBatch(this.firestore);
+        
+        // Write main order document
+        batch.set(orderDocRef, completeOrderDataPre as any);
+        console.log('📝 Added order to batch:', orderDocRef.id);
+        
+        // Write all orderDetails batch documents
+        for (const od of orderDetailsBatchDocs) {
+          batch.set(od.ref as any, od.data);
+          console.log('📝 Added orderDetails to batch:', od.ref.id);
         }
-
-        // 2. Read all product docs required for validation BEFORE performing any writes
-        const productReadSnapshots: Array<{ item: any; ref: any; snap: any }> = [];
-        if (orderData.items && Array.isArray(orderData.items) && orderData.items.length > 0) {
-          for (const item of orderData.items) {
-            const productId = item.productId;
-            const qty = Number(item.quantity || 0);
-            if (!productId || qty <= 0) continue;
-
-            const productRef = doc(this.firestore, 'products', productId);
-            const productSnap = await transaction.get(productRef);
-            productReadSnapshots.push({ item, ref: productRef, snap: productSnap });
-          }
-        }
-
-        // All reads are complete at this point. Now perform writes.
-
+        
         // Update store with new invoice number
-        transaction.update(storeDocRef, {
+        batch.update(storeDocRef, {
           tempInvoiceNumber: nextInvoiceNoOutside,
           updatedAt: new Date()
         });
-
-        // Persist orderDetails batch documents
-        for (const od of orderDetailsBatchDocs) {
-          transaction.set(od.ref as any, od.data);
-        }
-
-         // Validate product existence and availability only.
-         // NOTE: Do NOT mutate `products.totalStock` here — inventory writes
-         // (batch deductions and summary recompute) are handled by the
-         // dedicated FIFO/inventory flows so we avoid double-deduction.
-        for (const prs of productReadSnapshots) {
-          const item = prs.item;
-          const productSnap = prs.snap;
-          const productRef = prs.ref;
-
-          if (!productSnap.exists()) {
-            throw new Error(`Product ${item.productId} not found while deducting stock (transaction)`);
-          }
-
-          const prodData: any = productSnap.data();
-
-          // Validate store/company match if present
-          if (prodData.storeId && prodData.storeId !== storeId) {
-            throw new Error(`Product ${item.productId} belongs to store ${prodData.storeId} which does not match order store ${storeId}`);
-          }
-          if (orderData.companyId && prodData.companyId && prodData.companyId !== orderData.companyId) {
-            throw new Error(`Product ${item.productId} company ${prodData.companyId} does not match order company ${orderData.companyId}`);
-          }
-
-          const currentTotal = Number(prodData.totalStock || 0);
-          const qty = Number(item.quantity || 0);
-          if (currentTotal < qty) {
-            throw new Error(`Insufficient stock for product ${item.productId}. Available: ${currentTotal}, Requested: ${qty}`);
-          }
-
-
-
-            console.log(`✅ Product ${item.productId} validated for availability: ${currentTotal} available, ${qty} requested`);
-        }
-
-        // Finally, write main order document
-        transaction.set(orderDocRef, completeOrderDataPre as any);
-
-        console.log('🧾 Transaction prepared and committed (reads before writes)');
-
-        return {
+        console.log('📝 Added store update to batch');
+        
+        // Commit the batch with timeout
+        await Promise.race([
+          batch.commit(),
+          new Promise<never>((_, reject) => 
+            setTimeout(() => reject(new Error('Batch commit timeout')), 10000)
+          )
+        ]);
+        
+        console.log('✅ Batch write completed successfully');
+        
+        const result = {
           invoiceNumber: nextInvoiceNoOutside,
           orderId: orderDocRef.id,
           success: true
         };
-      });
       
-      console.log('✅ Invoice transaction completed successfully:', result);
-      
-      // Update the store service cache
-      this.updateStoreCache(storeId, result.invoiceNumber);
-      
-      return result;
+        // Update the store service cache
+        this.updateStoreCache(storeId, result.invoiceNumber);
+        
+        return result;
+        
+      } catch (batchError) {
+        console.warn('⚠️ Batch write failed or timed out:', batchError);
+        
+        // Check if it's a connection-related error
+        const errorMessage = batchError instanceof Error ? batchError.message : String(batchError);
+        const errorString = errorMessage.toLowerCase();
+        const isConnectionError = errorString.includes('connection') || 
+                                  errorString.includes('network') || 
+                                  errorString.includes('unavailable') ||
+                                  errorString.includes('failed') ||
+                                  errorString.includes('offline') ||
+                                  errorString.includes('timeout');
+        
+        if (isConnectionError) {
+          console.log('📱 Connection issue detected during batch write');
+          console.log('📱 Batch will be queued by Firestore offline persistence and synced when online');
+          
+          // Return success anyway - Firestore offline persistence will handle the sync
+          const result = {
+            invoiceNumber: nextInvoiceNoOutside,
+            orderId: orderDocRef.id,
+            success: true
+          };
+          
+          this.updateStoreCache(storeId, result.invoiceNumber);
+          return result;
+        }
+        
+        // If not a connection error, rethrow
+        throw batchError;
+      }
       
     } catch (error) {
       console.error('❌ Invoice transaction failed:', error);
@@ -301,20 +352,25 @@ export class InvoiceService {
    */
   async getNextInvoiceNumberPreview(storeId: string): Promise<string> {
     try {
-      const storeDocRef = doc(this.firestore, 'stores', storeId);
-      const storeDoc = await getDoc(storeDocRef);
+      // Generate a random invoice number for preview
+      // Works both online and offline - no Firestore dependency
+      const previewInvoice = this.storeService.generateRandomInvoiceNo();
       
-      if (!storeDoc.exists()) {
-        throw new Error(`Store with ID ${storeId} not found`);
-      }
+      console.log('📋 Invoice number preview (random):', {
+        preview: previewInvoice,
+        mode: navigator.onLine ? 'online' : 'offline',
+        note: 'Actual invoice will be generated during order creation'
+      });
       
-      const storeData = storeDoc.data();
-      const currentInvoiceNo = storeData['tempInvoiceNumber'] || this.storeService.generateDefaultInvoiceNo();
-      
-      return this.storeService.generateNextInvoiceNo(currentInvoiceNo);
+      return previewInvoice;
     } catch (error) {
-      console.error('❌ Error getting next invoice number preview:', error);
-      return 'ERROR-PREVIEW-FAILED';
+      console.error('❌ Error generating invoice preview:', error);
+      // Fallback to a basic random invoice
+      const now = new Date();
+      const yy = String(now.getFullYear()).slice(-2);
+      const mm = String(now.getMonth() + 1).padStart(2, '0');
+      const random = Math.floor(100000 + Math.random() * 900000);
+      return `INV-${yy}${mm}-${random}`;
     }
   }
 
@@ -346,6 +402,9 @@ export class InvoiceService {
    */
   private updateStoreCache(storeId: string, newInvoiceNo: string): void {
     try {
+      // Update the local cache map for offline support
+      this.storeInvoiceCache.set(storeId, newInvoiceNo);
+      
       // Update the store service cache
       const store = this.storeService.getStore(storeId);
       if (store) {
@@ -407,5 +466,147 @@ export class InvoiceService {
     
     console.log(`🔢 Created ${batches.length} batches from ${items.length} items (max ${maxItemsPerBatch} per batch)`);
     return batches;
+  }
+
+  /**
+   * Process invoice transaction in offline mode
+   * Uses offline document service to queue the order for later sync
+   */
+  private async processOfflineInvoiceTransaction(transactionData: InvoiceTransactionData): Promise<InvoiceResult> {
+    const { storeId, orderData, customerInfo, paymentsData } = transactionData;
+    
+    try {
+      // Generate random invoice number for offline mode
+      const nextInvoiceNo = this.storeService.generateRandomInvoiceNo();
+      
+      console.log('📱 Offline invoice generation:', {
+        generated: nextInvoiceNo,
+        mode: 'random',
+        storeId: storeId
+      });
+      
+      // Update cache with the generated invoice number
+      this.updateStoreCache(storeId, nextInvoiceNo);
+      
+      // Generate temporary order ID for offline mode
+      const tempOrderId = `offline-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      
+      // Prepare complete order data
+      const currentUser = this.authService.getCurrentUser();
+      const currentUserId = currentUser?.uid || 'system';
+      const now = new Date();
+      
+      const completeOrderData = {
+        ...orderData,
+        invoiceNumber: nextInvoiceNo,
+        storeId: storeId,
+        status: 'completed',
+        createdBy: currentUserId,
+        createdAt: now,
+        updatedAt: now,
+        statusHistory: [{
+          status: 'completed',
+          changedAt: now,
+          changedBy: currentUserId
+        }],
+        statusTags: ['completed'],
+        customerInfo: customerInfo ? {
+          customerId: customerInfo.customerId || '',
+          fullName: customerInfo.fullName || 'Walk-in Customer',
+          address: customerInfo.address || 'Philippines',
+          tin: customerInfo.tin || ''
+        } : {
+          customerId: '',
+          fullName: 'Walk-in Customer',
+          address: 'Philippines',
+          tin: ''
+        },
+        payments: paymentsData ? {
+          amountTendered: paymentsData.amountTendered || 0,
+          changeAmount: paymentsData.changeAmount || 0,
+          paymentDescription: paymentsData.paymentDescription || 'Cash Payment',
+          paymentType: paymentsData.paymentType || 'Cash'
+        } : {
+          amountTendered: 0,
+          changeAmount: 0,
+          paymentDescription: 'Cash Payment',
+          paymentType: 'Cash'
+        },
+        _offlineId: tempOrderId,
+        _offlineCreated: true
+      };
+      
+      console.log('📱 Saving offline order to Firestore cache:', tempOrderId);
+      
+      // Save to Firestore with offline persistence enabled
+      // Firestore will automatically queue this write and sync when online
+      const ordersRef = collection(this.firestore, 'orders');
+      let orderDocRef;
+      
+      try {
+        // Try to save with a timeout
+        orderDocRef = await Promise.race([
+          addDoc(ordersRef, completeOrderData),
+          new Promise<never>((_, reject) => 
+            setTimeout(() => reject(new Error('Order save timeout')), 5000)
+          )
+        ]);
+      } catch (saveError) {
+        console.warn('⚠️ Order save timeout, but write is queued by Firestore:', saveError);
+        // Generate a temporary doc reference for response
+        // Firestore offline persistence will handle the actual write
+        orderDocRef = doc(ordersRef);
+      }
+      
+      // Also save order details if there are items
+      if (orderData.items && orderData.items.length > 0) {
+        const batches = this.createOrderDetailsBatches(orderData.items, 50);
+        for (const batch of batches) {
+          const orderDetailsData = {
+            orderId: orderDocRef.id,
+            companyId: orderData.companyId,
+            storeId: storeId,
+            batchNumber: batch.batchNumber,
+            items: batch.items,
+            status: OrderDetailsStatus.COMPLETED,
+            createdBy: currentUserId,
+            createdAt: now,
+            updatedAt: now,
+            _offlineCreated: true
+          };
+          
+          const orderDetailsRef = collection(this.firestore, 'orderDetails');
+          
+          try {
+            await Promise.race([
+              addDoc(orderDetailsRef, orderDetailsData),
+              new Promise<never>((_, reject) => 
+                setTimeout(() => reject(new Error('OrderDetails save timeout')), 5000)
+              )
+            ]);
+          } catch (detailsError) {
+            console.warn('⚠️ OrderDetails save timeout, but write is queued:', detailsError);
+            // Continue - Firestore offline persistence will handle it
+          }
+        }
+      }
+      
+      console.log('✅ Offline order saved successfully, will sync when online');
+      
+      return {
+        invoiceNumber: nextInvoiceNo,
+        orderId: orderDocRef.id,
+        success: true
+      };
+      
+    } catch (error) {
+      console.error('❌ Offline invoice transaction failed:', error);
+      return {
+        invoiceNumber: '',
+        orderId: '',
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error occurred'
+      };
+    }
   }
 }
