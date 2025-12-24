@@ -145,13 +145,13 @@ export class IndexedDBService {
   async initDB(): Promise<void> {
     // Check if IndexedDB is permanently broken
     if (this.isPermanentlyBroken) {
-      console.warn('📦 IndexedDB: Permanently unavailable - using in-memory fallback');
+      //console.warn('📦 IndexedDB: Permanently unavailable - using in-memory fallback');
       return; // Silently fail and use in-memory storage
     }
 
     // Check if IndexedDB is available
     if (!window.indexedDB) {
-      console.warn('📦 IndexedDB: Not available in this browser - using in-memory fallback');
+      //console.warn('📦 IndexedDB: Not available in this browser - using in-memory fallback');
       this.isPermanentlyBroken = true;
       return; // Silently fail instead of throwing
     }
@@ -161,7 +161,7 @@ export class IndexedDBService {
 
       request.onerror = (event) => {
         const error = request.error;
-        console.error('📦 IndexedDB: Failed to open database:', error);
+        //console.error('📦 IndexedDB: Failed to open database:', error);
         
         // Check for specific errors
         if (error?.name === 'UnknownError') {
@@ -184,12 +184,12 @@ export class IndexedDBService {
       
       request.onsuccess = () => {
         this.db = request.result;
-        console.log('📦 IndexedDB: Database opened successfully');
-        console.log('📦 IndexedDB: Available object stores:', Array.from(this.db.objectStoreNames));
+        //console.log('📦 IndexedDB: Database opened successfully');
+        //console.log('📦 IndexedDB: Available object stores:', Array.from(this.db.objectStoreNames));
         
         // Set up error handler for the database
         this.db.onerror = (event) => {
-          console.error('📦 IndexedDB: Database error:', event);
+          //console.error('📦 IndexedDB: Database error:', event);
         };
         
         resolve();
@@ -197,13 +197,13 @@ export class IndexedDBService {
 
       request.onupgradeneeded = (event) => {
         const db = (event.target as IDBOpenDBRequest).result;
-        console.log('📦 IndexedDB: Upgrading database schema...');
+        //console.log('📦 IndexedDB: Upgrading database schema...');
         this.createObjectStores(db);
-        console.log('📦 IndexedDB: Database schema upgrade complete');
+        //console.log('📦 IndexedDB: Database schema upgrade complete');
       };
       
       request.onblocked = () => {
-        console.warn('📦 IndexedDB: Database opening blocked. Please close other tabs using this app.');
+        //console.warn('📦 IndexedDB: Database opening blocked. Please close other tabs using this app.');
         reject(new Error('Database is being used by another tab. Please close other tabs and try again.'));
       };
     });
@@ -212,7 +212,7 @@ export class IndexedDBService {
   // Delete the entire database (for recovery from corruption)
   async deleteDatabase(): Promise<void> {
     return new Promise((resolve, reject) => {
-      console.log('📦 IndexedDB: Attempting to delete database:', this.dbName);
+      //console.log('📦 IndexedDB: Attempting to delete database:', this.dbName);
       
       // Close existing connection
       if (this.db) {
@@ -247,7 +247,7 @@ export class IndexedDBService {
   async saveUserData(userData: OfflineUserData): Promise<void> {
     // If IndexedDB is unavailable, silently skip
     if (this.isPermanentlyBroken) {
-      console.warn('📦 IndexedDB: Unavailable - skipping user data save');
+      //console.warn('📦 IndexedDB: Unavailable - skipping user data save');
       return;
     }
     
@@ -255,7 +255,7 @@ export class IndexedDBService {
     
     // Check again after init
     if (this.isPermanentlyBroken || !this.db) {
-      console.warn('📦 IndexedDB: Unavailable after init - skipping user data save');
+      //console.warn('📦 IndexedDB: Unavailable after init - skipping user data save');
       return;
     }
     
@@ -271,11 +271,11 @@ export class IndexedDBService {
       const request = store.put(activeUserData);
 
       request.onsuccess = () => {
-        console.log('📦 IndexedDB: User data saved successfully as active user');
+        //console.log('📦 IndexedDB: User data saved successfully as active user');
         resolve();
       };
       request.onerror = () => {
-        console.warn('📦 IndexedDB: Error saving user data:', request.error);
+        //console.warn('📦 IndexedDB: Error saving user data:', request.error);
         resolve(); // Resolve anyway to not block the app
       };
     });

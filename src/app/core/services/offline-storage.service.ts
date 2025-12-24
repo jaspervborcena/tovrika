@@ -63,13 +63,13 @@ export class OfflineStorageService {
       const currentUser = await this.indexedDBService.getCurrentUser();
       this.currentUserSignal.set(currentUser);
       
-      console.log('💾 OfflineStorage: Current user loaded:', {
-        exists: !!currentUser,
-        uid: currentUser?.uid,
-        email: currentUser?.email,
-        isLoggedIn: currentUser?.isLoggedIn,
-        isAgreedToPolicy: currentUser?.isAgreedToPolicy
-      });
+      // console.log('💾 OfflineStorage: Current user loaded:', {
+      //   exists: !!currentUser,
+      //   uid: currentUser?.uid,
+      //   email: currentUser?.email,
+      //   isLoggedIn: currentUser?.isLoggedIn,
+      //   isAgreedToPolicy: currentUser?.isAgreedToPolicy
+      // });
 
       if (currentUser?.currentStoreId) {
         // Load products for current store
@@ -80,14 +80,14 @@ export class OfflineStorageService {
         const orders = await this.indexedDBService.getPendingOrders(currentUser.currentStoreId);
         this.pendingOrdersSignal.set(orders);
         
-        console.log('💾 OfflineStorage: Store data loaded for store:', currentUser.currentStoreId);
+        //console.log('💾 OfflineStorage: Store data loaded for store:', currentUser.currentStoreId);
       }
 
       console.log('💾 OfflineStorage: Data loaded successfully');
     } catch (error: any) {
-      console.error('💾 OfflineStorage: Failed to load data:', error);
+      //console.error('💾 OfflineStorage: Failed to load data:', error);
       // Always gracefully handle - don't block the app
-      console.warn('⚠️ OfflineStorage: Continuing without cached data');
+      //console.warn('⚠️ OfflineStorage: Continuing without cached data');
       // Reset signals to empty state
       this.currentUserSignal.set(null);
       this.productsSignal.set([]);

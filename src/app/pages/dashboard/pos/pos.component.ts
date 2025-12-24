@@ -5126,12 +5126,12 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   getProductTagLabels(product: Product): string[] {
     // Use denormalized tagLabels from product document for instant display
     if (product.tagLabels && product.tagLabels.length > 0) {
-      console.log('🏷️ Product', product.productName, 'has tagLabels:', product.tagLabels);
+      // console.log('🏷️ Product', product.productName, 'has tagLabels:', product.tagLabels);
       return product.tagLabels;
     }
     // Fallback: if tagLabels not available, return empty (old products)
     if (product.tags && product.tags.length > 0) {
-      console.log('⚠️ Product', product.productName, 'has tags but no tagLabels:', product.tags);
+      // console.log('⚠️ Product', product.productName, 'has tags but no tagLabels:', product.tags);
     }
     return [];
   }
