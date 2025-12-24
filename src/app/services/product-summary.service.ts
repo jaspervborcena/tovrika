@@ -9,6 +9,8 @@ import {
   getDocs,
   getDoc,
   runTransaction,
+  writeBatch,
+  WriteBatch,
   DocumentReference,
   Transaction
 } from '@angular/fire/firestore';
@@ -27,15 +29,12 @@ export class ProductSummaryService {
    * Recomputes product totalStock and sellingPrice based on current active batches
    * Uses FIFO for stock calculation and LIFO for price calculation
    * 
-   * TRANSACTION SAFE: Can be called within existing transactions
+   * BATCH WRITE SAFE: Can be called with WriteBatch for offline support
    */
   async recomputeProductSummaryInTransaction(
-    transaction: Transaction,
+    batchOrTransaction: WriteBatch | Transaction,
     productId: string,
     productRef?: DocumentReference,
-    // Optional: if the caller already has the up-to-date batch documents
-    // (for example, read inside the same transaction), pass them here so
-    // the recompute can avoid non-transactional queries.
     updatedBatches?: ProductInventoryEntry[]
   ): Promise<{ totalStock: number; sellingPrice: number; originalPrice: number }> {
     const currentUser = this.authService.getCurrentUser();
@@ -81,6 +80,10 @@ export class ProductSummaryService {
     // Calculate sellingPrice (LIFO - latest batch unitPrice) and originalPrice (base/unit price)
     let sellingPrice = 0;
     let originalPrice = 0;
+    let hasDiscount = false;
+    let discountType = 'percentage';
+    let discountValue = 0;
+    
     if (activeBatches.length > 0) {
       // Sort by receivedAt DESC to get latest batch (LIFO for price)
       const sortedByLatest = [...activeBatches].sort((a, b) => 
@@ -90,6 +93,11 @@ export class ProductSummaryService {
       const latest = sortedByLatest[0];
       // Prefer explicit batch.sellingPrice when available, otherwise fall back to unitPrice
       sellingPrice = (latest?.sellingPrice ?? latest?.unitPrice) || 0;
+      
+      // Sync discount fields from latest batch to product
+      hasDiscount = !!latest.hasDiscount;
+      discountType = latest.discountType ?? 'percentage';
+      discountValue = Number(latest.discountValue ?? 0) || 0;
 
       // Determine originalPrice: prefer unitPrice if present, otherwise compute from sellingPrice using VAT/discount metadata
       if (latest?.unitPrice !== undefined && latest?.unitPrice !== null) {
@@ -124,32 +132,58 @@ export class ProductSummaryService {
 
       console.log('💰 Calculated sellingPrice from latest batch:', sellingPrice, 'from batch:', latest?.batchId);
       console.log('🔎 Determined originalPrice for product from latest batch:', originalPrice);
+      console.log('🏷️ Synced discount from latest batch:', { hasDiscount, discountType, discountValue });
     }
 
-    // Update product document within the transaction. Use transaction.get to check existence
+    // Update product document with batch or transaction
     const productDocRef = productRef || doc(this.firestore, 'products', productId);
-    const prodSnap = await transaction.get(productDocRef);
     const payload: any = {
       totalStock,
       sellingPrice,
       originalPrice,
+      hasDiscount,
+      discountType,
+      discountValue,
       lastUpdated: new Date(),
       updatedBy: currentUser.uid
     };
 
-    if (prodSnap.exists()) {
-      transaction.update(productDocRef, payload);
+    // Check if we're using Transaction or WriteBatch
+    const isTransaction = 'get' in batchOrTransaction;
+    
+    if (isTransaction) {
+      // Transaction path - can read before write
+      const prodSnap = await (batchOrTransaction as Transaction).get(productDocRef);
+      if (prodSnap.exists()) {
+        (batchOrTransaction as Transaction).update(productDocRef, payload);
+      } else {
+        (batchOrTransaction as Transaction).set(productDocRef, {
+          uid: currentUser.uid,
+          companyId: permission.companyId,
+          storeId: permission.storeId,
+          status: 'active',
+          createdAt: new Date(),
+          createdBy: currentUser.uid,
+          ...payload
+        });
+      }
     } else {
-      // If product document doesn't exist, create it with minimal required fields
-      transaction.set(productDocRef, {
-        uid: currentUser.uid,
-        companyId: permission.companyId,
-        storeId: permission.storeId,
-        status: 'active',
-        createdAt: new Date(),
-        createdBy: currentUser.uid,
-        ...payload
-      });
+      // WriteBatch path - just update (or set if needed)
+      // Pre-check existence with getDoc for WriteBatch
+      const prodSnap = await getDoc(productDocRef);
+      if (prodSnap.exists()) {
+        (batchOrTransaction as WriteBatch).update(productDocRef, payload);
+      } else {
+        (batchOrTransaction as WriteBatch).set(productDocRef, {
+          uid: currentUser.uid,
+          companyId: permission.companyId,
+          storeId: permission.storeId,
+          status: 'active',
+          createdAt: new Date(),
+          createdBy: currentUser.uid,
+          ...payload
+        });
+      }
     }
 
     return { totalStock, sellingPrice, originalPrice };
@@ -159,9 +193,9 @@ export class ProductSummaryService {
    * Standalone method to recompute product summary (creates its own transaction)
    */
   async recomputeProductSummary(productId: string): Promise<{ totalStock: number; sellingPrice: number; originalPrice: number }> {
-    const result = await runTransaction(this.firestore, async (transaction) => {
-      return this.recomputeProductSummaryInTransaction(transaction, productId);
-    });
+    const batch = writeBatch(this.firestore);
+    const result = await this.recomputeProductSummaryInTransaction(batch, productId);
+    await batch.commit();
 
     // Notify product service (if present) to update its local cache without forcing a full refresh.
     try {
@@ -189,12 +223,12 @@ export class ProductSummaryService {
     if (productIds.length === 0) return;
 
     const results: Array<{ productId: string; totalStock: number; sellingPrice: number; originalPrice: number }> = [];
-    await runTransaction(this.firestore, async (transaction) => {
-      for (const productId of productIds) {
-        const res = await this.recomputeProductSummaryInTransaction(transaction, productId);
-        results.push({ productId, totalStock: res.totalStock, sellingPrice: res.sellingPrice, originalPrice: res.originalPrice });
-      }
-    });
+    const batch = writeBatch(this.firestore);
+    for (const productId of productIds) {
+      const res = await this.recomputeProductSummaryInTransaction(batch, productId);
+      results.push({ productId, totalStock: res.totalStock, sellingPrice: res.sellingPrice, originalPrice: res.originalPrice });
+    }
+    await batch.commit();
 
     // Notify product service about each updated product to keep local cache in sync
     try {
