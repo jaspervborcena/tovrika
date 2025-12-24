@@ -230,6 +230,32 @@ import { AppConstants } from '../../../shared/enums/app-constants.enum';
       color: #4a5568;
     }
 
+    .product-tags-cell {
+      max-width: 200px;
+      padding: 0.5rem;
+    }
+
+    .tags-wrapper {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.25rem;
+      align-items: center;
+    }
+
+    .tag-badge {
+      display: inline-block;
+      color: #000000;
+      font-size: 0.7rem;
+      font-weight: 400;
+      white-space: normal;
+      word-wrap: break-word;
+    }
+
+    .no-tags {
+      color: #a0aec0;
+      font-size: 0.85rem;
+    }
+
     .product-stock-cell {
       color: #4a5568;
       font-weight: 500;
@@ -1221,6 +1247,7 @@ import { AppConstants } from '../../../shared/enums/app-constants.enum';
                 <th>Product Name</th>
                 <th>SKU</th>
                 <th>Category</th>
+                <th>Tags</th>
                 <th>Stock</th>
                 <th>Price</th>
                 <th>Status</th>
@@ -1239,6 +1266,14 @@ import { AppConstants } from '../../../shared/enums/app-constants.enum';
                 <td class="product-name-cell">{{ product.productName }}</td>
                 <td class="product-sku-cell">{{ product.skuId }}</td>
                 <td class="product-category-cell">{{ product.category }}</td>
+                <td class="product-tags-cell">
+                  <div class="tags-wrapper">
+                    <span *ngFor="let tagLabel of product.tagLabels" class="tag-badge">
+                      {{ tagLabel }}
+                    </span>
+                    <span *ngIf="!product.tagLabels || product.tagLabels.length === 0" class="no-tags">-</span>
+                  </div>
+                </td>
                 <td class="product-stock-cell">{{ product.totalStock }}</td>
                 <td class="product-price-cell">\${{ displayPrice(product).toFixed(2) }}</td>
                 <td class="product-status-cell">
@@ -2111,13 +2146,14 @@ import { AppConstants } from '../../../shared/enums/app-constants.enum';
             </div>
 
             <div class="form-group" *ngIf="selectedTagGroup">
-              <label>Tags</label>
+              <label>Tags (Select one per group)</label>
               <div class="tags-selection-grid">
                 <label *ngFor="let tag of getFilteredTags()" class="tag-radio-label">
                   <input 
-                    type="checkbox" 
+                    type="radio" 
+                    [name]="'tag-group-' + selectedTagGroup"
                     [checked]="isTagSelected(tag.tagId)"
-                    (change)="toggleTagSelection(tag.tagId)">
+                    (change)="selectSingleTag(tag.tagId)">
                   <span>{{ tag.label }}</span>
                 </label>
               </div>
@@ -2179,6 +2215,16 @@ export class ProductManagementComponent implements OnInit {
       filtered = filtered.filter(product => product.storeId === this.selectedStore);
     }
 
+    // Tag filtering with AND logic: product must have ALL selected tags
+    if (this.activeTagFilters && this.activeTagFilters.length > 0) {
+      filtered = filtered.filter(product => {
+        // Product must have all selected tag IDs
+        return this.activeTagFilters.every(filterTagId => 
+          product.tags && product.tags.includes(filterTagId)
+        );
+      });
+    }
+
     return filtered;
   });
 
@@ -2186,6 +2232,7 @@ export class ProductManagementComponent implements OnInit {
   searchTerm = '';
   selectedCategory = '';
   selectedStore = '';
+  activeTagFilters: string[] = []; // Active tag filter IDs for product list filtering
   // Pagination state for BigQuery products API
   pageSize = 50;
   currentPage = 1;
@@ -2895,9 +2942,9 @@ export class ProductManagementComponent implements OnInit {
           // Tax and Discount Fields
           isVatApplicable: formValue.isVatApplicable || false,
           vatRate: formValue.vatRate ?? AppConstants.DEFAULT_VAT_RATE,
-          hasDiscount: formValue.hasDiscount || false,
+          hasDiscount: (formValue.discountValue && Number(formValue.discountValue) > 0) ? (formValue.hasDiscount || false) : false,
           discountType: formValue.discountType || 'percentage',
-          discountValue: formValue.discountValue || 0,
+          discountValue: Number(formValue.discountValue || 0),
           // Product tags
           tags: this.selectedTagIds(),
           tagLabels: this.getSelectedTagLabels()
@@ -2962,9 +3009,9 @@ export class ProductManagementComponent implements OnInit {
           // Tax and Discount Fields from form
           isVatApplicable: formValue.isVatApplicable || false,
           vatRate: formValue.vatRate ?? AppConstants.DEFAULT_VAT_RATE,
-          hasDiscount: formValue.hasDiscount || false,
+          hasDiscount: (formValue.discountValue && Number(formValue.discountValue) > 0) ? (formValue.hasDiscount || false) : false,
           discountType: formValue.discountType || 'percentage',
-          discountValue: formValue.discountValue || 0,
+          discountValue: Number(formValue.discountValue || 0),
           
           // Product tags
           tags: this.selectedTagIds(),
@@ -3325,7 +3372,7 @@ export class ProductManagementComponent implements OnInit {
           // VAT & Discount metadata
           isVatApplicable: !!formValue.isVatApplicable,
           vatRate: Number(formValue.vatRate ?? AppConstants.DEFAULT_VAT_RATE),
-          hasDiscount: !!formValue.hasDiscount,
+          hasDiscount: (formValue.discountValue && Number(formValue.discountValue) > 0) ? !!formValue.hasDiscount : false,
           discountType: formValue.discountType || 'percentage',
           discountValue: Number(formValue.discountValue || 0)
         });
@@ -3353,7 +3400,7 @@ export class ProductManagementComponent implements OnInit {
           // VAT & Discount metadata
           isVatApplicable: !!formValue.isVatApplicable,
           vatRate: Number(formValue.vatRate ?? AppConstants.DEFAULT_VAT_RATE),
-          hasDiscount: !!formValue.hasDiscount,
+          hasDiscount: (formValue.discountValue && Number(formValue.discountValue) > 0) ? !!formValue.hasDiscount : false,
           discountType: formValue.discountType || 'percentage',
           discountValue: Number(formValue.discountValue || 0),
           companyId: this.selectedProduct.companyId,
@@ -4192,11 +4239,55 @@ export class ProductManagementComponent implements OnInit {
     }
   }
 
+  // New method for single tag selection per group
+  selectSingleTag(tagId: string): void {
+    const selectedTag = this.availableTags().find(t => t.tagId === tagId);
+    if (!selectedTag) return;
+
+    // Remove any existing tag from the same group
+    this.tempSelectedTagIds = this.tempSelectedTagIds.filter(existingTagId => {
+      const existingTag = this.availableTags().find(t => t.tagId === existingTagId);
+      return existingTag?.group !== selectedTag.group;
+    });
+
+    // Add the new tag
+    this.tempSelectedTagIds.push(tagId);
+  }
+
+  // Check if the current group already has a tag selected
+  isGroupAlreadySelected(): boolean {
+    if (!this.selectedTagGroup) return false;
+    if (this.tempSelectedTagIds.length === 0) return false;
+    
+    return this.tempSelectedTagIds.some(tagId => {
+      const tag = this.availableTags().find(t => t.tagId === tagId);
+      return tag?.group === this.selectedTagGroup;
+    });
+  }
+
   saveSelectedTags(): void {
-    // Merge new selections with existing tags (no duplicates)
-    const currentTags = this.selectedTagIds();
-    const newTags = this.tempSelectedTagIds.filter(tagId => !currentTags.includes(tagId));
-    this.selectedTagIds.set([...currentTags, ...newTags]);
+    // Validate: each group should have at most one tag
+    const groupsMap = new Map<string, string[]>();
+    for (const tagId of this.tempSelectedTagIds) {
+      const tag = this.availableTags().find(t => t.tagId === tagId);
+      if (tag) {
+        if (!groupsMap.has(tag.group)) {
+          groupsMap.set(tag.group, []);
+        }
+        groupsMap.get(tag.group)!.push(tagId);
+      }
+    }
+
+    // Check for duplicates in any group
+    for (const [group, tags] of groupsMap.entries()) {
+      if (tags.length > 1) {
+        this.toastService.error(`Cannot save: Multiple tags selected from group "${group}". Please select only one tag per group.`);
+        return;
+      }
+    }
+
+    // Update selected tags (replacing, not merging)
+    this.selectedTagIds.set([...this.tempSelectedTagIds]);
     this.closeSelectTagModal();
   }
 

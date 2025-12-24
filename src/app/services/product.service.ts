@@ -18,6 +18,7 @@ import {
   disableNetwork,
   connectFirestoreEmulator,
   runTransaction,
+  writeBatch,
   Timestamp,
   Unsubscribe,
   DocumentChange,
@@ -29,6 +30,7 @@ import { AuthService } from './auth.service';
 import { ProductSummaryService } from './product-summary.service';
 import { LoggerService } from '../core/services/logger.service';
 import { OfflineDocumentService } from '../core/services/offline-document.service';
+import { IndexedDBService, OfflineProduct } from '../core/services/indexeddb.service';
 import { environment } from '../../environments/environment';
 import { BehaviorSubject, Observable } from 'rxjs';
 
@@ -105,7 +107,8 @@ export class ProductService implements OnDestroy {
     private firestore: Firestore,
     private authService: AuthService,
     private http: HttpClient,
-    private productSummaryService: ProductSummaryService
+    private productSummaryService: ProductSummaryService,
+    private indexedDBService: IndexedDBService
   ) {
     this.initializeNetworkMonitoring();
     this.initializeFirestorePersistence();
@@ -378,6 +381,31 @@ export class ProductService implements OnDestroy {
       
     } catch (error) {
       console.error('❌ Direct load failed:', error);
+      
+      // Only try IndexedDB fallback when actually offline
+      if (!navigator.onLine) {
+        console.log('🔄 Offline detected - attempting IndexedDB fallback after direct load failure...');
+        try {
+          const offlineProducts = await this.loadProductsFromIndexedDB(storeId);
+          
+          if (offlineProducts.length > 0) {
+            console.log('✅ IndexedDB fallback successful in direct load:', offlineProducts.length);
+            this.updateCacheState({
+              products: offlineProducts,
+              isLoading: false,
+              lastUpdated: new Date(),
+              error: null,
+              hasInitialLoad: true
+            });
+            return; // Success - don't throw
+          }
+        } catch (indexedDBError) {
+          console.error('❌ IndexedDB fallback in direct load failed:', indexedDBError);
+        }
+      } else {
+        console.log('❌ Direct load failed while online - not falling back to IndexedDB');
+      }
+      
       throw error;
     }
   }
@@ -388,7 +416,7 @@ export class ProductService implements OnDestroy {
    */
   async loadProductsRealTime(storeId: string, forceReload = false): Promise<void> {
     try {
-      console.log('🔄 ProductService.loadProductsRealTime called', { storeId, forceReload });
+      console.log('🔄 ProductService.loadProductsRealTime called', { storeId, forceReload, isOnline: navigator.onLine });
       console.log('🔄 Current state:', { 
         currentStoreId: this.currentStoreId, 
         currentProducts: this.products().length,
@@ -397,6 +425,45 @@ export class ProductService implements OnDestroy {
       
       if (!storeId) {
         throw new Error('storeId is required for loading products');
+      }
+
+      // Check if offline - load from IndexedDB instead of Firestore
+      if (!navigator.onLine) {
+        console.log('📴 Offline mode detected - loading products from IndexedDB...');
+        this.updateCacheState({ isLoading: true, error: null });
+        
+        try {
+          const offlineProducts = await this.loadProductsFromIndexedDB(storeId);
+          
+          if (offlineProducts.length > 0) {
+            console.log('✅ Loaded products from IndexedDB in offline mode:', offlineProducts.length);
+            this.updateCacheState({
+              products: offlineProducts,
+              isLoading: false,
+              lastUpdated: new Date(),
+              error: null,
+              hasInitialLoad: true
+            });
+          } else {
+            console.log('📭 No products found in IndexedDB for store:', storeId);
+            this.updateCacheState({
+              products: [],
+              isLoading: false,
+              error: 'No cached products available offline',
+              hasInitialLoad: true
+            });
+          }
+          
+          this.currentStoreId = storeId;
+          return;
+        } catch (error) {
+          console.error('❌ Failed to load products from IndexedDB:', error);
+          this.updateCacheState({
+            isLoading: false,
+            error: 'Failed to load offline products: ' + String(error)
+          });
+          return;
+        }
       }
 
       // Check if we already have this store loaded and don't need to reload
@@ -458,18 +525,75 @@ export class ProductService implements OnDestroy {
           console.log('🔄 Firestore assertion failure detected, using direct load fallback');
           await this.loadProductsDirectly(companyId, storeId);
         } else {
-          throw listenerError;
+          // When online, don't fallback to IndexedDB - let Firestore handle it
+          if (navigator.onLine) {
+            console.error('❌ Real-time listener error while online - relying on Firestore offline persistence');
+            throw listenerError;
+          } else {
+            // Only use IndexedDB fallback when actually offline
+            console.error('❌ Real-time listener error while offline, attempting IndexedDB fallback:', listenerError);
+            try {
+              console.log('🔄 Loading products from IndexedDB as fallback...');
+              const offlineProducts = await this.loadProductsFromIndexedDB(storeId);
+              
+              if (offlineProducts.length > 0) {
+                console.log('✅ Successfully loaded products from IndexedDB:', offlineProducts.length);
+                this.updateCacheState({
+                  products: offlineProducts,
+                  isLoading: false,
+                  lastUpdated: new Date(),
+                  error: null,
+                  hasInitialLoad: true
+                });
+                this.currentStoreId = storeId;
+                return; // Success - exit the function
+              } else {
+                console.log('📭 No products found in IndexedDB for store:', storeId);
+                throw listenerError; // Re-throw original error if no IndexedDB data
+              }
+            } catch (indexedDBError) {
+              console.error('❌ IndexedDB fallback failed:', indexedDBError);
+              throw listenerError; // Re-throw original listener error
+            }
+          }
         }
       }
 
     } catch (error) {
       this.logger.dbFailure('Failed to setup real-time product loading', { area: 'products', storeId }, error);
+      
+      // Only try IndexedDB fallback when actually offline
+      if (!navigator.onLine) {
+        console.log('❌ All Firestore methods failed while offline, attempting final IndexedDB fallback...');
+        try {
+          const offlineProducts = await this.loadProductsFromIndexedDB(storeId);
+          
+          if (offlineProducts.length > 0) {
+            console.log('✅ Final IndexedDB fallback successful:', offlineProducts.length, 'products loaded');
+            this.updateCacheState({
+              products: offlineProducts,
+              isLoading: false,
+              lastUpdated: new Date(),
+              error: null,
+              hasInitialLoad: true
+            });
+            this.currentStoreId = storeId;
+            return; // Success!
+          }
+        } catch (indexedDBError) {
+          console.error('❌ Final IndexedDB fallback also failed:', indexedDBError);
+        }
+      } else {
+        console.log('❌ Product loading failed while online - not falling back to IndexedDB, letting Firestore handle it');
+      }
+      
+      // If we get here, everything failed
       this.updateCacheState({ 
         isLoading: false, 
         error: String(error) 
       });
       
-      console.log('❌ Product loading failed completely');
+      console.log('❌ Product loading failed completely - no data available');
     }
   }
 
@@ -666,6 +790,15 @@ export class ProductService implements OnDestroy {
         error: null,
         hasInitialLoad: true
       });
+
+      // Save to IndexedDB when online for offline access
+      if (navigator.onLine && !isFromCache) {
+        console.log('💾 Saving products to IndexedDB for offline access...');
+        this.saveProductsToIndexedDB(normalizedProducts).catch(error => {
+          console.warn('⚠️ Failed to save products to IndexedDB:', error);
+          this.logger.warn('Failed to save products to IndexedDB', { area: 'products', payload: { error: String(error) } });
+        });
+      }
 
       console.log('✅ Products cache updated (Firestore offline persistence enabled)');
 
@@ -1004,148 +1137,130 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
         status: productData.status || 'active'
       });
 
-      // Use Firestore transaction for all-or-nothing product + inventory creation
-      return await runTransaction(this.firestore, async (transaction) => {
-        console.log('🔄 Starting atomic transaction for product creation...');
+      // Use batch writes for all-or-nothing product + inventory creation
+      const batch = writeBatch(this.firestore);
+      console.log('📦 Starting batch write for product creation...');
 
-        // 1. Create product document reference
-        const productRef = doc(collection(this.firestore, 'products'));
-        const productId = productRef.id;
-        console.log('📝 Generated product ID:', productId);
+      // 1. Create product document reference
+      const productRef = doc(collection(this.firestore, 'products'));
+      const productId = productRef.id;
+      console.log('📝 Generated product ID:', productId);
 
-        // 2. Prepare product data with security fields
-        const productPayload = {
-          ...baseData,
+      // 2. Prepare product data with security fields
+      const productPayload = {
+        ...baseData,
+        uid: currentUser.uid,
+        createdBy: currentUser.uid,
+        updatedBy: currentUser.uid,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        lastUpdated: new Date()
+      };
+
+      // 3. Calculate initial totals from batches
+      let totalStock = 0;
+      let sellingPrice = 0;
+      let originalPrice = 0;
+      
+      if (invArr.length > 0) {
+        // Calculate total stock
+        totalStock = invArr.reduce((sum: number, batch: any) => sum + Number(batch.quantity || 0), 0);
+        
+        // Get selling price from latest batch by receivedAt
+        const sortedBatches = [...invArr].sort((a: any, b: any) => {
+          const dateA = a.receivedAt instanceof Date ? a.receivedAt : new Date(a.receivedAt);
+          const dateB = b.receivedAt instanceof Date ? b.receivedAt : new Date(b.receivedAt);
+          return dateB.getTime() - dateA.getTime();
+        });
+        sellingPrice = Number((sortedBatches[0]?.sellingPrice ?? sortedBatches[0]?.unitPrice) || 0);
+        originalPrice = Number(sortedBatches[0]?.unitPrice || 0);
+        
+        console.log('📊 Calculated totals:', { totalStock, sellingPrice, batchCount: invArr.length });
+      }
+
+      // Add calculated fields to product
+      productPayload.totalStock = totalStock;
+      productPayload.sellingPrice = sellingPrice;
+      productPayload.originalPrice = originalPrice || Number(baseData?.originalPrice || 0);
+      productPayload.vatRate = Number(baseData?.vatRate || 0);
+      productPayload.isVatApplicable = !!baseData?.isVatApplicable;
+      productPayload.hasDiscount = !!baseData?.hasDiscount;
+      productPayload.discountType = baseData?.discountType || 'percentage';
+      productPayload.discountValue = Number(baseData?.discountValue || 0);
+
+      // 4. Queue product creation in batch
+      batch.set(productRef, productPayload);
+      console.log('📝 Product creation queued in batch');
+
+      // 5. Queue inventory batch creation in batch
+      const batchRefs: string[] = [];
+      for (const batchItem of invArr) {
+        const batchRef = doc(collection(this.firestore, 'productInventory'));
+        const batchId = batchRef.id;
+        
+        const batchData = {
+          productId: productId,
+          productName: baseData.productName || '',
+          companyId: companyId,
+          storeId: baseData.storeId || '',
+          batchNumber: batchItem.batchNumber || undefined,
+          batchId: batchId,
+          quantity: Number(batchItem.quantity || 0),
+          unitPrice: Number(batchItem.unitPrice || 0),
+          costPrice: Number(batchItem.costPrice || 0) || Number(batchItem.unitPrice || 0),
+          receivedAt: batchItem.receivedAt instanceof Date ? batchItem.receivedAt : new Date(batchItem.receivedAt || new Date()),
+          expiryDate: batchItem.expiryDate ? (batchItem.expiryDate instanceof Date ? batchItem.expiryDate : new Date(batchItem.expiryDate)) : null,
+          supplier: batchItem.supplier || null,
+          isVatApplicable: !!(batchItem.isVatApplicable ?? baseData.isVatApplicable),
+          vatRate: Number(batchItem.vatRate ?? baseData.vatRate ?? 0),
+          hasDiscount: !!(batchItem.hasDiscount ?? baseData.hasDiscount),
+          discountType: batchItem.discountType ?? baseData.discountType ?? 'percentage',
+          discountValue: Number(batchItem.discountValue ?? baseData.discountValue ?? 0),
+          sellingPrice: Number(batchItem.sellingPrice || batchItem.unitPrice || 0),
           uid: currentUser.uid,
+          status: 'active',
           createdBy: currentUser.uid,
           updatedBy: currentUser.uid,
           createdAt: new Date(),
           updatedAt: new Date(),
-          lastUpdated: new Date()
+          syncStatus: 'SYNCED',
+          isOffline: false,
+          initialQuantity: Number(batchItem.quantity || 0),
+          totalDeducted: 0
         };
 
-        // 3. Calculate initial totals from batches
-        let totalStock = 0;
-        let sellingPrice = 0;
-        let originalPrice = 0;
-        
-        if (invArr.length > 0) {
-          // Calculate total stock
-          totalStock = invArr.reduce((sum: number, batch: any) => sum + Number(batch.quantity || 0), 0);
-          
-          // Get selling price from latest batch by receivedAt
-          const sortedBatches = [...invArr].sort((a: any, b: any) => {
-            const dateA = a.receivedAt instanceof Date ? a.receivedAt : new Date(a.receivedAt);
-            const dateB = b.receivedAt instanceof Date ? b.receivedAt : new Date(b.receivedAt);
-            return dateB.getTime() - dateA.getTime();
-          });
-          // Prefer explicit batch.sellingPrice when available, otherwise use unitPrice
-          sellingPrice = Number((sortedBatches[0]?.sellingPrice ?? sortedBatches[0]?.unitPrice) || 0);
-          // originalPrice is the base/unit price from the latest batch (unitPrice)
-          originalPrice = Number(sortedBatches[0]?.unitPrice || 0);
-          
-          console.log('📊 Calculated totals:', { totalStock, sellingPrice, batchCount: invArr.length });
-        }
+        batch.set(batchRef, batchData);
+        batchRefs.push(batchId);
+        console.log('📦 Batch creation queued in batch:', batchId);
+      }
 
-        // Add calculated fields to product
-        productPayload.totalStock = totalStock;
-        productPayload.sellingPrice = sellingPrice;
-        productPayload.originalPrice = originalPrice || Number(baseData?.originalPrice || 0);
-        // Ensure VAT fields are persisted
-        productPayload.vatRate = Number(baseData?.vatRate || 0);
-        productPayload.isVatApplicable = !!baseData?.isVatApplicable;
-        // Ensure Discount fields are persisted
-        productPayload.hasDiscount = !!baseData?.hasDiscount;
-        productPayload.discountType = baseData?.discountType || 'percentage';
-        productPayload.discountValue = Number(baseData?.discountValue || 0);
+      console.log('✅ Batch prepared - will create product + ' + invArr.length + ' inventory batches');
+      
+      // Commit batch
+      await batch.commit();
+      console.log('🎉 Batch write committed successfully! Product created:', productId);
+      
+      // Update the local cache immediately for optimistic updates
+      const newLocalProd: Product = {
+        ...productData,
+        id: productId,
+        companyId,
+        totalStock,
+        sellingPrice,
+        originalPrice: originalPrice || Number((productData as any)?.originalPrice || 0),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        vatRate: Number((productData as any)?.vatRate || 0),
+        isVatApplicable: !!(productData as any)?.isVatApplicable,
+        hasDiscount: !!(productData as any)?.hasDiscount,
+        discountType: (productData as any)?.discountType || 'percentage',
+        discountValue: Number((productData as any)?.discountValue || 0),
+        isOfflineCreated: productId.startsWith('temp_')
+      } as Product;
 
-        // 4. Queue product creation in transaction
-        transaction.set(productRef, productPayload);
-        console.log('📝 Product creation queued in transaction');
-
-        // 5. Queue inventory batch creation in transaction
-        const batchRefs: string[] = [];
-        for (const batch of invArr) {
-          const batchRef = doc(collection(this.firestore, 'productInventory'));
-          const batchId = batchRef.id;
-          
-          const batchData = {
-            productId: productId,
-            productName: baseData.productName || '',
-            companyId: companyId,
-            storeId: baseData.storeId || '',
-            batchNumber: batch.batchNumber || undefined,
-            batchId: batchId, // Set batchId to document ID
-            quantity: Number(batch.quantity || 0),
-            unitPrice: Number(batch.unitPrice || 0),
-            costPrice: Number(batch.costPrice || 0) || Number(batch.unitPrice || 0),
-            receivedAt: batch.receivedAt instanceof Date ? batch.receivedAt : new Date(batch.receivedAt || new Date()),
-            expiryDate: batch.expiryDate ? (batch.expiryDate instanceof Date ? batch.expiryDate : new Date(batch.expiryDate)) : null,
-            supplier: batch.supplier || null,
-            // VAT metadata for the batch: prefer explicit batch value, fallback to product-level
-            isVatApplicable: !!(batch.isVatApplicable ?? baseData.isVatApplicable),
-            vatRate: Number(batch.vatRate ?? baseData.vatRate ?? 0),
-            // Discount metadata for the batch: prefer explicit batch value, fallback to product-level
-            hasDiscount: !!(batch.hasDiscount ?? baseData.hasDiscount),
-            discountType: batch.discountType ?? baseData.discountType ?? 'percentage',
-            discountValue: Number(batch.discountValue ?? baseData.discountValue ?? 0),
-            status: 'active',
-            totalDeducted: 0,
-            uid: currentUser.uid,
-            createdBy: currentUser.uid,
-            updatedBy: currentUser.uid,
-            createdAt: new Date(),
-            updatedAt: new Date(),
-            syncStatus: 'SYNCED',
-            isOffline: false,
-            initialQuantity: Number(batch.quantity || 0)
-          };
-
-          transaction.set(batchRef, batchData);
-          batchRefs.push(batchId);
-          console.log('📦 Batch creation queued in transaction:', batchId);
-        }
-
-        console.log('✅ Transaction prepared - will create product + ' + invArr.length + ' inventory batches atomically');
-        return productId;
-      }).then((productId) => {
-        console.log('🎉 Atomic transaction committed successfully! Product created:', productId);
-        
-        // Update the local cache immediately for optimistic updates
-        const newLocalProd: Product = {
-          ...productData,
-          id: productId,
-          companyId,
-          totalStock: invArr.reduce((sum: number, batch: any) => sum + Number(batch.quantity || 0), 0),
-          sellingPrice: invArr.length > 0 ? Number(invArr.sort((a: any, b: any) => {
-            const dateA = a.receivedAt instanceof Date ? a.receivedAt : new Date(a.receivedAt);
-            const dateB = b.receivedAt instanceof Date ? b.receivedAt : new Date(b.receivedAt);
-            return dateB.getTime() - dateA.getTime();
-          })[0]?.unitPrice || 0) : 0,
-          originalPrice: invArr.length > 0 ? Number(invArr.sort((a: any, b: any) => {
-            const dateA = a.receivedAt instanceof Date ? a.receivedAt : new Date(a.receivedAt);
-            const dateB = b.receivedAt instanceof Date ? b.receivedAt : new Date(b.receivedAt);
-            return dateB.getTime() - dateA.getTime();
-          })[0]?.unitPrice || 0) : Number((productData as any)?.originalPrice || 0),
-          createdAt: new Date(),
-          updatedAt: new Date(),
-          // include VAT in optimistic local model
-          vatRate: Number((productData as any)?.vatRate || 0),
-          isVatApplicable: !!(productData as any)?.isVatApplicable,
-          // include Discount in optimistic local model
-          hasDiscount: !!(productData as any)?.hasDiscount,
-          discountType: (productData as any)?.discountType || 'percentage',
-          discountValue: Number((productData as any)?.discountValue || 0),
-          isOfflineCreated: productId.startsWith('temp_')
-        } as Product;
-
-        this.addProductToCache(newLocalProd);
-        
-        return productId;
-      }).catch((error) => {
-        console.error('❌ Atomic transaction failed - no changes made:', error);
-        throw new Error(`Failed to create product atomically: ${error.message}`);
-      });
+      this.addProductToCache(newLocalProd);
+      
+      return productId;
       
     } catch (error) {
       this.logger.dbFailure('Atomic product creation failed', { api: 'firestore.transaction', area: 'products', collectionPath: 'products' }, error);
@@ -1559,6 +1674,115 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
     sortedProducts.sort((a, b) => (a.productName || '').localeCompare(b.productName || ''));
     return sortedProducts;
   }
+
+  /**
+   * Save products to IndexedDB for offline access
+   */
+  private async saveProductsToIndexedDB(products: Product[]): Promise<void> {
+    try {
+      const offlineProducts: OfflineProduct[] = products.map(p => ({
+        id: p.id || '',
+        uid: p.uid,
+        productName: p.productName,
+        description: p.description,
+        skuId: p.skuId,
+        productCode: p.productCode,
+        unitType: p.unitType,
+        category: p.category,
+        totalStock: p.totalStock,
+        originalPrice: p.originalPrice,
+        sellingPrice: p.sellingPrice,
+        companyId: p.companyId,
+        storeId: p.storeId,
+        barcodeId: p.barcodeId,
+        imageUrl: p.imageUrl,
+        tags: p.tags,
+        tagLabels: p.tagLabels,
+        isFavorite: p.isFavorite,
+        isVatApplicable: p.isVatApplicable,
+        vatRate: p.vatRate,
+        hasDiscount: p.hasDiscount,
+        discountType: p.discountType,
+        discountValue: p.discountValue,
+        status: p.status,
+        createdAt: p.createdAt,
+        updatedAt: p.updatedAt,
+        lastUpdated: p.lastUpdated || p.updatedAt || new Date()
+      }));
+
+      await this.indexedDBService.saveProducts(offlineProducts);
+      console.log('✅ Saved products to IndexedDB:', offlineProducts.length);
+    } catch (error) {
+      console.error('❌ Error saving products to IndexedDB:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Load products from IndexedDB when offline
+   */
+  private async loadProductsFromIndexedDB(storeId: string): Promise<Product[]> {
+    try {
+      console.log('📦 Loading products from IndexedDB for store:', storeId);
+      const offlineProducts = await this.indexedDBService.getProductsByStore(storeId);
+      
+      console.log('📦 IndexedDB query result:', {
+        storeId,
+        productsFound: offlineProducts.length
+      });
+      
+      // Log first product's raw data to see structure
+      if (offlineProducts.length > 0) {
+        console.log('🔍 Raw IndexedDB product data (first product):', offlineProducts[0]);
+        console.log('🔍 Product fields present:', Object.keys(offlineProducts[0]));
+      }
+      
+      const products: Product[] = offlineProducts.map((p: any) => {
+        // Handle both field name formats:
+        // - Standard: productName, totalStock, sellingPrice
+        // - Legacy/Manual: name, stock, price
+        const mapped = {
+          id: p.id || '',
+          uid: p.uid || '',
+          productName: p.productName || p.name || '',
+          description: p.description || '',
+          skuId: p.skuId || '',
+          productCode: p.productCode || '',
+          unitType: p.unitType || 'piece',
+          category: p.category || '',
+          totalStock: p.totalStock !== undefined ? p.totalStock : (p.stock !== undefined ? p.stock : 0),
+          originalPrice: p.originalPrice !== undefined ? p.originalPrice : (p.price !== undefined ? p.price : 0),
+          sellingPrice: p.sellingPrice !== undefined ? p.sellingPrice : (p.price !== undefined ? p.price : 0),
+          companyId: p.companyId || '',
+          storeId: p.storeId || storeId,
+          barcodeId: p.barcodeId || p.barcode || '',
+          imageUrl: p.imageUrl || p.image || '',
+          tags: p.tags || [],
+          tagLabels: p.tagLabels || [],
+          isFavorite: p.isFavorite || false,
+          isVatApplicable: p.isVatApplicable !== undefined ? p.isVatApplicable : true,
+          vatRate: p.vatRate || 12,
+          hasDiscount: p.hasDiscount || false,
+          discountType: p.discountType || 'percentage',
+          discountValue: p.discountValue || 0,
+          status: (p.status as ProductStatus) || ProductStatus.Active,
+          createdAt: p.createdAt || new Date(),
+          updatedAt: p.updatedAt || new Date(),
+          lastUpdated: p.lastUpdated || p.updatedAt || new Date()
+        };
+        
+        return mapped;
+      });
+
+      console.log('✅ Loaded products from IndexedDB:', products.length);
+      console.log('🔍 Mapped product sample (first product):', products[0]);
+      return products;
+    } catch (error) {
+      console.error('❌ Error loading products from IndexedDB:', error);
+      return [];
+    }
+  }
+  
   // Inventory is now managed in productInventory collection. Keep a helper for summary updates if needed by other services.
   async setInventorySummary(productId: string, totalStock: number, sellingPrice: number): Promise<void> {
     await this.updateProduct(productId, { totalStock, sellingPrice });

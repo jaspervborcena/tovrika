@@ -300,6 +300,9 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   selectedCartItem: CartItem | null = null;
   cartItemDetails: CartItemTaxDiscount = this.getDefaultCartItemDetails();
   
+  // Product Preview Modal State
+  readonly selectedPreviewProduct = signal<any>(null);
+  
   // Order completion status - tracks if current order is already processed
   readonly isOrderCompleted = signal<boolean>(false);
   readonly completedOrderData = signal<any>(null); // Store completed order data for reprinting
@@ -376,12 +379,20 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     const storeId = this.selectedStoreId();
     const stores = this.availableStores();
     
-    // 🔍 DEBUG: Log initial state
+    console.log('═══════════════════════════════════════════');
+    console.log('🔍 FILTERING START - Total products:', allProducts.length);
+    console.log('═══════════════════════════════════════════');
+    
     console.log('🔍 FILTERED PRODUCTS DEBUG:', {
       totalProducts: allProducts.length,
       selectedStoreId: storeId,
       availableStores: stores.length,
-      storeNames: stores.map(s => s.storeName)
+      storeNames: stores.map(s => s.storeName),
+      productTagsSample: allProducts.slice(0, 10).map(p => ({
+        name: p.productName,
+        tagLabels: p.tagLabels,
+        tags: p.tags
+      }))
     });
 
     let filtered = allProducts;
@@ -446,20 +457,51 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       });
     }
 
-    // Filter by active tag labels (OR logic - show products with ANY of the selected tags)
+    // Filter by active tag labels (AND logic - show products with ALL selected tags)
     const activeTagFilters = this.activeTagFilters();
     if (activeTagFilters.length > 0) {
       const beforeTagCount = filtered.length;
+      
+      console.log('═══════════════════════════════════════════');
+      console.log('🏷️ TAG FILTERING - Active filters:', activeTagFilters);
+      console.log('🏷️ Products to check:', beforeTagCount);
+      console.log('═══════════════════════════════════════════');
+      
+      // Show sample of what we're filtering
+      console.log('🏷️ Sample products BEFORE tag filter:');
+      filtered.slice(0, 5).forEach(p => {
+        console.log(`  - ${p.productName}: tagLabels =`, p.tagLabels);
+      });
+      
       filtered = filtered.filter(p => {
-        if (!p.tagLabels || p.tagLabels.length === 0) return false;
-        // Check if product has any of the active tag labels
-        return p.tagLabels.some(label => activeTagFilters.includes(label));
+        if (!p.tagLabels || p.tagLabels.length === 0) {
+          console.log('❌ REJECTED (no tags):', p.productName);
+          return false;
+        }
+        
+        // Check if product has ALL of the active tag labels (AND logic)
+        const hasAllTags = activeTagFilters.every(filterLabel => {
+          const hasThisTag = p.tagLabels?.includes(filterLabel) ?? false;
+          if (!hasThisTag) {
+            console.log(`❌ REJECTED ${p.productName}: Missing tag "${filterLabel}" (has: ${p.tagLabels?.join(', ') ?? 'none'})`);
+          }
+          return hasThisTag;
+        });
+        
+        if (hasAllTags) {
+          console.log(`✅ ACCEPTED: ${p.productName} (has all: ${activeTagFilters.join(', ')})`);
+        }
+        
+        return hasAllTags;
       });
-      console.log('🔍 After tag filtering:', {
-        activeFilters: activeTagFilters,
-        beforeCount: beforeTagCount,
-        afterCount: filtered.length
-      });
+      
+      console.log('═══════════════════════════════════════════');
+      console.log('🏷️ TAG FILTERING COMPLETE');
+      console.log('🏷️ Before:', beforeTagCount, 'products');
+      console.log('🏷️ After:', filtered.length, 'products');
+      console.log('🏷️ Required tags (ALL must match):', activeTagFilters);
+      console.log('🏷️ Remaining products:', filtered.map(p => p.productName));
+      console.log('═══════════════════════════════════════════');
     }
 
     // Sort by name based on current sort mode (default A–Z)
@@ -504,7 +546,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   });
 
   readonly promoProducts = computed(() =>
-    this.filteredProducts().filter(p => p.hasDiscount)
+    this.filteredProducts().filter(p => p.discountValue && p.discountValue > 0)
   );
 
   readonly bestSellerProducts = computed(() =>
@@ -536,7 +578,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   readonly isNavigationCollapsed = computed(() => this.isNavigationCollapsedSignal());
   
   // Access tabs for POS management
-  readonly accessTabs = ['New', 'Orders', 'Cancelled', 'Refunds & Returns', 'Split Payments', 'Discounts & Promotions'] as const;
+  readonly accessTabs = ['New', 'Orders', 'Cancelled', 'Returns', 'Refunds', 'Damage', 'Split Payments', 'Discounts & Promotions'] as const;
   private accessTabSignal = signal<string>('New');
   readonly accessTab = computed(() => this.accessTabSignal());
 
@@ -546,7 +588,9 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       'New': 'pos.newTab',
       'Orders': 'pos.ordersTab',
       'Cancelled': 'pos.cancelledTab',
-      'Refunds & Returns': 'pos.refundsTab',
+      'Returns': 'pos.returnsTab',
+      'Refunds': 'pos.refundsTab',
+      'Damage': 'pos.damageTab',
       'Split Payments': 'pos.splitPaymentsTab',
       'Discounts & Promotions': 'pos.discountsTab'
     };
@@ -560,6 +604,96 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   // Orders state
   private ordersSignal = signal<any[]>([]);
   readonly orders = computed(() => this.ordersSignal());
+  
+  // Filtered orders based on active tab
+  readonly filteredOrders = computed(() => {
+    const allOrders = this.ordersSignal();
+    const tab = this.accessTab();
+    
+    console.log('🔍 Filtering orders for tab:', tab, 'Total orders:', allOrders.length);
+    
+    if (tab === 'New' || tab === 'Orders') {
+      return allOrders;
+    }
+    
+    const filtered = allOrders.filter(order => {
+      // Helper to check if order has status in statusHistory
+      const hasStatusInHistory = (statusToCheck: string) => {
+        if (order.statusHistory && Array.isArray(order.statusHistory)) {
+          return order.statusHistory.some((historyItem: any) => 
+            historyItem.status?.toLowerCase() === statusToCheck.toLowerCase()
+          );
+        }
+        // Fallback to statusTags or status field
+        if (order.statusTags && Array.isArray(order.statusTags)) {
+          return order.statusTags.some((t: string) => t.toLowerCase() === statusToCheck.toLowerCase());
+        }
+        return order.status?.toLowerCase() === statusToCheck.toLowerCase();
+      };
+      
+      let matches = false;
+      
+      switch (tab) {
+        case 'Cancelled':
+          matches = hasStatusInHistory('cancelled');
+          break;
+        case 'Returns':
+          matches = hasStatusInHistory('return') || hasStatusInHistory('returned');
+          break;
+        case 'Refunds':
+          matches = hasStatusInHistory('refund') || hasStatusInHistory('refunded');
+          break;
+        case 'Damage':
+          matches = hasStatusInHistory('damage') || hasStatusInHistory('damaged');
+          break;
+        case 'Split Payments':
+          // Orders with both cash and charge payments
+          const hasCashSale = order.cashSale === true;
+          const hasChargeSale = order.chargeSale === true;
+          const hasCash = (order.cashAmount && order.cashAmount > 0) || false;
+          const hasCard = (order.cardAmount && order.cardAmount > 0) || false;
+          const isBothPayment = order.paymentMethod?.toLowerCase().includes('both') || false;
+          matches = (hasCashSale && hasChargeSale) || (hasCash && hasCard) || isBothPayment;
+          if (matches) {
+            console.log('✅ Split payment match:', order.invoiceNumber, { 
+              cashSale: order.cashSale, 
+              chargeSale: order.chargeSale, 
+              hasCash, 
+              hasCard, 
+              isBothPayment, 
+              paymentMethod: order.paymentMethod, 
+              cashAmount: order.cashAmount, 
+              cardAmount: order.cardAmount 
+            });
+          }
+          break;
+        case 'Discounts & Promotions':
+          // Orders with discountAmount > 0
+          matches = (order.discountAmount && order.discountAmount > 0) || false;
+          if (!matches) {
+            console.log('❌ No discount:', order.invoiceNumber, { 
+              discountAmount: order.discountAmount,
+              hasDiscountAmount: !!order.discountAmount,
+              allOrderFields: Object.keys(order)
+            });
+          } else {
+            console.log('✅ Discount match:', order.invoiceNumber, { discountAmount: order.discountAmount });
+          }
+          break;
+        default:
+          matches = true;
+      }
+      
+      if (matches && tab !== 'Split Payments' && tab !== 'Discounts & Promotions') {
+        console.log('✅ Order matched:', order.invoiceNumber, 'for tab:', tab, 'statusHistory:', order.statusHistory);
+      }
+      
+      return matches;
+    });
+    
+    console.log('🔍 Filtered result:', filtered.length, 'orders for tab:', tab);
+    return filtered;
+  });
   
   private isLoadingOrdersSignal = signal<boolean>(false);
   readonly isLoadingOrders = computed(() => this.isLoadingOrdersSignal());
@@ -770,19 +904,20 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     
     this.accessTabSignal.set(tab);
     
-    // When Orders tab is activated, always load recent orders
-    if (tab === 'Orders') {
-      console.log('📋 Orders tab activated, loading recent orders...');
-      console.log('🔄 About to call loadRecentOrders()...');
-      
-      // Clear search query and load recent orders
-      this.setOrderSearchQuery('');
-      this.loadRecentOrders();
-      
-      console.log('✅ loadRecentOrders() called');
-    } else if (tab !== 'Orders') {
-      // Clear orders when switching away from Orders tab
-      console.log('🧹 Clearing orders for tab:', tab);
+    // When any order-related tab is activated, ensure orders are loaded
+    const orderRelatedTabs = ['Orders', 'Cancelled', 'Returns', 'Refunds', 'Damage', 'Split Payments', 'Discounts & Promotions'];
+    if (orderRelatedTabs.includes(tab)) {
+      // Only load if we don't have orders yet
+      if (this.ordersSignal().length === 0) {
+        console.log('📋 Order tab activated, loading recent orders...');
+        this.setOrderSearchQuery('');
+        this.loadRecentOrders();
+      } else {
+        console.log('📋 Orders already loaded, just filtering for tab:', tab);
+      }
+    } else {
+      // Clear orders only when switching to non-order tabs (New tab)
+      console.log('🧹 Clearing orders for non-order tab:', tab);
       this.ordersSignal.set([]);
       this.setOrderSearchQuery('');
     }
@@ -2978,6 +3113,12 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   async processPayment(): Promise<void> {
+    // Prevent double-submission
+    if (this.isProcessing()) {
+      console.log('⚠️ Payment already processing, ignoring duplicate request');
+      return;
+    }
+    
     try {
       console.log('💳 Processing payment and completing order...');
       const totalAmount = this.cartSummary().netAmount;
@@ -3009,20 +3150,25 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       });
       
       // Generate real invoice number when payment is being processed
+      // CRITICAL: Always fetch fresh from Firestore to avoid duplicate invoice numbers
       let realInvoiceNumber: string;
       try {
-        if (this.networkService.isOffline()) {
-          // In offline mode, use manual invoice handling
-          realInvoiceNumber = this.manualInvoiceInput || 'INV-0000-000000';
-        } else {
-          // In online mode, get next invoice number from service
+        console.log('📋 Fetching fresh invoice number from Firestore...');
+        // Force a fresh read from Firestore, not from cache
+        realInvoiceNumber = await this.posService.getNextInvoiceNumberPreview();
+        
+        // Validate the invoice number is not a placeholder or error
+        if (realInvoiceNumber.includes('ERROR') || realInvoiceNumber.includes('0000-000000')) {
+          console.warn('⚠️ Invalid invoice number received, retrying...');
+          // Wait a moment and try once more
+          await new Promise(resolve => setTimeout(resolve, 500));
           realInvoiceNumber = await this.posService.getNextInvoiceNumberPreview();
         }
         
         // Update the display immediately
         this.nextInvoiceNumber.set(realInvoiceNumber);
         this.invoiceNumber = realInvoiceNumber;
-        console.log('📋 Real invoice number generated:', realInvoiceNumber);
+        console.log('📋 Fresh invoice number generated from Firestore:', realInvoiceNumber);
       } catch (invoiceError) {
         console.warn('Warning: Could not generate invoice number:', invoiceError);
         realInvoiceNumber = 'INV-0000-000000';
@@ -3032,14 +3178,45 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       this.closePaymentDialog();
       
       // Now complete the order with payment information (using captured values)
-      await this.completeOrderWithPayment(paymentInfo);
+      // Add timeout to prevent indefinite hanging
+      const orderPromise = this.completeOrderWithPayment(paymentInfo);
+      const timeoutPromise = new Promise<never>((_, reject) => 
+        setTimeout(() => reject(new Error('Order processing timeout - please check your connection')), 15000)
+      );
+      
+      await Promise.race([orderPromise, timeoutPromise]);
       
     } catch (error) {
       console.error('❌ Error processing payment:', error);
-      // Show error dialog
+      
+      // Reset processing state in service if it got stuck
+      this.posService['isProcessingSignal']?.set(false);
+      
+      // Check if this is a duplicate invoice error
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const isDuplicateError = errorMessage.includes('Duplicate invoice number');
+      
+      // Reload the invoice number to get the latest from Firestore
+      // This prevents duplicate invoice number errors on retry
+      try {
+        console.log('🔄 Reloading invoice number after failed order...');
+        await this.loadNextInvoicePreview();
+        const freshInvoiceNumber = this.nextInvoiceNumber();
+        this.invoiceNumber = freshInvoiceNumber === 'Loading...' ? 'INV-0000-000000' : freshInvoiceNumber;
+        console.log('📋 Invoice number refreshed:', this.invoiceNumber);
+      } catch (invoiceReloadError) {
+        console.warn('⚠️ Failed to reload invoice number:', invoiceReloadError);
+      }
+      
+      // Show error dialog with appropriate message
+      const errorTitle = isDuplicateError ? 'Order Already Processed' : 'Payment Processing Failed';
+      const errorMsg = isDuplicateError 
+        ? 'This invoice number has already been used. The invoice number has been refreshed. Please start a new order or try again.'
+        : `Failed to process payment and save order. Please try again.\nReason: ${errorMessage}`;
+      
       await this.showConfirmationDialog({
-        title: 'Payment Processing Failed',
-        message: `Failed to process payment and save order. Please try again.\nReason: ${error instanceof Error ? error.message : String(error)}`,
+        title: errorTitle,
+        message: errorMsg,
         confirmText: 'OK',
         cancelText: ''
       });
@@ -3798,8 +3975,9 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
 
       console.log('🧾 Offline receipt modal opened with invoice:', this.invoiceNumber);
       
-      // Clear cart for next order
-      this.clearCart();
+      // Clear cart directly without confirmation (order is completed)
+      this.posService.clearCart();
+      console.log('🗑️ Cart cleared after successful offline order');
       
     } catch (error) {
       console.error('❌ Error processing offline order:', error);
@@ -3916,6 +4094,15 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     this.showCartItemDetails = false;
     this.selectedCartItem = null;
     this.cartItemDetails = this.getDefaultCartItemDetails();
+  }
+
+  openProductPreviewModal(product: any, event: Event): void {
+    event.stopPropagation(); // Prevent add to cart
+    this.selectedPreviewProduct.set(product);
+  }
+
+  closeProductPreviewModal(): void {
+    this.selectedPreviewProduct.set(null);
   }
 
   openCartDetailsModal(): void {
@@ -4156,15 +4343,8 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
         return;
       }
       
-      // Handle offline mode - skip payment dialog and go directly to invoice preference
-      if (this.networkService.isOffline()) {
-        console.log('📱 Offline mode - showing invoice preference dialog...');
-        await this.showOfflineInvoicePreferenceDialog();
-        return;
-      }
-
-      // Online mode - Open payment dialog first (no Firestore save yet)
-      console.log('💳 Online mode - opening payment dialog for order completion...');
+      // Both online and offline modes - Open payment dialog first
+      console.log('💳 Opening payment dialog for order completion...');
       this.showPaymentDialog();
     } catch (error) {
       console.error('❌ Error processing order:', error);
@@ -4946,12 +5126,12 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   getProductTagLabels(product: Product): string[] {
     // Use denormalized tagLabels from product document for instant display
     if (product.tagLabels && product.tagLabels.length > 0) {
-      console.log('🏷️ Product', product.productName, 'has tagLabels:', product.tagLabels);
+      // console.log('🏷️ Product', product.productName, 'has tagLabels:', product.tagLabels);
       return product.tagLabels;
     }
     // Fallback: if tagLabels not available, return empty (old products)
     if (product.tags && product.tags.length > 0) {
-      console.log('⚠️ Product', product.productName, 'has tags but no tagLabels:', product.tags);
+      // console.log('⚠️ Product', product.productName, 'has tags but no tagLabels:', product.tags);
     }
     return [];
   }

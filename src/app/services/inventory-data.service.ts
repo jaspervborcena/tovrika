@@ -38,9 +38,16 @@ export class InventoryDataService {
     const colRef = collection(this.firestore, this.collectionName);
     
     try {
-      // Try the optimized query with index first
+      // Try the optimized query with index first (with timeout)
       const qRef = query(colRef, where('productId', '==', productId), orderBy('receivedAt', 'desc'));
-      const snap = await getDocs(qRef);
+      
+      const snap = await Promise.race([
+        getDocs(qRef),
+        new Promise<never>((_, reject) => 
+          setTimeout(() => reject(new Error('List batches timeout')), 5000)
+        )
+      ]);
+      
       return snap.docs.map((d) => {
         const data = d.data() as any;
         return {
@@ -51,27 +58,51 @@ export class InventoryDataService {
         } as ProductInventoryEntry;
       });
     } catch (indexError: any) {
+      // Check if it's a timeout error in offline mode
+      const errorMessage = indexError?.message || String(indexError);
+      if (errorMessage.includes('timeout') && !navigator.onLine) {
+        console.log('📱 Offline mode: returning empty batch list for FIFO planning');
+        return [];
+      }
+      
       // If index is not ready, fall back to simple query and sort in memory
-      console.warn('⚠️ Index not ready, using fallback query:', indexError.message);
+      console.warn('⚠️ Index not ready or query failed, using fallback:', indexError.message);
       
-      const simpleQuery = query(colRef, where('productId', '==', productId));
-      const snap = await getDocs(simpleQuery);
-      const batches = snap.docs.map((d) => {
-        const data = d.data() as any;
-        return {
-          id: d.id,
-          ...data,
-          receivedAt: data.receivedAt?.toDate?.() || data.receivedAt,
-          expiryDate: data.expiryDate?.toDate?.() || data.expiryDate,
-        } as ProductInventoryEntry;
-      });
-      
-      // Sort in memory by receivedAt descending
-      return batches.sort((a, b) => {
-        const dateA = new Date(a.receivedAt).getTime();
-        const dateB = new Date(b.receivedAt).getTime();
-        return dateB - dateA; // Descending order
-      });
+      try {
+        const simpleQuery = query(colRef, where('productId', '==', productId));
+        
+        const snap = await Promise.race([
+          getDocs(simpleQuery),
+          new Promise<never>((_, reject) => 
+            setTimeout(() => reject(new Error('Fallback query timeout')), 5000)
+          )
+        ]);
+        
+        const batches = snap.docs.map((d) => {
+          const data = d.data() as any;
+          return {
+            id: d.id,
+            ...data,
+            receivedAt: data.receivedAt?.toDate?.() || data.receivedAt,
+            expiryDate: data.expiryDate?.toDate?.() || data.expiryDate,
+          } as ProductInventoryEntry;
+        });
+        
+        // Sort in memory by receivedAt descending
+        return batches.sort((a, b) => {
+          const dateA = new Date(a.receivedAt).getTime();
+          const dateB = new Date(b.receivedAt).getTime();
+          return dateB - dateA; // Descending order
+        });
+      } catch (fallbackError) {
+        console.error('❌ Fallback query also failed:', fallbackError);
+        // In offline mode, return empty array
+        if (!navigator.onLine) {
+          console.log('📱 Offline mode: returning empty batch list');
+          return [];
+        }
+        throw fallbackError;
+      }
     }
   }
 
