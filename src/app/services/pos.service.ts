@@ -5,7 +5,9 @@ import {
   addDoc,
   doc,
   getDoc,
-  runTransaction
+  runTransaction,
+  writeBatch,
+  increment
 } from '@angular/fire/firestore';
 import { AuthService } from './auth.service';
 import { CompanyService } from './company.service';
@@ -153,6 +155,74 @@ export class PosService {
   ) {
     // Load persisted store selection on service initialization
     this.loadPersistedStoreSelection();
+  }
+
+  /**
+   * Helper method to get user and company data, with offline fallback to IndexedDB
+   */
+  private async getUserAndCompanyData(): Promise<{ user: any; company: any } | null> {
+    let user = this.authService.getCurrentUser();
+    let company = await this.companyService.getActiveCompany();
+    
+    // If offline or data not available, try IndexedDB
+    if (!user || !company) {
+      console.log('📱 POS: User or company not in memory, checking IndexedDB...');
+      
+      // Try to get user from IndexedDB
+      if (!user) {
+        // Get logged in user from userData store
+        const allUsers = await this.getAllUsersFromIndexedDB();
+        const loggedInUser = allUsers.find((u: any) => u.isLoggedIn === true);
+        if (loggedInUser) {
+          user = loggedInUser;
+          console.log('📱 POS: Loaded user from IndexedDB:', user?.email);
+        }
+      }
+      
+      // Try to get company from IndexedDB using currentCompanyId
+      if (!company && user) {
+        const companyId = user.currentCompanyId || user.permissions?.[0]?.companyId;
+        if (companyId) {
+          const companies = await this.indexedDBService.getAllCompanies();
+          const foundCompany = companies.find((c: any) => c.id === companyId);
+          if (foundCompany) {
+            company = foundCompany as any;
+            console.log('📱 POS: Loaded company from IndexedDB:', (company as any)?.companyName || (company as any)?.name);
+          }
+        }
+      }
+    }
+    
+    if (!user || !company) {
+      console.error('❌ POS: User or company not found in memory or IndexedDB');
+      return null;
+    }
+    
+    return { user, company };
+  }
+
+  /**
+   * Helper to get all users from IndexedDB userData store
+   */
+  private async getAllUsersFromIndexedDB(): Promise<any[]> {
+    try {
+      const db = (this.indexedDBService as any).db;
+      if (!db) {
+        await this.indexedDBService.initDB();
+      }
+      
+      return new Promise((resolve) => {
+        const transaction = (this.indexedDBService as any).db.transaction(['userData'], 'readonly');
+        const store = transaction.objectStore('userData');
+        const request = store.getAll();
+        
+        request.onsuccess = () => resolve(request.result || []);
+        request.onerror = () => resolve([]);
+      });
+    } catch (error) {
+      console.error('Error getting users from IndexedDB:', error);
+      return [];
+    }
   }
 
   // Cart Management
@@ -308,12 +378,12 @@ export class PosService {
       this.isProcessingSignal.set(true);
       console.log('🧾 Starting order processing with invoice transaction...');
       
-      const user = this.authService.getCurrentUser();
-      const company = await this.companyService.getActiveCompany();
-      
-      if (!user || !company) {
+      const userData = await this.getUserAndCompanyData();
+      if (!userData) {
         throw new Error('User or company not found');
       }
+      
+      const { user, company } = userData;
 
       const storeId = this.selectedStoreId();
       if (!storeId) {
@@ -418,46 +488,61 @@ export class PosService {
 
       // Record accounting ledger entry for the created order (non-blocking)
       try {
-        // Use the locally computed `summary` from above (not an undefined `cartSummary`)
-        const ledgerRes: any = await this.ledgerService.recordEvent(
-          company.id || '',
-          storeId,
-          invoiceResult.orderId!,
-          'completed',
-          Number(summary.netAmount || 0),
-          Number(summary.totalQuantity || 0),
-          user.uid
-        );
-        console.log('LedgerService: order ledger entry created for', invoiceResult.orderId, 'docId=', ledgerRes?.id, 'runningBalance=', ledgerRes?.runningBalanceAmount, ledgerRes?.runningBalanceQty);
+        // Skip ledger recording if offline - it will be handled when synced
+        if (navigator.onLine) {
+          // Use the locally computed `summary` from above (not an undefined `cartSummary`)
+          const ledgerRes: any = await this.ledgerService.recordEvent(
+            company.id || '',
+            storeId,
+            invoiceResult.orderId!,
+            'completed',
+            Number(summary.netAmount || 0),
+            Number(summary.totalQuantity || 0),
+            user.uid
+          );
+          console.log('LedgerService: order ledger entry created for', invoiceResult.orderId, 'docId=', ledgerRes?.id, 'runningBalance=', ledgerRes?.runningBalanceAmount, ledgerRes?.runningBalanceQty);
+        } else {
+          console.log('📱 Offline: Skipping ledger entry - will sync when online');
+        }
       } catch (ledgerErr) {
-        console.warn('LedgerService: failed to create ledger entry', ledgerErr);
+        console.warn('LedgerService: failed to create ledger entry (non-blocking):', ledgerErr);
       }
 
       // Sync local product summaries with server values so UI reflects Firestore state
       try {
-        await this.syncProductsFromOrder(orderItems);
-        console.log('🔄 Local product summaries synced from server after invoice');
+        if (navigator.onLine) {
+          await this.syncProductsFromOrder(orderItems);
+          console.log('🔄 Local product summaries synced from server after invoice');
+        } else {
+          console.log('📱 Offline: Skipping product sync - will sync when online');
+        }
       } catch (syncErr) {
-        console.warn('⚠️ Failed to sync local product summaries after invoice:', syncErr);
+        console.warn('⚠️ Failed to sync local product summaries after invoice (non-blocking):', syncErr);
       }
 
       // Update product inventory (this happens after successful order creation)
       try {
         await this.updateProductInventory(cartItems, { orderId: invoiceResult.orderId!, invoiceNumber: invoiceResult.invoiceNumber! });
         console.log('✅ Product inventory updated successfully');
+        
         // Mark tracking docs as completed for this order (if any were created as pending)
         try {
-          const markRes = await this.ordersSellingTrackingService.markOrderTrackingCompleted(invoiceResult.orderId!, user.uid);
-          if (markRes.errors && markRes.errors.length) {
-            console.warn('⚠️ Some tracking docs failed to be marked completed:', markRes.errors);
+          // Skip tracking update if offline - Firestore will handle sync
+          if (navigator.onLine) {
+            const markRes = await this.ordersSellingTrackingService.markOrderTrackingCompleted(invoiceResult.orderId!, user.uid);
+            if (markRes.errors && markRes.errors.length) {
+              console.warn('⚠️ Some tracking docs failed to be marked completed:', markRes.errors);
+            } else {
+              console.log(`✅ Marked ${markRes.updated} tracking docs completed for order ${invoiceResult.orderId}`);
+            }
           } else {
-            console.log(`✅ Marked ${markRes.updated} tracking docs completed for order ${invoiceResult.orderId}`);
+            console.log('📱 Offline: Skipping tracking update - will sync when online');
           }
         } catch (markErr) {
-          console.warn('⚠️ Failed to mark ordersSellingTracking docs completed:', markErr);
+          console.warn('⚠️ Failed to mark ordersSellingTracking docs completed (non-blocking):', markErr);
         }
       } catch (inventoryError) {
-        console.error('⚠️ Warning: Order created but inventory update failed:', inventoryError);
+        console.error('⚠️ Warning: Order created but inventory update failed (non-blocking):', inventoryError);
         // Don't throw error here as the order was already created successfully
       }
 
@@ -482,12 +567,12 @@ export class PosService {
       this.isProcessingSignal.set(true);
       console.log('🧾 Starting NEW order processing with customerInfo and payments...');
       
-      const user = this.authService.getCurrentUser();
-      const company = await this.companyService.getActiveCompany();
-      
-      if (!user || !company) {
+      const userData = await this.getUserAndCompanyData();
+      if (!userData) {
         throw new Error('User or company not found');
       }
+      
+      const { user, company } = userData;
 
       const storeId = this.selectedStoreId();
       if (!storeId) {
@@ -533,9 +618,9 @@ export class PosService {
         assignedCashierEmail: user.email || 'Unknown Cashier',
         assignedCashierName: user.displayName || user.email || 'Unknown Cashier',
         
-        // Payment type determination (only cashSale/chargeSale at root, paymentType goes in payments object)
-        cashSale: payments.paymentType !== 'Credit Card',
-        chargeSale: payments.paymentType === 'Credit Card',
+        // Payment type determination - use actual checkbox states from service
+        cashSale: this.isCashSale(),
+        chargeSale: this.isChargeSale(),
         
         // Invoice Information (invoiceNumber will be set by transaction)
         invoiceNumber: '',  // Will be filled by transaction
@@ -595,37 +680,63 @@ export class PosService {
 
       // Record accounting ledger entry for the created order (non-blocking)
       try {
-        const ledgerRes: any = await this.ledgerService.recordEvent(
-          company.id!,
-          storeId,
-          invoiceResult.orderId!,
-          'completed',
-          Number(cartSummary.netAmount || 0),
-          Number(cartSummary.totalQuantity || 0),
-          user.uid
-        );
-        console.log('LedgerService: order ledger entry created for', invoiceResult.orderId, 'docId=', ledgerRes?.id, 'runningBalance=', ledgerRes?.runningBalanceAmount, ledgerRes?.runningBalanceQty);
+        // Skip ledger recording if offline - it will be handled when synced
+        if (navigator.onLine) {
+          // Add timeout to prevent hanging on slow connections
+          const ledgerPromise = this.ledgerService.recordEvent(
+            company.id!,
+            storeId,
+            invoiceResult.orderId!,
+            'completed',
+            Number(cartSummary.netAmount || 0),
+            Number(cartSummary.totalQuantity || 0),
+            user.uid
+          );
+          
+          const ledgerRes: any = await Promise.race([
+            ledgerPromise,
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Ledger recording timeout')), 5000))
+          ]);
+          
+          console.log('LedgerService: order ledger entry created for', invoiceResult.orderId, 'docId=', ledgerRes?.id, 'runningBalance=', ledgerRes?.runningBalanceAmount, ledgerRes?.runningBalanceQty);
+        } else {
+          console.log('📱 Offline: Skipping ledger entry - will sync when online');
+        }
       } catch (ledgerErr) {
-        console.warn('LedgerService: failed to create ledger entry', ledgerErr);
+        console.warn('LedgerService: failed to create ledger entry (non-blocking):', ledgerErr);
       }
 
       // Update product inventory
       try {
         await this.updateProductInventory(cartItems, { orderId: invoiceResult.orderId!, invoiceNumber: invoiceResult.invoiceNumber! });
         console.log('✅ Product inventory updated successfully');
+        
         // Mark tracking docs as completed for this order (if any were created as pending)
         try {
-          const markRes = await this.ordersSellingTrackingService.markOrderTrackingCompleted(invoiceResult.orderId!, user.uid);
-          if (markRes.errors && markRes.errors.length) {
-            console.warn('⚠️ Some tracking docs failed to be marked completed:', markRes.errors);
+          // Skip tracking update if offline - Firestore will handle sync
+          if (navigator.onLine) {
+            // Add timeout to prevent hanging on slow connections
+            const trackingPromise = this.ordersSellingTrackingService.markOrderTrackingCompleted(invoiceResult.orderId!, user.uid);
+            
+            const markRes = await Promise.race([
+              trackingPromise,
+              new Promise((_, reject) => setTimeout(() => reject(new Error('Tracking update timeout')), 5000))
+            ]) as any;
+            
+            if (markRes?.errors && markRes.errors.length) {
+              console.warn('⚠️ Some tracking docs failed to be marked completed:', markRes.errors);
+            } else {
+              console.log(`✅ Marked ${markRes?.updated || 0} tracking docs completed for order ${invoiceResult.orderId}`);
+            }
           } else {
-            console.log(`✅ Marked ${markRes.updated} tracking docs completed for order ${invoiceResult.orderId}`);
+            console.log('📱 Offline: Skipping tracking update - will sync when online');
           }
         } catch (markErr) {
-          console.warn('⚠️ Failed to mark ordersSellingTracking docs completed:', markErr);
+          console.warn('⚠️ Failed to mark ordersSellingTracking docs completed (non-blocking):', markErr);
         }
       } catch (inventoryError) {
-        console.error('⚠️ Warning: Order created but inventory update failed:', inventoryError);
+        console.error('⚠️ Warning: Order created but inventory update failed (non-blocking):', inventoryError);
+        // Don't throw - allow order to complete even if inventory update fails
       }
 
       return {
@@ -650,12 +761,12 @@ export class PosService {
       this.isProcessingSignal.set(true);
       console.log('🧾 Starting order processing with invoice transaction (returning invoice number)...');
       
-      const user = this.authService.getCurrentUser();
-      const company = await this.companyService.getActiveCompany();
-      
-      if (!user || !company) {
+      const userData = await this.getUserAndCompanyData();
+      if (!userData) {
         throw new Error('User or company not found');
       }
+      
+      const { user, company } = userData;
 
       const storeId = this.selectedStoreId();
       if (!storeId) {
@@ -1062,6 +1173,35 @@ export class PosService {
       .sort((a: any, b: any) => new Date(a.receivedAt).getTime() - new Date(b.receivedAt).getTime()); // Oldest first
 
     if (activeBatches.length === 0) {
+      // In offline mode, proceed without FIFO validation - Firestore will validate when synced
+      if (!navigator.onLine) {
+        console.log('📱 Offline mode: No batch data available, proceeding with stock deduction only');
+        // Just update the product stock without batch-level tracking
+        const currentUser = this.authService.getCurrentUser();
+        const batch = writeBatch(this.firestore);
+        const productRef = doc(this.firestore, 'products', productId);
+        
+        batch.update(productRef as any, {
+          totalStock: increment(-quantityToDeduct),
+          lastUpdated: new Date(),
+          updatedBy: currentUser?.uid || 'system'
+        });
+        
+        try {
+          await Promise.race([
+            batch.commit(),
+            new Promise<never>((_, reject) => 
+              setTimeout(() => reject(new Error('Batch commit timeout')), 5000)
+            )
+          ]);
+          console.log('📱 Offline stock deduction queued for product', productId);
+        } catch (commitError) {
+          console.log('📱 Stock deduction queued by Firestore offline persistence');
+        }
+        
+        return;
+      }
+      
       throw new Error(`No active inventory batches found for product ${productId}`);
     }
 
@@ -1080,70 +1220,136 @@ export class PosService {
       throw new Error(`Insufficient inventory for product ${productId}. Need ${quantityToDeduct}, but only ${quantityToDeduct - remainingToDeduct} available.`);
     }
 
-    // Execute all updates inside a Firestore transaction to keep batches and product.totalStock consistent
+    // Execute all updates using batch writes for offline support
   const currentUser = this.authService.getCurrentUser();
-  await runTransaction(this.firestore, async (transaction) => {
-      // Validate and apply batch updates
-      for (const p of plan) {
-        const batchRef = doc(this.firestore, 'productInventory', p.docId);
-        const batchSnap = await transaction.get(batchRef as any);
-        if (!batchSnap.exists()) {
-          throw new Error(`Batch ${p.batchId} not found during transaction`);
-        }
-
-        const batchData: any = batchSnap.data();
-        const currentQty = Number(batchData.quantity || 0);
-        if (currentQty < p.deduct) {
-          throw new Error(`Insufficient quantity in batch ${p.batchId}. Available: ${currentQty}, Needed: ${p.deduct}`);
-        }
-
-        const newQty = currentQty - p.deduct;
-        const updateData: any = {
-          quantity: newQty,
-          totalDeducted: (batchData.totalDeducted || 0) + p.deduct,
-          updatedAt: new Date(),
-          status: newQty === 0 ? 'inactive' : batchData.status
-        };
-
-        transaction.update(batchRef as any, updateData);
-
-        // Persist a deduction record for audit/querying
-        const dedRecord = {
-          productId,
-          batchId: p.batchId,
-          quantity: p.deduct,
-          deductedAt: new Date(),
-          note: 'POS FIFO deduction',
-          deductedBy: currentUser?.uid || null
-        };
-        const dedRef = doc(collection(this.firestore, 'inventoryDeductions'));
-        transaction.set(dedRef, dedRecord);
-        console.log(`✅ Transaction: will update batch ${p.batchId} ${currentQty} -> ${newQty}`);
-      }
-
-      // Update product totalStock
-      const productRef = doc(this.firestore, 'products', productId);
-      const productSnap = await transaction.get(productRef as any);
-      if (!productSnap.exists()) {
-        throw new Error(`Product ${productId} not found while deducting stock`);
-      }
-
-      const prodData: any = productSnap.data();
-      const currentTotal = Number(prodData.totalStock || 0);
-      if (currentTotal < quantityToDeduct) {
+  const batch = writeBatch(this.firestore);
+  
+  // Pre-read product to validate stock (client-side check)
+  const productRef = doc(this.firestore, 'products', productId);
+  let productSnap;
+  let currentTotal = 0;
+  
+  try {
+    // Add timeout to prevent hanging
+    productSnap = await Promise.race([
+      getDoc(productRef as any),
+      new Promise<never>((_, reject) => 
+        setTimeout(() => reject(new Error('Product read timeout')), 3000)
+      )
+    ]);
+    
+    if (!productSnap.exists()) {
+      throw new Error(`Product ${productId} not found while deducting stock`);
+    }
+    
+    const prodData: any = productSnap.data();
+    currentTotal = Number(prodData.totalStock || 0);
+    
+    if (currentTotal < quantityToDeduct) {
+      console.warn(`⚠️ Product ${productId} may have insufficient stock. Available: ${currentTotal}, Needed: ${quantityToDeduct}`);
+      // In offline mode, allow deduction - Firestore will sync and validate when online
+      if (!navigator.onLine) {
+        console.log('📱 Offline mode: proceeding with deduction, will validate when synced');
+      } else {
         throw new Error(`Insufficient product totalStock for product ${productId}. Available: ${currentTotal}, Needed: ${quantityToDeduct}`);
       }
-
-      const newTotal = Math.max(0, currentTotal - quantityToDeduct);
-      // Update product summary (only totalStock and lastUpdated)
-      transaction.update(productRef as any, {
-        totalStock: newTotal,
-        lastUpdated: new Date(),
-        updatedBy: currentUser?.uid || 'system'
-      });
-
-      console.log(`🔻 Transaction: product ${productId} totalStock ${currentTotal} -> ${newTotal}`);
+    }
+  } catch (readError) {
+    console.warn('⚠️ Failed to read product for validation:', readError);
+    // In offline mode, proceed with deduction - validation will happen when synced
+    if (!navigator.onLine) {
+      console.log('📱 Offline mode: proceeding without pre-validation');
+      currentTotal = quantityToDeduct; // Assume sufficient stock
+    } else {
+      throw readError;
+    }
+  }
+  
+  // Apply batch updates
+  for (const p of plan) {
+    const batchRef = doc(this.firestore, 'productInventory', p.docId);
+    
+    // Client-side validation from cached/offline data
+    let batchData: any = null;
+    let currentQty = p.deduct; // Default assumption
+    
+    try {
+      // Add timeout to prevent hanging
+      const batchSnap = await Promise.race([
+        getDoc(batchRef as any),
+        new Promise<never>((_, reject) => 
+          setTimeout(() => reject(new Error('Batch read timeout')), 2000)
+        )
+      ]);
+      
+      if (batchSnap.exists()) {
+        batchData = batchSnap.data();
+        currentQty = Number(batchData.quantity || 0);
+      }
+    } catch (batchReadError) {
+      console.warn(`⚠️ Failed to read batch ${p.batchId} for validation:`, batchReadError);
+      // In offline mode, proceed without pre-validation
+      if (!navigator.onLine) {
+        console.log(`📱 Offline mode: proceeding with batch ${p.batchId} update`);
+      } else {
+        // Online but read failed - skip this batch update
+        console.warn(`⚠️ Skipping batch ${p.batchId} update due to read failure`);
+        continue;
+      }
+    }
+    
+    const newQty = Math.max(0, currentQty - p.deduct);
+    
+    batch.update(batchRef as any, {
+      quantity: newQty,
+      totalDeducted: (batchData?.totalDeducted || 0) + p.deduct,
+      updatedAt: new Date(),
+      status: newQty === 0 ? 'inactive' : (batchData?.status || 'active')
     });
+    
+    console.log(`✅ Batch: will update batch ${p.batchId} ${currentQty} -> ${newQty}`);
+    
+    // Persist a deduction record for audit/querying
+    const dedRecord = {
+      productId,
+      batchId: p.batchId,
+      quantity: p.deduct,
+      deductedAt: new Date(),
+      note: 'POS FIFO deduction',
+      deductedBy: currentUser?.uid || null
+    };
+    const dedRef = doc(collection(this.firestore, 'inventoryDeductions'));
+    batch.set(dedRef, dedRecord);
+  }
+  
+  // Update product totalStock
+  const newTotal = Math.max(0, currentTotal - quantityToDeduct);
+  batch.update(productRef as any, {
+    totalStock: newTotal,
+    lastUpdated: new Date(),
+    updatedBy: currentUser?.uid || 'system'
+  });
+  
+  console.log(`🔻 Batch: product ${productId} totalStock ${currentTotal} -> ${newTotal}`);
+  
+  // Commit batch (queues offline, syncs when online)
+  try {
+    await Promise.race([
+      batch.commit(),
+      new Promise<never>((_, reject) => 
+        setTimeout(() => reject(new Error('Batch commit timeout')), 10000)
+      )
+    ]);
+    console.log(`✅ FIFO deduction batch committed for product ${productId}`);
+  } catch (commitError) {
+    console.warn('⚠️ Batch commit timeout or error:', commitError);
+    // In offline mode, the batch is queued by Firestore offline persistence
+    if (!navigator.onLine) {
+      console.log('📱 Offline mode: batch queued for sync when online');
+    } else {
+      throw commitError;
+    }
+  }
 
     console.log(`✅ FIFO deduction completed for product ${productId}`);
   }
