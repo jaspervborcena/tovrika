@@ -470,6 +470,18 @@ export class StoreService {
   }
 
   /**
+   * Generate random invoice number (new approach - no sequential)
+   * Format: INV-YYMM-XXXXXX (where XXXXXX is random 6-digit number)
+   */
+  generateRandomInvoiceNo(): string {
+    const now = new Date();
+    const yy = String(now.getFullYear()).slice(-2);
+    const mm = String(now.getMonth() + 1).padStart(2, '0');
+    const random = Math.floor(100000 + Math.random() * 900000); // 6-digit random
+    return `INV-${yy}${mm}-${random}`;
+  }
+
+  /**
    * Parse invoice number to extract parts
    */
   parseInvoiceNo(invoiceNo: string): { prefix: string; year: string; sequence: number } | null {
@@ -484,7 +496,8 @@ export class StoreService {
   }
 
   /**
-   * Generate next invoice number
+   * Generate next invoice number (legacy sequential approach - kept for backward compatibility)
+   * @deprecated Use generateRandomInvoiceNo() instead
    */
   generateNextInvoiceNo(currentInvoiceNo: string): string {
     const parsed = this.parseInvoiceNo(currentInvoiceNo);

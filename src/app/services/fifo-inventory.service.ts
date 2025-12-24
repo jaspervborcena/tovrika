@@ -1,5 +1,5 @@
 import { Injectable, inject } from '@angular/core';
-import { Firestore, collection, query, where, orderBy, getDocs, doc, updateDoc, runTransaction, writeBatch } from '@angular/fire/firestore';
+import { Firestore, collection, query, where, orderBy, getDocs, doc, updateDoc, runTransaction, writeBatch, getDoc } from '@angular/fire/firestore';
 import { AuthService } from './auth.service';
 import { ProductService } from './product.service';
 import { ProductSummaryService } from './product-summary.service';
@@ -128,102 +128,93 @@ export class FIFOInventoryService {
       throw new Error(`Cannot fulfill FIFO deduction plan. Shortfall: ${plan.shortfall}`);
     }
 
-    // Execute EVERYTHING in a single Firestore transaction for full consistency
-    const result = await runTransaction(this.firestore, async (transaction) => {
-      console.log('🔄 Starting FIFO deduction transaction...');
-      const deductions: BatchDeductionDetail[] = [];
-      // Collect the updated batch snapshots (after applying deductions) so
-      // we can recompute product summary transactionally without doing
-      // non-transactional queries.
-      const updatedBatches: ProductInventoryEntry[] = [];
+    // Execute using batch writes for offline support
+    const batch = writeBatch(this.firestore);
+    console.log('📦 Starting FIFO deduction batch write...');
+    const deductions: BatchDeductionDetail[] = [];
+    const updatedBatches: ProductInventoryEntry[] = [];
+    
+    for (const allocation of plan.batchAllocations) {
+      const batchRef = doc(this.firestore, 'productInventory', allocation.batchId);
+      const batchDoc = await getDoc(batchRef);
       
-      for (const allocation of plan.batchAllocations) {
-        const batchRef = doc(this.firestore, 'productInventory', allocation.batchId);
-        const batchDoc = await transaction.get(batchRef);
-        
-        if (!batchDoc.exists()) {
-          throw new Error(`Batch ${allocation.batchId} not found`);
-        }
-
-        const batch = batchDoc.data() as ProductInventoryEntry;
-        
-        // Validate batch still has enough quantity
-        if (batch.quantity < allocation.allocatedQuantity) {
-          throw new Error(`Insufficient quantity in batch ${allocation.batchId}. Available: ${batch.quantity}, Needed: ${allocation.allocatedQuantity}`);
-        }
-
-        // Calculate new quantities
-        const newQuantity = batch.quantity - allocation.allocatedQuantity;
-        const newTotalDeducted = (batch.totalDeducted || 0) + allocation.allocatedQuantity;
-
-        // Create deduction record in a dedicated collection instead of
-        // storing an array on the batch document.
-        const deductionRecord: BatchDeduction & { productId: string; batchId: string } = {
-          orderId,
-          orderDetailId,
-          quantity: allocation.allocatedQuantity,
-          deductedAt: new Date(),
-          deductedBy: currentUser.uid,
-          isOffline: false,
-          syncStatus: 'SYNCED',
-          productId,
-          batchId: allocation.batchId
-        };
-
-        // Update batch with new status logic (do NOT write deductionHistory to batch)
-        const newStatus = newQuantity === 0 ? 'removed' : batch.status; // Use 'removed' when depleted
-
-        transaction.update(batchRef, {
-          quantity: newQuantity,
-          totalDeducted: newTotalDeducted,
-          updatedAt: new Date(),
-          updatedBy: currentUser.uid,
-          status: newStatus
-        });
-
-        // Persist the deduction record to the `inventoryDeductions` collection
-        const deductionRef = doc(collection(this.firestore, 'inventoryDeductions'));
-        transaction.set(deductionRef, deductionRecord);
-
-        console.log(`📦 Batch ${allocation.batchId}: ${batch.quantity} -> ${newQuantity} (status: ${newStatus})`);
-
-        // Add to deduction details
-        deductions.push({
-          batchId: allocation.batchId,
-          batchNumber: batch.batchNumber?.toString(),
-          quantity: allocation.allocatedQuantity,
-          batchUnitPrice: batch.unitPrice,
-          deductedAt: new Date(),
-          isOffline: false,
-          synced: true
-        });
-
-        // Prepare updated batch snapshot for transactional recompute
-        const updatedBatch: ProductInventoryEntry = {
-          ...batch,
-          quantity: newQuantity,
-          totalDeducted: newTotalDeducted,
-          status: newStatus
-        } as ProductInventoryEntry;
-
-        updatedBatches.push(updatedBatch);
+      if (!batchDoc.exists()) {
+        throw new Error(`Batch ${allocation.batchId} not found`);
       }
 
-      // Update product summary using ProductSummaryService within the same transaction
-      console.log('📊 Updating product summary within transaction...');
-      await this.productSummaryService.recomputeProductSummaryInTransaction(
-        transaction,
+      const batchData = batchDoc.data() as ProductInventoryEntry;
+      
+      // Validate batch still has enough quantity
+      if (batchData.quantity < allocation.allocatedQuantity) {
+        throw new Error(`Insufficient quantity in batch ${allocation.batchId}. Available: ${batchData.quantity}, Needed: ${allocation.allocatedQuantity}`);
+      }
+
+      // Calculate new quantities
+      const newQuantity = batchData.quantity - allocation.allocatedQuantity;
+      const newTotalDeducted = (batchData.totalDeducted || 0) + allocation.allocatedQuantity;
+
+      // Create deduction record in a dedicated collection
+      const deductionRecord: BatchDeduction & { productId: string; batchId: string } = {
+        orderId,
+        orderDetailId,
+        quantity: allocation.allocatedQuantity,
+        deductedAt: new Date(),
+        deductedBy: currentUser.uid,
+        isOffline: false,
+        syncStatus: 'SYNCED',
         productId,
-        undefined,
-        updatedBatches
-      );
+        batchId: allocation.batchId
+      };
 
-      console.log('✅ FIFO deduction transaction prepared successfully');
-      return deductions;
-    });
+      // Update batch with new status logic
+      const newStatus = newQuantity === 0 ? 'removed' : batchData.status;
 
-    console.log(`🎉 FIFO deduction transaction committed! Product ${productId} deducted ${quantityToDeduct} units across ${result.length} batches`);
-    return result;
+      batch.update(batchRef, {
+        quantity: newQuantity,
+        totalDeducted: newTotalDeducted,
+        updatedAt: new Date(),
+        updatedBy: currentUser.uid,
+        status: newStatus
+      });
+
+      // Persist the deduction record to the `inventoryDeductions` collection
+      const deductionRef = doc(collection(this.firestore, 'inventoryDeductions'));
+      batch.set(deductionRef, deductionRecord);
+
+      console.log(`📦 Batch ${allocation.batchId}: ${batchData.quantity} -> ${newQuantity} (status: ${newStatus})`);
+
+      // Add to deduction details
+      deductions.push({
+        batchId: allocation.batchId,
+        batchNumber: batchData.batchNumber?.toString(),
+        quantity: allocation.allocatedQuantity,
+        batchUnitPrice: batchData.unitPrice,
+        deductedAt: new Date(),
+        isOffline: false,
+        synced: true
+      });
+
+      // Prepare updated batch snapshot for summary recompute
+      const updatedBatch: ProductInventoryEntry = {
+        ...batchData,
+        quantity: newQuantity,
+        totalDeducted: newTotalDeducted,
+        status: newStatus
+      } as ProductInventoryEntry;
+
+      updatedBatches.push(updatedBatch);
+    }
+
+    // Commit batch writes
+    await batch.commit();
+    console.log('✅ FIFO deduction batch write completed');
+    
+    // Update product summary separately
+    console.log('📊 Updating product summary after deduction...');
+    await this.productSummaryService.recomputeProductSummary(productId);
+
+    console.log(`🎉 FIFO deduction completed! Product ${productId} deducted ${quantityToDeduct} units across ${deductions.length} batches`);
+    return deductions;
   }
 
   /**
@@ -314,57 +305,57 @@ export class FIFOInventoryService {
       throw new Error('User not authenticated');
     }
 
-    await runTransaction(this.firestore, async (transaction) => {
-      console.log('🔄 Starting FIFO reversal transaction...');
+    const batch = writeBatch(this.firestore);
+    console.log('📦 Starting FIFO reversal batch write...');
 
-      for (const deduction of deductions) {
-        const batchRef = doc(this.firestore, 'productInventory', deduction.batchId);
-        const batchDoc = await transaction.get(batchRef);
-        
-        if (!batchDoc.exists()) {
-          console.warn(`Batch ${deduction.batchId} not found during reversal`);
-          continue;
-        }
-
-        const batch = batchDoc.data() as ProductInventoryEntry;
-        
-        // Add quantity back
-        const newQuantity = batch.quantity + deduction.quantity;
-        const newTotalDeducted = Math.max(0, (batch.totalDeducted || 0) - deduction.quantity);
-        
-        // Update batch quantities without touching a per-batch deduction array
-        transaction.update(batchRef, {
-          quantity: newQuantity,
-          totalDeducted: newTotalDeducted,
-          updatedAt: new Date(),
-          updatedBy: currentUser.uid,
-          status: 'active' // Reactivate batch (change from 'removed' back to 'active')
-        });
-
-        // Log a reversal record for audit purposes in a dedicated collection.
-        const reversalRecord = {
-          orderId,
-          batchId: deduction.batchId,
-          productId,
-          quantity: deduction.quantity,
-          reversedAt: new Date(),
-          reversedBy: currentUser.uid
-        };
-        const reversalRef = doc(collection(this.firestore, 'inventoryDeductionReversals'));
-        transaction.set(reversalRef, reversalRecord);
-
-        console.log(`📦 Batch ${deduction.batchId}: restored ${deduction.quantity} units (now ${newQuantity})`);
+    for (const deduction of deductions) {
+      const batchRef = doc(this.firestore, 'productInventory', deduction.batchId);
+      const batchDoc = await getDoc(batchRef);
+      
+      if (!batchDoc.exists()) {
+        console.warn(`Batch ${deduction.batchId} not found during reversal`);
+        continue;
       }
 
-      // Update product summary using ProductSummaryService within the same transaction
-      console.log('📊 Updating product summary within reversal transaction...');
-      await this.productSummaryService.recomputeProductSummaryInTransaction(
-        transaction,
-        productId
-      );
-    });
+      const batchData = batchDoc.data() as ProductInventoryEntry;
+      
+      // Add quantity back
+      const newQuantity = batchData.quantity + deduction.quantity;
+      const newTotalDeducted = Math.max(0, (batchData.totalDeducted || 0) - deduction.quantity);
+      
+      // Update batch quantities
+      batch.update(batchRef, {
+        quantity: newQuantity,
+        totalDeducted: newTotalDeducted,
+        updatedAt: new Date(),
+        updatedBy: currentUser.uid,
+        status: 'active' // Reactivate batch
+      });
 
-    console.log(`🎉 FIFO reversal transaction committed! Order ${orderId} reversed successfully`);
+      // Log a reversal record for audit purposes
+      const reversalRecord = {
+        orderId,
+        batchId: deduction.batchId,
+        productId,
+        quantity: deduction.quantity,
+        reversedAt: new Date(),
+        reversedBy: currentUser.uid
+      };
+      const reversalRef = doc(collection(this.firestore, 'inventoryDeductionReversals'));
+      batch.set(reversalRef, reversalRecord);
+
+      console.log(`📦 Batch ${deduction.batchId}: restored ${deduction.quantity} units (now ${newQuantity})`);
+    }
+
+    // Commit batch writes
+    await batch.commit();
+    console.log('✅ FIFO reversal batch write completed');
+    
+    // Update product summary separately
+    console.log('📊 Updating product summary after reversal...');
+    await this.productSummaryService.recomputeProductSummary(productId);
+
+    console.log(`🎉 FIFO reversal completed! Order ${orderId} reversed successfully`);
   }
 
   /**

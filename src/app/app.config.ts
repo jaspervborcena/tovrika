@@ -32,10 +32,10 @@ export const appConfig: ApplicationConfig = {
       try {
         // Reuse existing app if already initialized elsewhere
         const app = getApps().length > 0 ? getApp() : initializeApp(environment.firebase);
-        console.log('✅ Firebase App initialized:', app.name);
+        //console.log('✅ Firebase App initialized:', app.name);
         return app;
       } catch (error) {
-        console.error('❌ Firebase App initialization failed:', error);
+        //console.error('❌ Firebase App initialization failed:', error);
         // Attempt to fallback to existing app if available
         try {
           return getApp();
@@ -53,7 +53,7 @@ export const appConfig: ApplicationConfig = {
         // This ensures user sessions persist across browser tabs and page refreshes
         return auth;
       } catch (error) {
-        console.error('❌ Firebase Auth initialization failed:', error);
+        //console.error('❌ Firebase Auth initialization failed:', error);
         throw error;
       }
     }),
@@ -61,10 +61,10 @@ export const appConfig: ApplicationConfig = {
       try {
         const app = getApp(); // Get the Firebase app instance
         const firestore = getFirestore(app); // Pass app to ensure proper linking with Auth
-        console.log('✅ Firebase Firestore initialized with app');
+        //console.log('✅ Firebase Firestore initialized with app');
         return firestore;
       } catch (error) {
-        console.error('❌ Firebase Firestore initialization failed:', error);
+        //console.error('❌ Firebase Firestore initialization failed:', error);
         throw error;
       }
     }),
