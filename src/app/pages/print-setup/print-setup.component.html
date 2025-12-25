@@ -1,0 +1,209 @@
+<app-header></app-header>
+<app-content-layout>
+  <div class="print-setup-container">
+    <div class="page-header">
+      <h1 class="page-title">🖨️ Print Setup</h1>
+      <p class="page-subtitle">Configure your receipt printers and connection settings</p>
+    </div>
+
+    <!-- Add Printer Button -->
+    <div class="action-bar" *ngIf="!isAddingPrinter()">
+      <button class="btn btn-primary" (click)="startAddingPrinter()">
+        <span class="btn-icon">➕</span>
+        Add Printer
+      </button>
+    </div>
+
+    <!-- Add/Edit Printer Form -->
+    <div class="info-section" *ngIf="isAddingPrinter()">
+      <h2 class="section-title">
+        {{ editingPrinterId() ? 'Edit Printer' : 'Add New Printer' }}
+      </h2>
+      
+      <form class="printer-form" (ngSubmit)="savePrinter()">
+        <div class="form-group">
+          <label for="printerName">Printer Name</label>
+          <input 
+            type="text" 
+            id="printerName" 
+            [(ngModel)]="printerName" 
+            name="printerName"
+            placeholder="e.g., Kitchen Printer, Cashier Printer"
+            class="form-input"
+            required
+          />
+        </div>
+
+        <div class="form-group">
+          <label for="connectionType">Connection Type</label>
+          <select 
+            id="connectionType" 
+            [(ngModel)]="connectionType" 
+            name="connectionType"
+            class="form-select"
+          >
+            <option *ngFor="let conn of connectionTypes" [value]="conn.value">
+              {{ conn.icon }} {{ conn.label }}
+            </option>
+          </select>
+          <span class="form-hint">Select how the printer is connected to your device</span>
+        </div>
+
+        <div class="form-group">
+          <label for="paperSize">Paper Size</label>
+          <select 
+            id="paperSize" 
+            [(ngModel)]="paperSize" 
+            name="paperSize"
+            class="form-select"
+          >
+            <option *ngFor="let size of paperSizes" [value]="size.value">
+              {{ size.label }} - {{ size.description }}
+            </option>
+          </select>
+          <span class="form-hint">Select the paper roll width for this printer</span>
+        </div>
+
+        <div class="form-group checkbox-group">
+          <label class="checkbox-label">
+            <input 
+              type="checkbox" 
+              [(ngModel)]="isDefault" 
+              name="isDefault"
+              class="form-checkbox"
+            />
+            <span>Set as default printer</span>
+          </label>
+        </div>
+
+        <div class="form-actions">
+          <button type="button" class="btn btn-secondary" (click)="cancelForm()">
+            Cancel
+          </button>
+          <button type="submit" class="btn btn-primary" [disabled]="isSaving() || !printerName.trim()">
+            {{ isSaving() ? 'Saving...' : (editingPrinterId() ? 'Update Printer' : 'Add Printer') }}
+          </button>
+        </div>
+      </form>
+    </div>
+
+    <!-- Loading State -->
+    <div class="loading-state" *ngIf="isLoading()">
+      <div class="spinner"></div>
+      <p>Loading printers...</p>
+    </div>
+
+    <!-- Printer List -->
+    <div class="printers-section" *ngIf="!isLoading() && printers().length > 0">
+      <h2 class="section-title">Configured Printers</h2>
+      
+      <div class="printer-cards">
+        <div 
+          class="printer-card" 
+          *ngFor="let printer of printers()"
+          [class.is-default]="printer.isDefault"
+          [class.is-inactive]="printer.status === 'inactive'"
+        >
+          <div class="printer-header">
+            <div class="printer-name">
+              <span class="printer-icon">🖨️</span>
+              {{ printer.name }}
+              <span class="default-badge" *ngIf="printer.isDefault">Default</span>
+            </div>
+            <div class="printer-status" [class.active]="printer.status === 'active'">
+              <span class="status-dot"></span>
+              {{ printer.status === 'active' ? 'Active' : 'Inactive' }}
+            </div>
+          </div>
+
+          <div class="printer-details">
+            <div class="detail-item">
+              <span class="detail-label">Connection</span>
+              <span class="detail-value">
+                {{ getConnectionIcon(printer.connectionType) }} {{ getConnectionLabel(printer.connectionType) }}
+              </span>
+            </div>
+            <div class="detail-item">
+              <span class="detail-label">Paper Size</span>
+              <span class="detail-value">{{ getPaperSizeLabel(printer.paperSize) }}</span>
+            </div>
+            <div class="detail-item" *ngIf="printer.lastConnected">
+              <span class="detail-label">Last Connected</span>
+              <span class="detail-value">{{ printer.lastConnected | date:'short' }}</span>
+            </div>
+          </div>
+
+          <div class="printer-actions">
+            <button 
+              class="btn btn-sm btn-outline"
+              (click)="togglePrinterStatus(printer)"
+              [title]="printer.status === 'active' ? 'Deactivate' : 'Activate'"
+            >
+              {{ printer.status === 'active' ? '⏸️ Deactivate' : '▶️ Activate' }}
+            </button>
+            <button 
+              class="btn btn-sm btn-outline"
+              (click)="setAsDefault(printer.id)"
+              *ngIf="!printer.isDefault"
+              title="Set as Default"
+            >
+              ⭐ Set Default
+            </button>
+            <button 
+              class="btn btn-sm btn-outline"
+              (click)="startEditingPrinter(printer)"
+              title="Edit"
+            >
+              ✏️ Edit
+            </button>
+            <button 
+              class="btn btn-sm btn-outline btn-danger"
+              (click)="deletePrinter(printer.id)"
+              title="Delete"
+            >
+              🗑️ Delete
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Empty State -->
+    <div class="empty-state" *ngIf="!isLoading() && printers().length === 0 && !isAddingPrinter()">
+      <div class="empty-icon">🖨️</div>
+      <h3>No Printers Configured</h3>
+      <p>Add a printer to start printing receipts and reports.</p>
+      <button class="btn btn-primary" (click)="startAddingPrinter()">
+        <span class="btn-icon">➕</span>
+        Add Your First Printer
+      </button>
+    </div>
+
+    <!-- Help Section -->
+    <div class="info-section help-section">
+      <h2 class="section-title">💡 Printer Setup Guide</h2>
+      <div class="help-content">
+        <div class="help-item">
+          <h4>📶 Bluetooth Printers</h4>
+          <p>Pair your Bluetooth printer in your device settings first, then add it here.</p>
+        </div>
+        <div class="help-item">
+          <h4>📡 Wi-Fi Printers</h4>
+          <p>Ensure your printer is connected to the same network as your device.</p>
+        </div>
+        <div class="help-item">
+          <h4>🔌 USB Printers</h4>
+          <p>Connect the printer via USB cable. May require additional drivers.</p>
+        </div>
+        <div class="help-item">
+          <h4>📄 Paper Sizes</h4>
+          <ul>
+            <li><strong>58mm (2 inch):</strong> Compact thermal printers, ideal for small receipts</li>
+            <li><strong>80mm (3 inch):</strong> Standard POS printers, most common size</li>
+            <li><strong>127mm (5 inch):</strong> Wide format printers for detailed receipts</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+</app-content-layout>
