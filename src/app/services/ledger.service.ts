@@ -140,6 +140,7 @@ export class LedgerService {
 
   /**
    * Get the latest running balances for 'order' eventType (or any provided eventType)
+   * Returns the SUM of all entries for the specified day (not running balance difference)
    */
   async getLatestOrderBalances(
     companyId: string,
@@ -148,69 +149,54 @@ export class LedgerService {
     eventType: 'completed' | 'returned' | 'refunded' | 'cancelled' | 'damaged' = 'completed'
   ): Promise<{ runningBalanceAmount: number; runningBalanceQty: number; runningBalanceOrderQty: number }> {
     try {
+      console.log(`📊 LedgerService.getLatestOrderBalances called:`, { companyId, storeId, date: date.toISOString(), eventType });
       const startOfDay = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0, 0);
       const endOfDay = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59, 999);
       
-      // Get the previous day to calculate the difference
-      const previousDay = new Date(date);
-      previousDay.setDate(previousDay.getDate() - 1);
-      const startOfPreviousDay = new Date(previousDay.getFullYear(), previousDay.getMonth(), previousDay.getDate(), 0, 0, 0, 0);
-      const endOfPreviousDay = new Date(previousDay.getFullYear(), previousDay.getMonth(), previousDay.getDate(), 23, 59, 59, 999);
+      console.log(`📊 Querying entries FROM ${startOfDay.toISOString()} TO ${endOfDay.toISOString()}`);
       
-      // Query for the latest ledger entry up to end of the specified date
+      // Query for ALL ledger entries within the specified day
       const q = query(
         collection(this.firestore, 'orderAccountingLedger'),
         where('companyId', '==', companyId),
         where('storeId', '==', storeId),
         where('eventType', '==', eventType),
+        where('createdAt', '>=', startOfDay),
         where('createdAt', '<=', endOfDay),
-        orderBy('createdAt', 'desc'),
-        limit(1)
+        orderBy('createdAt', 'desc')
       );
       
       const snaps = await getDocs(q);
+      console.log(`📊 Found ${snaps.docs.length} ledger entries for ${eventType} on ${date.toDateString()}`);
       
-      // Get running balance at end of specified date
-      let currentBalance = { runningBalanceAmount: 0, runningBalanceQty: 0, runningBalanceOrderQty: 0 };
-      if (snaps.docs.length > 0) {
-        const d: any = snaps.docs[0].data();
-        currentBalance = {
-          runningBalanceAmount: Number(d.runningBalanceAmount || 0),
-          runningBalanceQty: Number(d.runningBalanceQty || 0),
-          runningBalanceOrderQty: Number(d.runningBalanceOrderQty || 0)
-        };
-      }
+      // Sum up all entries for the day
+      let totalAmount = 0;
+      let totalQty = 0;
+      let totalOrderQty = 0;
       
-      // Query for the latest ledger entry up to end of previous day
-      const qPrev = query(
-        collection(this.firestore, 'orderAccountingLedger'),
-        where('companyId', '==', companyId),
-        where('storeId', '==', storeId),
-        where('eventType', '==', eventType),
-        where('createdAt', '<=', endOfPreviousDay),
-        orderBy('createdAt', 'desc'),
-        limit(1)
-      );
+      snaps.docs.forEach((doc, idx) => {
+        const d: any = doc.data();
+        const amount = Number(d.amount || 0);
+        const qty = Number(d.qty || 1);
+        const orderQty = Number(d.orderQty || 1);
+        
+        totalAmount += amount;
+        totalQty += qty;
+        totalOrderQty += orderQty;
+        
+        if (idx < 3) { // Log first 3 for debugging
+          const docCreatedAt = d.createdAt?.toDate ? d.createdAt.toDate() : new Date(d.createdAt);
+          console.log(`📊 Entry ${idx + 1}: createdAt=${docCreatedAt.toISOString()}, amount=${amount}, orderQty=${orderQty}`);
+        }
+      });
       
-      const snapsPrev = await getDocs(qPrev);
-      
-      // Get running balance at end of previous date
-      let previousBalance = { runningBalanceAmount: 0, runningBalanceQty: 0, runningBalanceOrderQty: 0 };
-      if (snapsPrev.docs.length > 0) {
-        const d: any = snapsPrev.docs[0].data();
-        previousBalance = {
-          runningBalanceAmount: Number(d.runningBalanceAmount || 0),
-          runningBalanceQty: Number(d.runningBalanceQty || 0),
-          runningBalanceOrderQty: Number(d.runningBalanceOrderQty || 0)
-        };
-      }
-      
-      // Return the difference (activity for the specified day only)
-      return {
-        runningBalanceAmount: currentBalance.runningBalanceAmount - previousBalance.runningBalanceAmount,
-        runningBalanceQty: currentBalance.runningBalanceQty - previousBalance.runningBalanceQty,
-        runningBalanceOrderQty: currentBalance.runningBalanceOrderQty - previousBalance.runningBalanceOrderQty
+      const result = {
+        runningBalanceAmount: totalAmount,
+        runningBalanceQty: totalQty,
+        runningBalanceOrderQty: totalOrderQty
       };
+      console.log(`📊 LedgerService.getLatestOrderBalances result for ${eventType}:`, result);
+      return result;
     } catch (err) {
       console.warn('LedgerService.getLatestOrderBalances fallback', err);
       return { runningBalanceAmount: 0, runningBalanceQty: 0, runningBalanceOrderQty: 0 };
