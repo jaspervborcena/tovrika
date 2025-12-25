@@ -4350,15 +4350,17 @@ export class ProductManagementComponent implements OnInit {
 
   /**
    * Check if the current product has existing inventory batches
+   * Only returns true if the product has actual inventory batch entries,
+   * not just a totalStock value (which can be edited directly)
    */
   hasExistingInventory(): boolean {
     if (!this.selectedProduct?.id) {
       return false; // New product, no existing inventory
     }
     
-    // Check if product has inventory entries or legacy inventory
-    return (this.currentBatches && this.currentBatches.length > 0) ||
-           !!(this.selectedProduct.totalStock && this.selectedProduct.totalStock > 0);
+    // Only check if product has inventory batch entries
+    // totalStock without batches should still be editable
+    return (this.currentBatches && this.currentBatches.length > 0);
   }
 
   /**
