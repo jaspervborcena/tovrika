@@ -1285,6 +1285,9 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
       if ('originalPrice' in updates) {
         updateData.originalPrice = Number((updates as any).originalPrice || 0);
       }
+      if ('sellingPrice' in updates) {
+        updateData.sellingPrice = Number((updates as any).sellingPrice || 0);
+      }
       if ('isVatApplicable' in updates) {
         updateData.isVatApplicable = !!(updates as any).isVatApplicable;
       }
@@ -1298,9 +1301,15 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
       if ('discountValue' in updates) {
         updateData.discountValue = Number((updates as any).discountValue || 0);
       }
+      // Normalize totalStock when present
+      if ('totalStock' in updates) {
+        updateData.totalStock = Number((updates as any).totalStock || 0);
+      }
 
       // Clean undefined values to prevent Firestore errors
       const cleanedUpdateData = this.cleanUndefinedValues(updateData);
+      
+      console.log('📝 updateProduct - updating product:', productId, 'with data:', cleanedUpdateData);
 
       // Use OfflineDocumentService for consistent online/offline updates
       await this.offlineDocService.updateDocument('products', productId, cleanedUpdateData);
