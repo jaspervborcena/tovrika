@@ -1052,6 +1052,7 @@ export class OverviewComponent implements OnInit {
   protected topProductsList = signal<any[]>([]);
   protected selectedStoreId = signal<string>('all');
   protected isLoading = signal<boolean>(true);
+  private analyticsLoadInProgress = false;
 
   // UI controls for overview filtering
   protected periodOptions = [
@@ -1138,15 +1139,12 @@ export class OverviewComponent implements OnInit {
   
   protected totalRevenue = computed(() => {
     const period = this.selectedPeriod();
-    // Use monthly totals for this_month and previous_month periods
-    if (period === 'this_month') {
-      return Math.max(0, this.currentMonthRevenue());
-    } else if (period === 'previous_month') {
-      return Math.max(0, this.previousMonthRevenue());
-    } else if (period === 'date_range') {
+    // Use ledgerTotalRevenue for all periods - it's now set correctly by fetchLedgerTotalsForPeriod
+    // which sums the 'amount' field from all ledger entries in the date range
+    if (period === 'date_range') {
       return Math.max(0, this.dateRangeRevenue());
     }
-    // Use ledger balance from orderAccountingLedger for other periods
+    // For today, yesterday, this_month, previous_month - all use ledgerTotalRevenue
     return Math.max(0, this.ledgerTotalRevenue());
   });
   // Use ledger order count from orderAccountingLedger
@@ -1345,26 +1343,33 @@ export class OverviewComponent implements OnInit {
 
   // Fetch today's analytics data (all event types for Sale Analytics)
   protected async fetchTodayAnalytics(): Promise<void> {
-    //console.log('🔍 fetchTodayAnalytics called');
+    console.log('🔍 fetchTodayAnalytics called');
     try {
       const companyId = this.authService.getCurrentPermission()?.companyId || '';
       const storeId = this.selectedStoreId() || this.authService.getCurrentPermission()?.storeId;
       console.log('🔍 fetchTodayAnalytics - companyId:', companyId, 'storeId:', storeId);
       if (!companyId || !storeId) {
-        //console.log('🔍 fetchTodayAnalytics - returning early, missing companyId or storeId');
+        console.log('🔍 fetchTodayAnalytics - returning early, missing companyId or storeId');
         return;
       }
 
       const today = new Date();
-      //console.log('🔍 fetchTodayAnalytics - today date:', today);
+      console.log('🔍 fetchTodayAnalytics - today date:', today);
 
       // Fetch completed orders for today
       const ledger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, today, 'completed');
+      console.log('💰 fetchTodayAnalytics - ledger response:', ledger);
       if (ledger) {
-        this.ledgerTotalRevenue.set(Math.max(0, Number(ledger.runningBalanceAmount || 0)));
-        this.ledgerTotalOrders.set(Math.max(0, Number(ledger.runningBalanceOrderQty || ledger.runningBalanceQty || 0)));
-        this.ledgerCompletedQty.set(Math.max(0, Number(ledger.runningBalanceOrderQty || ledger.runningBalanceQty || 0)));
-        this.ledgerOrderQty.set(Math.max(0, Number(ledger.runningBalanceOrderQty || ledger.runningBalanceQty || 0)));
+        const revenue = Math.max(0, Number(ledger.runningBalanceAmount || 0));
+        const orders = Math.max(0, Number(ledger.runningBalanceOrderQty || ledger.runningBalanceQty || 0));
+        console.log('💰 fetchTodayAnalytics - Setting revenue:', revenue, 'orders:', orders);
+        this.ledgerTotalRevenue.set(revenue);
+        this.ledgerTotalOrders.set(orders);
+        this.ledgerCompletedQty.set(orders);
+        this.ledgerOrderQty.set(orders);
+        console.log('💰 fetchTodayAnalytics - After set, ledgerTotalRevenue():', this.ledgerTotalRevenue());
+      } else {
+        console.log('⚠️ fetchTodayAnalytics - No ledger data returned for completed orders');
       }
 
       // Fetch returns for today
@@ -1782,15 +1787,8 @@ export class OverviewComponent implements OnInit {
     const period = this.selectedPeriod();
     console.log('⚡ applyPeriodAndLoad called with period:', period, 'at', new Date().toISOString());
     
-    // Reset all ledger signals to 0 before loading new data
-    this.ledgerReturnAmount.set(0);
-    this.ledgerReturnQty.set(0);
-    this.ledgerRefundAmount.set(0);
-    this.ledgerRefundQty.set(0);
-    this.ledgerDamageAmount.set(0);
-    this.ledgerDamageQty.set(0);
-    this.ledgerCancelQty.set(0);
-    console.log('🔄 applyPeriodAndLoad: Reset ledger signals to 0');
+    // Note: Signal reset moved to loadAnalyticsData to prevent race conditions
+    // where duplicate calls reset data while loading is in progress
     
     const now = new Date();
     let start: Date | undefined;
@@ -2264,17 +2262,10 @@ export class OverviewComponent implements OnInit {
 
       this.orders.set(normalized);
 
-      // Populate ledger-driven aggregates where possible
-      try {
-        const companyId = this.authService.getCurrentPermission()?.companyId || '';
-        const ledger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, refDate, status as any);
-        if (ledger) {
-          this.ledgerTotalRevenue.set(Number(ledger.runningBalanceAmount || 0));
-          this.ledgerTotalOrders.set(Number(ledger.runningBalanceOrderQty || ledger.runningBalanceQty || 0));
-        }
-      } catch (ledgerErr) {
-        console.warn('Ledger lookup failed in overview loader', ledgerErr);
-      }
+      // Note: Ledger-driven aggregates (revenue, orders) are now set by:
+      // - fetchTodayAnalytics() for 'today' period
+      // - fetchLedgerTotalsForPeriod() for other periods
+      // Removed redundant ledger lookup here to prevent race conditions
 
       console.log(`✅ Loaded ${normalized.length} orders for store=${storeId} (Firestore-first)`);
     } catch (err) {
@@ -2285,12 +2276,31 @@ export class OverviewComponent implements OnInit {
 
   // Method to load analytics data from Cloud Function API (clean, ledger-first)
   async loadAnalyticsData(startDate: Date, endDate: Date): Promise<void> {
+    // Guard against concurrent loads to prevent race conditions
+    if (this.analyticsLoadInProgress) {
+      console.log('⏳ Analytics load already in progress, skipping duplicate call');
+      return;
+    }
+    this.analyticsLoadInProgress = true;
     this.isLoading.set(true);
     try {
       const storeId = this.selectedStoreId() || this.authService.getCurrentPermission()?.storeId;
-      if (!storeId) return;
+      if (!storeId) {
+        this.analyticsLoadInProgress = false;
+        return;
+      }
 
       console.log('📊 Loading analytics data for store:', storeId, { startDate, endDate, period: this.selectedPeriod() });
+
+      // Reset ledger signals to 0 before loading new data (moved here from applyPeriodAndLoad
+      // to prevent race conditions where duplicate calls reset data while loading)
+      this.ledgerReturnAmount.set(0);
+      this.ledgerReturnQty.set(0);
+      this.ledgerRefundAmount.set(0);
+      this.ledgerRefundQty.set(0);
+      this.ledgerDamageAmount.set(0);
+      this.ledgerDamageQty.set(0);
+      this.ledgerCancelQty.set(0);
 
       // Load orders (Firestore-first) and normalize
       await this.loadSalesFromCloudFunction(storeId, startDate, endDate, 'completed');
@@ -2308,23 +2318,26 @@ export class OverviewComponent implements OnInit {
         this.yesterdayExpensesTotal.set(0);
       }
 
-      // Fetch ledger-driven totals for the selected period
-      try {
-        await this.fetchLedgerTotalsForPeriod(startDate, endDate);
-      } catch (ledgerErr) {
-        console.warn('Overview: failed to load ledger totals', ledgerErr);
-      }
-
       // Fetch comparison data based on selected period
+      // Note: For 'today' period, fetchTodayAnalytics handles revenue/orders
+      // For other periods, fetchLedgerTotalsForPeriod handles revenue/orders
       const period = this.selectedPeriod();
-      if (period === 'date_range') {
-        await this.fetchDateRangeComparison();
-      } else if (period === 'this_month' || period === 'previous_month') {
-        await this.fetchMonthlyComparison();
-      } else if (period === 'today') {
+      if (period === 'today') {
+        // fetchTodayAnalytics sets ledgerTotalRevenue from latest ledger entry
         await Promise.all([this.fetchTodayAnalytics(), this.fetchYesterdayRevenue()]);
       } else if (period === 'yesterday') {
+        // For yesterday, use fetchLedgerTotalsForPeriod for the date range
+        await this.fetchLedgerTotalsForPeriod(startDate, endDate);
         await this.fetchYesterdayRevenue();
+      } else if (period === 'date_range') {
+        await this.fetchLedgerTotalsForPeriod(startDate, endDate);
+        await this.fetchDateRangeComparison();
+      } else if (period === 'this_month' || period === 'previous_month') {
+        await this.fetchLedgerTotalsForPeriod(startDate, endDate);
+        await this.fetchMonthlyComparison();
+      } else {
+        // Default fallback for any other period
+        await this.fetchLedgerTotalsForPeriod(startDate, endDate);
       }
 
       // Refresh top products
@@ -2341,6 +2354,7 @@ export class OverviewComponent implements OnInit {
       console.error('❌ Error loading analytics data:', error);
     } finally {
       this.isLoading.set(false);
+      this.analyticsLoadInProgress = false;
     }
 
   }
@@ -2355,8 +2369,7 @@ export class OverviewComponent implements OnInit {
 
   /**
    * Fetch ledger totals from orderAccountingLedger for the selected period.
-   * Gets the last ledger entry for each day and sums their running balances.
-   * This gives accurate daily totals that accumulate to monthly totals.
+   * Sums up the 'amount' field from all entries in the date range.
    */
   private async fetchLedgerTotalsForPeriod(startDate: Date | null, endDate: Date | null): Promise<void> {
     try {
@@ -2370,7 +2383,7 @@ export class OverviewComponent implements OnInit {
         return;
       }
 
-      console.log(`🔍 Querying daily ledger balances from ${startDate.toISOString()} to ${endDate.toISOString()}`);
+      console.log(`🔍 Querying ledger entries from ${startDate.toISOString()} to ${endDate.toISOString()}`);
 
       // Query all ledger entries within the date range
       const q = query(
@@ -2385,40 +2398,31 @@ export class OverviewComponent implements OnInit {
       );
 
       const snaps = await getDocs(q);
-      console.log(`📊 Found ${snaps.docs.length} ledger entries`);
+      console.log(`📊 Found ${snaps.docs.length} ledger entries for period`);
 
-      // Group by day and get the latest (first in desc order) entry for each day
-      const dailyBalances = new Map<string, { amount: number; orders: number }>();
-
-      snaps.docs.forEach(doc => {
-        const d: any = doc.data();
-        if (d && d.createdAt) {
-          const createdDate = d.createdAt?.toDate ? d.createdAt.toDate() : new Date(d.createdAt);
-          const dayKey = createdDate.toISOString().split('T')[0]; // YYYY-MM-DD
-
-          // Only take the first (latest) entry for each day since we sorted desc
-          if (!dailyBalances.has(dayKey)) {
-            dailyBalances.set(dayKey, {
-              amount: Number(d.runningBalanceAmount || 0),
-              orders: Number(d.runningBalanceOrderQty || d.runningBalanceQty || 0)
-            });
-            console.log(`  📅 ${dayKey}: ₱${d.runningBalanceAmount} (${d.runningBalanceOrderQty || d.runningBalanceQty} orders)`);
-          }
-        }
-      });
-
-      // Sum all daily running balances
+      // Sum up all entries' amount and orderQty fields
       let totalAmount = 0;
       let totalOrders = 0;
-      dailyBalances.forEach((balance, day) => {
-        totalAmount += balance.amount;
-        totalOrders += balance.orders;
+
+      snaps.docs.forEach((doc, idx) => {
+        const d: any = doc.data();
+        if (d) {
+          const amount = Number(d.amount || 0);
+          const orderQty = Number(d.orderQty || 1);
+          totalAmount += amount;
+          totalOrders += orderQty;
+          
+          if (idx < 5) { // Log first 5 for debugging
+            const createdDate = d.createdAt?.toDate ? d.createdAt.toDate() : new Date(d.createdAt);
+            console.log(`  📅 Entry ${idx + 1}: ${createdDate.toISOString().split('T')[0]} - ₱${amount} (${orderQty} orders)`);
+          }
+        }
       });
 
       this.ledgerTotalRevenue.set(totalAmount);
       this.ledgerTotalOrders.set(totalOrders);
 
-      console.log(`📈 Total for ${dailyBalances.size} days: Revenue=₱${totalAmount}, Orders=${totalOrders}`);
+      console.log(`📈 Total for period: Revenue=₱${totalAmount}, Orders=${totalOrders}`);
     } catch (err) {
       console.error('fetchLedgerTotalsForPeriod error:', err);
       this.ledgerTotalRevenue.set(0);
