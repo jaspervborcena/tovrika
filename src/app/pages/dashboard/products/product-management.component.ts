@@ -185,7 +185,8 @@ import { AppConstants } from '../../../shared/enums/app-constants.enum';
     .table-wrapper {
       background: white;
       border-radius: 12px;
-      overflow: hidden;
+      overflow-x: auto;
+      overflow-y: hidden;
       box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
     }
 
@@ -271,7 +272,10 @@ import { AppConstants } from '../../../shared/enums/app-constants.enum';
     }
 
     .actions-cell {
-      text-align: center;
+      text-align: left;
+      min-width: 320px;
+      width: 320px;
+      white-space: nowrap;
     }
 
     .product-img-cell {
@@ -288,24 +292,46 @@ import { AppConstants } from '../../../shared/enums/app-constants.enum';
       background: #f3f4f6;
     }
 
+    /* Compact column widths to fit Actions */
+    .products-table th:nth-child(7), /* Stock */
+    .products-table td:nth-child(7) {
+      width: 80px;
+      text-align: center;
+    }
+
+    .products-table th:nth-child(8), /* Price */
+    .products-table td:nth-child(8) {
+      width: 100px;
+      text-align: right;
+    }
+
+    .products-table th:nth-child(9), /* Status */
+    .products-table td:nth-child(9) {
+      width: 90px;
+      text-align: center;
+    }
+
     .action-buttons {
       display: flex;
-      gap: 0.375rem; /* match stores management */
+      gap: 0.25rem;
       align-items: center;
-      justify-content: center;
+      justify-content: flex-start;
+      flex-wrap: nowrap;
+      width: 100%;
     }
 
     /* Match Stores Management emoji action buttons */
     .btn-icon-action {
-      padding: 0.5rem;
+      padding: 0.4rem;
       border: 1px solid #d1d5db;
       background: white;
       border-radius: 0.375rem;
       cursor: pointer;
       transition: all 0.2s;
-      font-size: 1.25rem;
+      font-size: 1.1rem;
       line-height: 1;
       position: relative;
+      flex-shrink: 0;
     }
 
     .btn-icon-action:hover {
@@ -1651,11 +1677,11 @@ import { AppConstants } from '../../../shared/enums/app-constants.enum';
                         <input 
                           type="number" 
                           id="totalStock"
-                          formControlName="initialQuantity"
-                          placeholder="Enter initial stock quantity"
+                          [formControlName]="isEditMode ? 'totalStock' : 'initialQuantity'"
+                          placeholder="Enter stock quantity"
                           class="form-input"
                           min="0">
-                        <small class="text-muted">Initial stock for this product</small>
+                        <small class="text-muted">{{ isEditMode ? 'Current stock quantity' : 'Initial stock for this product' }}</small>
                       </div>
 
                       <div class="form-group">
@@ -1663,7 +1689,7 @@ import { AppConstants } from '../../../shared/enums/app-constants.enum';
                         <input 
                           type="number" 
                           id="costPrice"
-                          formControlName="initialCostPrice"
+                          [formControlName]="isEditMode ? 'costPrice' : 'initialCostPrice'"
                           placeholder="0.00"
                           class="form-input"
                           min="0"
@@ -2553,6 +2579,8 @@ export class ProductManagementComponent implements OnInit {
       totalStock: [0, Validators.min(0)],
       sellingPrice: [0, Validators.min(0)],
       originalPrice: [0, Validators.min(0)],
+      // Cost Price (for edit mode when updating inventory)
+      costPrice: [0, [Validators.min(0)]],
       // Product tags
       tags: [[]],
     });
@@ -2700,6 +2728,8 @@ export class ProductManagementComponent implements OnInit {
     this.selectedTagIds.set(product.tags || []);
     // Patch the form silently to avoid triggering valueChange subscriptions
     this.productForm.patchValue(product, { emitEvent: false });
+    // Set costPrice to 0 initially (will be loaded from latest batch if available)
+    this.productForm.get('costPrice')?.setValue(0, { emitEvent: false });
     // Ensure vatRate defaults to 12 if the product doesn't include it
     const currentVat = this.productForm.get('vatRate')?.value;
     if (currentVat === null || currentVat === undefined || currentVat === '') {
@@ -2740,6 +2770,19 @@ export class ProductManagementComponent implements OnInit {
     // Enable/disable summary controls depending on whether product uses separate inventory
     const hasInv = this.hasExistingInventory();
     this.toggleControlsForInventory(hasInv);
+    
+    // Load costPrice from latest batch if available
+    if (product.id) {
+      this.inventoryDataService.listBatches(product.id).then(batches => {
+        if (batches.length > 0) {
+          const latestBatch = batches[0]; // Batches are sorted by receivedAt desc
+          this.productForm.get('costPrice')?.setValue(Number(latestBatch.costPrice || 0), { emitEvent: false });
+        }
+      }).catch(err => {
+        console.error('Failed to load batches for costPrice:', err);
+      });
+    }
+    
     this.showModal = true;
   }
 
@@ -2964,6 +3007,42 @@ export class ProductManagementComponent implements OnInit {
         }
 
         await this.productService.updateProduct(this.selectedProduct.id!, updates);
+
+        // If no inventory exists and user provided totalStock/costPrice, create an inventory entry
+        const currentBatches = await this.inventoryDataService.listBatches(this.selectedProduct.id!);
+        if (currentBatches.length === 0 && Number(formValue.totalStock || 0) > 0) {
+          console.log('📦 No inventory exists for product, creating initial batch...');
+          try {
+            const currentPermission = this.authService.getCurrentPermission();
+            if (!currentPermission) {
+              throw new Error('No permission found');
+            }
+            const batchData = {
+              batchId: this.generateBatchId(),
+              quantity: Number(formValue.totalStock || 0),
+              unitPrice: Number(formValue.originalPrice || computedOriginalPrice || 0),
+              sellingPrice: Number(formValue.sellingPrice || computedSellingPrice || 0),
+              costPrice: Number(formValue.costPrice || 0),
+              receivedAt: new Date(),
+              status: ProductStatus.Active,
+              unitType: formValue.unitType || 'pieces',
+              companyId: currentPermission.companyId,
+              storeId: currentPermission.storeId || '',
+              isVatApplicable: formValue.isVatApplicable || false,
+              vatRate: formValue.vatRate ?? AppConstants.DEFAULT_VAT_RATE,
+              hasDiscount: formValue.hasDiscount || false,
+              discountType: formValue.discountType || 'percentage',
+              discountValue: Number(formValue.discountValue || 0),
+            };
+            await this.inventoryDataService.addBatch(this.selectedProduct.id!, batchData);
+            console.log('✅ Initial inventory batch created for edited product');
+            // Refresh products to update cache
+            await this.productService.refreshProducts(currentPermission.storeId || '');
+          } catch (batchError) {
+            console.error('❌ Failed to create inventory batch for edited product:', batchError);
+            this.toastService.error('Product updated but failed to create inventory batch');
+          }
+        }
         
         } else {
         // Create new product (no embedded inventory)
