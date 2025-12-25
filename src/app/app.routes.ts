@@ -84,6 +84,10 @@ export const routes: Routes = [
     path: 'account-settings',
     loadComponent: () => import('./pages/account-settings/account-settings.component').then(m => m.AccountSettingsComponent)
   },
+  {
+    path: 'print-setup',
+    loadComponent: () => import('./pages/print-setup/print-setup.component').then(m => m.PrintSetupComponent)
+  },
   
   // Import Utility Route (admin use only)
   {
