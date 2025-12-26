@@ -128,26 +128,20 @@ export class PrintService {
   /**
    * 🎯 DIRECT HARDWARE PRINT: Bypasses browser dialog when hardware printers are available
    * This method checks for connected hardware first and prints directly if found
-   * Now uses printer configuration from IndexedDB for connection type and paper size
    */
   async printReceiptDirect(receiptData: any): Promise<{ success: boolean; method: string; message: string }> {
     try {
       console.log('🎯 Starting direct hardware print...');
       
-      // Refresh printer config from IndexedDB
+      // Load printer configuration from IndexedDB
       await this.loadPrinterConfig();
-      
       const connectionType = this.getConnectionType();
-      const paperConfig = this.getPaperSizeConfig();
-      console.log(`🖨️ Using printer config: ${connectionType} connection, ${paperConfig.width} paper`);
       
-      // Add paper size to receipt data for formatting
-      receiptData._paperSize = this.currentPrinterConfig?.paperSize || '58mm';
-      receiptData._paperConfig = paperConfig;
+      console.log(`🖨️ IndexedDB printer config: ${connectionType}`);
       
-      // Route to appropriate print method based on connection type
+      // Route based on IndexedDB configuration
       if (connectionType === 'bluetooth') {
-        console.log('📶 Using Bluetooth connection...');
+        console.log('📶 Using Bluetooth connection (from IndexedDB config)...');
         try {
           await this.printMobileESCPOS(receiptData);
           return {
@@ -157,6 +151,8 @@ export class PrintService {
           };
         } catch (btError: any) {
           console.log('⚠️ Bluetooth print failed:', btError.message);
+          // Fallback to browser print
+          console.log('🔄 Falling back to browser print...');
           this.printBrowserReceipt(receiptData);
           return {
             success: true,
@@ -167,7 +163,7 @@ export class PrintService {
       }
       
       if (connectionType === 'usb') {
-        console.log('🔌 Using USB connection...');
+        console.log('🔌 Using USB connection (from IndexedDB config)...');
         try {
           await this.printToThermalPrinter(receiptData);
           return {
@@ -177,6 +173,8 @@ export class PrintService {
           };
         } catch (usbError: any) {
           console.log('⚠️ USB print failed:', usbError.message);
+          // Fallback to browser print
+          console.log('🔄 Falling back to browser print...');
           this.printBrowserReceipt(receiptData);
           return {
             success: true,
@@ -186,7 +184,8 @@ export class PrintService {
         }
       }
       
-      // Check for available hardware printers (auto-detect)
+      // If no configuration or 'none', check for available hardware printers
+      console.log('⚠️ No printer configured in IndexedDB, checking hardware...');
       const hardwareCheck = await this.isHardwarePrinterAvailable();
       
       if (hardwareCheck.hasHardware) {
