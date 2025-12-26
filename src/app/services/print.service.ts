@@ -127,118 +127,67 @@ export class PrintService {
 
   /**
    * 🎯 DIRECT HARDWARE PRINT: Bypasses browser dialog when hardware printers are available
-   * This method checks for connected hardware first and prints directly if found
+   * USB: NO FALLBACK - Direct thermal printing only (no browser dialog)
+   * Bluetooth: Has fallback to browser print if connection fails
    */
   async printReceiptDirect(receiptData: any): Promise<{ success: boolean; method: string; message: string }> {
     try {
       console.log('🎯 Starting direct hardware print...');
       
-      // Load printer configuration from IndexedDB
-      await this.loadPrinterConfig();
-      const connectionType = this.getConnectionType();
-      
-      console.log(`🖨️ IndexedDB printer config: ${connectionType}`);
-      
-      // Route based on IndexedDB configuration
-      if (connectionType === 'bluetooth') {
-        console.log('📶 Using Bluetooth connection (from IndexedDB config)...');
-        try {
-          await this.printMobileESCPOS(receiptData);
-          return {
-            success: true,
-            method: 'Bluetooth',
-            message: 'Receipt printed successfully via Bluetooth printer'
-          };
-        } catch (btError: any) {
-          console.log('⚠️ Bluetooth print failed:', btError.message);
-          // Fallback to browser print
-          console.log('🔄 Falling back to browser print...');
-          this.printBrowserReceipt(receiptData);
-          return {
-            success: true,
-            method: 'Browser',
-            message: 'Bluetooth failed, used browser print instead'
-          };
-        }
-      }
-      
-      if (connectionType === 'usb') {
-        console.log('🔌 Using USB connection (from IndexedDB config)...');
-        try {
-          // Primary: Browser print for USB
-          console.log('🖨️ Trying browser print for USB...');
-          this.printBrowserReceipt(receiptData);
-          return {
-            success: true,
-            method: 'Browser',
-            message: 'Receipt printed successfully via browser (USB)'
-          };
-        } catch (browserError: any) {
-          console.log('⚠️ Browser print failed:', browserError.message);
-          // Fallback: Direct thermal printer
-          console.log('🔄 Falling back to thermal printer...');
-          try {
-            await this.printToThermalPrinter(receiptData);
-            return {
-              success: true,
-              method: 'USB',
-              message: 'Browser failed, used USB thermal printer instead'
-            };
-          } catch (usbError: any) {
-            console.log('⚠️ USB thermal print also failed:', usbError.message);
-            return {
-              success: false,
-              method: 'Failed',
-              message: 'Both browser and USB thermal printing failed'
-            };
-          }
-        }
-      }
-      
-      // If no configuration or 'none', check for available hardware printers
-      console.log('⚠️ No printer configured in IndexedDB, checking hardware...');
+      // Check for available hardware printers
       const hardwareCheck = await this.isHardwarePrinterAvailable();
       
       if (hardwareCheck.hasHardware) {
         console.log(`🖨️ Hardware printer detected (${hardwareCheck.type}), printing directly...`);
         
-        try {
-          // Print using the smart method (will use hardware automatically)
-          await this.printReceiptSmart(receiptData);
-          
+        // 🔥 USB: Direct print with NO fallback - fail if USB fails
+        if (hardwareCheck.type === 'USB') {
+          console.log('🔌 USB printer detected - Direct ESC/POS print (NO fallback)');
+          await this.printToThermalPrinter(receiptData);
           return {
             success: true,
-            method: hardwareCheck.type,
-            message: `Receipt printed successfully via ${hardwareCheck.type} printer`
+            method: 'USB',
+            message: 'Receipt printed successfully via USB thermal printer'
           };
-          
-        } catch (hardwareError: any) {
-          console.log(`❌ ${hardwareCheck.type} printing failed:`, hardwareError.message);
-          
-          // If hardware print fails, fall back to browser print
-          console.log('🔄 Hardware failed, falling back to browser print...');
-          this.printBrowserReceipt(receiptData);
-          
-          return {
-            success: true,
-            method: 'Browser',
-            message: `${hardwareCheck.type} printer failed, used browser print instead`
-          };
+          // Note: If USB print fails, it will throw and be caught below
         }
-      } else {
-        // No hardware available, use browser print directly
-        console.log('🖨️ No hardware printers detected, using browser print...');
-        this.printBrowserReceipt(receiptData);
         
-        return {
-          success: true,
-          method: 'Browser',
-          message: 'No hardware printers found, used browser print'
-        };
+        // 🔥 Bluetooth: Try direct, fallback to browser if fails
+        if (hardwareCheck.type === 'Bluetooth') {
+          try {
+            console.log('📱 Bluetooth printer detected - attempting direct print');
+            await this.printReceiptSmart(receiptData);
+            return {
+              success: true,
+              method: 'Bluetooth',
+              message: 'Receipt printed successfully via Bluetooth printer'
+            };
+          } catch (btError: any) {
+            console.log(`⚠️ Bluetooth printing failed: ${btError.message}`);
+            console.log('🔄 Bluetooth failed, falling back to browser print...');
+            this.printBrowserReceipt(receiptData);
+            return {
+              success: true,
+              method: 'Browser',
+              message: 'Bluetooth failed, used browser print instead'
+            };
+          }
+        }
       }
+      
+      // No hardware available, use browser print directly
+      console.log('🖨️ No hardware printers detected, using browser print...');
+      this.printBrowserReceipt(receiptData);
+      
+      return {
+        success: true,
+        method: 'Browser',
+        message: 'No hardware printers found, used browser print'
+      };
       
     } catch (error: any) {
       console.error('❌ Direct print failed:', error);
+      // For USB failures, return error without fallback
       return {
         success: false,
         method: 'Failed',
