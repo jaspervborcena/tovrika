@@ -134,28 +134,37 @@ export class PrintService {
     try {
       console.log('🎯 Starting direct hardware print...');
       
-      // Check for available hardware printers
-      const hardwareCheck = await this.isHardwarePrinterAvailable();
-      
-      if (hardwareCheck.hasHardware) {
-        console.log(`🖨️ Hardware printer detected (${hardwareCheck.type}), printing directly...`);
-        
-        // 🔥 USB: Direct print with NO fallback - fail if USB fails
-        if (hardwareCheck.type === 'USB') {
-          console.log('🔌 USB printer detected - Direct ESC/POS print (NO fallback)');
+      // 🔥 PRIORITY 1: Try USB printer first (if Web Serial API is supported)
+      if ('serial' in navigator) {
+        try {
+          console.log('🔌 USB printing supported - attempting direct USB print...');
           await this.printToThermalPrinter(receiptData);
           return {
             success: true,
             method: 'USB',
             message: 'Receipt printed successfully via USB thermal printer'
           };
-          // Note: If USB print fails, it will throw and be caught below
+        } catch (usbError: any) {
+          // If user cancelled port selection, don't try other methods
+          if (usbError.message.includes('cancelled') || usbError.message.includes('No port selected')) {
+            console.log('⚠️ USB port selection cancelled by user');
+            return {
+              success: false,
+              method: 'USB',
+              message: 'Print cancelled. Please select your USB printer to continue.'
+            };
+          }
+          console.log('⚠️ USB printing failed:', usbError.message);
+          // Continue to try Bluetooth
         }
-        
-        // 🔥 Bluetooth: Try direct, fallback to browser if fails
-        if (hardwareCheck.type === 'Bluetooth') {
+      }
+      
+      // 🔥 PRIORITY 2: Try Bluetooth printer
+      if (navigator.bluetooth) {
+        const hasBluetoothPrinters = await this.checkBluetoothPrintersAvailable();
+        if (hasBluetoothPrinters || this.isConnected) {
           try {
-            console.log('📱 Bluetooth printer detected - attempting direct print');
+            console.log('📱 Bluetooth available - attempting direct print');
             await this.printReceiptSmart(receiptData);
             return {
               success: true,
@@ -163,31 +172,21 @@ export class PrintService {
               message: 'Receipt printed successfully via Bluetooth printer'
             };
           } catch (btError: any) {
-            console.log(`⚠️ Bluetooth printing failed: ${btError.message}`);
-            console.log('🔄 Bluetooth failed, falling back to browser print...');
-            this.printBrowserReceipt(receiptData);
-            return {
-              success: true,
-              method: 'Browser',
-              message: 'Bluetooth failed, used browser print instead'
-            };
+            console.error(`❌ Bluetooth printing failed: ${btError.message}`);
           }
         }
       }
       
-      // No hardware available, use browser print directly
-      console.log('🖨️ No hardware printers detected, using browser print...');
-      this.printBrowserReceipt(receiptData);
-      
+      // No hardware printers available
+      console.error('❌ No hardware printers available');
       return {
-        success: true,
-        method: 'Browser',
-        message: 'No hardware printers found, used browser print'
+        success: false,
+        method: 'None',
+        message: 'No hardware printers found. Please connect a USB or Bluetooth thermal printer.'
       };
       
     } catch (error: any) {
       console.error('❌ Direct print failed:', error);
-      // For USB failures, return error without fallback
       return {
         success: false,
         method: 'Failed',
@@ -238,9 +237,8 @@ export class PrintService {
       // 🔥 PRIORITY 2: Try Bluetooth printer
       // Check if Web Bluetooth is supported
       if (!navigator.bluetooth) {
-        console.log('⚠️ Bluetooth not supported, falling back to browser print...');
-        this.printBrowserReceipt(receiptData);
-        return;
+        console.error('❌ Bluetooth not supported in this browser');
+        throw new Error('Bluetooth not supported. Please use a browser that supports Web Bluetooth API.');
       }
 
       // Check existing Bluetooth connection
@@ -262,9 +260,8 @@ export class PrintService {
       // Check if Bluetooth printers are available before attempting connection
       const hasBluetoothPrinters = await this.checkBluetoothPrintersAvailable();
       if (!hasBluetoothPrinters) {
-        console.log('⚠️ No Bluetooth printers found, falling back to browser print...');
-        this.printBrowserReceipt(receiptData);
-        return;
+        console.error('❌ No Bluetooth printers found');
+        throw new Error('No Bluetooth printers found. Please pair a Bluetooth thermal printer first.');
       }
 
       // Try to connect to Bluetooth printer
@@ -273,9 +270,8 @@ export class PrintService {
         const connected = await this.connectToBluetoothPrinter();
         
         if (!connected) {
-          console.log('❌ Bluetooth connection failed, falling back to browser print...');
-          this.printBrowserReceipt(receiptData);
-          return;
+          console.error('❌ Bluetooth connection failed');
+          throw new Error('Failed to connect to Bluetooth printer. Please check printer is on and paired.');
         }
       }
 
@@ -291,14 +287,11 @@ export class PrintService {
       this.isConnected = false;
       this.bluetoothCharacteristic = null;
       
-      // Fallback to browser print on any error
-      console.log('🔄 Error occurred, falling back to browser print...');
-      try {
-        this.printBrowserReceipt(receiptData);
-      } catch (fallbackError) {
-        alert(`Print Error: ${error instanceof Error ? error.message : 'Unable to print receipt. Please check your printer connection.'}`);
-        throw error;
-      }
+      // Show error message
+      console.error('❌ Print error:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unable to print receipt. Please check your printer connection.';
+      alert(`Print Error: ${errorMessage}`);
+      throw error;
     }
   }
 
@@ -807,6 +800,7 @@ export class PrintService {
   /**
    * 🖨️ Print receipt using browser's window.print() - Universal printer support
    * Now supports dynamic paper sizes from printer configuration
+   * Uses iframe to avoid showing about:blank popup
    */
   printBrowserReceipt(receiptData: any): void {
     console.log('🖨️ Opening browser print dialog...');
@@ -815,16 +809,27 @@ export class PrintService {
     const paperSize = receiptData?._paperSize || this.currentPrinterConfig?.paperSize || '58mm';
     const paperConfig = this.getPaperSizeConfig(paperSize);
     
-    // Create a new window for printing
-    const printWindow = window.open('', '_blank', 'width=400,height=600');
-    if (!printWindow) {
-      alert('Print Error: Popup blocked. Please allow popups for this site to print receipts.');
-      return;
-    }
-
     const printContent = this.generatePrintableReceipt(receiptData, paperConfig);
     
-    printWindow.document.write(`
+    // Create iframe for printing (no popup window)
+    const iframe = document.createElement('iframe');
+    iframe.style.position = 'fixed';
+    iframe.style.right = '0';
+    iframe.style.bottom = '0';
+    iframe.style.width = '0';
+    iframe.style.height = '0';
+    iframe.style.border = '0';
+    document.body.appendChild(iframe);
+    
+    const iframeDoc = iframe.contentWindow?.document;
+    if (!iframeDoc) {
+      console.error('❌ Unable to create print iframe');
+      alert('Print Error: Unable to open print dialog. Please try again.');
+      return;
+    }
+    
+    iframeDoc.open();
+    iframeDoc.write(`
       <html>
         <head>
           <title>Receipt - ${receiptData?.invoiceNumber || 'Invoice'}</title>
@@ -900,11 +905,29 @@ export class PrintService {
             }
           </style>
         </head>
-        <body onload="window.print(); window.close();">${printContent}</body>
+        <body>${printContent}</body>
       </html>
     `);
+    iframeDoc.close();
     
-    printWindow.document.close();
+    // Wait for content to load, then print
+    setTimeout(() => {
+      try {
+        iframe.contentWindow?.focus();
+        iframe.contentWindow?.print();
+        console.log('✅ Print dialog opened');
+        
+        // Remove iframe after printing
+        setTimeout(() => {
+          document.body.removeChild(iframe);
+          console.log('🧹 Print iframe cleaned up');
+        }, 1000);
+      } catch (error) {
+        console.error('❌ Print error:', error);
+        document.body.removeChild(iframe);
+        alert('Print Error: Unable to open print dialog. Please try again.');
+      }
+    }, 500);
   }
 
   /**
