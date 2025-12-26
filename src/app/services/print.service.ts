@@ -384,9 +384,15 @@ export class PrintService {
         return false;
       }
 
-      // Check if any Bluetooth devices were previously paired
-      const devices = await navigator.bluetooth.getDevices();
-      return devices.length > 0;
+      // Check if getDevices is supported (newer API)
+      if (typeof navigator.bluetooth.getDevices === 'function') {
+        const devices = await navigator.bluetooth.getDevices();
+        return devices.length > 0;
+      }
+      
+      // If getDevices not available, assume Bluetooth is available
+      // (will trigger connection dialog on first use)
+      return true;
     } catch (error) {
       console.log('🔍 Bluetooth printer check failed:', error);
       return false;
@@ -467,13 +473,38 @@ export class PrintService {
     const encoder = new TextEncoder();
     const data = encoder.encode(escposCommands);
     
+    // Check characteristic properties
+    const properties = this.bluetoothCharacteristic.properties;
+    console.log('📝 Characteristic properties:', {
+      write: properties.write,
+      writeWithoutResponse: properties.writeWithoutResponse,
+      notify: properties.notify
+    });
+    
     // Send to printer in chunks
     const chunkSize = 512;
     for (let i = 0; i < data.length; i += chunkSize) {
       const chunk = data.slice(i, i + chunkSize);
-      await this.bluetoothCharacteristic.writeValue(chunk);
+      
+      try {
+        // Try writeValueWithoutResponse first (faster, works for most thermal printers)
+        if (properties.writeWithoutResponse) {
+          await this.bluetoothCharacteristic.writeValueWithoutResponse(chunk);
+        } else if (properties.write) {
+          // Fall back to writeValue (with response)
+          await this.bluetoothCharacteristic.writeValue(chunk);
+        } else {
+          throw new Error('Characteristic does not support write operations');
+        }
+      } catch (writeError: any) {
+        console.error(`❌ Chunk ${i / chunkSize + 1} write failed:`, writeError);
+        throw new Error(`Bluetooth write failed: ${writeError.message}`);
+      }
+      
       await new Promise(resolve => setTimeout(resolve, 50));
     }
+    
+    console.log('✅ All data sent to Bluetooth printer');
   }
 
   /**
@@ -546,7 +577,8 @@ export class PrintService {
           this.usbPort = port;
         }
 
-        if (!port.readable || port.readable.locked) {
+        // Only open if port is not already open
+        if (!port.readable) {
           console.log('🔌 Opening USB port connection...');
           await port.open({ 
             baudRate: 9600,
@@ -555,6 +587,8 @@ export class PrintService {
             parity: 'none',
             flowControl: 'none'
           });
+        } else {
+          console.log('✅ Port already open, reusing connection');
         }
       }
 
@@ -566,29 +600,25 @@ export class PrintService {
         throw new Error('USB port is not writable');
       }
 
-      // Check if stream is already locked
+      // Wait for stream to be unlocked (max 2 seconds)
+      let attempts = 0;
+      while (port.writable.locked && attempts < 20) {
+        console.log(`⏳ Waiting for stream to unlock (attempt ${attempts + 1}/20)...`);
+        await new Promise(resolve => setTimeout(resolve, 100));
+        attempts++;
+      }
+
       if (port.writable.locked) {
-        console.log('⚠️ Port writable stream is locked, waiting...');
-        // Wait a bit for previous operation to complete
-        await new Promise(resolve => setTimeout(resolve, 500));
-        
-        // If still locked, force close and reopen port
-        if (port.writable.locked) {
-          console.log('🔄 Forcing port reset...');
-          try {
-            await port.close();
-            await new Promise(resolve => setTimeout(resolve, 200));
-            await port.open({ 
-              baudRate: 9600,
-              dataBits: 8,
-              stopBits: 1,
-              parity: 'none',
-              flowControl: 'none'
-            });
-          } catch (resetError) {
-            console.error('❌ Port reset failed:', resetError);
-          }
+        console.error('❌ Stream still locked after waiting, resetting port...');
+        // Force close and clear connection
+        try {
+          await port.close();
+          this.usbPort = null;
+          this.usbConnected = false;
+        } catch (closeError) {
+          console.error('❌ Error closing port:', closeError);
         }
+        throw new Error('USB port stream is locked. Please try printing again.');
       }
 
       // Use try-finally to ensure writer is always released
