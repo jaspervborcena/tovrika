@@ -384,9 +384,15 @@ export class PrintService {
         return false;
       }
 
-      // Check if any Bluetooth devices were previously paired
-      const devices = await navigator.bluetooth.getDevices();
-      return devices.length > 0;
+      // Check if getDevices is supported (newer API)
+      if (typeof navigator.bluetooth.getDevices === 'function') {
+        const devices = await navigator.bluetooth.getDevices();
+        return devices.length > 0;
+      }
+      
+      // If getDevices not available, assume Bluetooth is available
+      // (will trigger connection dialog on first use)
+      return true;
     } catch (error) {
       console.log('🔍 Bluetooth printer check failed:', error);
       return false;
