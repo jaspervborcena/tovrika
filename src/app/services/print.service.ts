@@ -145,17 +145,38 @@ export class PrintService {
             message: 'Receipt printed successfully via USB thermal printer'
           };
         } catch (usbError: any) {
-          // If user cancelled port selection, don't try other methods
-          if (usbError.message.includes('cancelled') || usbError.message.includes('No port selected')) {
-            console.log('⚠️ USB port selection cancelled by user');
-            return {
-              success: false,
-              method: 'USB',
-              message: 'Print cancelled. Please select your USB printer to continue.'
-            };
-          }
           console.log('⚠️ USB printing failed:', usbError.message);
+          
+          // If no port was selected or connection failed, force port selection dialog
+          if (usbError.message.includes('No USB printer selected') || 
+              usbError.message.includes('Port selection failed') ||
+              !this.usbPort) {
+            try {
+              console.log('🔄 Retrying with port selection dialog...');
+              // Force new port selection
+              this.usbPort = null;
+              this.usbConnected = false;
+              await this.printToThermalPrinter(receiptData);
+              return {
+                success: true,
+                method: 'USB',
+                message: 'Receipt printed successfully via USB thermal printer'
+              };
+            } catch (retryError: any) {
+              console.error('❌ USB retry failed:', retryError.message);
+              // If user cancelled, return that message
+              if (retryError.message.includes('No USB printer selected')) {
+                return {
+                  success: false,
+                  method: 'USB',
+                  message: 'Print cancelled. Please select your USB printer to continue.'
+                };
+              }
+            }
+          }
+          
           // Continue to try Bluetooth
+          console.log('🔄 Trying Bluetooth printer...');
         }
       }
       
@@ -509,8 +530,17 @@ export class PrintService {
             port = ports[0];
             console.log('📱 Found previously authorized USB printer');
           } else {
-            console.log('🔍 No authorized printers, requesting user selection...');
-            port = await (navigator as any).serial.requestPort();
+            // No authorized ports - ALWAYS show port selection dialog
+            console.log('🔍 No authorized printers found, opening port selection dialog...');
+            try {
+              port = await (navigator as any).serial.requestPort();
+              console.log('✅ User selected USB port');
+            } catch (error: any) {
+              if (error.name === 'NotFoundError') {
+                throw new Error('No USB printer selected. Please select your printer from the list.');
+              }
+              throw new Error(`Port selection failed: ${error.message}`);
+            }
           }
           
           this.usbPort = port;
