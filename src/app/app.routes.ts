@@ -1,3 +1,5 @@
+
+
 import { Routes, Router, ActivatedRouteSnapshot, RouterStateSnapshot } from '@angular/router';
 import { inject } from '@angular/core';
 import { authGuard } from './guards/auth.guard';
@@ -238,6 +240,22 @@ export const routes: Routes = [
   {
     path: 'pos/mobile/receipt-preview',
     loadComponent: () => import('./pages/dashboard/pos/mobile/mobile-receipt-preview.component').then(m => m.MobileReceiptPreviewComponent),
+    canActivate: [authGuard, policyGuard, onboardingGuard, roleGuard],
+    data: { roles: ['creator', 'store_manager', 'cashier'] }
+  },
+
+  // BACKUP Mobile POS Route for Testing - Uses print.service.bak.ts
+  {
+    path: 'pos/mobile-bak',
+    loadComponent: () => import('./pages/dashboard/pos/mobile_bak/pos-mobile.component').then(m => m.PosMobileBakComponent),
+    canActivate: [authGuard, policyGuard, onboardingGuard, roleGuard],
+    data: { roles: ['creator', 'store_manager', 'cashier'] }
+  },
+
+  // BACKUP Mobile Receipt Preview Route for Testing
+  {
+    path: 'pos/mobile-bak/receipt-preview',
+    loadComponent: () => import('./pages/dashboard/pos/mobile_bak/mobile-receipt-preview.component').then(m => m.MobileReceiptPreviewBakComponent),
     canActivate: [authGuard, policyGuard, onboardingGuard, roleGuard],
     data: { roles: ['creator', 'store_manager', 'cashier'] }
   },
