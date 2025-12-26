@@ -1,36 +1,12 @@
-import { Injectable, inject } from '@angular/core';
-import { IndexedDBService } from '../core/services/indexeddb.service';
+import { Injectable } from '@angular/core';
 
 // Web Bluetooth API types (simplified)
 declare const navigator: any;
-
-// Printer configuration interface (matches print-setup component)
-export interface PrinterConfig {
-  id: string;
-  name: string;
-  connectionType: 'bluetooth' | 'wifi' | 'usb' | 'none';
-  paperSize: '58mm' | '80mm' | '127mm';
-  status: 'active' | 'inactive';
-  isDefault: boolean;
-  lastConnected?: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-// Paper size configuration
-export interface PaperSizeConfig {
-  width: string;        // CSS width (e.g., '58mm', '80mm', '127mm')
-  maxWidth: string;     // CSS max-width in pixels
-  receiptWidth: number; // Character width for ESC/POS
-  fontSize: string;     // Base font size
-  lineChars: number;    // Characters per line for formatting
-}
 
 @Injectable({
   providedIn: 'root'
 })
 export class PrintService {
-  private indexedDBService = inject(IndexedDBService);
   
   // Bluetooth printer connection state
   private bluetoothDevice: any = null;
@@ -40,90 +16,8 @@ export class PrintService {
   // USB printer connection state
   private usbPort: any = null;
   private usbConnected = false;
-  
-  // Current printer configuration (loaded from IndexedDB)
-  private currentPrinterConfig: PrinterConfig | null = null;
-  
-  // Paper size configurations
-  private readonly paperSizeConfigs: Record<string, PaperSizeConfig> = {
-    '58mm': {
-      width: '58mm',
-      maxWidth: '210px',
-      receiptWidth: 32,
-      fontSize: '11px',
-      lineChars: 32
-    },
-    '80mm': {
-      width: '80mm',
-      maxWidth: '300px',
-      receiptWidth: 48,
-      fontSize: '12px',
-      lineChars: 48
-    },
-    '127mm': {
-      width: '127mm',
-      maxWidth: '480px',
-      receiptWidth: 64,
-      fontSize: '13px',
-      lineChars: 64
-    }
-  };
 
-  constructor() {
-    // Load printer config on service initialization
-    this.loadPrinterConfig();
-  }
-  
-  /**
-   * 🔧 Load default printer configuration from IndexedDB
-   */
-  async loadPrinterConfig(): Promise<PrinterConfig | null> {
-    try {
-      const printers = await this.indexedDBService.getSetting('printerConfigs') as PrinterConfig[] | null;
-      if (printers && Array.isArray(printers) && printers.length > 0) {
-        // Find default printer or first active printer
-        const defaultPrinter = printers.find(p => p.isDefault && p.status === 'active');
-        const activePrinter = printers.find(p => p.status === 'active');
-        this.currentPrinterConfig = defaultPrinter || activePrinter || printers[0];
-        console.log('🖨️ Loaded printer config:', this.currentPrinterConfig);
-        return this.currentPrinterConfig;
-      }
-      console.log('⚠️ No printer configuration found in IndexedDB');
-      return null;
-    } catch (error) {
-      console.error('Failed to load printer config:', error);
-      return null;
-    }
-  }
-  
-  /**
-   * 📄 Get current paper size configuration
-   */
-  getPaperSizeConfig(paperSize?: string): PaperSizeConfig {
-    const size = paperSize || this.currentPrinterConfig?.paperSize || '58mm';
-    return this.paperSizeConfigs[size] || this.paperSizeConfigs['58mm'];
-  }
-  
-  /**
-   * 🔌 Get current printer connection type
-   */
-  getConnectionType(): 'bluetooth' | 'wifi' | 'usb' | 'none' {
-    return this.currentPrinterConfig?.connectionType || 'none';
-  }
-  
-  /**
-   * 🖨️ Get current printer config
-   */
-  getCurrentPrinterConfig(): PrinterConfig | null {
-    return this.currentPrinterConfig;
-  }
-  
-  /**
-   * 🔄 Refresh printer config from IndexedDB
-   */
-  async refreshPrinterConfig(): Promise<PrinterConfig | null> {
-    return this.loadPrinterConfig();
-  }
+  constructor() { }
 
   /**
    * 🎯 DIRECT HARDWARE PRINT: Bypasses browser dialog when hardware printers are available
@@ -133,70 +27,7 @@ export class PrintService {
     try {
       console.log('🎯 Starting direct hardware print...');
       
-      // Load printer configuration from IndexedDB
-      await this.loadPrinterConfig();
-      const connectionType = this.getConnectionType();
-      
-      console.log(`🖨️ IndexedDB printer config: ${connectionType}`);
-      
-      // Route based on IndexedDB configuration
-      if (connectionType === 'bluetooth') {
-        console.log('📶 Using Bluetooth connection (from IndexedDB config)...');
-        try {
-          await this.printMobileESCPOS(receiptData);
-          return {
-            success: true,
-            method: 'Bluetooth',
-            message: 'Receipt printed successfully via Bluetooth printer'
-          };
-        } catch (btError: any) {
-          console.log('⚠️ Bluetooth print failed:', btError.message);
-          // Fallback to browser print
-          console.log('🔄 Falling back to browser print...');
-          this.printBrowserReceipt(receiptData);
-          return {
-            success: true,
-            method: 'Browser',
-            message: 'Bluetooth failed, used browser print instead'
-          };
-        }
-      }
-      
-      if (connectionType === 'usb') {
-        console.log('🔌 Using USB connection (from IndexedDB config)...');
-        try {
-          // Primary: Browser print for USB
-          console.log('🖨️ Trying browser print for USB...');
-          this.printBrowserReceipt(receiptData);
-          return {
-            success: true,
-            method: 'Browser',
-            message: 'Receipt printed successfully via browser (USB)'
-          };
-        } catch (browserError: any) {
-          console.log('⚠️ Browser print failed:', browserError.message);
-          // Fallback: Direct thermal printer
-          console.log('🔄 Falling back to thermal printer...');
-          try {
-            await this.printToThermalPrinter(receiptData);
-            return {
-              success: true,
-              method: 'USB',
-              message: 'Browser failed, used USB thermal printer instead'
-            };
-          } catch (usbError: any) {
-            console.log('⚠️ USB thermal print also failed:', usbError.message);
-            return {
-              success: false,
-              method: 'Failed',
-              message: 'Both browser and USB thermal printing failed'
-            };
-          }
-        }
-      }
-      
-      // If no configuration or 'none', check for available hardware printers
-      console.log('⚠️ No printer configured in IndexedDB, checking hardware...');
+      // Check for available hardware printers
       const hardwareCheck = await this.isHardwarePrinterAvailable();
       
       if (hardwareCheck.hasHardware) {
@@ -601,21 +432,10 @@ export class PrintService {
   /**
    * 📄 Generate ESC/POS commands for thermal printer (optimized for Xprinter)
    * Made public to allow components to generate ESC/POS content for preview
-   * Updated: Support multiple paper sizes (58mm, 80mm, 127mm)
+   * Updated: Increased font size and improved print quality
    */
   generateESCPOSCommands(receiptData: any): string {
     let commands = '';
-    
-    // Get paper size configuration
-    const paperSize = receiptData?._paperSize || this.currentPrinterConfig?.paperSize || '58mm';
-    const paperConfig = this.getPaperSizeConfig(paperSize);
-    const lineChars = paperConfig.lineChars;
-    
-    console.log(`📄 Generating ESC/POS for ${paperSize} paper (${lineChars} chars/line)`);
-    
-    // Generate separator line based on paper width
-    const separatorLine = '-'.repeat(lineChars) + '\n';
-    const doubleSeparatorLine = '='.repeat(lineChars) + '\n';
     
     // Initialize printer with better quality settings
     commands += '\x1B\x40'; // Initialize
@@ -658,7 +478,7 @@ export class PrintService {
     commands += '\x1D\x21\x00'; // Back to normal size
     commands += '\x1B\x61\x00'; // Left alignment for rest
     
-    commands += separatorLine;
+    commands += '--------------------------------\n';
     
     // Payment Method with filled/empty circles (Cash by default, both can be selected)
     const isCashSale = receiptData?.isCashSale !== false; // Default to true unless explicitly false
@@ -667,7 +487,7 @@ export class PrintService {
     commands += `Cash: ${isCashSale ? '\u25CF' : '\u25CB'}   Charge: ${isChargeSale ? '\u25CF' : '\u25CB'}\n`;
     commands += '\x1B\x45\x00'; // Bold off
     
-    commands += separatorLine;
+    commands += '--------------------------------\n';
     
     // Customer info - BOLD for sold to
     commands += '\x1B\x45\x01'; // Bold on
@@ -684,7 +504,7 @@ export class PrintService {
       }
     }
     
-    commands += separatorLine;
+    commands += '--------------------------------------------------\n';
     
     // Date and Cashier - BOLD
     commands += '\x1B\x45\x01'; // Bold on
@@ -693,18 +513,13 @@ export class PrintService {
     commands += `${date.toLocaleDateString()} ${date.toLocaleTimeString()}\n`;
     commands += '\x1B\x45\x00'; // Bold off
     
-    commands += separatorLine;
+    commands += '--------------------------------------------------\n';
     
-    // Items header - BOLD and clearer (adapt to paper width)
+    // Items header - BOLD and clearer
     commands += '\x1B\x45\x01'; // Bold on
-    // Dynamic header based on paper size
-    const qtyColWidth = 4;
-    const totalColWidth = 10;
-    const productColWidth = lineChars - qtyColWidth - totalColWidth - 2; // -2 for spaces
-    const itemsHeader = 'Qty'.padEnd(qtyColWidth) + 'Product Name'.padEnd(productColWidth) + 'Total'.padStart(totalColWidth);
-    commands += itemsHeader + '\n';
+    commands += 'Qty Product Name             Total\n';
     commands += '\x1B\x45\x00'; // Bold off
-    commands += separatorLine;
+    commands += '--------------------------------\n';
     
     if (receiptData?.items) {
       receiptData.items.forEach((item: any) => {
@@ -712,37 +527,37 @@ export class PrintService {
         const unitType = item.unitType && item.unitType !== 'N/A' ? ` ${item.unitType.substring(0, 2)}` : '';
         const total = (item.total || 0).toFixed(2);
         
-        // Dynamic formatting based on paper width
+        // Optimize for 58mm: Qty first, then product name, then total
         const qtyWithUnit = `${qty}${unitType}`;
-        const qtyPadded = qtyWithUnit.padEnd(qtyColWidth);
+        const qtyPadded = qtyWithUnit.padEnd(3); // 3 chars for quantity
         
-        // Product name - limited to fit paper width
-        const maxProductNameLength = productColWidth - 1;
+        // Product name - limited to fit 58mm width
+        const maxProductNameLength = 20; // Reduced for 58mm
         const productName = (item.productName || item.name || 'Item').substring(0, maxProductNameLength);
         const productPadded = productName.padEnd(maxProductNameLength);
         
         // Total - right aligned
-        const totalPadded = total.padStart(totalColWidth);
+        const totalPadded = total.padStart(7); // 7 chars for amount
         
-        // Make item lines slightly bolder
-        commands += '\x1B\x45\x01'; // Bold on for item
-        commands += `${qtyPadded} ${productPadded} ${totalPadded}\n`;
-        commands += '\x1B\x45\x00'; // Bold off
+  // Make item lines slightly bolder
+  commands += '\x1B\x45\x01'; // Bold on for item
+  commands += `${qtyPadded} ${productPadded} ${totalPadded}\n`;
+  commands += '\x1B\x45\x00'; // Bold off
 
-        // SKU on separate indented line (show SKU after product name)
-        const skuLine = `    SKU: ${item.skuId || item.productId || ''}`;
-        commands += `${skuLine}\n`;
+  // SKU on separate indented line (show SKU after product name)
+  const skuLine = `    SKU: ${item.skuId || item.productId || ''}`;
+  commands += `${skuLine}\n`;
 
-        // Unit price on separate line, indented
-        const unitPrice = (item.sellingPrice || item.price || 0).toFixed(2);
-        commands += `    @ ${unitPrice} each\n`;
+  // Unit price on separate line, indented
+  const unitPrice = (item.sellingPrice || item.price || 0).toFixed(2);
+  commands += `    @ ${unitPrice} each\n`;
       });
     }
     
-    commands += separatorLine;
+    commands += '--------------------------------\n';
     
-    // Totals - Right aligned with dynamic width and BOLD amounts
-    const receiptWidth = lineChars; // Use dynamic width based on paper size
+    // Totals - Right aligned for 58mm printer with BOLD amounts
+    const receiptWidth = 32; // 58mm printer width
     
     // Subtotal - always show (BOLD)
     commands += '\x1B\x45\x01'; // Bold on
@@ -764,35 +579,35 @@ export class PrintService {
     commands += '\x1B\x45\x01'; // Bold on
     const vatExemptAmt = (receiptData?.vatExempt || 0).toFixed(2);
     const vatExemptLine = `VAT Exempt: ${vatExemptAmt}`;
-    const vatExemptSpaces = ' '.repeat(Math.max(0, receiptWidth - vatExemptLine.length));
+    const vatExemptSpaces = ' '.repeat(receiptWidth - vatExemptLine.length);
     commands += `${vatExemptSpaces}${vatExemptLine}\n`;
     commands += '\x1B\x45\x00'; // Bold off
     
     // Discount - always show (BOLD)
     commands += '\x1B\x45\x01'; // Bold on
-    const discountAmt2 = (receiptData?.discount || 0).toFixed(2);
-    const discountLine = `Discount: ${discountAmt2}`;
-    const discountSpaces = ' '.repeat(Math.max(0, receiptWidth - discountLine.length));
+    const discountAmt = (receiptData?.discount || 0).toFixed(2);
+    const discountLine = `Discount: ${discountAmt}`;
+    const discountSpaces = ' '.repeat(receiptWidth - discountLine.length);
     commands += `${discountSpaces}${discountLine}\n`;
     commands += '\x1B\x45\x00'; // Bold off
     
-    commands += doubleSeparatorLine;
+    commands += '================================\n';
     // Total - DOUBLE SIZE and BOLD
     commands += '\x1D\x21\x11'; // Double height and width
     commands += '\x1B\x45\x01'; // Bold on
     const totalAmt = (receiptData?.totalAmount || receiptData?.netAmount || 0).toFixed(2);
     const totalLine = `TOTAL: ${totalAmt}`;
-    const totalSpaces = ' '.repeat(Math.max(0, Math.floor(receiptWidth / 2) - totalLine.length));
+    const totalSpaces = ' '.repeat(Math.floor(receiptWidth / 2) - totalLine.length);
     commands += `${totalSpaces}${totalLine}\n`;
     commands += '\x1B\x45\x00'; // Bold off
     commands += '\x1D\x21\x00'; // Back to normal size
-    commands += doubleSeparatorLine;
+    commands += '================================\n';
     
     // Discount Information (for PWD/Senior/Special Discounts)
     if (receiptData?.orderDiscount) {
       commands += '\n';
       commands += 'DISCOUNT INFORMATION\n';
-      commands += separatorLine;
+      commands += '--------------------------------\n';
       
       let discountType = receiptData.orderDiscount.type;
       if (receiptData.orderDiscount.customType) {
@@ -821,7 +636,7 @@ export class PrintService {
           commands += '_________________________\n';
         }
       }
-      commands += doubleSeparatorLine;
+      commands += '================================\n';
     }
     
     // Validity Notice - CENTERED
@@ -846,14 +661,9 @@ export class PrintService {
 
   /**
    * 🖨️ Print receipt using browser's window.print() - Universal printer support
-   * Now supports dynamic paper sizes from printer configuration
    */
   printBrowserReceipt(receiptData: any): void {
     console.log('🖨️ Opening browser print dialog...');
-    
-    // Get paper size configuration
-    const paperSize = receiptData?._paperSize || this.currentPrinterConfig?.paperSize || '58mm';
-    const paperConfig = this.getPaperSizeConfig(paperSize);
     
     // Create a new window for printing
     const printWindow = window.open('', '_blank', 'width=400,height=600');
@@ -862,7 +672,7 @@ export class PrintService {
       return;
     }
 
-    const printContent = this.generatePrintableReceipt(receiptData, paperConfig);
+    const printContent = this.generatePrintableReceipt(receiptData);
     
     printWindow.document.write(`
       <html>
@@ -873,16 +683,16 @@ export class PrintService {
               body { margin: 0 !important; }
               @page { 
                 margin: 3mm; 
-                size: ${paperConfig.width} auto; /* Dynamic paper size */
+                size: 58mm auto; /* Optimized for 58mm thermal paper */
               }
             }
             body { 
               font-family: 'Courier New', monospace; 
-              font-size: ${paperConfig.fontSize}; 
+              font-size: 11px; 
               margin: 0; 
               padding: 3px;
               width: 100%;
-              max-width: ${paperConfig.maxWidth}; /* Dynamic based on paper size */
+              max-width: 210px; /* ~58mm in pixels */
               line-height: 1.3;
             }
             .center { 
@@ -917,7 +727,7 @@ export class PrintService {
               width: 100%; 
               border-collapse: collapse; 
               margin: 2px 0;
-              font-size: ${paperConfig.fontSize};
+              font-size: 10px;
             }
             td, th { 
               padding: 1px 2px; 
@@ -954,11 +764,7 @@ export class PrintService {
   printDirectMobile(receiptData: any): void {
     console.log('🖨️ Starting direct mobile print (no dialog)...');
     
-    // Get paper size configuration
-    const paperSize = receiptData?._paperSize || this.currentPrinterConfig?.paperSize || '58mm';
-    const paperConfig = this.getPaperSizeConfig(paperSize);
-    
-    const printContent = this.generatePrintableReceipt(receiptData, paperConfig);
+    const printContent = this.generatePrintableReceipt(receiptData);
     
     // Create iframe for silent printing
     const iframe = document.createElement('iframe');
@@ -988,16 +794,16 @@ export class PrintService {
               body { margin: 0 !important; }
               @page { 
                 margin: 3mm; 
-                size: ${paperConfig.width} auto; /* Dynamic paper size */
+                size: 58mm auto; /* Optimized for 58mm thermal paper */
               }
             }
             body { 
               font-family: 'Courier New', monospace; 
-              font-size: ${paperConfig.fontSize}; 
+              font-size: 11px; 
               margin: 0; 
               padding: 3px;
               width: 100%;
-              max-width: ${paperConfig.maxWidth}; /* Dynamic based on paper size */
+              max-width: 210px; /* ~58mm in pixels */
               line-height: 1.3;
             }
             .center { 
@@ -1186,14 +992,9 @@ export class PrintService {
    * 🖨️ MOBILE PRINT: Direct ESC/POS print using new window (not iframe)
    * Opens print dialog with ESC/POS formatted for thermal printer
    * Print preview shows ONLY the receipt content, not the parent page
-   * Now supports dynamic paper sizes
    */
   printMobileThermal(receiptData: any): void {
     console.log('🖨️ Starting mobile ESC/POS print...');
-    
-    // Get paper size configuration
-    const paperSize = receiptData?._paperSize || this.currentPrinterConfig?.paperSize || '58mm';
-    const paperConfig = this.getPaperSizeConfig(paperSize);
     
     // Generate ESC/POS commands
     const escposCommands = this.generateESCPOSCommands(receiptData);
@@ -1215,23 +1016,23 @@ export class PrintService {
               body { margin: 0 !important; }
               @page { 
                 margin: 3mm; 
-                size: ${paperConfig.width} auto;
+                size: 58mm auto;
               }
             }
             body { 
               font-family: 'Courier New', monospace; 
-              font-size: ${paperConfig.fontSize}; 
+              font-size: 11px; 
               margin: 0; 
               padding: 3px;
               width: 100%;
-              max-width: ${paperConfig.maxWidth};
+              max-width: 210px;
               line-height: 1.2;
             }
             pre {
               margin: 0;
               padding: 0;
               font-family: 'Courier New', monospace;
-              font-size: ${paperConfig.fontSize};
+              font-size: 11px;
               white-space: pre-wrap;
               word-wrap: break-word;
             }
@@ -1253,12 +1054,8 @@ export class PrintService {
 
   /**
    * Generate HTML content for browser printing
-   * Now supports dynamic paper sizes
    */
-  private generatePrintableReceipt(receiptData: any, paperConfig?: PaperSizeConfig): string {
-    // Use provided config or get from current printer config
-    const config = paperConfig || this.getPaperSizeConfig();
-    
+  private generatePrintableReceipt(receiptData: any): string {
     // Get customer display name (same logic as preview)
     const getCustomerDisplayName = () => {
       if (!receiptData?.customerName || receiptData.customerName === 'Walk-in Customer') {
