@@ -566,9 +566,47 @@ export class PrintService {
         throw new Error('USB port is not writable');
       }
 
-      const writer = port.writable.getWriter();
-      await writer.write(data);
-      writer.releaseLock();
+      // Check if stream is already locked
+      if (port.writable.locked) {
+        console.log('⚠️ Port writable stream is locked, waiting...');
+        // Wait a bit for previous operation to complete
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        // If still locked, force close and reopen port
+        if (port.writable.locked) {
+          console.log('🔄 Forcing port reset...');
+          try {
+            await port.close();
+            await new Promise(resolve => setTimeout(resolve, 200));
+            await port.open({ 
+              baudRate: 9600,
+              dataBits: 8,
+              stopBits: 1,
+              parity: 'none',
+              flowControl: 'none'
+            });
+          } catch (resetError) {
+            console.error('❌ Port reset failed:', resetError);
+          }
+        }
+      }
+
+      // Use try-finally to ensure writer is always released
+      let writer;
+      try {
+        writer = port.writable.getWriter();
+        await writer.write(data);
+        console.log('✅ Data written to USB printer');
+      } finally {
+        if (writer) {
+          try {
+            writer.releaseLock();
+            console.log('✅ Writer lock released');
+          } catch (releaseError) {
+            console.warn('⚠️ Error releasing writer lock:', releaseError);
+          }
+        }
+      }
 
       this.usbConnected = true;
       console.log('✅ Receipt sent to USB thermal printer successfully');
