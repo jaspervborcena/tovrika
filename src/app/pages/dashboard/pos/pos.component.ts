@@ -4583,11 +4583,16 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       
     } catch (error) {
       console.error('Error during print process:', error);
+      console.error('Error details:', {
+        message: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined
+      });
       
-      // Show error in a modal dialog instead of browser alert
+      // Show error in a modal dialog with more details
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
       await this.showConfirmationDialog({
         title: 'Print Receipt Failed',
-        message: 'Failed to print receipt. Please check your printer connection and try printing again.',
+        message: `Failed to print receipt: ${errorMessage}\n\nPlease check your printer connection and try again.`,
         confirmText: 'OK',
         cancelText: '',
         type: 'warning'
