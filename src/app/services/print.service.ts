@@ -173,19 +173,16 @@ export class PrintService {
             };
           } catch (btError: any) {
             console.error(`❌ Bluetooth printing failed: ${btError.message}`);
-            // Continue to browser print fallback
           }
         }
       }
       
-      // 🔥 PRIORITY 3: Fallback to browser print if no hardware worked
-      console.log('🖨️ No hardware printers available, using browser print as fallback...');
-      this.printBrowserReceipt(receiptData);
-      
+      // No hardware printers available
+      console.error('❌ No hardware printers available');
       return {
-        success: true,
-        method: 'Browser',
-        message: 'No hardware printers found, used browser print as fallback'
+        success: false,
+        method: 'None',
+        message: 'No hardware printers found. Please connect a USB or Bluetooth thermal printer.'
       };
       
     } catch (error: any) {
@@ -803,6 +800,7 @@ export class PrintService {
   /**
    * 🖨️ Print receipt using browser's window.print() - Universal printer support
    * Now supports dynamic paper sizes from printer configuration
+   * Uses iframe to avoid showing about:blank popup
    */
   printBrowserReceipt(receiptData: any): void {
     console.log('🖨️ Opening browser print dialog...');
@@ -811,16 +809,27 @@ export class PrintService {
     const paperSize = receiptData?._paperSize || this.currentPrinterConfig?.paperSize || '58mm';
     const paperConfig = this.getPaperSizeConfig(paperSize);
     
-    // Create a new window for printing
-    const printWindow = window.open('', '_blank', 'width=400,height=600');
-    if (!printWindow) {
-      alert('Print Error: Popup blocked. Please allow popups for this site to print receipts.');
-      return;
-    }
-
     const printContent = this.generatePrintableReceipt(receiptData, paperConfig);
     
-    printWindow.document.write(`
+    // Create iframe for printing (no popup window)
+    const iframe = document.createElement('iframe');
+    iframe.style.position = 'fixed';
+    iframe.style.right = '0';
+    iframe.style.bottom = '0';
+    iframe.style.width = '0';
+    iframe.style.height = '0';
+    iframe.style.border = '0';
+    document.body.appendChild(iframe);
+    
+    const iframeDoc = iframe.contentWindow?.document;
+    if (!iframeDoc) {
+      console.error('❌ Unable to create print iframe');
+      alert('Print Error: Unable to open print dialog. Please try again.');
+      return;
+    }
+    
+    iframeDoc.open();
+    iframeDoc.write(`
       <html>
         <head>
           <title>Receipt - ${receiptData?.invoiceNumber || 'Invoice'}</title>
@@ -896,11 +905,29 @@ export class PrintService {
             }
           </style>
         </head>
-        <body onload="window.print(); window.close();">${printContent}</body>
+        <body>${printContent}</body>
       </html>
     `);
+    iframeDoc.close();
     
-    printWindow.document.close();
+    // Wait for content to load, then print
+    setTimeout(() => {
+      try {
+        iframe.contentWindow?.focus();
+        iframe.contentWindow?.print();
+        console.log('✅ Print dialog opened');
+        
+        // Remove iframe after printing
+        setTimeout(() => {
+          document.body.removeChild(iframe);
+          console.log('🧹 Print iframe cleaned up');
+        }, 1000);
+      } catch (error) {
+        console.error('❌ Print error:', error);
+        document.body.removeChild(iframe);
+        alert('Print Error: Unable to open print dialog. Please try again.');
+      }
+    }, 500);
   }
 
   /**
