@@ -384,26 +384,37 @@ export class PrintService {
 
       let port = this.usbPort;
 
-      if (!port || !port.readable) {
-        const ports = await (navigator as any).serial.getPorts();
+      // ✅ OPTIMIZED: Skip printer lookup if already connected
+      if (this.usbConnected && port && port.readable && !port.readable.locked) {
+        console.log('✅ Using existing USB connection - skipping printer lookup');
+      } else {
+        // Need to find or request a port
+        console.log('🔍 USB not connected, searching for printer...');
         
-        if (ports.length > 0) {
-          port = ports[0];
-        } else {
-          port = await (navigator as any).serial.requestPort();
+        if (!port || !port.readable) {
+          const ports = await (navigator as any).serial.getPorts();
+          
+          if (ports.length > 0) {
+            port = ports[0];
+            console.log('📱 Found previously authorized USB printer');
+          } else {
+            console.log('🔍 No authorized printers, requesting user selection...');
+            port = await (navigator as any).serial.requestPort();
+          }
+          
+          this.usbPort = port;
         }
-        
-        this.usbPort = port;
-      }
 
-      if (!port.readable || port.readable.locked) {
-        await port.open({ 
-          baudRate: 9600,
-          dataBits: 8,
-          stopBits: 1,
-          parity: 'none',
-          flowControl: 'none'
-        });
+        if (!port.readable || port.readable.locked) {
+          console.log('🔌 Opening USB port connection...');
+          await port.open({ 
+            baudRate: 9600,
+            dataBits: 8,
+            stopBits: 1,
+            parity: 'none',
+            flowControl: 'none'
+          });
+        }
       }
 
       const escPosCommands = this.generateESCPOSCommands(receiptData);
