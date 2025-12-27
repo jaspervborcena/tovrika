@@ -850,7 +850,7 @@ export class PrintService {
     
     // Thank you message - CENTERED for Xprinter
     commands += '\x1B\x61\x01'; // Center alignment
-    commands += 'Thank you for your purchase!\n';
+    commands += 'Thank you for visiting us!\n';
     commands += 'Please come again\n';
     commands += '\x1B\x61\x00'; // Reset alignment
     commands += '\n\n\n\n'; // Extra feed for complete printing
@@ -1234,14 +1234,14 @@ export class PrintService {
    * Now supports dynamic paper sizes
    */
   printMobileThermal(receiptData: any): void {
-    console.log('🖨️ Starting mobile ESC/POS print...');
+    console.log('🖨️ Starting mobile thermal print...');
     
     // Get paper size configuration
     const paperSize = receiptData?._paperSize || this.currentPrinterConfig?.paperSize || '58mm';
     const paperConfig = this.getPaperSizeConfig(paperSize);
     
-    // Generate ESC/POS commands
-    const escposCommands = this.generateESCPOSCommands(receiptData);
+    // Generate HTML receipt instead of ESC/POS to avoid control character display issues
+    const htmlContent = this.generatePrintableReceipt(receiptData, paperConfig);
     
     // Create a new window for printing
     const printWindow = window.open('', '_blank', 'width=400,height=600');
@@ -1250,7 +1250,7 @@ export class PrintService {
       return;
     }
     
-    // Write ESC/POS content wrapped in pre tag
+    // Write HTML content with thermal printer styling
     printWindow.document.write(`
       <html>
         <head>
@@ -1267,22 +1267,22 @@ export class PrintService {
               font-family: 'Courier New', monospace; 
               font-size: ${paperConfig.fontSize}; 
               margin: 0; 
-              padding: 3px;
+              padding: 5px;
               width: 100%;
               max-width: ${paperConfig.maxWidth};
-              line-height: 1.2;
+              line-height: 1.3;
             }
-            pre {
-              margin: 0;
-              padding: 0;
-              font-family: 'Courier New', monospace;
-              font-size: ${paperConfig.fontSize};
-              white-space: pre-wrap;
-              word-wrap: break-word;
-            }
+            .header-section { text-align: center; margin-bottom: 10px; }
+            .bold { font-weight: bold; }
+            .line { border-top: 1px dashed #000; margin: 5px 0; }
+            table { width: 100%; border-collapse: collapse; font-size: ${paperConfig.fontSize}; }
+            td { padding: 2px 0; }
+            .right { text-align: right; }
+            .footer-section { text-align: center; margin-top: 10px; }
+            .no-break { page-break-inside: avoid; }
           </style>
         </head>
-        <body><pre>${escposCommands}</pre></body>
+        <body>${htmlContent}</body>
       </html>
     `);
     
@@ -1491,7 +1491,7 @@ export class PrintService {
 
     html += `
       <div class="footer-section no-break">
-        <div>Thank you for your purchase!</div>
+        <div>Thank you for visiting us!</div>
         <div>Please come again</div>
         <br>
         <div style="margin-top: 10px;">&nbsp;</div>
