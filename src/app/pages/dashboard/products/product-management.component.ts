@@ -2559,9 +2559,9 @@ export class ProductManagementComponent implements OnInit {
   // Tax and Discount Fields
   isVatApplicable: [true],
   vatRate: [AppConstants.DEFAULT_VAT_RATE, [Validators.min(0), Validators.max(100)]],
-      hasDiscount: [true],
+      hasDiscount: [false],
       discountType: ['percentage'],
-      discountValue: [10.0, [Validators.min(0)]],
+      discountValue: [0, [Validators.min(0)]],
       // Initial inventory fields (for new products)
       initialBatchId: [''],
       initialQuantity: [0, Validators.min(0)],
@@ -3047,7 +3047,7 @@ export class ProductManagementComponent implements OnInit {
         const initialBatch = hasInitial ? {
           batchId: formValue.initialBatchId || this.generateBatchId(), // Use proper batch ID generator
           quantity: Number(formValue.initialQuantity || 0),
-          unitPrice: Number(formValue.originalPrice || 0),
+          unitPrice: computedOriginalPrice,
           costPrice: Number(formValue.initialCostPrice || 0),
           receivedAt: formValue.initialReceivedAt ? new Date(formValue.initialReceivedAt) : new Date(), // Default to now if not specified
           expiryDate: formValue.initialExpiryDate ? new Date(formValue.initialExpiryDate) : undefined,
@@ -3121,8 +3121,8 @@ export class ProductManagementComponent implements OnInit {
             const batchData = {
               batchId: initialBatch!.batchId,
               quantity: initialBatch!.quantity,
-              unitPrice: initialBatch!.unitPrice,
-              sellingPrice: Number(formValue.originalPrice || computedSellingPrice || 0),
+              unitPrice: computedOriginalPrice,
+              sellingPrice: computedSellingPrice,
               costPrice: initialBatch!.costPrice,
               receivedAt: initialBatch!.receivedAt,
               expiryDate: initialBatch!.expiryDate,
