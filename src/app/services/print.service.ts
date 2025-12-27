@@ -188,13 +188,13 @@ export class PrintService {
         
         if (hasBluetoothPrinters || this.isConnected) {
           try {
-            console.log('📱 Bluetooth available - attempting direct print via printReceiptSmart');
+            console.log('📱 Opening browser print dialog for Bluetooth and other printers...');
             await this.printReceiptSmart(receiptData);
-            console.log('✅ Bluetooth print completed successfully');
+            console.log('✅ Print dialog opened successfully');
             return {
               success: true,
-              method: 'Bluetooth',
-              message: 'Receipt printed successfully via Bluetooth printer'
+              method: 'Browser Print',
+              message: 'Print dialog opened successfully. Please select your printer.'
             };
           } catch (btError: any) {
             console.error(`❌ Bluetooth printing failed:`, btError);
@@ -267,9 +267,9 @@ export class PrintService {
 
       // 🔥 PRIORITY 2: Bluetooth printer via browser print (mobile-friendly)
       // Use the same approach as mobile preview - show ESC/POS formatted content and use window.print()
-      console.log('📱 Using Bluetooth-friendly browser print (ESC/POS formatted)...');
+      console.log('📱 Opening browser print dialog (supports all printers including Bluetooth)...');
       this.printMobileThermal(receiptData);
-      console.log('✅ Bluetooth print dialog opened');
+      console.log('✅ Print dialog opened successfully');
 
     } catch (error) {
       console.error('❌ Print error:', error);
