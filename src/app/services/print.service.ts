@@ -182,20 +182,30 @@ export class PrintService {
       
       // 🔥 PRIORITY 2: Try Bluetooth printer
       if (navigator.bluetooth) {
+        console.log('🔍 Checking Bluetooth availability...');
         const hasBluetoothPrinters = await this.checkBluetoothPrintersAvailable();
+        console.log('🔍 Bluetooth check result:', hasBluetoothPrinters, 'Already connected:', this.isConnected);
+        
         if (hasBluetoothPrinters || this.isConnected) {
           try {
-            console.log('📱 Bluetooth available - attempting direct print');
+            console.log('📱 Bluetooth available - attempting direct print via printReceiptSmart');
             await this.printReceiptSmart(receiptData);
+            console.log('✅ Bluetooth print completed successfully');
             return {
               success: true,
               method: 'Bluetooth',
               message: 'Receipt printed successfully via Bluetooth printer'
             };
           } catch (btError: any) {
-            console.error(`❌ Bluetooth printing failed: ${btError.message}`);
+            console.error(`❌ Bluetooth printing failed:`, btError);
+            console.error(`❌ Error message: ${btError.message}`);
+            console.error(`❌ Error stack:`, btError.stack);
           }
+        } else {
+          console.log('⚠️ No Bluetooth printers available or connected');
         }
+      } else {
+        console.log('❌ Web Bluetooth API not available');
       }
       
       // No hardware printers available
@@ -218,7 +228,7 @@ export class PrintService {
 
   /**
    * 🚀 SMART PRINT: Auto-detects printer type and connection method
-   * Priority: 1) USB/Cable printers (Web Serial) 2) Bluetooth 3) Browser print fallback
+   * Priority: 1) USB/Cable printers (Web Serial) 2) Bluetooth (via browser print) 3) Browser print fallback
    */
   async printReceiptSmart(receiptData: any): Promise<void> {
     try {
@@ -255,58 +265,14 @@ export class PrintService {
         console.log('⚠️ USB printing not supported in this browser, trying Bluetooth...');
       }
 
-      // 🔥 PRIORITY 2: Try Bluetooth printer
-      // Check if Web Bluetooth is supported
-      if (!navigator.bluetooth) {
-        console.error('❌ Bluetooth not supported in this browser');
-        throw new Error('Bluetooth not supported. Please use a browser that supports Web Bluetooth API.');
-      }
-
-      // Check existing Bluetooth connection
-      if (this.isConnected && this.bluetoothDevice && this.bluetoothDevice.gatt.connected) {
-        console.log('✅ Already connected to Bluetooth printer:', this.bluetoothDevice.name);
-        console.log('🖨️ Printing directly via existing Bluetooth connection...');
-        await this.printViaBluetoothESCPOS(receiptData);
-        console.log('✅ Bluetooth print completed successfully');
-        return;
-      }
-
-      // Reset connection state if device got disconnected
-      if (this.bluetoothDevice && !this.bluetoothDevice.gatt.connected) {
-        console.log('📱 Bluetooth device disconnected, resetting connection state...');
-        this.isConnected = false;
-        this.bluetoothCharacteristic = null;
-      }
-
-      // Check if Bluetooth printers are available before attempting connection
-      const hasBluetoothPrinters = await this.checkBluetoothPrintersAvailable();
-      if (!hasBluetoothPrinters) {
-        console.error('❌ No Bluetooth printers found');
-        throw new Error('No Bluetooth printers found. Please pair a Bluetooth thermal printer first.');
-      }
-
-      // Try to connect to Bluetooth printer
-      if (!this.isConnected) {
-        console.log('📱 Attempting Bluetooth printer connection...');
-        const connected = await this.connectToBluetoothPrinter();
-        
-        if (!connected) {
-          console.error('❌ Bluetooth connection failed');
-          throw new Error('Failed to connect to Bluetooth printer. Please check printer is on and paired.');
-        }
-      }
-
-      // Print via Bluetooth
-      console.log('🖨️ Printing via Bluetooth...');
-      await this.printViaBluetoothESCPOS(receiptData);
-      console.log('✅ Bluetooth print completed successfully');
+      // 🔥 PRIORITY 2: Bluetooth printer via browser print (mobile-friendly)
+      // Use the same approach as mobile preview - show ESC/POS formatted content and use window.print()
+      console.log('📱 Using Bluetooth-friendly browser print (ESC/POS formatted)...');
+      this.printMobileThermal(receiptData);
+      console.log('✅ Bluetooth print dialog opened');
 
     } catch (error) {
       console.error('❌ Print error:', error);
-      
-      // Reset connection on error
-      this.isConnected = false;
-      this.bluetoothCharacteristic = null;
       
       // Show error message
       console.error('❌ Print error:', error);
