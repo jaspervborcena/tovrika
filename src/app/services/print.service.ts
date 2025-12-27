@@ -640,9 +640,9 @@ export class PrintService {
     commands += '\x1B\x4D\x00'; // Font A (clearer than Font B)
     commands += '\x1B\x7B\x32'; // Increase print density for darker text
     
-    // Store header - CENTERED and LARGER
+    // Store header - CENTERED and LARGER (same as Sales Invoice)
     commands += '\x1B\x61\x01'; // Center alignment
-    commands += '\x1D\x21\x11'; // Double height and width for store name
+    commands += '\x1D\x21\x22'; // Triple height and width for store name (larger than before)
     commands += '\x1B\x45\x01'; // Bold on
     commands += (receiptData?.storeInfo?.storeName || 'Store Name') + '\n';
     commands += '\x1B\x45\x00'; // Bold off
@@ -1324,7 +1324,7 @@ export class PrintService {
 
     let html = `
       <div class="header-section">
-        <div class="bold" style="font-size: 14px;">${receiptData?.storeInfo?.storeName || 'Store Name'}</div>
+        <div class="bold" style="font-size: 18px; font-weight: 900;">${receiptData?.storeInfo?.storeName || 'Store Name'}</div>
         <div>${receiptData?.storeInfo?.address || 'Store Address'}</div>
         <div>Tel: ${receiptData?.storeInfo?.phone || 'N/A'}</div>
         <div>Email: ${receiptData?.storeInfo?.email || 'N/A'}</div>
