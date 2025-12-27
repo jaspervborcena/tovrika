@@ -804,7 +804,7 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
       invoiceNumber: order.invoiceNumber,
       receiptDate: order.date || order.createdAt,
       storeInfo: {
-        storeName: company?.name || (storeInfo as any)?.storeName || 'Unknown Store',
+        storeName: (storeInfo as any)?.storeName || company?.name || 'Unknown Store',
         address: (storeInfo as any)?.address || 'Store Address',
         phone: (storeInfo as any)?.phoneNumber || (storeInfo as any)?.phone || 'N/A',
         email: company?.email || storeInfo?.email || 'N/A', // Use company email
@@ -1236,7 +1236,7 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
       invoiceNumber: this.nextInvoiceNumber(),
       receiptDate: new Date(),
       storeInfo: {
-        storeName: company?.name || (storeInfo as any)?.storeName || 'Unknown Store',
+        storeName: (storeInfo as any)?.storeName || company?.name || 'Unknown Store',
         address: (storeInfo as any)?.address || 'Store Address',
         phone: (storeInfo as any)?.phoneNumber || (storeInfo as any)?.phone || 'N/A',
         email: company?.email || storeInfo?.email || 'N/A', // Use company email
