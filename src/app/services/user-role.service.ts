@@ -177,14 +177,14 @@ export class UserRoleService {
       // 🔥 NEW APPROACH: Use OfflineDocumentService for offline-safe creation
       await this.offlineDocService.createDocument('userRoles', docData);
 
-      // Update user's permission field in users collection
+      // Update user's permissions array in users collection
       const userDocRef = doc(this.firestore, 'users', userRoleData.userId);
       const permissionUpdate = {
-        permission: {
+        permissions: [{
           companyId: currentPermission.companyId,
           storeId: userRoleData.storeId,  
           roleId: userRoleData.roleId
-        },
+        }],
         updatedAt: new Date()
       };
   await this.offlineDocService.updateDocument('users', userRoleData.userId, permissionUpdate);
