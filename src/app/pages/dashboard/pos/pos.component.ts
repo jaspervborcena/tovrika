@@ -3892,11 +3892,17 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     this.focusSearchInput();
   }
 
-  // Handle barcode scanner input (only triggered by Enter key)
+  // Barcode scanner state
+  private barcodeScanBuffer = '';
+  private barcodeScanTimeout: any = null;
+
+  // Handle barcode scanner input
   handleBarcodeSearch(barcodeValue: string): void {
     if (!barcodeValue || barcodeValue.length < 8) {
       return;
     }
+
+    console.log('🔍 Searching for barcode:', barcodeValue);
 
     // Find product by exact barcode match
     const products = this.products();
@@ -3905,16 +3911,86 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     );
 
     if (matchedProduct) {
-      console.log('🔍 Barcode matched:', matchedProduct.productName);
+      console.log('✅ Barcode matched:', matchedProduct.productName);
       
-      // Add to cart
+      // Add to cart automatically
       this.addToCart(matchedProduct);
       
-      // Clear search after adding
+      // Clear search and reset
       setTimeout(() => {
         this.clearSearch();
+        const searchInput = document.querySelector('.search-input') as HTMLInputElement;
+        if (searchInput) {
+          searchInput.value = '';
+          searchInput.placeholder = 'Search products...';
+        }
       }, 100);
+    } else {
+      console.warn('⚠️ No product found with barcode:', barcodeValue);
+      
+      // Show error feedback
+      const searchInput = document.querySelector('.search-input') as HTMLInputElement;
+      if (searchInput) {
+        searchInput.placeholder = '❌ Product not found - try again';
+        setTimeout(() => {
+          searchInput.placeholder = 'Search products...';
+        }, 2000);
+      }
     }
+  }
+
+  // Trigger barcode scanner from button click
+  triggerBarcodeScanner(): void {
+    console.log('🔍 Barcode scanner triggered - ready to scan');
+    
+    // Focus on search input to prepare for barcode scanner input
+    const searchInput = document.querySelector('.search-input') as HTMLInputElement;
+    if (searchInput) {
+      // Clear any existing value
+      this.clearSearch();
+      searchInput.value = '';
+      searchInput.focus();
+      
+      // Show visual feedback that scanner is ready
+      searchInput.placeholder = '📷 Scan barcode now...';
+      
+      // Reset placeholder after 5 seconds
+      setTimeout(() => {
+        if (searchInput.placeholder === '📷 Scan barcode now...') {
+          searchInput.placeholder = 'Search products...';
+        }
+      }, 5000);
+    }
+  }
+
+  // Handle search input keyup for barcode scanning
+  onSearchKeyup(event: KeyboardEvent, searchValue: string): void {
+    // Clear any existing timeout
+    if (this.barcodeScanTimeout) {
+      clearTimeout(this.barcodeScanTimeout);
+    }
+
+    // When Enter is pressed, treat as barcode scan completion
+    if (event.key === 'Enter') {
+      if (searchValue && searchValue.length >= 8) {
+        console.log('🔍 Barcode scan detected (Enter key):', searchValue);
+        this.handleBarcodeSearch(searchValue);
+      }
+      return;
+    }
+
+    // Detect rapid input (typical of barcode scanners)
+    // Barcode scanners typically input all characters within 100ms
+    this.barcodeScanBuffer += event.key;
+    
+    // Set timeout to auto-trigger search after rapid input stops
+    this.barcodeScanTimeout = setTimeout(() => {
+      if (this.barcodeScanBuffer.length >= 8) {
+        console.log('🔍 Barcode scan detected (rapid input):', this.barcodeScanBuffer);
+        this.handleBarcodeSearch(this.barcodeScanBuffer);
+      }
+      this.barcodeScanBuffer = '';
+    }, 100); // 100ms window for barcode scanner input
   }
 
   // Customer panel methods
