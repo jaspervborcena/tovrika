@@ -931,18 +931,16 @@ export class PosService {
 
   // Helper Methods
   private createCartItem(product: Product, quantity: number): CartItem {
-    // Derive per-unit values from originalPrice: apply discount to originalPrice, then apply VAT
-    // Ensure we have a valid price - try originalPrice, then sellingPrice, then 0
-    const originalPrice = (product as any).originalPrice;
-    const sellingPrice = product.sellingPrice;
-    const original = originalPrice ?? sellingPrice ?? 0;
+    // Use sellingPrice (which already includes VAT) as the base price
+    // Only apply additional discounts if configured
+    const sellingPrice = product.sellingPrice ?? 0;
+    const originalPrice = (product as any).originalPrice ?? sellingPrice;
     const vatRate = Number(product.vatRate ?? 0);
 
     console.log('🛒 Creating cart item for:', product.productName, {
       productId: product.id,
-      originalPrice: originalPrice,
       sellingPrice: sellingPrice,
-      derivedOriginal: original,
+      originalPrice: originalPrice,
       hasDiscount: product.hasDiscount,
       discountType: product.discountType,
       discountValue: product.discountValue,
@@ -950,34 +948,40 @@ export class PosService {
       vatRate: vatRate
     });
 
-    if (original === 0) {
-      console.error('⚠️ WARNING: Product has zero price!', {
+    if (sellingPrice === 0) {
+      console.error('⚠️ WARNING: Product has zero selling price!', {
         productName: product.productName,
         productId: product.id,
-        originalPrice: originalPrice,
-        sellingPrice: sellingPrice
+        sellingPrice: sellingPrice,
+        originalPrice: originalPrice
       });
     }
 
-    // Per-unit discount
+    // Apply discount to selling price if configured
     let discountPerUnit = 0;
     if (product.hasDiscount) {
       if (product.discountType === 'percentage') {
-        discountPerUnit = (original * (product.discountValue || 0)) / 100;
+        discountPerUnit = (sellingPrice * (product.discountValue || 0)) / 100;
       } else {
         discountPerUnit = product.discountValue || 0;
       }
     }
 
-    const netBasePerUnit = Math.max(0, original - discountPerUnit);
-    const vatAmountPerUnit = (product.isVatApplicable && !false) ? (netBasePerUnit * vatRate) / 100 : 0;
-    // Round per-unit VAT and selling price to 2 decimals to avoid floating rounding differences
+    const finalPricePerUnit = Math.max(0, sellingPrice - discountPerUnit);
+    const finalPricePerUnitRounded = Number(finalPricePerUnit.toFixed(2));
+
+    // Calculate VAT amount based on final price (VAT is already included in selling price)
+    // We calculate it for display purposes by reverse-calculating from the VAT-inclusive price
+    let vatAmountPerUnit = 0;
+    if (product.isVatApplicable && vatRate > 0) {
+      // Reverse calculate: vatAmount = price - (price / (1 + vatRate/100))
+      vatAmountPerUnit = finalPricePerUnit - (finalPricePerUnit / (1 + vatRate / 100));
+    }
     const vatAmountPerUnitRounded = Number(vatAmountPerUnit.toFixed(2));
-    const sellingPricePerUnitRounded = Number((netBasePerUnit + vatAmountPerUnitRounded).toFixed(2));
 
     const discountAmount = Number((discountPerUnit * quantity).toFixed(2));
     const vatAmount = Number((vatAmountPerUnitRounded * quantity).toFixed(2));
-    const total = Number((sellingPricePerUnitRounded * quantity).toFixed(2));
+    const total = Number((finalPricePerUnitRounded * quantity).toFixed(2));
 
     // Use denormalized tag labels from product for instant display
     const tagLabels = product.tagLabels || [];
@@ -988,9 +992,9 @@ export class PosService {
       skuId: product.skuId,
       unitType: product.unitType,
       quantity,
-      // Store derived sellingPrice so UI can show it; keep originalPrice for display and two-way sync
-      sellingPrice: sellingPricePerUnitRounded,
-      originalPrice: original,
+      // Store final selling price after discounts
+      sellingPrice: finalPricePerUnitRounded,
+      originalPrice: originalPrice,
       total,
       isVatApplicable: product.isVatApplicable,
       vatRate: vatRate,
