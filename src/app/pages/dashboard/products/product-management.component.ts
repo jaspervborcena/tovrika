@@ -2944,13 +2944,15 @@ export class ProductManagementComponent implements OnInit {
         isEditMode: this.isEditMode
       });
       
-      // If originalPrice is not set but sellingPrice is, derive it by reversing VAT
+      // If originalPrice is not set but sellingPrice is, calculate originalPrice (price before VAT)
       if (computedOriginalPrice === 0 && computedSellingPrice > 0) {
         const isVatApplicable = formValue.isVatApplicable ?? true;
         const vatRate = formValue.vatRate ?? AppConstants.DEFAULT_VAT_RATE;
         
         if (isVatApplicable && vatRate > 0) {
-          // Reverse VAT calculation: originalPrice = sellingPrice / (1 + vatRate/100)
+          // Original price is the base price (before VAT)
+          // Selling price = original price + VAT
+          // So: Original price = selling price / (1 + VAT rate)
           computedOriginalPrice = computedSellingPrice / (1 + vatRate / 100);
         } else {
           // No VAT, so selling price = original price
@@ -2961,7 +2963,8 @@ export class ProductManagementComponent implements OnInit {
           sellingPrice: computedSellingPrice,
           originalPrice: computedOriginalPrice,
           vatRate: vatRate,
-          isVatApplicable: isVatApplicable
+          isVatApplicable: isVatApplicable,
+          calculation: `${computedSellingPrice} / (1 + ${vatRate}/100) = ${computedOriginalPrice}`
         });
       }
 
