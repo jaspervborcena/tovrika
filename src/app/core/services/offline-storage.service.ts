@@ -168,7 +168,9 @@ export class OfflineStorageService {
       console.log('💾 OfflineStorage: Saving user data to IndexedDB:', {
         email: offlineUserData.email,
         roleId: offlineUserData.roleId,
-        permissions: offlineUserData.permissions
+        permissions: offlineUserData.permissions,
+        originalUserPermissions: userData.permissions,
+        activePermissionSelected: activePermission
       });
       
       // Always set the signal first (so user data is available even if IndexedDB fails)
