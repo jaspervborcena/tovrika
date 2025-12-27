@@ -642,11 +642,9 @@ export class PrintService {
     
     // Store header - CENTERED and LARGER (same as Sales Invoice)
     commands += '\x1B\x61\x01'; // Center alignment
-    commands += '\x1D\x21\x22'; // Triple height and width for store name (larger than before)
     commands += '\x1B\x45\x01'; // Bold on
     commands += (receiptData?.storeInfo?.storeName || 'Store Name') + '\n';
     commands += '\x1B\x45\x00'; // Bold off
-    commands += '\x1D\x21\x00'; // Back to normal size
     
     // Store details - CENTERED with normal font
     commands += (receiptData?.storeInfo?.address || 'Store Address') + '\n';
@@ -677,11 +675,11 @@ export class PrintService {
     
     commands += separatorLine;
     
-    // Payment Method with filled/empty circles (Cash by default, both can be selected)
+    // Payment Method with asterisk (*) for selected and O for unselected
     const isCashSale = receiptData?.isCashSale !== false; // Default to true unless explicitly false
     const isChargeSale = receiptData?.isChargeSale === true; // Only true if explicitly set
     commands += '\x1B\x45\x01'; // Bold for payment method
-    commands += `Cash: ${isCashSale ? '\u25CF' : '\u25CB'}   Charge: ${isChargeSale ? '\u25CF' : '\u25CB'}\n`;
+    commands += `Cash: ${isCashSale ? '*' : 'O'}   Charge: ${isChargeSale ? '*' : 'O'}\n`;
     commands += '\x1B\x45\x00'; // Bold off
     
     commands += separatorLine;
