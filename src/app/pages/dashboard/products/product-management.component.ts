@@ -2428,21 +2428,15 @@ export class ProductManagementComponent implements OnInit {
 
     // Wire subscriptions
     unitCtrl?.valueChanges.subscribe(() => {
-      // Only recompute selling price if not in edit mode or if values are actually different
-      // This prevents unwanted recalculation when editing batches where prices are intentionally equal
-      if (!this.isEditingBatch) {
-        recomputeSelling();
-      }
+      // Recompute selling price when unit price changes
+      recomputeSelling();
     });
     sellCtrl?.valueChanges.subscribe(() => {
-      // Only recompute original price if not in edit mode or if values are actually different
-      // This prevents unwanted recalculation when editing batches where prices are intentionally equal
-      if (!this.isEditingBatch) {
-        recomputeOriginal();
-      }
+      // Recompute original/unit price when selling price changes
+      recomputeOriginal();
     });
     vatCtrl?.valueChanges.subscribe(() => {
-      // VAT toggle affects both directions
+      // VAT toggle: recompute selling from original
       recomputeSelling();
     });
     vatRateCtrlInv?.valueChanges.subscribe(() => recomputeSelling());
@@ -2565,9 +2559,9 @@ export class ProductManagementComponent implements OnInit {
   // Tax and Discount Fields
   isVatApplicable: [true],
   vatRate: [AppConstants.DEFAULT_VAT_RATE, [Validators.min(0), Validators.max(100)]],
-      hasDiscount: [true],
+      hasDiscount: [false],
       discountType: ['percentage'],
-      discountValue: [10.0, [Validators.min(0)]],
+      discountValue: [0, [Validators.min(0)]],
       // Initial inventory fields (for new products)
       initialBatchId: [''],
       initialQuantity: [0, Validators.min(0)],
@@ -3053,7 +3047,7 @@ export class ProductManagementComponent implements OnInit {
         const initialBatch = hasInitial ? {
           batchId: formValue.initialBatchId || this.generateBatchId(), // Use proper batch ID generator
           quantity: Number(formValue.initialQuantity || 0),
-          unitPrice: Number(formValue.originalPrice || 0),
+          unitPrice: computedOriginalPrice,
           costPrice: Number(formValue.initialCostPrice || 0),
           receivedAt: formValue.initialReceivedAt ? new Date(formValue.initialReceivedAt) : new Date(), // Default to now if not specified
           expiryDate: formValue.initialExpiryDate ? new Date(formValue.initialExpiryDate) : undefined,
@@ -3127,8 +3121,8 @@ export class ProductManagementComponent implements OnInit {
             const batchData = {
               batchId: initialBatch!.batchId,
               quantity: initialBatch!.quantity,
-              unitPrice: initialBatch!.unitPrice,
-              sellingPrice: Number(formValue.originalPrice || computedSellingPrice || 0),
+              unitPrice: computedOriginalPrice,
+              sellingPrice: computedSellingPrice,
               costPrice: initialBatch!.costPrice,
               receivedAt: initialBatch!.receivedAt,
               expiryDate: initialBatch!.expiryDate,
@@ -3389,26 +3383,21 @@ export class ProductManagementComponent implements OnInit {
     }, { emitEvent: false });
 
     try {
-      // Ensure consistent values: if a batch.sellingPrice was stored, compute original (unitPrice) from it
-      const storedSelling = batch.sellingPrice;
-      const isVat = typeof batch.isVatApplicable === 'boolean' ? batch.isVatApplicable : true;
-      const vatRate = batch.vatRate ?? AppConstants.DEFAULT_VAT_RATE;
-      const hasDisc = !!batch.hasDiscount;
-      const discType = batch.discountType ?? 'percentage';
-      const discValue = Number(batch.discountValue ?? 0);
+      // Load the stored values from Firestore without recomputing
+      // Only the UI valueChanges subscriptions should trigger recomputation when user edits
+      const storedUnitPrice = Number(batch.unitPrice ?? 0);
+      const storedSellingPrice = Number(batch.sellingPrice ?? batch.unitPrice ?? 0);
+      
+      console.log('📦 Loading inventory batch for edit:', {
+        batchId: batch.batchId,
+        storedUnitPrice,
+        storedSellingPrice,
+        fromFirestore: true
+      });
 
-      if (storedSelling !== undefined && storedSelling !== null) {
-        // Compute original/unit price from saved selling price and set both fields without emitting
-        const computedOriginal = this.computeOriginalFromSelling(Number(storedSelling), isVat, Number(vatRate), hasDisc, discType, discValue);
-        this.inventoryForm.get('unitPrice')?.setValue(Number(computedOriginal.toFixed(2)), { emitEvent: false });
-        this.inventoryForm.get('sellingPrice')?.setValue(Number(Number(storedSelling).toFixed(2)), { emitEvent: false });
-      } else {
-        // No stored selling price: compute selling from unitPrice
-        const unitVal = Number(batch.unitPrice ?? 0);
-        const computedSelling = this.computeSellingFromOriginal(unitVal, isVat, Number(vatRate), hasDisc, discType, discValue);
-        this.inventoryForm.get('unitPrice')?.setValue(Number(unitVal.toFixed(2)), { emitEvent: false });
-        this.inventoryForm.get('sellingPrice')?.setValue(Number(computedSelling.toFixed(2)), { emitEvent: false });
-      }
+      // Set both prices exactly as stored in Firestore, without any computation
+      this.inventoryForm.get('unitPrice')?.setValue(Number(storedUnitPrice.toFixed(2)), { emitEvent: false });
+      this.inventoryForm.get('sellingPrice')?.setValue(Number(storedSellingPrice.toFixed(2)), { emitEvent: false });
 
       // Now update validity and UI
       this.inventoryForm.updateValueAndValidity({ onlySelf: false, emitEvent: false });
