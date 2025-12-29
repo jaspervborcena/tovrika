@@ -2391,7 +2391,12 @@ export class ProductManagementComponent implements OnInit {
     prodSellCtrl?.valueChanges.subscribe(() => recomputeProdOriginal());
     prodVatCtrl?.valueChanges.subscribe(() => recomputeProdSelling());
     prodVatRateCtrl?.valueChanges.subscribe(() => recomputeProdSelling());
-    prodHasDiscCtrl?.valueChanges.subscribe(() => recomputeProdSelling());
+    prodHasDiscCtrl?.valueChanges.subscribe((hasDiscount: boolean) => {
+      if (!hasDiscount) {
+        prodDiscValueCtrl?.setValue(0, { emitEvent: false });
+      }
+      recomputeProdSelling();
+    });
     prodDiscTypeCtrl?.valueChanges.subscribe(() => recomputeProdSelling());
     prodDiscValueCtrl?.valueChanges.subscribe(() => recomputeProdSelling());
 
@@ -2440,7 +2445,12 @@ export class ProductManagementComponent implements OnInit {
       recomputeSelling();
     });
     vatRateCtrlInv?.valueChanges.subscribe(() => recomputeSelling());
-    hasDiscCtrl?.valueChanges.subscribe(() => recomputeSelling());
+    hasDiscCtrl?.valueChanges.subscribe((hasDiscount: boolean) => {
+      if (!hasDiscount) {
+        discValueCtrl?.setValue(0, { emitEvent: false });
+      }
+      recomputeSelling();
+    });
     discTypeCtrl?.valueChanges.subscribe(() => recomputeSelling());
     discValueCtrl?.valueChanges.subscribe(() => recomputeSelling());
     if (isVatCtrl && vatRateCtrl) {
