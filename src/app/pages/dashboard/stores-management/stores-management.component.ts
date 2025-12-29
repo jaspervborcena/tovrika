@@ -243,6 +243,23 @@ import { Timestamp } from '@angular/fire/firestore';
                 </div>
 
                 <div class="form-group">
+                  <label for="invoiceType">Invoice Type</label>
+                  <select 
+                    id="invoiceType"
+                    formControlName="invoiceType"
+                    class="form-input">
+                    <option value="">Select invoice type</option>
+                    <option value="Sales Invoice">Sales Invoice</option>
+                    <option value="Cash Invoice">Cash Invoice</option>
+                    <option value="Charge Invoice">Charge Invoice</option>
+                    <option value="Credit Invoice">Credit Invoice</option>
+                    <option value="Service Invoice">Service Invoice</option>
+                    <option value="Billing Invoice">Billing Invoice</option>
+                    <option value="Order Checklist">Order Checklist</option>
+                  </select>
+                </div>
+
+                <div class="form-group">
                   <label for="status">Status</label>
                   <select 
                     id="status"
@@ -1910,6 +1927,7 @@ export class StoresManagementComponent implements OnInit {
     this.storeForm = this.fb.group({
       storeName: ['', [Validators.required]],
       storeType: ['', [Validators.required]],
+      invoiceType: [''],
       branchName: [''],
       address: ['', [Validators.required]],
       phoneNumber: [''],
@@ -1926,7 +1944,6 @@ export class StoresManagementComponent implements OnInit {
       inclusiveSerialNumber: [''],
       serialNumber: [''],
       minNumber: [''],
-      invoiceType: [''],
       invoiceNumber: [''],
       permitDateIssued: [''],
       validityNotice: [''],
@@ -2398,6 +2415,7 @@ export class StoresManagementComponent implements OnInit {
         companyId: currentPermission.companyId,
         storeName: formData.storeName,
         storeType: formData.storeType,
+        invoiceType: formData.invoiceType || '',
         branchName: formData.branchName || '',
         address: formData.address,
         phoneNumber: formData.phoneNumber || '',
