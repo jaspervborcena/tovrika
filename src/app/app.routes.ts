@@ -15,20 +15,55 @@ export const routes: Routes = [
   {
     path: '',
     loadComponent: () => import('./pages/home/home.component').then(m => m.HomeComponent),
-    canActivate: [(route: ActivatedRouteSnapshot, state: RouterStateSnapshot) => {
+    canActivate: [async (route: ActivatedRouteSnapshot, state: RouterStateSnapshot) => {
       const authService = inject(AuthService);
       const router = inject(Router);
       
-      // If user is authenticated, check if they're a visitor
+      // Wait for Firebase auth state to be restored (max 3 seconds)
+      let attempts = 0;
+      const maxAttempts = 30; // 3 seconds (30 * 100ms)
+      
+      while (authService['isLoading']() && attempts < maxAttempts) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        attempts++;
+      }
+      
+      console.log('🏠 Root Guard: Auth state loaded after', attempts * 100, 'ms');
+      
+      // If user is authenticated, check where they should be redirected
       if (authService.isAuthenticated()) {
+        const currentUser = authService.getCurrentUser();
         const currentPermission = authService.getCurrentPermission();
+        const rememberMe = localStorage.getItem('rememberMe') === 'true';
+        
+        console.log('🏠 Root Guard: Authenticated user detected', {
+          email: currentUser?.email,
+          rememberMe,
+          hasPermission: !!currentPermission,
+          hasCompanyId: !!currentPermission?.companyId
+        });
+        
         const isVisitor = !currentPermission || 
                          !currentPermission.companyId || 
                          currentPermission.companyId.trim() === '' || 
                          currentPermission.roleId === 'visitor';
         
+        // If remember me is enabled and user is authenticated, redirect to appropriate page
+        if (rememberMe) {
+          if (isVisitor) {
+            console.log('🏠 Root Guard: Visitor with remember me - redirecting to onboarding');
+            router.navigate(['/onboarding']);
+            return false;
+          } else {
+            console.log('🏠 Root Guard: User with remember me - redirecting to dashboard');
+            router.navigate(['/dashboard']);
+            return false;
+          }
+        }
+        
+        // If not remember me but is visitor, go to onboarding
         if (isVisitor) {
-          console.log('🏠 HomeGuard: Visitor trying to access home, redirecting to onboarding');
+          console.log('🏠 Root Guard: Visitor without remember me - redirecting to onboarding');
           router.navigate(['/onboarding']);
           return false;
         }
@@ -39,7 +74,53 @@ export const routes: Routes = [
   },
   {
     path: 'login',
-    loadComponent: () => import('./pages/auth/login/login.component').then(m => m.LoginComponent)
+    loadComponent: () => import('./pages/auth/login/login.component').then(m => m.LoginComponent),
+    canActivate: [async (route: ActivatedRouteSnapshot, state: RouterStateSnapshot) => {
+      const authService = inject(AuthService);
+      const router = inject(Router);
+      
+      // Wait for Firebase auth state to be restored (max 3 seconds)
+      let attempts = 0;
+      const maxAttempts = 30; // 3 seconds (30 * 100ms)
+      
+      while (authService['isLoading']() && attempts < maxAttempts) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        attempts++;
+      }
+      
+      console.log('🔐 Login Guard: Auth state loaded after', attempts * 100, 'ms');
+      
+      // If user is already authenticated with remember me, redirect them
+      if (authService.isAuthenticated()) {
+        const currentUser = authService.getCurrentUser();
+        const currentPermission = authService.getCurrentPermission();
+        const rememberMe = localStorage.getItem('rememberMe') === 'true';
+        
+        console.log('🔐 Login Guard: Already authenticated', {
+          email: currentUser?.email,
+          rememberMe,
+          hasAgreedToPolicy: currentUser?.isAgreedToPolicy
+        });
+        
+        if (rememberMe) {
+          const isVisitor = !currentPermission || 
+                           !currentPermission.companyId || 
+                           currentPermission.companyId.trim() === '' || 
+                           currentPermission.roleId === 'visitor';
+          
+          if (isVisitor) {
+            console.log('🔐 Login Guard: Redirecting authenticated visitor to onboarding');
+            router.navigate(['/onboarding']);
+          } else {
+            console.log('🔐 Login Guard: Redirecting authenticated user to dashboard');
+            router.navigate(['/dashboard']);
+          }
+          return false;
+        }
+      }
+      
+      return true;
+    }]
   },
   {
     path: 'register',
