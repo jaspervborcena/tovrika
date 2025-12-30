@@ -9,6 +9,7 @@ import {
   query, 
   where, 
   getDocs,
+  getDoc,
   addDoc
 } from '@angular/fire/firestore';
 import { AuthService } from './auth.service';
@@ -178,16 +179,39 @@ export class UserRoleService {
       await this.offlineDocService.createDocument('userRoles', docData);
 
       // Update user's permissions array in users collection
+      // First, get the current user document to check existing permissions
       const userDocRef = doc(this.firestore, 'users', userRoleData.userId);
-      const permissionUpdate = {
-        permissions: [{
-          companyId: currentPermission.companyId,
-          storeId: userRoleData.storeId,  
+      const userDocSnap = await getDoc(userDocRef);
+      
+      let permissions: any[] = [];
+      if (userDocSnap.exists()) {
+        const userData = userDocSnap.data();
+        permissions = Array.isArray(userData?.['permissions']) ? [...userData['permissions']] : [];
+      }
+      
+      // Check if permission for this company already exists
+      const existingPermIdx = permissions.findIndex(p => p.companyId === currentPermission.companyId);
+      if (existingPermIdx >= 0) {
+        // Update existing permission
+        permissions[existingPermIdx] = {
+          ...permissions[existingPermIdx],
+          storeId: userRoleData.storeId,
           roleId: userRoleData.roleId
-        }],
+        };
+      } else {
+        // Add new permission
+        permissions.push({
+          companyId: currentPermission.companyId,
+          storeId: userRoleData.storeId,
+          roleId: userRoleData.roleId
+        });
+      }
+      
+      const permissionUpdate = {
+        permissions: permissions,
         updatedAt: new Date()
       };
-  await this.offlineDocService.updateDocument('users', userRoleData.userId, permissionUpdate);
+      await this.offlineDocService.updateDocument('users', userRoleData.userId, permissionUpdate);
 
       await this.loadUserRoles(); // Refresh the data
     } catch (error) {

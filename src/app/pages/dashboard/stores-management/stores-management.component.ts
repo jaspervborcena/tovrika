@@ -72,6 +72,7 @@ import { Timestamp } from '@angular/fire/firestore';
             <table class="stores-table">
             <thead>
               <tr>
+                <th>Store Code</th>
                 <th>Store Name</th>
                 <th>Branch Name</th>
                 <th>Store Type</th>
@@ -83,6 +84,7 @@ import { Timestamp } from '@angular/fire/firestore';
             </thead>
             <tbody>
               <tr *ngFor="let store of filteredStores">
+                <td class="store-code-cell">{{ store.storeCode || '-' }}</td>
                 <td class="store-name-cell">{{ store.storeName }}</td>
                 <td class="branch-name-cell">{{ store.branchName || '-' }}</td>
                 <td class="store-type-cell">{{ store.storeType }}</td>

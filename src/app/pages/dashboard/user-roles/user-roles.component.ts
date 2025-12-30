@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, signal, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { UserRoleService } from '../../../services/user-role.service';
@@ -6,7 +6,9 @@ import { RoleDefinitionService, RoleDefinition } from '../../../services/role-de
 import { StoreService, Store } from '../../../services/store.service';
 import { AuthService } from '../../../services/auth.service';
 import { UserRole } from '../../../interfaces/user-role.interface';
+import { AccessRequest } from '../../../interfaces/access-request.interface';
 import { ToastService } from '../../../shared/services/toast.service';
+import { getFirestore, collection, query, where, getDocs, doc, updateDoc, Timestamp } from 'firebase/firestore';
 
 @Component({
   selector: 'app-user-roles',
@@ -29,6 +31,46 @@ import { ToastService } from '../../../shared/services/toast.service';
         </div>
       </div>
 
+      <!-- Store Selection -->
+      <div class="store-selection-section" *ngIf="stores().length > 0">
+        <div *ngIf="hasMultipleStores(); else singleStore" class="store-selector">
+          <label for="storeSelect">Store:</label>
+          <select 
+            id="storeSelect"
+            [value]="selectedStoreId()"
+            (change)="onStoreChange($event)"
+            class="store-select">
+            <option *ngFor="let store of stores()" [value]="store.id">
+              {{ store.storeName.toUpperCase() }}
+            </option>
+          </select>
+        </div>
+        <ng-template #singleStore>
+          <div class="single-store">
+            <label>Store:</label>
+            <span class="store-name">{{ stores()[0].storeName.toUpperCase() }}</span>
+          </div>
+        </ng-template>
+      </div>
+
+      <!-- Tabs -->
+      <div class="tabs-section">
+        <div class="tabs">
+          <button 
+            class="tab-btn" 
+            [class.active]="activeTab() === 'users'"
+            (click)="switchTab('users')">
+            User List
+          </button>
+          <button 
+            class="tab-btn" 
+            [class.active]="activeTab() === 'requests'"
+            (click)="switchTab('requests')">
+            Request List ({{ filteredAccessRequests().length }})
+          </button>
+        </div>
+      </div>
+
       <!-- Search and Filters -->
       <div class="filters-section">
         <div class="search-container">
@@ -44,8 +86,8 @@ import { ToastService } from '../../../shared/services/toast.service';
         </div>
       </div>
 
-      <!-- User Roles Table -->
-      <div class="table-container">
+      <!-- User List Tab -->
+      <div class="table-container" *ngIf="activeTab() === 'users'">
         <div class="table-header">
           <h3>User Roles ({{ filteredUserRoles.length }})</h3>
           <button 
@@ -120,22 +162,103 @@ import { ToastService } from '../../../shared/services/toast.service';
             <p>Loading user roles...</p>
           </div>
         </div>
-        <!-- Delete Confirmation Modal -->
-        <div class="modal-overlay" *ngIf="showDeleteModal" (click)="cancelDeleteUserRole()">
-          <div class="modal" (click)="$event.stopPropagation()">
-            <div class="modal-header">
-              <h3>Confirm Delete</h3>
-              <button class="close-btn" (click)="cancelDeleteUserRole()">×</button>
-            </div>
-            <div class="modal-body">
-              <ng-container *ngIf="userRoleToDelete">
-                <p>Are you sure you want to delete the role assignment for <b>{{ userRoleToDelete.email }}</b>?</p>
-              </ng-container>
-            </div>
-            <div class="modal-footer">
-              <button class="btn btn-secondary" (click)="cancelDeleteUserRole()">Cancel</button>
-              <button class="btn btn-danger" (click)="confirmDeleteUserRole()">Delete</button>
-            </div>
+      </div>
+
+      <!-- Request List Tab -->
+      <div class="table-container" *ngIf="activeTab() === 'requests'">
+        <div class="table-header">
+          <h3>Access Requests ({{ filteredAccessRequests().length }})</h3>
+          <button 
+            class="btn-icon-action" 
+            (click)="refreshAccessRequests()"
+            title="Refresh access requests"
+            aria-label="Refresh access requests">
+            🔄
+          </button>
+        </div>
+
+        <div class="table-wrapper" *ngIf="filteredAccessRequests().length > 0">
+          <table class="user-roles-table">
+            <thead>
+              <tr>
+                <th>Email</th>
+                <th>Requested Role</th>
+                <th>Store Code</th>
+                <th>Status</th>
+                <th>Created</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let request of filteredAccessRequests()">
+                <td class="email-cell">{{ request.email }}</td>
+                <td class="role-cell">
+                  <span class="role-badge" [class]="'role-' + request.requestedRole">
+                    {{ request.requestedRole | titlecase }}
+                  </span>
+                </td>
+                <td class="store-code-cell">{{ request.storeCode }}</td>
+                <td class="status-cell">
+                  <span class="status-badge" [class]="'status-' + request.status">
+                    {{ request.status | titlecase }}
+                  </span>
+                </td>
+                <td class="date-cell">{{ request.createdAt | date:'short' }}</td>
+                <td class="actions-cell">
+                  <ng-container *ngIf="request.status === 'pending' && canManageRequest(request)">
+                    <button 
+                      class="btn btn-success btn-sm"
+                      (click)="approveRequest(request)"
+                      title="Approve request">
+                      Approve
+                    </button>
+                    <button 
+                      class="btn btn-danger btn-sm"
+                      (click)="rejectRequest(request)"
+                      title="Reject request">
+                      Reject
+                    </button>
+                  </ng-container>
+                  <span *ngIf="request.status !== 'pending'" class="no-actions">—</span>
+                  <span *ngIf="request.status === 'pending' && !canManageRequest(request)" class="no-actions">—</span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Empty State -->
+        <div class="empty-state" *ngIf="filteredAccessRequests().length === 0 && !isLoading">
+          <div class="empty-content">
+            <h3>No Access Requests Found</h3>
+            <p>No access requests for the selected store.</p>
+          </div>
+        </div>
+
+        <!-- Loading State -->
+        <div class="loading-state" *ngIf="isLoading">
+          <div class="loading-content">
+            <div class="spinner"></div>
+            <p>Loading access requests...</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Delete Confirmation Modal -->
+      <div class="modal-overlay" *ngIf="showDeleteModal" (click)="cancelDeleteUserRole()">
+        <div class="modal" (click)="$event.stopPropagation()">
+          <div class="modal-header">
+            <h3>Confirm Delete</h3>
+            <button class="close-btn" (click)="cancelDeleteUserRole()">×</button>
+          </div>
+          <div class="modal-body">
+            <ng-container *ngIf="userRoleToDelete">
+              <p>Are you sure you want to delete the role assignment for <b>{{ userRoleToDelete.email }}</b>?</p>
+            </ng-container>
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-secondary" (click)="cancelDeleteUserRole()">Cancel</button>
+            <button class="btn btn-danger" (click)="confirmDeleteUserRole()">Delete</button>
           </div>
         </div>
       </div>
@@ -268,6 +391,119 @@ import { ToastService } from '../../../shared/services/toast.service';
       gap: 0.75rem;
     }
 
+    /* Store Selection Styles */
+    .store-selection-section {
+      max-width: 1200px;
+      margin: 0 auto 1.5rem;
+      padding: 0 1rem;
+    }
+
+    .store-selector {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      padding: 1rem;
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    }
+
+    .store-selector label {
+      font-weight: 600;
+      color: #4a5568;
+      font-size: 0.875rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .store-select {
+      padding: 0.5rem 1rem;
+      border: 1px solid #e2e8f0;
+      border-radius: 6px;
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: #2d3748;
+      background: white;
+      cursor: pointer;
+      transition: all 0.2s;
+      min-width: 200px;
+    }
+
+    .store-select:hover {
+      border-color: #4f46e5;
+    }
+
+    .store-select:focus {
+      outline: none;
+      border-color: #4f46e5;
+      box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+    }
+
+    .single-store {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      padding: 1rem;
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    }
+
+    .single-store label {
+      font-weight: 600;
+      color: #4a5568;
+      font-size: 0.875rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .store-name {
+      font-weight: 600;
+      font-size: 0.875rem;
+      color: #2d3748;
+    }
+
+    /* Tabs Styles */
+    .tabs-section {
+      max-width: 1200px;
+      margin: 0 auto 1.5rem;
+      padding: 0 1rem;
+    }
+
+    .tabs {
+      display: flex;
+      gap: 0.5rem;
+      border-bottom: 2px solid #e2e8f0;
+      background: white;
+      border-radius: 8px 8px 0 0;
+      padding: 0.5rem 0.5rem 0;
+    }
+
+    .tab-btn {
+      padding: 0.75rem 1.5rem;
+      background: transparent;
+      border: none;
+      border-bottom: 3px solid transparent;
+      color: #718096;
+      font-weight: 600;
+      font-size: 0.875rem;
+      cursor: pointer;
+      transition: all 0.2s;
+      position: relative;
+      top: 2px;
+    }
+
+    .tab-btn:hover {
+      color: #4f46e5;
+      background: #f7fafc;
+    }
+
+    .tab-btn.active {
+      color: #4f46e5;
+      border-bottom-color: #4f46e5;
+      background: #f7fafc;
+    }
+
     .filters-section {
       max-width: 1200px;
       margin: 0 auto 2rem auto;
@@ -387,6 +623,51 @@ import { ToastService } from '../../../shared/services/toast.service';
       color: #4a5568;
     }
 
+    .role-badge.role-store_manager {
+      background: #fef3c7;
+      color: #92400e;
+    }
+
+    .role-badge.role-creator {
+      background: #ddd6fe;
+      color: #5b21b6;
+    }
+
+    /* Status Badge Styles */
+    .status-badge {
+      padding: 0.25rem 0.75rem;
+      border-radius: 9999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.025em;
+    }
+
+    .status-badge.status-pending {
+      background: #fef3c7;
+      color: #92400e;
+    }
+
+    .status-badge.status-approved {
+      background: #c6f6d5;
+      color: #2f855a;
+    }
+
+    .status-badge.status-rejected {
+      background: #fed7d7;
+      color: #c53030;
+    }
+
+    .store-code-cell {
+      font-family: monospace;
+      color: #4a5568;
+      font-weight: 600;
+    }
+
+    .status-cell {
+      color: #4a5568;
+    }
+
     .store-cell {
       color: #4a5568;
     }
@@ -445,6 +726,25 @@ import { ToastService } from '../../../shared/services/toast.service';
 
     .btn-danger:hover:not(:disabled) {
       background: #e53e3e;
+    }
+
+    .btn-success {
+      background: #48bb78;
+      color: white;
+    }
+
+    .btn-success:hover:not(:disabled) {
+      background: #38a169;
+    }
+
+    .btn-sm {
+      padding: 0.375rem 0.75rem;
+      font-size: 0.8125rem;
+    }
+
+    .no-actions {
+      color: #cbd5e0;
+      font-size: 1.125rem;
     }
 
     .btn-sm {
@@ -668,6 +968,25 @@ import { ToastService } from '../../../shared/services/toast.service';
   `]
 })
 export class UserRolesComponent implements OnInit {
+  // Signals
+  readonly stores = signal<Store[]>([]);
+  readonly selectedStoreId = signal<string>('');
+  readonly hasMultipleStores = computed(() => this.stores().length > 1);
+  readonly activeTab = signal<'users' | 'requests'>('users');
+  readonly accessRequests = signal<AccessRequest[]>([]);
+  readonly filteredAccessRequests = computed(() => {
+    const selectedStore = this.selectedStoreId();
+    if (!selectedStore) return this.accessRequests();
+    
+    // Filter requests that match the selected store
+    return this.accessRequests().filter(request => {
+      // Match by storeCode or resolved storeId
+      return request.storeId === selectedStore || 
+             this.getStoreByCode(request.storeCode)?.id === selectedStore;
+    });
+  });
+
+  // Existing properties
   showDeleteModal: boolean = false;
   userRoleToDelete: UserRole | null = null;
   findUserError: string = '';
@@ -732,19 +1051,20 @@ export class UserRolesComponent implements OnInit {
 
   async ngOnInit() {
     await this.loadData();
+    await this.loadAccessRequests();
   }
 
   async loadData() {
     this.isLoading = true;
     
     try {
-  // Load user roles
+      // Load user roles
       await this.userRoleService.loadUserRoles();
       this.userRoles = this.userRoleService.getCompanyUserRoles();
       this.filteredUserRoles = [...this.userRoles];
 
-  // Enrich with user profiles (names/emails)
-  await this.loadUserProfilesForRoles(this.userRoles);
+      // Enrich with user profiles (names/emails)
+      await this.loadUserProfilesForRoles(this.userRoles);
 
       // Load available roles
       await this.roleDefinitionService.loadRoleDefinitions();
@@ -757,11 +1077,144 @@ export class UserRolesComponent implements OnInit {
       }
       this.availableStores = this.storeService.getStores();
       
+      // Set stores signal and select first store
+      this.stores.set(this.availableStores);
+      if (this.availableStores.length > 0) {
+        this.selectedStoreId.set(this.availableStores[0].id || '');
+      }
+      
     } catch (error) {
       console.error('Error loading data:', error);
     } finally {
       this.isLoading = false;
     }
+  }
+
+  // Load access requests from Firestore
+  async loadAccessRequests() {
+    try {
+      const db = getFirestore();
+      const currentPermission = this.authService.getCurrentPermission();
+      if (!currentPermission?.companyId) return;
+
+      const requestsRef = collection(db, 'accessRequests');
+      const querySnapshot = await getDocs(requestsRef);
+      
+      const requests: AccessRequest[] = [];
+      for (const docSnap of querySnapshot.docs) {
+        const data = docSnap.data();
+        const request: AccessRequest = {
+          id: docSnap.id,
+          createdAt: data['createdAt']?.toDate() || new Date(),
+          createdBy: data['createdBy'] || '',
+          email: data['email'] || '',
+          requestedRole: data['requestedRole'] || '',
+          status: data['status'] || 'pending',
+          storeCode: data['storeCode'] || '',
+          uid: data['uid'] || '',
+          updatedAt: data['updatedAt']?.toDate() || new Date(),
+          updatedBy: data['updatedBy'] || '',
+        };
+
+        // Resolve storeId from storeCode
+        const store = this.getStoreByCode(request.storeCode);
+        if (store) {
+          request.storeId = store.id;
+        }
+
+        requests.push(request);
+      }
+
+      this.accessRequests.set(requests);
+    } catch (error) {
+      console.error('Error loading access requests:', error);
+      this.toastService.error('Failed to load access requests');
+    }
+  }
+
+  // Store management methods
+  onStoreChange(event: Event) {
+    const target = event.target as HTMLSelectElement;
+    this.selectedStoreId.set(target.value);
+  }
+
+  getStoreByCode(storeCode: string): Store | undefined {
+    return this.stores().find(store => store.storeCode === storeCode);
+  }
+
+  // Tab management
+  switchTab(tab: 'users' | 'requests') {
+    this.activeTab.set(tab);
+  }
+
+  // Access request management
+  canManageRequest(request: AccessRequest): boolean {
+    const selectedStore = this.selectedStoreId();
+    if (!selectedStore) return false;
+    
+    // Check if request's store matches selected store
+    return request.storeId === selectedStore || 
+           this.getStoreByCode(request.storeCode)?.id === selectedStore;
+  }
+
+  async approveRequest(request: AccessRequest) {
+    if (!request.id) return;
+
+    try {
+      const db = getFirestore();
+      const requestRef = doc(db, 'accessRequests', request.id);
+      const currentUser = this.authService.getCurrentUser();
+
+      await updateDoc(requestRef, {
+        status: 'approved',
+        updatedAt: Timestamp.now(),
+        updatedBy: currentUser?.uid || ''
+      });
+
+      // Create user role for the approved request
+      const store = this.getStoreByCode(request.storeCode);
+      if (store?.id) {
+        await this.userRoleService.createUserRole({
+          email: request.email,
+          userId: request.uid,
+          roleId: request.requestedRole,
+          storeId: store.id
+        } as Omit<UserRole, 'id' | 'createdAt' | 'updatedAt' | 'companyId'>);
+      }
+
+      this.toastService.success('Access request approved');
+      await this.loadAccessRequests();
+      await this.loadData();
+    } catch (error) {
+      console.error('Error approving request:', error);
+      this.toastService.error('Failed to approve request');
+    }
+  }
+
+  async rejectRequest(request: AccessRequest) {
+    if (!request.id) return;
+
+    try {
+      const db = getFirestore();
+      const requestRef = doc(db, 'accessRequests', request.id);
+      const currentUser = this.authService.getCurrentUser();
+
+      await updateDoc(requestRef, {
+        status: 'rejected',
+        updatedAt: Timestamp.now(),
+        updatedBy: currentUser?.uid || ''
+      });
+
+      this.toastService.success('Access request rejected');
+      await this.loadAccessRequests();
+    } catch (error) {
+      console.error('Error rejecting request:', error);
+      this.toastService.error('Failed to reject request');
+    }
+  }
+
+  async refreshAccessRequests() {
+    await this.loadAccessRequests();
   }
 
   onSearchChange() {
