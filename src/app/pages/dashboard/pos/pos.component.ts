@@ -73,9 +73,13 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   private sanitizer = inject(DomSanitizer);
 
   private routerSubscription: any;
+  private resizeListener?: () => void;
   
   // Barcode image cache
   private barcodeImageCache = new Map<string, SafeUrl>();
+  
+  // Expose Math for template
+  readonly Math = Math;
 
   constructor() {
     console.log('🏗️ POS COMPONENT: Constructor called - Component is being created!');
@@ -206,6 +210,8 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       this.sortModeSignal.set(mode);
       // Reset grid pagination to initial 3 rows when sort changes
       this.gridRowsVisible.set(3);
+      // Reset to page 1 when sort changes
+      this.resetPagination();
     }
     // Close dropdown after a selection
     this.sortMenuOpenSignal.set(false);
@@ -241,17 +247,37 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   // Each "Show more" reveals 2 more rows. With a 6-column grid, each row shows 6 items.
   readonly gridRowsVisible = signal<number>(3); // initial rows visible (3 rows -> 18 items)
   private readonly gridColumns = 6; // must match CSS grid columns for desktop
+  
+  // Pagination state
+  readonly currentPage = signal<number>(1);
+  readonly isMobileView = signal<boolean>(typeof window !== 'undefined' ? window.innerWidth < 768 : false);
+  
+  // Dynamic page size based on screen width
+  readonly pageSize = computed(() => {
+    return this.isMobileView() ? 4 : 12; // Mobile: 2 cols × 2 rows, Desktop: 6 cols × 2 rows
+  });
 
   // Products to display in grid view based on visible rows
   readonly displayGridProducts = computed(() => {
     const all = this.filteredProducts();
-    const count = this.gridRowsVisible() * this.gridColumns;
-    // Only apply when in grid view under New tab
+    // Apply pagination: show products per page based on screen size
     if (this.accessTab() === 'New' && this.currentView() === 'grid') {
-      return all.slice(0, count);
+      const startIndex = (this.currentPage() - 1) * this.pageSize();
+      const endIndex = startIndex + this.pageSize();
+      return all.slice(startIndex, endIndex);
     }
     return all;
   });
+  
+  // Total pages for pagination
+  readonly totalPages = computed(() => {
+    const total = this.filteredProducts().length;
+    return Math.ceil(total / this.pageSize());
+  });
+  
+  // Check if there are more pages
+  readonly hasNextPage = computed(() => this.currentPage() < this.totalPages());
+  readonly hasPreviousPage = computed(() => this.currentPage() > 1);
 
   // Favorite products derived from filtered list
   readonly favoriteProducts = computed(() => {
@@ -2193,6 +2219,14 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }, 100);
     
+    // Add window resize listener for mobile view
+    if (typeof window !== 'undefined') {
+      this.resizeListener = () => {
+        this.isMobileView.set(window.innerWidth < 768);
+      };
+      window.addEventListener('resize', this.resizeListener);
+    }
+    
     // Add Firestore test
     await this.testFirestoreConnection();
     
@@ -2446,6 +2480,9 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     console.log('🏗️ POS COMPONENT: ngOnDestroy called - Component is being destroyed');
     if (this.routerSubscription) {
       this.routerSubscription.unsubscribe();
+    }
+    if (this.resizeListener && typeof window !== 'undefined') {
+      window.removeEventListener('resize', this.resizeListener);
     }
   }
 
@@ -3832,11 +3869,71 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     }
     return false;
   }
+  
+  // Pagination methods
+  nextPage(): void {
+    if (this.hasNextPage()) {
+      this.currentPage.update(p => p + 1);
+    }
+  }
+  
+  previousPage(): void {
+    if (this.hasPreviousPage()) {
+      this.currentPage.update(p => p - 1);
+    }
+  }
+  
+  goToPage(page: number): void {
+    if (page >= 1 && page <= this.totalPages()) {
+      this.currentPage.set(page);
+    }
+  }
+  
+  resetPagination(): void {
+    this.currentPage.set(1);
+  }
+  
+  // Generate page numbers for pagination display
+  getPageNumbers(): number[] {
+    const total = this.totalPages();
+    const current = this.currentPage();
+    const pages: number[] = [];
+    
+    if (total <= 7) {
+      // Show all pages if 7 or fewer
+      for (let i = 1; i <= total; i++) {
+        pages.push(i);
+      }
+    } else {
+      // Always show first page
+      pages.push(1);
+      
+      if (current <= 3) {
+        // Near start: 1 2 3 4 ... total
+        pages.push(2, 3, 4);
+        pages.push(-1); // ellipsis
+        pages.push(total);
+      } else if (current >= total - 2) {
+        // Near end: 1 ... total-3 total-2 total-1 total
+        pages.push(-1); // ellipsis
+        pages.push(total - 3, total - 2, total - 1, total);
+      } else {
+        // Middle: 1 ... current-1 current current+1 ... total
+        pages.push(-1); // ellipsis
+        pages.push(current - 1, current, current + 1);
+        pages.push(-1); // ellipsis
+        pages.push(total);
+      }
+    }
+    
+    return pages;
+  }
 
   setSelectedCategory(category: string): void {
     this.posSharedService.updateSelectedCategory(category);
     // Reset grid pagination when filters change
     this.gridRowsVisible.set(4);
+    this.resetPagination();
   }
 
   setCurrentView(view: ProductViewType): void {
@@ -3844,6 +3941,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     // Reset pagination when switching views
     if (view === 'grid' || view === 'favorites') {
       this.gridRowsVisible.set(4);
+      this.resetPagination();
     }
   }
 
