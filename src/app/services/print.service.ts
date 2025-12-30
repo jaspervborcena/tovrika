@@ -1,5 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { IndexedDBService } from '../core/services/indexeddb.service';
+import { Capacitor } from '@capacitor/core';
+import { AndroidBluetoothPrinterService } from './android-bluetooth-printer.service';
 
 // Web Bluetooth API types (simplified)
 declare const navigator: any;
@@ -31,6 +33,7 @@ export interface PaperSizeConfig {
 })
 export class PrintService {
   private indexedDBService = inject(IndexedDBService);
+  private androidPrinter = inject(AndroidBluetoothPrinterService);
   
   // Bluetooth printer connection state
   private bluetoothDevice: any = null;
@@ -129,10 +132,36 @@ export class PrintService {
    * 🎯 DIRECT HARDWARE PRINT: Bypasses browser dialog when hardware printers are available
    * USB: NO FALLBACK - Direct thermal printing only (no browser dialog)
    * Bluetooth: Has fallback to browser print if connection fails
+   * Android: Uses native Bluetooth LE for thermal printers
    */
   async printReceiptDirect(receiptData: any): Promise<{ success: boolean; method: string; message: string }> {
     try {
       console.log('🎯 Starting direct hardware print...');
+      
+      // 🔥 ANDROID NATIVE: Check if running on Android
+      if (Capacitor.getPlatform() === 'android') {
+        try {
+          console.log('📱 Android platform detected - using native Bluetooth printing...');
+          const receiptHtml = this.generateReceiptHTML(receiptData);
+          const paperWidth = this.getPaperSizeConfig().lineChars;
+          await this.androidPrinter.quickPrint(receiptHtml, paperWidth);
+          return {
+            success: true,
+            method: 'Android Bluetooth',
+            message: 'Receipt printed successfully via Android Bluetooth printer'
+          };
+        } catch (androidError: any) {
+          console.log('⚠️ Android native printing failed:', androidError.message);
+          // Fallback to browser print dialog on Android
+          console.log('🔄 Falling back to Android print dialog...');
+          await this.printReceiptSmart(receiptData);
+          return {
+            success: true,
+            method: 'Android Print Dialog',
+            message: 'Print dialog opened. Please select your printer.'
+          };
+        }
+      }
       
       // 🔥 PRIORITY 1: Try USB printer first (if Web Serial API is supported)
       if ('serial' in navigator) {
