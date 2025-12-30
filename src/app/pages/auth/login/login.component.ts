@@ -103,16 +103,36 @@ export class LoginComponent implements OnInit {
             await this.router.navigate(['/pos']);
           }
         } else {
-          // Online mode - always go to policy agreement after successful login
-          try {
-            console.log('🔐 Login: Online mode - redirecting to policy agreement...');
-            const navResult = await this.router.navigate(['/policy-agreement']);
-            console.log('🔐 Login: Navigation result:', navResult);
-          } catch (navError) {
-            console.error('🔐 Login: Policy agreement navigation failed:', navError);
-            console.warn('🔐 Login: Falling back to onboarding...');
-            // Fallback to onboarding if policy-agreement chunk fails
-            await this.router.navigate(['/onboarding']);
+          // Online mode - check if user already agreed to policy
+          console.log('🔐 Login: Online mode - checking policy agreement status...');
+          
+          // Check if user already agreed to policy (from localStorage or IndexedDB)
+          const hasAgreedToPolicy = user.isAgreedToPolicy || false;
+          console.log('🔐 Login: User policy agreement status:', hasAgreedToPolicy);
+          
+          if (hasAgreedToPolicy && rememberMe) {
+            // User already agreed and remember me is checked - skip policy page
+            console.log('🔐 Login: Policy already agreed with remember me - redirecting to onboarding...');
+            try {
+              await this.router.navigate(['/onboarding']);
+              console.log('🔐 Login: Navigation to onboarding successful');
+            } catch (navError) {
+              console.error('🔐 Login: Onboarding navigation failed:', navError);
+              // Fallback to policy agreement if onboarding fails
+              await this.router.navigate(['/policy-agreement']);
+            }
+          } else {
+            // User needs to agree to policy - go to policy agreement
+            try {
+              console.log('🔐 Login: Redirecting to policy agreement...');
+              const navResult = await this.router.navigate(['/policy-agreement']);
+              console.log('🔐 Login: Navigation result:', navResult);
+            } catch (navError) {
+              console.error('🔐 Login: Policy agreement navigation failed:', navError);
+              console.warn('🔐 Login: Falling back to onboarding...');
+              // Fallback to onboarding if policy-agreement chunk fails
+              await this.router.navigate(['/onboarding']);
+            }
           }
         }
       } catch (err: any) {
