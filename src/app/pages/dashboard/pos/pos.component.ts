@@ -142,6 +142,35 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       this.handleEmptyStores();
     } else {
       console.log('🏪 Store details:', stores.map(s => ({ id: s.id, name: s.storeName, companyId: s.companyId })));
+      
+      // Count products per store and prioritize stores with products
+      const allProducts = this.productService.getProductsSignal()();
+      const storeProductCounts = new Map<string, number>();
+      
+      stores.forEach(store => {
+        const productCount = allProducts.filter(p => p.storeId === store.id).length;
+        storeProductCounts.set(store.id || '', productCount);
+      });
+      
+      // Sort stores: stores with products first, then by product count descending
+      const sortedStores = [...stores].sort((a, b) => {
+        const countA = storeProductCounts.get(a.id || '') || 0;
+        const countB = storeProductCounts.get(b.id || '') || 0;
+        
+        // If one has products and other doesn't, prioritize the one with products
+        if (countA > 0 && countB === 0) return -1;
+        if (countA === 0 && countB > 0) return 1;
+        
+        // If both have products or both don't, sort by count descending
+        return countB - countA;
+      });
+      
+      console.log('🏪 Store product counts:', Array.from(storeProductCounts.entries()).map(([id, count]) => ({
+        store: stores.find(s => s.id === id)?.storeName,
+        count
+      })));
+      
+      return sortedStores;
     }
     
     return stores;
@@ -3785,6 +3814,73 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     console.log('🎯 selectStore called with storeId:', storeId);
     console.log('🏪 Available stores:', this.availableStores().map(s => ({ id: s.id, name: s.storeName, companyId: s.companyId })));
     
+    // Get companyId for the selected store first
+    const storeInfo = this.availableStores().find(s => s.id === storeId);
+    const companyIdForStore = storeInfo?.companyId;
+    
+    // Update IndexedDB immediately with the new selected store
+    try {
+      const currentUser = this.authService.getCurrentUser();
+      console.log('💾 Current user for IndexedDB update:', currentUser?.uid);
+      
+      if (currentUser?.uid) {
+        const existingUserData = await this.indexedDBService.getUserData(currentUser.uid);
+        console.log('💾 Existing user data from IndexedDB:', existingUserData);
+        
+        if (existingUserData) {
+          // Update permissions array to reflect the new store selection
+          let updatedPermissions = existingUserData.permissions || [];
+          
+          if (companyIdForStore) {
+            // Find the permission for this company
+            const permissionIndex = updatedPermissions.findIndex(p => p.companyId === companyIdForStore);
+            
+            if (permissionIndex >= 0) {
+              // Update existing permission with new storeId
+              updatedPermissions[permissionIndex] = {
+                ...updatedPermissions[permissionIndex],
+                storeId: storeId
+              };
+              console.log('💾 Updated permission for company:', companyIdForStore, 'with storeId:', storeId);
+            } else {
+              // Add new permission if it doesn't exist
+              const roleId = existingUserData.roleId || 'creator';
+              updatedPermissions.push({
+                companyId: companyIdForStore,
+                storeId: storeId,
+                roleId: roleId
+              });
+              console.log('💾 Added new permission for company:', companyIdForStore, 'with storeId:', storeId);
+            }
+          }
+          
+          const updatedUserData = { 
+            ...existingUserData, 
+            currentStoreId: storeId,
+            permissions: updatedPermissions,
+            updatedAt: new Date()
+          };
+          
+          console.log('💾 About to save updated user data:', updatedUserData);
+          await this.indexedDBService.saveUserData(updatedUserData);
+          console.log('💾 ✅ Store selection and permissions updated in IndexedDB:', storeId);
+          console.log('💾 ✅ Updated permissions:', updatedPermissions);
+          
+          // Verify the save by reading back
+          const verifyData = await this.indexedDBService.getUserData(currentUser.uid);
+          console.log('💾 ✅ VERIFICATION - Data read back from IndexedDB:', verifyData);
+          console.log('💾 ✅ VERIFICATION - currentStoreId:', verifyData?.currentStoreId);
+        } else {
+          console.error('❌ No existing user data found in IndexedDB for uid:', currentUser.uid);
+        }
+      } else {
+        console.error('❌ No current user UID available');
+      }
+    } catch (error) {
+      console.error('❌ ERROR updating store selection in IndexedDB:', error);
+      console.error('❌ Error details:', error);
+    }
+    
     // Set the selected store first - preserve cart to prevent accidental clearing
     await this.posService.setSelectedStore(storeId, { preserveCart: true });
     
@@ -3831,21 +3927,6 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       
   // Reset grid pagination when store changes
   this.gridRowsVisible.set(4);
-      
-      // Save selected store to IndexedDB for future sessions
-      try {
-        const currentUser = this.authService.getCurrentUser();
-        if (currentUser?.uid) {
-          const existingUserData = await this.indexedDBService.getUserData(currentUser.uid);
-          if (existingUserData) {
-            const updatedUserData = { ...existingUserData, currentStoreId: storeId };
-            await this.indexedDBService.saveUserData(updatedUserData);
-            console.log('💾 Store selection saved to IndexedDB:', storeId);
-          }
-        }
-      } catch (error) {
-        console.log('⚠️ Could not save store selection to IndexedDB:', error);
-      }
     } else {
       console.error('❌ No companyId available from IndexedDB or database - cannot load products');
       console.error('❌ This will prevent products from loading for store:', storeId);
