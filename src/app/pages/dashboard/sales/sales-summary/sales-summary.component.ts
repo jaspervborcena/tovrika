@@ -1757,7 +1757,7 @@ export class SalesSummaryComponent implements OnInit {
                 assignedCashierId: data.assignedCashierId || '',
                 status: data.status || 'paid',
                 cashSale: data.cashSale !== false,
-                soldTo: data.soldTo || 'Cash Sale',
+                soldTo: data.soldTo || 'Walk-in Customer',
                 tin: data.tin || '',
                 businessAddress: data.businessAddress || '',
                 invoiceNumber: data.invoiceNumber || '',
@@ -1846,7 +1846,7 @@ export class SalesSummaryComponent implements OnInit {
       const transformedOrders: Order[] = filteredOrders.map((order: any) => ({
         ...order, // Spread all existing order properties
         id: order.id || '', // Ensure id is not undefined
-        customerName: order.soldTo || 'Cash Sale',
+        customerName: order.soldTo || 'Walk-in Customer',
         paymentMethod: order.paymentMethod || 'cash'
       }));
 
@@ -1896,7 +1896,7 @@ export class SalesSummaryComponent implements OnInit {
         if (page && page.length > 0) {
         // Append - transform and dedupe against existing orders
         const current = this.orders();
-        const transformed = page.map((order: any) => ({ ...(order as any), customerName: order.soldTo || 'Cash Sale', paymentMethod: order.payment || order.paymentMethod || 'cash' }));
+        const transformed = page.map((order: any) => ({ ...(order as any), customerName: order.soldTo || 'Walk-in Customer', paymentMethod: order.payment || order.paymentMethod || 'cash' }));
 
         // Build a map from existing orders for quick dedupe
         const map = new Map<string, Order>();

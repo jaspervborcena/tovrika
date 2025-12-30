@@ -2256,7 +2256,7 @@ export class OverviewComponent implements OnInit {
       const normalized = (orders || []).map((o: any, idx: number) => ({
         ...o,
         id: o.id || `order-${idx}`,
-        customerName: o.soldTo || o.customerName || 'Cash Sale',
+        customerName: o.soldTo || o.customerName || 'Walk-in Customer',
         items: o.items || []
       }));
 

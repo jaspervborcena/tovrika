@@ -2916,6 +2916,23 @@ export class ProductManagementComponent implements OnInit {
       console.log('🔍 Company ID:', companyId);
       console.log('🔍 Store ID:', storeId);
       
+      // Validate SKU uniqueness for the current store
+      const skuId = formValue.skuId;
+      if (skuId) {
+        const allProducts = this.productService.products();
+        const duplicateSku = allProducts.find(p => 
+          p.skuId === skuId && 
+          p.storeId === storeId && 
+          (!this.isEditMode || p.id !== this.selectedProduct?.id) // Exclude current product in edit mode
+        );
+        
+        if (duplicateSku) {
+          this.toastService.error(`SKU "${skuId}" already exists for this store in product "${duplicateSku.productName}". Please use a different SKU.`);
+          this.loading = false;
+          return;
+        }
+      }
+      
       // Validate required fields
       if (!companyId) {
         throw new Error('Company ID is required but not found in user permissions');
