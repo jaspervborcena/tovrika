@@ -17,8 +17,78 @@
   right: 0;
   z-index: 50;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  transition: background 0.3s ease;
+  transition: transform 0.3s ease, background 0.3s ease, opacity 0.3s ease;
+  transform: translateY(0);
+  opacity: 1;
 }
+
+/* Header hidden state */
+.dashboard-header.header-hidden {
+  transform: translateY(-100%);
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Compact mode */
+.dashboard-header.header-compact {
+  padding: 0.5rem 0;
+}
+
+.dashboard-header.header-compact .header-content {
+  padding: 0 1rem;
+}
+
+/* Floating toggle button */
+.floating-header-toggle {
+  position: fixed;
+  top: 10px;
+  right: 20px;
+  z-index: 60;
+  width: 44px;
+  height: 44px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: 2px solid white;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 4px 20px rgba(102, 126, 234, 0.4);
+  transition: all 0.3s ease;
+  animation: slideDown 0.5s ease;
+}
+
+.floating-header-toggle:hover {
+  transform: translateY(-2px) scale(1.05);
+  box-shadow: 0 6px 25px rgba(102, 126, 234, 0.5);
+}
+
+.floating-header-toggle:active {
+  transform: translateY(0) scale(0.95);
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Header toggle button in header */
+.header-toggle-btn {
+  background: rgba(255, 255, 255, 0.1) !important;
+  border: 1px solid rgba(255, 255, 255, 0.2) !important;
+}
+
+.header-toggle-btn:hover {
+  background: rgba(255, 255, 255, 0.2) !important;
+}
+
 
 /* Language Selector Styles */
 .language-selector {
@@ -35,13 +105,20 @@
   border: 1px solid rgba(255, 255, 255, 0.3);
   border-radius: 6px;
   transition: all 0.2s ease;
-  min-width: 120px;
   color: white !important;
 }
 
 .language-btn:hover {
   background: rgba(255, 255, 255, 0.2);
   transform: translateY(-1px);
+}
+
+.language-icon {
+  font-size: 20px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .language-flag {

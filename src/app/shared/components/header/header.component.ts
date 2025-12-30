@@ -58,6 +58,10 @@ export class HeaderComponent implements OnInit {
   // Notification control - disabled when not logged in
   protected showNotifications = computed(() => !!this.currentUser());
   
+  // Header visibility control
+  protected isHeaderVisible = signal<boolean>(false);
+  protected isCompactMode = signal<boolean>(false);
+  
   // App constants and network status
   protected isOnline = computed(() => {
     const status = this.networkService.isOnline();
@@ -134,13 +138,81 @@ export class HeaderComponent implements OnInit {
     }
   }
 
+  @HostListener('window:keydown', ['$event'])
+  onKeyDown(event: KeyboardEvent) {
+    // Toggle header with Ctrl+H or Cmd+H
+    if ((event.ctrlKey || event.metaKey) && event.key === 'h') {
+      event.preventDefault();
+      this.toggleHeaderVisibility();
+    }
+  }
+
   ngOnInit() {
     this.loadDashboardData();
+    this.loadHeaderPreferences();
     
     // Subscribe to language changes for debugging
     this.translationService.getLanguageChange().subscribe(lang => {
       console.log('🌐 Header: Language changed to:', lang);
     });
+  }
+
+  // Header visibility methods
+  protected toggleHeaderVisibility(): void {
+    const newState = !this.isHeaderVisible();
+    this.isHeaderVisible.set(newState);
+    this.saveHeaderPreferences();
+    console.log('🎯 Header visibility toggled to:', newState);
+  }
+
+  protected showHeader(): void {
+    if (!this.isHeaderVisible()) {
+      this.isHeaderVisible.set(true);
+      console.log('👁️ Header shown');
+    }
+  }
+
+  protected hideHeader(): void {
+    if (this.isHeaderVisible()) {
+      this.isHeaderVisible.set(false);
+      console.log('🙈 Header hidden');
+    }
+  }
+
+  protected toggleCompactMode(): void {
+    this.isCompactMode.set(!this.isCompactMode());
+    this.saveHeaderPreferences();
+  }
+
+  private loadHeaderPreferences(): void {
+    try {
+      const saved = localStorage.getItem('headerPreferences');
+      if (saved) {
+        const prefs = JSON.parse(saved);
+        // Restore manual toggle state (default is hidden)
+        if (prefs.isVisible !== undefined) {
+          this.isHeaderVisible.set(prefs.isVisible);
+        }
+        if (prefs.compactMode !== undefined) {
+          this.isCompactMode.set(prefs.compactMode);
+        }
+      }
+    } catch (error) {
+      console.error('Error loading header preferences:', error);
+    }
+  }
+
+  private saveHeaderPreferences(): void {
+    try {
+      const prefs = {
+        isVisible: this.isHeaderVisible(),
+        compactMode: this.isCompactMode(),
+        timestamp: new Date().toISOString()
+      };
+      localStorage.setItem('headerPreferences', JSON.stringify(prefs));
+    } catch (error) {
+      console.error('Error saving header preferences:', error);
+    }
   }
 
   private async loadDashboardData() {

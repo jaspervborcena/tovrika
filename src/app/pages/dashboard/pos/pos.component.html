@@ -1,21 +1,35 @@
 <div class="pos-container">
       <app-header></app-header>
       
-      
+      <!-- Floating Cart/Back FAB (Mobile/Tablet only) -->
+      <button class="floating-cart-fab" (click)="showReceiptPanel() ? showProductPanel() : showReceiptPanelView()">
+        @if(showReceiptPanel()) {
+          <!-- Back Arrow Icon -->
+          <svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+          </svg>
+        } @else {
+          <!-- Cart Icon with Badge -->
+          <svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+          </svg>
+          @if(cartItems().length > 0) {
+            <span class="cart-badge">{{ cartItems().length }}</span>
+          }
+        }
+      </button>
 
       <!-- Main POS Layout -->
       <div class="pos-layout">
         <!-- Left Panel: Categories & Products -->
-        <div class="left-panel">
+        <div class="left-panel" [class.hidden-mobile]="showReceiptPanel()">
           
           <!-- NAVIGATION TOGGLE BUTTON -->
           <div class="navigation-toggle-row">
             <button class="navigation-toggle-btn" (click)="toggleNavigationPanel()">
-              <div style="display: flex; flex-direction: column; align-items: flex-start; flex: 1;">
-                <span class="toggle-text">{{ isNavigationCollapsed() ? ('pos.showControls' | translate) : ('pos.hideControls' | translate) }}</span>
-                <span class="controls-hint">{{ 'pos.controlsHint' | translate }}</span>
-              </div>
               <span class="toggle-icon" [class.expanded]="!isNavigationCollapsed()">▼</span>
+              <span class="toggle-text">{{ isNavigationCollapsed() ? ('pos.showControls' | translate) : ('pos.hideControls' | translate) }}</span>
+              <span class="controls-hint">{{ 'pos.controlsHint' | translate }}</span>
             </button>
           </div>
 
@@ -91,8 +105,8 @@
               
               <!-- Customer Header -->
               <div class="customer-header" (click)="toggleSoldToPanel()">
-                <h3>👤 {{ 'pos.customer' | translate }}</h3>
                 <span class="expand-arrow" [class.expanded]="!isSoldToCollapsed()">▼</span>
+                <h3>👤 {{ 'pos.customer' | translate }}</h3>
               </div>
               
               <!-- Always visible customer name -->
@@ -191,8 +205,8 @@
           <!-- Tag Filter Tabs (shown before product tabs if tags exist) -->
           <div class="tag-filter-section" *ngIf="accessTab() === 'New' && availableTagsByGroup().length > 0">
             <div class="tag-filter-header" (click)="toggleTagFilterSection()">
-              <span class="tag-filter-title">Classification</span>
               <span class="tag-filter-toggle" [class.expanded]="isTagFilterExpanded()">▼</span>
+              <span class="tag-filter-title">Classification</span>
             </div>
             <div class="tag-filter-content" *ngIf="isTagFilterExpanded()" 
                  [class.scrollable]="availableTagsByGroup().length > 12">
@@ -263,6 +277,24 @@
 
             <!-- Products Display (shown only for New access tab). Orders will use the same area for results -->
             <div class="products-display" *ngIf="accessTab() === 'New'">
+            <!-- Floating Previous Button (Mobile/Tablet) -->
+            <button 
+              *ngIf="currentView() === 'grid' && hasPreviousPage() && filteredProducts().length > pageSize()"
+              class="floating-nav-btn floating-nav-prev"
+              (click)="previousPage()"
+              title="Previous page">
+              ‹
+            </button>
+            
+            <!-- Floating Next Button (Mobile/Tablet) -->
+            <button 
+              *ngIf="currentView() === 'grid' && hasNextPage() && filteredProducts().length > pageSize()"
+              class="floating-nav-btn floating-nav-next"
+              (click)="nextPage()"
+              title="Next page">
+              ›
+            </button>
+            
             <!-- List View -->
             <div *ngIf="currentView() === 'list'" class="products-list">
               <div 
@@ -286,12 +318,13 @@
             </div>
 
             <!-- Grid View -->
-            <div *ngIf="currentView() === 'grid'" class="products-grid">
-              <div 
-                *ngFor="let product of displayGridProducts()"
-                class="product-grid-item"
-                [class.disabled]="!canInteractWithProducts()"
-                [title]="'SKU: ' + product.skuId">
+            <div *ngIf="currentView() === 'grid'" class="products-grid-container">
+              <div class="products-grid">
+                <div 
+                  *ngFor="let product of displayGridProducts()"
+                  class="product-grid-item"
+                  [class.disabled]="!canInteractWithProducts()"
+                  [title]="'SKU: ' + product.skuId">
                 <div class="product-image-container" (click)="openProductPreviewModal(product, $event)">
                   <img 
                     [src]="product.imageUrl || 'assets/noimage.png'"
@@ -321,6 +354,7 @@
                     <span class="tag-item product-tag" *ngFor="let label of getProductTagLabels(product)">{{ label }}</span>
                   </div>
                 </div>
+              </div>
               </div>
             </div>
 
@@ -880,7 +914,7 @@
       </div>
 
         <!-- Right Panel: Receipt/Cart -->
-        <div class="right-panel">
+        <div class="right-panel" [class.hidden-mobile]="!showReceiptPanel()">
           <div class="receipt-panel">
             <!-- Receipt Header -->
             <!-- <div class="receipt-header">
@@ -896,8 +930,11 @@
 
             <!-- Hotkey Hints (clickable) -->
             <fieldset class="hotkey-fieldset">
-              <legend>Shortcut keys</legend>
-              <div class="hotkey-hints">
+              <legend class="collapsible-legend" (click)="toggleHotkeySection()">
+                <span class="legend-toggle" [class.expanded]="isHotkeyExpanded()" [class.desktop-hidden]="isDesktopView()">▼</span>
+                <span>Shortcut keys</span>
+              </legend>
+              <div class="hotkey-hints" *ngIf="isHotkeyExpanded()">
                 <div class="hotkey-item" (click)="handleF4HotkeyClick()" title="F4 - {{ 'pos.clearCart' | translate }}">
                   <kbd>F4</kbd>
                   <span>{{ 'pos.clearCart' | translate }}</span>
@@ -919,8 +956,11 @@
 
             <!-- Invoice Info moved OUTSIDE cart scroll to stay steady -->
             <fieldset class="invoice-fieldset">
-              <legend>{{ 'pos.invoiceInformation' | translate }}</legend>
-              <div class="invoice-compact-layout">
+              <legend class="collapsible-legend" (click)="toggleInvoiceSection()">
+                <span class="legend-toggle" [class.expanded]="isInvoiceExpanded()" [class.desktop-hidden]="isDesktopView()">▼</span>
+                <span>{{ 'pos.invoiceInformation' | translate }}</span>
+              </legend>
+              <div class="invoice-compact-layout" *ngIf="isInvoiceExpanded()">
                 <div class="invoice-field-compact">
                   <label>{{ 'pos.invoiceNumber' | translate }}:</label>
                   <input type="text" [(ngModel)]="invoiceNumber" placeholder="Auto-generated">
@@ -1166,13 +1206,12 @@
     <div *ngIf="showPaymentModal()" class="modal-overlay" (keydown.enter)="onPaymentDialogEnter($event)">
       <div class="payment-dialog">
         <div class="dialog-header">
-          <h3>💳 {{ 'pos.paymentProcessing' | translate }}</h3>
-          <p>{{ 'pos.enterPaymentDetails' | translate }}</p>
+          <h3>💳 {{ 'pos.paymentProcessing' | translate }} - {{ 'pos.enterPaymentDetails' | translate }}</h3>
         </div>
         
         <div class="dialog-content">
           <!-- Payment method selection (keeps in sync with POS via PosService) -->
-          <div class="payment-methods" style="display:flex; gap:1rem; margin-bottom:0.5rem; align-items:center;">
+          <div class="payment-methods" style="display:flex; gap:1rem; margin-bottom:0.75rem; align-items:center;">
             <label style="display:flex; align-items:center; gap:0.5rem; cursor:pointer;">
               <input type="checkbox" [checked]="isCashSale()" (change)="toggleCashSale()">
               <span>💵 {{ 'pos.cashPayment' | translate }}</span>
@@ -1241,7 +1280,7 @@
               id="payment-desc"
               [(ngModel)]="paymentDescription"
               [placeholder]="'pos.paymentDescriptionPlaceholder' | translate"
-              rows="3"
+              rows="2"
               class="payment-textarea"></textarea>
           </div>
         </div>
@@ -1282,141 +1321,143 @@
         <div class="cart-info-dialog-body">
           <div class="cart-items-section">
             <label>{{ 'pos.itemsInCart' | translate }}:</label>
-            <div class="cart-items-list-dialog">
-              <div class="cart-item-header-extended" style="display: grid; grid-template-columns: 2.5fr 0.6fr 0.9fr 0.9fr 0.5fr 0.6fr 0.6fr 0.5fr 0.5fr 0.7fr 0.9fr 1.2fr 1.1fr 1.4fr 1.1fr; gap: 0.5rem; align-items: center;">
-                <span>{{ 'pos.product' | translate }}</span>
-                <span>{{ 'pos.quantity' | translate }}</span>
-                <span>Original Price</span>
-                <span>{{ 'pos.price' | translate }}</span>
-               
-                <span>{{ 'pos.vatApplicable' | translate }}</span>
-                <span>{{ 'pos.vatRate' | translate }}</span>
-                <span>VAT Amount</span>
-                <span>{{ 'pos.hasDiscount' | translate }}</span>
-                <span>{{ 'pos.discountType' | translate }}</span>
-                <span>{{ 'pos.discountValue' | translate }}</span>
-                 <span>{{ 'pos.total' | translate }}</span>
-                 <span>Identification No.</span>
-                 <span>ID Type</span>
-                 <span>Name</span>
-              </div>
-              <div class="cart-item-row-extended" *ngFor="let item of cartItems(); let i = index; trackBy: trackByCartItem" style="display: grid; grid-template-columns: 2.5fr 0.6fr 0.9fr 0.9fr 0.5fr 0.6fr 0.6fr 0.5fr 0.5fr 0.7fr 0.9fr 1.2fr 1.1fr 1.4fr 1.1fr; gap: 0.5rem; align-items: center;">
-                <!-- Product Info -->
-                <div class="item-details-dialog">
-                  <span class="item-name">{{ item.productName }}</span>
-                  <span class="item-sku">{{ item.skuId }}</span>
-                </div>
-                
-                <!-- Quantity (read-only in dialog) -->
-                <div class="quantity-controls-dialog">
-                  <span class="quantity">{{ item.quantity }}</span>
-                </div>
-                <!-- Original Price -->
-                <div class="item-original-price">₱{{ (item.originalPrice || 0).toFixed(2) }}</div>
-                
-                <!-- Price -->
-                <div class="item-price-dialog">₱{{ item.sellingPrice.toFixed(2) }}</div>
-                <!-- VAT Rate Input (compact) -->
-                <div class="cart-item-field">
-                  <input 
-                    type="number" 
-                    [(ngModel)]="item.vatRate"
-                    (change)="updateCartItemField(i, 'vatRate', item.vatRate)"
-                    [disabled]="!item.isVatApplicable"
-                    min="0"
-                    max="100"
-                    step="0.01"
-                    class="cart-item-input"
-                    placeholder="0"
-                    style="width:4.5rem">
-                </div>
-                <!-- VAT Applicable Checkbox (compact) -->
-                <div class="cart-item-field" style="display:flex; align-items:center; justify-content:center;">
-                  <input 
-                    type="checkbox" 
-                    [(ngModel)]="item.isVatApplicable"
-                    (change)="updateCartItemField(i, 'isVatApplicable', item.isVatApplicable)"
-                    class="cart-item-checkbox">
-                </div>
-                <!-- VAT Amount Display -->
-                <div class="cart-item-field">
-                  <span class="vat-amount">₱{{ (item.vatAmount || 0).toFixed(2) }}</span>
-                </div>
+            <div class="cart-items-table-wrapper">
+              <table class="cart-items-table">
+                <thead>
+                  <tr>
+                    <th>{{ 'pos.product' | translate }}</th>
+                    <th>{{ 'pos.quantity' | translate }}</th>
+                    <th>Original Price</th>
+                    <th>{{ 'pos.price' | translate }}</th>
+                    <th>{{ 'pos.vatApplicable' | translate }}</th>
+                    <th>VAT Amount</th>
+                    <th>{{ 'pos.discountType' | translate }}</th>
+                    <th>{{ 'pos.discountValue' | translate }}</th>
+                    <th>{{ 'pos.total' | translate }}</th>
+                    <th>Identification No.</th>
+                    <th>ID Type</th>
+                    <th>Name</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr *ngFor="let item of cartItems(); let i = index; trackBy: trackByCartItem">
+                    <!-- Product Info -->
+                    <td>
+                      <div class="item-details-dialog">
+                        <span class="item-name">{{ item.productName }}</span>
+                        <span class="item-sku">{{ item.skuId }}</span>
+                      </div>
+                    </td>
+                    
+                    <!-- Quantity -->
+                    <td>
+                      <span class="quantity">{{ item.quantity }}</span>
+                    </td>
+                    
+                    <!-- Original Price -->
+                    <td>₱{{ (item.originalPrice || 0).toFixed(2) }}</td>
+                    
+                    <!-- Price -->
+                    <td>₱{{ item.sellingPrice.toFixed(2) }}</td>
+                    
+                    <!-- VAT Applicable (checkbox + rate) -->
+                    <td>
+                      <div class="grouped-field">
+                        <input 
+                          type="checkbox" 
+                          [(ngModel)]="item.isVatApplicable"
+                          (change)="updateCartItemField(i, 'isVatApplicable', item.isVatApplicable)"
+                          class="cart-item-checkbox">
+                        <input 
+                          type="number" 
+                          [(ngModel)]="item.vatRate"
+                          (change)="updateCartItemField(i, 'vatRate', item.vatRate)"
+                          [disabled]="!item.isVatApplicable"
+                          min="0"
+                          max="100"
+                          step="0.01"
+                          class="cart-item-input"
+                          placeholder="0"
+                          style="width:3.5rem">
+                      </div>
+                    </td>
+                    
+                    <!-- VAT Amount -->
+                    <td>₱{{ (item.vatAmount || 0).toFixed(2) }}</td>
 
-                <!-- Has Discount Checkbox (compact) -->
-                <div class="cart-item-field" style="display:flex; align-items:center; justify-content:center;">
-                  <input 
-                    type="checkbox" 
-                    [(ngModel)]="item.hasDiscount"
-                    (change)="updateCartItemField(i, 'hasDiscount', item.hasDiscount)"
-                    class="cart-item-checkbox">
-                </div>
+                    <!-- Discount Type (checkbox + dropdown) -->
+                    <td>
+                      <div class="grouped-field">
+                        <input 
+                          type="checkbox" 
+                          [(ngModel)]="item.hasDiscount"
+                          (change)="updateCartItemField(i, 'hasDiscount', item.hasDiscount)"
+                          class="cart-item-checkbox">
+                        <select 
+                          [(ngModel)]="item.discountType"
+                          (change)="updateCartItemField(i, 'discountType', item.discountType)"
+                          [disabled]="!item.hasDiscount"
+                          class="cart-item-select"
+                          style="width:5rem">
+                          <option value=""></option>
+                          <option value="PWD">PWD</option>
+                          <option value="SENIOR">Senior</option>
+                          <option value="VIP">VIP</option>
+                          <option value="ATHLETE">Athlete</option>
+                          <option value="FRIENDS">Friends</option>
+                          <option value="EMPLOYEE">Employee</option>
+                          <option value="OTHERS">Others</option>
+                        </select>
+                      </div>
+                    </td>
 
-                <!-- Discount Type Dropdown (compact) -->
-                <div class="cart-item-field">
-                  <select 
-                    [(ngModel)]="item.discountType"
-                    (change)="updateCartItemField(i, 'discountType', item.discountType)"
-                    [disabled]="!item.hasDiscount"
-                    class="cart-item-select"
-                    style="width:3rem">
-                    <option value="percentage">%</option>
-                    <option value="fixed">₱</option>
-                  </select>
-                </div>
+                    <!-- Discount Value -->
+                    <td>
+                      <input 
+                        type="number" 
+                        [(ngModel)]="item.discountValue"
+                        (change)="updateCartItemField(i, 'discountValue', item.discountValue)"
+                        [disabled]="!item.hasDiscount"
+                        [max]="item.discountType === 'percentage' ? 100 : item.sellingPrice * item.quantity"
+                        min="0"
+                        step="0.01"
+                        class="cart-item-input"
+                        placeholder="0"
+                        style="width:4.5rem">
+                    </td>
 
-                <!-- Discount Value Input (compact) -->
-                <div class="cart-item-field">
-                  <input 
-                    type="number" 
-                    [(ngModel)]="item.discountValue"
-                    (change)="updateCartItemField(i, 'discountValue', item.discountValue)"
-                    [disabled]="!item.hasDiscount"
-                    [max]="item.discountType === 'percentage' ? 100 : item.sellingPrice * item.quantity"
-                    min="0"
-                    step="0.01"
-                    class="cart-item-input"
-                    placeholder="0"
-                    style="width:4.5rem">
-                </div>
-
-                <!-- Final Total - Editable -->
-                <!-- Total -->
-                <div class="item-total-dialog">₱{{ (item.total || (item.sellingPrice * item.quantity)).toFixed(2) }}</div>
-                <!-- PWD ID (per-item) - editable -->
-                <div class="item-pwd-id">
-                  <input type="text" class="cart-item-input" style="width:6rem" [(ngModel)]="item.pwdId" (ngModelChange)="updateCartItemField(i, 'pwdId', $event)" placeholder="">
-                </div>
-                <!-- ID Type (per-item) - dropdown -->
-                <div class="item-id-type">
-                  <select class="cart-item-select" [ngModel]="$any(item).idType" (ngModelChange)="updateCartItemField(i, 'idType', $event)" style="width:7rem">
-                    <option value=""></option>
-                    <option value="SSS">SSS</option>
-                    <option value="UMID">UMID</option>
-                    <option value="DriverLicense">Driver License</option>
-                    <option value="Passport">Passport</option>
-                    <option value="Others">Others</option>
-                  </select>
-                </div>
-                <!-- Customer Name (per-item) - editable (compact) -->
-                <div class="item-customer-name">
-                  <input type="text" class="cart-item-input" style="width:8rem" [(ngModel)]="item.customerName" (ngModelChange)="updateCartItemField(i, 'customerName', $event)" placeholder="Name">
-                </div>
-                <!-- Customer Discount selector (per-item) -->
-                <div class="cart-item-field">
-                  <select class="cart-item-select" [(ngModel)]="item.customerDiscount" (change)="updateCartItemField(i, 'customerDiscount', $any($event.target).value)">
-                    <option value=""></option>
-                    <option value="PWD">PWD</option>
-                    <option value="SENIOR">Senior</option>
-                    <option value="ATHLETE">Athlete</option>
-                    <option value="OTHERS">Others</option>
-                  </select>
-                </div>
-               
-              </div>
-              <div *ngIf="cartItems().length === 0" class="empty-cart-message">
-                {{ 'pos.cartEmpty' | translate }}
-              </div>
+                    <!-- Total -->
+                    <td>₱{{ (item.total || (item.sellingPrice * item.quantity)).toFixed(2) }}</td>
+                    
+                    <!-- Identification No. -->
+                    <td>
+                      <input type="text" class="cart-item-input" style="width:6rem" [(ngModel)]="item.pwdId" (ngModelChange)="updateCartItemField(i, 'pwdId', $event)" placeholder="">
+                    </td>
+                    
+                    <!-- ID Type -->
+                    <td>
+                      <select class="cart-item-select" [ngModel]="$any(item).idType" (ngModelChange)="updateCartItemField(i, 'idType', $event)" style="width:7rem">
+                        <option value=""></option>
+                        <option value="SSS">SSS</option>
+                        <option value="UMID">UMID</option>
+                        <option value="DriverLicense">Driver License</option>
+                        <option value="Passport">Passport</option>
+                        <option value="Others">Others</option>
+                      </select>
+                    </td>
+                    
+                    <!-- Customer Name -->
+                    <td>
+                      <input type="text" class="cart-item-input" style="width:8rem" [(ngModel)]="item.customerName" (ngModelChange)="updateCartItemField(i, 'customerName', $event)" placeholder="Name">
+                    </td>
+                  </tr>
+                  <tr *ngIf="cartItems().length === 0">
+                    <td colspan="12" class="empty-cart-message">
+                      {{ 'pos.cartEmpty' | translate }}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
           </div>
         </div>

@@ -1,4 +1,4 @@
-import { Component, OnInit, computed, inject, signal } from '@angular/core';
+import { Component, OnInit, computed, inject, signal, HostListener } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink, RouterOutlet, Router, NavigationEnd } from '@angular/router';
 import { filter } from 'rxjs/operators';
@@ -11,6 +11,7 @@ import { Firestore, collection, query, where, getDocs } from '@angular/fire/fire
 import { LogoComponent } from '../../shared/components/logo/logo.component';
 import { AppConstants } from '../../shared/enums';
 import { NetworkService } from '../../core/services/network.service';
+import { TranslationService, Language } from '../../services/translation.service';
 
 @Component({
   selector: 'app-dashboard',
@@ -41,6 +42,7 @@ export class DashboardComponent implements OnInit {
   private firestore = inject(Firestore);
   private router = inject(Router);
   private networkService = inject(NetworkService);
+  private translationService = inject(TranslationService);
 
   // Signals
   protected stores = signal<Store[]>([]);
@@ -48,6 +50,15 @@ export class DashboardComponent implements OnInit {
   protected selectedStore = computed(() => 
     this.stores().find(store => store.id === this.selectedStoreId())
   );
+  
+  // Header visibility control
+  protected isHeaderVisible = signal<boolean>(false);
+  protected isCompactMode = signal<boolean>(false);
+  
+  // Translation signals
+  protected currentLanguage = computed(() => this.translationService.currentLanguage());
+  protected availableLanguages = computed(() => this.translationService.availableLanguages);
+  protected isLanguageMenuOpen = signal<boolean>(false);
   
   // App constants and network status
   protected isOnline = computed(() => this.networkService.isOnline());
@@ -284,5 +295,58 @@ export class DashboardComponent implements OnInit {
 
   protected isActiveNavItem(pageName: string): boolean {
     return this.currentActivePage() === pageName;
+  }
+
+  // Header visibility methods
+  protected toggleHeaderVisibility(): void {
+    const newState = !this.isHeaderVisible();
+    this.isHeaderVisible.set(newState);
+    this.saveHeaderPreferences();
+    console.log('🎯 Header visibility toggled to:', newState);
+  }
+
+  protected showHeader(): void {
+    if (!this.isHeaderVisible()) {
+      this.isHeaderVisible.set(true);
+    }
+  }
+
+  protected hideHeader(): void {
+    if (this.isHeaderVisible()) {
+      this.isHeaderVisible.set(false);
+    }
+  }
+
+  private saveHeaderPreferences(): void {
+    try {
+      const prefs = {
+        manuallyHidden: !this.isHeaderVisible(),
+        compactMode: this.isCompactMode(),
+        timestamp: new Date().toISOString()
+      };
+      localStorage.setItem('headerPreferences', JSON.stringify(prefs));
+    } catch (error) {
+      console.error('Error saving header preferences:', error);
+    }
+  }
+
+  // Language selection methods
+  toggleLanguageMenu(): void {
+    this.isLanguageMenuOpen.set(!this.isLanguageMenuOpen());
+  }
+
+  selectLanguage(language: Language): void {
+    console.log('🌐 Switching to language:', language.code, language.name);
+    this.translationService.setLanguage(language.code);
+    this.isLanguageMenuOpen.set(false);
+  }
+
+  @HostListener('window:keydown', ['$event'])
+  onKeyDown(event: KeyboardEvent) {
+    // Toggle header with Ctrl+H or Cmd+H
+    if ((event.ctrlKey || event.metaKey) && event.key === 'h') {
+      event.preventDefault();
+      this.toggleHeaderVisibility();
+    }
   }
 }

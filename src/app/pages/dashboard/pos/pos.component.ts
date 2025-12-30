@@ -232,7 +232,9 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   // Tag filters
   readonly activeTagFilters = signal<string[]>([]); // Track active tag label filters
   readonly availableTagsByGroup = signal<{ group: string; tags: { id: string; label: string }[] }[]>([]); // Tags from database
-  readonly isTagFilterExpanded = signal<boolean>(true); // Track tag filter section collapse state
+  readonly isTagFilterExpanded = signal<boolean>(window.innerWidth > 1024); // Track tag filter section collapse state - collapsed on mobile/tablet
+  readonly isHotkeyExpanded = signal<boolean>(window.innerWidth > 1024); // Track hotkey section collapse state - collapsed on mobile/tablet
+  readonly isInvoiceExpanded = signal<boolean>(window.innerWidth > 1024); // Track invoice section collapse state - collapsed on mobile/tablet
 
   setSortMode(mode: 'asc' | 'desc' | 'mid'): void {
     if (this.sortModeSignal() !== mode) {
@@ -280,10 +282,14 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   // Pagination state
   readonly currentPage = signal<number>(1);
   readonly isMobileView = signal<boolean>(typeof window !== 'undefined' ? window.innerWidth < 768 : false);
+  readonly isTabletView = signal<boolean>(typeof window !== 'undefined' ? (window.innerWidth >= 768 && window.innerWidth < 1024) : false);
+  readonly isDesktopView = computed(() => !this.isMobileView() && !this.isTabletView());
   
   // Dynamic page size based on screen width
   readonly pageSize = computed(() => {
-    return this.isMobileView() ? 4 : 12; // Mobile: 2 cols × 2 rows, Desktop: 6 cols × 2 rows
+    if (this.isMobileView()) return 6; // Mobile: 3 cols × 2 rows = 6 items
+    if (this.isTabletView()) return 10; // Tablet: 5 cols × 2 rows = 10 items
+    return 12; // Desktop: 6 cols × 2 rows = 12 items
   });
 
   // Products to display in grid view based on visible rows
@@ -631,6 +637,10 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   // Navigation collapse state for desktop POS
   private isNavigationCollapsedSignal = signal<boolean>(true);
   readonly isNavigationCollapsed = computed(() => this.isNavigationCollapsedSignal());
+  
+  // Panel toggle for mobile/tablet (drawer mode)
+  private showReceiptPanelSignal = signal<boolean>(false);
+  readonly showReceiptPanel = computed(() => this.showReceiptPanelSignal());
   
   // Access tabs for POS management
   readonly accessTabs = ['New', 'Orders', 'Cancelled', 'Returns', 'Refunds', 'Damage', 'Split Payments', 'Discounts & Promotions'] as const;
@@ -2251,7 +2261,9 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     // Add window resize listener for mobile view
     if (typeof window !== 'undefined') {
       this.resizeListener = () => {
-        this.isMobileView.set(window.innerWidth < 768);
+        const width = window.innerWidth;
+        this.isMobileView.set(width < 768);
+        this.isTabletView.set(width >= 768 && width < 1024);
       };
       window.addEventListener('resize', this.resizeListener);
     }
@@ -4181,6 +4193,19 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     this.isNavigationCollapsedSignal.set(!this.isNavigationCollapsedSignal());
   }
 
+  // Toggle between left panel (products) and right panel (receipt) on mobile/tablet
+  togglePanelView(): void {
+    this.showReceiptPanelSignal.set(!this.showReceiptPanelSignal());
+  }
+
+  showProductPanel(): void {
+    this.showReceiptPanelSignal.set(false);
+  }
+
+  showReceiptPanelView(): void {
+    this.showReceiptPanelSignal.set(true);
+  }
+
   updateCurrentDateTime(): void {
     this.datetime = new Date().toISOString().slice(0, 16);
   }
@@ -5401,6 +5426,20 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
    */
   toggleTagFilterSection(): void {
     this.isTagFilterExpanded.set(!this.isTagFilterExpanded());
+  }
+
+  /**
+   * Toggle hotkey section expand/collapse
+   */
+  toggleHotkeySection(): void {
+    this.isHotkeyExpanded.set(!this.isHotkeyExpanded());
+  }
+
+  /**
+   * Toggle invoice section expand/collapse
+   */
+  toggleInvoiceSection(): void {
+    this.isInvoiceExpanded.set(!this.isInvoiceExpanded());
   }
 
   /**

@@ -1,6 +1,21 @@
 <div class="dashboard-layout">
+  <!-- Floating Header Toggle Button (shown when header is hidden) -->
+  @if (!isHeaderVisible()) {
+    <button 
+      class="floating-header-toggle"
+      (click)="toggleHeaderVisibility()"
+      title="Show Header (Ctrl+H)"
+      aria-label="Show header">
+      <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+      </svg>
+    </button>
+  }
+
   <!-- Professional Header -->
   <header [class]="headerClass()" 
+          [class.header-hidden]="!isHeaderVisible()"
+          [class.header-compact]="isCompactMode()"
           [style.background]="isOnline() ? null : 'linear-gradient(135deg, #dc2626 0%, #b91c1c 100%)'">
     <div class="header-content">
       <div class="header-left">
@@ -21,6 +36,28 @@
       
       <div class="header-right">
         <div class="header-actions">
+          <!-- Language Selector -->
+          <div class="language-selector" (click)="$event.stopPropagation()">
+            <button class="header-btn language-btn" 
+                    (click)="toggleLanguageMenu()" 
+                    title="Select Language">
+              <span class="language-icon">🌐</span>
+            </button>
+            
+            @if (isLanguageMenuOpen()) {
+              <div class="language-dropdown">
+                @for (language of availableLanguages(); track language.code) {
+                  <button class="language-option" 
+                          [class.active]="language.code === currentLanguage().code"
+                          (click)="selectLanguage(language)">
+                    <span class="language-flag">{{ language.flag }}</span>
+                    <span class="language-name">{{ language.name }}</span>
+                  </button>
+                }
+              </div>
+            }
+          </div>
+
           <!-- Notifications -->
           <button class="header-btn" title="Notifications">
             <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -29,12 +66,15 @@
             <span class="notification-badge">3</span>
           </button>
           
-          <!-- Home Link -->
-          <a routerLink="/" class="header-btn" title="Home">
-            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2-2m0 0l7-7 7 7m-9 10v-8a1 1 0 011-1h2a1 1 0 011 1v8m0 0v1a1 1 0 001 1h4a1 1 0 001-1v-1m0 0V9a1 1 0 00-1-1h-2a1 1 0 00-1-1z" />
+          <!-- Header Toggle Button -->
+          <button 
+            class="header-btn header-toggle-btn" 
+            (click)="toggleHeaderVisibility()"
+            title="Hide Header (Ctrl+H)">
+            <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7" />
             </svg>
-          </a>
+          </button>
           
           <!-- Help Link -->
           <a routerLink="/help" class="header-btn" title="Help">
@@ -96,7 +136,7 @@
     <!-- Professional Sidebar (desktop only) -->
     <nav class="dashboard-sidebar" *ngIf="screenWidth > 640">
       <div class="sidebar-header">
-        <h2 class="sidebar-title">Management</h2>
+        <h2 class="sidebar-title">Menu</h2>
       </div>
       <div class="nav-sections">
         <!-- Overview Section -->
