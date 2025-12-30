@@ -10,7 +10,7 @@
     
     <!-- Modal Header with Close Button -->
     <div class="modal-header">
-      <h2>Sales Invoice Preview</h2>
+      <h2>{{ receiptData?.storeInfo?.invoiceType || 'Sales Invoice' }} Preview</h2>
       <button 
         class="close-btn"
         (click)="onCloseModal()"
@@ -54,8 +54,7 @@
           <p class="invoice-number"><strong>Invoice #: {{ receiptData?.invoiceNumber || 'Auto-generated' }}</strong></p>
           
           <!-- Dynamic Invoice Type Label -->
-          <p *ngIf="receiptData?.storeInfo?.invoiceType && receiptData?.storeInfo?.invoiceType !== 'SALES INVOICE'" class="sales-invoice-label">{{ receiptData.storeInfo.invoiceType }}</p>
-          <p *ngIf="!receiptData?.storeInfo?.invoiceType || receiptData?.storeInfo?.invoiceType === 'SALES INVOICE'" class="sales-invoice-label">SALES INVOICE</p>
+          <p class="sales-invoice-label">{{ receiptData?.storeInfo?.invoiceType || 'SALES INVOICE' }}</p>
         </div>
       </div>
 

@@ -4,6 +4,7 @@ export interface Store {
   storeCode?: string;
   storeName: string;
   storeType: string;
+  invoiceType?: string;
   branchName: string;
   address: string;
   phoneNumber: string;
