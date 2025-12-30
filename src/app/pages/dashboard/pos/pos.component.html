@@ -363,8 +363,8 @@
               </div>
             </div>
 
-            <!-- Show More button for grid view -->
-            <div *ngIf="(currentView() === 'grid' || currentView() === 'favorites') && hasMoreGridProducts()" class="show-more-row">
+            <!-- Show More button for favorites view -->
+            <div *ngIf="currentView() === 'favorites' && hasMoreGridProducts()" class="show-more-row">
               <button class="btn btn-secondary show-more-btn" (click)="showMoreGridProducts()">Show more</button>
             </div>
 
@@ -437,6 +437,41 @@
                     <div class="product-price">₱{{ (product.sellingPrice || 0).toFixed(2) }}</div>
                   </div>
                 </div>
+              </div>
+            </div>
+            
+            <!-- Pagination controls for grid view -->
+            <div *ngIf="currentView() === 'grid' && filteredProducts().length > pageSize()" class="pagination-controls">
+              <div class="pagination-info">
+                Showing {{ ((currentPage() - 1) * pageSize()) + 1 }} - {{ Math.min(currentPage() * pageSize(), filteredProducts().length) }} of {{ filteredProducts().length }} products
+              </div>
+              <div class="pagination-buttons">
+                <button 
+                  class="btn btn-secondary pagination-btn" 
+                  (click)="previousPage()" 
+                  [disabled]="!hasPreviousPage()">
+                  ←
+                </button>
+                
+                <!-- Page number buttons -->
+                <div class="page-numbers">
+                  <button 
+                    *ngFor="let page of getPageNumbers()"
+                    class="page-number-btn"
+                    [class.active]="page === currentPage()"
+                    [class.ellipsis]="page === -1"
+                    (click)="page !== -1 && goToPage(page)"
+                    [disabled]="page === -1">
+                    {{ page === -1 ? '...' : page }}
+                  </button>
+                </div>
+                
+                <button 
+                  class="btn btn-secondary pagination-btn" 
+                  (click)="nextPage()" 
+                  [disabled]="!hasNextPage()">
+                  →
+                </button>
               </div>
             </div>
           </div>
