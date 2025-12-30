@@ -142,8 +142,9 @@ export class PrintService {
       if (Capacitor.getPlatform() === 'android') {
         try {
           console.log('📱 Android platform detected - using native Bluetooth printing...');
-          const receiptHtml = this.generateReceiptHTML(receiptData);
-          const paperWidth = this.getPaperSizeConfig().lineChars;
+          const paperConfig = this.getPaperSizeConfig();
+          const receiptHtml = this.generatePrintableReceipt(receiptData, paperConfig);
+          const paperWidth = paperConfig.lineChars;
           await this.androidPrinter.quickPrint(receiptHtml, paperWidth);
           return {
             success: true,

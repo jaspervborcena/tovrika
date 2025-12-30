@@ -30,7 +30,7 @@ export class AndroidBluetoothPrinterService {
     if (this.isInitialized) return;
     
     try {
-      await BluetoothLe.initialize({ android: { scanMode: 'lowLatency' } });
+      await BluetoothLe.initialize();
       this.isInitialized = true;
       console.log('✅ Android Bluetooth initialized');
     } catch (error) {
@@ -56,40 +56,16 @@ export class AndroidBluetoothPrinterService {
 
     await this.initialize();
 
-    const devices: BleDevice[] = [];
-
     try {
-      // Start scanning
-      await BluetoothLe.requestLEScan(
-        {
-          allowDuplicates: false,
-        },
-        (result) => {
-          if (result.device && result.device.name) {
-            // Filter for printer devices (common names)
-            const name = result.device.name.toLowerCase();
-            if (
-              name.includes('printer') ||
-              name.includes('pos') ||
-              name.includes('thermal') ||
-              name.includes('mpt') ||
-              name.includes('rpp') ||
-              name.includes('xprinter')
-            ) {
-              devices.push(result.device);
-            }
-          }
-        }
-      );
+      // Request device directly
+      const device = await BluetoothLe.requestDevice({
+        allowDuplicates: false,
+      });
 
-      // Wait for scan duration
-      await new Promise(resolve => setTimeout(resolve, timeoutMs));
-
-      // Stop scanning
-      await BluetoothLe.stopLEScan();
-
-      console.log(`🔍 Found ${devices.length} printer(s)`);
-      return devices;
+      console.log(`🔍 Found device:`, device);
+      
+      // Return as array
+      return device ? [device] : [];
     } catch (error) {
       console.error('❌ Error scanning for printers:', error);
       throw error;
@@ -108,10 +84,9 @@ export class AndroidBluetoothPrinterService {
 
     try {
       // Connect to device
-      await BluetoothLe.connect({ deviceId }, () => {
-        console.log('⚠️ Printer disconnected');
-        this.connectedDevice = null;
-      });
+      await BluetoothLe.connect({ deviceId });
+      
+      // Note: Connection callback moved to separate handler if needed
 
       // Discover services
       await BluetoothLe.discoverServices({ deviceId });
