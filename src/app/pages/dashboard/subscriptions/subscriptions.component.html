@@ -79,6 +79,7 @@
     >
       <option value="all">All Status</option>
       <option value="active">Active</option>
+      <option value="pending">Pending Approval</option>
       <option value="inactive">Inactive</option>
       <option value="expired">Expired</option>
       <option value="cancelled">Cancelled</option>
@@ -180,6 +181,14 @@
 
           <!-- Card Actions -->
           <div class="card-actions">
+            @if (getStoreStatus(store) === 'pending') {
+              <button class="btn-success" (click)="approveSubscription(store)">
+                ✔ Approve
+              </button>
+              <button class="btn-danger" (click)="rejectSubscription(store)">
+                ✖ Reject
+              </button>
+            }
             <button class="btn-secondary" (click)="viewStoreDetails(store)">
               View Details
             </button>

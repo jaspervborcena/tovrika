@@ -66,7 +66,13 @@ export class AccessService {
     console.log('🔍 [AccessService] Setting permissions for role:', role, 'with custom permissions:', permissions);
     console.log('🔍 [AccessService] Current permissions before update:', this.permissionsSignal());
     
-    if (role === 'cashier') {
+    if (role === 'admin') {
+      // Admin gets all permissions - full access to everything
+      const finalPermissions = { ...this.defaultPermissions, ...permissions };
+      console.log('🔍 [AccessService] Final admin permissions (full access):', finalPermissions);
+      this.permissionsSignal.set(finalPermissions);
+      console.log('🔍 [AccessService] Permissions signal updated to:', this.permissionsSignal());
+    } else if (role === 'cashier') {
       const finalPermissions = { ...this.cashierPermissions, ...permissions };
       console.log('🔍 [AccessService] Final cashier permissions:', finalPermissions);
       this.permissionsSignal.set(finalPermissions);

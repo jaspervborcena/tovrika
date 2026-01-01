@@ -1,6 +1,7 @@
 import { Component, EventEmitter, Input, Output, signal, computed, inject, OnChanges, SimpleChanges } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { Firestore, collection, addDoc } from '@angular/fire/firestore';
 import { AuthService } from '../../../services/auth.service';
 import { SubscriptionService } from '../../../services/subscription.service';
 import { BillingService } from '../../../services/billing.service';
@@ -8,6 +9,7 @@ import { StoreService } from '../../../services/store.service';
 import { getPlanByTier, calculateFinalAmount, calculateExpiryDate } from '../../../shared/config/subscription-plans.config';
 import { CompanyService } from '../../../services/company.service';
 import { ToastService } from '../../../shared/services/toast.service';
+import { SubscriptionRequest } from '../../../interfaces/subscription-request.interface';
 
 type Tier = 'standard' | 'premium';
 type PaymentMethod = 'gcash' | 'paymaya' | 'paypal';
@@ -26,6 +28,7 @@ export class UpgradeSubscriptionModalComponent implements OnChanges {
   private readonly storeService = inject(StoreService);
   private readonly companyService = inject(CompanyService);
   private readonly toast = inject(ToastService);
+  private readonly firestore = inject(Firestore);
 
   @Input() isOpen = false;
   @Input() companyId = '';
@@ -203,7 +206,7 @@ export class UpgradeSubscriptionModalComponent implements OnChanges {
         storeId: this.storeId,
         uid: user.uid,
         planType: this.selectedTier,
-        status: 'active',
+        status: 'pending', // Changed from 'active' to 'pending' - requires admin approval
         startDate,
         endDate,
         trialStart: null,
@@ -246,8 +249,11 @@ export class UpgradeSubscriptionModalComponent implements OnChanges {
         } as any);
       }
 
-      // Update denormalized subscription end date on store for quick checks
-      await this.storeService.updateStore(this.storeId, { subscriptionEndDate: endDate as any });
+      // Create subscription request for admin approval
+      await this.createSubscriptionRequest(docId, url, effectiveAmount);
+
+      // Do NOT update store subscription end date yet - wait for admin approval
+      // await this.storeService.updateStore(this.storeId, { subscriptionEndDate: endDate as any });
 
       // Create billing history record
       await this.billing.createBillingHistory({
@@ -282,6 +288,48 @@ export class UpgradeSubscriptionModalComponent implements OnChanges {
       }
     } finally {
       this.submitting.set(false);
+    }
+  }
+
+  /**
+   * Create a subscription request for admin approval
+   */
+  private async createSubscriptionRequest(subscriptionId: string, receiptUrl: string, amountPaid: number): Promise<void> {
+    try {
+      const user = this.auth.getCurrentUser();
+      if (!user) {
+        throw new Error('User not authenticated');
+      }
+
+      const company = this.resolvedCompanyName() || 'Unknown Company';
+      const store = await this.storeService.getStoreById(this.storeId);
+      
+      const requestData: Omit<SubscriptionRequest, 'id'> = {
+        companyId: this.companyId,
+        companyName: company,
+        ownerEmail: user.email || '',
+        contactPhone: store?.phoneNumber || this.payerMobile || '',
+        requestedAt: new Date(),
+        requestedTier: this.selectedTier,
+        notes: `Upgrade to ${this.selectedTier.toUpperCase()} plan for ${this.durationMonths} month(s). Payment: ${this.activeTab.toUpperCase()}`,
+        status: 'pending',
+        // Link subscription details
+        subscriptionId: subscriptionId,
+        durationMonths: this.durationMonths,
+        paymentMethod: this.activeTab,
+        paymentReference: this.paymentReference || '',
+        amountPaid: amountPaid,
+        paymentReceiptUrl: receiptUrl
+      };
+
+      const requestsRef = collection(this.firestore, 'subscriptionRequests');
+      await addDoc(requestsRef, requestData);
+
+      console.log('✅ Subscription request created for admin approval:', subscriptionId);
+      this.toast.success('Subscription upgrade submitted! Waiting for admin approval.');
+    } catch (error) {
+      console.error('❌ Failed to create subscription request:', error);
+      throw error;
     }
   }
 

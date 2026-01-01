@@ -1,0 +1,236 @@
+<div class="admin-container">
+  <!-- Header -->
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Admin - Subscription Requests</h1>
+      <p class="page-subtitle">Manage subscription upgrade requests and approvals</p>
+    </div>
+    <button class="btn-refresh" (click)="refreshRequests()">
+      <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+              d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+      </svg>
+      Refresh
+    </button>
+  </div>
+
+  <!-- Stats Cards -->
+  <div class="stats-grid">
+    <div class="stat-card">
+      <div class="stat-icon bg-blue">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+        </svg>
+      </div>
+      <div>
+        <p class="stat-label">Total Requests</p>
+        <p class="stat-value">{{ totalRequests() }}</p>
+      </div>
+    </div>
+
+    <div class="stat-card">
+      <div class="stat-icon bg-yellow">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+      </div>
+      <div>
+        <p class="stat-label">Pending</p>
+        <p class="stat-value">{{ pendingRequests() }}</p>
+      </div>
+    </div>
+
+    <div class="stat-card">
+      <div class="stat-icon bg-green">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+      </div>
+      <div>
+        <p class="stat-label">Approved</p>
+        <p class="stat-value">{{ approvedRequests() }}</p>
+      </div>
+    </div>
+
+    <div class="stat-card">
+      <div class="stat-icon bg-red">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+      </div>
+      <div>
+        <p class="stat-label">Rejected</p>
+        <p class="stat-value">{{ rejectedRequests() }}</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Filters -->
+  <div class="filters-section">
+    <div class="search-container">
+      <svg class="search-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+              d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+      </svg>
+      <input 
+        type="text" 
+        placeholder="Search by company, email, store, or tier..." 
+        [value]="searchTerm()"
+        (input)="onSearchChange($any($event.target).value)"
+        class="search-input"
+      />
+      @if (searchTerm()) {
+        <button class="clear-btn" (click)="clearSearch()">Clear</button>
+      }
+    </div>
+
+    <select 
+      [value]="filterStatus()"
+      (change)="onFilterStatusChange($any($event.target).value)"
+      class="filter-select"
+    >
+      <option value="all">All Status</option>
+      <option value="pending">Pending</option>
+      <option value="approved">Approved</option>
+      <option value="rejected">Rejected</option>
+    </select>
+
+    <select 
+      [value]="filterTier()"
+      (change)="onFilterTierChange($any($event.target).value)"
+      class="filter-select"
+    >
+      <option value="all">All Tiers</option>
+      <option value="freemium">Freemium</option>
+      <option value="standard">Standard</option>
+      <option value="premium">Premium</option>
+      <option value="enterprise">Enterprise</option>
+    </select>
+  </div>
+
+  <!-- Results Count -->
+  <div class="results-header">
+    <h2 class="results-title">Subscription Requests ({{ filteredRequests().length }})</h2>
+    <button class="btn-refresh-small" (click)="refreshRequests()">🔄</button>
+  </div>
+
+  <!-- Loading State -->
+  @if (loading()) {
+    <div class="loading-state">
+      <div class="spinner"></div>
+      <p>Loading subscription requests...</p>
+    </div>
+  }
+
+  <!-- Empty State -->
+  @else if (filteredRequests().length === 0) {
+    <div class="empty-state">
+      <svg class="empty-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+              d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+      </svg>
+      <h3>No subscription requests found</h3>
+      <p>No requests match your current filters</p>
+    </div>
+  }
+
+  <!-- Requests Table -->
+  @else {
+    <div class="table-container">
+      <table class="requests-table">
+        <thead>
+          <tr>
+            <th>Requested At</th>
+            <th>Company</th>
+            <th>Store</th>
+            <th>Contact</th>
+            <th>Tier</th>
+            <th>Duration</th>
+            <th>Amount</th>
+            <th>Payment</th>
+            <th>Status</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (request of filteredRequests(); track request.id) {
+            <tr [class.pending-row]="request.status === 'pending'">
+              <td class="date-cell">{{ formatDate(request.requestedAt) }}</td>
+              <td>
+                <div class="company-info">
+                  <div class="company-name">{{ request.companyName }}</div>
+                  <div class="company-id">{{ request.companyId }}</div>
+                </div>
+              </td>
+              <td class="store-cell">{{ request.storeName }}</td>
+              <td>
+                <div class="contact-info">
+                  <div class="contact-email">{{ request.ownerEmail }}</div>
+                  <div class="contact-phone">{{ request.contactPhone }}</div>
+                </div>
+              </td>
+              <td>
+                <span [class]="getTierBadgeClass(request.requestedTier)">
+                  {{ request.requestedTier | titlecase }}
+                </span>
+              </td>
+              <td class="duration-cell">{{ request.durationMonths || '-' }} mo</td>
+              <td class="amount-cell">{{ formatCurrency(request.amountPaid) }}</td>
+              <td>
+                <div class="payment-info">
+                  <div class="payment-method">{{ request.paymentMethod || '-' }}</div>
+                  @if (request.paymentReference) {
+                    <div class="payment-ref">Ref: {{ request.paymentReference }}</div>
+                  }
+                </div>
+              </td>
+              <td>
+                <span [class]="getStatusBadgeClass(request.status)">
+                  {{ request.status | titlecase }}
+                </span>
+                @if (request.reviewedAt) {
+                  <div class="reviewed-info">{{ formatDate(request.reviewedAt) }}</div>
+                }
+              </td>
+              <td class="actions-cell">
+                @if (request.status === 'pending') {
+                  <button 
+                    class="btn-action btn-approve" 
+                    (click)="approveRequest(request)"
+                    title="Approve Request">
+                    ✅
+                  </button>
+                  <button 
+                    class="btn-action btn-reject" 
+                    (click)="rejectRequest(request)"
+                    title="Reject Request">
+                    ❌
+                  </button>
+                }
+                @if (request.paymentReceiptUrl) {
+                  <button 
+                    class="btn-action btn-view" 
+                    (click)="viewReceipt(request.paymentReceiptUrl)"
+                    title="View Receipt">
+                    📋
+                  </button>
+                }
+                @if (request.status === 'rejected' && request.rejectionReason) {
+                  <button 
+                    class="btn-action btn-info" 
+                    [title]="'Reason: ' + request.rejectionReason">
+                    ℹ️
+                  </button>
+                }
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+</div>
