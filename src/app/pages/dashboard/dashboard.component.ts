@@ -110,7 +110,11 @@ export class DashboardComponent implements OnInit {
       // If either companyId or storeId is missing, check user's role directly from permissions
       if (currentPermission?.roleId) {
         
-        if (currentPermission.roleId === 'cashier') {
+        if (currentPermission.roleId === 'admin') {
+          this.userRole.set('admin');
+          this.accessService.setPermissions({}, 'admin');
+          return;
+        } else if (currentPermission.roleId === 'cashier') {
           this.accessService.setPermissions({}, 'cashier');
           return;
         } else if (currentPermission.roleId === 'store_manager') {
