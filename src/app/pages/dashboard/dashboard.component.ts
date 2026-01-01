@@ -279,6 +279,8 @@ export class DashboardComponent implements OnInit {
       this.currentActivePage.set('access');
     } else if (url.includes('/dashboard/user-roles')) {
       this.currentActivePage.set('user-roles');
+    } else if (url.includes('/dashboard/admin')) {
+      this.currentActivePage.set('admin');
     } else if (url.includes('/dashboard/products')) {
       this.currentActivePage.set('products');
     } else if (url === '/pos' || url.startsWith('/pos/')) {
