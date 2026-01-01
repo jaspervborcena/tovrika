@@ -41,15 +41,15 @@ export const roleGuard: CanActivateFn = async (route, state) => {
       storemanager: 'store_manager',
       cashier: 'cashier',
       visitor: 'visitor',
+      admin: 'admin', // Add admin as its own role
       // Synonyms/legacy
       manager: 'store_manager',
       mgr: 'store_manager',
       supervisor: 'store_manager',
       owner: 'creator',
-      admin: 'creator',
-      administrator: 'creator',
-      superadmin: 'creator',
-      super_admin: 'creator'
+      administrator: 'admin',
+      superadmin: 'admin',
+      super_admin: 'admin'
     };
     return map[key] || r;
   };
@@ -77,6 +77,12 @@ export const roleGuard: CanActivateFn = async (route, state) => {
     normalizedRole: roleId,
     companyId: perm?.companyId
   });
+
+  // Admin has access to everything
+  if (roleId === 'admin') {
+    console.log('✅ RoleGuard: Admin access granted to all routes');
+    return true;
+  }
 
   if (normalizedRequired.includes(roleId)) {
     return true;

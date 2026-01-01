@@ -1,6 +1,7 @@
 import { Component, OnInit, signal, computed, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { Firestore, collection, query, where, limit, getDocs, doc, updateDoc } from '@angular/fire/firestore';
 import { Store } from '../../../interfaces/store.interface';
 import { StoreService } from '../../../services/store.service';
 import { AuthService } from '../../../services/auth.service';
@@ -20,6 +21,7 @@ export class SubscriptionsComponent implements OnInit {
   private storeService = inject(StoreService);
   private authService = inject(AuthService);
   private subscriptionService = inject(SubscriptionService);
+  private firestore = inject(Firestore);
 
   // Billing History Modal State
   billingHistoryModalOpen = signal(false);
@@ -33,7 +35,7 @@ export class SubscriptionsComponent implements OnInit {
   subscriptionsMap = signal<Record<string, SubscriptionDoc>>({});
   loading = signal(false);
   searchTerm = signal('');
-  filterStatus = signal<'all' | 'active' | 'inactive' | 'expired' | 'cancelled'>('all');
+  filterStatus = signal<'all' | 'active' | 'inactive' | 'expired' | 'cancelled' | 'pending'>('all');
   filterTier = signal<'all' | 'freemium' | 'standard' | 'premium'>('all');
 
   // Computed filtered stores
@@ -130,6 +132,8 @@ export class SubscriptionsComponent implements OnInit {
     switch (status) {
       case 'active':
         return `${baseClasses} bg-green-100 text-green-800`;
+      case 'pending':
+        return `${baseClasses} bg-yellow-100 text-yellow-800`;
       case 'inactive':
         return `${baseClasses} bg-gray-100 text-gray-800`;
       case 'expired':
@@ -252,6 +256,106 @@ export class SubscriptionsComponent implements OnInit {
     this.loadStores();
   }
 
+  async approveSubscription(store: Store) {
+    const sub = this.getLatestSub(store);
+    if (!sub || !sub.id) {
+      alert('No subscription found to approve');
+      return;
+    }
+
+    const confirmed = confirm(`Approve subscription upgrade for ${store.storeName}?\n\nThis will activate the ${sub.planType.toUpperCase()} plan.`);
+    if (!confirmed) return;
+
+    try {
+      this.loading.set(true);
+      
+      // Update subscription status to active
+      await this.subscriptionService.updateSubscription(sub.id, {
+        status: 'active'
+      } as any);
+
+      // Update store subscription end date
+      if (sub.endDate) {
+        await this.storeService.updateStore(store.id!, { 
+          subscriptionEndDate: sub.endDate as any 
+        });
+      }
+
+      // Update subscription request status if exists
+      await this.updateSubscriptionRequestStatus(sub.id, 'approved');
+
+      alert('✅ Subscription approved successfully!');
+      await this.loadStores();
+    } catch (error) {
+      console.error('Error approving subscription:', error);
+      alert('❌ Failed to approve subscription. Please try again.');
+    } finally {
+      this.loading.set(false);
+    }
+  }
+
+  async rejectSubscription(store: Store) {
+    const sub = this.getLatestSub(store);
+    if (!sub || !sub.id) {
+      alert('No subscription found to reject');
+      return;
+    }
+
+    const reason = prompt(`Reject subscription upgrade for ${store.storeName}?\n\nPlease provide a rejection reason:`);
+    if (!reason || !reason.trim()) return;
+
+    try {
+      this.loading.set(true);
+      
+      // Update subscription status to rejected/cancelled
+      await this.subscriptionService.updateSubscription(sub.id, {
+        status: 'cancelled'
+      } as any);
+
+      // Update subscription request status if exists
+      await this.updateSubscriptionRequestStatus(sub.id, 'rejected', reason);
+
+      alert('❌ Subscription rejected.');
+      await this.loadStores();
+    } catch (error) {
+      console.error('Error rejecting subscription:', error);
+      alert('❌ Failed to reject subscription. Please try again.');
+    } finally {
+      this.loading.set(false);
+    }
+  }
+
+  private async updateSubscriptionRequestStatus(subscriptionId: string, status: 'approved' | 'rejected', rejectionReason?: string): Promise<void> {
+    try {
+      const user = this.authService.getCurrentUser();
+      if (!user) return;
+
+      // Query for subscription request with this subscriptionId
+      const requestsRef = collection(this.firestore, 'subscriptionRequests');
+      const q = query(requestsRef, where('subscriptionId', '==', subscriptionId), limit(1));
+      const snapshot = await getDocs(q);
+
+      if (!snapshot.empty) {
+        const requestDoc = snapshot.docs[0];
+        const updateData: any = {
+          status,
+          reviewedAt: new Date(),
+          reviewedBy: user.uid
+        };
+        
+        if (rejectionReason) {
+          updateData.rejectionReason = rejectionReason;
+        }
+
+        await updateDoc(doc(this.firestore, 'subscriptionRequests', requestDoc.id), updateData);
+        console.log('✅ Subscription request updated:', status);
+      }
+    } catch (error) {
+      console.error('⚠️ Failed to update subscription request:', error);
+      // Don't throw - this is a secondary operation
+    }
+  }
+
   // ===== Derived subscription helpers =====
   private getLatestSub(store: Store): SubscriptionDoc | undefined {
     if (!store?.id) return undefined;
@@ -263,9 +367,13 @@ export class SubscriptionsComponent implements OnInit {
     return (sub?.planType as string) || 'freemium';
   }
 
-  getStoreStatus(store: Store): 'active' | 'inactive' | 'expired' | 'cancelled' {
+  getStoreStatus(store: Store): 'active' | 'inactive' | 'expired' | 'cancelled' | 'pending' {
     const sub = this.getLatestSub(store);
     if (!sub) return 'inactive';
+    
+    // Check if subscription is pending approval
+    if (sub.status === 'pending') return 'pending';
+    
     const now = Date.now();
     const endMs = sub.endDate ? new Date(sub.endDate).getTime() : 0;
     if (sub.status === 'cancelled') return 'cancelled';
