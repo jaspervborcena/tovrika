@@ -160,7 +160,9 @@ export class DashboardComponent implements OnInit {
       return;
     }
 
-    if (roleId === 'cashier') {
+    if (roleId === 'admin') {
+      this.accessService.setPermissions({}, 'admin');
+    } else if (roleId === 'cashier') {
       this.accessService.setPermissions({}, 'cashier');
     } else if (roleId === 'store_manager') {
       this.accessService.setPermissions({}, 'store_manager');

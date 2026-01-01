@@ -3023,18 +3023,13 @@ export class ProductManagementComponent implements OnInit {
           availableTags: this.availableTags().length
         });
 
-        // totalStock: only allow editing when product has no separate inventory batches
-        if (this.hasExistingInventory()) {
-          updates.totalStock = this.selectedProduct.totalStock || 0;
-        } else {
-          updates.totalStock = Number(formValue.totalStock || 0);
-        }
-
         await this.productService.updateProduct(this.selectedProduct.id!, updates);
 
-        // If no inventory exists and user provided totalStock/costPrice, create an inventory entry
+        // Handle inventory batch updates based on current batches
         const currentBatches = await this.inventoryDataService.listBatches(this.selectedProduct.id!);
+        
         if (currentBatches.length === 0 && Number(formValue.totalStock || 0) > 0) {
+          // No inventory exists and user provided totalStock - create an inventory entry
           console.log('📦 No inventory exists for product, creating initial batch...');
           try {
             const currentPermission = this.authService.getCurrentPermission();
@@ -3065,6 +3060,31 @@ export class ProductManagementComponent implements OnInit {
           } catch (batchError) {
             console.error('❌ Failed to create inventory batch for edited product:', batchError);
             this.toastService.error('Product updated but failed to create inventory batch');
+          }
+        } else if (currentBatches.length === 1) {
+          // Single batch exists and user edited the quantity - update that batch
+          const newQuantity = Number(formValue.totalStock || 0);
+          const existingBatch = currentBatches[0];
+          
+          if (existingBatch.quantity !== newQuantity && newQuantity > 0) {
+            console.log('📦 Single batch exists, updating its quantity from', existingBatch.quantity, 'to', newQuantity);
+            try {
+              await this.inventoryDataService.updateBatch(this.selectedProduct.id!, existingBatch.id!, {
+                quantity: newQuantity,
+                unitPrice: Number(formValue.originalPrice || computedOriginalPrice || existingBatch.unitPrice || 0),
+                sellingPrice: Number(formValue.sellingPrice || computedSellingPrice || existingBatch.sellingPrice || 0),
+                costPrice: Number(formValue.costPrice || existingBatch.costPrice || 0),
+                isVatApplicable: formValue.isVatApplicable || false,
+                vatRate: formValue.vatRate ?? AppConstants.DEFAULT_VAT_RATE,
+                hasDiscount: formValue.hasDiscount || false,
+                discountType: formValue.discountType || 'percentage',
+                discountValue: Number(formValue.discountValue || 0)
+              });
+              console.log('✅ Single batch updated with new quantity');
+            } catch (batchError) {
+              console.error('❌ Failed to update batch quantity:', batchError);
+              this.toastService.error('Product updated but failed to update inventory batch');
+            }
           }
         }
         
