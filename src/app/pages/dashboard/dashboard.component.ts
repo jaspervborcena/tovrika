@@ -66,6 +66,7 @@ export class DashboardComponent implements OnInit {
   // User-related signals
   protected currentUser = computed(() => this.authService.getCurrentUser());
   protected isUserMenuOpen = signal<boolean>(false);
+  protected userRole = signal<string>('');
   
   // Computed properties
   protected userInitial = computed(() => {
@@ -160,13 +161,20 @@ export class DashboardComponent implements OnInit {
       return;
     }
 
-    if (roleId === 'cashier') {
+    if (roleId === 'admin') {
+      this.userRole.set('admin');
+      this.accessService.setPermissions({}, 'admin');
+    } else if (roleId === 'cashier') {
+      this.userRole.set('cashier');
       this.accessService.setPermissions({}, 'cashier');
     } else if (roleId === 'store_manager') {
+      this.userRole.set('store_manager');
       this.accessService.setPermissions({}, 'store_manager');
     } else if (roleId === 'creator') {
+      this.userRole.set('creator');
       this.accessService.setPermissions({}, 'creator');
     } else {
+      this.userRole.set(roleId);
       // For other custom roles, use roledefinition permissions
       const roleDefRef = collection(this.firestore, 'roledefinition');
       const roleDefQuery = query(

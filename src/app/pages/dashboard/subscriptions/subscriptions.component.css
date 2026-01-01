@@ -361,6 +361,16 @@
   transform: translateY(-1px);
 }
 
+.btn-danger {
+  background: #ef4444;
+  color: white;
+}
+
+.btn-danger:hover {
+  background: #dc2626;
+  transform: translateY(-1px);
+}
+
 .btn-info {
   background: #8b5cf6;
   color: white;
