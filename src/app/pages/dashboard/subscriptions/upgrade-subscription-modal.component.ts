@@ -302,7 +302,7 @@ export class UpgradeSubscriptionModalComponent implements OnChanges {
       }
 
       const company = this.resolvedCompanyName() || 'Unknown Company';
-      const store = await this.storeService.getStoreById(this.storeId);
+      const store = await this.storeService.getStore(this.storeId);
       
       const requestData: Omit<SubscriptionRequest, 'id'> = {
         companyId: this.companyId,
