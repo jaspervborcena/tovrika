@@ -1075,7 +1075,7 @@ export class UserRolesComponent implements OnInit {
       if (currentPermission?.companyId) {
         await this.storeService.loadStoresByCompany(currentPermission.companyId);
       }
-      this.availableStores = this.storeService.getStores();
+      this.availableStores = this.storeService.getStores().filter(store => store.status === 'active');
       
       // Set stores signal and select first store
       this.stores.set(this.availableStores);

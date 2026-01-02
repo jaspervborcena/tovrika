@@ -240,13 +240,13 @@ export class DashboardComponent implements OnInit {
         
         try {
           await this.storeService.loadStoresByCompany(currentPermission.companyId);
-          this.stores.set(this.storeService.getStores());
+          this.stores.set(this.storeService.getStores().filter(store => store.status === 'active'));
           this.totalStores.set(this.stores().length);
           console.log('✅ Dashboard: Stores loaded:', this.totalStores());
         } catch (storeError) {
           console.warn('⚠️ Dashboard: Failed to load stores (will use cached data):', storeError);
           // Still set the stores from service in case there's cached data
-          this.stores.set(this.storeService.getStores());
+          this.stores.set(this.storeService.getStores().filter(store => store.status === 'active'));
           this.totalStores.set(this.stores().length);
         }
         

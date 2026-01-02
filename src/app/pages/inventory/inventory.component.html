@@ -6,13 +6,28 @@
       <p class="page-subtitle">View and analyze your inventory performance</p>
     </div>
   </div>
-  <!-- Controls: Store (single) + Period (select) - patterned after Overview -->
+  <!-- Controls: Store + Period (select) - patterned after Overview -->
   <div class="overview-controls">
     <div class="control-row">
       <label class="control-label">Store</label>
-      <div class="single-store">
-        <span class="store-name">{{ storeName }}</span>
-      </div>
+      
+      <!-- Multiple stores: Show dropdown -->
+      <select 
+        *ngIf="hasMultipleStores(); else singleStore"
+        class="control-select" 
+        [(ngModel)]="selectedStoreId" 
+        (change)="onStoreChange()">
+        <option *ngFor="let store of stores()" [value]="store.id">
+          {{ store.storeName.toUpperCase() }}
+        </option>
+      </select>
+      
+      <!-- Single store: Show static name -->
+      <ng-template #singleStore>
+        <div class="single-store">
+          <span class="store-name">{{ getSelectedStoreName() }}</span>
+        </div>
+      </ng-template>
     </div>
 
     <div class="control-row">
