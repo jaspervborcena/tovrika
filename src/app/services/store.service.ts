@@ -11,7 +11,8 @@ import {
   getDocs,
   addDoc,
   collectionGroup,
-  documentId
+  documentId,
+  limit
 } from '@angular/fire/firestore';
 import { runTransaction, getFirestore } from 'firebase/firestore';
 import { AuthService } from './auth.service';
@@ -459,6 +460,100 @@ export class StoreService {
   // Get stores for a specific company
   getStoresByCompany(companyId: string) {
     return this.stores().filter(store => store.companyId === companyId);
+  }
+
+  /**
+   * Get active stores for dropdown components
+   * Centralized method with debug logging for consistent dropdown behavior
+   * Filters based on userRoles collection - only returns stores user has access to
+   */
+  async getActiveStoresForDropdown(companyId: string): Promise<Store[]> {
+    try {
+      console.log('🏪 getActiveStoresForDropdown called:', { companyId });
+      
+      const user = this.authService.getCurrentUser();
+      if (!user) {
+        console.warn('🚨 No current user - returning empty stores');
+        return [];
+      }
+
+      // Query userRoles collection to get stores this user has access to
+      const userRolesRef = collection(this.firestore, 'userRoles');
+      const userRolesQuery = query(
+        userRolesRef,
+        where('companyId', '==', companyId),
+        where('userId', '==', user.uid)
+      );
+      
+      console.log('🔍 Querying userRoles for user access:', { companyId, userId: user.uid });
+      const userRolesSnap = await getDocs(userRolesQuery);
+      
+      console.log('📋 UserRoles query results:', {
+        found: userRolesSnap.size,
+        roles: userRolesSnap.docs.map(d => ({
+          storeId: d.data()['storeId'],
+          roleId: d.data()['roleId']
+        }))
+      });
+
+      // Extract unique storeIds from userRoles
+      const allowedStoreIds = new Set<string>();
+      userRolesSnap.docs.forEach(doc => {
+        const storeId = doc.data()['storeId'];
+        if (storeId) {
+          allowedStoreIds.add(storeId);
+        }
+      });
+
+      console.log('🔐 Allowed store IDs from userRoles:', Array.from(allowedStoreIds));
+
+      // If no specific stores found, user might not have access
+      if (allowedStoreIds.size === 0) {
+        console.warn('🚨 No store access found in userRoles for this user');
+        return [];
+      }
+
+      // Ensure stores are loaded
+      await this.loadStoresByCompany(companyId);
+      
+      const storesRef = collection(this.firestore, 'stores');
+      
+      // Check store snapshot: First check if there are ANY stores at all
+      const storeSnapshotQuery = query(
+        storesRef,
+        where('companyId', '==', companyId),
+        limit(10)
+      );
+      const storeSnapshot = await getDocs(storeSnapshotQuery);
+      console.log('📸 Store Snapshot: Total stores in DB (any status):', storeSnapshot.size);
+      if (storeSnapshot.size > 0) {
+        console.log('📸 Store Snapshot: Sample store statuses:', storeSnapshot.docs.map(d => ({ 
+          id: d.id, 
+          name: d.data()['storeName'], 
+          status: d.data()['status'] 
+        })));
+      }
+      
+      // Get all stores for the company
+      const allStores = this.getStoresByCompany(companyId);
+      
+      // Filter by: active status AND user has access (from userRoles)
+      const accessibleStores = allStores.filter(store => 
+        store.status === 'active' && allowedStoreIds.has(store.id || '')
+      );
+      
+      console.log('🏪 Active stores for dropdown (filtered by userRoles):', {
+        total: allStores.length,
+        active: allStores.filter(s => s.status === 'active').length,
+        accessible: accessibleStores.length,
+        stores: accessibleStores.map(s => ({ id: s.id, name: s.storeName, status: s.status }))
+      });
+      
+      return accessibleStores;
+    } catch (error) {
+      console.error('❌ Error getting active stores for dropdown:', error);
+      return [];
+    }
   }
 
   // Get a specific store

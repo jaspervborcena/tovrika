@@ -1564,14 +1564,15 @@ export class SalesSummaryComponent implements OnInit {
         return;
       }
 
-      const stores = await this.storeService.getStoresByCompany(currentPermission.companyId);
-      this.stores.set(stores);
+      // Use centralized method from store.service
+      const activeStores = await this.storeService.getActiveStoresForDropdown(currentPermission.companyId);
+      this.stores.set(activeStores);
 
       // Set selected store - if user has storeId, use it, otherwise use first store
       if (currentPermission?.storeId) {
         this.selectedStoreId.set(currentPermission.storeId);
-      } else if (stores.length > 0 && stores[0].id) {
-        this.selectedStoreId.set(stores[0].id);
+      } else if (activeStores.length > 0 && activeStores[0].id) {
+        this.selectedStoreId.set(activeStores[0].id);
       }
     } catch (error) {
       console.error('Error loading stores:', error);

@@ -1868,7 +1868,8 @@ export class OverviewComponent implements OnInit {
         return;
       }
 
-      const stores = await this.storeService.getStoresByCompany(currentPermission.companyId);
+      // Use centralized method - filters by active status and userRoles access
+      const stores = await this.storeService.getActiveStoresForDropdown(currentPermission.companyId);
       this.stores.set(stores);
       console.log('🏪 Dashboard stores loaded:', stores?.length || 0);
 

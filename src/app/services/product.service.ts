@@ -623,6 +623,23 @@ export class ProductService implements OnDestroy {
       
       const productsRef = collection(this.firestore, 'products');
       
+      // DEBUG: First check if there are ANY products at all
+      const debugQuery = query(
+        productsRef,
+        where('companyId', '==', companyId),
+        where('storeId', '==', storeId),
+        limit(10)
+      );
+      const debugSnapshot = await getDocs(debugQuery);
+      console.log('🐛 DEBUG: Total products in DB (any status):', debugSnapshot.size);
+      if (debugSnapshot.size > 0) {
+        console.log('🐛 DEBUG: Sample product statuses:', debugSnapshot.docs.map(d => ({ 
+          id: d.id, 
+          name: d.data()['productName'], 
+          status: d.data()['status'] 
+        })));
+      }
+
       // Create query with proper error handling - avoid orderBy to prevent index requirements
       console.log('🔧 Building Firestore query without orderBy to avoid index requirements...');
       let q;

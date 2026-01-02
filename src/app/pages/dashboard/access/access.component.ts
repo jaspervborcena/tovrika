@@ -335,8 +335,9 @@ export class AccessComponent implements OnInit {
     try {
       const currentPermission = this.authService.getCurrentPermission();
       if (currentPermission?.companyId) {
-        await this.storeService.loadStoresByCompany(currentPermission.companyId);
-        this.stores = this.storeService.getStoresByCompany(currentPermission.companyId);
+        // Use centralized method from store.service
+        this.stores = await this.storeService.getActiveStoresForDropdown(currentPermission.companyId);
+        
         // If the current permission includes a storeId, prefer it as the default selected store
         const permStoreId = currentPermission.storeId;
         if (permStoreId) {
