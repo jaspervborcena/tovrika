@@ -30,6 +30,7 @@ import { CompanyService } from '../../../services/company.service';
 import { TranslationService } from '../../../services/translation.service';
 import { TranslateModule } from '@ngx-translate/core';
 import { Product } from '../../../interfaces/product.interface';
+import { Store } from '../../../interfaces/store.interface';
 import { ProductViewType, OrderDiscount, ReceiptValidityNotice, CartItem, CartItemTaxDiscount } from '../../../interfaces/pos.interface';
 import { Customer, CustomerFormData } from '../../../interfaces/customer.interface';
 import { SubscriptionService } from '../../../services/subscription.service';
@@ -74,6 +75,11 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
 
   private routerSubscription: any;
   private resizeListener?: () => void;
+  
+  // Touch event properties for swipe navigation
+  private touchStartX: number = 0;
+  private touchEndX: number = 0;
+  private readonly minSwipeDistance = 50; // Minimum distance for swipe
   
   // Barcode image cache
   private barcodeImageCache = new Map<string, SafeUrl>();
@@ -120,60 +126,45 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   readonly selectedCategory = computed(() => this.posSharedService.selectedCategory());
   readonly currentView = computed(() => this.posSharedService.currentView());
   
-  // Show stores loaded from user roles (already filtered by role-based access)
+  // Stores signal - loaded via getActiveStoresForDropdown (same as Access Management)
+  private storesSignal = signal<Store[]>([]);
+  
+  // Show stores filtered by userRoles and active status only (same as dropdowns in other components)
   readonly availableStores = computed(() => {
-    const stores = this.storeService.getStores();
-    console.log('🏪 availableStores computed - Stores from userRoles:', stores.length, 'stores');
+    const stores = this.storesSignal();
+    
+    console.log('🏪 availableStores computed - Stores from getActiveStoresForDropdown:', stores.length, 'stores');
     
     if (stores.length === 0) {
-      console.warn('⚠️ No stores available from role-based loading');
-      
-      // Enhanced debugging for empty stores
-      console.log('🔍 DEBUGGING EMPTY STORES:');
-      console.log('  - Current user:', this.authService.getCurrentUser()?.uid || 'No user');
-      console.log('  - Store service state:', this.storeService.debugStoreStatus());
-      console.log('  - Component initialization state:', {
-        products: this.products().length,
-        categories: this.categories().length,
-        selectedStore: this.selectedStoreId()
-      });
-      
-      // Try to trigger store loading as fallback
-      this.handleEmptyStores();
-    } else {
-      console.log('🏪 Store details:', stores.map(s => ({ id: s.id, name: s.storeName, companyId: s.companyId })));
-      
-      // Count products per store and prioritize stores with products
-      const allProducts = this.productService.getProductsSignal()();
-      const storeProductCounts = new Map<string, number>();
-      
-      stores.forEach(store => {
-        const productCount = allProducts.filter(p => p.storeId === store.id).length;
-        storeProductCounts.set(store.id || '', productCount);
-      });
-      
-      // Sort stores: stores with products first, then by product count descending
-      const sortedStores = [...stores].sort((a, b) => {
-        const countA = storeProductCounts.get(a.id || '') || 0;
-        const countB = storeProductCounts.get(b.id || '') || 0;
-        
-        // If one has products and other doesn't, prioritize the one with products
-        if (countA > 0 && countB === 0) return -1;
-        if (countA === 0 && countB > 0) return 1;
-        
-        // If both have products or both don't, sort by count descending
-        return countB - countA;
-      });
-      
-      console.log('🏪 Store product counts:', Array.from(storeProductCounts.entries()).map(([id, count]) => ({
-        store: stores.find(s => s.id === id)?.storeName,
-        count
-      })));
-      
-      return sortedStores;
+      console.warn('⚠️ No stores available - need to call loadStoresForPOS()');
+      return [];
     }
     
-    return stores;
+    console.log('🏪 Available stores:', stores.map(s => ({ id: s.id, name: s.storeName, status: s.status })));
+    
+    // Count products per store and prioritize stores with products
+    const allProducts = this.productService.getProductsSignal()();
+    const storeProductCounts = new Map<string, number>();
+    
+    stores.forEach(store => {
+      const productCount = allProducts.filter(p => p.storeId === store.id).length;
+      storeProductCounts.set(store.id || '', productCount);
+    });
+    
+    // Sort stores: stores with products first, then by product count descending
+    const sortedStores = [...stores].sort((a, b) => {
+      const countA = storeProductCounts.get(a.id || '') || 0;
+      const countB = storeProductCounts.get(b.id || '') || 0;
+      
+      // If one has products and other doesn't, prioritize the one with products
+      if (countA > 0 && countB === 0) return -1;
+      if (countA === 0 && countB > 0) return 1;
+      
+      // If both have products or both don't, sort by count descending
+      return countB - countA;
+    });
+    
+    return sortedStores;
   });
   readonly selectedStoreId = computed(() => this.posService.selectedStoreId());
   readonly cartItems = computed(() => this.posService.cartItems());
@@ -280,10 +271,14 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   // Pagination state
   readonly currentPage = signal<number>(1);
   readonly isMobileView = signal<boolean>(typeof window !== 'undefined' ? window.innerWidth < 768 : false);
+  readonly isTabletView = signal<boolean>(typeof window !== 'undefined' ? (window.innerWidth >= 768 && window.innerWidth < 1024) : false);
+  readonly isDesktopView = computed(() => !this.isMobileView() && !this.isTabletView());
   
   // Dynamic page size based on screen width
   readonly pageSize = computed(() => {
-    return this.isMobileView() ? 4 : 12; // Mobile: 2 cols × 2 rows, Desktop: 6 cols × 2 rows
+    if (this.isMobileView()) return 6; // Mobile: 2 cols × 3 rows = 6 items
+    if (this.isTabletView()) return 10; // Tablet: 5 cols × 2 rows = 10 items
+    return 12; // Desktop: 6 cols × 2 rows = 12 items
   });
 
   // Products to display in grid view based on visible rows
@@ -631,6 +626,10 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   // Navigation collapse state for desktop POS
   private isNavigationCollapsedSignal = signal<boolean>(true);
   readonly isNavigationCollapsed = computed(() => this.isNavigationCollapsedSignal());
+  
+  // Panel toggle for mobile/tablet (drawer mode)
+  private showReceiptPanelSignal = signal<boolean>(false);
+  readonly showReceiptPanel = computed(() => this.showReceiptPanelSignal());
   
   // Access tabs for POS management
   readonly accessTabs = ['New', 'Orders', 'Cancelled', 'Returns', 'Refunds', 'Damage', 'Split Payments', 'Discounts & Promotions'] as const;
@@ -2406,16 +2405,21 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       await this.loadData();
       console.log('✅ STEP 1 COMPLETED: Data loading finished');
       
-      console.log('📊 STEP 2: Setting current date and time...');
+      console.log('📊 STEP 2: Loading stores for POS (using getActiveStoresForDropdown)...');
+      // Load stores using the same method as Access Management
+      await this.loadStoresForPOS();
+      console.log('✅ STEP 2 COMPLETED: Stores loaded');
+      
+      console.log('📊 STEP 3: Setting current date and time...');
       // Set current date and time
       this.updateCurrentDateTime();
       
-      console.log('📊 STEP 3: Loading next invoice number preview...');
+      console.log('📊 STEP 4: Loading next invoice number preview...');
       // Load next invoice number preview
       await this.loadNextInvoicePreview();
-      console.log('✅ STEP 3 COMPLETED: Invoice number loaded');
+      console.log('✅ STEP 4 COMPLETED: Invoice number loaded');
       
-      console.log('📊 STEP 4: Initializing store selection...');
+      console.log('📊 STEP 5: Initializing store selection...');
       await this.initializeStore(); 
       console.log('✅ STEP 4 COMPLETED: Store initialization finished');
       
@@ -3809,6 +3813,25 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     }
   }
 
+  // Load stores using getActiveStoresForDropdown (same as Access Management)
+  async loadStoresForPOS(): Promise<void> {
+    try {
+      const currentPermission = this.authService.getCurrentPermission();
+      if (currentPermission?.companyId) {
+        console.log('🏪 Loading stores for POS using getActiveStoresForDropdown:', currentPermission.companyId);
+        // Use the same centralized method as Access Management
+        const stores = await this.storeService.getActiveStoresForDropdown(currentPermission.companyId);
+        this.storesSignal.set(stores);
+        console.log('✅ Stores loaded for POS:', stores.length, 'stores');
+      } else {
+        console.warn('⚠️ No companyId available for loading stores');
+      }
+    } catch (error) {
+      console.error('❌ Error loading stores for POS:', error);
+      this.storesSignal.set([]);
+    }
+  }
+
   // Event handlers
   async selectStore(storeId: string): Promise<void> {
     console.log('🎯 selectStore called with storeId:', storeId);
@@ -3949,6 +3972,32 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       return this.displayFavoriteGridProducts().length < this.favoriteProducts().length;
     }
     return false;
+  }
+  
+  // Touch event handlers for swipe navigation
+  onTouchStart(event: TouchEvent): void {
+    this.touchStartX = event.touches[0].clientX;
+  }
+
+  onTouchEnd(event: TouchEvent): void {
+    this.touchEndX = event.changedTouches[0].clientX;
+    this.handleSwipeGesture();
+  }
+
+  private handleSwipeGesture(): void {
+    const swipeDistance = this.touchEndX - this.touchStartX;
+    
+    if (Math.abs(swipeDistance) < this.minSwipeDistance) {
+      return; // Not a swipe, ignore
+    }
+    
+    if (swipeDistance > 0) {
+      // Swipe right - go to previous page
+      this.previousPage();
+    } else {
+      // Swipe left - go to next page
+      this.nextPage();
+    }
   }
   
   // Pagination methods
@@ -4179,6 +4228,19 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
 
   toggleNavigationPanel(): void {
     this.isNavigationCollapsedSignal.set(!this.isNavigationCollapsedSignal());
+  }
+
+  // Toggle between left panel (products) and right panel (receipt) on mobile/tablet
+  togglePanelView(): void {
+    this.showReceiptPanelSignal.set(!this.showReceiptPanelSignal());
+  }
+
+  showProductPanel(): void {
+    this.showReceiptPanelSignal.set(false);
+  }
+
+  showReceiptPanelView(): void {
+    this.showReceiptPanelSignal.set(true);
   }
 
   updateCurrentDateTime(): void {
@@ -5208,6 +5270,11 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     } else {
       return 'Cash'; // Default to cash if neither is selected
     }
+  }
+
+  // Helper method to get cart item count for FAB badge
+  getCartItemCount(): number {
+    return this.cartItems().reduce((total, item) => total + item.quantity, 0);
   }
 
   // Helper method to get order status color

@@ -9,6 +9,15 @@
 /* POS Common Styles */
 @import './app/shared/styles/pos-common.css';
 
+/* Ensure body extends full width with no default white background */
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
 /* Global font styling for professional appearance */
 * {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;

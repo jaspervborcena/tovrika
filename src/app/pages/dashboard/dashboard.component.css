@@ -17,7 +17,61 @@
   right: 0;
   z-index: 50;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  transition: background 0.3s ease;
+  transition: transform 0.3s ease, opacity 0.3s ease;
+}
+
+/* Header Collapsed State */
+.dashboard-header.header-collapsed {
+  transform: translateY(-100%);
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Adjust content when header is collapsed */
+.dashboard-layout:has(.dashboard-header.header-collapsed) .dashboard-content {
+  margin-top: 0 !important;
+  padding-top: 10px !important;
+}
+
+/* FAB Button to Show Header */
+.show-header-fab {
+  position: fixed;
+  top: 10px;
+  right: 20px;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border: none;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+  cursor: pointer;
+  z-index: 1000;
+  transition: all 0.3s ease;
+  animation: fadeIn 0.3s ease;
+}
+
+.show-header-fab:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.5);
+}
+
+.show-header-fab:active {
+  transform: translateY(0);
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 /* Offline Header Styles - High Specificity */
@@ -168,6 +222,48 @@ header.dashboard-header.offline {
   height: 1.25rem;
 }
 
+/* Header Store Selector */
+.store-selector {
+  position: relative;
+}
+
+.header-select {
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 12px;
+  color: white;
+  padding: 0.5rem 2rem 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%23ffffff' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+  background-position: right 0.5rem center;
+  background-repeat: no-repeat;
+  background-size: 1rem;
+  min-width: 140px;
+}
+
+.header-select:hover {
+  background: rgba(255, 255, 255, 0.2);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+}
+
+.header-select:focus {
+  outline: none;
+  background: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.header-select option {
+  background: #4c51bf;
+  color: white;
+  padding: 0.5rem;
+}
+
 .notification-badge {
   position: absolute;
   top: -4px;
@@ -183,6 +279,85 @@ header.dashboard-header.offline {
   align-items: center;
   justify-content: center;
   border: 2px solid white;
+}
+
+/* Language Selector Styles */
+.language-selector {
+  position: relative;
+  display: inline-block;
+}
+
+.language-btn {
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  padding: 0 !important;
+  width: 2.5rem;
+  height: 2.5rem;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 12px;
+  transition: all 0.3s ease;
+  color: white !important;
+}
+
+.language-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+}
+
+.language-icon {
+  font-size: 20px;
+  line-height: 1;
+  display: inline-block;
+  filter: grayscale(100%) brightness(2);
+}
+
+.language-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
+  min-width: 200px;
+  overflow: hidden;
+  z-index: 1000;
+  animation: slideDown 0.2s ease;
+}
+
+.language-option {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  width: 100%;
+  background: transparent;
+  border: none;
+  color: #1f2937;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: left;
+}
+
+.language-option:hover {
+  background: #f3f4f6;
+}
+
+.language-option.active {
+  background: #ede9fe;
+  color: #7c3aed;
+  font-weight: 500;
+}
+
+.language-flag {
+  font-size: 1.25rem;
+}
+
+.language-name {
+  flex: 1;
 }
 
 /* User Menu */
@@ -597,13 +772,12 @@ header.dashboard-header.offline {
     gap: 0.25rem;
   }
   
-  .dashboard-sidebar {
-    width: 200px;
+  .logo-text {
+    font-size: 1.25rem;
   }
   
-  .nav-item {
-    padding: 0.75rem 1rem;
-    font-size: 0.8125rem;
+  .dashboard-header {
+    padding: 0.75rem 0;
   }
   
   .main-content {
@@ -616,12 +790,7 @@ header.dashboard-header.offline {
     flex-direction: column;
   }
   
-  .dashboard-sidebar {
-    width: 100%;
-    max-height: 200px;
-    border-right: none;
-    border-bottom: 1px solid #e2e8f0;
-  }
+  /* Sidebar is hidden via *ngIf on mobile, no need for styling */
   
   .nav-sections {
     padding: 0.5rem 0;
@@ -639,6 +808,12 @@ header.dashboard-header.offline {
   .dashboard-content {
     margin-top: 70px; /* Smaller margin for mobile */
     min-height: calc(100vh - 70px);
+  }
+  
+  /* Ensure main content takes full width when sidebar is hidden */
+  .dashboard-main {
+    width: 100%;
+    margin-left: 0;
   }
 }
 nav svg, .nav svg, .menu svg, .navbar svg {

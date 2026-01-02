@@ -1000,6 +1000,351 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
         grid-template-columns: 1fr;
       }
     }
+
+    @media (max-width: 768px) {
+      .dashboard-container {
+        padding: 12px; /* Reduced from 16px */
+      }
+
+      .page-title {
+        font-size: 1.375rem; /* Slightly reduced */
+      }
+
+      .page-subtitle {
+        font-size: 0.8125rem; /* Slightly reduced */
+      }
+
+      .overview-controls {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 8px;
+      }
+
+      .overview-controls .control-row {
+        flex-direction: column;
+        gap: 4px;
+      }
+
+      .control-select, .control-input {
+        width: 100%;
+        font-size: 0.875rem; /* Smaller text */
+      }
+
+      .date-range-inputs {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+
+      .chart-content {
+        height: 180px; /* Reduced from 200px */
+        flex-direction: column;
+      }
+
+      .chart-placeholder {
+        width: 100%;
+        height: 130px; /* Reduced from 150px */
+      }
+
+      .sales-cards {
+        gap: 6px; /* Reduced from 8px */
+      }
+
+      .sales-card {
+        padding: 10px; /* Reduced from 12px */
+        min-height: auto;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 6px; /* Reduced from 8px */
+      }
+
+      .card-content {
+        width: 100%;
+      }
+
+      .card-value {
+        font-size: 1.125rem; /* Reduced from 1.25rem */
+      }
+
+      .card-label {
+        font-size: 0.6875rem; /* Reduced from 0.75rem */
+      }
+
+      .card-change {
+        font-size: 0.6875rem; /* Reduced from 0.75rem */
+      }
+    }
+
+    @media (max-width: 640px) {
+      .dashboard-container {
+        padding: 4px; /* Further reduced from 8px */
+        margin-left: -2px; /* Move everything more to the left */
+      }
+
+      .header {
+        margin-bottom: 8px; /* Reduced from 12px */
+        margin-left: -2px; /* Move header content left */
+      }
+
+      .page-title {
+        font-size: 1rem; /* Further reduced from 1.125rem */
+        margin-bottom: 2px;
+      }
+
+      .page-subtitle {
+        font-size: 0.6875rem; /* Further reduced from 0.75rem */
+        margin-bottom: 6px; /* Reduced from 8px */
+      }
+
+      .dashboard-grid {
+        gap: 6px; /* Reduced from 8px */
+        margin-left: -2px; /* Move grid content left */
+      }
+
+      .chart-container {
+        padding: 6px; /* Further reduced from 8px */
+        margin-left: -6px; /* Move more to the left */
+        margin-right: -4px; /* Extend to right edge */
+      }
+
+      .chart-title {
+        font-size: 0.8125rem; /* Slightly reduced from 0.875rem */
+        margin-bottom: 6px; /* Reduced from 8px */
+      }
+
+      .chart-content {
+        height: 140px; /* Further reduced from 150px */
+        margin-left: -4px; /* Move chart content left */
+        display: flex;
+        flex-direction: column;
+      }
+
+      .chart-placeholder {
+        order: 2; /* Chart goes after orders pie */
+      }
+
+      .orders-pie-wrapper {
+        order: 1; /* Orders pie wrapper goes first */
+        margin-top: 0;
+        margin-bottom: 8px; /* Add spacing below */
+        gap: 12px; /* Reduce gap for mobile */
+      }
+
+      .orders-pie {
+        width: 120px; /* Further reduced for mobile */
+        height: 120px;
+      }
+
+      .orders-donut {
+        width: 120px; /* Match orders-pie */
+        height: 120px;
+      }
+
+      .orders-donut-hole {
+        width: 60px; /* Half of orders-donut */
+        height: 60px;
+      }
+
+      .orders-count {
+        font-size: 0.875rem; /* Smaller text for mobile donut */
+      }
+
+      .orders-profit {
+        font-size: 0.75rem; /* Smaller profit text */
+      }
+
+      .chart-header {
+        order: 0; /* Chart title stays at top */
+        margin-bottom: 8px;
+      }
+
+      .chart-placeholder {
+        height: 100px; /* Further reduced from 110px */
+      }
+
+      .sales-cards {
+        margin-left: -6px; /* Move further to the left */
+        margin-right: -4px; /* Extend to right edge */
+        max-width: calc(100vw - 12px); /* Limit width to viewport */
+        margin-bottom: 12px; /* Add spacing after sales cards */
+      }
+
+      .sales-card {
+        padding: 6px; /* Further reduced from 8px */
+        border-radius: 6px; /* Reduced from 8px */
+        min-height: 45px; /* Reduced from 50px */
+        margin: 0 2px 4px 2px; /* Reduced margins */
+        max-width: calc(100vw - 24px); /* Match chart header width constraint */
+        width: calc(100% - 16px); /* Responsive width, more constrained */
+      }
+
+      .card-icon {
+        width: 24px; /* Further reduced from 28px */
+        height: 24px;
+        border-radius: 4px; /* Reduced from 6px */
+      }
+
+      .icon {
+        width: 12px; /* Further reduced from 14px */
+        height: 12px;
+      }
+
+      .card-value {
+        font-size: 0.9375rem; /* Reduced from 1rem */
+        line-height: 1.1;
+      }
+
+      .card-label {
+        font-size: 0.625rem; /* Reduced from 0.6875rem */
+      }
+
+      .card-change {
+        font-size: 0.5625rem; /* Reduced from 0.625rem */
+      }
+
+      .sidebar-title {
+        font-size: 0.8125rem; /* Reduced from 0.875rem */
+        padding: 2px 4px; /* Reduced from 3px 6px */
+      }
+
+      .analytics-card {
+        padding: 8px; /* Reduced from 12px */
+        margin-left: -6px; /* Move more to the left */
+        margin-right: -4px; /* Extend to right edge */
+        margin-top: 16px; /* Add spacing from orders overview */
+      }
+
+      .analytics-title {
+        font-size: 0.8125rem; /* Reduced from 0.875rem */
+        margin-bottom: 6px; /* Reduced from 8px */
+      }
+
+      .donut-container {
+        width: 70px; /* Further reduced from 80px */
+        height: 70px;
+      }
+
+      .donut-center-text {
+        font-size: 0.6875rem; /* Reduced from 0.75rem */
+      }
+
+      /* Horizontal scroll for controls if needed */
+      .overview-controls {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        padding: 0 2px; /* Reduced from 4px */
+        margin-left: -2px; /* Move controls left */
+      }
+
+      .control-label {
+        font-size: 0.6875rem; /* Reduced from 0.75rem */
+      }
+
+      .control-select, .control-input {
+        font-size: 0.6875rem; /* Reduced from 0.75rem */
+        padding: 3px 4px; /* Reduced padding */
+      }
+
+      /* Make sure chart svg is responsive */
+      .chart-svg {
+        max-width: 100%;
+        height: auto;
+      }
+
+      /* Adjust spacing for mobile */
+      .chart-labels {
+        padding: 0 8px; /* Reduced from 12px */
+        font-size: 0.5625rem; /* Reduced from 0.625rem */
+      }
+
+      /* Make analytics items smaller */
+      .stat-label, .stat-value {
+        font-size: 0.6875rem; /* Reduced from 0.75rem */
+      }
+
+      /* Reduce legend spacing */
+      .legend-item {
+        font-size: 0.6875rem; /* Reduced from 0.75rem */
+        gap: 2px; /* Reduced gap */
+      }
+
+      /* Mobile bar-chart optimizations */
+      .bar-chart {
+        gap: 6px; /* Reduced from 12px */
+        padding: 4px; /* Add compact padding */
+      }
+
+      .bars {
+        gap: 4px; /* Reduced from 8px */
+      }
+
+      .bar-row {
+        gap: 6px; /* Reduced from 12px */
+        align-items: center;
+      }
+
+      .bar-label {
+        width: 60px; /* Reduced from 90px */
+        font-size: 0.6875rem; /* Smaller font size */
+        font-weight: 500; /* Reduced from 600 */
+      }
+
+      .bar {
+        height: 8px; /* Reduced from 12px */
+        border-radius: 4px; /* Reduced from 6px */
+      }
+
+      .bar-fill {
+        border-radius: 4px; /* Match bar border-radius */
+      }
+
+      .bar-percent {
+        width: 32px; /* Reduced from 48px */
+        font-size: 0.625rem; /* Smaller font size */
+        font-weight: 500; /* Reduced from 600 */
+      }
+
+      .legend-dot {
+        width: 6px; /* Further reduced from 8px */
+        height: 6px;
+      }
+
+      /* Compact main content */
+      .main-content {
+        padding: 2px; /* Further reduced padding */
+        margin-left: -2px; /* Move main content left */
+      }
+
+      /* Orders Overview specific adjustments */
+      .chart-header {
+        margin-bottom: 4px; /* Reduced spacing */
+        margin-left: -2px; /* Move header left */
+      }
+
+      .chart-container {
+        padding: 6px; /* Further reduced from 8px */
+        margin-left: -6px; /* Move more to the left */
+        margin-right: -4px; /* Extend to right edge */
+        margin-bottom: 8px; /* Add spacing after chart container */
+      }
+
+      /* Sales Analytics specific adjustments */
+      .analytics-row {
+        margin-left: -4px; /* Move analytics left */
+        margin-right: -2px; /* Extend to right */
+        margin-top: 12px; /* Add spacing from previous section */
+      }
+
+      /* Make donut chart text smaller */
+      .donut-svg text {
+        font-size: 0.625rem !important; /* Force smaller text */
+      }
+
+      /* Reduce analytics spacing */
+      .analytics-card .stat-item {
+        padding: 2px 0; /* Reduce item spacing */
+      }
+    }
   `]
 })
 export class OverviewComponent implements OnInit {
