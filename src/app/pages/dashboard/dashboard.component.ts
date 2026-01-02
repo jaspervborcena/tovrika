@@ -103,12 +103,15 @@ export class DashboardComponent implements OnInit {
     if (!user) return;
 
     const currentPermission = this.authService.getCurrentPermission();
+    console.log('🔍 Dashboard: Current permission:', currentPermission);
     
     // Check if BOTH companyId AND storeId exist
     if (!currentPermission?.companyId || !currentPermission?.storeId) {
+      console.log('⚠️ Dashboard: Missing companyId or storeId, checking early roleId...');
       
       // If either companyId or storeId is missing, check user's role directly from permissions
       if (currentPermission?.roleId) {
+        console.log('🔍 Dashboard: Early check - roleId from permission:', currentPermission.roleId);
         
         if (currentPermission.roleId === 'admin') {
           this.userRole.set('admin');
@@ -128,7 +131,7 @@ export class DashboardComponent implements OnInit {
       return;
     }
 
-
+    console.log('✅ Dashboard: Has both companyId and storeId, querying userRoles collection...');
     // Try to get roleId from userRoles collection
     const userRolesRef = collection(this.firestore, 'userRoles');
     const userRolesQuery = query(
@@ -143,17 +146,27 @@ export class DashboardComponent implements OnInit {
       const userRoleData = userRolesSnap.docs[0].data();
       roleId = userRoleData['roleId'];
     } else {
+      console.log('⚠️ Dashboard: No matching document in userRoles collection');
       // Fallback: use roleId from permissions array if available
       if (currentPermission?.roleId) {
         roleId = currentPermission.roleId;
+        console.log('📌 Dashboard: Using roleId from currentPermission:', roleId);
       } else {
-        // Final fallback: get user doc from Firestore and check permission field
+        // Final fallback: get user doc from Firestore and check both roleId and permission.roleId
         const userDocRef = collection(this.firestore, 'users');
         const userDocSnap = await getDocs(query(userDocRef, where('uid', '==', user.uid)));
         if (!userDocSnap.empty) {
           const userDoc = userDocSnap.docs[0].data();
-          if (userDoc['permission'] && userDoc['permission']['roleId']) {
+          console.log('🔍 Dashboard: User doc from Firestore:', userDoc);
+          // Check direct roleId field first
+          if (userDoc['roleId']) {
+            roleId = userDoc['roleId'];
+            console.log('✅ Dashboard: Found direct roleId:', roleId);
+          }
+          // Fall back to nested permission.roleId
+          else if (userDoc['permission'] && userDoc['permission']['roleId']) {
             roleId = userDoc['permission']['roleId'];
+            console.log('✅ Dashboard: Found nested roleId:', roleId);
           }
         }
       }
@@ -161,12 +174,16 @@ export class DashboardComponent implements OnInit {
 
     if (!roleId) {
       // If no roleId found, treat as creator
+      console.log('⚠️ Dashboard: No roleId found, defaulting to creator');
       this.accessService.setPermissions({}, 'creator');
       return;
     }
 
+    console.log('🔍 Dashboard: Detected roleId:', roleId);
+
     if (roleId === 'admin') {
       this.userRole.set('admin');
+      console.log('✅ Dashboard: Admin role set, userRole signal:', this.userRole());
       this.accessService.setPermissions({}, 'admin');
     } else if (roleId === 'cashier') {
       this.userRole.set('cashier');
