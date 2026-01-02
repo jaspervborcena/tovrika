@@ -50,7 +50,7 @@
         </svg>
       </div>
       <div>
-        <p class="stat-label">Approved</p>
+        <p class="stat-label">Active</p>
         <p class="stat-value">{{ approvedRequests() }}</p>
       </div>
     </div>
@@ -63,7 +63,7 @@
         </svg>
       </div>
       <div>
-        <p class="stat-label">Rejected</p>
+        <p class="stat-label">Closed</p>
         <p class="stat-value">{{ rejectedRequests() }}</p>
       </div>
     </div>
@@ -95,8 +95,8 @@
     >
       <option value="all">All Status</option>
       <option value="pending">Pending</option>
-      <option value="approved">Approved</option>
-      <option value="rejected">Rejected</option>
+      <option value="active">Active</option>
+      <option value="closed">Closed</option>
     </select>
 
     <select 
@@ -219,7 +219,7 @@
                     📋
                   </button>
                 }
-                @if (request.status === 'rejected' && request.rejectionReason) {
+                @if (request.status === 'closed' && request.rejectionReason) {
                   <button 
                     class="btn-action btn-info" 
                     [title]="'Reason: ' + request.rejectionReason">

@@ -32,12 +32,15 @@ export class AdminComponent implements OnInit {
   requests = signal<SubscriptionRequestWithStore[]>([]);
   loading = signal(false);
   searchTerm = signal('');
-  filterStatus = signal<'all' | 'pending' | 'approved' | 'rejected'>('all');
+  filterStatus = signal<'all' | 'pending' | 'active' | 'closed'>('all');
   filterTier = signal<'all' | 'freemium' | 'standard' | 'premium' | 'enterprise'>('all');
 
   // Computed
   filteredRequests = computed(() => {
     let filtered = this.requests();
+
+    // Exclude closed requests by default
+    filtered = filtered.filter(req => req.status !== 'closed');
 
     // Filter by search term
     const search = this.searchTerm().toLowerCase();
@@ -66,10 +69,10 @@ export class AdminComponent implements OnInit {
   });
 
   // Stats
-  totalRequests = computed(() => this.requests().length);
+  totalRequests = computed(() => this.requests().filter(r => r.status !== 'closed').length);
   pendingRequests = computed(() => this.requests().filter(r => r.status === 'pending').length);
-  approvedRequests = computed(() => this.requests().filter(r => r.status === 'approved').length);
-  rejectedRequests = computed(() => this.requests().filter(r => r.status === 'rejected').length);
+  approvedRequests = computed(() => this.requests().filter(r => r.status === 'active').length);
+  rejectedRequests = computed(() => this.requests().filter(r => r.status === 'closed').length);
 
   async ngOnInit() {
     // Check if user has admin role
@@ -169,7 +172,7 @@ export class AdminComponent implements OnInit {
       // 2. Update subscription request status
       const requestRef = doc(this.firestore, 'subscriptionRequests', request.id);
       await updateDoc(requestRef, {
-        status: 'approved',
+        status: 'active',
         reviewedAt: Timestamp.now(),
         reviewedBy: user.uid
       });
@@ -205,41 +208,41 @@ export class AdminComponent implements OnInit {
   }
 
   async rejectRequest(request: SubscriptionRequestWithStore) {
-    if (!request.id || !request.subscriptionId) {
+    if (!request.id) {
       this.toast.error('Invalid request data');
       return;
     }
 
     const reason = prompt(
-      `Reject subscription request for ${request.companyName}?\n\n` +
-      `Please provide a rejection reason:`
+      `Close subscription request for ${request.companyName}?\n\n` +
+      `Please provide a reason (optional):`
     );
-    if (!reason || !reason.trim()) return;
+    if (reason === null) return; // User clicked cancel
 
     this.loading.set(true);
     try {
       const user = this.authService.getCurrentUser();
       if (!user) throw new Error('User not authenticated');
 
-      // 1. Update subscription status to cancelled
-      await this.subscriptionService.updateSubscription(request.subscriptionId, {
-        status: 'cancelled'
-      } as any);
-
-      // 2. Update subscription request status
+      // Update subscription request status to closed
       const requestRef = doc(this.firestore, 'subscriptionRequests', request.id);
-      await updateDoc(requestRef, {
-        status: 'rejected',
+      const updateData: any = {
+        status: 'closed',
         reviewedAt: Timestamp.now(),
-        reviewedBy: user.uid,
-        rejectionReason: reason.trim()
-      });
+        reviewedBy: user.uid
+      };
+      
+      if (reason && reason.trim()) {
+        updateData.rejectionReason = reason.trim();
+      }
+      
+      await updateDoc(requestRef, updateData);
 
-      this.toast.success('❌ Subscription request rejected.');
+      this.toast.success('✅ Subscription request closed.');
       await this.loadSubscriptionRequests();
     } catch (error) {
-      console.error('❌ Error rejecting request:', error);
-      this.toast.error('Failed to reject request. Please try again.');
+      console.error('❌ Error closing request:', error);
+      this.toast.error('Failed to close request. Please try again.');
     } finally {
       this.loading.set(false);
     }
@@ -277,9 +280,9 @@ export class AdminComponent implements OnInit {
     switch (status) {
       case 'pending':
         return 'badge-warning';
-      case 'approved':
+      case 'active':
         return 'badge-success';
-      case 'rejected':
+      case 'closed':
         return 'badge-danger';
       default:
         return 'badge-secondary';
