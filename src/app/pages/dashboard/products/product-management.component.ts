@@ -1381,8 +1381,7 @@ import { AppConstants } from '../../../shared/enums/app-constants.enum';
 
       <!-- Add/Edit Product Modal -->
       <div class="modal-overlay" 
-           *ngIf="showModal" 
-           (click)="closeModal()"
+           *ngIf="showModal"
            style="position: fixed !important; z-index: 9999 !important; background: rgba(0, 0, 0, 0.8) !important;">
         <div class="modal store-modal" (click)="$event.stopPropagation()">
           <div class="modal-header">
@@ -2835,7 +2834,12 @@ export class ProductManagementComponent implements OnInit {
       // Reset form for new batch
       this.inventoryForm.reset();
       this.inventoryForm.patchValue({
-        receivedAt: new Date().toISOString().split('T')[0]
+        receivedAt: new Date().toISOString().split('T')[0],
+        isVatApplicable: true, // Default VAT enabled
+        vatRate: AppConstants.DEFAULT_VAT_RATE, // Default 12%
+        hasDiscount: false,
+        discountType: 'percentage',
+        discountValue: 0
       });
     }
   }
@@ -2845,8 +2849,14 @@ export class ProductManagementComponent implements OnInit {
     this.showModal = false;
     this.selectedProduct = product;
     this.inventoryForm.reset();
+    // Set default values after reset to ensure VAT is enabled by default
     this.inventoryForm.patchValue({
-      receivedAt: new Date().toISOString().split('T')[0]
+      receivedAt: new Date().toISOString().split('T')[0],
+      isVatApplicable: true, // Default VAT enabled
+      vatRate: AppConstants.DEFAULT_VAT_RATE, // Default 12%
+      hasDiscount: false,
+      discountType: 'percentage',
+      discountValue: 0
     });
     this.generatedBatchId = this.generateBatchId();
     this.inventoryTab = 'list';
@@ -3090,6 +3100,7 @@ export class ProductManagementComponent implements OnInit {
                 unitPrice: newOriginalPrice,
                 sellingPrice: newSellingPrice,
                 costPrice: Number(formValue.costPrice || existingBatch.costPrice || 0),
+                status: ProductStatus.Active, // Ensure status remains active
                 isVatApplicable: formValue.isVatApplicable || false,
                 vatRate: formValue.vatRate ?? AppConstants.DEFAULT_VAT_RATE,
                 hasDiscount: formValue.hasDiscount || false,
