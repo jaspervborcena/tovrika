@@ -1399,6 +1399,21 @@ import { AppConstants } from '../../../shared/enums/app-constants.enum';
                   <span>Basic Information</span>
                 </h4>
 
+                <!-- Store Selection (Add mode only, when multiple stores exist) -->
+                <div class="form-group" *ngIf="!isEditMode && stores().length > 1">
+                  <label for="storeId">🏪 Store *</label>
+                  <select 
+                    id="storeId"
+                    formControlName="storeId"
+                    class="form-input">
+                    <option value="">Select Store</option>
+                    <option *ngFor="let store of stores()" [value]="store.id">{{ store.storeName }}</option>
+                  </select>
+                  <div class="error-message" *ngIf="productForm.get('storeId')?.invalid && productForm.get('storeId')?.touched">
+                    Store is required
+                  </div>
+                </div>
+
                 <div class="form-group">
                   <label for="category">Category</label>
                   <div class="category-input-wrapper" style="display: flex; gap: 8px; align-items: center;">
@@ -2215,7 +2230,7 @@ import { AppConstants } from '../../../shared/enums/app-constants.enum';
 export class ProductManagementComponent implements OnInit {
   // Signals
   readonly products = computed(() => this.productService.getProducts());
-  readonly stores = computed(() => this.storeService.getStores());
+  readonly stores = computed(() => this.storeService.getStores().filter(store => store.status === 'active'));
   readonly categories = computed(() => this.categoryService.getCategoryLabels());
 
   // Reactive filtered products - automatically updates when products change or filters change
@@ -2552,6 +2567,7 @@ export class ProductManagementComponent implements OnInit {
 
   private createProductForm(): FormGroup {
     return this.fb.group({
+      storeId: [''], // Will be populated from permission or user selection
       productName: ['', Validators.required],
       description: [''],
       skuId: ['', Validators.required],
@@ -2695,7 +2711,22 @@ export class ProductManagementComponent implements OnInit {
     this.isEditMode = false;
     this.selectedProduct = null;
     this.selectedTagIds.set([]); // Reset tags for new product
+    
+    // Set default storeId based on available stores
+    const currentPermission = this.authService.getCurrentPermission();
+    const availableStores = this.stores();
+    let defaultStoreId = '';
+    
+    if (availableStores.length === 1) {
+      // Single store: auto-select it
+      defaultStoreId = availableStores[0].id || '';
+    } else if (currentPermission?.storeId) {
+      // Multiple stores: default to current permission's store
+      defaultStoreId = currentPermission.storeId;
+    }
+    
     this.productForm.reset({
+      storeId: defaultStoreId,
       initialReceivedAt: new Date().toISOString().split('T')[0],
       isMultipleInventory: false,
       initialBatchId: '',
@@ -2920,7 +2951,9 @@ export class ProductManagementComponent implements OnInit {
       const companyId = currentPermission?.companyId || 
                        currentUser?.currentCompanyId || 
                        currentUser?.permissions?.[0]?.companyId || '';
-      const storeId = currentPermission?.storeId || 
+      // Use storeId from form if selected (multi-store scenario), otherwise use permission
+      const storeId = formValue.storeId || 
+                     currentPermission?.storeId || 
                      currentUser?.permissions?.[0]?.storeId || '';
       
       console.log('🔍 Company ID:', companyId);

@@ -1,4 +1,4 @@
-import { Component, OnInit, effect } from '@angular/core';
+import { Component, OnInit, effect, signal, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { MatTableModule } from '@angular/material/table';
@@ -10,6 +10,8 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatCardModule } from '@angular/material/card';
 import { MatTableDataSource } from '@angular/material/table';
 import { InventoryService as AppInventoryService } from '../../services/inventory.service';
+import { StoreService, Store } from '../../services/store.service';
+import { AuthService } from '../../services/auth.service';
 
 export interface InventoryRow {
   orderId?: string;
@@ -77,12 +79,21 @@ export interface InventoryRow {
       .overview-controls { display: flex; gap: 12px; align-items: center; margin-top: 12px; flex-wrap: wrap; }
       .overview-controls .control-row { display: flex; gap: 8px; align-items: center; }
       .control-label { font-weight: 600; color: #374151; }
-      .control-select { padding: 6px 8px; border-radius: 8px; border: 1px solid #e5e7eb; background: white; }
+      .control-select { padding: 6px 8px; border-radius: 8px; border: 1px solid #e5e7eb; background: white; cursor: pointer; }
       .control-input { padding: 6px 8px; border-radius: 8px; border: 1px solid #e5e7eb; }
       .control-go { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; padding: 6px 10px; border-radius: 8px; cursor: pointer; }
       .date-range-inputs { display: flex; gap: 8px; align-items: center; }
 
-      .store-name { text-transform: uppercase; }
+      .single-store { display: inline-block; }
+      .store-name { 
+        text-transform: uppercase; 
+        font-weight: 600;
+        color: #111827;
+        padding: 6px 12px;
+        background-color: #f3f4f6;
+        border-radius: 8px;
+        display: inline-block;
+      }
 
       /* Table / wrapper */
       .table-wrap { 
@@ -182,7 +193,16 @@ export class InventoryComponent implements OnInit {
 
   dataSource = new MatTableDataSource<InventoryRow>(this.inventoryData);
 
-  constructor(public inventoryService: AppInventoryService) {
+  // Store management
+  stores = signal<Store[]>([]);
+  selectedStoreId = signal<string>('');
+  hasMultipleStores = computed(() => this.stores().length > 1);
+
+  constructor(
+    public inventoryService: AppInventoryService,
+    private storeService: StoreService,
+    private authService: AuthService
+  ) {
     // reactively update datasource when service rows change
     effect(() => {
       const rows = this.inventoryService.rows();
@@ -203,11 +223,45 @@ export class InventoryComponent implements OnInit {
   }
 
   async ngOnInit(): Promise<void> {
+    await this.loadStores();
     await this.inventoryService.loadRowsForPeriod(this.selectedPeriod, 1);
   }
 
+  async loadStores(): Promise<void> {
+    try {
+      const currentPermission = this.authService.getCurrentPermission();
+      if (!currentPermission?.companyId) {
+        console.warn('No companyId found in current permission');
+        return;
+      }
+
+      const activeStores = await this.storeService.getActiveStoresForDropdown(currentPermission.companyId);
+      this.stores.set(activeStores);
+
+      // Set selected store
+      if (currentPermission?.storeId) {
+        this.selectedStoreId.set(currentPermission.storeId);
+      } else if (activeStores.length > 0 && activeStores[0].id) {
+        this.selectedStoreId.set(activeStores[0].id);
+      }
+    } catch (error) {
+      console.error('Error loading stores:', error);
+      this.stores.set([]);
+    }
+  }
+
+  onStoreChange(): void {
+    console.log('Store changed to:', this.selectedStoreId());
+    // Reload inventory data for selected store
+    this.inventoryService.loadRowsForPeriod(this.selectedPeriod, 1);
+  }
+
+  getSelectedStoreName(): string {
+    const store = this.stores().find(s => s.id === this.selectedStoreId());
+    return store?.storeName.toUpperCase() || 'BREW ORGANICS INC';
+  }
+
   // UI controls (simple, mock-driven for now)
-  storeName = 'BREW ORGANICS INC';
   periodOptions = [
     { key: 'today', label: 'Today' },
     { key: 'yesterday', label: 'Yesterday' },

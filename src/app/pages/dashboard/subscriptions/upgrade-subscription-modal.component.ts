@@ -196,85 +196,22 @@ export class UpgradeSubscriptionModalComponent implements OnChanges {
       const user = this.auth.getCurrentUser();
       if (!user?.uid) throw new Error('Not authenticated');
 
-      // Build subscription payload (doc created first to get id)
-      const startDate = new Date();
-      const endDate = calculateExpiryDate(this.durationMonths, startDate);
-
-      const subInput = {
-        subscriptionId: '', // will set to doc id after creation
-        companyId: this.companyId,
-        storeId: this.storeId,
-        uid: user.uid,
-        planType: this.selectedTier,
-        status: 'pending', // Changed from 'active' to 'pending' - requires admin approval
-        startDate,
-        endDate,
-        trialStart: null,
-        trialDays: 0,
-        isTrial: false,
-        promoCode: this.promoCode || null,
-        referralCode: this.referralCode || null,
-        paymentMethod: this.activeTab,
-        paymentReference: this.paymentReference || '',
-        amountPaid: effectiveAmount,
-        currency: this.currency,
-        paymentReceiptUrl: '',
-        payerMobile: this.payerMobile || null,
-        payerName: this.payerName || null,
-        description: this.paymentDescription || null,
-        features: this.subs.getDefaultFeatures(),
-      } as any;
-
-      const docId = await this.subs.createSubscription(subInput);
-
-      // Upload receipt using docId as subscriptionId in path
-      let url = '';
-      if (this.activeTab !== 'paypal') {
-        url = await this.subs.uploadPaymentReceipt(this.receiptFile!, {
+      // Upload receipt first (if not PayPal)
+      let receiptUrl = '';
+      if (this.activeTab !== 'paypal' && this.receiptFile) {
+        // Create temp subscription ID for receipt upload path
+        const tempId = `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        receiptUrl = await this.subs.uploadPaymentReceipt(this.receiptFile!, {
           companyId: this.companyId,
           storeId: this.storeId,
-          subscriptionId: docId,
+          subscriptionId: tempId,
           paymentMethod: this.activeTab,
         });
-        // Update subscription with receipt URL and subscriptionId field
-        await this.subs.updateSubscription(docId, {
-          subscriptionId: docId,
-          paymentReceiptUrl: url,
-        } as any);
-      } else {
-        // For PayPal card flow, we'll later set receipt/transaction after capture
-        await this.subs.updateSubscription(docId, {
-          subscriptionId: docId,
-          paymentReceiptUrl: '',
-        } as any);
       }
 
-      // Create subscription request for admin approval
-      await this.createSubscriptionRequest(docId, url, effectiveAmount);
-
-      // Do NOT update store subscription end date yet - wait for admin approval
-      // await this.storeService.updateStore(this.storeId, { subscriptionEndDate: endDate as any });
-
-      // Create billing history record
-      await this.billing.createBillingHistory({
-        companyId: this.companyId,
-        storeId: this.storeId,
-        tier: this.selectedTier,
-        cycle: 'monthly',
-        durationMonths: this.durationMonths,
-        amount: this.planPrice() || 0,
-        discountPercent: 0,
-        finalAmount: effectiveAmount,
-        promoCode: this.promoCode || '',
-        referralCode: this.referralCode || '',
-        paymentMethod: this.activeTab,
-        transactionId: this.activeTab === 'paypal' ? '' : (this.paymentReference || ''),
-        payerMobile: this.activeTab === 'paypal' ? '' : (this.payerMobile || ''),
-        payerName: this.activeTab === 'paypal' ? '' : (this.payerName || ''),
-        description: this.activeTab === 'paypal' ? '' : (this.paymentDescription || ''),
-        paidAt: new Date(),
-        createdAt: new Date(),
-      } as any);
+      // Create subscription request ONLY - do not create subscription yet
+      // Admin will create the actual subscription when they approve the request
+      await this.createSubscriptionRequest(receiptUrl, effectiveAmount);
 
       this.completed.emit();
       this.close();
@@ -293,8 +230,10 @@ export class UpgradeSubscriptionModalComponent implements OnChanges {
 
   /**
    * Create a subscription request for admin approval
+   * This is the ONLY document created when user requests upgrade
+   * Admin will create the actual subscription when they approve
    */
-  private async createSubscriptionRequest(subscriptionId: string, receiptUrl: string, amountPaid: number): Promise<void> {
+  private async createSubscriptionRequest(receiptUrl: string, amountPaid: number): Promise<void> {
     try {
       const user = this.auth.getCurrentUser();
       if (!user) {
@@ -304,29 +243,46 @@ export class UpgradeSubscriptionModalComponent implements OnChanges {
       const company = this.resolvedCompanyName() || 'Unknown Company';
       const store = await this.storeService.getStore(this.storeId);
       
+      // Calculate dates for reference (admin will use these when creating subscription)
+      const startDate = new Date();
+      const endDate = calculateExpiryDate(this.durationMonths, startDate);
+      
       const requestData: Omit<SubscriptionRequest, 'id'> = {
         companyId: this.companyId,
         companyName: company,
+        storeId: this.storeId,
+        storeName: this.storeName || store?.storeName || '',
+        storeCode: this.storeCode || store?.storeCode || '',
+        uid: user.uid,
         ownerEmail: user.email || '',
         contactPhone: store?.phoneNumber || this.payerMobile || '',
         requestedAt: new Date(),
         requestedTier: this.selectedTier,
         notes: `Upgrade to ${this.selectedTier.toUpperCase()} plan for ${this.durationMonths} month(s). Payment: ${this.activeTab.toUpperCase()}`,
         status: 'pending',
-        // Link subscription details
-        subscriptionId: subscriptionId,
+        // Subscription details (will be used when creating subscription on approval)
         durationMonths: this.durationMonths,
+        proposedStartDate: startDate,
+        proposedEndDate: endDate,
+        // Payment details
         paymentMethod: this.activeTab,
         paymentReference: this.paymentReference || '',
         amountPaid: amountPaid,
-        paymentReceiptUrl: receiptUrl
+        currency: this.currency,
+        paymentReceiptUrl: receiptUrl,
+        payerMobile: this.payerMobile || '',
+        payerName: this.payerName || '',
+        paymentDescription: this.paymentDescription || '',
+        // Promo codes
+        promoCode: this.promoCode || null,
+        referralCode: this.referralCode || null
       };
 
       const requestsRef = collection(this.firestore, 'subscriptionRequests');
-      await addDoc(requestsRef, requestData);
+      const docRef = await addDoc(requestsRef, requestData);
 
-      console.log('✅ Subscription request created for admin approval:', subscriptionId);
-      this.toast.success('Subscription upgrade submitted! Waiting for admin approval.');
+      console.log('✅ Subscription request created for admin approval:', docRef.id);
+      this.toast.success('Subscription upgrade request submitted! Waiting for admin approval.');
     } catch (error) {
       console.error('❌ Failed to create subscription request:', error);
       throw error;

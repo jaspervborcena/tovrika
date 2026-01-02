@@ -180,7 +180,7 @@ export class HeaderComponent implements OnInit {
         // ProductService signal which is kept in sync by product pages.
         // (this.productService.loadProducts(currentPermission.storeId) intentionally omitted)
         
-        this.stores.set(this.storeService.getStores());
+        this.stores.set(this.storeService.getStores().filter(store => store.status === 'active'));
         this.totalStores.set(this.storeService.totalStores());
         this.totalProducts.set(this.productService.totalProducts());
   } else if (roleId === 'admin') {
