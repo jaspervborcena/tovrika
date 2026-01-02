@@ -318,15 +318,47 @@ export class InventoryDataService {
     await runTransaction(this.firestore, async (transaction) => {
       console.log('🔄 Starting Firestore transaction for updateBatch...');
 
-      // 1. Update batch document
+      // 1. Read existing batch to preserve critical fields
       const batchRef = doc(this.firestore, this.collectionName, batchDocId);
+      const batchSnap = await transaction.get(batchRef);
+      
+      if (!batchSnap.exists()) {
+        throw new Error(`Batch document ${batchDocId} not found`);
+      }
+      
+      const existingBatch = batchSnap.data() as ProductInventoryEntry;
+      console.log('📦 Existing batch data:', {
+        id: batchDocId,
+        productId: existingBatch.productId,
+        companyId: existingBatch.companyId,
+        storeId: existingBatch.storeId,
+        quantity: existingBatch.quantity,
+        status: existingBatch.status
+      });
+
+      // 2. Update batch document, PRESERVING critical query fields
       const cleanUpdates = this.cleanUndefined({
         ...updates,
+        // CRITICAL: Preserve fields required for queries
+        productId: existingBatch.productId, // Must preserve for query
+        companyId: existingBatch.companyId, // Must preserve for query
+        storeId: existingBatch.storeId, // Must preserve for query
+        status: updates.status !== undefined ? updates.status : (existingBatch.status || 'active'),
+        // Update tracking
         uid: user.uid,
         updatedBy: user.uid,
         updatedAt: new Date(),
-        receivedAt: updates.receivedAt ? (updates.receivedAt instanceof Date ? updates.receivedAt : new Date(updates.receivedAt)) : undefined,
-        expiryDate: updates.expiryDate ? (updates.expiryDate instanceof Date ? updates.expiryDate : new Date(updates.expiryDate)) : undefined,
+        // Handle dates
+        receivedAt: updates.receivedAt ? (updates.receivedAt instanceof Date ? updates.receivedAt : new Date(updates.receivedAt)) : existingBatch.receivedAt,
+        expiryDate: updates.expiryDate ? (updates.expiryDate instanceof Date ? updates.expiryDate : new Date(updates.expiryDate)) : existingBatch.expiryDate,
+      });
+
+      console.log('📝 Update payload:', {
+        quantity: cleanUpdates.quantity,
+        productId: cleanUpdates.productId,
+        companyId: cleanUpdates.companyId,
+        storeId: cleanUpdates.storeId,
+        status: cleanUpdates.status
       });
 
       transaction.update(batchRef, cleanUpdates);
