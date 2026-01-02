@@ -268,10 +268,14 @@ import { Timestamp } from '@angular/fire/firestore';
                     formControlName="status"
                     class="form-input"
                     [class.status-active]="storeForm.get('status')?.value === 'active'"
-                    [class.status-inactive]="storeForm.get('status')?.value === 'inactive'">
+                    [class.status-inactive]="storeForm.get('status')?.value === 'inactive'"
+                    [disabled]="!canEditStoreStatus()">
                     <option value="active">Active</option>
                     <option value="inactive">Inactive</option>
                   </select>
+                  @if (!canEditStoreStatus()) {
+                    <small class="text-muted">Only administrators can change store status</small>
+                  }
                 </div>
               </div>
 
@@ -2016,6 +2020,11 @@ export class StoresManagementComponent implements OnInit {
     return this.isAdminUser(); // Only admin can manage devices
   }
 
+  canEditStoreStatus(): boolean {
+    const role = this.authService.getCurrentPermission()?.roleId;
+    return role === UserRolesEnum.ADMIN; // Only admin can edit store status
+  }
+
   showAccessDeniedMessage(feature: string): void {
     this.toastService.error(`Access denied: ${feature} is only available for administrators.`);
   }
@@ -2038,8 +2047,17 @@ export class StoresManagementComponent implements OnInit {
       if (currentPermission?.companyId) {
         this.currentCompanyId = currentPermission.companyId;
         await this.storeService.loadStoresByCompany(currentPermission.companyId);
+        // Load all stores (including inactive) for management - admin needs to see all
         this.stores = this.storeService.getStoresByCompany(currentPermission.companyId);
         this.filteredStores = [...this.stores];
+        
+        // Debug: Log store statuses
+        console.log('🏪 Loaded stores with statuses:', this.stores.map(s => ({
+          name: s.storeName,
+          code: s.storeCode,
+          status: s.status,
+          type: typeof s.status
+        })));
 
         // Load latest subscription per store
         const subs = await Promise.all(
@@ -2289,6 +2307,10 @@ export class StoresManagementComponent implements OnInit {
       invoiceNo: 'INV-0000-000000',
       status: 'active'
     });
+    
+    // Enable status field when adding a new store (even for non-admins)
+    this.storeForm.get('status')?.enable();
+    
     // Ensure store types are loaded for the Store Type select.
     (async () => {
       try {
@@ -2347,6 +2369,13 @@ export class StoresManagementComponent implements OnInit {
     
     this.storeForm.patchValue(formValues);
     
+    // Disable status field for non-admin users
+    if (!this.canEditStoreStatus()) {
+      this.storeForm.get('status')?.disable();
+    } else {
+      this.storeForm.get('status')?.enable();
+    }
+    
     console.log('📝 Form value after patch:', this.storeForm.value);
     
     this.showStoreModal = true;
@@ -2381,6 +2410,9 @@ export class StoresManagementComponent implements OnInit {
       subscriptionStatus: 'active',
       subscriptionPopupShown: false
     });
+    
+    // Re-enable status field on cancel
+    this.storeForm.get('status')?.enable();
   }
 
   async saveStore() {
@@ -2423,7 +2455,7 @@ export class StoresManagementComponent implements OnInit {
         phoneNumber: formData.phoneNumber || '',
         email: formData.email || '',
         uid: formData.uid || '',
-        status: formData.status,
+        status: formData.status || 'active', // Default to 'active' if not set
         logoUrl: formData.logoUrl || '',
         // BIR Compliance
         isBirAccredited: formData.isBirAccredited || false,
@@ -2826,7 +2858,12 @@ export class StoresManagementComponent implements OnInit {
   }
 
   getEffectiveStatus(store: Store): 'active' | 'inactive' {
-    return this.isStoreExpired(store) ? 'inactive' : 'active';
+    // If expired, force inactive
+    if (this.isStoreExpired(store)) {
+      return 'inactive';
+    }
+    // Otherwise return the actual store status, defaulting to 'active' if not set
+    return (store.status || 'active') as 'active' | 'inactive';
   }
 
   // Helper method to format date for input
