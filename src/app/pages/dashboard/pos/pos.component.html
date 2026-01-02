@@ -203,7 +203,9 @@
           </div>
 
           <!-- Tag Filter Tabs (shown before product tabs if tags exist) -->
-          <div class="tag-filter-section" *ngIf="accessTab() === 'New' && availableTagsByGroup().length > 0">
+          <div class="tag-filter-section" 
+               [class.has-active-filters]="activeTagFilters().length > 0"
+               *ngIf="accessTab() === 'New' && availableTagsByGroup().length > 0">
             <div class="tag-filter-header" (click)="toggleTagFilterSection()">
               <span class="tag-filter-toggle" [class.expanded]="isTagFilterExpanded()">▼</span>
               <span class="tag-filter-title">Classification</span>

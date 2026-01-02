@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">app-tovrika</string>
+    <string name="title_activity_main">app-tovrika</string>
+    <string name="package_name">com.tovrika.app</string>
+    <string name="custom_url_scheme">com.tovrika.app</string>
+</resources>

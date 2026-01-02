@@ -13,7 +13,12 @@
     "deploy:prod": "npm run build:prod && firebase use prod && firebase deploy --only hosting:app",
     "build:analyze": "ng build --configuration=production && npx webpack-bundle-analyzer dist/pos-system/main*.js",
     "watch": "ng build --watch --configuration development",
-    "test": "ng test"
+    "test": "ng test",
+    "android:build": "ng build --configuration=production && npx cap sync android",
+    "android:open": "npx cap open android",
+    "android:run": "npm run android:build && npm run android:open",
+    "cap:sync": "npx cap sync",
+    "cap:update": "npx cap update"
   },
   "private": true,
   "dependencies": {
@@ -28,6 +33,10 @@
     "@angular/platform-browser": "^19.1.0",
     "@angular/platform-browser-dynamic": "^19.1.0",
     "@angular/router": "^19.1.0",
+    "@capacitor-community/bluetooth-le": "^7.3.0",
+    "@capacitor/android": "^8.0.0",
+    "@capacitor/cli": "^8.0.0",
+    "@capacitor/core": "^8.0.0",
     "@ngx-translate/core": "^17.0.0",
     "@ngx-translate/http-loader": "^17.0.0",
     "firebase": "^11.2.0",

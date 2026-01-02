@@ -1680,7 +1680,7 @@ input[type="datetime-local"]:focus {
 .floating-actions {
   position: fixed;
   bottom: 20px;
-  right: 20px;
+  right: 32px;
   display: flex;
   flex-direction: column;
   gap: 12px;

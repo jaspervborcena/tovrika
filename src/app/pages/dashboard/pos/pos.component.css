@@ -20,7 +20,7 @@
       display: none; /* Hidden on desktop */
       position: fixed;
       bottom: 20px;
-      right: 5px;
+      right: 17px;
       z-index: 60;
       width: 44px;
       height: 44px;
@@ -881,6 +881,16 @@
       flex-direction: column;
     }
 
+    .tag-filter-section.has-active-filters {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+    }
+
+    .tag-filter-section.has-active-filters .tag-filter-title,
+    .tag-filter-section.has-active-filters .tag-filter-toggle {
+      color: white;
+    }
+
     .tag-filter-header {
       display: flex;
       justify-content: space-between;
@@ -1599,7 +1609,7 @@
     }
 
     .floating-nav-next {
-      right: 5px;
+      right: 17px;
     }
 
     /* On smaller screens, keep them at the same position */
@@ -1609,7 +1619,7 @@
       }
 
       .floating-nav-next {
-        right: 5px;
+        right: 17px;
       }
     }
 
@@ -2137,16 +2147,16 @@
         margin-top: 0;
       }
       
-      /* Mobile portrait: 3 columns x 2 rows */
+      /* Mobile portrait: 2 columns x 3-4 rows */
       .products-grid {
-        grid-template-columns: repeat(3, 1fr) !important;
-        gap: 0.5rem;
-        grid-auto-rows: minmax(130px, auto);
+        grid-template-columns: repeat(2, 1fr) !important;
+        gap: 0.75rem;
+        grid-auto-rows: minmax(160px, auto);
         width: 100%;
       }
       
       .product-grid-item {
-        min-height: 120px;
+        min-height: 160px;
         min-width: 0; /* Allow items to shrink below content size */
       }
       
@@ -2861,6 +2871,7 @@
   padding: 0;
   max-width: 500px;
   width: 90%;
+  max-height: 90vh;
   /* Make dialog a flex column so content scrolls but footer stays pinned */
   display: flex;
   flex-direction: column;
@@ -2870,18 +2881,15 @@
 .dialog-header {
   background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
   color: white;
-  padding: 1rem 1.5rem;
+  padding: 1.5rem;
   border-radius: 12px 12px 0 0;
   flex-shrink: 0; /* prevent header from shrinking */
 }
 
 .dialog-header h3 {
-  margin: 0;
-  font-size: 1.1rem;
+  margin: 0 0 0.5rem 0;
+  font-size: 1.25rem;
   font-weight: 600;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .dialog-header p {
@@ -2890,55 +2898,19 @@
   font-size: 0.9rem;
 }
 
-@media (max-width: 1024px) {
-  .dialog-header {
-    padding: 0.4rem 0.75rem;
-  }
-  
-  .dialog-header h3 {
-    font-size: 0.9rem;
-  }
-  
-  .dialog-header p {
-    font-size: 0.8rem;
-  }
-}
-
 .dialog-content {
-  padding: 1rem 1.5rem;
+  padding: 1.5rem;
   flex: 1 1 auto;         /* fill available space */
   overflow-y: auto;        /* scroll only content */
   min-height: 0;           /* allow flexbox overflow */
-  margin: 0;              /* remove any default margins */
-}
-
-@media (max-width: 1024px) {
-  .dialog-content {
-    padding: 0.4rem 0.75rem;
-  }
 }
 
 .payment-amounts {
   margin-bottom: 1.5rem;
 }
 
-@media (max-width: 1024px) {
-  .payment-amounts {
-    margin-bottom: 0.5rem;
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 0.5rem;
-  }
-}
-
 .amount-field {
   margin-bottom: 1rem;
-}
-
-@media (max-width: 1024px) {
-  .amount-field {
-    margin-bottom: 0;
-  }
 }
 
 .amount-field label {
@@ -2949,13 +2921,6 @@
   font-size: 0.9rem;
 }
 
-@media (max-width: 1024px) {
-  .amount-field label {
-    font-size: 0.75rem;
-    margin-bottom: 0.25rem;
-  }
-}
-
 .amount-input {
   width: 100%;
   padding: 0.75rem;
@@ -2964,14 +2929,6 @@
   font-size: 1rem;
   font-weight: 500;
   transition: all 0.2s ease;
-}
-
-@media (max-width: 1024px) {
-  .amount-input {
-    padding: 0.5rem;
-    font-size: 0.875rem;
-    border-radius: 6px;
-  }
 }
 
 .amount-input:focus {
@@ -2990,25 +2947,12 @@
   margin-bottom: 1.5rem;
 }
 
-@media (max-width: 1024px) {
-  .payment-type {
-    margin-bottom: 0.5rem;
-  }
-}
-
 .payment-type label {
   display: block;
   font-weight: 500;
   color: #374151;
   margin-bottom: 0.5rem;
   font-size: 0.9rem;
-}
-
-@media (max-width: 1024px) {
-  .payment-type label {
-    font-size: 0.75rem;
-    margin-bottom: 0.25rem;
-  }
 }
 
 .payment-select {
@@ -3021,14 +2965,6 @@
   background-color: white;
   cursor: pointer;
   transition: all 0.2s ease;
-}
-
-@media (max-width: 1024px) {
-  .payment-select {
-    padding: 0.5rem;
-    font-size: 0.875rem;
-    border-radius: 6px;
-  }
 }
 
 .payment-select:hover {
@@ -3045,25 +2981,12 @@
   margin-bottom: 1rem;
 }
 
-@media (max-width: 1024px) {
-  .payment-description {
-    margin-bottom: 0;
-  }
-}
-
 .payment-description label {
   display: block;
   font-weight: 500;
   color: #374151;
   margin-bottom: 0.5rem;
   font-size: 0.9rem;
-}
-
-@media (max-width: 1024px) {
-  .payment-description label {
-    font-size: 0.75rem;
-    margin-bottom: 0.25rem;
-  }
 }
 
 .payment-textarea {
@@ -3078,15 +3001,6 @@
   transition: all 0.2s ease;
 }
 
-@media (max-width: 1024px) {
-  .payment-textarea {
-    padding: 0.4rem;
-    font-size: 0.8rem;
-    min-height: 40px;
-    border-radius: 6px;
-  }
-}
-
 .payment-textarea:focus {
   outline: none;
   border-color: #3b82f6;
@@ -3094,26 +3008,13 @@
 }
 
 .dialog-actions {
-  padding: 0.75rem 1.5rem;
+  padding: 1rem 1.5rem;
   display: flex;
   gap: 1rem;
   justify-content: flex-end;
   border-top: 1px solid #f3f4f6;
   flex-shrink: 0;          /* keep footer visible */
   background: #fff;        /* solid surface under footer */
-}
-
-@media (max-width: 1024px) {
-  .dialog-actions {
-    padding: 0.5rem 0.75rem;
-    gap: 0.5rem;
-  }
-  
-  .dialog-actions .btn-secondary,
-  .dialog-actions .btn-primary {
-    padding: 0.5rem 1rem;
-    font-size: 0.875rem;
-  }
 }
 
 .dialog-actions .btn-secondary {

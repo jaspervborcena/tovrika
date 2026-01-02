@@ -1,5 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { IndexedDBService } from '../core/services/indexeddb.service';
+import { ThermalPrinterService } from './thermal-printer.service';
+import { Capacitor } from '@capacitor/core';
 
 // Web Bluetooth API types (simplified)
 declare const navigator: any;
@@ -31,6 +33,7 @@ export interface PaperSizeConfig {
 })
 export class PrintService {
   private indexedDBService = inject(IndexedDBService);
+  private thermalPrinter = inject(ThermalPrinterService);
   
   // Bluetooth printer connection state
   private bluetoothDevice: any = null;
@@ -180,9 +183,53 @@ export class PrintService {
         }
       }
       
-      // 🔥 PRIORITY 2: Try Bluetooth printer
+      // 🔥 PRIORITY 2: Try Capacitor Bluetooth (Android/iOS native)
+      if (Capacitor.isNativePlatform()) {
+        console.log('📱 Trying native Bluetooth thermal printer...');
+        try {
+          // Check if already connected
+          if (!this.thermalPrinter.isConnected()) {
+            console.log('🔌 Not connected, requesting connection...');
+            const connected = await this.thermalPrinter.connectToPrinter();
+            if (!connected) {
+              throw new Error('Failed to connect to printer');
+            }
+          }
+
+          console.log('🖨️ Printing via Capacitor BLE...');
+          await this.thermalPrinter.printReceipt(receiptData);
+          
+          return {
+            success: true,
+            method: 'Bluetooth Thermal',
+            message: 'Receipt printed successfully via Bluetooth thermal printer'
+          };
+        } catch (bleError: any) {
+          console.error('❌ Capacitor BLE printing failed:', bleError);
+          
+          // Provide user-friendly error message
+          let errorMsg = bleError.message || 'Bluetooth printing failed';
+          if (errorMsg.includes('select your Bluetooth printer')) {
+            errorMsg = 'Please select your Bluetooth printer from the list to continue.';
+          } else if (errorMsg.includes('not connected')) {
+            errorMsg = 'Printer not connected. Please connect to your thermal printer first.';
+          } else if (errorMsg.includes('Bluetooth')) {
+            errorMsg = 'Bluetooth error: ' + errorMsg;
+          } else {
+            errorMsg = 'Print failed: ' + errorMsg;
+          }
+          
+          return {
+            success: false,
+            method: 'Bluetooth Thermal',
+            message: errorMsg
+          };
+        }
+      }
+      
+      // 🔥 PRIORITY 3: Try Web Bluetooth (browser fallback)
       if (navigator.bluetooth) {
-        console.log('🔍 Checking Bluetooth availability...');
+        console.log('🔍 Checking Web Bluetooth availability...');
         const hasBluetoothPrinters = await this.checkBluetoothPrintersAvailable();
         console.log('🔍 Bluetooth check result:', hasBluetoothPrinters, 'Already connected:', this.isConnected);
         
@@ -213,7 +260,7 @@ export class PrintService {
       return {
         success: false,
         method: 'None',
-        message: 'No hardware printers found. Please connect a USB or Bluetooth thermal printer.'
+        message: 'No printers found. Please connect your Bluetooth thermal printer and allow permissions when prompted.'
       };
       
     } catch (error: any) {

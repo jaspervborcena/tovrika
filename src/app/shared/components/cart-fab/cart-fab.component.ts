@@ -20,7 +20,7 @@ import { PosService } from '../../../services/pos.service';
   styles: [`
     .cart-fab {
       position: fixed;
-      bottom: 20px;
+      bottom: 60px;
       right: 20px;
       width: 80px;
       height: 80px;
