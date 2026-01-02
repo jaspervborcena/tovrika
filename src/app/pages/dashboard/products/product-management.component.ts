@@ -3062,17 +3062,33 @@ export class ProductManagementComponent implements OnInit {
             this.toastService.error('Product updated but failed to create inventory batch');
           }
         } else if (currentBatches.length === 1) {
-          // Single batch exists and user edited the quantity - update that batch
+          // Single batch exists - update it with new quantity/prices if changed
           const newQuantity = Number(formValue.totalStock || 0);
+          const newOriginalPrice = Number(formValue.originalPrice || computedOriginalPrice || 0);
+          const newSellingPrice = Number(formValue.sellingPrice || computedSellingPrice || 0);
           const existingBatch = currentBatches[0];
           
-          if (existingBatch.quantity !== newQuantity && newQuantity > 0) {
-            console.log('📦 Single batch exists, updating its quantity from', existingBatch.quantity, 'to', newQuantity);
+          // Check if quantity OR prices have changed
+          const quantityChanged = existingBatch.quantity !== newQuantity && newQuantity > 0;
+          const pricesChanged = (existingBatch.unitPrice !== newOriginalPrice) || 
+                                (existingBatch.sellingPrice !== newSellingPrice);
+          
+          if (quantityChanged || pricesChanged) {
+            console.log('📦 Single batch exists, updating:', {
+              quantityChanged,
+              pricesChanged,
+              oldQuantity: existingBatch.quantity,
+              newQuantity,
+              oldUnitPrice: existingBatch.unitPrice,
+              newUnitPrice: newOriginalPrice,
+              oldSellingPrice: existingBatch.sellingPrice,
+              newSellingPrice
+            });
             try {
               await this.inventoryDataService.updateBatch(this.selectedProduct.id!, existingBatch.id!, {
                 quantity: newQuantity,
-                unitPrice: Number(formValue.originalPrice || computedOriginalPrice || existingBatch.unitPrice || 0),
-                sellingPrice: Number(formValue.sellingPrice || computedSellingPrice || existingBatch.sellingPrice || 0),
+                unitPrice: newOriginalPrice,
+                sellingPrice: newSellingPrice,
                 costPrice: Number(formValue.costPrice || existingBatch.costPrice || 0),
                 isVatApplicable: formValue.isVatApplicable || false,
                 vatRate: formValue.vatRate ?? AppConstants.DEFAULT_VAT_RATE,
@@ -3080,9 +3096,9 @@ export class ProductManagementComponent implements OnInit {
                 discountType: formValue.discountType || 'percentage',
                 discountValue: Number(formValue.discountValue || 0)
               });
-              console.log('✅ Single batch updated with new quantity');
+              console.log('✅ Single batch updated with new quantity/prices');
             } catch (batchError) {
-              console.error('❌ Failed to update batch quantity:', batchError);
+              console.error('❌ Failed to update batch:', batchError);
               this.toastService.error('Product updated but failed to update inventory batch');
             }
           }
@@ -4468,17 +4484,17 @@ export class ProductManagementComponent implements OnInit {
 
   /**
    * Check if the current product has existing inventory batches
-   * Only returns true if the product has actual inventory batch entries,
-   * not just a totalStock value (which can be edited directly)
+   * Only returns true if the product has MULTIPLE inventory batch entries.
+   * Single batch can still be edited directly in the product form.
    */
   hasExistingInventory(): boolean {
     if (!this.selectedProduct?.id) {
       return false; // New product, no existing inventory
     }
     
-    // Only check if product has inventory batch entries
-    // totalStock without batches should still be editable
-    return (this.currentBatches && this.currentBatches.length > 0);
+    // Allow editing prices when there's 0 or 1 batch
+    // Only lock when there are multiple batches (complex inventory)
+    return (this.currentBatches && this.currentBatches.length > 1);
   }
 
   /**

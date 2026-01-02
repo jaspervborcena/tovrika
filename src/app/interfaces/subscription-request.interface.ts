@@ -7,7 +7,7 @@ export interface SubscriptionRequest {
   requestedAt: Date;
   requestedTier: 'freemium' | 'standard' | 'premium' | 'enterprise';
   notes: string;
-  status: 'pending' | 'approved' | 'rejected';
+  status: 'pending' | 'approved' | 'rejected' | 'active' | 'closed';
   reviewedAt?: Date;
   reviewedBy?: string;
   rejectionReason?: string;
