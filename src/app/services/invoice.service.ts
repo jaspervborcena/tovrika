@@ -7,6 +7,7 @@ import {
   runTransaction,
   collection,
   addDoc,
+  setDoc,
   DocumentReference,
   query,
   where,
@@ -17,6 +18,7 @@ import { StoreService } from './store.service';
 import { AuthService } from './auth.service';
 import { FirestoreSecurityService } from '../core/services/firestore-security.service';
 import { OfflineDocumentService } from '../core/services/offline-document.service';
+import { NetworkService } from '../core/services/network.service';
 import { OrderDetailsStatus } from '../interfaces/order-details.interface';
 
 export interface InvoiceTransactionData {
@@ -42,6 +44,7 @@ export class InvoiceService {
   private authService = inject(AuthService);
   private securityService = inject(FirestoreSecurityService);
   private offlineDocService = inject(OfflineDocumentService);
+  private networkService = inject(NetworkService);
   
   // Cache for invoice numbers to support offline mode
   private storeInvoiceCache = new Map<string, string>();
@@ -53,7 +56,7 @@ export class InvoiceService {
   async checkInvoiceNumberExists(invoiceNumber: string, storeId: string): Promise<boolean> {
     try {
       // Skip check in offline mode - Firestore offline persistence will handle conflicts
-      if (!navigator.onLine) {
+      if (!this.networkService.isOnline()) {
         console.log('📱 Offline mode - skipping invoice duplicate check');
         return false;
       }
@@ -67,11 +70,11 @@ export class InvoiceService {
         where('storeId', '==', storeId)
       );
       
-      // Use timeout to prevent hanging
+      // Use very short timeout (200ms) to prevent hanging
       const snapshot = await Promise.race([
         getDocs(q),
         new Promise<never>((_, reject) => 
-          setTimeout(() => reject(new Error('Invoice check timeout')), 2000)
+          setTimeout(() => reject(new Error('Invoice check timeout')), 200)
         )
       ]);
       
@@ -112,6 +115,12 @@ export class InvoiceService {
     
     console.log('🧾 Starting invoice transaction for store:', storeId);
     
+    // Check if we're offline first - no need to try online operations
+    if (!this.networkService.isOnline()) {
+      console.log('📴 Already offline - using offline processing immediately');
+      return await this.processOfflineInvoiceTransaction(transactionData);
+    }
+    
     try {
       // --- PREPARE NON-TRANSACTIONAL READS AND SECURITY DATA FIRST ---
       const storeDocRef = doc(this.firestore, 'stores', storeId);
@@ -121,21 +130,21 @@ export class InvoiceService {
       let useOfflineMode = false;
       
       try {
-        // Use a timeout to prevent hanging on slow connections
+        // Use very short timeout (300ms) for fast offline detection
         storeSnapshot = await Promise.race([
           getDocFromServer(storeDocRef),
           new Promise<never>((_, reject) => 
-            setTimeout(() => reject(new Error('Store read timeout')), 3000)
+            setTimeout(() => reject(new Error('Store read timeout - switching to offline mode')), 300)
           )
         ]);
       } catch (storeReadError) {
-        console.warn('⚠️ Failed to read store document:', storeReadError);
+        console.warn('⚠️ Failed to read store document, switching to offline mode:', storeReadError);
         useOfflineMode = true;
       }
       
       // If offline mode detected or store read failed, switch to offline processing
-      if (useOfflineMode || !navigator.onLine) {
-        console.log('📱 Offline mode detected - using offline document service');
+      if (useOfflineMode) {
+        console.log('📱 Network issue detected - using offline document service');
         return await this.processOfflineInvoiceTransaction(transactionData);
       }
       
@@ -283,13 +292,9 @@ export class InvoiceService {
         });
         console.log('📝 Added store update to batch');
         
-        // Commit the batch with timeout
-        await Promise.race([
-          batch.commit(),
-          new Promise<never>((_, reject) => 
-            setTimeout(() => reject(new Error('Batch commit timeout')), 10000)
-          )
-        ]);
+        // Commit the batch - Firestore offline persistence will queue if offline
+        // No timeout needed as offline persistence handles queuing automatically
+        await batch.commit();
         
         console.log('✅ Batch write completed successfully');
         
@@ -358,7 +363,7 @@ export class InvoiceService {
       
       console.log('📋 Invoice number preview (random):', {
         preview: previewInvoice,
-        mode: navigator.onLine ? 'online' : 'offline',
+        mode: this.networkService.isOnline() ? 'online' : 'offline',
         note: 'Actual invoice will be generated during order creation'
       });
       
@@ -537,26 +542,20 @@ export class InvoiceService {
       };
       
       console.log('📱 Saving offline order to Firestore cache:', tempOrderId);
+      console.log('📱 Generated unique invoice number:', nextInvoiceNo);
       
       // Save to Firestore with offline persistence enabled
       // Firestore will automatically queue this write and sync when online
       const ordersRef = collection(this.firestore, 'orders');
-      let orderDocRef;
+      const orderDocRef = doc(ordersRef); // Pre-generate ID
       
-      try {
-        // Try to save with a timeout
-        orderDocRef = await Promise.race([
-          addDoc(ordersRef, completeOrderData),
-          new Promise<never>((_, reject) => 
-            setTimeout(() => reject(new Error('Order save timeout')), 5000)
-          )
-        ]);
-      } catch (saveError) {
-        console.warn('⚠️ Order save timeout, but write is queued by Firestore:', saveError);
-        // Generate a temporary doc reference for response
-        // Firestore offline persistence will handle the actual write
-        orderDocRef = doc(ordersRef);
-      }
+      // Fire-and-forget: Queue writes without waiting
+      // Firestore offline persistence handles queuing and sync automatically
+      setDoc(orderDocRef, completeOrderData).catch((error: any) => {
+        console.warn('⚠️ Order save queued (will sync when online):', error);
+      });
+      
+      console.log('✅ Order queued for sync:', orderDocRef.id);
       
       // Also save order details if there are items
       if (orderData.items && orderData.items.length > 0) {
@@ -577,18 +576,12 @@ export class InvoiceService {
           
           const orderDetailsRef = collection(this.firestore, 'orderDetails');
           
-          try {
-            await Promise.race([
-              addDoc(orderDetailsRef, orderDetailsData),
-              new Promise<never>((_, reject) => 
-                setTimeout(() => reject(new Error('OrderDetails save timeout')), 5000)
-              )
-            ]);
-          } catch (detailsError) {
-            console.warn('⚠️ OrderDetails save timeout, but write is queued:', detailsError);
-            // Continue - Firestore offline persistence will handle it
-          }
+          // Fire-and-forget: Queue writes without waiting
+          addDoc(orderDetailsRef, orderDetailsData).catch((error: any) => {
+            console.warn('⚠️ OrderDetails queued (will sync when online):', error);
+          });
         }
+        console.log(`✅ ${batches.length} orderDetails batches queued for sync`);
       }
       
       console.log('✅ Offline order saved successfully, will sync when online');

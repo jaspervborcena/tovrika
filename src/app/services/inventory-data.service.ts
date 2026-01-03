@@ -11,7 +11,6 @@ import { ProductInventoryEntry } from '../interfaces/product-inventory-entry.int
 @Injectable({ providedIn: 'root' })
 export class InventoryDataService {
   private readonly firestore = inject(Firestore);
-  private readonly offlineDocService = inject(OfflineDocumentService);
   private readonly auth = inject(AuthService);
   private readonly productService = inject(ProductService);
   private readonly productSummaryService = inject(ProductSummaryService);
@@ -174,13 +173,25 @@ export class InventoryDataService {
 
     console.log('🔐 User authenticated for batch creation:', { uid: user.uid, email: user.email, companyId: permission.companyId });
 
+    // Get the product's storeId first (before creating batch)
+    const productRef = doc(this.firestore, 'products', productId);
+    const productSnap = await getDoc(productRef);
+    
+    if (!productSnap.exists()) {
+      throw new Error(`Product ${productId} not found. Cannot create inventory batch for non-existent product.`);
+    }
+    
+    const productData = productSnap.data();
+    const productStoreId = productData?.['storeId'] || permission.storeId || '';
+    console.log('📦 Using storeId from product:', productStoreId, '(product storeId:', productData?.['storeId'], ', permission storeId:', permission.storeId, ')');
+
     // Prepare batch entry data
     const batchData: Omit<ProductInventoryEntry, 'id'> = {
       ...entry,
       productId,
       uid: user.uid,
       companyId: permission.companyId,
-      storeId: permission.storeId || '', // Handle potential undefined
+      storeId: productStoreId, // Use product's storeId, not permission's
       status: 'active',
       createdBy: user.uid,
       updatedBy: user.uid,
@@ -423,9 +434,23 @@ export class InventoryDataService {
     console.log('🔥 Creating document directly with Firestore...');
     const colRef = collection(this.firestore, this.collectionName);
     const toWrite = applyCreateTimestamps(payload, navigator.onLine as boolean);
-    const docRef = await addDoc(colRef, toWrite);
-    console.log('✅ Direct Firestore creation successful:', docRef.id);
-    return docRef.id;
+    
+    try {
+      const docRef = await addDoc(colRef, toWrite);
+      console.log('✅ Direct Firestore creation successful:', docRef.id);
+      return docRef.id;
+    } catch (error) {
+      console.warn('⚠️ Direct Firestore creation failed, trying offline mode:', error);
+      
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const isNetworkError = errorMessage.includes('timeout') || 
+                            errorMessage.includes('network') || 
+                            errorMessage.includes('connection') ||
+                            !navigator.onLine;
+      
+      // Firestore's native offline persistence handles this automatically
+      throw error;
+    }
   }
 
   /**
@@ -466,7 +491,8 @@ export class InventoryDataService {
           } as any);
         }
         // Remove embedded inventory fields
-        await this.offlineDocService.updateDocument('products', productId, {
+        const productRef = doc(this.firestore, 'products', productId);
+        await updateDoc(productRef, {
           inventory: deleteField(),
           isMultipleInventory: deleteField()
         });

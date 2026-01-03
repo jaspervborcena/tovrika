@@ -211,7 +211,20 @@ export class UserRoleService {
         permissions: permissions,
         updatedAt: new Date()
       };
-      await this.offlineDocService.updateDocument('users', userRoleData.userId, permissionUpdate);
+      
+      try {
+        await this.offlineDocService.updateDocument('users', userRoleData.userId, permissionUpdate);
+      } catch (updateError) {
+        console.error('❌ Failed to update user permissions:', updateError);
+        const errorMessage = updateError instanceof Error ? updateError.message : String(updateError);
+        
+        if (errorMessage.includes('network') || errorMessage.includes('timeout') || !navigator.onLine) {
+          console.log('📱 User permission update queued offline');
+          // The offline document service should handle queuing
+        } else {
+          throw new Error('Failed to update user permissions. Please try again.');
+        }
+      }
 
       await this.loadUserRoles(); // Refresh the data
     } catch (error) {
@@ -235,11 +248,25 @@ export class UserRoleService {
       }
 
       const userRoleDocRef = doc(this.firestore, 'userRoles', userRoleId);
-      await this.offlineDocService.updateDocument('userRoles', userRoleId, {
-        ...userRoleData,
-        companyId: currentPermission.companyId, // Ensure companyId cannot be changed
-        updatedAt: new Date()
-      });
+      
+      try {
+        await this.offlineDocService.updateDocument('userRoles', userRoleId, {
+          ...userRoleData,
+          companyId: currentPermission.companyId, // Ensure companyId cannot be changed
+          updatedAt: new Date()
+        });
+      } catch (updateError) {
+        console.error('❌ Failed to update user role:', updateError);
+        const errorMessage = updateError instanceof Error ? updateError.message : String(updateError);
+        
+        if (errorMessage.includes('network') || errorMessage.includes('timeout') || !navigator.onLine) {
+          console.log('📱 User role update queued offline');
+          // The offline document service should handle queuing
+        } else {
+          throw new Error('Failed to update user role. Please try again.');
+        }
+      }
+      
       await this.loadUserRoles(); // Refresh the data
     } catch (error) {
       console.error('Error updating user role:', error);

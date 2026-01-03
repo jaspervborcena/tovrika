@@ -1119,82 +1119,202 @@ type Order = OrderDisplay;
     }
 
     @media (max-width: 768px) {
+      .header {
+        padding: 1rem 0;
+      }
+
       .header-content {
         padding: 0 1rem;
       }
 
       .page-title {
-        font-size: 2rem;
+        font-size: 1.5rem;
+      }
+
+      .page-subtitle {
+        font-size: 0.875rem;
       }
 
       .sales-controls {
-        padding: 0 1rem 2rem 1rem;
+        padding: 0 1rem 1.5rem 1rem;
       }
 
       .date-picker-section {
         flex-direction: column;
         align-items: stretch;
-        gap: 15px;
+        gap: 1rem;
       }
 
       .date-inputs {
-        justify-content: space-between;
+        flex-direction: column;
+        gap: 0.75rem;
+      }
+
+      .date-input-group label {
+        font-size: 0.8125rem;
       }
 
       .date-input {
-        width: 140px;
+        width: 100%;
+        font-size: 0.875rem;
+        padding: 0.625rem 0.75rem;
+      }
+
+      .go-button-group {
+        flex-direction: column;
+        align-items: stretch;
+        width: 100%;
+      }
+
+      .go-button,
+      .debug-button {
+        width: 100%;
+        font-size: 0.8125rem;
+        padding: 0.625rem 1rem;
+      }
+
+      .store-selection {
+        padding: 0.75rem;
+      }
+
+      .store-selector {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0.5rem;
+      }
+
+      .store-select {
+        width: 100%;
+        min-width: auto;
+        font-size: 0.875rem;
       }
 
       .totals-section {
-        justify-content: center;
+        grid-template-columns: 1fr;
+        gap: 0.75rem;
       }
 
       .total-card {
-        min-width: 140px;
-        padding: 20px;
+        min-width: auto;
+        padding: 1rem;
+      }
+
+      .total-card-label {
+        font-size: 0.75rem;
+      }
+
+      .total-card-value {
+        font-size: 1.25rem;
       }
 
       .table-wrapper {
-        font-size: 14px;
+        font-size: 0.75rem;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+      }
+
+      .sales-table {
+        min-width: 600px;
       }
 
       .sales-table th,
       .sales-table td {
-        padding: 12px 8px;
+        padding: 0.5rem 0.375rem;
+        font-size: 0.75rem;
       }
 
       .header-content {
-        gap: 4px;
+        gap: 0.25rem;
       }
 
       .header-content span {
-        font-size: 11px;
+        font-size: 0.6875rem;
       }
 
       .sort-icon {
-        width: 14px;
-        height: 14px;
+        width: 0.875rem;
+        height: 0.875rem;
       }
 
       .table-header {
         flex-direction: column;
         align-items: flex-start;
-        gap: 10px;
+        gap: 0.75rem;
       }
 
       .table-info-container {
         align-items: flex-start;
+        flex-direction: column;
+        gap: 0.5rem;
+      }
+
+      .export-container {
+        width: 100%;
+      }
+
+      .export-button {
+        width: 100%;
+        justify-content: center;
+        font-size: 0.8125rem;
       }
 
       .pagination-container {
         flex-direction: column;
-        gap: 12px;
+        gap: 0.75rem;
         align-items: center;
       }
 
       .pagination-controls {
         flex-wrap: wrap;
         justify-content: center;
+        gap: 0.375rem;
+      }
+
+      .page-button,
+      .page-number {
+        padding: 0.375rem 0.625rem;
+        font-size: 0.75rem;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .page-title {
+        font-size: 1.25rem;
+      }
+
+      .page-subtitle {
+        font-size: 0.8125rem;
+      }
+
+      .date-input-group label {
+        font-size: 0.75rem;
+      }
+
+      .date-input {
+        font-size: 0.8125rem;
+      }
+
+      .go-button,
+      .debug-button {
+        font-size: 0.75rem;
+      }
+
+      .total-card {
+        padding: 0.75rem;
+      }
+
+      .total-card-label {
+        font-size: 0.6875rem;
+      }
+
+      .total-card-value {
+        font-size: 1.125rem;
+      }
+
+      .sales-table th,
+      .sales-table td {
+        padding: 0.375rem 0.25rem;
+        font-size: 0.6875rem;
       }
 
       /* Modal responsive styles */

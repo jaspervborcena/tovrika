@@ -2,7 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import { environment } from '../../environments/environment';
 import { HttpClient } from '@angular/common/http';
 import { Firestore, collection, query, where, orderBy, limit } from '@angular/fire/firestore';
-import { getDocs, getDoc, Timestamp, doc as clientDoc, runTransaction, writeBatch } from 'firebase/firestore';
+import { getDocs, getDoc, Timestamp, doc as clientDoc, runTransaction, writeBatch, updateDoc } from 'firebase/firestore';
 import { User } from '@angular/fire/auth';
 import { Order } from '../interfaces/pos.interface';
 import { AuthService } from './auth.service';
@@ -10,7 +10,6 @@ import { OrdersSellingTrackingService } from './orders-selling-tracking.service'
 import { LoggerService } from '../core/services/logger.service';
 import { LedgerService } from './ledger.service';
 import { FirestoreSecurityService } from '../core/services/firestore-security.service';
-import { OfflineDocumentService } from '../core/services/offline-document.service';
 import { IndexedDBService } from '../core/services/indexeddb.service';
 import { toDateValue } from '../core/utils/date-utils';
 import { OrdersSellingTrackingDoc } from '../interfaces/orders-selling-tracking.interface';
@@ -23,7 +22,6 @@ import { OrdersSellingTrackingDoc } from '../interfaces/orders-selling-tracking.
 })
 export class OrderService {
   private authService = inject(AuthService);
-  private offlineDocService = inject(OfflineDocumentService);
   // Use centralized LoggerService so logs include authenticated uid/company/store via context provider
   private logger = inject(LoggerService);
   private ledgerService = inject(LedgerService);
@@ -462,8 +460,9 @@ async updateOrderStatus(orderId: string, status: string, reason?: string): Promi
       updatePayload.updateReason = reason;
     }
     
-    // Update the order document
-    await this.offlineDocService.updateDocument('orders', orderId, updatePayload);
+    // Update the order document - Firestore offline persistence handles sync
+    const orderDocRef = clientDoc(this.firestore, 'orders', orderId);
+    await updateDoc(orderDocRef, updatePayload);
     // If we're online and the order was cancelled or returned, attempt a client-side transactional restock.
     // This is a best-effort attempt — the server-side Cloud Function still exists as authoritative.
   if (navigator.onLine && (status === 'cancelled' || status === 'returned' || status === 'refunded' || status === 'damage' || status === 'damaged')) {

@@ -110,7 +110,21 @@ export class LedgerService {
     };
 
     const ref = doc(collection(this.firestore, 'orderAccountingLedger'));
-    await setDoc(ref, newDoc);
+    
+    try {
+      await setDoc(ref, newDoc);
+    } catch (error) {
+      console.warn('⚠️ Failed to record ledger entry online, trying offline mode:', error);
+      
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const isNetworkError = errorMessage.includes('timeout') || 
+                            errorMessage.includes('network') || 
+                            errorMessage.includes('connection') ||
+                            !navigator.onLine;
+      
+      // Firestore's native offline persistence handles this automatically
+      throw error;
+    }
 
     console.log(
       `✅ LedgerService: recorded ${eventType} for order ${orderId}:`,
@@ -284,18 +298,19 @@ export class LedgerService {
    * Get aggregate totals for common adjustment event types (return, refund, damage).
    * Returns amounts and quantities grouped by eventType.
    */
- async getAdjustmentTotals(
-  companyId: string,
-  storeId: string,
-  startDate: Date,
-  endDate: Date
-): Promise<{
-  returns: { amount: number; qty: number };
-  refunds: { amount: number; qty: number };
-  damages: { amount: number; qty: number };
-}> {
-  try {
-    const types = ['completed','returned', 'refunded', 'damaged'];
+  async getAdjustmentTotals(
+    companyId: string,
+    storeId: string,
+    startDate: Date,
+    endDate: Date
+  ): Promise<{
+    completed: { amount: number; qty: number };
+    returns: { amount: number; qty: number };
+    refunds: { amount: number; qty: number };
+    damages: { amount: number; qty: number };
+  }> {
+    try {
+      const types = ['completed','returned', 'refunded', 'damaged'];
       const result = {
         completed: { amount: 0, qty: 0 },
         returns: { amount: 0, qty: 0 },
@@ -362,15 +377,16 @@ export class LedgerService {
       }
 
       return result;
-  } catch (err) {
-    console.warn('LedgerService.getAdjustmentTotals error', err);
-    return {
-      returns: { amount: 0, qty: 0 },
-      refunds: { amount: 0, qty: 0 },
-      damages: { amount: 0, qty: 0 }
-    };
+    } catch (err) {
+      console.warn('LedgerService.getAdjustmentTotals error', err);
+      return {
+        completed: { amount: 0, qty: 0 },
+        returns: { amount: 0, qty: 0 },
+        refunds: { amount: 0, qty: 0 },
+        damages: { amount: 0, qty: 0 }
+      };
+    }
   }
-}
 
   /**
    * Get the latest running balance for a given company, store, date, and eventType.

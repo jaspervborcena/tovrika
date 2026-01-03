@@ -6,10 +6,12 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 2rem 0;
+  padding: 2rem 1rem;
   padding-top: calc(2rem + 80px); /* Account for fixed header height */
   margin: 0;
-  width: 100%;
+  width: 100vw;
+  box-sizing: border-box;
+  overflow-x: hidden;
 }
 
 .auth-wrapper::before {
@@ -271,20 +273,41 @@
 /* Responsive Design */
 @media (max-width: 480px) {
   .auth-wrapper {
-    padding: 1rem 0.5rem;
+    padding: 10px;
+    padding-top: calc(10px + 80px);
+    padding-bottom: 20px;
+    min-height: auto;
+    align-items: flex-start;
+    overflow-y: auto;
   }
   
   .auth-container {
-    padding: 0 0.5rem;
+    padding: 10px;
+    max-width: 100%;
+    width: 100%;
+    margin-bottom: 0;
   }
   
   .auth-card {
-    padding: 2rem 1.5rem;
-    border-radius: 16px;
+    padding: 1.5rem 1.25rem 1.5rem 1.25rem;
+    border-radius: 20px;
+    width: 100%;
+    max-height: none;
+    margin-bottom: 0;
   }
   
   .auth-title {
-    font-size: 1.75rem;
+    font-size: 1.5rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .auth-subtitle {
+    font-size: 0.9rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .form-group {
+    margin-bottom: 1.25rem;
   }
   
   .form-input {

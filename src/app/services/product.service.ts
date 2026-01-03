@@ -1328,8 +1328,17 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
       
       console.log('📝 updateProduct - updating product:', productId, 'with data:', cleanedUpdateData);
 
-      // Use OfflineDocumentService for consistent online/offline updates
-      await this.offlineDocService.updateDocument('products', productId, cleanedUpdateData);
+      // Use Firestore updateDoc directly for automatic offline persistence
+      const productRef = doc(this.firestore, 'products', productId);
+      await updateDoc(productRef, cleanedUpdateData);
+
+      // Also update IndexedDB cache to keep it in sync
+      try {
+        await this.indexedDBService.updateProduct(productId, cleanedUpdateData);
+      } catch (idbError) {
+        console.warn('⚠️ Failed to update product in IndexedDB:', idbError);
+        // Non-critical - Firestore is source of truth
+      }
 
       // Update the local cache optimistically with the cleaned/normalized data
       this.updateProductInCache(productId, cleanedUpdateData as Partial<Product>);

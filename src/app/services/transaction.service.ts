@@ -1,8 +1,7 @@
 import { Injectable, inject } from '@angular/core';
-import { Firestore, collection, collectionGroup, doc, setDoc, addDoc, query, where, getDocs, getDoc } from '@angular/fire/firestore';
+import { Firestore, collection, collectionGroup, doc, setDoc, addDoc, query, where, getDocs, getDoc, writeBatch } from '@angular/fire/firestore';
 import { AuthService } from './auth.service';
 import { FirestoreSecurityService } from '../core/services/firestore-security.service';
-import { OfflineDocumentService } from '../core/services/offline-document.service';
 import { ProductService } from './product.service';
 import { InventoryService } from './inventory.service';
 
@@ -38,7 +37,6 @@ export class TransactionService {
   private firestore = inject(Firestore);
   private authService = inject(AuthService);
   private firestoreSecurityService = inject(FirestoreSecurityService);
-  private offlineDocService = inject(OfflineDocumentService);
   private productService = inject(ProductService);
   private inventoryService = inject(InventoryService);
   // NOTE: InventoryService writes to a different collection path than the newer inventory modules
@@ -64,24 +62,42 @@ export class TransactionService {
         updatedAt: new Date()
       };
 
-      // 🔥 OFFLINE-SAFE: Use OfflineDocumentService for pre-generated IDs
+      // 🔥 ATOMIC: Use batch write for transaction + inventory updates
+      const batch = writeBatch(this.firestore);
+      
+      // Create transaction document
       const collectionPath = `companies/${currentPermission.companyId}/stores/${currentPermission.storeId}/branches/${user.branchId}/transactions`;
-      const documentId = await this.offlineDocService.createDocument(collectionPath, newTransaction);
-
-      // Update inventory
+      const transactionRef = doc(collection(this.firestore, collectionPath));
+      batch.set(transactionRef, newTransaction);
+      
+      // Add all inventory updates to the same batch
       for (const item of transaction.items) {
-        await this.inventoryService.updateStock(
-          item.productId,
-          -item.quantity,
-          currentPermission.companyId,
-          currentPermission.storeId,
-          user.branchId,
-          true
-        );
+        const inventoryPath = `companies/${currentPermission.companyId}/stores/${currentPermission.storeId}/branches/${user.branchId}/inventory`;
+        const inventoryRef = doc(this.firestore, inventoryPath, item.productId);
+        
+        // Get current inventory to calculate new quantity
+        const currentInventory = await getDoc(inventoryRef);
+        const currentQuantity = currentInventory.exists() ? (currentInventory.data()?.['quantity'] || 0) : 0;
+        const newQuantity = currentQuantity - item.quantity;
+        
+        const inventoryData = {
+          productId: item.productId,
+          branchId: user.branchId,
+          storeId: currentPermission.storeId,
+          companyId: currentPermission.companyId,
+          quantity: newQuantity,
+          lastRestocked: currentInventory.exists() ? currentInventory.data()?.['lastRestocked'] : new Date(),
+          updatedAt: new Date()
+        };
+        
+        batch.set(inventoryRef, inventoryData, { merge: true });
       }
-
-      console.log('✅ Transaction created with pre-generated ID:', documentId, navigator.onLine ? '(online)' : '(offline)');
-      return documentId;
+      
+      // Commit all changes atomically - Firestore offline persistence queues this
+      await batch.commit();
+      
+      console.log('✅ Transaction + inventory updated atomically:', transactionRef.id, navigator.onLine ? '(online)' : '(offline)');
+      return transactionRef.id;
     } catch (error) {
       console.error('Error creating transaction:', error);
       throw error;
@@ -130,24 +146,39 @@ export class TransactionService {
         status: 'void',
         updatedAt: new Date()
       });
-      await setDoc(transactionRef, updateData, { merge: true });
-
-      // Reverse inventory changes
+      
+      // Get transaction data first
       const transaction = await getDoc(transactionRef);
       const transactionData = transaction.data() as Transaction;
-
-      if (transactionData) {
-        for (const item of transactionData.items) {
-          await this.inventoryService.updateStock(
-            item.productId,
-            item.quantity,
-            currentPermission.companyId,
-            currentPermission.storeId,
-            user.branchId,
-            true
-          );
-        }
+      
+      if (!transactionData) {
+        throw new Error('Transaction not found');
       }
+      
+      // 🔥 ATOMIC: Use batch write for void + inventory reversal
+      const batch = writeBatch(this.firestore);
+      
+      // Void the transaction
+      batch.set(transactionRef, updateData, { merge: true });
+      
+      // Reverse all inventory changes in the same batch
+      for (const item of transactionData.items) {
+        const inventoryPath = `companies/${currentPermission.companyId}/stores/${currentPermission.storeId}/branches/${user.branchId}/inventory`;
+        const inventoryRef = doc(this.firestore, inventoryPath, item.productId);
+        
+        const currentInventory = await getDoc(inventoryRef);
+        const currentQuantity = currentInventory.exists() ? (currentInventory.data()?.['quantity'] || 0) : 0;
+        const restoredQuantity = currentQuantity + item.quantity;
+        
+        batch.set(inventoryRef, {
+          quantity: restoredQuantity,
+          updatedAt: new Date()
+        }, { merge: true });
+      }
+      
+      // Commit all changes atomically
+      await batch.commit();
+      console.log('✅ Transaction voided + inventory restored atomically:', transactionId);
     } catch (error) {
       console.error('Error voiding transaction:', error);
       throw error;

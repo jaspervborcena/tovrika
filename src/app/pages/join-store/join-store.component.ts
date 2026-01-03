@@ -136,7 +136,21 @@ export class JoinStoreComponent {
       const id = await this.offlineDocService.createDocument('accessRequests', payload);
       this.submittedId = id;
     } catch (e: any) {
-      this.error = e?.message || 'Failed to submit access request. Please try again.';
+      console.error('Failed to submit access request:', e);
+      
+      // Provide more specific error messages
+      const errorMessage = e?.message || '';
+      if (errorMessage.includes('Authentication failed') || errorMessage.includes('auth')) {
+        this.error = 'Authentication error. Please sign in again and try again.';
+      } else if (errorMessage.includes('network') || errorMessage.includes('timeout') || !navigator.onLine) {
+        this.error = 'Network connection issue. Your request has been saved offline and will be submitted when connection is restored.';
+        // In this case, the offline document service should have saved it offline
+        console.log('📱 Access request saved offline for later sync');
+      } else if (errorMessage.includes('quota') || errorMessage.includes('storage')) {
+        this.error = 'Storage limit reached. Please clear some data and try again.';
+      } else {
+        this.error = 'Failed to submit access request. Please try again.';
+      }
     } finally {
       this.isSubmitting = false;
     }

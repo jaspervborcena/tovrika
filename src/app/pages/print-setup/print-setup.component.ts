@@ -62,7 +62,12 @@ export class PrintSetupComponent implements OnInit {
       }
       console.log('🖨️ Loaded printers from IndexedDB:', this.printers());
     } catch (error) {
-      console.error('Failed to load printers:', error);
+      console.error('Failed to load printers from IndexedDB:', error);
+      // Try to continue with empty printers array instead of failing completely
+      this.printers.set([]);
+      
+      // Show user-friendly error
+      this.showNotification('Warning: Could not load saved printer settings. Starting with default configuration.', 'warning');
     } finally {
       this.isLoading.set(false);
     }
@@ -74,9 +79,25 @@ export class PrintSetupComponent implements OnInit {
       // Refresh the print service with the new config
       await this.printService.refreshPrinterConfig();
       console.log('💾 Printers saved to IndexedDB and print service updated');
+      
+      this.showNotification('Printer settings saved successfully!', 'success');
     } catch (error) {
-      console.error('Failed to save printers:', error);
+      console.error('Failed to save printers to IndexedDB:', error);
+      
+      // Check if it's a storage quota error
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      if (errorMessage.includes('quota') || errorMessage.includes('storage')) {
+        this.showNotification('Failed to save: Storage quota exceeded. Please clear some data and try again.', 'error');
+      } else {
+        this.showNotification('Failed to save printer settings. Please try again.', 'error');
+      }
     }
+  }
+
+  private showNotification(message: string, type: 'success' | 'warning' | 'error') {
+    // Add a simple notification system
+    console.log(`${type.toUpperCase()}: ${message}`);
+    // You can integrate with your notification service here
   }
 
   startAddingPrinter() {

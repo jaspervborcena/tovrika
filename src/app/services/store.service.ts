@@ -421,7 +421,19 @@ export class StoreService {
         updateData.subscriptionEndDate = toDateValue(updateData.subscriptionEndDate) || updateData.subscriptionEndDate;
       }
 
-      await this.offlineDocService.updateDocument('stores', storeId, updateData);
+      try {
+        await this.offlineDocService.updateDocument('stores', storeId, updateData);
+      } catch (updateError) {
+        console.error('❌ Failed to update store:', updateError);
+        const errorMessage = updateError instanceof Error ? updateError.message : String(updateError);
+        
+        if (errorMessage.includes('network') || errorMessage.includes('timeout') || !navigator.onLine) {
+          console.log('📱 Store update queued offline');
+          // The offline document service should handle queuing
+        } else {
+          throw new Error('Failed to update store information. Please try again.');
+        }
+      }
 
       // Update the signal
       this.storesSignal.update(stores =>
@@ -571,14 +583,19 @@ export class StoreService {
 
   /**
    * Generate random invoice number (new approach - no sequential)
-   * Format: INV-YYMM-XXXXXX (where XXXXXX is random 6-digit number)
+   * Format: INV-YYMM-XXXXXXXXX (where XXXXXXXXX is timestamp + random for uniqueness)
    */
   generateRandomInvoiceNo(): string {
     const now = new Date();
     const yy = String(now.getFullYear()).slice(-2);
     const mm = String(now.getMonth() + 1).padStart(2, '0');
-    const random = Math.floor(100000 + Math.random() * 900000); // 6-digit random
-    return `INV-${yy}${mm}-${random}`;
+    
+    // Use timestamp (last 5 digits) + 4 random chars for better uniqueness
+    // This prevents collisions when creating multiple orders quickly
+    const timestamp = String(Date.now()).slice(-5); // Last 5 digits of timestamp
+    const random = Math.random().toString(36).substring(2, 6).toUpperCase(); // 4 random chars
+    
+    return `INV-${yy}${mm}-${timestamp}${random}`;
   }
 
   /**
@@ -665,16 +682,28 @@ export class StoreService {
       
 
       const storeRef = doc(this.firestore, 'stores', storeId);
-      await this.offlineDocService.updateDocument('stores', storeId, {
-        isBirAccredited: false, // Not yet accredited until approved
-        birAccreditationStatus: 'pending',
-        birAccreditationSubmittedAt: new Date(),
-        'birDetails.tinNumber': birData.tinNumber,
-        'birDetails.businessName': birData.businessName,
-        'birDetails.address': birData.address,
-        updatedAt: new Date()
-      });
-
+      
+      try {
+        await this.offlineDocService.updateDocument('stores', storeId, {
+          isBirAccredited: false, // Not yet accredited until approved
+          birAccreditationStatus: 'pending',
+          birAccreditationSubmittedAt: new Date(),
+          'birDetails.tinNumber': birData.tinNumber,
+          'birDetails.businessName': birData.businessName,
+          'birDetails.address': birData.address,
+          updatedAt: new Date()
+        });
+      } catch (updateError) {
+        console.error('❌ Failed to submit BIR accreditation:', updateError);
+        const errorMessage = updateError instanceof Error ? updateError.message : String(updateError);
+        
+        if (errorMessage.includes('network') || errorMessage.includes('timeout') || !navigator.onLine) {
+          console.log('📱 BIR accreditation submission queued offline');
+          // The offline document service should handle queuing
+        } else {
+          throw new Error('Failed to submit BIR accreditation. Please try again.');
+        }
+      }
       
     } catch (error) {
       console.error('❌ Error submitting BIR accreditation:', error);

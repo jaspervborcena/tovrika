@@ -16,7 +16,6 @@ import {
 } from '@angular/fire/firestore';
 import { toDateValue } from '../core/utils/date-utils';
 import { AuthService } from './auth.service';
-import { OfflineDocumentService } from '../core/services/offline-document.service';
 import { CompanyBillingHistory } from '../interfaces/billing.interface';
 
 export type { CompanyBillingHistory } from '../interfaces/billing.interface';
@@ -33,8 +32,7 @@ export class BillingService {
 
   constructor(
     private firestore: Firestore,
-    private authService: AuthService,
-    private offlineDocService: OfflineDocumentService
+    private authService: AuthService
   ) {}
 
   /**
@@ -52,10 +50,16 @@ export class BillingService {
       };
 
       const billingRef = collection(this.firestore, 'companyBillingHistory');
-      const docRef = await addDoc(billingRef, billingData);
-
-      console.log('✅ Billing history created with ID:', docRef.id);
-      return docRef.id;
+      
+      try {
+        const docRef = await addDoc(billingRef, billingData);
+        console.log('✅ Billing history created with ID:', docRef.id);
+        return docRef.id;
+      } catch (error) {
+        console.error('❌ Failed to create billing history:', error);
+        // Firestore's native offline persistence handles this automatically
+        throw error;
+      }
     } catch (error) {
       console.error('❌ Error creating billing history:', error);
       throw error;
@@ -281,8 +285,8 @@ export class BillingService {
   async deleteBillingHistory(billingId: string): Promise<void> {
     try {
       console.log('🗑️ Deleting billing history:', billingId);
-  const billingRef = doc(this.firestore, 'companyBillingHistory', billingId);
-  await this.offlineDocService.deleteDocument('companyBillingHistory', billingId);
+      const billingRef = doc(this.firestore, 'companyBillingHistory', billingId);
+      await deleteDoc(billingRef);
       console.log('✅ Billing history deleted');
     } catch (error) {
       console.error('❌ Error deleting billing history:', error);
