@@ -93,19 +93,16 @@ export class OrdersSellingTrackingService {
         };
 
         try {
-          // If we have a concrete createdAt and we are online and the doc ID is not a temp id,
-          // write updatedAt equal to createdAt so both timestamps match (avoids serverTimestamp map in the field).
-          if (navigator.onLine && !id.startsWith('temp_') && (createdAt instanceof Date || typeof createdAt === 'string' || typeof createdAt === 'number')) {
+          // Always use Firestore directly for automatic offline sync
+          if (createdAt instanceof Date || typeof createdAt === 'string' || typeof createdAt === 'number') {
             updates.updatedAt = createdAt;
-            const ref = doc(this.firestore, 'ordersSellingTracking', id);
-            // Use setDoc with merge to avoid overriding other fields
-            await setDoc(ref as any, updates as any, { merge: true } as any);
-          } else {
-            // Fallback: use offlineDocService.updateDocument which will handle offline queuing and timestamps
-            await this.offlineDocService.updateDocument('ordersSellingTracking', id, updates);
           }
+          const ref = doc(this.firestore, 'ordersSellingTracking', id);
+          // Use setDoc with merge - Firestore offline persistence will handle sync
+          await setDoc(ref as any, updates as any, { merge: true } as any);
           updated++;
         } catch (e) {
+          console.warn('⚠️ Update failed, Firestore will retry when online:', e);
           errors.push({ id, error: e });
         }
       }
@@ -209,14 +206,12 @@ export class OrdersSellingTrackingService {
         if (reason) updates.updateReason = reason;
 
         try {
-          if (navigator.onLine && !id.startsWith('temp_')) {
-            const ref = doc(this.firestore, 'ordersSellingTracking', id);
-            await setDoc(ref as any, updates as any, { merge: true } as any);
-          } else {
-            await this.offlineDocService.updateDocument('ordersSellingTracking', id, updates);
-          }
+          // Always use Firestore directly for automatic offline sync
+          const ref = doc(this.firestore, 'ordersSellingTracking', id);
+          await setDoc(ref as any, updates as any, { merge: true } as any);
           updated++;
         } catch (e) {
+          console.warn('⚠️ Update failed, Firestore will retry when online:', e);
           errors.push({ id, error: e });
         }
       }
@@ -230,9 +225,7 @@ export class OrdersSellingTrackingService {
       for (const pd of pending) {
         try {
           if (pd.collectionName === 'ordersSellingTracking' && pd.data && pd.data.orderId === orderId && pd.data.status !== 'cancelled') {
-            const upd: any = { status: 'cancelled', updatedBy: cancelledBy || pd.data.createdBy || 'system' };
-            if (reason) upd.updateReason = reason;
-            await this.offlineDocService.updateDocument('ordersSellingTracking', pd.id, upd);
+            // Skip - Firestore offline persistence handles pending updates automatically
             updated++;
           }
         } catch (e) {
@@ -288,22 +281,16 @@ export class OrdersSellingTrackingService {
       
 
       try {
-        if (navigator.onLine && !id.startsWith('temp_')) {
-          const colRef = collection(this.firestore, 'ordersSellingTracking');
-          const ref = doc(colRef as any);
-          const payload = this.sanitizeForFirestore(newDoc);
-          console.log(`markOrderTrackingReturned: creating returned copy for tracking=${id} -> newId=${ref.id}`);
-          await setDoc(ref as any, payload as any);
-          updated++;
-        } else {
-          // Offline: queue a new pending document rather than updating the existing one
-          const payload = this.sanitizeForFirestore(newDoc);
-          console.log(`markOrderTrackingReturned: queueing offline returned copy for pendingId=${id}`);
-          await this.offlineDocService.createDocument('ordersSellingTracking', payload as any);
-          updated++;
-        }
+        const colRef = collection(this.firestore, 'ordersSellingTracking');
+        const ref = doc(colRef as any);
+        const payload = this.sanitizeForFirestore(newDoc);
+        console.log(`markOrderTrackingReturned: creating returned copy for tracking=${id} -> newId=${ref.id}`);
+        // Use Firestore directly for automatic offline sync
+        await setDoc(ref as any, payload as any);
+        updated++;
       } catch (e) {
         console.error(`markOrderTrackingReturned: failed to create returned copy for ${id}`, e);
+        console.warn('⚠️ Firestore will retry automatically when connection is restored');
         const errMsg = (e && (e as any).message) ? (e as any).message : String(e);
         errors.push({ id, error: errMsg });
       }
@@ -1135,8 +1122,15 @@ async markOrderTrackingDamaged(orderId: string, damagedBy?: string, reason?: str
             createdAt: this.sanitizeForFirestore(new Date())
           };
 
-          await this.offlineDocService.createDocument('inventoryDeductions', deductionDoc as any);
-          console.log(`📝 Created deduction log: batch=${deduction.batchId}, qty=${deduction.deductedQty}, cost=₱${deduction.costPrice}`);
+          // Use Firestore directly for automatic offline sync
+          try {
+            const deductionsRef = collection(this.firestore, 'inventoryDeductions');
+            await addDoc(deductionsRef, deductionDoc);
+            console.log(`📝 Created deduction log: batch=${deduction.batchId}, qty=${deduction.deductedQty}, cost=₱${deduction.costPrice}`);
+          } catch (error) {
+            console.warn(`⚠️ Failed to create deduction log (will retry via Firestore persistence):`, error);
+            // Firestore offline persistence will queue this automatically
+          }
         }
 
         if (remainingQty > 0) {

@@ -671,11 +671,11 @@ export class PosService {
           paymentsData: payments      // Pass as separate parameter
         });
         
-        // Only apply timeout if we're online - Firestore offline persistence should handle offline seamlessly
+        // Apply very short timeout to quickly detect offline mode
         if (navigator.onLine) {
-          console.log('🌐 Online mode: applying 8-second timeout for invoice transaction');
+          console.log('🌐 Online mode: applying 2-second timeout for invoice transaction');
           const timeoutPromise = new Promise<never>((_, reject) => 
-            setTimeout(() => reject(new Error('Invoice transaction timeout - switching to offline mode')), 8000)
+            setTimeout(() => reject(new Error('Invoice transaction timeout - switching to offline mode')), 2000)
           );
           
           invoiceResult = await Promise.race([invoicePromise, timeoutPromise]);
@@ -718,10 +718,10 @@ export class PosService {
         );
         
         if (navigator.onLine) {
-          // Add timeout only when online to prevent hanging on slow connections
+          // Add short timeout (1s) only when online to prevent hanging on slow connections
           const ledgerRes: any = await Promise.race([
             ledgerPromise,
-            new Promise((_, reject) => setTimeout(() => reject(new Error('Ledger recording timeout')), 5000))
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Ledger recording timeout')), 1000))
           ]);
           
           console.log('LedgerService: order ledger entry created for', invoiceResult.orderId, 'docId=', ledgerRes?.id, 'runningBalance=', ledgerRes?.runningBalanceAmount, ledgerRes?.runningBalanceQty);
@@ -745,10 +745,10 @@ export class PosService {
           const trackingPromise = this.ordersSellingTrackingService.markOrderTrackingCompleted(invoiceResult.orderId!, user.uid);
           
           if (navigator.onLine) {
-            // Add timeout only when online to prevent hanging on slow connections
+            // Add short timeout (1s) only when online to prevent hanging on slow connections
             const markRes = await Promise.race([
               trackingPromise,
-              new Promise((_, reject) => setTimeout(() => reject(new Error('Tracking update timeout')), 5000))
+              new Promise((_, reject) => setTimeout(() => reject(new Error('Tracking update timeout')), 1000))
             ]) as any;
             
             if (markRes?.errors && markRes.errors.length) {

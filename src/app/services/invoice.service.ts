@@ -67,11 +67,11 @@ export class InvoiceService {
         where('storeId', '==', storeId)
       );
       
-      // Use timeout to prevent hanging
+      // Use very short timeout (200ms) to prevent hanging
       const snapshot = await Promise.race([
         getDocs(q),
         new Promise<never>((_, reject) => 
-          setTimeout(() => reject(new Error('Invoice check timeout')), 2000)
+          setTimeout(() => reject(new Error('Invoice check timeout')), 200)
         )
       ]);
       
@@ -127,11 +127,11 @@ export class InvoiceService {
       let useOfflineMode = false;
       
       try {
-        // Reduce timeout for faster offline detection
+        // Use very short timeout (300ms) for fast offline detection
         storeSnapshot = await Promise.race([
           getDocFromServer(storeDocRef),
           new Promise<never>((_, reject) => 
-            setTimeout(() => reject(new Error('Store read timeout - switching to offline mode')), 2000)
+            setTimeout(() => reject(new Error('Store read timeout - switching to offline mode')), 300)
           )
         ]);
       } catch (storeReadError) {
@@ -289,13 +289,9 @@ export class InvoiceService {
         });
         console.log('📝 Added store update to batch');
         
-        // Commit the batch with timeout
-        await Promise.race([
-          batch.commit(),
-          new Promise<never>((_, reject) => 
-            setTimeout(() => reject(new Error('Batch commit timeout')), 10000)
-          )
-        ]);
+        // Commit the batch - Firestore offline persistence will queue if offline
+        // No timeout needed as offline persistence handles queuing automatically
+        await batch.commit();
         
         console.log('✅ Batch write completed successfully');
         
@@ -543,6 +539,7 @@ export class InvoiceService {
       };
       
       console.log('📱 Saving offline order to Firestore cache:', tempOrderId);
+      console.log('📱 Generated unique invoice number:', nextInvoiceNo);
       
       // Save to Firestore with offline persistence enabled
       // Firestore will automatically queue this write and sync when online
@@ -550,15 +547,11 @@ export class InvoiceService {
       let orderDocRef;
       
       try {
-        // Try to save with a timeout
-        orderDocRef = await Promise.race([
-          addDoc(ordersRef, completeOrderData),
-          new Promise<never>((_, reject) => 
-            setTimeout(() => reject(new Error('Order save timeout')), 5000)
-          )
-        ]);
+        // Save directly - Firestore offline persistence will queue if offline
+        orderDocRef = await addDoc(ordersRef, completeOrderData);
+        console.log('✅ Order saved/queued successfully:', orderDocRef.id);
       } catch (saveError) {
-        console.warn('⚠️ Order save timeout, but write is queued by Firestore:', saveError);
+        console.warn('⚠️ Order save error, generating temp doc ref:', saveError);
         // Generate a temporary doc reference for response
         // Firestore offline persistence will handle the actual write
         orderDocRef = doc(ordersRef);
@@ -584,14 +577,10 @@ export class InvoiceService {
           const orderDetailsRef = collection(this.firestore, 'orderDetails');
           
           try {
-            await Promise.race([
-              addDoc(orderDetailsRef, orderDetailsData),
-              new Promise<never>((_, reject) => 
-                setTimeout(() => reject(new Error('OrderDetails save timeout')), 5000)
-              )
-            ]);
+            // Save directly - Firestore offline persistence will queue if offline
+            await addDoc(orderDetailsRef, orderDetailsData);
           } catch (detailsError) {
-            console.warn('⚠️ OrderDetails save timeout, but write is queued:', detailsError);
+            console.warn('⚠️ OrderDetails save error, continuing (queued by persistence):', detailsError);
             // Continue - Firestore offline persistence will handle it
           }
         }

@@ -129,20 +129,27 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   // Stores signal - loaded via getActiveStoresForDropdown (same as Access Management)
   private storesSignal = signal<Store[]>([]);
   
+  // Cached company data for faster receipt preparation
+  private cachedCompanySignal = signal<any>(null);
+  
   // Show stores filtered by userRoles and active status only (same as dropdowns in other components)
   readonly availableStores = computed(() => {
     const stores = this.storesSignal();
     
-    console.log('🏪 availableStores computed - Stores from getActiveStoresForDropdown:', stores.length, 'stores');
+    console.log('🏪 availableStores computed - Stores from storesSignal:', stores.length, 'stores');
+    console.log('🏪 Store details:', stores.map(s => ({ 
+      id: s.id, 
+      name: s.storeName, 
+      status: s.status,
+      companyId: s.companyId
+    })));
     
     if (stores.length === 0) {
-      console.warn('⚠️ No stores available - need to call loadStoresForPOS()');
+      console.warn('⚠️ No stores available - storesSignal is empty');
       return [];
     }
     
-    console.log('🏪 Available stores:', stores.map(s => ({ id: s.id, name: s.storeName, status: s.status })));
-    
-    // Return stores in their original order without sorting
+    // Return stores without any additional filtering
     return stores;
   });
   readonly selectedStoreId = computed(() => this.posService.selectedStoreId());
@@ -2301,14 +2308,51 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       },
       // Store debugging methods
       refreshStores: () => this.refreshStores(),
-      checkStores: () => {
+      checkStores: async () => {
+        const user = this.authService.getCurrentUser();
+        const permission = this.authService.getCurrentPermission();
         console.log('🏪 STORE DEBUG STATE:', {
           availableStores: this.availableStores().length,
+          availableStoreDetails: this.availableStores().map(s => ({ 
+            id: s.id, 
+            name: s.storeName, 
+            status: s.status,
+            companyId: s.companyId 
+          })),
           selectedStore: this.selectedStoreId(),
           hasStoreError: this.hasStoreLoadingError(),
           storeServiceState: this.storeService.debugStoreStatus(),
-          user: this.authService.getCurrentUser()?.uid || 'No user'
+          user: user?.uid || 'No user',
+          userEmail: user?.email,
+          permission: permission
         });
+        
+        // Check all stores in the service (not filtered)
+        const allStores = this.storeService.getStores();
+        console.log('🏪 ALL STORES IN SERVICE (unfiltered):', allStores.length, allStores.map(s => ({ 
+          id: s.id, 
+          name: s.storeName, 
+          status: s.status,
+          companyId: s.companyId 
+        })));
+        
+        // Check userRoles to see what stores user has access to
+        if (user?.uid && permission?.companyId) {
+          const { collection, query, where, getDocs } = await import('@angular/fire/firestore');
+          const userRolesRef = collection(this.firestore, 'userRoles');
+          const userRolesQuery = query(
+            userRolesRef,
+            where('companyId', '==', permission.companyId),
+            where('userId', '==', user.uid)
+          );
+          const userRolesSnap = await getDocs(userRolesQuery);
+          console.log('🔐 USER ROLES (access control):', userRolesSnap.docs.map(d => ({
+            storeId: d.data()['storeId'],
+            roleId: d.data()['roleId'],
+            companyId: d.data()['companyId']
+          })));
+        }
+        
         return this.availableStores();
       },
       forceStoreRecovery: () => this.handleEmptyStores(),
@@ -2398,7 +2442,10 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     console.log('  - window.debugPOS.checkOrderStatus() - Check order completion status');
     console.log('  - window.debugPOS.resetOrderState() - Reset order to initial state');
     try {
-      console.log('📊 STEP 1: Loading data (stores, products, categories)...');
+      console.log('📊 STEP 1: Loading data (stores, products, categories, company)...');
+      // Load company data early for faster receipt preparation
+      this.loadCompanyDataForReceipts();
+      
       // Load data first to ensure stores and products are available
       await this.loadData();
       console.log('✅ STEP 1 COMPLETED: Data loading finished');
@@ -3403,18 +3450,30 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
           console.log('📴 Step 2: Order saved successfully, queued for sync');
         }
       } catch (error) {
-        // Check if this is a network/timeout error that should trigger offline mode
+        console.error('❌ Error during order processing:', error);
+        
+        // Check if this is a network/timeout error
         const errorMessage = error instanceof Error ? error.message : String(error);
         const isNetworkError = errorMessage.includes('timeout') || 
                               errorMessage.includes('network') || 
                               errorMessage.includes('connection') ||
                               errorMessage.includes('Store read timeout') ||
+                              errorMessage.includes('unavailable') ||
                               !navigator.onLine;
         
-        // Only show offline fallback if we're actually online but experiencing issues
-        const isCurrentlyOnline = this.networkService.isOnline();
-        
-        if (isNetworkError && isCurrentlyOnline) {
+        // If already offline, the order should have been queued by Firestore offline persistence
+        // In this case, don't throw - the invoice service returned the order info
+        if (!navigator.onLine && isNetworkError) {
+          console.log('📴 Offline mode: Order should be queued by Firestore persistence');
+          // Result might not be set if error occurred, but offline processing should continue
+          // The error is likely just from timeout, but Firestore queued the write
+          if (!result) {
+            console.warn('⚠️ Result not set, but offline mode active - order may still be queued');
+            // Re-throw to let user know there was an issue
+            throw error;
+          }
+        } else if (isNetworkError && this.networkService.isOnline()) {
+          // We're online but experiencing network issues
           console.log('🔄 Network error detected while online, offering offline fallback...');
           
           // Ask user if they want to proceed in offline mode
@@ -3436,7 +3495,8 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
             paymentsData
           );
         } else {
-          throw error; // Re-throw non-network errors or if already offline
+          // Non-network error, re-throw
+          throw error;
         }
       }
       
@@ -3469,7 +3529,9 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       }
 
       // Prepare receipt data with the real order ID and invoice number
+      console.log('📝 Preparing receipt data for order:', result.orderId);
       const receiptData = await this.prepareReceiptData(result.orderId);
+      console.log('✅ Receipt data prepared successfully');
       
       // Update receipt data with the correct invoice number and payment info
       const updatedReceiptData = { 
@@ -3479,16 +3541,38 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
         paymentInfo: paymentInfo
       };
       
+      console.log('📋 Updated receipt data:', {
+        orderId: updatedReceiptData.orderId,
+        invoiceNumber: updatedReceiptData.invoiceNumber,
+        hasItems: !!updatedReceiptData.items?.length
+      });
+      
       // Mark order as completed and store the receipt data for reprinting
       this.isOrderCompleted.set(true);
+      console.log('✅ Order marked as completed');
+      
       // orderDetails.status is set at creation time by the invoice service
       this.completedOrderData.set(updatedReceiptData);
+      console.log('✅ Completed order data stored');
       
       // Set receipt data and show modal
       this.receiptDataSignal.set(updatedReceiptData);
+      console.log('✅ Receipt data signal set');
+      
+      // IMPORTANT: Clear processing state BEFORE showing receipt modal
+      // This ensures the UI isn't blocked by loading state when receipt appears
+      this.posService['isProcessingSignal']?.set(false);
+      console.log('✅ Processing state cleared for receipt display');
+      
       this.isReceiptModalVisibleSignal.set(true);
+      console.log('✅ Receipt modal visibility signal set to TRUE');
 
       console.log('🧾 Receipt modal opened with invoice:', result.invoiceNumber);
+      console.log('🎯 Receipt modal state:', {
+        isVisible: this.isReceiptModalVisible(),
+        hasReceiptData: !!this.receiptData(),
+        isOrderCompleted: this.isOrderCompleted()
+      });
       
     } catch (error) {
       console.error('❌ Error completing order with payment:', error);
@@ -3543,6 +3627,23 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       console.log('🔄 POS COMPONENT: Reinitialization completed - products:', this.products().length);
     } catch (error) {
       console.error('🔄 Error reinitializing POS component:', error);
+    }
+  }
+
+  /**
+   * Load company data early and cache it for faster receipt preparation.
+   * This runs async in the background and doesn't block initialization.
+   */
+  private async loadCompanyDataForReceipts(): Promise<void> {
+    try {
+      const company = await this.companyService.getActiveCompany();
+      if (company) {
+        this.cachedCompanySignal.set(company);
+        console.log('✅ Company data cached for receipts:', company.name);
+      }
+    } catch (error) {
+      console.warn('⚠️ Could not load company data for receipts:', error);
+      // Non-critical error - receipts will work with store info only
     }
   }
 
@@ -3810,7 +3911,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
             });
             
             if (storeWithProducts?.id) {
-              storeIdToSelect = storeWithProducts.id;
+              storeIdToSelect = storeWithProducts.id || null;
               console.log('🗄️ FALLBACK: Using store with products:', storeIdToSelect, 
                 `(${allProducts.filter(p => p.storeId === storeIdToSelect).length} products)`);
             } else {
@@ -3932,18 +4033,33 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   // Load stores using getActiveStoresForDropdown (same as Access Management)
   async loadStoresForPOS(): Promise<void> {
     try {
+      console.log('🏪 loadStoresForPOS: Starting...');
       const currentPermission = this.authService.getCurrentPermission();
+      console.log('🏪 loadStoresForPOS: Current permission:', currentPermission);
+      
       if (currentPermission?.companyId) {
-        console.log('🏪 Loading stores for POS using getActiveStoresForDropdown:', currentPermission.companyId);
+        console.log('🏪 loadStoresForPOS: Calling getActiveStoresForDropdown with companyId:', currentPermission.companyId);
         // Use the same centralized method as Access Management
         const stores = await this.storeService.getActiveStoresForDropdown(currentPermission.companyId);
+        console.log('🏪 loadStoresForPOS: Received stores:', stores.length);
+        console.log('🏪 loadStoresForPOS: Store details:', stores.map(s => ({ 
+          id: s.id, 
+          name: s.storeName, 
+          status: s.status,
+          companyId: s.companyId
+        })));
+        
         this.storesSignal.set(stores);
-        console.log('✅ Stores loaded for POS:', stores.length, 'stores');
+        console.log('✅ loadStoresForPOS: Stores set in signal:', stores.length, 'stores');
+        
+        // Verify signal was set correctly
+        const verifyStores = this.storesSignal();
+        console.log('🔍 loadStoresForPOS: Verification - storesSignal now contains:', verifyStores.length, 'stores');
       } else {
-        console.warn('⚠️ No companyId available for loading stores');
+        console.warn('⚠️ loadStoresForPOS: No companyId available for loading stores');
       }
     } catch (error) {
-      console.error('❌ Error loading stores for POS:', error);
+      console.error('❌ loadStoresForPOS: Error loading stores:', error);
       this.storesSignal.set([]);
     }
   }
@@ -4852,13 +4968,8 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     const customerInfo = this.customerInfo;
     const currentUser = this.authService.currentUser();
     
-    // Get company information for tax ID and phone
-    let company = null;
-    try {
-      company = await this.companyService.getActiveCompany();
-    } catch (error) {
-      console.warn('Could not fetch company info for receipt:', error);
-    }
+    // Use cached company data for faster receipt preparation (no async fetch needed)
+    const company = this.cachedCompanySignal();
     
     // Get date and invoice number from shared service (receipt panel data)
     const receiptDate = this.posSharedService.orderDate();
