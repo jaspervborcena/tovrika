@@ -263,8 +263,21 @@
 
             <!-- Products Display (shown only for New access tab). Orders will use the same area for results -->
             <div class="products-display" *ngIf="accessTab() === 'New'">
+            
+            <!-- Empty State: No Products in Selected Store -->
+            <div *ngIf="currentStoreHasNoProducts() && availableStores().length > 0" class="empty-store-state">
+              <div class="empty-store-icon">📦</div>
+              <h3>No Products Found</h3>
+              <p class="empty-store-message">
+                There are no products available in <strong>{{ currentStoreName() }}</strong>.
+              </p>
+              <p class="empty-store-hint">
+                Try selecting a different store from the dropdown above.
+              </p>
+            </div>
+
             <!-- List View -->
-            <div *ngIf="currentView() === 'list'" class="products-list">
+            <div *ngIf="currentView() === 'list' && !currentStoreHasNoProducts()" class="products-list">
               <div 
                 *ngFor="let product of filteredProducts()"
                 (click)="addToCart(product)"
@@ -286,12 +299,28 @@
             </div>
 
             <!-- Grid View -->
-            <div *ngIf="currentView() === 'grid'" class="products-grid">
+            <div *ngIf="currentView() === 'grid' && !currentStoreHasNoProducts()" class="products-grid-container">
+              <!-- Left Arrow -->
+              <button 
+                *ngIf="hasPreviousPage()" 
+                class="grid-nav-arrow left-arrow"
+                (click)="previousPage()"
+                [disabled]="!hasPreviousPage()">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="15 18 9 12 15 6"></polyline>
+                </svg>
+              </button>
+
+              <!-- Grid with Touch Support -->
               <div 
-                *ngFor="let product of displayGridProducts()"
-                class="product-grid-item"
-                [class.disabled]="!canInteractWithProducts()"
-                [title]="'SKU: ' + product.skuId">
+                class="products-grid"
+                (touchstart)="onTouchStart($event)"
+                (touchend)="onTouchEnd($event)">
+                <div 
+                  *ngFor="let product of displayGridProducts()"
+                  class="product-grid-item"
+                  [class.disabled]="!canInteractWithProducts()"
+                  [title]="'SKU: ' + product.skuId">
                 <div class="product-image-container" (click)="openProductPreviewModal(product, $event)">
                   <img 
                     [src]="product.imageUrl || 'assets/noimage.png'"
@@ -322,6 +351,18 @@
                   </div>
                 </div>
               </div>
+              </div>
+
+              <!-- Right Arrow -->
+              <button 
+                *ngIf="hasNextPage()" 
+                class="grid-nav-arrow right-arrow"
+                (click)="nextPage()"
+                [disabled]="!hasNextPage()">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="9 18 15 12 9 6"></polyline>
+                </svg>
+              </button>
             </div>
 
             <!-- Favorites View (same as Grid but filtered by isFavorite) -->
@@ -880,7 +921,7 @@
       </div>
 
         <!-- Right Panel: Receipt/Cart -->
-        <div class="right-panel">
+        <div class="right-panel" [class.mobile-drawer-open]="showReceiptPanel()">
           <div class="receipt-panel">
             <!-- Receipt Header -->
             <!-- <div class="receipt-header">
@@ -1748,4 +1789,25 @@
         </div>
       </div>
     </div>
+
+    <!-- Mobile FAB (Floating Action Button) for Cart -->
+    <button 
+      *ngIf="isMobileView() && accessTab() === 'New'" 
+      class="mobile-cart-fab"
+      (click)="showReceiptPanel() ? showProductPanel() : showReceiptPanelView()"
+      [class.has-items]="cartItems().length > 0"
+      [class.is-back-button]="showReceiptPanel()">
+      <!-- Cart Icon (show when panel is closed) -->
+      <svg *ngIf="!showReceiptPanel()" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="9" cy="21" r="1"></circle>
+        <circle cx="20" cy="21" r="1"></circle>
+        <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path>
+      </svg>
+      <!-- Back Arrow Icon (show when panel is open) -->
+      <svg *ngIf="showReceiptPanel()" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M19 12H5"></path>
+        <polyline points="12 19 5 12 12 5"></polyline>
+      </svg>
+      <span class="fab-badge" *ngIf="getCartItemCount() > 0 && !showReceiptPanel()">{{ getCartItemCount() }}</span>
+    </button>
 

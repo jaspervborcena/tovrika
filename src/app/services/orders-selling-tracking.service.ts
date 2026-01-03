@@ -1,6 +1,6 @@
 import { Injectable, inject } from '@angular/core';
 import { Firestore, collection, query, where } from '@angular/fire/firestore';
-import { getDocs, getDoc, doc, setDoc, updateDoc, runTransaction, orderBy, limit, getAggregateFromServer, count } from 'firebase/firestore';
+import { getDocs, getDoc, doc, setDoc, updateDoc, runTransaction, orderBy, limit, getAggregateFromServer, count, addDoc } from 'firebase/firestore';
 import { toDateValue } from '../core/utils/date-utils';
 import { OfflineDocumentService } from '../core/services/offline-document.service';
 import { OrdersSellingTrackingDoc } from '../interfaces/orders-selling-tracking.interface';

@@ -941,36 +941,177 @@ import { SubscriptionService } from '../../../services/subscription.service';
 
     /* Responsive - Subscription Section */
     @media (max-width: 768px) {
+      .header {
+        padding: 1rem 0;
+      }
+
+      .header-content {
+        padding: 0 0.75rem;
+      }
+
+      .page-title {
+        font-size: 1.25rem;
+      }
+
+      .page-subtitle {
+        font-size: 0.875rem;
+      }
+
+      .header-actions {
+        width: 100%;
+        flex-direction: column;
+      }
+
+      .btn {
+        width: 100%;
+        justify-content: center;
+        font-size: 0.8125rem;
+        padding: 0.625rem 1rem;
+      }
+
+      .content-container {
+        padding: 1rem;
+      }
+
+      .tab-navigation {
+        padding: 0.25rem;
+      }
+
+      .tab-button {
+        padding: 0.625rem 0.75rem;
+        font-size: 0.8125rem;
+      }
+
+      .tab-icon {
+        width: 1rem;
+        height: 1rem;
+      }
+
+      .subscription-section {
+        padding: 1rem;
+      }
+
       .section-header {
         flex-direction: column;
         gap: 1rem;
         align-items: flex-start;
       }
 
+      .section-header h2 {
+        font-size: 1.125rem;
+      }
+
       .btn-add-subscription {
         width: 100%;
         justify-content: center;
+        font-size: 0.8125rem;
+        padding: 0.625rem 1rem;
       }
 
       .subscription-table {
-        font-size: 0.875rem;
+        font-size: 0.75rem;
+        display: block;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
       }
 
-      .subscription-table th,
+      .subscription-table thead,
+      .subscription-table tbody,
+      .subscription-table tr {
+        display: block;
+      }
+
+      .subscription-table thead {
+        display: none;
+      }
+
+      .subscription-table tr {
+        margin-bottom: 1rem;
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        padding: 0.75rem;
+        background: white;
+      }
+
       .subscription-table td {
-        padding: 0.75rem 0.5rem;
+        display: flex;
+        justify-content: space-between;
+        padding: 0.5rem 0;
+        border-bottom: 1px solid #f3f4f6;
+        font-size: 0.8125rem;
+      }
+
+      .subscription-table td:last-child {
+        border-bottom: none;
+      }
+
+      .subscription-table td::before {
+        content: attr(data-label);
+        font-weight: 600;
+        color: #6b7280;
+        margin-right: 1rem;
       }
 
       .action-buttons {
-        justify-content: center;
+        justify-content: flex-end;
+        gap: 0.5rem;
       }
 
-      .btn-icon-action[title]:hover::after {
-        display: none;
+      .btn-icon-action {
+        padding: 0.5rem;
       }
 
+      .btn-icon-action[title]:hover::after,
       .btn-icon-action[title]:hover::before {
         display: none;
+      }
+
+      .form-container {
+        padding: 0.75rem;
+      }
+
+      .company-form {
+        padding: 1rem;
+      }
+
+      .form-group label {
+        font-size: 0.8125rem;
+      }
+
+      .form-control {
+        font-size: 0.875rem;
+        padding: 0.625rem;
+      }
+
+      .form-actions {
+        flex-direction: column;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .page-title {
+        font-size: 1.125rem;
+      }
+
+      .page-subtitle {
+        font-size: 0.8125rem;
+      }
+
+      .btn {
+        font-size: 0.75rem;
+        padding: 0.5rem 0.875rem;
+      }
+
+      .subscription-table {
+        font-size: 0.6875rem;
+      }
+
+      .subscription-table td {
+        font-size: 0.75rem;
+      }
+
+      .section-header h2 {
+        font-size: 1rem;
       }
     }
   `]

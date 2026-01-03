@@ -10,6 +10,7 @@ import { getPlanByTier, calculateFinalAmount, calculateExpiryDate } from '../../
 import { CompanyService } from '../../../services/company.service';
 import { ToastService } from '../../../shared/services/toast.service';
 import { SubscriptionRequest } from '../../../interfaces/subscription-request.interface';
+import { OfflineDocumentService } from '../../../core/services/offline-document.service';
 
 type Tier = 'standard' | 'premium';
 type PaymentMethod = 'gcash' | 'paymaya' | 'paypal';
@@ -29,6 +30,7 @@ export class UpgradeSubscriptionModalComponent implements OnChanges {
   private readonly companyService = inject(CompanyService);
   private readonly toast = inject(ToastService);
   private readonly firestore = inject(Firestore);
+  private readonly offlineDocService = inject(OfflineDocumentService);
 
   @Input() isOpen = false;
   @Input() companyId = '';
@@ -279,10 +281,34 @@ export class UpgradeSubscriptionModalComponent implements OnChanges {
       };
 
       const requestsRef = collection(this.firestore, 'subscriptionRequests');
-      const docRef = await addDoc(requestsRef, requestData);
-
-      console.log('✅ Subscription request created for admin approval:', docRef.id);
-      this.toast.success('Subscription upgrade request submitted! Waiting for admin approval.');
+      
+      try {
+        const docRef = await addDoc(requestsRef, requestData);
+        console.log('✅ Subscription request created for admin approval:', docRef.id);
+        this.toast.success('Subscription upgrade request submitted! Waiting for admin approval.');
+      } catch (error) {
+        console.warn('⚠️ Failed to create subscription request online, trying offline mode:', error);
+        
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        const isNetworkError = errorMessage.includes('timeout') || 
+                              errorMessage.includes('network') || 
+                              errorMessage.includes('connection') ||
+                              !navigator.onLine;
+        
+        if (isNetworkError) {
+          console.log('📱 Creating subscription request in offline mode...');
+          try {
+            const offlineId = await this.offlineDocService.createDocument('subscriptionRequests', requestData);
+            console.log('✅ Offline subscription request created:', offlineId);
+            this.toast.success('Subscription upgrade request queued offline! It will be submitted when connection is restored.');
+          } catch (offlineError) {
+            console.error('❌ Failed to create subscription request both online and offline:', offlineError);
+            throw new Error('Failed to submit subscription request. Please check your connection and try again.');
+          }
+        } else {
+          throw error;
+        }
+      }
     } catch (error) {
       console.error('❌ Failed to create subscription request:', error);
       throw error;
