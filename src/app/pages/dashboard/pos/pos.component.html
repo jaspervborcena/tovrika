@@ -263,8 +263,21 @@
 
             <!-- Products Display (shown only for New access tab). Orders will use the same area for results -->
             <div class="products-display" *ngIf="accessTab() === 'New'">
+            
+            <!-- Empty State: No Products in Selected Store -->
+            <div *ngIf="currentStoreHasNoProducts() && availableStores().length > 0" class="empty-store-state">
+              <div class="empty-store-icon">📦</div>
+              <h3>No Products Found</h3>
+              <p class="empty-store-message">
+                There are no products available in <strong>{{ currentStoreName() }}</strong>.
+              </p>
+              <p class="empty-store-hint">
+                Try selecting a different store from the dropdown above.
+              </p>
+            </div>
+
             <!-- List View -->
-            <div *ngIf="currentView() === 'list'" class="products-list">
+            <div *ngIf="currentView() === 'list' && !currentStoreHasNoProducts()" class="products-list">
               <div 
                 *ngFor="let product of filteredProducts()"
                 (click)="addToCart(product)"
@@ -286,7 +299,7 @@
             </div>
 
             <!-- Grid View -->
-            <div *ngIf="currentView() === 'grid'" class="products-grid-container">
+            <div *ngIf="currentView() === 'grid' && !currentStoreHasNoProducts()" class="products-grid-container">
               <!-- Left Arrow -->
               <button 
                 *ngIf="hasPreviousPage()" 

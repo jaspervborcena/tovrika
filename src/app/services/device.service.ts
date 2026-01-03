@@ -59,10 +59,34 @@ export class DeviceService {
       }, navigator.onLine as boolean);
 
       const devicesRef = collection(this.firestore, 'devices');
-      const docRef = await addDoc(devicesRef, device);
-
-      console.log('✅ Device created with ID:', docRef.id);
-      return docRef.id;
+      
+      try {
+        const docRef = await addDoc(devicesRef, device);
+        console.log('✅ Device created with ID:', docRef.id);
+        return docRef.id;
+      } catch (error) {
+        console.warn('⚠️ Failed to create device online, trying offline mode:', error);
+        
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        const isNetworkError = errorMessage.includes('timeout') || 
+                              errorMessage.includes('network') || 
+                              errorMessage.includes('connection') ||
+                              !navigator.onLine;
+        
+        if (isNetworkError) {
+          console.log('📱 Creating device in offline mode...');
+          try {
+            const offlineId = await this.offlineDocService.createDocument('devices', device);
+            console.log('✅ Offline device created with ID:', offlineId);
+            return offlineId;
+          } catch (offlineError) {
+            console.error('❌ Failed to create device both online and offline:', offlineError);
+            throw new Error('Failed to register device. Please check your connection and try again.');
+          }
+        } else {
+          throw error;
+        }
+      }
     } catch (error) {
       console.error('❌ Error creating device:', error);
       throw error;

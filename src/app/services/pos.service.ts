@@ -661,12 +661,38 @@ export class PosService {
       console.log('📦 Complete orderData being sent to invoice service:', JSON.stringify(orderData, null, 2));
       
       // 🧾 Execute invoice transaction with NEW structure
-      const invoiceResult = await this.invoiceService.processInvoiceTransaction({
-        storeId: storeId,
-        orderData: orderData,
-        customerInfo: customerInfo, // Pass as separate parameter
-        paymentsData: payments      // Pass as separate parameter
-      });
+      // Only apply timeout when online - offline mode should work without timeout
+      let invoiceResult;
+      try {
+        const invoicePromise = this.invoiceService.processInvoiceTransaction({
+          storeId: storeId,
+          orderData: orderData,
+          customerInfo: customerInfo, // Pass as separate parameter
+          paymentsData: payments      // Pass as separate parameter
+        });
+        
+        // Only apply timeout if we're online - Firestore offline persistence should handle offline seamlessly
+        if (navigator.onLine) {
+          console.log('🌐 Online mode: applying 8-second timeout for invoice transaction');
+          const timeoutPromise = new Promise<never>((_, reject) => 
+            setTimeout(() => reject(new Error('Invoice transaction timeout - switching to offline mode')), 8000)
+          );
+          
+          invoiceResult = await Promise.race([invoicePromise, timeoutPromise]);
+        } else {
+          console.log('📴 Offline mode: processing invoice without timeout (Firestore persistence active)');
+          invoiceResult = await invoicePromise;
+        }
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        
+        // If timeout or network error, the invoice service should have already switched to offline mode
+        if (errorMessage.includes('timeout') || errorMessage.includes('network') || !navigator.onLine) {
+          console.log('⚠️ Network timeout detected, invoice service should handle offline mode automatically');
+        }
+        
+        throw error; // Let the invoice service handle offline processing
+      }
 
       // Check transaction result
       if (!invoiceResult.success) {
@@ -680,19 +706,19 @@ export class PosService {
 
       // Record accounting ledger entry for the created order (non-blocking)
       try {
-        // Skip ledger recording if offline - it will be handled when synced
+        // Always record ledger - Firestore offline persistence will handle sync
+        const ledgerPromise = this.ledgerService.recordEvent(
+          company.id!,
+          storeId,
+          invoiceResult.orderId!,
+          'completed',
+          Number(cartSummary.netAmount || 0),
+          Number(cartSummary.totalQuantity || 0),
+          user.uid
+        );
+        
         if (navigator.onLine) {
-          // Add timeout to prevent hanging on slow connections
-          const ledgerPromise = this.ledgerService.recordEvent(
-            company.id!,
-            storeId,
-            invoiceResult.orderId!,
-            'completed',
-            Number(cartSummary.netAmount || 0),
-            Number(cartSummary.totalQuantity || 0),
-            user.uid
-          );
-          
+          // Add timeout only when online to prevent hanging on slow connections
           const ledgerRes: any = await Promise.race([
             ledgerPromise,
             new Promise((_, reject) => setTimeout(() => reject(new Error('Ledger recording timeout')), 5000))
@@ -700,7 +726,9 @@ export class PosService {
           
           console.log('LedgerService: order ledger entry created for', invoiceResult.orderId, 'docId=', ledgerRes?.id, 'runningBalance=', ledgerRes?.runningBalanceAmount, ledgerRes?.runningBalanceQty);
         } else {
-          console.log('📱 Offline: Skipping ledger entry - will sync when online');
+          // Offline: Let it complete without timeout - Firestore persistence will queue it
+          console.log('📱 Offline: Recording ledger entry (will auto-sync when online)');
+          await ledgerPromise;
         }
       } catch (ledgerErr) {
         console.warn('LedgerService: failed to create ledger entry (non-blocking):', ledgerErr);
@@ -713,11 +741,11 @@ export class PosService {
         
         // Mark tracking docs as completed for this order (if any were created as pending)
         try {
-          // Skip tracking update if offline - Firestore will handle sync
+          // Always mark tracking - Firestore offline persistence will handle sync
+          const trackingPromise = this.ordersSellingTrackingService.markOrderTrackingCompleted(invoiceResult.orderId!, user.uid);
+          
           if (navigator.onLine) {
-            // Add timeout to prevent hanging on slow connections
-            const trackingPromise = this.ordersSellingTrackingService.markOrderTrackingCompleted(invoiceResult.orderId!, user.uid);
-            
+            // Add timeout only when online to prevent hanging on slow connections
             const markRes = await Promise.race([
               trackingPromise,
               new Promise((_, reject) => setTimeout(() => reject(new Error('Tracking update timeout')), 5000))
@@ -729,7 +757,9 @@ export class PosService {
               console.log(`✅ Marked ${markRes?.updated || 0} tracking docs completed for order ${invoiceResult.orderId}`);
             }
           } else {
-            console.log('📱 Offline: Skipping tracking update - will sync when online');
+            // Offline: Let it complete without timeout - Firestore persistence will queue it
+            console.log('📱 Offline: Marking tracking completed (will auto-sync when online)');
+            await trackingPromise;
           }
         } catch (markErr) {
           console.warn('⚠️ Failed to mark ordersSellingTracking docs completed (non-blocking):', markErr);

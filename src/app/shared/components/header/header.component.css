@@ -1,4 +1,4 @@
-/* Professional Dashboard Layout CSS */
+
 .dashboard-layout {
   min-height: 100vh;
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
@@ -87,17 +87,39 @@ body:has(.dashboard-header.header-collapsed) main {
   padding: 0 !important;
   width: 2.5rem;
   height: 2.5rem;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.1) !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
   border-radius: 12px;
   transition: all 0.3s ease;
   color: white !important;
+  filter: none !important;
+}
+
+.dashboard-header .language-btn,
+.language-selector .language-btn,
+button.language-btn {
+  background: rgba(255, 255, 255, 0.1) !important;
+  color: white !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
 }
 
 .language-btn:hover {
-  background: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.2) !important;
   transform: translateY(-2px);
   box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+  color: white !important;
+}
+
+.language-btn:active,
+.language-btn:focus,
+.language-btn:visited {
+  background: rgba(255, 255, 255, 0.1) !important;
+  color: white !important;
+}
+
+.language-btn .language-icon {
+  color: white !important;
+  filter: none !important;
 }
 
 .language-flag {
@@ -109,6 +131,16 @@ body:has(.dashboard-header.header-collapsed) main {
   font-size: 20px;
   line-height: 1;
   display: inline-block;
+  color: white !important;
+  filter: none !important;
+}
+
+.language-selector .language-icon,
+.header-content .language-icon,
+button .language-icon,
+.language-btn .language-icon {
+  color: white !important;
+  filter: none !important;
 }
 
 .language-text {
@@ -231,6 +263,21 @@ header.dashboard-header.offline {
   max-width: 100%;
   margin: 0 auto;
   padding: 0 2rem;
+}
+
+/* Ensure all buttons in header-content maintain white styling */
+.header-content .language-btn,
+.header-content button.language-btn,
+.header-content .header-btn.language-btn {
+  background: rgba(255, 255, 255, 0.1) !important;
+  color: white !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+}
+
+.header-content .language-btn:hover,
+.header-content button.language-btn:hover {
+  background: rgba(255, 255, 255, 0.2) !important;
+  color: white !important;
 }
 
 .header-left {
@@ -930,6 +977,10 @@ header.dashboard-header.offline {
 }
 
 @media (max-width: 640px) {
+  .language-icon {
+    font-size: 18px;
+  }
+
   .dashboard-content {
     flex-direction: column;
   }

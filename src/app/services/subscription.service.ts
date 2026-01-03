@@ -53,8 +53,32 @@ export class SubscriptionService {
     };
 
     const colRef = collection(this.firestore, this.collectionName);
-    const docRef = await addDoc(colRef, payload);
-    return docRef.id;
+    
+    try {
+      const docRef = await addDoc(colRef, payload);
+      return docRef.id;
+    } catch (error) {
+      console.warn('⚠️ Failed to create subscription online, trying offline mode:', error);
+      
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const isNetworkError = errorMessage.includes('timeout') || 
+                            errorMessage.includes('network') || 
+                            errorMessage.includes('connection') ||
+                            !navigator.onLine;
+      
+      if (isNetworkError) {
+        console.log('📱 Creating subscription in offline mode...');
+        try {
+          const offlineId = await this.offlineDocService.createDocument(this.collectionName, payload);
+          return offlineId;
+        } catch (offlineError) {
+          console.error('❌ Failed to create subscription both online and offline:', offlineError);
+          throw new Error('Failed to create subscription. Please check your connection and try again.');
+        }
+      } else {
+        throw error;
+      }
+    }
   }
 
   /** Helper: Create a 14-day trial subscription */

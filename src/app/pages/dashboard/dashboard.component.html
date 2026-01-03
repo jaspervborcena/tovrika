@@ -23,20 +23,6 @@
       <div class="header-right">
         <div class="header-actions">
           
-          <!-- Store Selector (only show when multiple stores exist) -->
-          <div class="store-selector" *ngIf="stores().length > 1" (click)="$event.stopPropagation()">
-            <select 
-              [value]="selectedStoreId()" 
-              (change)="onStoreChange($event)"
-              class="header-select"
-              title="Select Store">
-              <option value="" disabled>Select Store</option>
-              <option *ngFor="let store of stores()" [value]="store.id">
-                🏪 {{ store.storeName }}
-              </option>
-            </select>
-          </div>
-          
           <!-- Language Selector -->
           <div class="language-selector" (click)="$event.stopPropagation()">
             <button class="header-btn language-btn" 

@@ -124,6 +124,18 @@ button svg, .btn svg {
   height: 16px !important;
 }
 
+/* Force language icon to always be white in header */
+.language-icon,
+button .language-icon,
+.language-btn .language-icon,
+.header-btn .language-icon,
+.language-selector .language-icon,
+span.language-icon {
+  color: white !important;
+  filter: none !important;
+  -webkit-text-fill-color: white !important;
+}
+
 /* Navigation icon consistency - compact for navigation */
 nav svg, .nav svg, .menu svg, .navbar svg {
   width: 16px !important;

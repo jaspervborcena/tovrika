@@ -142,29 +142,8 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     
     console.log('🏪 Available stores:', stores.map(s => ({ id: s.id, name: s.storeName, status: s.status })));
     
-    // Count products per store and prioritize stores with products
-    const allProducts = this.productService.getProductsSignal()();
-    const storeProductCounts = new Map<string, number>();
-    
-    stores.forEach(store => {
-      const productCount = allProducts.filter(p => p.storeId === store.id).length;
-      storeProductCounts.set(store.id || '', productCount);
-    });
-    
-    // Sort stores: stores with products first, then by product count descending
-    const sortedStores = [...stores].sort((a, b) => {
-      const countA = storeProductCounts.get(a.id || '') || 0;
-      const countB = storeProductCounts.get(b.id || '') || 0;
-      
-      // If one has products and other doesn't, prioritize the one with products
-      if (countA > 0 && countB === 0) return -1;
-      if (countA === 0 && countB > 0) return 1;
-      
-      // If both have products or both don't, sort by count descending
-      return countB - countA;
-    });
-    
-    return sortedStores;
+    // Return stores in their original order without sorting
+    return stores;
   });
   readonly selectedStoreId = computed(() => this.posService.selectedStoreId());
   readonly cartItems = computed(() => this.posService.cartItems());
@@ -211,6 +190,25 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   readonly currentStoreInfo = computed(() => 
     this.availableStores().find(s => s.id === this.selectedStoreId())
   );
+
+  // Check if current store has no products
+  readonly currentStoreHasNoProducts = computed(() => {
+    const storeId = this.selectedStoreId();
+    const filtered = this.filteredProducts();
+    const allProducts = this.products();
+    
+    if (!storeId) return false;
+    
+    // Check if there are any products for this specific store
+    const storeProducts = allProducts.filter(p => p.storeId === storeId);
+    return storeProducts.length === 0 && filtered.length === 0;
+  });
+
+  // Get store name for empty state message
+  readonly currentStoreName = computed(() => {
+    const store = this.currentStoreInfo();
+    return store?.storeName || 'Unknown Store';
+  });
 
   // Sorting mode for products list/grid
   private sortModeSignal = signal<'asc' | 'desc' | 'mid'>('asc');
@@ -3247,14 +3245,66 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       // Close payment dialog after capturing values
       this.closePaymentDialog();
       
-      // Now complete the order with payment information (using captured values)
-      // Add timeout to prevent indefinite hanging
-      const orderPromise = this.completeOrderWithPayment(paymentInfo);
-      const timeoutPromise = new Promise<never>((_, reject) => 
-        setTimeout(() => reject(new Error('Order processing timeout - please check your connection')), 15000)
-      );
+      // Check if we're online or offline before processing
+      // Use both navigator.onLine and network service for more reliable detection
+      const navigatorOnline = navigator.onLine;
+      const networkServiceOnline = this.networkService.isOnline();
+      const isOnline = navigatorOnline && networkServiceOnline;
       
-      await Promise.race([orderPromise, timeoutPromise]);
+      console.log(`🌐 Network status check:`, {
+        navigator: navigatorOnline,
+        networkService: networkServiceOnline,
+        finalDecision: isOnline ? 'Online' : 'Offline'
+      });
+      
+      // If offline or slow connection detected, inform user and proceed with offline mode
+      if (!isOnline) {
+        const offlineConfirmation = await this.showConfirmationDialog({
+          title: '📴 Offline Mode',
+          message: 'You are currently offline. Your order will be saved locally and automatically synced when you reconnect.\n\nDo you want to proceed?',
+          confirmText: 'Proceed',
+          cancelText: 'Cancel'
+        });
+        
+        if (!offlineConfirmation) {
+          console.log('❌ User cancelled offline order processing');
+          this.posService['isProcessingSignal']?.set(false);
+          return;
+        }
+        
+        // Process offline without any timeout
+        console.log('📴 Processing in offline mode');
+        await this.completeOrderWithPayment(paymentInfo);
+      } else {
+        // Online mode - use short timeout to detect connection issues quickly
+        console.log('🌐 Processing in online mode');
+        const orderPromise = this.completeOrderWithPayment(paymentInfo);
+        const timeoutPromise = new Promise<never>((_, reject) => 
+          setTimeout(() => reject(new Error('Connection timeout')), 5000) // Short 5 second timeout
+        );
+        
+        try {
+          await Promise.race([orderPromise, timeoutPromise]);
+        } catch (error) {
+          // Quick timeout - ask user to proceed offline
+          console.warn('⚠️ Online processing timed out, offering offline mode');
+          
+          const proceedOffline = await this.showConfirmationDialog({
+            title: '⚠️ Connection Slow or Unavailable',
+            message: 'Your internet connection is too slow or unavailable. Would you like to process this order offline? It will sync automatically when connection improves.',
+            confirmText: 'Process Offline',
+            cancelText: 'Cancel'
+          });
+          
+          if (!proceedOffline) {
+            throw new Error('Order cancelled by user due to connection issues');
+          }
+          
+          // Process offline without timeout
+          console.log('📴 User chose offline processing');
+          await this.completeOrderWithPayment(paymentInfo);
+        }
+      }
       
     } catch (error) {
       console.error('❌ Error processing payment:', error);
@@ -3335,10 +3385,60 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       }
 
       // Use the invoice service with the new data structure
-      const result = await this.posService.processOrderWithInvoiceAndPayment(
-        processedCustomerInfo,
-        paymentsData
-      );
+      // Add better error handling and offline detection
+      let result;
+      try {
+        // Log progress for offline mode
+        if (!navigator.onLine) {
+          console.log('📴 Processing order in offline mode...');
+          console.log('📴 Step 1: Saving order locally...');
+        }
+        
+        result = await this.posService.processOrderWithInvoiceAndPayment(
+          processedCustomerInfo,
+          paymentsData
+        );
+        
+        if (!navigator.onLine) {
+          console.log('📴 Step 2: Order saved successfully, queued for sync');
+        }
+      } catch (error) {
+        // Check if this is a network/timeout error that should trigger offline mode
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        const isNetworkError = errorMessage.includes('timeout') || 
+                              errorMessage.includes('network') || 
+                              errorMessage.includes('connection') ||
+                              errorMessage.includes('Store read timeout') ||
+                              !navigator.onLine;
+        
+        // Only show offline fallback if we're actually online but experiencing issues
+        const isCurrentlyOnline = this.networkService.isOnline();
+        
+        if (isNetworkError && isCurrentlyOnline) {
+          console.log('🔄 Network error detected while online, offering offline fallback...');
+          
+          // Ask user if they want to proceed in offline mode
+          const offlineConfirmation = await this.showConfirmationDialog({
+            title: '⚠️ Connection Issue Detected',
+            message: 'Network connection is experiencing issues. Would you like to process this order offline? It will be auto-synced when connection is restored.\n\nNote: Inventory may be temporarily out of sync.',
+            confirmText: 'Proceed Offline',
+            cancelText: 'Cancel'
+          });
+          
+          if (!offlineConfirmation) {
+            throw new Error('Order cancelled by user due to connection issues');
+          }
+          
+          console.log('📴 User confirmed offline processing, retrying...');
+          // Retry with offline processing (Firestore persistence will handle it)
+          result = await this.posService.processOrderWithInvoiceAndPayment(
+            processedCustomerInfo,
+            paymentsData
+          );
+        } else {
+          throw error; // Re-throw non-network errors or if already offline
+        }
+      }
       
       if (!result || !result.orderId) {
         throw new Error('Failed to process order with invoice');
@@ -3698,10 +3798,26 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
             console.log('⚠️ Could not get storeId from IndexedDB permissions:', error);
           }
           
-          // Fallback to first available store if no IndexedDB store found
+          // Fallback: Prioritize stores with products if no IndexedDB store found
           if (!storeIdToSelect) {
-            storeIdToSelect = stores[0]?.id || null;
-            console.log('🗄️ FALLBACK: Using first available store:', storeIdToSelect);
+            // Get all products to check which stores have data
+            const allProducts = this.productService.getProductsSignal()();
+            
+            // Find store with products
+            const storeWithProducts = stores.find(store => {
+              const storeProducts = allProducts.filter(p => p.storeId === store.id);
+              return storeProducts.length > 0;
+            });
+            
+            if (storeWithProducts?.id) {
+              storeIdToSelect = storeWithProducts.id;
+              console.log('🗄️ FALLBACK: Using store with products:', storeIdToSelect, 
+                `(${allProducts.filter(p => p.storeId === storeIdToSelect).length} products)`);
+            } else {
+              // If no stores have products, use first available store
+              storeIdToSelect = stores[0]?.id || null;
+              console.log('🗄️ FALLBACK: No stores with products, using first available store:', storeIdToSelect);
+            }
           }
           
           const storeToSelect = stores.find(store => store.id === storeIdToSelect);
