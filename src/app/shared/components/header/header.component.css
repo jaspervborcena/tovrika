@@ -1,4 +1,4 @@
-/* Professional Dashboard Layout CSS */
+
 .dashboard-layout {
   min-height: 100vh;
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
@@ -17,7 +17,61 @@
   right: 0;
   z-index: 50;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  transition: background 0.3s ease;
+  transition: all 0.3s ease;
+}
+
+/* Header collapsed state */
+.dashboard-header.header-collapsed {
+  transform: translateY(-100%);
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Adjust main content when header is collapsed */
+.dashboard-header.header-collapsed ~ * .pos-container,
+.dashboard-header.header-collapsed ~ .pos-container,
+body:has(.dashboard-header.header-collapsed) .pos-container,
+body:has(.dashboard-header.header-collapsed) .dashboard-main,
+body:has(.dashboard-header.header-collapsed) .auth-wrapper,
+body:has(.dashboard-header.header-collapsed) main {
+  margin-top: 0 !important;
+  padding-top: 10px !important;
+  min-height: 100vh !important;
+  transition: all 0.3s ease;
+}
+
+/* FAB Button to show header */
+.show-header-fab {
+  position: fixed;
+  top: 10px;
+  right: 20px;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  box-shadow: 0 4px 20px rgba(102, 126, 234, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 1000;
+  transition: all 0.3s ease;
+}
+
+.show-header-fab:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 30px rgba(102, 126, 234, 0.5);
+}
+
+.show-header-fab:active {
+  transform: translateY(0);
+}
+
+.show-header-fab svg {
+  width: 24px;
+  height: 24px;
 }
 
 /* Language Selector Styles */
@@ -29,24 +83,64 @@
 .language-btn {
   display: flex !important;
   align-items: center;
-  gap: 8px;
-  padding: 8px 12px !important;
-  background: rgba(255, 255, 255, 0.15);
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  border-radius: 6px;
-  transition: all 0.2s ease;
-  min-width: 120px;
+  justify-content: center;
+  padding: 0 !important;
+  width: 2.5rem;
+  height: 2.5rem;
+  background: rgba(255, 255, 255, 0.1) !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  border-radius: 12px;
+  transition: all 0.3s ease;
   color: white !important;
+  filter: none !important;
+}
+
+.dashboard-header .language-btn,
+.language-selector .language-btn,
+button.language-btn {
+  background: rgba(255, 255, 255, 0.1) !important;
+  color: white !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
 }
 
 .language-btn:hover {
-  background: rgba(255, 255, 255, 0.2);
-  transform: translateY(-1px);
+  background: rgba(255, 255, 255, 0.2) !important;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+  color: white !important;
+}
+
+.language-btn:active,
+.language-btn:focus,
+.language-btn:visited {
+  background: rgba(255, 255, 255, 0.1) !important;
+  color: white !important;
+}
+
+.language-btn .language-icon {
+  color: white !important;
+  filter: none !important;
 }
 
 .language-flag {
   font-size: 16px;
   line-height: 1;
+}
+
+.language-icon {
+  font-size: 20px;
+  line-height: 1;
+  display: inline-block;
+  color: white !important;
+  filter: none !important;
+}
+
+.language-selector .language-icon,
+.header-content .language-icon,
+button .language-icon,
+.language-btn .language-icon {
+  color: white !important;
+  filter: none !important;
 }
 
 .language-text {
@@ -56,10 +150,11 @@
 }
 
 .dropdown-arrow {
-  width: 16px;
-  height: 16px;
+  width: 10px;
+  height: 10px;
   transition: transform 0.2s ease;
-  margin-left: auto;
+  margin-left: 0;
+  flex-shrink: 0;
 }
 
 .dropdown-arrow.rotated {
@@ -170,6 +265,21 @@ header.dashboard-header.offline {
   padding: 0 2rem;
 }
 
+/* Ensure all buttons in header-content maintain white styling */
+.header-content .language-btn,
+.header-content button.language-btn,
+.header-content .header-btn.language-btn {
+  background: rgba(255, 255, 255, 0.1) !important;
+  color: white !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+}
+
+.header-content .language-btn:hover,
+.header-content button.language-btn:hover {
+  background: rgba(255, 255, 255, 0.2) !important;
+  color: white !important;
+}
+
 .header-left {
   display: flex;
   align-items: center;
@@ -276,9 +386,10 @@ header.dashboard-header.offline {
 }
 
 .header-btn svg {
-  width: 1.25rem;
-  height: 1.25rem;
+  width: 20px;
+  height: 20px;
   display: inline-block;
+  flex-shrink: 0;
 }
 
 
@@ -508,13 +619,14 @@ header.dashboard-header.offline {
   border: 1px solid rgba(255, 255, 255, 0.15);
   border-radius: 12px;
   cursor: pointer;
-  transition: all 0.2s ease;
-  font-size: 1.25rem; /* emoji size */
+  transition: all 0.3s ease;
+  font-size: 18px; /* emoji size - matches other icons */
 }
 
 .view-toggle:hover {
   background: rgba(255, 255, 255, 0.2);
   transform: translateY(-2px);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
 }
 
 .view-icon {
@@ -834,7 +946,7 @@ header.dashboard-header.offline {
 
 @media (max-width: 768px) {
   .header-left {
-    gap: 1rem;
+    gap: 0.5rem;
   }
   
   .breadcrumb {
@@ -843,6 +955,11 @@ header.dashboard-header.offline {
   
   .header-actions {
     gap: 0.25rem;
+  }
+  
+  .header-btn {
+    padding: 6px;
+    min-width: auto;
   }
   
   .dashboard-sidebar {
@@ -860,6 +977,10 @@ header.dashboard-header.offline {
 }
 
 @media (max-width: 640px) {
+  .language-icon {
+    font-size: 18px;
+  }
+
   .dashboard-content {
     flex-direction: column;
   }
@@ -880,7 +1001,45 @@ header.dashboard-header.offline {
   }
   
   .logo-text {
-    font-size: 1.5rem;
+    display: none !important;
+  }
+
+  /* Extra compact header for very small screens */
+  .header-content {
+    padding: 0.75rem 0.5rem;
+  }
+
+  .header-left {
+    gap: 0.25rem;
+    flex-shrink: 1;
+  }
+
+  .header-right {
+    flex-shrink: 0;
+  }
+
+  .header-actions {
+    gap: 0.15rem;
+  }
+
+  .header-btn {
+    padding: 4px;
+    min-width: 32px;
+    height: 32px;
+  }
+
+  .header-btn svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  .language-icon {
+    font-size: 18px;
+  }
+
+  .dropdown-arrow {
+    width: 14px;
+    height: 14px;
   }
   
   /* Mobile adjustments for fixed header */

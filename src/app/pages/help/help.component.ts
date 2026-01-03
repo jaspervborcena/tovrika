@@ -11,3 +11,4 @@ import { ContentLayoutComponent } from '../../shared/components/content-layout/c
   styleUrls: ['./help.component.css']
 })
 export class HelpComponent {}
+

@@ -55,8 +55,8 @@ export class HeaderComponent implements OnInit {
   protected availableLanguages = computed(() => this.translationService.availableLanguages);
   protected isLanguageMenuOpen = signal<boolean>(false);
   
-  // Notification control - disabled when not logged in
-  protected showNotifications = computed(() => !!this.currentUser());
+  // Header collapse/expand
+  protected isHeaderCollapsed = signal<boolean>(false);
   
   // App constants and network status
   protected isOnline = computed(() => {
@@ -217,6 +217,15 @@ export class HeaderComponent implements OnInit {
     console.log('🌐 Switching to language:', language.code, language.name);
     this.translationService.setLanguage(language.code);
     this.isLanguageMenuOpen.set(false);
+  }
+
+  // Header collapse/expand methods
+  toggleHeaderCollapse(): void {
+    this.isHeaderCollapsed.set(!this.isHeaderCollapsed());
+  }
+
+  showHeader(): void {
+    this.isHeaderCollapsed.set(false);
   }
 
   @HostListener('document:click', ['$event'])

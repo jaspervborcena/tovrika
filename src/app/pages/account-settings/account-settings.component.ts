@@ -82,14 +82,20 @@ export class AccountSettingsComponent implements OnInit {
         let storeName: string | undefined;
         if (permission.storeId) {
           console.log('🏪 Fetching store from IndexedDB:', permission.storeId);
-          const store = await this.indexedDBService.getStoreById(permission.storeId);
-          console.log('🏪 Store data:', store);
-          if (store) {
-            storeName = store.storeName;
-            console.log('🏪 Store name:', storeName);
-          } else {
-            console.warn('⚠️ Store not found in IndexedDB:', permission.storeId);
-            storeName = 'Store not found';
+          try {
+            const store = await this.indexedDBService.getStoreById(permission.storeId);
+            console.log('🏪 Store data:', store);
+            if (store) {
+              storeName = store.storeName;
+              console.log('🏪 Store name:', storeName);
+            } else {
+              console.warn('⚠️ Store not found in IndexedDB:', permission.storeId);
+              storeName = 'Store not found';
+            }
+          } catch (indexedDBError) {
+            console.error('❌ Failed to fetch store from IndexedDB:', indexedDBError);
+            storeName = 'Error loading store';
+            // Continue with the flow instead of breaking
           }
         }
 

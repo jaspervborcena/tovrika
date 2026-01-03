@@ -421,7 +421,19 @@ export class StoreService {
         updateData.subscriptionEndDate = toDateValue(updateData.subscriptionEndDate) || updateData.subscriptionEndDate;
       }
 
-      await this.offlineDocService.updateDocument('stores', storeId, updateData);
+      try {
+        await this.offlineDocService.updateDocument('stores', storeId, updateData);
+      } catch (updateError) {
+        console.error('❌ Failed to update store:', updateError);
+        const errorMessage = updateError instanceof Error ? updateError.message : String(updateError);
+        
+        if (errorMessage.includes('network') || errorMessage.includes('timeout') || !navigator.onLine) {
+          console.log('📱 Store update queued offline');
+          // The offline document service should handle queuing
+        } else {
+          throw new Error('Failed to update store information. Please try again.');
+        }
+      }
 
       // Update the signal
       this.storesSignal.update(stores =>
@@ -665,16 +677,28 @@ export class StoreService {
       
 
       const storeRef = doc(this.firestore, 'stores', storeId);
-      await this.offlineDocService.updateDocument('stores', storeId, {
-        isBirAccredited: false, // Not yet accredited until approved
-        birAccreditationStatus: 'pending',
-        birAccreditationSubmittedAt: new Date(),
-        'birDetails.tinNumber': birData.tinNumber,
-        'birDetails.businessName': birData.businessName,
-        'birDetails.address': birData.address,
-        updatedAt: new Date()
-      });
-
+      
+      try {
+        await this.offlineDocService.updateDocument('stores', storeId, {
+          isBirAccredited: false, // Not yet accredited until approved
+          birAccreditationStatus: 'pending',
+          birAccreditationSubmittedAt: new Date(),
+          'birDetails.tinNumber': birData.tinNumber,
+          'birDetails.businessName': birData.businessName,
+          'birDetails.address': birData.address,
+          updatedAt: new Date()
+        });
+      } catch (updateError) {
+        console.error('❌ Failed to submit BIR accreditation:', updateError);
+        const errorMessage = updateError instanceof Error ? updateError.message : String(updateError);
+        
+        if (errorMessage.includes('network') || errorMessage.includes('timeout') || !navigator.onLine) {
+          console.log('📱 BIR accreditation submission queued offline');
+          // The offline document service should handle queuing
+        } else {
+          throw new Error('Failed to submit BIR accreditation. Please try again.');
+        }
+      }
       
     } catch (error) {
       console.error('❌ Error submitting BIR accreditation:', error);

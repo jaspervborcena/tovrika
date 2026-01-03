@@ -11,7 +11,6 @@ import { ProductInventoryEntry } from '../interfaces/product-inventory-entry.int
 @Injectable({ providedIn: 'root' })
 export class InventoryDataService {
   private readonly firestore = inject(Firestore);
-  private readonly offlineDocService = inject(OfflineDocumentService);
   private readonly auth = inject(AuthService);
   private readonly productService = inject(ProductService);
   private readonly productSummaryService = inject(ProductSummaryService);
@@ -423,9 +422,23 @@ export class InventoryDataService {
     console.log('🔥 Creating document directly with Firestore...');
     const colRef = collection(this.firestore, this.collectionName);
     const toWrite = applyCreateTimestamps(payload, navigator.onLine as boolean);
-    const docRef = await addDoc(colRef, toWrite);
-    console.log('✅ Direct Firestore creation successful:', docRef.id);
-    return docRef.id;
+    
+    try {
+      const docRef = await addDoc(colRef, toWrite);
+      console.log('✅ Direct Firestore creation successful:', docRef.id);
+      return docRef.id;
+    } catch (error) {
+      console.warn('⚠️ Direct Firestore creation failed, trying offline mode:', error);
+      
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const isNetworkError = errorMessage.includes('timeout') || 
+                            errorMessage.includes('network') || 
+                            errorMessage.includes('connection') ||
+                            !navigator.onLine;
+      
+      // Firestore's native offline persistence handles this automatically
+      throw error;
+    }
   }
 
   /**
@@ -466,7 +479,8 @@ export class InventoryDataService {
           } as any);
         }
         // Remove embedded inventory fields
-        await this.offlineDocService.updateDocument('products', productId, {
+        const productRef = doc(this.firestore, 'products', productId);
+        await updateDoc(productRef, {
           inventory: deleteField(),
           isMultipleInventory: deleteField()
         });

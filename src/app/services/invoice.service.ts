@@ -112,6 +112,12 @@ export class InvoiceService {
     
     console.log('🧾 Starting invoice transaction for store:', storeId);
     
+    // Check if we're offline first - no need to try online operations
+    if (!navigator.onLine) {
+      console.log('📴 Already offline - using offline processing immediately');
+      return await this.processOfflineInvoiceTransaction(transactionData);
+    }
+    
     try {
       // --- PREPARE NON-TRANSACTIONAL READS AND SECURITY DATA FIRST ---
       const storeDocRef = doc(this.firestore, 'stores', storeId);
@@ -121,21 +127,21 @@ export class InvoiceService {
       let useOfflineMode = false;
       
       try {
-        // Use a timeout to prevent hanging on slow connections
+        // Reduce timeout for faster offline detection
         storeSnapshot = await Promise.race([
           getDocFromServer(storeDocRef),
           new Promise<never>((_, reject) => 
-            setTimeout(() => reject(new Error('Store read timeout')), 3000)
+            setTimeout(() => reject(new Error('Store read timeout - switching to offline mode')), 2000)
           )
         ]);
       } catch (storeReadError) {
-        console.warn('⚠️ Failed to read store document:', storeReadError);
+        console.warn('⚠️ Failed to read store document, switching to offline mode:', storeReadError);
         useOfflineMode = true;
       }
       
       // If offline mode detected or store read failed, switch to offline processing
-      if (useOfflineMode || !navigator.onLine) {
-        console.log('📱 Offline mode detected - using offline document service');
+      if (useOfflineMode) {
+        console.log('📱 Network issue detected - using offline document service');
         return await this.processOfflineInvoiceTransaction(transactionData);
       }
       

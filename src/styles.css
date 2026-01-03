@@ -9,6 +9,15 @@
 /* POS Common Styles */
 @import './app/shared/styles/pos-common.css';
 
+/* Ensure body extends full width with no default white background */
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
 /* Global font styling for professional appearance */
 * {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
@@ -113,6 +122,18 @@ svg, svg * {
 button svg, .btn svg {
   width: 16px !important;
   height: 16px !important;
+}
+
+/* Force language icon to always be white in header */
+.language-icon,
+button .language-icon,
+.language-btn .language-icon,
+.header-btn .language-icon,
+.language-selector .language-icon,
+span.language-icon {
+  color: white !important;
+  filter: none !important;
+  -webkit-text-fill-color: white !important;
 }
 
 /* Navigation icon consistency - compact for navigation */
