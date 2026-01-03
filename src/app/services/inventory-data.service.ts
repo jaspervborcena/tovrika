@@ -173,13 +173,25 @@ export class InventoryDataService {
 
     console.log('🔐 User authenticated for batch creation:', { uid: user.uid, email: user.email, companyId: permission.companyId });
 
+    // Get the product's storeId first (before creating batch)
+    const productRef = doc(this.firestore, 'products', productId);
+    const productSnap = await getDoc(productRef);
+    
+    if (!productSnap.exists()) {
+      throw new Error(`Product ${productId} not found. Cannot create inventory batch for non-existent product.`);
+    }
+    
+    const productData = productSnap.data();
+    const productStoreId = productData?.['storeId'] || permission.storeId || '';
+    console.log('📦 Using storeId from product:', productStoreId, '(product storeId:', productData?.['storeId'], ', permission storeId:', permission.storeId, ')');
+
     // Prepare batch entry data
     const batchData: Omit<ProductInventoryEntry, 'id'> = {
       ...entry,
       productId,
       uid: user.uid,
       companyId: permission.companyId,
-      storeId: permission.storeId || '', // Handle potential undefined
+      storeId: productStoreId, // Use product's storeId, not permission's
       status: 'active',
       createdBy: user.uid,
       updatedBy: user.uid,

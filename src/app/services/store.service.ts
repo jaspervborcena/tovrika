@@ -583,14 +583,19 @@ export class StoreService {
 
   /**
    * Generate random invoice number (new approach - no sequential)
-   * Format: INV-YYMM-XXXXXX (where XXXXXX is random 6-digit number)
+   * Format: INV-YYMM-XXXXXXXXX (where XXXXXXXXX is timestamp + random for uniqueness)
    */
   generateRandomInvoiceNo(): string {
     const now = new Date();
     const yy = String(now.getFullYear()).slice(-2);
     const mm = String(now.getMonth() + 1).padStart(2, '0');
-    const random = Math.floor(100000 + Math.random() * 900000); // 6-digit random
-    return `INV-${yy}${mm}-${random}`;
+    
+    // Use timestamp (last 5 digits) + 4 random chars for better uniqueness
+    // This prevents collisions when creating multiple orders quickly
+    const timestamp = String(Date.now()).slice(-5); // Last 5 digits of timestamp
+    const random = Math.random().toString(36).substring(2, 6).toUpperCase(); // 4 random chars
+    
+    return `INV-${yy}${mm}-${timestamp}${random}`;
   }
 
   /**
