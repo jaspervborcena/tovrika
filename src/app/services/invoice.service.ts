@@ -7,6 +7,7 @@ import {
   runTransaction,
   collection,
   addDoc,
+  setDoc,
   DocumentReference,
   query,
   where,
@@ -17,6 +18,7 @@ import { StoreService } from './store.service';
 import { AuthService } from './auth.service';
 import { FirestoreSecurityService } from '../core/services/firestore-security.service';
 import { OfflineDocumentService } from '../core/services/offline-document.service';
+import { NetworkService } from '../core/services/network.service';
 import { OrderDetailsStatus } from '../interfaces/order-details.interface';
 
 export interface InvoiceTransactionData {
@@ -42,6 +44,7 @@ export class InvoiceService {
   private authService = inject(AuthService);
   private securityService = inject(FirestoreSecurityService);
   private offlineDocService = inject(OfflineDocumentService);
+  private networkService = inject(NetworkService);
   
   // Cache for invoice numbers to support offline mode
   private storeInvoiceCache = new Map<string, string>();
@@ -53,7 +56,7 @@ export class InvoiceService {
   async checkInvoiceNumberExists(invoiceNumber: string, storeId: string): Promise<boolean> {
     try {
       // Skip check in offline mode - Firestore offline persistence will handle conflicts
-      if (!navigator.onLine) {
+      if (!this.networkService.isOnline()) {
         console.log('📱 Offline mode - skipping invoice duplicate check');
         return false;
       }
@@ -113,7 +116,7 @@ export class InvoiceService {
     console.log('🧾 Starting invoice transaction for store:', storeId);
     
     // Check if we're offline first - no need to try online operations
-    if (!navigator.onLine) {
+    if (!this.networkService.isOnline()) {
       console.log('📴 Already offline - using offline processing immediately');
       return await this.processOfflineInvoiceTransaction(transactionData);
     }
@@ -360,7 +363,7 @@ export class InvoiceService {
       
       console.log('📋 Invoice number preview (random):', {
         preview: previewInvoice,
-        mode: navigator.onLine ? 'online' : 'offline',
+        mode: this.networkService.isOnline() ? 'online' : 'offline',
         note: 'Actual invoice will be generated during order creation'
       });
       
@@ -544,18 +547,15 @@ export class InvoiceService {
       // Save to Firestore with offline persistence enabled
       // Firestore will automatically queue this write and sync when online
       const ordersRef = collection(this.firestore, 'orders');
-      let orderDocRef;
+      const orderDocRef = doc(ordersRef); // Pre-generate ID
       
-      try {
-        // Save directly - Firestore offline persistence will queue if offline
-        orderDocRef = await addDoc(ordersRef, completeOrderData);
-        console.log('✅ Order saved/queued successfully:', orderDocRef.id);
-      } catch (saveError) {
-        console.warn('⚠️ Order save error, generating temp doc ref:', saveError);
-        // Generate a temporary doc reference for response
-        // Firestore offline persistence will handle the actual write
-        orderDocRef = doc(ordersRef);
-      }
+      // Fire-and-forget: Queue writes without waiting
+      // Firestore offline persistence handles queuing and sync automatically
+      setDoc(orderDocRef, completeOrderData).catch((error: any) => {
+        console.warn('⚠️ Order save queued (will sync when online):', error);
+      });
+      
+      console.log('✅ Order queued for sync:', orderDocRef.id);
       
       // Also save order details if there are items
       if (orderData.items && orderData.items.length > 0) {
@@ -576,14 +576,12 @@ export class InvoiceService {
           
           const orderDetailsRef = collection(this.firestore, 'orderDetails');
           
-          try {
-            // Save directly - Firestore offline persistence will queue if offline
-            await addDoc(orderDetailsRef, orderDetailsData);
-          } catch (detailsError) {
-            console.warn('⚠️ OrderDetails save error, continuing (queued by persistence):', detailsError);
-            // Continue - Firestore offline persistence will handle it
-          }
+          // Fire-and-forget: Queue writes without waiting
+          addDoc(orderDetailsRef, orderDetailsData).catch((error: any) => {
+            console.warn('⚠️ OrderDetails queued (will sync when online):', error);
+          });
         }
+        console.log(`✅ ${batches.length} orderDetails batches queued for sync`);
       }
       
       console.log('✅ Offline order saved successfully, will sync when online');

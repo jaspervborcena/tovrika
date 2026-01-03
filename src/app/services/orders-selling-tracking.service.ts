@@ -3,6 +3,8 @@ import { Firestore, collection, query, where } from '@angular/fire/firestore';
 import { getDocs, getDoc, doc, setDoc, updateDoc, runTransaction, orderBy, limit, getAggregateFromServer, count, addDoc } from 'firebase/firestore';
 import { toDateValue } from '../core/utils/date-utils';
 import { OfflineDocumentService } from '../core/services/offline-document.service';
+import { NetworkService } from '../core/services/network.service';
+import { IndexedDBService } from '../core/services/indexeddb.service';
 import { OrdersSellingTrackingDoc } from '../interfaces/orders-selling-tracking.interface';
 import { ProductService } from './product.service';
 import { LedgerService } from './ledger.service';
@@ -69,7 +71,9 @@ export class OrdersSellingTrackingService {
   constructor(
     private firestore: Firestore,
     private productService: ProductService,
-    private ledgerService: LedgerService
+    private ledgerService: LedgerService,
+    private networkService: NetworkService,
+    private indexedDBService: IndexedDBService
   ) {}
 
   /**
@@ -166,7 +170,7 @@ export class OrdersSellingTrackingService {
 
         if (!updatedAt || isServerTimestamp) {
           try {
-            if (navigator.onLine) {
+            if (this.networkService.isOnline()) {
               const ref = doc(this.firestore, 'ordersSellingTracking', s.id);
               await setDoc(ref as any, { updatedAt: createdDate }, { merge: true } as any);
             } else {
@@ -272,9 +276,9 @@ export class OrdersSellingTrackingService {
         uid: data.uid || data.createdBy || undefined,
         cashierId: data.cashierId || data.createdBy || undefined,
         status: 'returned',
-        createdAt: navigator.onLine ? onlineCreatedAt : offlineCreatedAt,
+        createdAt: this.networkService.isOnline() ? onlineCreatedAt : offlineCreatedAt,
         createdBy: returnedBy || data.updatedBy || data.createdBy || 'system',
-        updatedAt: navigator.onLine ? onlineCreatedAt : offlineCreatedAt,
+        updatedAt: this.networkService.isOnline() ? onlineCreatedAt : offlineCreatedAt,
         updatedBy: returnedBy || data.updatedBy || data.createdBy || 'system'
       };
       if (reason) newDoc.updateReason = reason;
@@ -364,9 +368,9 @@ async markOrderTrackingRefunded(orderId: string, refundedBy?: string, reason?: s
         uid: data.uid || data.createdBy || undefined,
         cashierId: data.cashierId || data.createdBy || undefined,
         status: 'refunded',
-        createdAt: navigator.onLine ? onlineCreatedAt : offlineCreatedAt,
+        createdAt: this.networkService.isOnline() ? onlineCreatedAt : offlineCreatedAt,
         createdBy: refundedBy || data.updatedBy || data.createdBy || 'system',
-        updatedAt: navigator.onLine ? onlineCreatedAt : offlineCreatedAt,
+        updatedAt: this.networkService.isOnline() ? onlineCreatedAt : offlineCreatedAt,
         updatedBy: refundedBy || data.updatedBy || data.createdBy || 'system'
       };
       if (reason) newDoc.updateReason = reason;
@@ -517,16 +521,16 @@ async createPartialTrackingFromDoc(trackingId: string, newStatus: string, qty: n
       uid: data.uid || data.createdBy || undefined,
       cashierId: data.cashierId || data.createdBy || undefined,
       status: newStatus,
-      createdAt: navigator.onLine ? onlineCreatedAt : offlineCreatedAt,
+      createdAt: this.networkService.isOnline() ? onlineCreatedAt : offlineCreatedAt,
       createdBy: createdBy || data.updatedBy || data.createdBy || 'system',
-      updatedAt: navigator.onLine ? onlineCreatedAt : offlineCreatedAt,
+      updatedAt: this.networkService.isOnline() ? onlineCreatedAt : offlineCreatedAt,
       updatedBy: createdBy || data.updatedBy || data.createdBy || 'system'
     };
 
     const newStatusLower = (newStatus || '').toString().toLowerCase();
     const isDamage = newStatusLower.includes('damage');
 
-    if (navigator.onLine) {
+    if (this.networkService.isOnline()) {
       const colRef = collection(this.firestore, 'ordersSellingTracking');
       const newRef = doc(colRef as any);
       const payload = this.sanitizeForFirestore(newDoc);
@@ -652,7 +656,7 @@ async createPartialTrackingFromDoc(trackingId: string, newStatus: string, qty: n
       }
       // If we created an online damaged/partial-damage tracking row, record a ledger 'damage' event
       try {
-        if (isDamage && navigator.onLine) {
+        if (isDamage && this.networkService.isOnline()) {
           const companyId = data.companyId || newDoc.companyId;
           const storeId = data.storeId || newDoc.storeId;
           const orderId = newDoc.orderId || data.orderId;
@@ -729,9 +733,9 @@ async markOrderTrackingDamaged(orderId: string, damagedBy?: string, reason?: str
         uid: data.uid || data.createdBy || undefined,
         cashierId: data.cashierId || data.createdBy || undefined,
         status: 'damaged',
-        createdAt: navigator.onLine ? onlineCreatedAt : offlineCreatedAt,
+        createdAt: this.networkService.isOnline() ? onlineCreatedAt : offlineCreatedAt,
         createdBy: damagedBy || data.updatedBy || data.createdBy || 'system',
-        updatedAt: navigator.onLine ? onlineCreatedAt : offlineCreatedAt,
+        updatedAt: this.networkService.isOnline() ? onlineCreatedAt : offlineCreatedAt,
         updatedBy: damagedBy || data.updatedBy || data.createdBy || 'system'
       };
       if (reason) newDoc.updateReason = reason;
@@ -884,7 +888,7 @@ async markOrderTrackingDamaged(orderId: string, damagedBy?: string, reason?: str
 
           // Record ledger entry for damage (online only)
           try {
-            if (navigator.onLine) {
+            if (this.networkService.isOnline()) {
               const companyId = data.companyId || newDoc.companyId;
               const storeId = data.storeId || newDoc.storeId;
               const ledgerOrderId = newDoc.orderId || data.orderId || orderId;
@@ -977,6 +981,19 @@ async markOrderTrackingDamaged(orderId: string, damagedBy?: string, reason?: str
 }
 
   /**
+   * Remove undefined fields from object (Firestore rejects undefined values)
+   */
+  private removeUndefinedFields(obj: any): any {
+    const cleaned: any = {};
+    for (const key in obj) {
+      if (obj[key] !== undefined) {
+        cleaned[key] = obj[key];
+      }
+    }
+    return cleaned;
+  }
+
+  /**
    * Log a batch of sale items for later reconciliation and apply stock deltas to products.
    * Best-effort per item; continues on individual failures, returns summary.
    */
@@ -1013,27 +1030,117 @@ async markOrderTrackingDamaged(orderId: string, damagedBy?: string, reason?: str
     for (const it of items) {
       try {
         // Step 1: Find batches for this product using FIFO (oldest first, active only)
-        // Ultra-simplified query to avoid ANY composite index - only use equality filters
-        const batchesQuery = query(
-          collection(this.firestore, 'productInventory'),
-          where('productId', '==', it.productId),
-          where('storeId', '==', ctx.storeId),
-          limit(100) // Get more batches since we're filtering/sorting client-side
-        );
+        let batches: any[] = [];
+        
+        // Try IndexedDB first when offline for guaranteed access
+        if (!this.networkService.isOnline()) {
+          console.log(`📱 Offline: Querying IndexedDB for product ${it.productId}`);
+          try {
+            batches = await this.indexedDBService.getProductInventoryBatches(
+              it.productId,
+              ctx.storeId,
+              ctx.companyId
+            );
+            console.log(`📦 IndexedDB returned ${batches.length} batches for product ${it.productId}`);
+          } catch (idbError) {
+            console.warn('⚠️ IndexedDB query failed, will try Firestore cache:', idbError);
+          }
+        }
+        
+        // If no IndexedDB results or online, query Firestore
+        if (batches.length === 0) {
+          const batchesQuery = query(
+            collection(this.firestore, 'productInventory'),
+            where('productId', '==', it.productId),
+            where('storeId', '==', ctx.storeId),
+            limit(100) // Get more batches since we're filtering/sorting client-side
+          );
 
-        const batchesSnapshot = await getDocs(batchesQuery);
-        const allBatches = batchesSnapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        })) as Array<any>;
+          let batchesSnapshot;
+          try {
+            batchesSnapshot = await getDocs(batchesQuery);
+            batches = batchesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            console.log(`🔥 Firestore returned ${batches.length} batches for product ${it.productId}`);
+          } catch (queryError) {
+            console.warn(`⚠️ Failed to query Firestore for product ${it.productId}:`, queryError);
+            // If offline and both IndexedDB and Firestore failed, create tracking without batches
+            if (!this.networkService.isOnline()) {
+              console.log('📱 Offline: No batches available, creating tracking only');
+              
+              // Create tracking document without batch deductions
+              const docData: OrdersSellingTrackingDoc = {
+                companyId: ctx.companyId,
+                storeId: ctx.storeId,
+                orderId: ctx.orderId,
+                batchNumber: (it as any).batchNumber || 1,
+                createdAt: new Date(),
+                createdBy: ctx.cashierId,
+                uid: ctx.cashierId,
+                status: 'processing',
+                itemIndex: idx,
+                orderDetailsId: (it as any).orderDetailsId || undefined,
+                productId: it.productId,
+                productName: it.productName,
+                productCode: (it as any).productCode || undefined,
+                sku: (it as any).sku || undefined,
+                cost: 0, // Will be calculated when synced
+                price: it.unitPrice,
+                quantity: it.quantity,
+                discount: (it as any).discount ?? 0,
+                discountType: (it as any).discountType ?? 'none',
+                vat: (it as any).vat ?? 0,
+                total: it.lineTotal,
+                isVatExempt: !!((it as any).isVatExempt),
+                cashierId: ctx.cashierId,
+                cashierEmail: ctx.cashierEmail,
+                cashierName: ctx.cashierName,
+                number: (it as any).number || undefined,
+                ...(this.networkService.isOnline() ? {} : { _offlineCreated: true })
+              } as OrdersSellingTrackingDoc;
+
+              const trackingRef = collection(this.firestore, 'ordersSellingTracking');
+              const cleanedDoc = this.removeUndefinedFields(docData as any);
+              await addDoc(trackingRef, cleanedDoc);
+              tracked++;
+              console.log(`📝 Created offline tracking (no batches) for product ${it.productId}`);
+              
+              idx++;
+              continue; // Skip to next item
+            }
+            throw queryError; // Re-throw if online
+          }
+        }
+
+        // batches array now contains data from either IndexedDB or Firestore
+        const allBatches = batches;
+        
+        console.log(`📊 Retrieved ${allBatches.length} batches for product ${it.productId}`);
+        if (allBatches.length > 0) {
+          console.log(`📊 Sample batch:`, {
+            companyId: allBatches[0].companyId,
+            status: allBatches[0].status,
+            quantity: allBatches[0].quantity,
+            expectedCompanyId: ctx.companyId
+          });
+        }
         
         // Filter and sort client-side: active status, quantity > 0, matching companyId, FIFO order
-        const batches = allBatches
-          .filter(b => 
-            b.companyId === ctx.companyId &&
-            (b.status || '').toLowerCase() === 'active' &&
-            (b.quantity || 0) > 0
-          )
+        const filteredBatches = allBatches
+          .filter(b => {
+            const match = b.companyId === ctx.companyId &&
+              (b.status || '').toLowerCase() === 'active' &&
+              (b.quantity || 0) > 0;
+            if (!match && allBatches.length > 0) {
+              console.log(`🚫 Batch ${b.id} filtered out:`, {
+                companyIdMatch: b.companyId === ctx.companyId,
+                statusActive: (b.status || '').toLowerCase() === 'active',
+                hasQuantity: (b.quantity || 0) > 0,
+                actualStatus: b.status,
+                actualQuantity: b.quantity
+              });
+            }
+            return match;
+          })
           .sort((a, b) => {
             // Sort by batchId ascending (FIFO - oldest first, batchId contains timestamp)
             const aBatchId = String(a.batchId || '');
@@ -1048,7 +1155,7 @@ async markOrderTrackingDamaged(orderId: string, damagedBy?: string, reason?: str
           })
           .slice(0, 20); // Take first 20 after filtering and sorting
 
-        console.log(`📦 Found ${batches.length} active batches with stock for product ${it.productId} (FIFO sorted)`);
+        console.log(`📦 Found ${filteredBatches.length} active batches with stock for product ${it.productId} (FIFO sorted)`);
 
         // Step 2: Deduct quantity from batches using FIFO and track deductions
         let remainingQty = it.quantity;
@@ -1059,7 +1166,7 @@ async markOrderTrackingDamaged(orderId: string, damagedBy?: string, reason?: str
           deductedQty: number;
         }> = [];
 
-        for (const batch of batches) {
+        for (const batch of filteredBatches) {
           if (remainingQty <= 0) break;
 
           const availableQty = batch.quantity || 0;
@@ -1069,14 +1176,37 @@ async markOrderTrackingDamaged(orderId: string, damagedBy?: string, reason?: str
           const batchRef = doc(this.firestore, 'productInventory', batch.id);
           const newQty = availableQty - deductQty;
           const newTotalDeducted = (batch.totalDeducted || 0) + deductQty;
+          const newStatus = newQty === 0 ? 'depleted' : 'active';
 
-          await updateDoc(batchRef, {
-            quantity: newQty,
-            totalDeducted: newTotalDeducted,
-            status: newQty === 0 ? 'depleted' : 'active',
-            updatedAt: new Date(),
-            updatedBy: ctx.cashierId
-          });
+          // Update Firestore (queues for sync when online)
+          try {
+            await updateDoc(batchRef, {
+              quantity: newQty,
+              totalDeducted: newTotalDeducted,
+              status: newStatus,
+              updatedAt: new Date(),
+              updatedBy: ctx.cashierId
+            });
+            console.log(`✅ Updated batch ${batch.batchId} in Firestore`);
+          } catch (updateError) {
+            console.warn(`⚠️ Failed to update batch ${batch.batchId} in Firestore (will retry via persistence):`, updateError);
+            // Firestore offline persistence will queue this update
+          }
+
+          // Also update IndexedDB cache to keep quantities in sync
+          try {
+            await this.indexedDBService.updateProductInventoryBatch(batch.id, {
+              quantity: newQty,
+              totalDeducted: newTotalDeducted,
+              status: newStatus,
+              updatedAt: new Date(),
+              updatedBy: ctx.cashierId
+            });
+            console.log(`✅ Updated batch ${batch.batchId} in IndexedDB cache`);
+          } catch (idbError) {
+            console.warn(`⚠️ Failed to update IndexedDB for batch ${batch.batchId}:`, idbError);
+            // Non-critical - Firestore is source of truth
+          }
 
           // Only record deductions for batches where we actually deducted (qty > 0)
           if (deductQty > 0) {
@@ -1094,6 +1224,48 @@ async markOrderTrackingDamaged(orderId: string, damagedBy?: string, reason?: str
         }
 
         // Step 3: Create inventoryDeductions records (one per batch used, sorted by batchId asc)
+        // If no batches found but offline, create a generic deduction record for reconciliation
+        if (batchDeductions.length === 0 && !this.networkService.isOnline()) {
+          console.log(`📱 Offline: Creating generic deduction for product ${it.productId} (no batches available)`);
+          
+          const genericDeduction = {
+            companyId: ctx.companyId,
+            storeId: ctx.storeId,
+            orderId: ctx.orderId,
+            invoiceNumber: ctx.invoiceNumber || '',
+            productId: it.productId,
+            productCode: (it as any).productCode || '',
+            sku: (it as any).sku || it.productId,
+            productName: it.productName || '',
+            
+            // Generic batch info - will be reconciled when online
+            batchId: 'PENDING_RECONCILIATION',
+            refId: 'PENDING_RECONCILIATION',
+            costPrice: 0,
+            
+            // Deduction details
+            quantity: it.quantity,
+            deductedAt: this.sanitizeForFirestore(new Date()),
+            
+            // Audit
+            deductedBy: ctx.cashierId,
+            createdAt: this.sanitizeForFirestore(new Date()),
+            
+            // Mark as offline-created for reconciliation
+            _offlineCreated: true,
+            _needsReconciliation: true
+          };
+
+          try {
+            const deductionsRef = collection(this.firestore, 'inventoryDeductions');
+            const cleanedDoc = this.removeUndefinedFields(genericDeduction);
+            await addDoc(deductionsRef, cleanedDoc);
+            console.log(`📝 Created generic deduction for offline reconciliation: product=${it.productId}, qty=${it.quantity}`);
+          } catch (error) {
+            console.warn(`⚠️ Failed to create generic deduction:`, error);
+          }
+        }
+        
         // Sort by batchId ascending before creating records
         batchDeductions.sort((a, b) => a.batchId.localeCompare(b.batchId));
 
@@ -1119,13 +1291,17 @@ async markOrderTrackingDamaged(orderId: string, damagedBy?: string, reason?: str
             
             // Audit
             deductedBy: ctx.cashierId,
-            createdAt: this.sanitizeForFirestore(new Date())
+            createdAt: this.sanitizeForFirestore(new Date()),
+            
+            // Mark as offline-created if offline
+            ...(this.networkService.isOnline() ? {} : { _offlineCreated: true })
           };
 
           // Use Firestore directly for automatic offline sync
           try {
             const deductionsRef = collection(this.firestore, 'inventoryDeductions');
-            await addDoc(deductionsRef, deductionDoc);
+            const cleanedDoc = this.removeUndefinedFields(deductionDoc);
+            await addDoc(deductionsRef, cleanedDoc);
             console.log(`📝 Created deduction log: batch=${deduction.batchId}, qty=${deduction.deductedQty}, cost=₱${deduction.costPrice}`);
           } catch (error) {
             console.warn(`⚠️ Failed to create deduction log (will retry via Firestore persistence):`, error);
@@ -1181,11 +1357,23 @@ async markOrderTrackingDamaged(orderId: string, damagedBy?: string, reason?: str
           cashierId: ctx.cashierId,
           cashierEmail: ctx.cashierEmail,
           cashierName: ctx.cashierName,
-          number: (it as any).number || undefined
+          number: (it as any).number || undefined,
+          
+          // Mark as offline-created if offline
+          ...(this.networkService.isOnline() ? {} : { _offlineCreated: true })
         } as OrdersSellingTrackingDoc;
 
-        await this.offlineDocService.createDocument(colName, docData as any);
-        tracked++;
+        // Use Firestore directly for automatic offline sync (same as inventoryDeductions)
+        try {
+          const trackingRef = collection(this.firestore, colName);
+          const cleanedDoc = this.removeUndefinedFields(docData as any);
+          await addDoc(trackingRef, cleanedDoc);
+          tracked++;
+          console.log(`📝 Created tracking log for product ${it.productId}, qty=${it.quantity}`);
+        } catch (error) {
+          console.warn(`⚠️ Failed to create tracking log (will retry via Firestore persistence):`, error);
+          // Firestore offline persistence will queue this automatically
+        }
 
         // Step 5: Update product totalStock
         const product = this.productService.getProduct(it.productId);

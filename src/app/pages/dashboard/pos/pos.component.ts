@@ -24,6 +24,7 @@ import { OrderService } from '../../../services/order.service';
 import { OrdersSellingTrackingService } from '../../../services/orders-selling-tracking.service';
 import { LedgerService } from '../../../services/ledger.service';
 import { StoreService } from '../../../services/store.service';
+import { InvoiceService } from '../../../services/invoice.service';
 import { UserRoleService } from '../../../services/user-role.service';
 import { CustomerService } from '../../../services/customer.service';
 import { CompanyService } from '../../../services/company.service';
@@ -60,6 +61,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   private networkService = inject(NetworkService);
   private indexedDBService = inject(IndexedDBService);
   private storeService = inject(StoreService);
+  private invoiceService = inject(InvoiceService);
   private orderService = inject(OrderService);
   private ordersSellingTrackingService = inject(OrdersSellingTrackingService);
   private ledgerService = inject(LedgerService);
@@ -418,14 +420,27 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
 
   async loadNextInvoicePreview(): Promise<void> {
     try {
-      // Always use default placeholder until payment is processed
-      console.log('📋 Setting default invoice number placeholder');
-      this.nextInvoiceNumber.set('INV-0000-000000');
-      this.invoiceNumber = 'INV-0000-000000';
+      // Generate a preview invoice number that works both online and offline
+      const storeId = this.selectedStoreId();
+      if (!storeId) {
+        console.log('📋 No store selected - using default placeholder');
+        this.nextInvoiceNumber.set('INV-0000-000000');
+        this.invoiceNumber = 'INV-0000-000000';
+        return;
+      }
+      
+      console.log('📋 Generating invoice preview for store:', storeId);
+      const previewInvoice = await this.invoiceService.getNextInvoiceNumberPreview(storeId);
+      
+      console.log('📋 Invoice preview generated:', previewInvoice, this.networkService.isOnline() ? '(online)' : '(offline)');
+      this.nextInvoiceNumber.set(previewInvoice);
+      this.invoiceNumber = previewInvoice;
     } catch (error) {
       console.error('Error loading invoice preview:', error);
-      this.nextInvoiceNumber.set('INV-0000-000000');
-      this.invoiceNumber = 'INV-0000-000000';
+      // Even on error, generate a basic preview
+      const fallback = this.storeService.generateRandomInvoiceNo();
+      this.nextInvoiceNumber.set(fallback);
+      this.invoiceNumber = fallback;
     }
   }
 
@@ -2466,11 +2481,15 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       
       console.log('📊 STEP 5: Initializing store selection...');
       await this.initializeStore(); 
-      console.log('✅ STEP 4 COMPLETED: Store initialization finished');
+      console.log('✅ STEP 5 COMPLETED: Store initialization finished');
       
-      console.log('📊 STEP 5: Checking hardware printer availability...');
+      console.log('📊 STEP 6: Loading product inventory for offline cache...');
+      await this.preloadProductInventory();
+      console.log('✅ STEP 6 COMPLETED: Product inventory preloaded');
+      
+      console.log('📊 STEP 7: Checking hardware printer availability...');
       await this.checkHardwarePrinterStatus();
-      console.log('✅ STEP 5 COMPLETED: Hardware printer status checked');
+      console.log('✅ STEP 7 COMPLETED: Hardware printer status checked');
       
       // 🔍 ENHANCED DEBUG: More detailed final check
       console.log('🔍 FINAL CHECK - currentUser:', this.authService.getCurrentUser());
@@ -3293,14 +3312,11 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       this.closePaymentDialog();
       
       // Check if we're online or offline before processing
-      // Use both navigator.onLine and network service for more reliable detection
-      const navigatorOnline = navigator.onLine;
-      const networkServiceOnline = this.networkService.isOnline();
-      const isOnline = navigatorOnline && networkServiceOnline;
+      // Use NetworkService which monitors Firestore connection (SOURCE OF TRUTH)
+      const isOnline = this.networkService.isOnline();
       
       console.log(`🌐 Network status check:`, {
-        navigator: navigatorOnline,
-        networkService: networkServiceOnline,
+        firestoreConnected: isOnline,
         finalDecision: isOnline ? 'Online' : 'Offline'
       });
       
@@ -3436,7 +3452,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       let result;
       try {
         // Log progress for offline mode
-        if (!navigator.onLine) {
+        if (!this.networkService.isOnline()) {
           console.log('📴 Processing order in offline mode...');
           console.log('📴 Step 1: Saving order locally...');
         }
@@ -3446,7 +3462,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
           paymentsData
         );
         
-        if (!navigator.onLine) {
+        if (!this.networkService.isOnline()) {
           console.log('📴 Step 2: Order saved successfully, queued for sync');
         }
       } catch (error) {
@@ -3459,11 +3475,11 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
                               errorMessage.includes('connection') ||
                               errorMessage.includes('Store read timeout') ||
                               errorMessage.includes('unavailable') ||
-                              !navigator.onLine;
+                              !this.networkService.isOnline();
         
         // If already offline, the order should have been queued by Firestore offline persistence
         // In this case, don't throw - the invoice service returned the order info
-        if (!navigator.onLine && isNetworkError) {
+        if (!this.networkService.isOnline() && isNetworkError) {
           console.log('📴 Offline mode: Order should be queued by Firestore persistence');
           // Result might not be set if error occurred, but offline processing should continue
           // The error is likely just from timeout, but Firestore queued the write
@@ -3528,7 +3544,16 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
         }
       }
 
-      // Prepare receipt data with the real order ID and invoice number
+      // IMPORTANT: Clear processing state and show receipt modal IMMEDIATELY
+      // Don't wait for receipt data preparation - show the modal first for instant feedback
+      this.posService['isProcessingSignal']?.set(false);
+      console.log('✅ Processing state cleared');
+      
+      // Show receipt modal immediately
+      this.isReceiptModalVisibleSignal.set(true);
+      console.log('✅ Receipt modal shown immediately');
+      
+      // Prepare receipt data in background (non-blocking)
       console.log('📝 Preparing receipt data for order:', result.orderId);
       const receiptData = await this.prepareReceiptData(result.orderId);
       console.log('✅ Receipt data prepared successfully');
@@ -3555,17 +3580,9 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       this.completedOrderData.set(updatedReceiptData);
       console.log('✅ Completed order data stored');
       
-      // Set receipt data and show modal
+      // Set receipt data signal (will update the already-visible modal)
       this.receiptDataSignal.set(updatedReceiptData);
-      console.log('✅ Receipt data signal set');
-      
-      // IMPORTANT: Clear processing state BEFORE showing receipt modal
-      // This ensures the UI isn't blocked by loading state when receipt appears
-      this.posService['isProcessingSignal']?.set(false);
-      console.log('✅ Processing state cleared for receipt display');
-      
-      this.isReceiptModalVisibleSignal.set(true);
-      console.log('✅ Receipt modal visibility signal set to TRUE');
+      console.log('✅ Receipt data signal updated in modal');
 
       console.log('🧾 Receipt modal opened with invoice:', result.invoiceNumber);
       console.log('🎯 Receipt modal state:', {
@@ -4030,6 +4047,117 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     }
   }
 
+  /**
+   * Preload product inventory for the selected store
+   * This ensures we have offline access to inventory data for FIFO calculations
+   */
+  async preloadProductInventory(): Promise<void> {
+    try {
+      const storeId = this.selectedStoreId();
+      if (!storeId) {
+        console.log('📦 No store selected - skipping inventory preload');
+        return;
+      }
+
+      const companyId = this.authService.getCurrentPermission()?.companyId;
+      if (!companyId) {
+        console.log('📦 No companyId - skipping inventory preload');
+        return;
+      }
+
+      console.log('📦 Preloading product inventory for store:', storeId);
+      
+      // Initialize IndexedDB first to ensure productInventory store exists
+      try {
+        console.log('📦 Initializing IndexedDB for productInventory store...');
+        await this.indexedDBService.initDB();
+        console.log('✅ IndexedDB initialized - productInventory store should be available');
+      } catch (initError) {
+        console.error('❌ Failed to initialize IndexedDB:', initError);
+      }
+      
+      // Query productInventory collection for this store
+      // Important: Query must match or be broader than queries used during order processing
+      // Order processing queries by: productId + storeId (no status filter)
+      // So we preload by: storeId + companyId only (broader, includes all statuses)
+      const inventoryRef = collection(this.firestore, 'productInventory');
+      const inventoryQuery = query(
+        inventoryRef,
+        where('storeId', '==', storeId),
+        where('companyId', '==', companyId)
+        // Note: No status filter - we need ALL batches cached for offline processing
+      );
+
+      try {
+        // Use short timeout to avoid hanging
+        const snapshot = await Promise.race([
+          getDocs(inventoryQuery),
+          new Promise<never>((_, reject) => 
+            setTimeout(() => reject(new Error('Inventory preload timeout')), 3000)
+          )
+        ]);
+
+        console.log(`📦 Loaded ${snapshot.size} inventory batches from Firestore`);
+        
+        if (snapshot.size > 0) {
+          // Save to IndexedDB for guaranteed offline access
+          const batches: any[] = snapshot.docs.map(doc => {
+            const data = doc.data();
+            return {
+              id: doc.id,
+              ...data
+            };
+          });
+
+          try {
+            // Only clear old data when ONLINE to sync with Firestore
+            // When offline, keep existing IndexedDB data
+            if (this.networkService.isOnline()) {
+              console.log('🗑️ Online: Clearing old productInventory data from IndexedDB to sync...');
+              await this.indexedDBService.clearProductInventory();
+            } else {
+              console.log('📱 Offline: Keeping existing IndexedDB data, will merge updates');
+            }
+            
+            // Save fresh data from Firestore
+            await this.indexedDBService.saveProductInventoryBatches(batches);
+            
+            const products = new Set<string>();
+            batches.forEach((batch) => {
+              const productId = batch.productId;
+              if (productId) products.add(productId);
+            });
+            console.log(`✅ Synced ${batches.length} batches to IndexedDB (${products.size} products)`);
+          } catch (idbError) {
+            console.warn('⚠️ Failed to save inventory to IndexedDB:', idbError);
+            // Fallback to Firestore cache only
+          }
+        } else {
+          // If Firestore is empty, clear IndexedDB too (only when online)
+          if (this.networkService.isOnline()) {
+            console.log('🗑️ Online: No batches in Firestore - clearing IndexedDB cache');
+            try {
+              await this.indexedDBService.clearProductInventory();
+            } catch (clearError) {
+              console.warn('⚠️ Failed to clear IndexedDB:', clearError);
+            }
+          } else {
+            console.log('📱 Offline: Keeping existing IndexedDB data');
+          }
+        }
+      } catch (error) {
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        if (errorMsg.includes('timeout') || !this.networkService.isOnline()) {
+          console.log('📱 Offline or timeout - will use IndexedDB cached inventory');
+        } else {
+          console.warn('⚠️ Error preloading inventory (non-critical):', error);
+        }
+      }
+    } catch (error) {
+      console.warn('⚠️ Error in preloadProductInventory (non-critical):', error);
+    }
+  }
+
   // Load stores using getActiveStoresForDropdown (same as Access Management)
   async loadStoresForPOS(): Promise<void> {
     try {
@@ -4179,6 +4307,11 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       
       // Load available tags for the store
       await this.loadAvailableTags();
+      
+      // Preload productInventory for this store to IndexedDB
+      console.log('📦 Preloading inventory for new store...');
+      await this.preloadProductInventory();
+      console.log('✅ Inventory preloaded for store:', storeId);
       
   // Reset grid pagination when store changes
   this.gridRowsVisible.set(4);
