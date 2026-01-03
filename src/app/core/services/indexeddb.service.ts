@@ -78,7 +78,7 @@ export interface OfflineStore extends Store {
 })
 export class IndexedDBService {
   private dbName = 'TovrikaOfflineDB';
-  private dbVersion = 2; // Increment version to add new stores
+  private dbVersion = 3; // Increment version to add productInventory store
   private db: IDBDatabase | null = null;
   private isPermanentlyBroken = false; // Flag to stop retrying corrupted DB
 
@@ -139,6 +139,16 @@ export class IndexedDBService {
       const storesStore = db.createObjectStore('stores', { keyPath: 'id' });
       storesStore.createIndex('companyId', 'companyId', { unique: false });
       console.log('📦 IndexedDB: Created stores store');
+    }
+
+    // Product Inventory store (for offline FIFO processing)
+    if (!db.objectStoreNames.contains('productInventory')) {
+      const inventoryStore = db.createObjectStore('productInventory', { keyPath: 'id' });
+      inventoryStore.createIndex('productId', 'productId', { unique: false });
+      inventoryStore.createIndex('storeId', 'storeId', { unique: false });
+      inventoryStore.createIndex('companyId', 'companyId', { unique: false });
+      inventoryStore.createIndex('status', 'status', { unique: false });
+      console.log('📦 IndexedDB: Created productInventory store');
     }
   }
 
@@ -671,6 +681,50 @@ export class IndexedDBService {
         console.error('📦 IndexedDB: Exception getting products:', error);
         resolve([]); // Return empty array instead of rejecting
       }
+    });
+  }
+
+  /**
+   * Update a single product in IndexedDB (for stock updates)
+   */
+  async updateProduct(productId: string, updates: Partial<any>): Promise<void> {
+    await this.initDB();
+    if (!this.db) {
+      console.error('❌ IndexedDB: Database not initialized for updateProduct');
+      return;
+    }
+
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction(['products'], 'readwrite');
+      const store = transaction.objectStore('products');
+      const getRequest = store.get(productId);
+
+      getRequest.onsuccess = () => {
+        const product = getRequest.result;
+        if (!product) {
+          console.warn(`⚠️ IndexedDB: Product ${productId} not found in cache`);
+          resolve();
+          return;
+        }
+
+        const updatedProduct = { ...product, ...updates };
+        const putRequest = store.put(updatedProduct);
+
+        putRequest.onsuccess = () => {
+          console.log(`✅ IndexedDB: Updated product ${productId} in cache`);
+          resolve();
+        };
+
+        putRequest.onerror = () => {
+          console.error('❌ IndexedDB: Error updating product:', putRequest.error);
+          reject(putRequest.error);
+        };
+      };
+
+      getRequest.onerror = () => {
+        console.error('❌ IndexedDB: Error getting product:', getRequest.error);
+        reject(getRequest.error);
+      };
     });
   }
 
@@ -1237,5 +1291,167 @@ export class IndexedDBService {
     
     const estimate = await navigator.storage.estimate();
     return estimate.usage || 0;
+  }
+
+  /**
+   * Save multiple productInventory batches to IndexedDB
+   */
+  async saveProductInventoryBatches(batches: any[]): Promise<void> {
+    await this.initDB();
+    if (!this.db) {
+      console.error('❌ IndexedDB: Database not initialized for saveProductInventoryBatches');
+      return;
+    }
+
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction(['productInventory'], 'readwrite');
+      const store = transaction.objectStore('productInventory');
+
+      let completed = 0;
+      const total = batches.length;
+
+      if (total === 0) {
+        resolve();
+        return;
+      }
+
+      batches.forEach(batch => {
+        const request = store.put(batch);
+        
+        request.onsuccess = () => {
+          completed++;
+          if (completed === total) {
+            console.log(`✅ IndexedDB: Saved ${total} productInventory batches`);
+            resolve();
+          }
+        };
+
+        request.onerror = () => {
+          console.error('❌ IndexedDB: Error saving batch:', request.error);
+          reject(request.error);
+        };
+      });
+    });
+  }
+
+  /**
+   * Get productInventory batches for a specific product and store
+   * Filters by active status and sorts by createdAt
+   */
+  async getProductInventoryBatches(
+    productId: string,
+    storeId: string,
+    companyId: string
+  ): Promise<any[]> {
+    await this.initDB();
+    if (!this.db) {
+      console.error('❌ IndexedDB: Database not initialized for getProductInventoryBatches');
+      return [];
+    }
+
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction(['productInventory'], 'readonly');
+      const store = transaction.objectStore('productInventory');
+      const index = store.index('productId');
+      const request = index.getAll(productId);
+
+      request.onsuccess = () => {
+        const allBatches = request.result || [];
+        
+        // Filter by storeId, companyId, and status
+        const filteredBatches = allBatches.filter((batch: any) => 
+          batch.storeId === storeId &&
+          batch.companyId === companyId &&
+          batch.status === 'active' &&
+          batch.quantity > 0
+        );
+
+        // Sort by createdAt for FIFO
+        filteredBatches.sort((a: any, b: any) => {
+          const dateA = a.createdAt?.seconds || 0;
+          const dateB = b.createdAt?.seconds || 0;
+          return dateA - dateB;
+        });
+
+        console.log(`📦 IndexedDB: Found ${filteredBatches.length} active batches for product ${productId}`);
+        resolve(filteredBatches);
+      };
+
+      request.onerror = () => {
+        console.error('❌ IndexedDB: Error querying productInventory:', request.error);
+        reject(request.error);
+      };
+    });
+  }
+
+  /**
+   * Update a productInventory batch quantity
+   */
+  async updateProductInventoryBatch(batchId: string, updates: Partial<any>): Promise<void> {
+    await this.initDB();
+    if (!this.db) {
+      console.error('❌ IndexedDB: Database not initialized for updateProductInventoryBatch');
+      return;
+    }
+
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction(['productInventory'], 'readwrite');
+      const store = transaction.objectStore('productInventory');
+      const getRequest = store.get(batchId);
+
+      getRequest.onsuccess = () => {
+        const batch = getRequest.result;
+        if (!batch) {
+          console.warn(`⚠️ IndexedDB: Batch ${batchId} not found`);
+          resolve();
+          return;
+        }
+
+        const updatedBatch = { ...batch, ...updates };
+        const putRequest = store.put(updatedBatch);
+
+        putRequest.onsuccess = () => {
+          console.log(`✅ IndexedDB: Updated batch ${batchId}`);
+          resolve();
+        };
+
+        putRequest.onerror = () => {
+          console.error('❌ IndexedDB: Error updating batch:', putRequest.error);
+          reject(putRequest.error);
+        };
+      };
+
+      getRequest.onerror = () => {
+        console.error('❌ IndexedDB: Error getting batch:', getRequest.error);
+        reject(getRequest.error);
+      };
+    });
+  }
+
+  /**
+   * Clear all productInventory data
+   */
+  async clearProductInventory(): Promise<void> {
+    await this.initDB();
+    if (!this.db) {
+      console.error('❌ IndexedDB: Database not initialized for clearProductInventory');
+      return;
+    }
+
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction(['productInventory'], 'readwrite');
+      const store = transaction.objectStore('productInventory');
+      const request = store.clear();
+
+      request.onsuccess = () => {
+        console.log('✅ IndexedDB: Cleared productInventory store');
+        resolve();
+      };
+
+      request.onerror = () => {
+        console.error('❌ IndexedDB: Error clearing productInventory:', request.error);
+        reject(request.error);
+      };
+    });
   }
 }

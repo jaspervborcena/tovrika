@@ -3122,6 +3122,10 @@ export class ProductManagementComponent implements OnInit {
             if (!currentPermission) {
               throw new Error('No permission found');
             }
+            // Use the product's storeId, not the current permission's storeId
+            const productStoreId = this.selectedProduct.storeId || storeId || currentPermission.storeId || '';
+            console.log('📦 Using storeId from product:', productStoreId);
+            
             const batchData = {
               batchId: this.generateBatchId(),
               quantity: Number(formValue.totalStock || 0),
@@ -3132,7 +3136,7 @@ export class ProductManagementComponent implements OnInit {
               status: ProductStatus.Active,
               unitType: formValue.unitType || 'pieces',
               companyId: currentPermission.companyId,
-              storeId: currentPermission.storeId || '',
+              storeId: productStoreId, // Use product's storeId
               isVatApplicable: formValue.isVatApplicable || false,
               vatRate: formValue.vatRate ?? AppConstants.DEFAULT_VAT_RATE,
               hasDiscount: formValue.hasDiscount || false,
@@ -3142,7 +3146,7 @@ export class ProductManagementComponent implements OnInit {
             await this.inventoryDataService.addBatch(this.selectedProduct.id!, batchData);
             console.log('✅ Initial inventory batch created for edited product');
             // Refresh products to update cache
-            await this.productService.refreshProducts(currentPermission.storeId || '');
+            await this.productService.refreshProducts(productStoreId);
           } catch (batchError) {
             console.error('❌ Failed to create inventory batch for edited product:', batchError);
             this.toastService.error('Product updated but failed to create inventory batch');
