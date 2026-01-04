@@ -1030,88 +1030,73 @@ async markOrderTrackingDamaged(orderId: string, damagedBy?: string, reason?: str
     for (const it of items) {
       try {
         // Step 1: Find batches for this product using FIFO (oldest first, active only)
+        // Query Firestore - it will automatically use its cache when offline
         let batches: any[] = [];
         
-        // Try IndexedDB first when offline for guaranteed access
-        if (!this.networkService.isOnline()) {
-          console.log(`📱 Offline: Querying IndexedDB for product ${it.productId}`);
-          try {
-            batches = await this.indexedDBService.getProductInventoryBatches(
-              it.productId,
-              ctx.storeId,
-              ctx.companyId
-            );
-            console.log(`📦 IndexedDB returned ${batches.length} batches for product ${it.productId}`);
-          } catch (idbError) {
-            console.warn('⚠️ IndexedDB query failed, will try Firestore cache:', idbError);
-          }
-        }
-        
-        // If no IndexedDB results or online, query Firestore
-        if (batches.length === 0) {
-          const batchesQuery = query(
-            collection(this.firestore, 'productInventory'),
-            where('productId', '==', it.productId),
-            where('storeId', '==', ctx.storeId),
-            limit(100) // Get more batches since we're filtering/sorting client-side
-          );
+        const batchesQuery = query(
+          collection(this.firestore, 'productInventory'),
+          where('productId', '==', it.productId),
+          where('storeId', '==', ctx.storeId),
+          limit(100) // Get more batches since we're filtering/sorting client-side
+        );
 
-          let batchesSnapshot;
-          try {
-            batchesSnapshot = await getDocs(batchesQuery);
-            batches = batchesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            console.log(`🔥 Firestore returned ${batches.length} batches for product ${it.productId}`);
-          } catch (queryError) {
-            console.warn(`⚠️ Failed to query Firestore for product ${it.productId}:`, queryError);
-            // If offline and both IndexedDB and Firestore failed, create tracking without batches
-            if (!this.networkService.isOnline()) {
-              console.log('📱 Offline: No batches available, creating tracking only');
-              
-              // Create tracking document without batch deductions
-              const docData: OrdersSellingTrackingDoc = {
-                companyId: ctx.companyId,
-                storeId: ctx.storeId,
-                orderId: ctx.orderId,
-                batchNumber: (it as any).batchNumber || 1,
-                createdAt: new Date(),
-                createdBy: ctx.cashierId,
-                uid: ctx.cashierId,
-                status: 'processing',
-                itemIndex: idx,
-                orderDetailsId: (it as any).orderDetailsId || undefined,
-                productId: it.productId,
-                productName: it.productName,
-                productCode: (it as any).productCode || undefined,
-                sku: (it as any).sku || undefined,
-                cost: 0, // Will be calculated when synced
-                price: it.unitPrice,
-                quantity: it.quantity,
-                discount: (it as any).discount ?? 0,
-                discountType: (it as any).discountType ?? 'none',
-                vat: (it as any).vat ?? 0,
-                total: it.lineTotal,
-                isVatExempt: !!((it as any).isVatExempt),
-                cashierId: ctx.cashierId,
-                cashierEmail: ctx.cashierEmail,
-                cashierName: ctx.cashierName,
-                number: (it as any).number || undefined,
-                ...(this.networkService.isOnline() ? {} : { _offlineCreated: true })
-              } as OrdersSellingTrackingDoc;
+        let batchesSnapshot;
+        try {
+          batchesSnapshot = await getDocs(batchesQuery);
+          batches = batchesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+          
+          const isFromCache = batchesSnapshot.metadata.fromCache;
+          console.log(`🔥 Firestore returned ${batches.length} batches for product ${it.productId} (source: ${isFromCache ? 'CACHE' : 'SERVER'})`);
+        } catch (queryError) {
+          console.warn(`⚠️ Failed to query Firestore for product ${it.productId}:`, queryError);
+          // If offline and Firestore cache failed, create tracking without batches
+          if (!this.networkService.isOnline()) {
+            console.log('📱 Offline: No batches available in Firestore cache, creating tracking only');
+            
+            // Create tracking document without batch deductions
+            const docData: OrdersSellingTrackingDoc = {
+              companyId: ctx.companyId,
+              storeId: ctx.storeId,
+              orderId: ctx.orderId,
+              batchNumber: (it as any).batchNumber || 1,
+              createdAt: new Date(),
+              createdBy: ctx.cashierId,
+              uid: ctx.cashierId,
+              status: 'processing',
+              itemIndex: idx,
+              orderDetailsId: (it as any).orderDetailsId || undefined,
+              productId: it.productId,
+              productName: it.productName,
+              productCode: (it as any).productCode || undefined,
+              sku: (it as any).sku || undefined,
+              cost: 0, // Will be calculated when synced
+              price: it.unitPrice,
+              quantity: it.quantity,
+              discount: (it as any).discount ?? 0,
+              discountType: (it as any).discountType ?? 'none',
+              vat: (it as any).vat ?? 0,
+              total: it.lineTotal,
+              isVatExempt: !!((it as any).isVatExempt),
+              cashierId: ctx.cashierId,
+              cashierEmail: ctx.cashierEmail,
+              cashierName: ctx.cashierName,
+              number: (it as any).number || undefined,
+              ...(this.networkService.isOnline() ? {} : { _offlineCreated: true })
+            } as OrdersSellingTrackingDoc;
 
-              const trackingRef = collection(this.firestore, 'ordersSellingTracking');
-              const cleanedDoc = this.removeUndefinedFields(docData as any);
-              await addDoc(trackingRef, cleanedDoc);
-              tracked++;
-              console.log(`📝 Created offline tracking (no batches) for product ${it.productId}`);
-              
-              idx++;
-              continue; // Skip to next item
-            }
-            throw queryError; // Re-throw if online
+            const trackingRef = collection(this.firestore, 'ordersSellingTracking');
+            const cleanedDoc = this.removeUndefinedFields(docData as any);
+            await addDoc(trackingRef, cleanedDoc);
+            tracked++;
+            console.log(`📝 Created offline tracking (no batches) for product ${it.productId}`);
+            
+            idx++;
+            continue; // Skip to next item
           }
+          throw queryError; // Re-throw if online
         }
 
-        // batches array now contains data from either IndexedDB or Firestore
+        // batches array now contains data from Firestore (with cache)
         const allBatches = batches;
         
         console.log(`📊 Retrieved ${allBatches.length} batches for product ${it.productId}`);
@@ -1190,22 +1175,7 @@ async markOrderTrackingDamaged(orderId: string, damagedBy?: string, reason?: str
             console.log(`✅ Updated batch ${batch.batchId} in Firestore`);
           } catch (updateError) {
             console.warn(`⚠️ Failed to update batch ${batch.batchId} in Firestore (will retry via persistence):`, updateError);
-            // Firestore offline persistence will queue this update
-          }
-
-          // Also update IndexedDB cache to keep quantities in sync
-          try {
-            await this.indexedDBService.updateProductInventoryBatch(batch.id, {
-              quantity: newQty,
-              totalDeducted: newTotalDeducted,
-              status: newStatus,
-              updatedAt: new Date(),
-              updatedBy: ctx.cashierId
-            });
-            console.log(`✅ Updated batch ${batch.batchId} in IndexedDB cache`);
-          } catch (idbError) {
-            console.warn(`⚠️ Failed to update IndexedDB for batch ${batch.batchId}:`, idbError);
-            // Non-critical - Firestore is source of truth
+            // Firestore offline persistence will queue this update and update its cache automatically
           }
 
           // Only record deductions for batches where we actually deducted (qty > 0)

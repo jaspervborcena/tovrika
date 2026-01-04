@@ -3088,6 +3088,8 @@ export class ProductManagementComponent implements OnInit {
           sellingPrice: this.hasExistingInventory() ? (this.selectedProduct.sellingPrice || computedSellingPrice) : computedSellingPrice,
           // originalPrice: base/unit price stored alongside sellingPrice
           originalPrice: this.hasExistingInventory() ? (this.selectedProduct.originalPrice || computedOriginalPrice) : computedOriginalPrice,
+          // Use form value if edited, otherwise preserve existing totalStock
+          totalStock: Number(formValue.totalStock ?? this.selectedProduct.totalStock ?? 0),
           storeId: storeId,  // Use storeId from permission
           barcodeId: formValue.barcodeId,
           imageUrl: formValue.imageUrl,

@@ -1386,14 +1386,16 @@ export class PosService {
       }
     }
     
-    const newQty = Math.max(0, currentQty - p.deduct);
-    
+    // Use increment() for atomic offline-compatible deductions
+    // Firestore will queue these operations and apply them atomically when online
     batch.update(batchRef as any, {
-      quantity: newQty,
-      totalDeducted: (batchData?.totalDeducted || 0) + p.deduct,
-      updatedAt: new Date(),
-      status: newQty === 0 ? 'inactive' : (batchData?.status || 'active')
+      quantity: increment(-p.deduct),
+      totalDeducted: increment(p.deduct),
+      updatedAt: new Date()
+      // Note: status update removed - will be handled by cloud functions or manual reconciliation
     });
+    
+    const newQty = Math.max(0, currentQty - p.deduct);
     
     console.log(`✅ Batch: will update batch ${p.batchId} ${currentQty} -> ${newQty}`);
     
@@ -1410,13 +1412,15 @@ export class PosService {
     batch.set(dedRef, dedRecord);
   }
   
-  // Update product totalStock
-  const newTotal = Math.max(0, currentTotal - quantityToDeduct);
+  // Update product totalStock using increment() for atomic offline-compatible deduction
+  // Firestore offline persistence will queue this and apply atomically when online
   batch.update(productRef as any, {
-    totalStock: newTotal,
+    totalStock: increment(-quantityToDeduct),
     lastUpdated: new Date(),
     updatedBy: currentUser?.uid || 'system'
   });
+  
+  const newTotal = Math.max(0, currentTotal - quantityToDeduct);
   
   console.log(`🔻 Batch: product ${productId} totalStock ${currentTotal} -> ${newTotal}`);
   
