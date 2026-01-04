@@ -1,6 +1,6 @@
 import { Component, OnInit, AfterViewInit, OnDestroy, HostListener, ViewChild, ElementRef, computed, signal, inject } from '@angular/core';
 import { Firestore, doc, getDoc, collection, query, where } from '@angular/fire/firestore';
-import { getDocs } from 'firebase/firestore';
+import { getDocs, onSnapshot } from 'firebase/firestore';
 import { ProductStatus } from '../../../interfaces/product.interface';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -76,6 +76,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   private sanitizer = inject(DomSanitizer);
 
   private routerSubscription: any;
+  private inventorySnapshotUnsubscribe?: (() => void) | null = null; // Firestore snapshot listener cleanup
   private resizeListener?: () => void;
   
   // Touch event properties for swipe navigation
@@ -2578,6 +2579,11 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     if (this.routerSubscription) {
       this.routerSubscription.unsubscribe();
     }
+    if (this.inventorySnapshotUnsubscribe) {
+      console.log('📦 Unsubscribing from productInventory snapshot listener');
+      this.inventorySnapshotUnsubscribe();
+      this.inventorySnapshotUnsubscribe = null;
+    }
     if (this.resizeListener && typeof window !== 'undefined') {
       window.removeEventListener('resize', this.resizeListener);
     }
@@ -4067,6 +4073,79 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
 
       console.log('📦 Preloading product inventory for store:', storeId);
       
+      // Unsubscribe from any existing snapshot listener
+      if (this.inventorySnapshotUnsubscribe) {
+        console.log('📦 Cleaning up existing inventory snapshot listener');
+        this.inventorySnapshotUnsubscribe();
+        this.inventorySnapshotUnsubscribe = null;
+      }
+      
+      // Query productInventory collection for this store
+      // Important: Query must match or be broader than queries used during order processing
+      // Order processing queries by: productId + storeId (no status filter)
+      // So we preload by: storeId + companyId only (broader, includes all statuses)
+      const inventoryRef = collection(this.firestore, 'productInventory');
+      const inventoryQuery = query(
+        inventoryRef,
+        where('storeId', '==', storeId),
+        where('companyId', '==', companyId)
+        // Note: No status filter - we need ALL batches cached for offline processing
+      );
+
+      // Use Firestore's built-in snapshot listener for automatic caching
+      // This is more reliable than custom IndexedDB because:
+      // 1. Firestore automatically manages its own IndexedDB cache
+      // 2. Real-time updates when online
+      // 3. Automatic sync when connection is restored
+      // 4. Better metadata tracking (fromCache, hasPendingWrites)
+      console.log('📦 Setting up Firestore snapshot listener for productInventory...');
+      
+      this.inventorySnapshotUnsubscribe = onSnapshot(
+        inventoryQuery,
+        { includeMetadataChanges: true }, // Enable cache metadata
+        (snapshot) => {
+          const fromCache = snapshot.metadata.fromCache;
+          const hasPendingWrites = snapshot.metadata.hasPendingWrites;
+          
+          console.log(`📦 Inventory snapshot received:`, {
+            size: snapshot.size,
+            fromCache,
+            hasPendingWrites,
+            source: fromCache ? 'CACHE' : 'SERVER'
+          });
+
+          if (snapshot.size > 0) {
+            const products = new Set<string>();
+            snapshot.docs.forEach(doc => {
+              const data = doc.data();
+              if (data['productId']) {
+                products.add(data['productId']);
+              }
+            });
+            
+            console.log(`✅ Firestore cached ${snapshot.size} inventory batches (${products.size} products)`);
+            
+            if (!fromCache) {
+              console.log('📡 Data synced from server - Firestore cache updated');
+            } else {
+              console.log('💾 Data loaded from Firestore cache');
+            }
+          } else {
+            console.log('⚠️ No inventory batches found for this store');
+          }
+        },
+        (error) => {
+          console.error('❌ Error in inventory snapshot listener:', error);
+          // Don't throw - allow offline operation with existing cache
+        }
+      );
+      
+      console.log('✅ Inventory snapshot listener registered - Firestore will handle caching');
+      
+      // REMARKED: Custom IndexedDB preload logic - replaced with Firestore snapshot listener
+      /*
+      // TODO: Implement Firestore snapshot-based caching (more reliable)
+      // REMARKED: Custom IndexedDB preload - testing Firestore offline persistence instead
       // Initialize IndexedDB first to ensure productInventory store exists
       try {
         console.log('📦 Initializing IndexedDB for productInventory store...');
@@ -4099,6 +4178,8 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
 
         console.log(`📦 Loaded ${snapshot.size} inventory batches from Firestore`);
         
+        // TODO: Implement proper Firestore snapshot listener for offline caching
+        // REMARKED: Custom IndexedDB saving logic - testing Firestore persistence instead
         if (snapshot.size > 0) {
           // Save to IndexedDB for guaranteed offline access
           const batches: any[] = snapshot.docs.map(doc => {
@@ -4153,6 +4234,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
           console.warn('⚠️ Error preloading inventory (non-critical):', error);
         }
       }
+      */
     } catch (error) {
       console.warn('⚠️ Error in preloadProductInventory (non-critical):', error);
     }
