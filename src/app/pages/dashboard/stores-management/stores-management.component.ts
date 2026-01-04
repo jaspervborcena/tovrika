@@ -1485,43 +1485,151 @@ import { Timestamp } from '@angular/fire/firestore';
       .header-content {
         flex-direction: column;
         align-items: flex-start;
+        gap: 1rem;
       }
 
       .page-title {
-        font-size: 2rem;
+        font-size: 1.5rem;
+      }
+
+      .page-subtitle {
+        font-size: 0.875rem;
       }
 
       .search-container {
         max-width: 100%;
+        width: 100%;
+      }
+
+      .search-input {
+        font-size: 0.875rem;
+        padding: 0.625rem 2.5rem 0.625rem 0.75rem;
+      }
+
+      .btn-add {
+        width: 100%;
+        justify-content: center;
+        font-size: 0.875rem;
+        padding: 0.625rem 1rem;
       }
 
       .table-wrapper {
         overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        font-size: 0.75rem;
       }
 
       .stores-table {
-        min-width: 800px;
+        min-width: 700px;
+      }
+
+      .stores-table th,
+      .stores-table td {
+        padding: 0.625rem 0.5rem;
+        font-size: 0.75rem;
       }
 
       .modal {
         width: 95%;
-        max-height: 95vh;
+        max-width: 95vw;
+        max-height: 90vh;
+        margin: 1rem;
       }
 
       .modal-header {
-        padding: 1rem 1.5rem;
+        padding: 1rem 1.25rem;
+      }
+
+      .modal-title {
+        font-size: 1.125rem;
+      }
+
+      .btn-close {
+        width: 1.75rem;
+        height: 1.75rem;
+        font-size: 1.25rem;
       }
 
       .modal-body {
-        padding: 1rem;
+        padding: 0.75rem;
       }
 
       .form-section {
-        padding: 1rem;
+        padding: 0.75rem;
+      }
+
+      .form-section-title {
+        font-size: 0.875rem;
+      }
+
+      .form-group label {
+        font-size: 0.8125rem;
+      }
+
+      .form-control {
+        font-size: 0.875rem;
+        padding: 0.625rem 0.75rem;
       }
 
       .modal-footer {
-        padding: 1rem 1.5rem;
+        padding: 0.75rem 1rem;
+        gap: 0.5rem;
+      }
+
+      .modal-footer .btn {
+        flex: 1;
+        font-size: 0.8125rem;
+        padding: 0.625rem 1rem;
+      }
+
+      .action-buttons {
+        gap: 0.25rem;
+      }
+
+      .btn-icon-action {
+        padding: 0.375rem;
+        font-size: 1rem;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .page-title {
+        font-size: 1.25rem;
+      }
+
+      .page-subtitle {
+        font-size: 0.8125rem;
+      }
+
+      .search-input {
+        font-size: 0.8125rem;
+      }
+
+      .btn-add {
+        font-size: 0.8125rem;
+      }
+
+      .stores-table {
+        min-width: 600px;
+      }
+
+      .stores-table th,
+      .stores-table td {
+        padding: 0.5rem 0.375rem;
+        font-size: 0.6875rem;
+      }
+
+      .modal-title {
+        font-size: 1rem;
+      }
+
+      .form-control {
+        font-size: 0.8125rem;
+      }
+
+      .modal-footer .btn {
+        font-size: 0.75rem;
+        padding: 0.5rem 0.875rem;
       }
     }
 

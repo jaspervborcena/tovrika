@@ -98,6 +98,21 @@ export class CategoryService {
       this.loadTimestamp = Date.now();
       
       console.log('✅ Categories loaded and signal updated. Current categories:', categories.length);
+      
+      // Debug: Log category details for troubleshooting
+      if (categories.length > 0) {
+        console.log('📋 Category details:', categories.map(c => ({ 
+          label: c.categoryLabel, 
+          active: c.isActive, 
+          storeId: c.storeId 
+        })));
+      } else {
+        console.log('⚠️ No categories found for storeId:', storeId);
+        console.log('🔍 This could mean:');
+        console.log('  - No categories exist in Firestore for this store');
+        console.log('  - Firestore query failed');
+        console.log('  - Data structure mismatch');
+      }
       return categories;
 
     } catch (error) {

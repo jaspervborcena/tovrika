@@ -64,6 +64,10 @@ export class ProductService implements OnDestroy {
   private unsubscribeSnapshot: Unsubscribe | null = null;
   private currentStoreId: string | null = null;
   private currentCompanyId: string | null = null;
+  
+  // Cache products per store to maintain snapshots when switching stores
+  private productCacheByStore = new Map<string, Product[]>();
+  private storeLoadTimestamps = new Map<string, Date>();
 
   // Network status tracking
   private isOnline = navigator.onLine;
@@ -501,6 +505,38 @@ export class ProductService implements OnDestroy {
         currentPermission: this.authService.getCurrentPermission()
       });
       
+      // Save current store's products to cache before switching
+      if (this.currentStoreId && this.currentStoreId !== storeId && this.products().length > 0) {
+        console.log(`💾 Caching ${this.products().length} products for store ${this.currentStoreId} before switching`);
+        this.productCacheByStore.set(this.currentStoreId, [...this.products()]);
+        this.storeLoadTimestamps.set(this.currentStoreId, new Date());
+      }
+      
+      // Check if we have cached products for the target store
+      const cachedProducts = this.productCacheByStore.get(storeId);
+      const cacheTimestamp = this.storeLoadTimestamps.get(storeId);
+      const cacheAge = cacheTimestamp ? Date.now() - cacheTimestamp.getTime() : Infinity;
+      const CACHE_MAX_AGE = 5 * 60 * 1000; // 5 minutes
+      
+      if (!forceReload && cachedProducts && cacheAge < CACHE_MAX_AGE) {
+        console.log(`📦 Restoring ${cachedProducts.length} cached products for store ${storeId} (cache age: ${Math.round(cacheAge/1000)}s)`);
+        this.updateCacheState({
+          products: cachedProducts,
+          isLoading: false,
+          lastUpdated: cacheTimestamp,
+          error: null,
+          hasInitialLoad: true
+        });
+        this.currentStoreId = storeId;
+        this.currentCompanyId = companyId;
+        
+        // Still set up real-time listener for updates
+        this.setupRealtimeListener(companyId, storeId).catch(err => {
+          console.warn('Failed to setup real-time listener for cached store:', err);
+        });
+        return;
+      }
+      
       // Unsubscribe from previous listener if exists
       this.unsubscribeFromRealTimeUpdates();
       
@@ -808,16 +844,9 @@ export class ProductService implements OnDestroy {
         hasInitialLoad: true
       });
 
-      // Save to IndexedDB when online for offline access
-      if (navigator.onLine && !isFromCache) {
-        console.log('💾 Saving products to IndexedDB for offline access...');
-        this.saveProductsToIndexedDB(normalizedProducts).catch(error => {
-          console.warn('⚠️ Failed to save products to IndexedDB:', error);
-          this.logger.warn('Failed to save products to IndexedDB', { area: 'products', payload: { error: String(error) } });
-        });
-      }
-
-      console.log('✅ Products cache updated (Firestore offline persistence enabled)');
+      // Firestore snapshot with includeMetadataChanges automatically handles caching
+      // No need for custom IndexedDB - Firestore manages its own cache
+      console.log(`✅ Products cache updated (Firestore ${isFromCache ? 'CACHE' : 'SERVER'})`);
 
       this.logger.dbSuccess('Products cache updated', { 
         area: 'products', 
@@ -1287,6 +1316,8 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
 
   async updateProduct(productId: string, updates: Partial<Product>): Promise<void> {
     try {
+      console.log('🔧 updateProduct called with:', { productId, updates: JSON.stringify(updates, null, 2) });
+
       // Get current user ID
       const currentUser = this.authService.getCurrentUser();
       if (!currentUser) {
@@ -1320,16 +1351,31 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
       }
       // Normalize totalStock when present
       if ('totalStock' in updates) {
-        updateData.totalStock = Number((updates as any).totalStock || 0);
+        const stockValue = (updates as any).totalStock;
+        // Handle null/undefined/empty string explicitly
+        if (stockValue === null || stockValue === undefined || stockValue === '') {
+          updateData.totalStock = 0;
+        } else {
+          updateData.totalStock = Number(stockValue);
+        }
+        console.log('📊 Normalizing totalStock:', { 
+          original: stockValue, 
+          normalized: updateData.totalStock,
+          type: typeof stockValue 
+        });
       }
+
+      console.log('🔍 Before cleaning - updateData:', JSON.stringify(updateData, null, 2));
 
       // Clean undefined values to prevent Firestore errors
       const cleanedUpdateData = this.cleanUndefinedValues(updateData);
       
-      console.log('📝 updateProduct - updating product:', productId, 'with data:', cleanedUpdateData);
+      console.log('📝 updateProduct - updating product:', productId, 'with cleaned data:', JSON.stringify(cleanedUpdateData, null, 2));
 
-      // Use OfflineDocumentService for consistent online/offline updates
-      await this.offlineDocService.updateDocument('products', productId, cleanedUpdateData);
+      // Use Firestore updateDoc directly for automatic offline persistence
+      // Firestore will queue this update if offline and update its cache automatically
+      const productRef = doc(this.firestore, 'products', productId);
+      await updateDoc(productRef, cleanedUpdateData);
 
       // Update the local cache optimistically with the cleaned/normalized data
       this.updateProductInCache(productId, cleanedUpdateData as Partial<Product>);

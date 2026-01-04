@@ -18,6 +18,7 @@ import { DeviceService } from './device.service';
 import { IndexedDBService } from '../core/services/indexeddb.service';
 import { FirestoreSecurityService } from '../core/services/firestore-security.service';
 import { OfflineDocumentService } from '../core/services/offline-document.service';
+import { NetworkService } from '../core/services/network.service';
 import { Order, OrderDetail, OrderItem, CartItem, ReceiptData, OrderDiscount, CartSummary, ReceiptValidityNotice } from '../interfaces/pos.interface';
 import { Product } from '../interfaces/product.interface';
 import { Store } from '../interfaces/store.interface';
@@ -139,6 +140,7 @@ export class PosService {
   private storeService = inject(StoreService);
   private deviceService = inject(DeviceService);
   private ledgerService = inject(LedgerService);
+  private networkService = inject(NetworkService);
   
   // Cache for product tags
   private productTagsCache = signal<Map<string, string>>(new Map());
@@ -489,7 +491,7 @@ export class PosService {
       // Record accounting ledger entry for the created order (non-blocking)
       try {
         // Skip ledger recording if offline - it will be handled when synced
-        if (navigator.onLine) {
+        if (this.networkService.isOnline()) {
           // Use the locally computed `summary` from above (not an undefined `cartSummary`)
           const ledgerRes: any = await this.ledgerService.recordEvent(
             company.id || '',
@@ -510,7 +512,7 @@ export class PosService {
 
       // Sync local product summaries with server values so UI reflects Firestore state
       try {
-        if (navigator.onLine) {
+        if (this.networkService.isOnline()) {
           await this.syncProductsFromOrder(orderItems);
           console.log('🔄 Local product summaries synced from server after invoice');
         } else {
@@ -528,7 +530,7 @@ export class PosService {
         // Mark tracking docs as completed for this order (if any were created as pending)
         try {
           // Skip tracking update if offline - Firestore will handle sync
-          if (navigator.onLine) {
+          if (this.networkService.isOnline()) {
             const markRes = await this.ordersSellingTrackingService.markOrderTrackingCompleted(invoiceResult.orderId!, user.uid);
             if (markRes.errors && markRes.errors.length) {
               console.warn('⚠️ Some tracking docs failed to be marked completed:', markRes.errors);
@@ -661,12 +663,38 @@ export class PosService {
       console.log('📦 Complete orderData being sent to invoice service:', JSON.stringify(orderData, null, 2));
       
       // 🧾 Execute invoice transaction with NEW structure
-      const invoiceResult = await this.invoiceService.processInvoiceTransaction({
-        storeId: storeId,
-        orderData: orderData,
-        customerInfo: customerInfo, // Pass as separate parameter
-        paymentsData: payments      // Pass as separate parameter
-      });
+      // Only apply timeout when online - offline mode should work without timeout
+      let invoiceResult;
+      try {
+        const invoicePromise = this.invoiceService.processInvoiceTransaction({
+          storeId: storeId,
+          orderData: orderData,
+          customerInfo: customerInfo, // Pass as separate parameter
+          paymentsData: payments      // Pass as separate parameter
+        });
+        
+        // Apply very short timeout to quickly detect offline mode
+        if (this.networkService.isOnline()) {
+          console.log('🌐 Online mode: applying 2-second timeout for invoice transaction');
+          const timeoutPromise = new Promise<never>((_, reject) => 
+            setTimeout(() => reject(new Error('Invoice transaction timeout - switching to offline mode')), 2000)
+          );
+          
+          invoiceResult = await Promise.race([invoicePromise, timeoutPromise]);
+        } else {
+          console.log('📴 Offline mode: processing invoice without timeout (Firestore persistence active)');
+          invoiceResult = await invoicePromise;
+        }
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        
+        // If timeout or network error, the invoice service should have already switched to offline mode
+        if (errorMessage.includes('timeout') || errorMessage.includes('network') || !this.networkService.isOnline()) {
+          console.log('⚠️ Network timeout detected, invoice service should handle offline mode automatically');
+        }
+        
+        throw error; // Let the invoice service handle offline processing
+      }
 
       // Check transaction result
       if (!invoiceResult.success) {
@@ -678,77 +706,133 @@ export class PosService {
         orderId: invoiceResult.orderId
       });
 
-      // Record accounting ledger entry for the created order (non-blocking)
-      try {
-        // Skip ledger recording if offline - it will be handled when synced
-        if (navigator.onLine) {
-          // Add timeout to prevent hanging on slow connections
-          const ledgerPromise = this.ledgerService.recordEvent(
-            company.id!,
-            storeId,
-            invoiceResult.orderId!,
-            'completed',
-            Number(cartSummary.netAmount || 0),
-            Number(cartSummary.totalQuantity || 0),
-            user.uid
-          );
-          
-          const ledgerRes: any = await Promise.race([
-            ledgerPromise,
-            new Promise((_, reject) => setTimeout(() => reject(new Error('Ledger recording timeout')), 5000))
-          ]);
-          
-          console.log('LedgerService: order ledger entry created for', invoiceResult.orderId, 'docId=', ledgerRes?.id, 'runningBalance=', ledgerRes?.runningBalanceAmount, ledgerRes?.runningBalanceQty);
-        } else {
-          console.log('📱 Offline: Skipping ledger entry - will sync when online');
-        }
-      } catch (ledgerErr) {
-        console.warn('LedgerService: failed to create ledger entry (non-blocking):', ledgerErr);
-      }
-
-      // Update product inventory
-      try {
-        await this.updateProductInventory(cartItems, { orderId: invoiceResult.orderId!, invoiceNumber: invoiceResult.invoiceNumber! });
-        console.log('✅ Product inventory updated successfully');
-        
-        // Mark tracking docs as completed for this order (if any were created as pending)
-        try {
-          // Skip tracking update if offline - Firestore will handle sync
-          if (navigator.onLine) {
-            // Add timeout to prevent hanging on slow connections
-            const trackingPromise = this.ordersSellingTrackingService.markOrderTrackingCompleted(invoiceResult.orderId!, user.uid);
-            
-            const markRes = await Promise.race([
-              trackingPromise,
-              new Promise((_, reject) => setTimeout(() => reject(new Error('Tracking update timeout')), 5000))
-            ]) as any;
-            
-            if (markRes?.errors && markRes.errors.length) {
-              console.warn('⚠️ Some tracking docs failed to be marked completed:', markRes.errors);
-            } else {
-              console.log(`✅ Marked ${markRes?.updated || 0} tracking docs completed for order ${invoiceResult.orderId}`);
-            }
-          } else {
-            console.log('📱 Offline: Skipping tracking update - will sync when online');
-          }
-        } catch (markErr) {
-          console.warn('⚠️ Failed to mark ordersSellingTracking docs completed (non-blocking):', markErr);
-        }
-      } catch (inventoryError) {
-        console.error('⚠️ Warning: Order created but inventory update failed (non-blocking):', inventoryError);
-        // Don't throw - allow order to complete even if inventory update fails
-      }
-
-      return {
+      // Return order info immediately so receipt can be shown
+      const orderResult = {
         orderId: invoiceResult.orderId!,
         invoiceNumber: invoiceResult.invoiceNumber!
       };
+
+      // Fire all background operations without blocking receipt display
+      // These will complete asynchronously and Firestore offline persistence will queue them
+      this.executeBackgroundOrderOperations(
+        company.id!,
+        storeId,
+        invoiceResult.orderId!,
+        invoiceResult.invoiceNumber!,
+        cartSummary,
+        cartItems,
+        user.uid
+      ).catch(err => {
+        console.warn('⚠️ Background operations error (non-critical):', err);
+      });
+
+      return orderResult;
 
     } catch (error) {
       console.error('❌ Error processing NEW order with invoice:', error);
       throw error;
     } finally {
       this.isProcessingSignal.set(false);
+    }
+  }
+
+  /**
+   * Execute background operations after order is created
+   * These operations run asynchronously and don't block receipt display
+   */
+  private async executeBackgroundOrderOperations(
+    companyId: string,
+    storeId: string,
+    orderId: string,
+    invoiceNumber: string,
+    cartSummary: any,
+    cartItems: CartItem[],
+    userId: string
+  ): Promise<void> {
+    console.log('🔄 Starting background operations for order:', orderId);
+
+    // 1. Record ledger entry (non-blocking)
+    this.recordLedgerEntry(companyId, storeId, orderId, cartSummary, userId).catch(err => {
+      console.warn('⚠️ Ledger recording failed (non-critical):', err);
+    });
+
+    // 2. Update product inventory (non-blocking)
+    this.updateProductInventory(cartItems, { orderId, invoiceNumber }).catch(err => {
+      console.warn('⚠️ Inventory update failed (non-critical):', err);
+    });
+
+    // 3. Mark tracking completed (non-blocking)
+    this.markTrackingCompleted(orderId, userId).catch(err => {
+      console.warn('⚠️ Tracking update failed (non-critical):', err);
+    });
+
+    console.log('✅ Background operations initiated for order:', orderId);
+  }
+
+  /**
+   * Record ledger entry for completed order
+   */
+  private async recordLedgerEntry(
+    companyId: string,
+    storeId: string,
+    orderId: string,
+    cartSummary: any,
+    userId: string
+  ): Promise<void> {
+    try {
+      const ledgerPromise = this.ledgerService.recordEvent(
+        companyId,
+        storeId,
+        orderId,
+        'completed',
+        Number(cartSummary.netAmount || 0),
+        Number(cartSummary.totalQuantity || 0),
+        userId
+      );
+      
+      if (this.networkService.isOnline()) {
+        // Add short timeout (1s) only when online
+        const ledgerRes: any = await Promise.race([
+          ledgerPromise,
+          new Promise((_, reject) => setTimeout(() => reject(new Error('Ledger recording timeout')), 1000))
+        ]);
+        console.log('✅ Ledger entry created:', ledgerRes?.id);
+      } else {
+        console.log('📱 Offline: Recording ledger (will sync when online)');
+        await ledgerPromise;
+      }
+    } catch (error) {
+      console.warn('⚠️ Ledger recording failed:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Mark order tracking as completed
+   */
+  private async markTrackingCompleted(orderId: string, userId: string): Promise<void> {
+    try {
+      const trackingPromise = this.ordersSellingTrackingService.markOrderTrackingCompleted(orderId, userId);
+      
+      if (this.networkService.isOnline()) {
+        // Add short timeout (1s) only when online
+        const markRes = await Promise.race([
+          trackingPromise,
+          new Promise((_, reject) => setTimeout(() => reject(new Error('Tracking update timeout')), 1000))
+        ]) as any;
+        
+        if (markRes?.errors?.length) {
+          console.warn('⚠️ Some tracking docs failed:', markRes.errors);
+        } else {
+          console.log(`✅ Marked ${markRes?.updated || 0} tracking docs completed`);
+        }
+      } else {
+        console.log('📱 Offline: Marking tracking (will sync when online)');
+        await trackingPromise;
+      }
+    } catch (error) {
+      console.warn('⚠️ Tracking update failed:', error);
+      throw error;
     }
   }
 
@@ -1178,7 +1262,7 @@ export class PosService {
 
     if (activeBatches.length === 0) {
       // In offline mode, proceed without FIFO validation - Firestore will validate when synced
-      if (!navigator.onLine) {
+      if (!this.networkService.isOnline()) {
         console.log('📱 Offline mode: No batch data available, proceeding with stock deduction only');
         // Just update the product stock without batch-level tracking
         const currentUser = this.authService.getCurrentUser();
@@ -1252,7 +1336,7 @@ export class PosService {
     if (currentTotal < quantityToDeduct) {
       console.warn(`⚠️ Product ${productId} may have insufficient stock. Available: ${currentTotal}, Needed: ${quantityToDeduct}`);
       // In offline mode, allow deduction - Firestore will sync and validate when online
-      if (!navigator.onLine) {
+      if (!this.networkService.isOnline()) {
         console.log('📱 Offline mode: proceeding with deduction, will validate when synced');
       } else {
         throw new Error(`Insufficient product totalStock for product ${productId}. Available: ${currentTotal}, Needed: ${quantityToDeduct}`);
@@ -1261,7 +1345,7 @@ export class PosService {
   } catch (readError) {
     console.warn('⚠️ Failed to read product for validation:', readError);
     // In offline mode, proceed with deduction - validation will happen when synced
-    if (!navigator.onLine) {
+    if (!this.networkService.isOnline()) {
       console.log('📱 Offline mode: proceeding without pre-validation');
       currentTotal = quantityToDeduct; // Assume sufficient stock
     } else {
@@ -1293,7 +1377,7 @@ export class PosService {
     } catch (batchReadError) {
       console.warn(`⚠️ Failed to read batch ${p.batchId} for validation:`, batchReadError);
       // In offline mode, proceed without pre-validation
-      if (!navigator.onLine) {
+      if (!this.networkService.isOnline()) {
         console.log(`📱 Offline mode: proceeding with batch ${p.batchId} update`);
       } else {
         // Online but read failed - skip this batch update
@@ -1302,14 +1386,16 @@ export class PosService {
       }
     }
     
-    const newQty = Math.max(0, currentQty - p.deduct);
-    
+    // Use increment() for atomic offline-compatible deductions
+    // Firestore will queue these operations and apply them atomically when online
     batch.update(batchRef as any, {
-      quantity: newQty,
-      totalDeducted: (batchData?.totalDeducted || 0) + p.deduct,
-      updatedAt: new Date(),
-      status: newQty === 0 ? 'inactive' : (batchData?.status || 'active')
+      quantity: increment(-p.deduct),
+      totalDeducted: increment(p.deduct),
+      updatedAt: new Date()
+      // Note: status update removed - will be handled by cloud functions or manual reconciliation
     });
+    
+    const newQty = Math.max(0, currentQty - p.deduct);
     
     console.log(`✅ Batch: will update batch ${p.batchId} ${currentQty} -> ${newQty}`);
     
@@ -1326,13 +1412,15 @@ export class PosService {
     batch.set(dedRef, dedRecord);
   }
   
-  // Update product totalStock
-  const newTotal = Math.max(0, currentTotal - quantityToDeduct);
+  // Update product totalStock using increment() for atomic offline-compatible deduction
+  // Firestore offline persistence will queue this and apply atomically when online
   batch.update(productRef as any, {
-    totalStock: newTotal,
+    totalStock: increment(-quantityToDeduct),
     lastUpdated: new Date(),
     updatedBy: currentUser?.uid || 'system'
   });
+  
+  const newTotal = Math.max(0, currentTotal - quantityToDeduct);
   
   console.log(`🔻 Batch: product ${productId} totalStock ${currentTotal} -> ${newTotal}`);
   
@@ -1348,7 +1436,7 @@ export class PosService {
   } catch (commitError) {
     console.warn('⚠️ Batch commit timeout or error:', commitError);
     // In offline mode, the batch is queued by Firestore offline persistence
-    if (!navigator.onLine) {
+    if (!this.networkService.isOnline()) {
       console.log('📱 Offline mode: batch queued for sync when online');
     } else {
       throw commitError;

@@ -1,4 +1,4 @@
-import { Injectable, inject } from '@angular/core';
+import { Injectable } from '@angular/core';
 import { 
   Firestore, 
   collection, 
@@ -52,8 +52,14 @@ export class TagsService {
       createdBy: currentUser?.uid || ''
     };
 
-    const docRef = await addDoc(collection(this.firestore, 'productTags'), newTag);
-    return docRef.id;
+    try {
+      const docRef = await addDoc(collection(this.firestore, 'productTags'), newTag);
+      return docRef.id;
+    } catch (error) {
+      console.error('❌ Failed to create tag:', error);
+      // Firestore's native offline persistence handles this automatically
+      throw error;
+    }
   }
 
   async updateTag(tagId: string, updates: Partial<ProductTag>): Promise<void> {
@@ -65,7 +71,13 @@ export class TagsService {
       updatedBy: currentUser?.uid || ''
     };
 
-    await updateDoc(doc(this.firestore, 'productTags', tagId), updateData);
+    try {
+      await updateDoc(doc(this.firestore, 'productTags', tagId), updateData);
+    } catch (error) {
+      console.error('❌ Failed to update tag:', error);
+      // Firestore's native offline persistence handles this automatically
+      throw error;
+    }
   }
 
   async deleteTag(tagId: string): Promise<void> {
