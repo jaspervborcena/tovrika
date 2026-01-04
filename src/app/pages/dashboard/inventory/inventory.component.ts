@@ -105,6 +105,66 @@ import { AuthService } from '../../../services/auth.service';
       background-color: #f3f4f6;
       border-radius: 0.375rem;
     }
+
+    @media (max-width: 768px) {
+      .header-section {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 1rem;
+      }
+
+      .store-selection {
+        width: 100%;
+      }
+
+      .store-selector {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0.5rem;
+      }
+
+      .store-selector label {
+        font-size: 0.875rem;
+      }
+
+      .store-select {
+        width: 100%;
+        font-size: 0.875rem;
+        padding: 0.625rem 0.75rem;
+      }
+
+      .single-store {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.375rem;
+      }
+
+      .single-store label {
+        font-size: 0.875rem;
+      }
+
+      .store-name {
+        font-size: 0.875rem;
+        padding: 0.5rem 0.75rem;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .store-selector label,
+      .single-store label {
+        font-size: 0.8125rem;
+      }
+
+      .store-select {
+        font-size: 0.8125rem;
+        padding: 0.5rem 0.625rem;
+      }
+
+      .store-name {
+        font-size: 0.8125rem;
+        padding: 0.375rem 0.625rem;
+      }
+    }
   `]
 })
 export class InventoryComponent implements OnInit {

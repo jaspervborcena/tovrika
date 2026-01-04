@@ -5,6 +5,7 @@ import { Product, ProductInventory, ProductStatus } from '../../../interfaces/pr
 import { ProductInventoryEntry } from '../../../interfaces/product-inventory-entry.interface';
 import { ProductService } from '../../../services/product.service';
 import { StoreService } from '../../../services/store.service';
+import { StoreSelectionService } from '../../../services/store-selection.service';
 
 import { AuthService } from '../../../services/auth.service';
 import { ToastService } from '../../../shared/services/toast.service';
@@ -1235,17 +1236,17 @@ import { AppConstants } from '../../../shared/enums/app-constants.enum';
             placeholder="Search products by name, SKU, or category..."
             class="search-input">
           <select 
+            [value]="selectedStore()" 
+            (change)="onSelectedStoreChange($any($event.target).value)"
+            class="filter-select">
+            <option value="">All Stores</option>
+            <option *ngFor="let store of stores()" [value]="store.id">{{ store.storeName }}</option>
+          </select>
+          <select 
             [(ngModel)]="selectedCategory" 
             class="filter-select">
             <option value="">All Categories</option>
             <option *ngFor="let category of categories()" [value]="category">{{ category }}</option>
-          </select>
-          <select 
-            [(ngModel)]="selectedStore" 
-            (ngModelChange)="onSelectedStoreChange($event)"
-            class="filter-select">
-            <option value="">All Stores</option>
-            <option *ngFor="let store of stores()" [value]="store.id">{{ store.storeName }}</option>
           </select>
           <button class="btn btn-secondary" (click)="clearSearch()">Clear</button>
         </div>
@@ -1405,7 +1406,8 @@ import { AppConstants } from '../../../shared/enums/app-constants.enum';
                   <select 
                     id="storeId"
                     formControlName="storeId"
-                    class="form-input">
+                    class="form-input"
+                    (change)="onStoreChange()">
                     <option value="">Select Store</option>
                     <option *ngFor="let store of stores()" [value]="store.id">{{ store.storeName }}</option>
                   </select>
@@ -2231,7 +2233,12 @@ export class ProductManagementComponent implements OnInit {
   // Signals
   readonly products = computed(() => this.productService.getProducts());
   readonly stores = computed(() => this.storeService.getStores().filter(store => store.status === 'active'));
-  readonly categories = computed(() => this.categoryService.getCategoryLabels());
+  // Get unique categories from products instead of category service
+  readonly categories = computed(() => {
+    const allProducts = this.products();
+    const categorySet = new Set(allProducts.map(product => product.category).filter(cat => cat && cat.trim()));
+    return Array.from(categorySet).sort();
+  });
 
   // Reactive filtered products - automatically updates when products change or filters change
   readonly filteredProducts = computed(() => {
@@ -2251,8 +2258,8 @@ export class ProductManagementComponent implements OnInit {
       filtered = filtered.filter(product => product.category === this.selectedCategory);
     }
 
-    if (this.selectedStore) {
-      filtered = filtered.filter(product => product.storeId === this.selectedStore);
+    if (this.selectedStore()) {
+      filtered = filtered.filter(product => product.storeId === this.selectedStore());
     }
 
     // Tag filtering with AND logic: product must have ALL selected tags
@@ -2271,7 +2278,8 @@ export class ProductManagementComponent implements OnInit {
   // State
   searchTerm = '';
   selectedCategory = '';
-  selectedStore = '';
+  // Use global store selection instead of local selectedStore
+  selectedStore = computed(() => this.storeSelectionService.selectedStoreId());
   activeTagFilters: string[] = []; // Active tag filter IDs for product list filtering
   // Pagination state for BigQuery products API
   pageSize = 50;
@@ -2349,7 +2357,8 @@ export class ProductManagementComponent implements OnInit {
     private categoryService: CategoryService,
     private inventoryDataService: InventoryDataService,
     private predefinedTypesService: PredefinedTypesService,
-    private tagsService: TagsService
+    private tagsService: TagsService,
+    private storeSelectionService: StoreSelectionService
   ) {
     this.productForm = this.createProductForm();
     this.inventoryForm = this.createInventoryForm();
@@ -2532,6 +2541,11 @@ export class ProductManagementComponent implements OnInit {
       if (currentPermission?.companyId) {
         await this.storeService.loadStoresByCompany(currentPermission.companyId);
         
+        // Initialize the global store selection if not already set
+        if (currentPermission.storeId && !this.storeSelectionService.getCurrentStoreId()) {
+          this.storeSelectionService.setSelectedStore(currentPermission.storeId);
+        }
+        
         // Initialize products with real-time updates
         if (currentPermission.storeId) {
           await this.productService.initializeProducts(currentPermission.storeId);
@@ -2541,7 +2555,9 @@ export class ProductManagementComponent implements OnInit {
           console.warn('No storeId available - cannot load products');
         }
         
-        await this.loadCategories(); // Load categories from CategoryService
+        // No need to load categories from service - we get them from products signal
+        
+        // Store service sets empty arrays for creator accounts without companies
       } else {
         // Creator account, no companyId or stores yet, allow empty arrays for onboarding
         this.storeService['storesSignal']?.set([]); // Use bracket notation to bypass private
@@ -2706,7 +2722,7 @@ export class ProductManagementComponent implements OnInit {
     console.log('🔢 Generated UPC-A barcode:', barcode, '(check digit:', checkDigit + ')');
   }
 
-  openAddModal(): void {
+  async openAddModal(): Promise<void> {
     console.log('openAddModal called');
     this.isEditMode = false;
     this.selectedProduct = null;
@@ -2737,6 +2753,33 @@ export class ProductManagementComponent implements OnInit {
       discountType: 'percentage',
       discountValue: 0
     });
+    
+    // Load categories for the default store if available
+    if (defaultStoreId) {
+      console.log('📋 Loading categories for default store:', defaultStoreId);
+      try {
+        await this.categoryService.loadCategoriesByStore(defaultStoreId);
+        console.log('✅ Categories loaded for store. Count:', this.categories().length);
+        
+        // Debug: Log actual category values
+        if (this.categories().length > 0) {
+          console.log('📋 Available categories:', this.categories());
+        } else {
+          console.log('⚠️ No categories found for store:', defaultStoreId);
+          console.log('🔍 This might indicate:');
+          console.log('  - No categories exist in Firestore for this store');
+          console.log('  - Categories collection structure mismatch');
+          console.log('  - Firestore permissions issue');
+        }
+        
+        // Force change detection to update dropdown
+        this.cdr.detectChanges();
+      } catch (error) {
+        console.error('❌ Error loading categories for default store:', error);
+      }
+    } else {
+      console.log('⚠️ No default store ID available for category loading');
+    }
     // Ensure required defaults after reset
     this.productForm.patchValue({
       unitType: 'pieces',
@@ -2970,7 +3013,7 @@ export class ProductManagementComponent implements OnInit {
         );
         
         if (duplicateSku) {
-          this.toastService.error(`SKU "${skuId}" already exists for this store in product "${duplicateSku.productName}". Please use a different SKU.`);
+          this.toastService.error(`Cannot save: SKU "${skuId}" already exists in product "${duplicateSku.productName}". Each product must have a unique SKU for this store.`);
           this.loading = false;
           return;
         }
@@ -3045,6 +3088,8 @@ export class ProductManagementComponent implements OnInit {
           sellingPrice: this.hasExistingInventory() ? (this.selectedProduct.sellingPrice || computedSellingPrice) : computedSellingPrice,
           // originalPrice: base/unit price stored alongside sellingPrice
           originalPrice: this.hasExistingInventory() ? (this.selectedProduct.originalPrice || computedOriginalPrice) : computedOriginalPrice,
+          // Use form value if edited, otherwise preserve existing totalStock
+          totalStock: Number(formValue.totalStock ?? this.selectedProduct.totalStock ?? 0),
           storeId: storeId,  // Use storeId from permission
           barcodeId: formValue.barcodeId,
           imageUrl: formValue.imageUrl,
@@ -3079,6 +3124,10 @@ export class ProductManagementComponent implements OnInit {
             if (!currentPermission) {
               throw new Error('No permission found');
             }
+            // Use the product's storeId, not the current permission's storeId
+            const productStoreId = this.selectedProduct.storeId || storeId || currentPermission.storeId || '';
+            console.log('📦 Using storeId from product:', productStoreId);
+            
             const batchData = {
               batchId: this.generateBatchId(),
               quantity: Number(formValue.totalStock || 0),
@@ -3089,7 +3138,7 @@ export class ProductManagementComponent implements OnInit {
               status: ProductStatus.Active,
               unitType: formValue.unitType || 'pieces',
               companyId: currentPermission.companyId,
-              storeId: currentPermission.storeId || '',
+              storeId: productStoreId, // Use product's storeId
               isVatApplicable: formValue.isVatApplicable || false,
               vatRate: formValue.vatRate ?? AppConstants.DEFAULT_VAT_RATE,
               hasDiscount: formValue.hasDiscount || false,
@@ -3099,7 +3148,7 @@ export class ProductManagementComponent implements OnInit {
             await this.inventoryDataService.addBatch(this.selectedProduct.id!, batchData);
             console.log('✅ Initial inventory batch created for edited product');
             // Refresh products to update cache
-            await this.productService.refreshProducts(currentPermission.storeId || '');
+            await this.productService.refreshProducts(productStoreId);
           } catch (batchError) {
             console.error('❌ Failed to create inventory batch for edited product:', batchError);
             this.toastService.error('Product updated but failed to create inventory batch');
@@ -3921,33 +3970,28 @@ export class ProductManagementComponent implements OnInit {
     this.isEditMode = false;
     this.selectedProduct = null;
     
-    // Reset tags for duplicate
+    // Reset tags for duplicate - don't copy tags
     this.selectedTagIds.set([]);
     
-    // Copy product data but exclude specific fields
+    // Copy ALL product data including SKU (but prevent saving same SKU)
     const duplicateData = {
       ...product,
-      // Clear identification fields
-      productCode: '',
-      skuId: '',
-      barcodeId: '',
-      // Clear tags
+      // Keep SKU but user must change it before saving (validation will prevent same SKU)
+      // Clear tags - don't copy tags to duplicate
       tags: undefined,
       tagLabels: undefined,
-      // Clear pricing & inventory fields
-      initialReceivedAt: new Date().toISOString().split('T')[0],
-      initialBatchId: '',
-      initialQuantity: 0,
-      totalStock: 0,
-      // Don't set prices here - let form initialization handle them
-      // Keep other fields like category, description, unit type, VAT settings, etc.
+      // Keep all other fields including SKU, prices, descriptions, settings, etc.
+      // Only clear identification that must be unique
+      id: undefined, // Let system generate new ID
+      createdAt: undefined, // Let system set new creation date
+      updatedAt: undefined, // Let system set new update date
     };
     
     // Reset form and patch with duplicate data
     this.productForm.reset();
-    // Remove price fields from duplicateData to let form defaults take over
-    const { sellingPrice, originalPrice, ...dataWithoutPrices } = duplicateData;
-    this.productForm.patchValue(dataWithoutPrices);
+    // Remove only tags and system fields from duplicateData, keep everything else including SKU and prices
+    const { tags, tagLabels, id, createdAt, updatedAt, ...dataWithoutExcludedFields } = duplicateData;
+    this.productForm.patchValue(dataWithoutExcludedFields);
     
     // Ensure defaults are set
     this.productForm.patchValue({
@@ -3967,9 +4011,10 @@ export class ProductManagementComponent implements OnInit {
     this.showModal = true;
     this.cdr.detectChanges();
     
-    this.toastService.info(`Duplicating "${product.productName}" - Please update product details`);
+    this.toastService.info(`Duplicating "${product.productName}" - SKU copied but must be changed before saving to avoid conflicts`);
   }
 
+  // Create default categories for a store if none exist
   async deleteProduct(product: Product): Promise<void> {
     // Set up confirmation dialog
     this.productToDelete = product;
@@ -4025,7 +4070,7 @@ export class ProductManagementComponent implements OnInit {
       try {
         const label = this.categoryToDeleteLabel || '';
         await this.categoryService.deleteCategory(this.categoryToDeleteId);
-        await this.loadCategories();
+        // Categories will automatically update via computed signal from products
         if (this.productForm.get('category')?.value === label) {
           this.productForm.patchValue({ category: '' });
         }
@@ -4064,13 +4109,14 @@ export class ProductManagementComponent implements OnInit {
   clearSearch(): void {
     this.searchTerm = '';
     this.selectedCategory = '';
-    this.selectedStore = '';
+    this.storeSelectionService.clearSelection();
     // No need to manually filter - computed signal handles this automatically
   }
 
   onSelectedStoreChange(storeId: string): void {
     console.log('Store filter changed to:', storeId);
-    this.selectedStore = storeId;
+    // Update the global store selection service instead of local property
+    this.storeSelectionService.setSelectedStore(storeId);
     // Try to initialize products for the selected store to ensure list is in sync
     if (storeId) {
       this.productService.initializeProducts(storeId).catch(err => {
@@ -4164,23 +4210,22 @@ export class ProductManagementComponent implements OnInit {
   filteredCategories: string[] = [];
   showCategorySuggestions = false;
 
-  async loadCategories(): Promise<void> {
-    try {
-      const currentPermission = this.authService.getCurrentPermission();
-      
-      // Get storeId from the product form if available, or use current permission's storeId
-      const storeId = this.productForm.value.storeId || currentPermission?.storeId;
-      
-      if (storeId) {
-        console.log('🔍 Loading categories for store:', storeId);
-        await this.categoryService.loadCategoriesByStore(storeId);
-        console.log('✅ Categories loaded:', this.categories().length);
+  // Handle store selection change
+  async onStoreChange(): Promise<void> {
+    // Small delay to ensure form value is updated
+    setTimeout(async () => {
+      const selectedStoreId = this.productForm.get('storeId')?.value;
+      if (selectedStoreId) {
+        console.log('🔄 Store changed in product form to:', selectedStoreId);
+        
+        // Clear current category selection since categories are store-specific
+        this.productForm.patchValue({ category: '' });
       } else {
-        console.log('❌ No storeId available for loading categories');
+        console.log('⚠️ No store selected, clearing categories');
+        // Clear category selection when no store is selected
+        this.productForm.patchValue({ category: '' });
       }
-    } catch (error) {
-      console.error('❌ Error loading categories:', error);
-    }
+    }, 100);
   }
 
   async loadUnitTypes(): Promise<void> {
@@ -4332,7 +4377,7 @@ export class ProductManagementComponent implements OnInit {
       
       console.log('🔍 Creating category with data:', categoryData);
       await this.categoryService.createCategory(categoryData);
-      await this.loadCategories(); // Refresh categories list
+      // Categories will automatically update via computed signal from products
       
       // Set the new category in the product form and switch back to product mode
       this.productForm.patchValue({ category: formValue.categoryLabel });
