@@ -100,6 +100,8 @@ export class HeaderComponent implements OnInit {
   protected toggleUserMenu() {
     // Prevent opening the dropdown if not authenticated
     if (!this.currentUser()) return;
+    // Only one dropdown at a time
+    this.isLanguageMenuOpen.set(false);
     this.isUserMenuOpen.set(!this.isUserMenuOpen());
   }
 
@@ -210,6 +212,8 @@ export class HeaderComponent implements OnInit {
 
   // Language selection methods
   toggleLanguageMenu(): void {
+    // Only one dropdown at a time
+    this.isUserMenuOpen.set(false);
     this.isLanguageMenuOpen.set(!this.isLanguageMenuOpen());
   }
 

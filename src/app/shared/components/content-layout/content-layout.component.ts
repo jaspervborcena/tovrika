@@ -8,7 +8,7 @@ import { CommonModule } from '@angular/common';
   template: `
     <div class="min-h-screen bg-gray-100">
       <!-- Content with proper header spacing -->
-      <main class="mt-24">
+      <main class="mt-[70px] sm:mt-20">
         <ng-content></ng-content>
       </main>
     </div>

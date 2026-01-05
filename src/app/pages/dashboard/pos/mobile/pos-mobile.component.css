@@ -36,6 +36,12 @@ input, textarea {
   padding-top: 20px;
 }
 
+@media (max-width: 640px) {
+  .mobile-pos-wrapper {
+    margin-top: 70px;
+  }
+}
+
 /* Prevent zoom on double tap */
 .mobile-pos-wrapper * {
   touch-action: manipulation;

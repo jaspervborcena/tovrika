@@ -2263,6 +2263,12 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     console.log('🎯 POS COMPONENT: Current URL:', window.location.href);
     console.log('🎯 POS COMPONENT: Timestamp:', new Date().toISOString());
     
+    // Set default tab to first available tab
+    if (this.accessTabs.length > 0) {
+      console.log('📑 Setting default tab to:', this.accessTabs[0]);
+      this.accessTabSignal.set(this.accessTabs[0]);
+    }
+    
     // Scroll to top when POS component loads
     setTimeout(() => {
       window.scrollTo({ top: 0, behavior: 'smooth' });
