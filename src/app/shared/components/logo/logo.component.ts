@@ -174,6 +174,11 @@ export type LogoBackground = 'none' | 'white' | 'light' | 'rounded' | 'circle';
       .logo-container.responsive .logo-text.size-xl {
         font-size: 1.25rem;
       }
+
+      /* Hide logo text on mobile */
+      .logo-text.size-md.theme-light {
+        display: none;
+      }
     }
   `]
 })

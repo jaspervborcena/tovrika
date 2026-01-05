@@ -15,7 +15,7 @@
   top: 0;
   left: 0;
   right: 0;
-  z-index: 50;
+  z-index: 2000;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
   transition: transform 0.3s ease, opacity 0.3s ease;
 }
@@ -49,7 +49,7 @@
   justify-content: center;
   box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
   cursor: pointer;
-  z-index: 1000;
+  z-index: 3000;
   transition: all 0.3s ease;
   animation: fadeIn 0.3s ease;
 }
@@ -308,16 +308,17 @@ header.dashboard-header.offline {
 }
 
 .language-icon {
-  font-size: 20px;
-  line-height: 1;
-  display: inline-block;
-  filter: grayscale(100%) brightness(2);
+  width: 20px;
+  height: 20px;
+  display: block;
+  color: white;
 }
 
 .language-dropdown {
   position: absolute;
   top: calc(100% + 8px);
-  right: 0;
+  left: 0;
+  right: auto;
   background: white;
   border-radius: 12px;
   box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
@@ -366,26 +367,13 @@ header.dashboard-header.offline {
 }
 
 .user-avatar {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  background: rgba(255, 255, 255, 0.15);
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 12px;
-  padding: 0.5rem 0.75rem;
-  color: white;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  font-weight: 600;
-  min-width: 4rem;
+  min-width: 2.5rem;
+  padding: 0;
 }
 
 .user-avatar:hover,
 .user-avatar.active {
-  background: rgba(255, 255, 255, 0.25);
-  transform: translateY(-2px);
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+  background: rgba(255, 255, 255, 0.2);
 }
 
 .avatar-text {
@@ -407,6 +395,7 @@ header.dashboard-header.offline {
   position: absolute;
   top: calc(100% + 0.5rem);
   right: 0;
+  left: auto;
   background: white;
   border-radius: 12px;
   box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
@@ -815,8 +804,36 @@ header.dashboard-header.offline {
     width: 100%;
     margin-left: 0;
   }
+
+  /* Mobile: hide Home icon button in header */
+  .home-btn {
+    display: none;
+  }
 }
 nav svg, .nav svg, .menu svg, .navbar svg {
     width: 40px !important;
     height: 16px !important;
+}
+
+/* Mobile nav-top-bar Material Design style indicator */
+.nav-top-bar a {
+  position: relative;
+  padding-bottom: 12px;
+  transition: all 0.3s ease-in-out;
+  color: #666666;
+  border-bottom: 2px solid transparent;
+}
+
+.nav-top-bar a svg {
+  transition: all 0.3s ease-in-out;
+}
+
+.nav-top-bar a.selected {
+  color: #003366;
+  border-bottom: 2px solid #003366;
+  filter: drop-shadow(0 2px 4px rgba(0, 51, 102, 0.25));
+}
+
+.nav-top-bar a:hover:not(.selected) {
+  opacity: 0.7;
 }
