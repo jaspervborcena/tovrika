@@ -225,11 +225,14 @@ export class HeaderComponent implements OnInit {
 
   // Header collapse/expand methods
   toggleHeaderCollapse(): void {
-    this.isHeaderCollapsed.set(!this.isHeaderCollapsed());
+    const next = !this.isHeaderCollapsed();
+    this.isHeaderCollapsed.set(next);
+    document.body.classList.toggle('header-collapsed-mode', next);
   }
 
   showHeader(): void {
     this.isHeaderCollapsed.set(false);
+    document.body.classList.remove('header-collapsed-mode');
   }
 
   @HostListener('document:click', ['$event'])
