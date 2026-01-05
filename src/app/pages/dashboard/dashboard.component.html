@@ -28,7 +28,12 @@
             <button class="header-btn language-btn" 
                     (click)="toggleLanguageMenu()" 
                     title="Select Language">
-              <span class="language-icon">🌐</span>
+              <svg class="language-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 21a9 9 0 100-18 9 9 0 000 18z" />
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.6 9h16.8" />
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.6 15h16.8" />
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3c2.5 2.5 4 5.7 4 9s-1.5 6.5-4 9c-2.5-2.5-4-5.7-4-9s1.5-6.5 4-9z" />
+              </svg>
             </button>
             
             <div *ngIf="isLanguageMenuOpen()" class="language-dropdown">
@@ -43,7 +48,7 @@
           </div>
           
           <!-- Home Link -->
-          <a routerLink="/" class="header-btn" title="Home">
+          <a routerLink="/" class="header-btn home-btn" title="Home">
             <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2-2m0 0l7-7 7 7m-9 10v-8a1 1 0 011-1h2a1 1 0 011 1v8m0 0v1a1 1 0 001 1h4a1 1 0 001-1v-1m0 0V9a1 1 0 00-1-1h-2a1 1 0 00-1-1z" />
             </svg>
@@ -72,12 +77,15 @@
         <div class="user-menu" data-user-menu>
           <button 
             (click)="toggleUserMenu()" 
-            class="user-avatar"
+            class="header-btn user-avatar"
             [class.active]="isUserMenuOpen()"
+            title="Account"
+            aria-label="Account"
           >
-            <span class="avatar-text">{{ userInitial() }}</span>
-            <svg class="dropdown-arrow" [class.rotate]="isUserMenuOpen()" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+            <svg class="member-icon" width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 21a9 9 0 100-18 9 9 0 000 18z" />
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6.5 19.5a7 7 0 0111 0" />
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 12a3.5 3.5 0 100-7 3.5 3.5 0 000 7z" />
             </svg>
           </button>
           
@@ -240,60 +248,60 @@
     <!-- Top Bar for Mobile (horizontal, icons + tooltip) -->
     <nav class="nav-top-bar" *ngIf="screenWidth <= 640"
          style="position:fixed;top:56px;left:0;width:100%;background:#fff;z-index:50;box-shadow:0 2px 8px rgba(0,0,0,0.08);display:flex;justify-content:center;align-items:center;height:64px;">
-      <a routerLink="overview" class="mx-6 flex flex-col items-center group relative" title="Dashboard Overview">
+      <a routerLink="overview" [class.selected]="isActiveNavItem('overview')" class="mx-6 flex flex-col items-center group relative" title="Dashboard Overview">
         <svg class="h-8 w-8 transition-transform duration-150 group-hover:scale-110" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
         </svg>
         <span class="absolute bottom-[-1.4rem] left-1/2 -translate-x-1/2 px-2 py-1 bg-gray-900 text-white text-xs rounded shadow-lg opacity-0 group-hover:opacity-100 group-active:opacity-100 transition pointer-events-none whitespace-nowrap">Overview</span>
       </a>
-      <a routerLink="company-profile" *ngIf="permissions.canViewCompanyProfile" class="mx-6 flex flex-col items-center group relative" title="Company Profile">
+      <a routerLink="company-profile" [class.selected]="isActiveNavItem('company-profile')" *ngIf="permissions.canViewCompanyProfile" class="mx-6 flex flex-col items-center group relative" title="Company Profile">
         <svg class="h-8 w-8 transition-transform duration-150 group-hover:scale-110" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v4a1 1 0 001 1h3V7a1 1 0 00-1-1H4a1 1 0 00-1 1zm0 0V5a2 2 0 012-2h2a2 2 0 012 2v2m0 0h6m0 0V5a2 2 0 012-2h2a2 2 0 012 2v2m0 0v4a1 1 0 01-1 1h-3V7a1 1 0 011-1h2a1 1 0 011 1zm0 0v6a2 2 0 01-2 2h-2a2 2 0 01-2-2v-6m0 0H9" />
         </svg>
         <span class="absolute bottom-[-1.4rem] left-1/2 -translate-x-1/2 px-2 py-1 bg-gray-900 text-white text-xs rounded shadow-lg opacity-0 group-hover:opacity-100 group-active:opacity-100 transition pointer-events-none whitespace-nowrap">Company</span>
       </a>
       <!-- POS and Sales Summary quick links moved here for easier access after Company -->
-      <a routerLink="/pos" *ngIf="permissions.canViewPOS" class="mx-6 flex flex-col items-center group relative" title="Point of Sale">
+      <a routerLink="/pos" [class.selected]="isActiveNavItem('pos')" *ngIf="permissions.canViewPOS" class="mx-6 flex flex-col items-center group relative" title="Point of Sale">
         <svg class="h-8 w-8 transition-transform duration-150 group-hover:scale-110" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
         </svg>
         <span class="absolute bottom-[-1.4rem] left-1/2 -translate-x-1/2 px-2 py-1 bg-gray-900 text-white text-xs rounded shadow-lg opacity-0 group-hover:opacity-100 group-active:opacity-100 transition pointer-events-none whitespace-nowrap">POS</span>
       </a>
-      <a routerLink="sales/summary" *ngIf="permissions.canViewSalesReports" class="mx-6 flex flex-col items-center group relative" title="Sales Summary">
+      <a routerLink="sales/summary" [class.selected]="isActiveNavItem('sales-summary')" *ngIf="permissions.canViewSalesReports" class="mx-6 flex flex-col items-center group relative" title="Sales Summary">
         <svg class="h-8 w-8 transition-transform duration-150 group-hover:scale-110" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
         </svg>
         <span class="absolute bottom-[-1.4rem] left-1/2 -translate-x-1/2 px-2 py-1 bg-gray-900 text-white text-xs rounded shadow-lg opacity-0 group-hover:opacity-100 group-active:opacity-100 transition pointer-events-none whitespace-nowrap">Sales</span>
       </a>
-      <a routerLink="stores" *ngIf="permissions.canViewStore" class="mx-6 flex flex-col items-center group relative" title="Manage Store">
+      <a routerLink="stores" [class.selected]="isActiveNavItem('stores')" *ngIf="permissions.canViewStore" class="mx-6 flex flex-col items-center group relative" title="Manage Store">
         <svg class="h-8 w-8 transition-transform duration-150 group-hover:scale-110" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
         </svg>
         <span class="absolute bottom-[-1.4rem] left-1/2 -translate-x-1/2 px-2 py-1 bg-gray-900 text-white text-xs rounded shadow-lg opacity-0 group-hover:opacity-100 group-active:opacity-100 transition pointer-events-none whitespace-nowrap">Store</span>
       </a>
       <!-- Access Management and User Roles removed from top bar — use Company Profile for management links -->
-      <a routerLink="products" *ngIf="permissions.canViewProducts" class="mx-6 flex flex-col items-center group relative" title="Products">
+      <a routerLink="products" [class.selected]="isActiveNavItem('products')" *ngIf="permissions.canViewProducts" class="mx-6 flex flex-col items-center group relative" title="Products">
         <svg class="h-8 w-8 transition-transform duration-150 group-hover:scale-110" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
         </svg>
         <span class="absolute bottom-[-1.4rem] left-1/2 -translate-x-1/2 px-2 py-1 bg-gray-900 text-white text-xs rounded shadow-lg opacity-0 group-hover:opacity-100 group-active:opacity-100 transition pointer-events-none whitespace-nowrap">Products</span>
       </a>
       
-      <a routerLink="inventory" *ngIf="permissions.canViewInventory" class="mx-6 flex flex-col items-center group relative" title="Inventory">
+      <a routerLink="inventory" [class.selected]="isActiveNavItem('inventory')" *ngIf="permissions.canViewInventory" class="mx-6 flex flex-col items-center group relative" title="Inventory">
         <svg class="h-8 w-8 transition-transform duration-150 group-hover:scale-110" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
         </svg>
         <span class="absolute bottom-[-1.4rem] left-1/2 -translate-x-1/2 px-2 py-1 bg-gray-900 text-white text-xs rounded shadow-lg opacity-0 group-hover:opacity-100 group-active:opacity-100 transition pointer-events-none whitespace-nowrap">Inventory</span>
       </a>
       
-      <a routerLink="admin" *ngIf="userRole() === 'admin'" class="mx-6 flex flex-col items-center group relative" title="Admin">
+      <a routerLink="admin" [class.selected]="isActiveNavItem('admin')" *ngIf="userRole() === 'admin'" class="mx-6 flex flex-col items-center group relative" title="Admin">
         <svg class="h-8 w-8 transition-transform duration-150 group-hover:scale-110" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
         </svg>
         <span class="absolute bottom-[-1.4rem] left-1/2 -translate-x-1/2 px-2 py-1 bg-gray-900 text-white text-xs rounded shadow-lg opacity-0 group-hover:opacity-100 group-active:opacity-100 transition pointer-events-none whitespace-nowrap">Admin</span>
       </a>
       
-      <a routerLink="reconciliation" *ngIf="false" class="mx-6 flex flex-col items-center group relative" title="Reconciliation">
+      <a routerLink="reconciliation" [class.selected]="isActiveNavItem('reconciliation')" *ngIf="false" class="mx-6 flex flex-col items-center group relative" title="Reconciliation">
         <svg class="h-8 w-8 transition-transform duration-150 group-hover:scale-110" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
         </svg>

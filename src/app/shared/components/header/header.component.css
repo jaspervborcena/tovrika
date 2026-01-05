@@ -15,7 +15,7 @@
   top: 0;
   left: 0;
   right: 0;
-  z-index: 50;
+  z-index: 2000;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
   transition: all 0.3s ease;
 }
@@ -56,7 +56,7 @@ body:has(.dashboard-header.header-collapsed) main {
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  z-index: 1000;
+  z-index: 3000;
   transition: all 0.3s ease;
 }
 
@@ -128,9 +128,9 @@ button.language-btn {
 }
 
 .language-icon {
-  font-size: 20px;
-  line-height: 1;
-  display: inline-block;
+  width: 20px;
+  height: 20px;
+  display: block;
   color: white !important;
   filter: none !important;
 }
@@ -164,7 +164,8 @@ button .language-icon,
 .language-dropdown {
   position: absolute;
   top: calc(100% + 8px);
-  right: 0;
+  left: 0;
+  right: auto;
   background: white;
   border-radius: 8px;
   box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
@@ -396,36 +397,9 @@ header.dashboard-header.offline {
 
 
 
-/* Dashboard Button */
+/* Dashboard shortcut: keep only spacing, inherit .header-btn visuals */
 .dashboard-btn {
-  position: relative;
-  width: 2.5rem;
-  height: 2.5rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(255, 255, 255, 0.15);
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 12px;
-  color: white;
-  text-decoration: none;
-  transition: all 0.3s ease;
-  cursor: pointer;
   margin-right: 0.5rem;
-}
-
-.dashboard-btn:hover {
-  background: rgba(255, 255, 255, 0.25);
-  transform: translateY(-2px);
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
-  text-decoration: none;
-  color: white;
-}
-
-.dashboard-btn svg {
-  width: 1.25rem;
-  height: 1.25rem;
 }
 
 /* Device Button in Header Actions */
@@ -457,56 +431,7 @@ header.dashboard-header.offline {
   height: 1.25rem;
 }
 
-/* Emoji View Toggle buttons */
-.view-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  padding: 0.4rem 0.6rem;
-  background: rgba(255, 255, 255, 0.15);
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 10px;
-  color: white;
-  font-size: 0.75rem;
-  font-weight: 600;
-  line-height: 1;
-  cursor: pointer;
-  transition: all 0.25s ease;
-}
-
-.view-toggle:hover {
-  background: rgba(255, 255, 255, 0.25);
-  transform: translateY(-1px);
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
-}
-
-.view-toggle.desktop {
-  background: rgba(16, 185, 129, 0.18);
-  border-color: rgba(16, 185, 129, 0.35);
-}
-
-.view-toggle.desktop[aria-pressed="true"] {
-  background: rgba(16, 185, 129, 0.3);
-}
-
-.view-toggle.mobile {
-  background: rgba(59, 130, 246, 0.18);
-  border-color: rgba(59, 130, 246, 0.35);
-}
-
-.view-toggle.mobile[aria-pressed="true"] {
-  background: rgba(59, 130, 246, 0.3);
-}
-
-.view-toggle .emoji {
-  font-size: 1rem;
-  line-height: 1;
-}
-
-.view-toggle .label {
-  letter-spacing: 0.01em;
-}
+/* View toggle uses the same wrapper as other header buttons */
 
 /* Device Toggle Button Styles */
 .device-toggle-btn {
@@ -584,26 +509,13 @@ header.dashboard-header.offline {
 }
 
 .user-avatar {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  background: rgba(255, 255, 255, 0.15);
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 12px;
-  padding: 0.5rem 0.75rem;
-  color: white;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  font-weight: 600;
-  min-width: 4rem;
+  min-width: 2.5rem;
+  padding: 0;
 }
 
 .user-avatar:hover,
 .user-avatar.active {
-  background: rgba(255, 255, 255, 0.25);
-  transform: translateY(-2px);
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+  background: rgba(255, 255, 255, 0.2);
 }
 
 /* Icon-only view toggle (opposite view) */
@@ -620,7 +532,7 @@ header.dashboard-header.offline {
   border-radius: 12px;
   cursor: pointer;
   transition: all 0.3s ease;
-  font-size: 18px; /* emoji size - matches other icons */
+  font-size: inherit;
 }
 
 .view-toggle:hover {
@@ -630,8 +542,8 @@ header.dashboard-header.offline {
 }
 
 .view-icon {
-  line-height: 1;
   display: inline-block;
+  flex-shrink: 0;
 }
 
 /* Hide any leftover textual labels (we use tooltip instead) */
@@ -639,10 +551,7 @@ header.dashboard-header.offline {
   display: none;
 }
 
-.avatar-text {
-  font-size: 0.875rem;
-  font-weight: 700;
-}
+/* Initials no longer used; we render a member icon instead */
 
 .dropdown-arrow {
   width: 1rem;
@@ -658,6 +567,7 @@ header.dashboard-header.offline {
   position: absolute;
   top: calc(100% + 0.5rem);
   right: 0;
+  left: auto;
   background: white;
   border-radius: 12px;
   box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
@@ -945,6 +855,10 @@ header.dashboard-header.offline {
 }
 
 @media (max-width: 768px) {
+  .dashboard-header {
+    padding: 0.75rem 0;
+  }
+
   .header-left {
     gap: 0.5rem;
   }
@@ -955,11 +869,6 @@ header.dashboard-header.offline {
   
   .header-actions {
     gap: 0.25rem;
-  }
-  
-  .header-btn {
-    padding: 6px;
-    min-width: auto;
   }
   
   .dashboard-sidebar {
@@ -977,10 +886,6 @@ header.dashboard-header.offline {
 }
 
 @media (max-width: 640px) {
-  .language-icon {
-    font-size: 18px;
-  }
-
   .dashboard-content {
     flex-direction: column;
   }
@@ -1000,13 +905,11 @@ header.dashboard-header.offline {
     margin-bottom: 1rem;
   }
   
-  .logo-text {
-    display: none !important;
-  }
+  /* Keep logo text visible on mobile */
 
-  /* Extra compact header for very small screens */
+  /* Match dashboard header height on very small screens (avoid adding vertical padding here) */
   .header-content {
-    padding: 0.75rem 0.5rem;
+    padding: 0 0.5rem;
   }
 
   .header-left {
@@ -1023,18 +926,15 @@ header.dashboard-header.offline {
   }
 
   .header-btn {
-    padding: 4px;
-    min-width: 32px;
-    height: 32px;
+    width: 2.5rem;
+    height: 2.5rem;
+    min-width: 2.5rem;
+    padding: 0;
   }
 
   .header-btn svg {
-    width: 18px;
-    height: 18px;
-  }
-
-  .language-icon {
-    font-size: 18px;
+    width: 20px;
+    height: 20px;
   }
 
   .dropdown-arrow {
