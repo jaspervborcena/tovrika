@@ -96,6 +96,8 @@ export class DashboardComponent implements OnInit {
   });
 
   protected toggleUserMenu() {
+    // Only one dropdown at a time
+    this.isLanguageMenuOpen.set(false);
     this.isUserMenuOpen.set(!this.isUserMenuOpen());
   }
   public screenWidth = 0;
@@ -336,8 +338,10 @@ export class DashboardComponent implements OnInit {
 
   private updateCurrentPage() {
     const url = this.router.url;
-    
-    if (url.includes('/dashboard/company-profile')) {
+
+    if (url.includes('/dashboard/overview') || url === '/dashboard' || url === '/dashboard/') {
+      this.currentActivePage.set('overview');
+    } else if (url.includes('/dashboard/company-profile')) {
       this.currentActivePage.set('company-profile');
     } else if (url.includes('/dashboard/stores')) {
       this.currentActivePage.set('stores');
@@ -368,6 +372,8 @@ export class DashboardComponent implements OnInit {
 
   // Language selection methods
   protected toggleLanguageMenu(): void {
+    // Only one dropdown at a time
+    this.isUserMenuOpen.set(false);
     this.isLanguageMenuOpen.set(!this.isLanguageMenuOpen());
   }
 
