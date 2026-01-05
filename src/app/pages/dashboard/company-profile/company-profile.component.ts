@@ -308,13 +308,13 @@ import { SubscriptionService } from '../../../services/subscription.service';
       background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
       color: white;
       padding: 2rem 0;
-      box-shadow: 0 4px 20px rgba(102, 126, 234, 0.15);
+      margin-bottom: 2rem;
     }
 
     .header-content {
-      max-width: 1200px;
+      max-width: 1400px;
       margin: 0 auto;
-      padding: 0 1rem;
+      padding: 0 2rem;
       display: flex;
       justify-content: space-between;
       align-items: center;
@@ -363,13 +363,14 @@ import { SubscriptionService } from '../../../services/subscription.service';
       font-weight: 700;
       margin: 0 0 0.5rem 0;
       color: white;
+      letter-spacing: -0.025em;
     }
 
     .page-subtitle {
-      font-size: 1.1rem;
-      opacity: 0.9;
+      font-size: 1.125rem;
       margin: 0;
-      color: rgba(255, 255, 255, 0.9);
+      opacity: 0.9;
+      font-weight: 400;
     }
 
     .header-actions {
@@ -946,11 +947,11 @@ import { SubscriptionService } from '../../../services/subscription.service';
       }
 
       .header-content {
-        padding: 0 0.75rem;
+        padding: 0 1rem;
       }
 
       .page-title {
-        font-size: 1.25rem;
+        font-size: 1.5rem;
       }
 
       .page-subtitle {
@@ -1090,7 +1091,7 @@ import { SubscriptionService } from '../../../services/subscription.service';
 
     @media (max-width: 480px) {
       .page-title {
-        font-size: 1.125rem;
+        font-size: 1.25rem;
       }
 
       .page-subtitle {
