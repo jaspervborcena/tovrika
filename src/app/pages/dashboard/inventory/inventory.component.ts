@@ -9,49 +9,82 @@ import { AuthService } from '../../../services/auth.service';
   standalone: true,
   imports: [CommonModule, FormsModule],
   template: `
-    <div class="py-6">
-      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div class="header-section">
-          <h2 class="text-2xl font-semibold text-gray-900">Inventory</h2>
-          
-          <!-- Store Selection -->
-          <div class="store-selection" *ngIf="stores().length > 0">
-            <div *ngIf="hasMultipleStores(); else singleStore" class="store-selector">
-              <label for="storeSelect">Store:</label>
-              <select 
-                id="storeSelect"
-                [(ngModel)]="selectedStoreId"
-                (change)="onStoreChange()"
-                class="store-select">
-                <option *ngFor="let store of stores()" [value]="store.id">
-                  {{ store.storeName.toUpperCase() }}
-                </option>
-              </select>
-            </div>
-            <ng-template #singleStore>
-              <div class="single-store">
-                <label>Store:</label>
-                <span class="store-name">{{ stores()[0].storeName.toUpperCase() }}</span>
-              </div>
-            </ng-template>
-          </div>
+    <div class="inventory-container">
+      <div class="header">
+        <div class="header-content">
+          <h1 class="page-title">Inventory</h1>
+          <p class="page-subtitle">View inventory by store</p>
         </div>
-        
+      </div>
+
+      <div class="inventory-controls">
+        <!-- Store Selection -->
+        <div class="store-selection" *ngIf="stores().length > 0">
+          <div *ngIf="hasMultipleStores(); else singleStore" class="store-selector">
+            <label for="storeSelect">Store:</label>
+            <select
+              id="storeSelect"
+              [(ngModel)]="selectedStoreId"
+              (change)="onStoreChange()"
+              class="store-select">
+              <option *ngFor="let store of stores()" [value]="store.id">
+                {{ store.storeName.toUpperCase() }}
+              </option>
+            </select>
+          </div>
+          <ng-template #singleStore>
+            <div class="single-store">
+              <label>Store:</label>
+              <span class="store-name">{{ stores()[0].storeName.toUpperCase() }}</span>
+            </div>
+          </ng-template>
+        </div>
+
         <!-- TODO: Implement inventory management -->
-        <div class="mt-6">
-          <p class="text-gray-600">Selected Store: {{ getSelectedStoreName() }}</p>
+        <div class="placeholder">
+          <p class="placeholder-text">Selected Store: {{ getSelectedStoreName() }}</p>
         </div>
       </div>
     </div>
   `,
   styles: [`
-    .header-section {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 1.5rem;
-      flex-wrap: wrap;
-      gap: 1rem;
+    .inventory-container {
+      background: #f8fafc;
+      min-height: 100vh;
+    }
+
+    /* Header Styles (patterned after Sales Summary) */
+    .header {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 2rem 0;
+      margin-bottom: 2rem;
+    }
+
+    .header-content {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 0 2rem;
+    }
+
+    .page-title {
+      font-size: 2.5rem;
+      font-weight: 700;
+      margin: 0 0 0.5rem 0;
+      letter-spacing: -0.025em;
+    }
+
+    .page-subtitle {
+      font-size: 1.125rem;
+      margin: 0;
+      opacity: 0.9;
+      font-weight: 400;
+    }
+
+    .inventory-controls {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 0 2rem 2rem 2rem;
     }
 
     .store-selection {
@@ -106,11 +139,35 @@ import { AuthService } from '../../../services/auth.service';
       border-radius: 0.375rem;
     }
 
+    .placeholder {
+      margin-top: 1.5rem;
+    }
+
+    .placeholder-text {
+      color: #4b5563;
+      font-size: 0.875rem;
+      margin: 0;
+    }
+
     @media (max-width: 768px) {
-      .header-section {
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 1rem;
+      .header {
+        padding: 1rem 0;
+      }
+
+      .header-content {
+        padding: 0 1rem;
+      }
+
+      .page-title {
+        font-size: 1.5rem;
+      }
+
+      .page-subtitle {
+        font-size: 0.875rem;
+      }
+
+      .inventory-controls {
+        padding: 0 1rem 1.5rem 1rem;
       }
 
       .store-selection {
@@ -150,6 +207,14 @@ import { AuthService } from '../../../services/auth.service';
     }
 
     @media (max-width: 480px) {
+      .page-title {
+        font-size: 1.25rem;
+      }
+
+      .page-subtitle {
+        font-size: 0.8125rem;
+      }
+
       .store-selector label,
       .single-store label {
         font-size: 0.8125rem;

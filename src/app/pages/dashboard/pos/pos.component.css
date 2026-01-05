@@ -4867,8 +4867,8 @@
    ========================================== */
 .mobile-cart-fab {
   position: fixed;
-  bottom: 20px;
-  right: 20px;
+  bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+  right: calc(20px + env(safe-area-inset-right, 0px));
   width: 56px;
   height: 56px;
   border-radius: 50%;
@@ -4882,6 +4882,9 @@
   cursor: pointer;
   z-index: 1000;
   transition: all 0.3s ease;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .mobile-cart-fab:hover {
@@ -5056,14 +5059,14 @@
 
   .grid-nav-arrow.left-arrow {
     position: absolute;
-    left: 0.25rem;
+    left: 0.75rem;
     top: 50%;
     transform: translateY(-50%);
   }
 
   .grid-nav-arrow.right-arrow {
     position: absolute;
-    right: 0.25rem;
+    right: 0.75rem;
     top: 50%;
     transform: translateY(-50%);
   }
