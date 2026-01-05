@@ -276,7 +276,7 @@
     padding: 10px;
     padding-top: calc(10px + 80px);
     padding-bottom: 20px;
-    min-height: auto;
+    min-height: 100vh;
     align-items: flex-start;
     overflow-y: auto;
   }
