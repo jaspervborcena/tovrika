@@ -60,6 +60,26 @@ import { AppConstants } from '../../../shared/enums/app-constants.enum';
       margin: 0;
     }
 
+    @media (max-width: 768px) {
+      .page-title {
+        font-size: 1.5rem;
+      }
+
+      .page-subtitle {
+        font-size: 0.875rem;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .page-title {
+        font-size: 1.25rem;
+      }
+
+      .page-subtitle {
+        font-size: 0.8125rem;
+      }
+    }
+
     .header-actions {
       display: flex;
       gap: 0.75rem;

@@ -83,6 +83,17 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   private touchStartX: number = 0;
   private touchEndX: number = 0;
   private readonly minSwipeDistance = 50; // Minimum distance for swipe
+
+  // Mobile cart FAB drag state (prevents hiding tiles on small screens)
+  private readonly mobileCartFabStorageKey = 'pos.mobileCartFabPosition.v1';
+  readonly mobileCartFabPosition = signal<{ x: number; y: number } | null>(null);
+  private mobileCartFabPointerId: number | null = null;
+  private mobileCartFabDragStart:
+    | { pointerX: number; pointerY: number; startX: number; startY: number }
+    | null = null;
+  private mobileCartFabDidDrag = false;
+  private readonly mobileCartFabSizePx = 56;
+  private readonly mobileCartFabEdgeMarginPx = 8;
   
   // Barcode image cache
   private barcodeImageCache = new Map<string, SafeUrl>();
@@ -266,8 +277,9 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   @HostListener('document:keydown.escape', ['$event'])
-  onEscapeKey(event: KeyboardEvent): void {
-    event.stopPropagation();
+  onEscapeKey(event: Event): void {
+    const keyboardEvent = event as KeyboardEvent;
+    keyboardEvent.stopPropagation();
     this.closeSortMenu();
   }
 
@@ -2278,9 +2290,13 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     if (typeof window !== 'undefined') {
       this.resizeListener = () => {
         this.isMobileView.set(window.innerWidth < 768);
+        this.clampMobileCartFabPositionToViewport();
       };
       window.addEventListener('resize', this.resizeListener);
     }
+
+    // Restore draggable FAB position (if user moved it)
+    this.restoreMobileCartFabPosition();
     
     // Add Firestore test
     await this.testFirestoreConnection();
@@ -2532,6 +2548,154 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     }
   }
 
+  getMobileCartFabStyle(): Record<string, string> {
+    const pos = this.mobileCartFabPosition();
+    if (!pos) return {};
+    return {
+      left: `${pos.x}px`,
+      top: `${pos.y}px`,
+      right: 'auto',
+      bottom: 'auto'
+    };
+  }
+
+  onMobileCartFabClick(event: Event): void {
+    // If the user just dragged, suppress the click that follows pointerup.
+    if (this.mobileCartFabDidDrag) {
+      event.preventDefault();
+      event.stopPropagation();
+      this.mobileCartFabDidDrag = false;
+      return;
+    }
+
+    // Original behavior from template
+    if (this.showReceiptPanel()) {
+      this.showProductPanel();
+    } else {
+      this.showReceiptPanelView();
+    }
+  }
+
+  onMobileCartFabPointerDown(event: Event): void {
+    // Only enable drag on mobile view where the FAB is rendered
+    if (!this.isMobileView()) return;
+
+    const pointerEvent = event as PointerEvent;
+    const target = pointerEvent.currentTarget as HTMLElement | null;
+    if (!target) return;
+
+    this.mobileCartFabPointerId = pointerEvent.pointerId;
+    this.mobileCartFabDidDrag = false;
+
+    // Establish a starting position using either stored style or current DOM rect
+    const rect = target.getBoundingClientRect();
+    const current = this.mobileCartFabPosition() ?? { x: rect.left, y: rect.top };
+
+    this.mobileCartFabDragStart = {
+      pointerX: pointerEvent.clientX,
+      pointerY: pointerEvent.clientY,
+      startX: current.x,
+      startY: current.y
+    };
+
+    try {
+      target.setPointerCapture(pointerEvent.pointerId);
+    } catch {
+      // ignore (not supported in some webviews)
+    }
+
+    window.addEventListener('pointermove', this.onMobileCartFabPointerMove, { passive: false });
+    window.addEventListener('pointerup', this.onMobileCartFabPointerUpOrCancel, { passive: true });
+    window.addEventListener('pointercancel', this.onMobileCartFabPointerUpOrCancel, { passive: true });
+  }
+
+  private readonly onMobileCartFabPointerMove = (event: Event): void => {
+    const pointerEvent = event as PointerEvent;
+    if (this.mobileCartFabPointerId === null) return;
+    if (pointerEvent.pointerId !== this.mobileCartFabPointerId) return;
+    if (!this.mobileCartFabDragStart) return;
+
+    const dx = pointerEvent.clientX - this.mobileCartFabDragStart.pointerX;
+    const dy = pointerEvent.clientY - this.mobileCartFabDragStart.pointerY;
+
+    if (!this.mobileCartFabDidDrag) {
+      if (Math.abs(dx) + Math.abs(dy) >= 6) {
+        this.mobileCartFabDidDrag = true;
+      }
+    }
+
+    const nextX = this.mobileCartFabDragStart.startX + dx;
+    const nextY = this.mobileCartFabDragStart.startY + dy;
+    const clamped = this.clampMobileCartFabPosition(nextX, nextY);
+    this.mobileCartFabPosition.set(clamped);
+
+    // Prevent page scroll while dragging the FAB
+    (event as PointerEvent).preventDefault();
+  };
+
+  private readonly onMobileCartFabPointerUpOrCancel = (event: Event): void => {
+    const pointerEvent = event as PointerEvent;
+    if (this.mobileCartFabPointerId === null) return;
+    if (pointerEvent.pointerId !== this.mobileCartFabPointerId) return;
+
+    window.removeEventListener('pointermove', this.onMobileCartFabPointerMove);
+    window.removeEventListener('pointerup', this.onMobileCartFabPointerUpOrCancel);
+    window.removeEventListener('pointercancel', this.onMobileCartFabPointerUpOrCancel);
+
+    this.mobileCartFabPointerId = null;
+    this.mobileCartFabDragStart = null;
+
+    if (this.mobileCartFabDidDrag) {
+      this.persistMobileCartFabPosition();
+    }
+  };
+
+  private clampMobileCartFabPosition(x: number, y: number): { x: number; y: number } {
+    const vw = typeof window !== 'undefined' ? window.innerWidth : 0;
+    const vh = typeof window !== 'undefined' ? window.innerHeight : 0;
+
+    const margin = this.mobileCartFabEdgeMarginPx;
+    const size = this.mobileCartFabSizePx;
+
+    const minX = margin;
+    const minY = margin;
+    const maxX = Math.max(margin, vw - size - margin);
+    const maxY = Math.max(margin, vh - size - margin);
+
+    return {
+      x: Math.min(Math.max(x, minX), maxX),
+      y: Math.min(Math.max(y, minY), maxY)
+    };
+  }
+
+  private clampMobileCartFabPositionToViewport(): void {
+    const pos = this.mobileCartFabPosition();
+    if (!pos) return;
+    this.mobileCartFabPosition.set(this.clampMobileCartFabPosition(pos.x, pos.y));
+  }
+
+  private restoreMobileCartFabPosition(): void {
+    try {
+      const raw = localStorage.getItem(this.mobileCartFabStorageKey);
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (typeof parsed?.x !== 'number' || typeof parsed?.y !== 'number') return;
+      this.mobileCartFabPosition.set(this.clampMobileCartFabPosition(parsed.x, parsed.y));
+    } catch {
+      // ignore
+    }
+  }
+
+  private persistMobileCartFabPosition(): void {
+    try {
+      const pos = this.mobileCartFabPosition();
+      if (!pos) return;
+      localStorage.setItem(this.mobileCartFabStorageKey, JSON.stringify(pos));
+    } catch {
+      // ignore
+    }
+  }
+
   async ngAfterViewInit(): Promise<void> {
     // Generate barcode images for all products
     setTimeout(() => {
@@ -2597,8 +2761,8 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
 
   // F4 Hotkey for Clear Data
   @HostListener('document:keydown.f4', ['$event'])
-  async onF4KeyPress(event: KeyboardEvent): Promise<void> {
-    event.preventDefault(); // Prevent default F4 behavior
+  async onF4KeyPress(event: Event): Promise<void> {
+    (event as KeyboardEvent).preventDefault(); // Prevent default F4 behavior
     
     // Check if order is already completed
     if (this.isOrderCompleted()) {
@@ -2635,16 +2799,16 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
 
   // F5 Hotkey for New Order
   @HostListener('document:keydown.f5', ['$event'])
-  async onF5KeyPress(event: KeyboardEvent): Promise<void> {
-    event.preventDefault(); // Prevent page refresh
+  async onF5KeyPress(event: Event): Promise<void> {
+    (event as KeyboardEvent).preventDefault(); // Prevent page refresh
     // Use unified flow so hotkey, button, and item-click behave the same
     await this.requestStartNewOrder('hotkey');
   }
 
   // F6 Hotkey for Complete Order
   @HostListener('document:keydown.f6', ['$event'])
-  async onF6KeyPress(event: KeyboardEvent): Promise<void> {
-    event.preventDefault(); // Prevent default F6 behavior
+  async onF6KeyPress(event: Event): Promise<void> {
+    (event as KeyboardEvent).preventDefault(); // Prevent default F6 behavior
     
     // If order is already completed, just show receipt
     if (this.isOrderCompleted()) {
@@ -2670,8 +2834,8 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
 
   // F7 Hotkey for Add Discount (mirrors Add Discount button behavior)
   @HostListener('document:keydown.f7', ['$event'])
-  async onF7KeyPress(event: KeyboardEvent): Promise<void> {
-    event.preventDefault(); // Prevent default F7 behavior
+  async onF7KeyPress(event: Event): Promise<void> {
+    (event as KeyboardEvent).preventDefault(); // Prevent default F7 behavior
 
     // Block on completed orders
     if (this.isOrderCompleted()) return;
@@ -4568,8 +4732,8 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
 
   // Ctrl+F hotkey to focus search
   @HostListener('document:keydown.control.f', ['$event'])
-  onCtrlF(event: KeyboardEvent): void {
-    event.preventDefault();
+  onCtrlF(event: Event): void {
+    (event as KeyboardEvent).preventDefault();
     this.focusSearchInput();
   }
 
@@ -5144,11 +5308,12 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   @HostListener('document:keydown.enter', ['$event'])
-  onGlobalEnterForModals(event: KeyboardEvent): void {
+  onGlobalEnterForModals(event: Event): void {
+    const keyboardEvent = event as KeyboardEvent;
     try {
       if (this.showPaymentModal()) {
-        event.preventDefault();
-        event.stopPropagation();
+        keyboardEvent.preventDefault();
+        keyboardEvent.stopPropagation();
         const active = document.activeElement as HTMLElement;
         if (active && active.tagName === 'BUTTON') {
           active.click();
@@ -5159,8 +5324,8 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       }
 
       if (this.isReceiptModalVisible()) {
-        event.preventDefault();
-        event.stopPropagation();
+        keyboardEvent.preventDefault();
+        keyboardEvent.stopPropagation();
         const active = document.activeElement as HTMLElement;
         if (active && active.tagName === 'BUTTON') {
           active.click();

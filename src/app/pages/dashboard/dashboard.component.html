@@ -47,12 +47,7 @@
             </div>
           </div>
           
-          <!-- Home Link -->
-          <a routerLink="/" class="header-btn home-btn" title="Home">
-            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2-2m0 0l7-7 7 7m-9 10v-8a1 1 0 011-1h2a1 1 0 011 1v8m0 0v1a1 1 0 001 1h4a1 1 0 001-1v-1m0 0V9a1 1 0 00-1-1h-2a1 1 0 00-1-1z" />
-            </svg>
-          </a>
+          <!-- Home Link removed (logo handles navigation) -->
           
           <!-- Help Link -->
           <a routerLink="/help" class="header-btn" title="Help">
@@ -247,7 +242,8 @@
 
     <!-- Top Bar for Mobile (horizontal, icons + tooltip) -->
     <nav class="nav-top-bar" *ngIf="screenWidth <= 640"
-         style="position:fixed;top:56px;left:0;width:100%;background:#fff;z-index:50;box-shadow:0 2px 8px rgba(0,0,0,0.08);display:flex;justify-content:center;align-items:center;height:64px;">
+         [style.top.px]="isHeaderCollapsed() ? 0 : 56"
+         style="position:fixed;left:0;width:100%;background:#fff;z-index:50;box-shadow:0 2px 8px rgba(0,0,0,0.08);display:flex;justify-content:center;align-items:center;height:64px;">
       <a routerLink="overview" [class.selected]="isActiveNavItem('overview')" class="mx-6 flex flex-col items-center group relative" title="Dashboard Overview">
         <svg class="h-8 w-8 transition-transform duration-150 group-hover:scale-110" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
@@ -312,7 +308,7 @@
     </nav>
 
     <!-- Main Panel -->
-    <main class="dashboard-main" [style.marginTop]="screenWidth <= 640 ? '64px' : '0'">
+    <main class="dashboard-main">
       <div class="main-content">
         <router-outlet></router-outlet>
       </div>

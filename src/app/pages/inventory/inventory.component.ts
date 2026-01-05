@@ -56,9 +56,6 @@ export interface InventoryRow {
         max-width: 1400px;
         margin: 0 auto;
         padding: 0 2rem;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
       }
 
       .page-title {
@@ -76,7 +73,15 @@ export interface InventoryRow {
       }
 
       /* Overview-like controls */
-      .overview-controls { display: flex; gap: 12px; align-items: center; margin-top: 12px; flex-wrap: wrap; }
+      .overview-controls { 
+        max-width: 1400px;
+        margin: 0 auto;
+        padding: 0 2rem 2rem 2rem;
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
       .overview-controls .control-row { display: flex; gap: 8px; align-items: center; }
       .control-label { font-weight: 600; color: #374151; }
       .control-select { padding: 6px 8px; border-radius: 8px; border: 1px solid #e5e7eb; background: white; cursor: pointer; }
@@ -165,6 +170,69 @@ export interface InventoryRow {
       .mat-column-profitPerUnit { min-width: 100px; text-align: right; }
       .mat-column-totalGross { min-width: 120px; text-align: right; }
       .mat-column-totalProfit { min-width: 120px; text-align: right; }
+
+      @media (max-width: 768px) {
+        .header {
+          padding: 1rem 0;
+        }
+
+        .header-content {
+          padding: 0 1rem;
+        }
+
+        .page-title {
+          font-size: 1.5rem;
+        }
+
+        .page-subtitle {
+          font-size: 0.875rem;
+        }
+
+        .overview-controls {
+          padding: 0 1rem 1.5rem 1rem;
+          flex-direction: column;
+          align-items: stretch;
+        }
+
+        .overview-controls .control-row {
+          width: 100%;
+          justify-content: space-between;
+          flex-wrap: wrap;
+        }
+
+        .control-label {
+          font-size: 0.8125rem;
+        }
+
+        .control-select,
+        .control-input {
+          font-size: 0.875rem;
+          padding: 0.625rem 0.75rem;
+        }
+
+        .control-go {
+          font-size: 0.75rem;
+        }
+      }
+
+      @media (max-width: 480px) {
+        .page-title {
+          font-size: 1.25rem;
+        }
+
+        .page-subtitle {
+          font-size: 0.8125rem;
+        }
+
+        .control-label {
+          font-size: 0.75rem;
+        }
+
+        .control-select,
+        .control-input {
+          font-size: 0.8125rem;
+        }
+      }
     `
   ]
 })

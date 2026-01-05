@@ -361,12 +361,23 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
       font-size: 2rem;
       font-weight: 700;
       color: #111827;
-      margin-bottom: 8px;
+      margin: 0 0 8px 0;
     }
 
     .page-subtitle {
       color: #6b7280;
       font-size: 1rem;
+      margin: 0;
+    }
+
+    @media (max-width: 640px) {
+      .dashboard-container {
+        padding: 12px;
+      }
+
+      .header {
+        margin-bottom: 16px;
+      }
     }
 
     /* Overview controls */
@@ -1281,17 +1292,24 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
       .bar-row {
         gap: 6px; /* Reduced from 12px */
         align-items: center;
+        min-width: 0;
       }
 
       .bar-label {
         width: 60px; /* Reduced from 90px */
+        flex: 0 0 60px;
         font-size: 0.6875rem; /* Smaller font size */
         font-weight: 500; /* Reduced from 600 */
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
       }
 
       .bar {
+        flex: 1 1 auto;
         height: 8px; /* Reduced from 12px */
         border-radius: 4px; /* Reduced from 6px */
+        min-width: 0;
       }
 
       .bar-fill {
@@ -1299,9 +1317,11 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
       }
 
       .bar-percent {
-        width: 32px; /* Reduced from 48px */
+        width: 44px; /* Ensure % text doesn't overlap on Android */
+        flex: 0 0 44px;
         font-size: 0.625rem; /* Smaller font size */
         font-weight: 500; /* Reduced from 600 */
+        white-space: nowrap;
       }
 
       .legend-dot {

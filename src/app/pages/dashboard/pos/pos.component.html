@@ -1781,7 +1781,9 @@
     <button 
       *ngIf="isMobileView() && accessTab() === 'New'" 
       class="mobile-cart-fab"
-      (click)="showReceiptPanel() ? showProductPanel() : showReceiptPanelView()"
+      [ngStyle]="getMobileCartFabStyle()"
+      (pointerdown)="onMobileCartFabPointerDown($event)"
+      (click)="onMobileCartFabClick($event)"
       [class.has-items]="cartItems().length > 0"
       [class.is-back-button]="showReceiptPanel()">
       <!-- Cart Icon (show when panel is closed) -->
