@@ -1,5 +1,7 @@
-import { Injectable, inject } from '@angular/core';
+﻿import { Injectable, inject } from '@angular/core';
 import { IndexedDBService } from '../core/services/indexeddb.service';
+import { ThermalPrinterService } from './thermal-printer.service';
+import { Capacitor } from '@capacitor/core';
 
 // Web Bluetooth API types (simplified)
 declare const navigator: any;
@@ -31,6 +33,7 @@ export interface PaperSizeConfig {
 })
 export class PrintService {
   private indexedDBService = inject(IndexedDBService);
+  private thermalPrinter = inject(ThermalPrinterService);
   
   // Bluetooth printer connection state
   private bluetoothDevice: any = null;
@@ -75,7 +78,7 @@ export class PrintService {
   }
   
   /**
-   * 🔧 Load default printer configuration from IndexedDB
+   * ≡ƒöº Load default printer configuration from IndexedDB
    */
   async loadPrinterConfig(): Promise<PrinterConfig | null> {
     try {
@@ -85,10 +88,10 @@ export class PrintService {
         const defaultPrinter = printers.find(p => p.isDefault && p.status === 'active');
         const activePrinter = printers.find(p => p.status === 'active');
         this.currentPrinterConfig = defaultPrinter || activePrinter || printers[0];
-        console.log('🖨️ Loaded printer config:', this.currentPrinterConfig);
+        console.log('≡ƒû¿∩╕Å Loaded printer config:', this.currentPrinterConfig);
         return this.currentPrinterConfig;
       }
-      console.log('⚠️ No printer configuration found in IndexedDB');
+      console.log('ΓÜá∩╕Å No printer configuration found in IndexedDB');
       return null;
     } catch (error) {
       console.error('Failed to load printer config:', error);
@@ -97,7 +100,7 @@ export class PrintService {
   }
   
   /**
-   * 📄 Get current paper size configuration
+   * ≡ƒôä Get current paper size configuration
    */
   getPaperSizeConfig(paperSize?: string): PaperSizeConfig {
     const size = paperSize || this.currentPrinterConfig?.paperSize || '58mm';
@@ -105,39 +108,39 @@ export class PrintService {
   }
   
   /**
-   * 🔌 Get current printer connection type
+   * ≡ƒöî Get current printer connection type
    */
   getConnectionType(): 'bluetooth' | 'wifi' | 'usb' | 'none' {
     return this.currentPrinterConfig?.connectionType || 'none';
   }
   
   /**
-   * 🖨️ Get current printer config
+   * ≡ƒû¿∩╕Å Get current printer config
    */
   getCurrentPrinterConfig(): PrinterConfig | null {
     return this.currentPrinterConfig;
   }
   
   /**
-   * 🔄 Refresh printer config from IndexedDB
+   * ≡ƒöä Refresh printer config from IndexedDB
    */
   async refreshPrinterConfig(): Promise<PrinterConfig | null> {
     return this.loadPrinterConfig();
   }
 
   /**
-   * 🎯 DIRECT HARDWARE PRINT: Bypasses browser dialog when hardware printers are available
+   * ≡ƒÄ» DIRECT HARDWARE PRINT: Bypasses browser dialog when hardware printers are available
    * USB: NO FALLBACK - Direct thermal printing only (no browser dialog)
    * Bluetooth: Has fallback to browser print if connection fails
    */
   async printReceiptDirect(receiptData: any): Promise<{ success: boolean; method: string; message: string }> {
     try {
-      console.log('🎯 Starting direct hardware print...');
+      console.log('≡ƒÄ» Starting direct hardware print...');
       
-      // 🔥 PRIORITY 1: Try USB printer first (if Web Serial API is supported)
+      // ≡ƒöÑ PRIORITY 1: Try USB printer first (if Web Serial API is supported)
       if ('serial' in navigator) {
         try {
-          console.log('🔌 USB printing supported - attempting direct USB print...');
+          console.log('≡ƒöî USB printing supported - attempting direct USB print...');
           await this.printToThermalPrinter(receiptData);
           return {
             success: true,
@@ -145,14 +148,14 @@ export class PrintService {
             message: 'Receipt printed successfully via USB thermal printer'
           };
         } catch (usbError: any) {
-          console.log('⚠️ USB printing failed:', usbError.message);
+          console.log('ΓÜá∩╕Å USB printing failed:', usbError.message);
           
           // If no port was selected or connection failed, force port selection dialog
           if (usbError.message.includes('No USB printer selected') || 
               usbError.message.includes('Port selection failed') ||
               !this.usbPort) {
             try {
-              console.log('🔄 Retrying with port selection dialog...');
+              console.log('≡ƒöä Retrying with port selection dialog...');
               // Force new port selection
               this.usbPort = null;
               this.usbConnected = false;
@@ -163,7 +166,7 @@ export class PrintService {
                 message: 'Receipt printed successfully via USB thermal printer'
               };
             } catch (retryError: any) {
-              console.error('❌ USB retry failed:', retryError.message);
+              console.error('Γ¥î USB retry failed:', retryError.message);
               // If user cancelled, return that message
               if (retryError.message.includes('No USB printer selected')) {
                 return {
@@ -176,48 +179,92 @@ export class PrintService {
           }
           
           // Continue to try Bluetooth
-          console.log('🔄 Trying Bluetooth printer...');
+          console.log('≡ƒöä Trying Bluetooth printer...');
         }
       }
       
-      // 🔥 PRIORITY 2: Try Bluetooth printer
+      // ≡ƒöÑ PRIORITY 2: Try Capacitor Bluetooth (Android/iOS native)
+      if (Capacitor.isNativePlatform()) {
+        console.log('≡ƒô▒ Trying native Bluetooth thermal printer...');
+        try {
+          // Check if already connected
+          if (!this.thermalPrinter.isConnected()) {
+            console.log('≡ƒöî Not connected, requesting connection...');
+            const connected = await this.thermalPrinter.connectToPrinter();
+            if (!connected) {
+              throw new Error('Failed to connect to printer');
+            }
+          }
+
+          console.log('≡ƒû¿∩╕Å Printing via Capacitor BLE...');
+          await this.thermalPrinter.printReceipt(receiptData);
+          
+          return {
+            success: true,
+            method: 'Bluetooth Thermal',
+            message: 'Receipt printed successfully via Bluetooth thermal printer'
+          };
+        } catch (bleError: any) {
+          console.error('Γ¥î Capacitor BLE printing failed:', bleError);
+          
+          // Provide user-friendly error message
+          let errorMsg = bleError.message || 'Bluetooth printing failed';
+          if (errorMsg.includes('select your Bluetooth printer')) {
+            errorMsg = 'Please select your Bluetooth printer from the list to continue.';
+          } else if (errorMsg.includes('not connected')) {
+            errorMsg = 'Printer not connected. Please connect to your thermal printer first.';
+          } else if (errorMsg.includes('Bluetooth')) {
+            errorMsg = 'Bluetooth error: ' + errorMsg;
+          } else {
+            errorMsg = 'Print failed: ' + errorMsg;
+          }
+          
+          return {
+            success: false,
+            method: 'Bluetooth Thermal',
+            message: errorMsg
+          };
+        }
+      }
+      
+      // ≡ƒöÑ PRIORITY 3: Try Web Bluetooth (browser fallback)
       if (navigator.bluetooth) {
-        console.log('🔍 Checking Bluetooth availability...');
+        console.log('≡ƒöì Checking Web Bluetooth availability...');
         const hasBluetoothPrinters = await this.checkBluetoothPrintersAvailable();
-        console.log('🔍 Bluetooth check result:', hasBluetoothPrinters, 'Already connected:', this.isConnected);
+        console.log('≡ƒöì Bluetooth check result:', hasBluetoothPrinters, 'Already connected:', this.isConnected);
         
         if (hasBluetoothPrinters || this.isConnected) {
           try {
-            console.log('📱 Opening browser print dialog for Bluetooth and other printers...');
+            console.log('≡ƒô▒ Opening browser print dialog for Bluetooth and other printers...');
             await this.printReceiptSmart(receiptData);
-            console.log('✅ Print dialog opened successfully');
+            console.log('Γ£à Print dialog opened successfully');
             return {
               success: true,
               method: 'Browser Print',
               message: 'Print dialog opened successfully. Please select your printer.'
             };
           } catch (btError: any) {
-            console.error(`❌ Bluetooth printing failed:`, btError);
-            console.error(`❌ Error message: ${btError.message}`);
-            console.error(`❌ Error stack:`, btError.stack);
+            console.error(`Γ¥î Bluetooth printing failed:`, btError);
+            console.error(`Γ¥î Error message: ${btError.message}`);
+            console.error(`Γ¥î Error stack:`, btError.stack);
           }
         } else {
-          console.log('⚠️ No Bluetooth printers available or connected');
+          console.log('ΓÜá∩╕Å No Bluetooth printers available or connected');
         }
       } else {
-        console.log('❌ Web Bluetooth API not available');
+        console.log('Γ¥î Web Bluetooth API not available');
       }
       
       // No hardware printers available
-      console.error('❌ No hardware printers available');
+      console.error('Γ¥î No hardware printers available');
       return {
         success: false,
         method: 'None',
-        message: 'No hardware printers found. Please connect a USB or Bluetooth thermal printer.'
+        message: 'No printers found. Please connect your Bluetooth thermal printer and allow permissions when prompted.'
       };
       
     } catch (error: any) {
-      console.error('❌ Direct print failed:', error);
+      console.error('Γ¥î Direct print failed:', error);
       return {
         success: false,
         method: 'Failed',
@@ -227,63 +274,62 @@ export class PrintService {
   }
 
   /**
-   * 🚀 SMART PRINT: Auto-detects printer type and connection method
+   * ≡ƒÜÇ SMART PRINT: Auto-detects printer type and connection method
    * Priority: 1) USB/Cable printers (Web Serial) 2) Bluetooth (via browser print) 3) Browser print fallback
    */
   async printReceiptSmart(receiptData: any): Promise<void> {
     try {
-      console.log('🖨️ Starting smart print process...');
-      console.log('📄 Receipt data received:', {
+      console.log('≡ƒû¿∩╕Å Starting smart print process...');
+      console.log('≡ƒôä Receipt data received:', {
         hasData: !!receiptData,
         orderId: receiptData?.orderId,
         invoiceNumber: receiptData?.invoiceNumber,
         itemsCount: receiptData?.items?.length || 0
       });
       
-      // 🔥 PRIORITY 1: Try USB/Cable printer first (Web Serial API)
+      // ≡ƒöÑ PRIORITY 1: Try USB/Cable printer first (Web Serial API)
       if ('serial' in navigator) {
         // Test USB connection first
         const usbTest = await this.testUSBConnection();
-        console.log('🧪 USB Connection Test:', usbTest);
+        console.log('≡ƒº¬ USB Connection Test:', usbTest);
         
         try {
-          console.log('🔌 USB/Cable printer support detected, trying USB connection...');
+          console.log('≡ƒöî USB/Cable printer support detected, trying USB connection...');
           await this.printToThermalPrinter(receiptData);
-          console.log('✅ USB/Cable print completed successfully');
+          console.log('Γ£à USB/Cable print completed successfully');
           return;
         } catch (usbError: any) {
-          console.log('⚠️ USB/Cable printer error:', usbError.message);
+          console.log('ΓÜá∩╕Å USB/Cable printer error:', usbError.message);
           
           // If user cancelled port selection, don't try Bluetooth
           if (usbError.message.includes('cancelled') || usbError.message.includes('No port selected')) {
             throw new Error('Print cancelled. Please select your USB printer port or use a Bluetooth printer.');
           }
           
-          console.log('🔄 USB failed, trying Bluetooth printer...');
+          console.log('≡ƒöä USB failed, trying Bluetooth printer...');
         }
       } else {
-        console.log('⚠️ USB printing not supported in this browser, trying Bluetooth...');
+        console.log('ΓÜá∩╕Å USB printing not supported in this browser, trying Bluetooth...');
       }
 
-      // 🔥 PRIORITY 2: Bluetooth printer via browser print (mobile-friendly)
+      // ≡ƒöÑ PRIORITY 2: Bluetooth printer via browser print (mobile-friendly)
       // Use the same approach as mobile preview - show ESC/POS formatted content and use window.print()
-      console.log('📱 Opening browser print dialog (supports all printers including Bluetooth)...');
+      console.log('≡ƒô▒ Opening browser print dialog (supports all printers including Bluetooth)...');
       this.printMobileThermal(receiptData);
-      console.log('✅ Print dialog opened successfully');
+      console.log('Γ£à Print dialog opened successfully');
 
     } catch (error) {
-      console.error('❌ Print error:', error);
+      console.error('Γ¥î Print error:', error);
       
       // Show error message
-      console.error('❌ Print error:', error);
+      console.error('Γ¥î Print error:', error);
       const errorMessage = error instanceof Error ? error.message : 'Unable to print receipt. Please check your printer connection.';
-      alert(`Print Error: ${errorMessage}`);
       throw error;
     }
   }
 
   /**
-   * 🔍 Check if hardware printers (USB or Bluetooth) are connected and ready
+   * ≡ƒöì Check if hardware printers (USB or Bluetooth) are connected and ready
    */
   async isHardwarePrinterAvailable(): Promise<{ hasHardware: boolean; type: string; details: any }> {
     let result = { hasHardware: false, type: 'none', details: {} };
@@ -305,13 +351,13 @@ export class PrintService {
                   ready: true
                 }
               };
-              console.log('🔌 USB thermal printer detected and ready');
+              console.log('≡ƒöî USB thermal printer detected and ready');
               break;
             }
           }
         }
       } catch (error) {
-        console.log('🔍 USB printer check failed:', error);
+        console.log('≡ƒöì USB printer check failed:', error);
       }
     }
     
@@ -333,16 +379,16 @@ export class PrintService {
             ready: isBluetoothReady
           }
         };
-        console.log('📱 Bluetooth thermal printer detected', isBluetoothReady ? '(connected)' : '(available)');
+        console.log('≡ƒô▒ Bluetooth thermal printer detected', isBluetoothReady ? '(connected)' : '(available)');
       }
     }
     
-    console.log('🔍 Hardware printer availability check:', result);
+    console.log('≡ƒöì Hardware printer availability check:', result);
     return result;
   }
 
   /**
-   * 🔍 Check if Bluetooth printers are available
+   * ≡ƒöì Check if Bluetooth printers are available
    */
   private async checkBluetoothPrintersAvailable(): Promise<boolean> {
     try {
@@ -360,17 +406,17 @@ export class PrintService {
       // (will trigger connection dialog on first use)
       return true;
     } catch (error) {
-      console.log('🔍 Bluetooth printer check failed:', error);
+      console.log('≡ƒöì Bluetooth printer check failed:', error);
       return false;
     }
   }
 
   /**
-   * 📱 Connect to Bluetooth thermal printer
+   * ≡ƒô▒ Connect to Bluetooth thermal printer
    */
   private async connectToBluetoothPrinter(): Promise<boolean> {
     try {
-      console.log('🔍 Scanning for Bluetooth printers...');
+      console.log('≡ƒöì Scanning for Bluetooth printers...');
       
       // Request Bluetooth device - use broader search for thermal printers
       this.bluetoothDevice = await navigator.bluetooth.requestDevice({
@@ -384,11 +430,11 @@ export class PrintService {
         ]
       });
 
-      console.log('📱 Found device:', this.bluetoothDevice.name);
+      console.log('≡ƒô▒ Found device:', this.bluetoothDevice.name);
 
       // Connect to GATT server
       const server = await this.bluetoothDevice.gatt!.connect();
-      console.log('🔗 Connected to GATT server');
+      console.log('≡ƒöù Connected to GATT server');
 
       // Try to find a suitable service
       let service = null;
@@ -414,18 +460,18 @@ export class PrintService {
 
       this.bluetoothCharacteristic = characteristic;
       this.isConnected = true;
-      console.log('✅ Bluetooth printer connected successfully');
+      console.log('Γ£à Bluetooth printer connected successfully');
       return true;
 
     } catch (error) {
-      console.error('❌ Bluetooth connection failed:', error);
+      console.error('Γ¥î Bluetooth connection failed:', error);
       this.isConnected = false;
       return false;
     }
   }
 
   /**
-   * 🖨️ Print via Bluetooth using ESC/POS commands
+   * ≡ƒû¿∩╕Å Print via Bluetooth using ESC/POS commands
    */
   private async printViaBluetoothESCPOS(receiptData: any): Promise<void> {
     if (!this.bluetoothCharacteristic) {
@@ -441,7 +487,7 @@ export class PrintService {
     
     // Check characteristic properties
     const properties = this.bluetoothCharacteristic.properties;
-    console.log('📝 Characteristic properties:', {
+    console.log('≡ƒô¥ Characteristic properties:', {
       write: properties.write,
       writeWithoutResponse: properties.writeWithoutResponse,
       notify: properties.notify
@@ -463,18 +509,18 @@ export class PrintService {
           throw new Error('Characteristic does not support write operations');
         }
       } catch (writeError: any) {
-        console.error(`❌ Chunk ${i / chunkSize + 1} write failed:`, writeError);
+        console.error(`Γ¥î Chunk ${i / chunkSize + 1} write failed:`, writeError);
         throw new Error(`Bluetooth write failed: ${writeError.message}`);
       }
       
       await new Promise(resolve => setTimeout(resolve, 50));
     }
     
-    console.log('✅ All data sent to Bluetooth printer');
+    console.log('Γ£à All data sent to Bluetooth printer');
   }
 
   /**
-   * 🧪 Test USB printer connectivity
+   * ≡ƒº¬ Test USB printer connectivity
    */
   async testUSBConnection(): Promise<{ success: boolean; message: string; details?: any }> {
     try {
@@ -505,7 +551,7 @@ export class PrintService {
    */
   async printToThermalPrinter(receiptData: any): Promise<void> {
     try {
-      console.log('🔌 Starting USB thermal printer process...');
+      console.log('≡ƒöî Starting USB thermal printer process...');
       
       if (!('serial' in navigator)) {
         throw new Error('Web Serial API not supported');
@@ -513,25 +559,25 @@ export class PrintService {
 
       let port = this.usbPort;
 
-      // ✅ OPTIMIZED: Skip printer lookup if already connected
+      // Γ£à OPTIMIZED: Skip printer lookup if already connected
       if (this.usbConnected && port && port.readable && !port.readable.locked) {
-        console.log('✅ Using existing USB connection - skipping printer lookup');
+        console.log('Γ£à Using existing USB connection - skipping printer lookup');
       } else {
         // Need to find or request a port
-        console.log('🔍 USB not connected, searching for printer...');
+        console.log('≡ƒöì USB not connected, searching for printer...');
         
         if (!port || !port.readable) {
           const ports = await (navigator as any).serial.getPorts();
           
           if (ports.length > 0) {
             port = ports[0];
-            console.log('📱 Found previously authorized USB printer');
+            console.log('≡ƒô▒ Found previously authorized USB printer');
           } else {
             // No authorized ports - ALWAYS show port selection dialog
-            console.log('🔍 No authorized printers found, opening port selection dialog...');
+            console.log('≡ƒöì No authorized printers found, opening port selection dialog...');
             try {
               port = await (navigator as any).serial.requestPort();
-              console.log('✅ User selected USB port');
+              console.log('Γ£à User selected USB port');
             } catch (error: any) {
               if (error.name === 'NotFoundError') {
                 throw new Error('No USB printer selected. Please select your printer from the list.');
@@ -545,7 +591,7 @@ export class PrintService {
 
         // Only open if port is not already open
         if (!port.readable) {
-          console.log('🔌 Opening USB port connection...');
+          console.log('≡ƒöî Opening USB port connection...');
           await port.open({ 
             baudRate: 9600,
             dataBits: 8,
@@ -554,7 +600,7 @@ export class PrintService {
             flowControl: 'none'
           });
         } else {
-          console.log('✅ Port already open, reusing connection');
+          console.log('Γ£à Port already open, reusing connection');
         }
       }
 
@@ -569,20 +615,20 @@ export class PrintService {
       // Wait for stream to be unlocked (max 2 seconds)
       let attempts = 0;
       while (port.writable.locked && attempts < 20) {
-        console.log(`⏳ Waiting for stream to unlock (attempt ${attempts + 1}/20)...`);
+        console.log(`ΓÅ│ Waiting for stream to unlock (attempt ${attempts + 1}/20)...`);
         await new Promise(resolve => setTimeout(resolve, 100));
         attempts++;
       }
 
       if (port.writable.locked) {
-        console.error('❌ Stream still locked after waiting, resetting port...');
+        console.error('Γ¥î Stream still locked after waiting, resetting port...');
         // Force close and clear connection
         try {
           await port.close();
           this.usbPort = null;
           this.usbConnected = false;
         } catch (closeError) {
-          console.error('❌ Error closing port:', closeError);
+          console.error('Γ¥î Error closing port:', closeError);
         }
         throw new Error('USB port stream is locked. Please try printing again.');
       }
@@ -592,23 +638,23 @@ export class PrintService {
       try {
         writer = port.writable.getWriter();
         await writer.write(data);
-        console.log('✅ Data written to USB printer');
+        console.log('Γ£à Data written to USB printer');
       } finally {
         if (writer) {
           try {
             writer.releaseLock();
-            console.log('✅ Writer lock released');
+            console.log('Γ£à Writer lock released');
           } catch (releaseError) {
-            console.warn('⚠️ Error releasing writer lock:', releaseError);
+            console.warn('ΓÜá∩╕Å Error releasing writer lock:', releaseError);
           }
         }
       }
 
       this.usbConnected = true;
-      console.log('✅ Receipt sent to USB thermal printer successfully');
+      console.log('Γ£à Receipt sent to USB thermal printer successfully');
 
     } catch (error: any) {
-      console.error('❌ USB thermal printer error:', error);
+      console.error('Γ¥î USB thermal printer error:', error);
       this.usbPort = null;
       this.usbConnected = false;
       throw error;
@@ -616,7 +662,7 @@ export class PrintService {
   }
 
   /**
-   * 📄 Generate ESC/POS commands for thermal printer (optimized for Xprinter)
+   * ≡ƒôä Generate ESC/POS commands for thermal printer (optimized for Xprinter)
    * Made public to allow components to generate ESC/POS content for preview
    * Updated: Support multiple paper sizes (58mm, 80mm, 127mm)
    */
@@ -628,7 +674,7 @@ export class PrintService {
     const paperConfig = this.getPaperSizeConfig(paperSize);
     const lineChars = paperConfig.lineChars;
     
-    console.log(`📄 Generating ESC/POS for ${paperSize} paper (${lineChars} chars/line)`);
+    console.log(`≡ƒôä Generating ESC/POS for ${paperSize} paper (${lineChars} chars/line)`);
     
     // Generate separator line based on paper width
     const separatorLine = '-'.repeat(lineChars) + '\n';
@@ -860,12 +906,12 @@ export class PrintService {
   }
 
   /**
-   * 🖨️ Print receipt using browser's window.print() - Universal printer support
+   * ≡ƒû¿∩╕Å Print receipt using browser's window.print() - Universal printer support
    * Now supports dynamic paper sizes from printer configuration
    * Uses iframe to avoid showing about:blank popup
    */
   printBrowserReceipt(receiptData: any): void {
-    console.log('🖨️ Opening browser print dialog...');
+    console.log('≡ƒû¿∩╕Å Opening browser print dialog...');
     
     // Get paper size configuration
     const paperSize = receiptData?._paperSize || this.currentPrinterConfig?.paperSize || '58mm';
@@ -885,8 +931,7 @@ export class PrintService {
     
     const iframeDoc = iframe.contentWindow?.document;
     if (!iframeDoc) {
-      console.error('❌ Unable to create print iframe');
-      alert('Print Error: Unable to open print dialog. Please try again.');
+      console.error('Γ¥î Unable to create print iframe');
       return;
     }
     
@@ -977,27 +1022,26 @@ export class PrintService {
       try {
         iframe.contentWindow?.focus();
         iframe.contentWindow?.print();
-        console.log('✅ Print dialog opened');
+        console.log('Γ£à Print dialog opened');
         
         // Remove iframe after printing
         setTimeout(() => {
           document.body.removeChild(iframe);
-          console.log('🧹 Print iframe cleaned up');
+          console.log('≡ƒº╣ Print iframe cleaned up');
         }, 1000);
       } catch (error) {
-        console.error('❌ Print error:', error);
+        console.error('Γ¥î Print error:', error);
         document.body.removeChild(iframe);
-        alert('Print Error: Unable to open print dialog. Please try again.');
       }
     }, 500);
   }
 
   /**
-   * 🖨️ Direct print without dialog - Auto-prints to default/last used printer
+   * ≡ƒû¿∩╕Å Direct print without dialog - Auto-prints to default/last used printer
    * Perfect for mobile devices with paired Bluetooth printers
    */
   printDirectMobile(receiptData: any): void {
-    console.log('🖨️ Starting direct mobile print (no dialog)...');
+    console.log('≡ƒû¿∩╕Å Starting direct mobile print (no dialog)...');
     
     // Get paper size configuration
     const paperSize = receiptData?._paperSize || this.currentPrinterConfig?.paperSize || '58mm';
@@ -1017,7 +1061,7 @@ export class PrintService {
     
     const iframeDoc = iframe.contentWindow?.document;
     if (!iframeDoc) {
-      console.error('❌ Unable to create print iframe');
+      console.error('Γ¥î Unable to create print iframe');
       // Fallback to dialog version
       this.printBrowserReceipt(receiptData);
       return;
@@ -1110,15 +1154,15 @@ export class PrintService {
       try {
         iframe.contentWindow?.focus();
         iframe.contentWindow?.print();
-        console.log('✅ Direct print command sent');
+        console.log('Γ£à Direct print command sent');
         
         // Remove iframe after printing
         setTimeout(() => {
           document.body.removeChild(iframe);
-          console.log('🧹 Print iframe cleaned up');
+          console.log('≡ƒº╣ Print iframe cleaned up');
         }, 1000);
       } catch (error) {
-        console.error('❌ Direct print error:', error);
+        console.error('Γ¥î Direct print error:', error);
         document.body.removeChild(iframe);
         // Fallback to dialog version
         this.printBrowserReceipt(receiptData);
@@ -1127,45 +1171,45 @@ export class PrintService {
   }
 
   /**
-   * 🖨️ MOBILE ESC/POS: Direct print to paired Bluetooth printer without dialog
+   * ≡ƒû¿∩╕Å MOBILE ESC/POS: Direct print to paired Bluetooth printer without dialog
    * Reuses existing connection or connects to previously paired device
    */
   async printMobileESCPOS(receiptData: any): Promise<void> {
     try {
-      console.log('🖨️ Starting mobile ESC/POS print...');
+      console.log('≡ƒû¿∩╕Å Starting mobile ESC/POS print...');
       
       // Check if Web Bluetooth is supported
       if (!navigator.bluetooth) {
-        console.log('⚠️ Bluetooth not supported on this device');
+        console.log('ΓÜá∩╕Å Bluetooth not supported on this device');
         throw new Error('Bluetooth not supported. Please use a device with Bluetooth capability.');
       }
 
-      // 🔥 STRATEGY 1: Use existing connection if available
+      // ≡ƒöÑ STRATEGY 1: Use existing connection if available
       if (this.isConnected && this.bluetoothDevice && this.bluetoothDevice.gatt.connected) {
-        console.log('✅ Using existing Bluetooth connection:', this.bluetoothDevice.name);
+        console.log('Γ£à Using existing Bluetooth connection:', this.bluetoothDevice.name);
         await this.printViaBluetoothESCPOS(receiptData);
-        console.log('✅ ESC/POS print completed via existing connection');
+        console.log('Γ£à ESC/POS print completed via existing connection');
         return;
       }
 
-      // 🔥 STRATEGY 2: Try to reconnect to previously paired device
-      console.log('🔄 Checking for previously paired Bluetooth devices...');
+      // ≡ƒöÑ STRATEGY 2: Try to reconnect to previously paired device
+      console.log('≡ƒöä Checking for previously paired Bluetooth devices...');
       
       try {
         // Get previously authorized devices (no dialog)
         const devices = await navigator.bluetooth.getDevices();
-        console.log(`📱 Found ${devices.length} previously paired device(s)`);
+        console.log(`≡ƒô▒ Found ${devices.length} previously paired device(s)`);
         
         if (devices.length > 0) {
           // Try to connect to the first paired device (most recent)
           for (const device of devices) {
             try {
-              console.log(`🔌 Attempting to reconnect to: ${device.name || 'Unknown Device'}`);
+              console.log(`≡ƒöî Attempting to reconnect to: ${device.name || 'Unknown Device'}`);
               this.bluetoothDevice = device;
               
               // Connect to GATT server
               const server = await device.gatt!.connect();
-              console.log('🔗 Connected to GATT server');
+              console.log('≡ƒöù Connected to GATT server');
 
               // Try to find a suitable service
               let service = null;
@@ -1184,7 +1228,7 @@ export class PrintService {
                     service = await server.getPrimaryService('000018f0-0000-1000-8000-00805f9b34fb');
                     characteristic = await service.getCharacteristic('00002af1-0000-1000-8000-00805f9b34fb');
                   } catch (e3) {
-                    console.log('⚠️ No compatible service found on this device, trying next...');
+                    console.log('ΓÜá∩╕Å No compatible service found on this device, trying next...');
                     continue;
                   }
                 }
@@ -1192,25 +1236,25 @@ export class PrintService {
 
               this.bluetoothCharacteristic = characteristic;
               this.isConnected = true;
-              console.log('✅ Reconnected to paired printer successfully');
+              console.log('Γ£à Reconnected to paired printer successfully');
               
               // Print immediately
               await this.printViaBluetoothESCPOS(receiptData);
-              console.log('✅ ESC/POS print completed via auto-reconnect');
+              console.log('Γ£à ESC/POS print completed via auto-reconnect');
               return;
               
             } catch (reconnectError) {
-              console.log(`⚠️ Failed to reconnect to ${device.name}:`, reconnectError);
+              console.log(`ΓÜá∩╕Å Failed to reconnect to ${device.name}:`, reconnectError);
               continue; // Try next device
             }
           }
         }
       } catch (getDevicesError) {
-        console.log('⚠️ getDevices() not supported or failed:', getDevicesError);
+        console.log('ΓÜá∩╕Å getDevices() not supported or failed:', getDevicesError);
       }
 
-      // 🔥 STRATEGY 3: Manual connection (shows device picker - only if auto-reconnect failed)
-      console.log('📱 No paired device available, requesting manual connection...');
+      // ≡ƒöÑ STRATEGY 3: Manual connection (shows device picker - only if auto-reconnect failed)
+      console.log('≡ƒô▒ No paired device available, requesting manual connection...');
       const connected = await this.connectToBluetoothPrinter();
       
       if (!connected) {
@@ -1219,22 +1263,22 @@ export class PrintService {
 
       // Print via Bluetooth
       await this.printViaBluetoothESCPOS(receiptData);
-      console.log('✅ ESC/POS print completed via manual connection');
+      console.log('Γ£à ESC/POS print completed via manual connection');
 
     } catch (error) {
-      console.error('❌ Mobile ESC/POS print error:', error);
+      console.error('Γ¥î Mobile ESC/POS print error:', error);
       throw error;
     }
   }
 
   /**
-   * 🖨️ MOBILE PRINT: Direct ESC/POS print using new window (not iframe)
+   * ≡ƒû¿∩╕Å MOBILE PRINT: Direct ESC/POS print using new window (not iframe)
    * Opens print dialog with ESC/POS formatted for thermal printer
    * Print preview shows ONLY the receipt content, not the parent page
    * Now supports dynamic paper sizes
    */
   printMobileThermal(receiptData: any): void {
-    console.log('🖨️ Starting mobile thermal print...');
+    console.log('≡ƒû¿∩╕Å Starting mobile thermal print...');
     
     // Get paper size configuration
     const paperSize = receiptData?._paperSize || this.currentPrinterConfig?.paperSize || '58mm';
@@ -1246,7 +1290,7 @@ export class PrintService {
     // Create a new window for printing
     const printWindow = window.open('', '_blank', 'width=400,height=600');
     if (!printWindow) {
-      alert('Print Error: Popup blocked. Please allow popups for this site to print receipts.');
+      console.error('Print Error: Popup blocked');
       return;
     }
     
@@ -1292,7 +1336,7 @@ export class PrintService {
     setTimeout(() => {
       printWindow.focus();
       printWindow.print();
-      console.log('✅ ESC/POS print dialog opened');
+      console.log('Γ£à ESC/POS print dialog opened');
     }, 500);
   }
 
@@ -1414,8 +1458,8 @@ export class PrintService {
             <div style="font-size: 10px; color: #666;">${item.skuId || item.productId || 'N/A'}</div>
           </td>
           <td style="padding: 4px 2px; text-align: center; vertical-align: top;">${qtyDisplay}</td>
-          <td style="padding: 4px 2px; text-align: right; vertical-align: top;">₱${(item.sellingPrice || item.price || 0).toFixed(2)}</td>
-          <td style="padding: 4px 2px; text-align: right; vertical-align: top;">₱${(item.total || 0).toFixed(2)}</td>
+          <td style="padding: 4px 2px; text-align: right; vertical-align: top;">Γé▒${(item.sellingPrice || item.price || 0).toFixed(2)}</td>
+          <td style="padding: 4px 2px; text-align: right; vertical-align: top;">Γé▒${(item.total || 0).toFixed(2)}</td>
         </tr>
       `;
     });
@@ -1426,16 +1470,16 @@ export class PrintService {
       <div class="line"></div>
       
       <table style="width: 100%;">
-        <tr><td>Subtotal:</td><td class="right">₱${(receiptData?.subtotal || 0).toFixed(2)}</td></tr>
-        <tr><td>VAT (12%):</td><td class="right">₱${(receiptData?.vatAmount || 0).toFixed(2)}</td></tr>
-        <tr><td>VAT Exempt:</td><td class="right">₱${(receiptData?.vatExempt || 0).toFixed(2)}</td></tr>
-        <tr><td>Discount:</td><td class="right">₱${(receiptData?.discount || 0).toFixed(2)}</td></tr>
+        <tr><td>Subtotal:</td><td class="right">Γé▒${(receiptData?.subtotal || 0).toFixed(2)}</td></tr>
+        <tr><td>VAT (12%):</td><td class="right">Γé▒${(receiptData?.vatAmount || 0).toFixed(2)}</td></tr>
+        <tr><td>VAT Exempt:</td><td class="right">Γé▒${(receiptData?.vatExempt || 0).toFixed(2)}</td></tr>
+        <tr><td>Discount:</td><td class="right">Γé▒${(receiptData?.discount || 0).toFixed(2)}</td></tr>
     `;
 
     html += `
         <tr style="border-top: 1px solid #000; font-weight: bold;">
           <td style="padding-top: 5px;"><strong>TOTAL:</strong></td>
-          <td class="right" style="padding-top: 5px;"><strong>₱${(receiptData?.totalAmount || receiptData?.netAmount || 0).toFixed(2)}</strong></td>
+          <td class="right" style="padding-top: 5px;"><strong>Γé▒${(receiptData?.totalAmount || receiptData?.netAmount || 0).toFixed(2)}</strong></td>
         </tr>
       </table>`;
 
@@ -1462,7 +1506,7 @@ export class PrintService {
       }
       
       const discountAmt = (receiptData?.discount || 0).toFixed(2);
-      html += `<div>Discount Amount: ₱${discountAmt}</div>`;
+      html += `<div>Discount Amount: Γé▒${discountAmt}</div>`;
       
       // Signature section for PWD/Senior discounts
       if (receiptData.orderDiscount.type === 'PWD' || receiptData.orderDiscount.type === 'SENIOR') {
