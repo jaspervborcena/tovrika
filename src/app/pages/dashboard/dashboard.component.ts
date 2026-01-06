@@ -113,6 +113,12 @@ export class DashboardComponent implements OnInit {
   }
 
   async ngOnInit() {
+    // Initialize header collapsed state from localStorage
+    const savedHeaderState = localStorage.getItem('headerCollapsed');
+    if (savedHeaderState === 'true') {
+      this.isHeaderCollapsed.set(true);
+    }
+    
     this.loadDashboardData();
     
     // Track current route for active menu item
@@ -385,10 +391,15 @@ export class DashboardComponent implements OnInit {
 
   // Header collapse/expand methods
   protected toggleHeaderCollapse(): void {
-    this.isHeaderCollapsed.set(!this.isHeaderCollapsed());
+    const newState = !this.isHeaderCollapsed();
+    this.isHeaderCollapsed.set(newState);
+    localStorage.setItem('headerCollapsed', String(newState));
+    window.dispatchEvent(new Event('headerCollapsed'));
   }
 
   protected showHeader(): void {
     this.isHeaderCollapsed.set(false);
+    localStorage.setItem('headerCollapsed', 'false');
+    window.dispatchEvent(new Event('headerCollapsed'));
   }
 }

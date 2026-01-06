@@ -12,7 +12,7 @@ import { ConfirmationDialogComponent } from '../../../../shared/components/confi
 import { ProductService } from '../../../../services/product.service';
 import { PosService } from '../../../../services/pos.service';
 import { PosSharedService } from '../../../../services/pos-shared.service';
-import { PrintService } from '../../../../services/print.service.bak';
+import { PrintService } from '../../../../services/print.service';
 import { TransactionService } from '../../../../services/transaction.service';
 import { AuthService } from '../../../../services/auth.service';
 import { CompanyService } from '../../../../services/company.service';
