@@ -1294,6 +1294,7 @@ export class PrintService {
       return;
     }
     
+    
     // Write HTML content with thermal printer styling
     printWindow.document.write(`
       <html>
