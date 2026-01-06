@@ -324,6 +324,7 @@ export class PrintService {
       // Show error message
       console.error('Γ¥î Print error:', error);
       const errorMessage = error instanceof Error ? error.message : 'Unable to print receipt. Please check your printer connection.';
+      alert(`Print Error: ${errorMessage}`);
       throw error;
     }
   }
@@ -932,6 +933,7 @@ export class PrintService {
     const iframeDoc = iframe.contentWindow?.document;
     if (!iframeDoc) {
       console.error('Γ¥î Unable to create print iframe');
+      alert('Print Error: Unable to open print dialog. Please try again.');
       return;
     }
     
@@ -1032,6 +1034,7 @@ export class PrintService {
       } catch (error) {
         console.error('Γ¥î Print error:', error);
         document.body.removeChild(iframe);
+        alert('Print Error: Unable to open print dialog. Please try again.');
       }
     }, 500);
   }
@@ -1290,7 +1293,7 @@ export class PrintService {
     // Create a new window for printing
     const printWindow = window.open('', '_blank', 'width=400,height=600');
     if (!printWindow) {
-      console.error('Print Error: Popup blocked');
+      alert('Print Error: Popup blocked. Please allow popups for this site to print receipts.');
       return;
     }
     

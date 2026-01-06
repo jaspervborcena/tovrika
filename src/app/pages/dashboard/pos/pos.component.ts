@@ -5522,7 +5522,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
       await this.showConfirmationDialog({
         title: 'Print Receipt Failed',
-        message: `Failed to print receipt: ${errorMessage}\n\nPlease check your printer connection and try again.`,
+        message: `[DEBUG-POS-100] Failed to print receipt: ${errorMessage}\n\nPlease check your printer connection and try again.`,
         confirmText: 'OK',
         cancelText: '',
         type: 'warning'
