@@ -965,6 +965,95 @@ import { getFirestore, collection, query, where, getDocs, doc, updateDoc, Timest
         width: auto;
       }
     }
+
+    @media (max-width: 480px) {
+      .page-title {
+        font-size: 1.25rem;
+      }
+
+      .page-subtitle {
+        font-size: 0.8125rem;
+      }
+
+      .header-content {
+        padding: 0 1rem;
+      }
+
+      .add-user-btn {
+        font-size: 0.75rem;
+        padding: 0.5rem 1rem;
+      }
+
+      .search-container {
+        padding: 0 0.5rem;
+      }
+
+      .search-input {
+        font-size: 0.875rem;
+        padding: 0.5rem 0.75rem;
+      }
+
+      .user-roles-table th,
+      .user-roles-table td {
+        font-size: 0.8125rem;
+        padding: 0.5rem;
+      }
+
+      .tab-buttons {
+        gap: 0.5rem;
+      }
+
+      .tab-button {
+        font-size: 0.8125rem;
+        padding: 0.5rem 1rem;
+      }
+
+      .badge {
+        font-size: 0.6875rem;
+        padding: 0.25rem 0.5rem;
+      }
+
+      .action-button {
+        font-size: 0.75rem;
+        padding: 0.375rem 0.625rem;
+      }
+
+      .modal {
+        width: 95%;
+        max-height: 95vh;
+      }
+
+      .modal-header h3 {
+        font-size: 1rem;
+      }
+
+      .modal-header {
+        padding: 1rem 1.5rem;
+      }
+
+      .modal-body {
+        padding: 1rem;
+      }
+
+      .form-group label {
+        font-size: 0.8125rem;
+      }
+
+      .form-input,
+      .form-select {
+        font-size: 0.875rem;
+        padding: 0.5rem;
+      }
+
+      .modal-footer {
+        padding: 1rem 1.5rem;
+      }
+
+      .btn {
+        font-size: 0.8125rem;
+        padding: 0.5rem 0.875rem;
+      }
+    }
   `]
 })
 export class UserRolesComponent implements OnInit {
