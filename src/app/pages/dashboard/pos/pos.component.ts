@@ -50,6 +50,7 @@ import { DomSanitizer, SafeUrl } from '@angular/platform-browser';
 })
 export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   @ViewChild('processPaymentButton', { read: ElementRef }) processPaymentButton?: ElementRef<HTMLButtonElement>;
+  @ViewChild('accessTabListContainer', { read: ElementRef }) accessTabListContainer?: ElementRef;
 
   // Services
   private productService = inject(ProductService);
@@ -203,8 +204,15 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     return prods;
   });
   readonly categories = computed(() => {
-    const cats = this.productService.getCategories();
-    console.log('🔍 CATEGORIES COMPUTED - Count:', cats.length, 'Categories:', cats);
+    // Get all categories from ALL products (global categories)
+    // Categories should be visible across all stores
+    const allProducts = this.products();
+    const categorySet = new Set(allProducts.map(p => p.category).filter(cat => cat && cat.trim()));
+    const cats = Array.from(categorySet).sort();
+    
+    const storeId = this.selectedStoreId();
+    console.log('🔍 CATEGORIES COMPUTED - Total products:', allProducts.length, 'Store:', storeId, 'Categories count:', cats.length, 'Categories:', cats);
+    
     return cats;
   });
   
@@ -242,6 +250,15 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   // Tag filters
   readonly activeTagFilters = signal<string[]>([]); // Track active tag label filters
   readonly availableTagsByGroup = signal<{ group: string; tags: { id: string; label: string }[] }[]>([]); // Tags from database
+  
+  // Check if current store's products have any tags
+  readonly hasProductsWithTags = computed(() => {
+    const filtered = this.filteredProducts();
+    const hasTags = filtered.some(product => product.tagLabels && product.tagLabels.length > 0);
+    console.log('🏷️ Has products with tags:', hasTags, 'Total filtered products:', filtered.length);
+    return hasTags;
+  });
+  
   readonly isTagFilterExpanded = signal<boolean>(true); // Track tag filter section collapse state
 
   setSortMode(mode: 'asc' | 'desc' | 'mid'): void {
@@ -668,6 +685,9 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   readonly accessTabs = ['New', 'Orders', 'Cancelled', 'Returns', 'Refunds', 'Damage', 'Split Payments', 'Discounts & Promotions'] as const;
   private accessTabSignal = signal<string>('New');
   readonly accessTab = computed(() => this.accessTabSignal());
+  
+  // Access tab scrolling for mobile
+  accessTabScrollPosition = 0;
 
   // Method to translate access tab names
   getAccessTabTranslation(tab: string): string {
@@ -5522,7 +5542,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
       await this.showConfirmationDialog({
         title: 'Print Receipt Failed',
-        message: `Failed to print receipt: ${errorMessage}\n\nPlease check your printer connection and try again.`,
+        message: `[DEBUG-POS-100] Failed to print receipt: ${errorMessage}\n\nPlease check your printer connection and try again.`,
         confirmText: 'OK',
         cancelText: '',
         type: 'warning'
@@ -6221,5 +6241,30 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     
     console.log('🏷️ Returning tag groups:', result);
     return result;
+  }
+
+  // Access tab scrolling methods for mobile
+  scrollAccessTabsLeft(): void {
+    if (this.accessTabListContainer) {
+      const container = this.accessTabListContainer.nativeElement;
+      const scrollAmount = container.clientWidth * 0.6;
+      container.scrollBy({ left: -scrollAmount, behavior: 'smooth' });
+      this.accessTabScrollPosition = Math.max(0, container.scrollLeft - scrollAmount);
+    }
+  }
+
+  scrollAccessTabsRight(): void {
+    if (this.accessTabListContainer) {
+      const container = this.accessTabListContainer.nativeElement;
+      const scrollAmount = container.clientWidth * 0.6;
+      container.scrollBy({ left: scrollAmount, behavior: 'smooth' });
+      this.accessTabScrollPosition = container.scrollLeft + scrollAmount;
+    }
+  }
+
+  isAccessTabScrollAtEnd(): boolean {
+    if (!this.accessTabListContainer) return true;
+    const container = this.accessTabListContainer.nativeElement;
+    return container.scrollLeft + container.clientWidth >= container.scrollWidth - 10;
   }
 }

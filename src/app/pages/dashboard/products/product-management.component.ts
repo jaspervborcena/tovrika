@@ -3000,7 +3000,7 @@ export class ProductManagementComponent implements OnInit {
 
     this.loading = true;
     try {
-      const rawFormValue = this.productForm.value;
+      const rawFormValue = this.productForm.getRawValue(); // Use getRawValue() to include disabled fields
       
       // Clean undefined values before processing
       const formValue = this.cleanFormData(rawFormValue);

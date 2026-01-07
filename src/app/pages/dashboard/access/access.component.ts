@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, ViewChild, ElementRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 
@@ -43,24 +43,43 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
         </div>
 
         <!-- Tab Headers -->
-        <div *ngIf="!isLoading" class="tab-headers">
-          <div 
-            *ngFor="let role of filteredRoles(); let i = index" 
-            class="tab-header" 
-            [class.active]="activeTabIndex === i"
-            (click)="setActiveTab(i)">
-            <div class="tab-content">
-              <div class="tab-label">{{ role.roleId }}</div>
-              <div class="tab-details">{{ getPermissionCount(role.permissions) }} permissions</div>
+        <div *ngIf="!isLoading" class="tab-headers-wrapper">
+          <!-- Left Arrow (Mobile Only) -->
+          <button class="tab-arrow tab-arrow-left" 
+                  (click)="scrollTabsLeft()"
+                  [disabled]="tabScrollPosition === 0">
+            <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+            </svg>
+          </button>
+
+          <div class="tab-headers" #tabHeadersContainer>
+            <div 
+              *ngFor="let role of filteredRoles(); let i = index" 
+              class="tab-header" 
+              [class.active]="activeTabIndex === i"
+              (click)="setActiveTab(i)">
+              <div class="tab-content">
+                <div class="tab-label">{{ role.roleId }}</div>
+                <div class="tab-details">{{ getPermissionCount(role.permissions) }} permissions</div>
+              </div>
+            </div>
+            <div class="tab-header add-role-tab" (click)="addNewRole()">
+              <div class="tab-content">
+                <div class="tab-label">+ Add Role</div>
+                <div class="tab-details">Create new role</div>
+              </div>
             </div>
           </div>
-              <div class="tab-header add-role-tab" (click)="addNewRole()">
-            <div class="tab-content">
-              <div class="tab-label">+ Add Role</div>
-              <div class="tab-details">Create new role</div>
-            </div>
-          </div>
-              
+
+          <!-- Right Arrow (Mobile Only) -->
+          <button class="tab-arrow tab-arrow-right" 
+                  (click)="scrollTabsRight()"
+                  [disabled]="isScrollAtEnd()">
+            <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+            </svg>
+          </button>
         </div>
 
         <!-- Tab Content Area -->
@@ -243,10 +262,13 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
     />
   `,
   styles: [
-    '.access-management { padding: 0; min-height: 100vh; background: #f8fafc; } .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 2rem 0; margin-bottom: 2rem; } .header-content { max-width: 1200px; margin: 0 auto; padding: 0 1rem; } .page-title { font-size: 2.5rem; font-weight: 700; margin: 0 0 0.5rem 0; } .page-subtitle { font-size: 1.1rem; opacity: 0.9; margin: 0; } .tabs-container { max-width: 1200px; margin: 0 auto; padding: 0 1rem; } .tab-headers { display: flex; gap: 0.5rem; margin-bottom: 2rem; flex-wrap: wrap; } .tab-header { background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 1rem 1.5rem; cursor: pointer; transition: all 0.2s; min-width: 160px; text-align: left; } .tab-header:hover { border-color: #667eea; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1); } .tab-header.active { border-color: #667eea; background: #667eea; color: white; } .add-role-tab { border: 2px dashed #cbd5e0; background: transparent; color: #4a5568; } .add-role-tab:hover { border-color: #667eea; background: #f7fafc; color: #667eea; } .tab-content { display: flex; flex-direction: column; gap: 0.25rem; } .tab-label { font-weight: 600; font-size: 1rem; } .tab-details { font-size: 0.875rem; opacity: 0.7; } .tab-content-area { background: white; border-radius: 12px; padding: 2rem; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1); margin-bottom: 2rem; } .role-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; padding-bottom: 1rem; border-bottom: 1px solid #e2e8f0; } .role-title { font-size: 1.875rem; font-weight: 700; color: #1a202c; margin: 0; } .role-actions { display: flex; gap: 0.75rem; } .permissions-section { margin-top: 2rem; } .permissions-title { font-size: 1.5rem; font-weight: 600; color: #2d3748; margin: 0 0 0.5rem 0; } .permissions-subtitle { color: #718096; margin: 0 0 2rem 0; font-size: 0.95rem; } .permissions-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 2rem; margin-bottom: 2rem; } .permission-group { background: #f8fafc; border-radius: 8px; padding: 1.5rem; border: 1px solid #e2e8f0; } .group-title { font-size: 1.125rem; font-weight: 600; color: #2d3748; margin: 0 0 1rem 0; padding-bottom: 0.75rem; border-bottom: 1px solid #e2e8f0; } .permission-items { display: flex; flex-direction: column; gap: 1rem; } .permission-item { background: white; border-radius: 6px; padding: 1rem; border: 1px solid #e2e8f0; transition: border-color 0.2s; } .permission-item:hover { border-color: #cbd5e0; } .permission-label { display: flex; align-items: flex-start; gap: 0.75rem; cursor: pointer; font-weight: 500; } .permission-label input[type="checkbox"] { width: 18px; height: 18px; margin: 0; cursor: pointer; } .permission-text { flex: 1; display: flex; flex-direction: column; gap: 0.25rem; } .permission-name { font-weight: 500; color: #2d3748; font-size: 0.95rem; } .permission-desc { color: #718096; font-size: 0.875rem; line-height: 1.4; } .save-section { margin-top: 2rem; padding-top: 1.5rem; border-top: 1px solid #e2e8f0; display: flex; justify-content: flex-end; } .save-btn { padding: 0.75rem 2rem; font-size: 1rem; } .btn { border: none; border-radius: 6px; padding: 0.5rem 1rem; font-weight: 500; cursor: pointer; transition: all 0.2s; display: inline-flex; align-items: center; gap: 0.5rem; text-decoration: none; } .btn:disabled { opacity: 0.6; cursor: not-allowed; } .btn-primary { background: #667eea; color: white; } .btn-primary:hover:not(:disabled) { background: #5a6fd8; } .btn-secondary { background: #e2e8f0; color: #4a5568; } .btn-secondary:hover:not(:disabled) { background: #cbd5e0; } .btn-danger { background: #f56565; color: white; } .btn-danger:hover:not(:disabled) { background: #e53e3e; } .btn-gradient { display: inline-flex; align-items: center; gap: 6px; background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%); color: white; border: none; padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.2s ease; box-shadow: 0 2px 4px rgba(79, 70, 229, 0.2); } .btn-gradient:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3); background: linear-gradient(135deg, #4338ca 0%, #6d28d9 100%); } .btn-gradient:disabled { opacity: 0.6; cursor: not-allowed; transform: none; } .btn-gradient svg { width: 16px; height: 16px; } .empty-state, .loading-state { text-align: center; padding: 4rem 2rem; color: #718096; } .empty-content h3, .loading-content p { margin-bottom: 1rem; } .spinner { width: 40px; height: 40px; border: 4px solid #e2e8f0; border-top-color: #667eea; border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 1rem; } @keyframes spin { to { transform: rotate(360deg); } } .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.5); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 1rem; } .modal { background: white; border-radius: 12px; max-width: 500px; width: 100%; max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3); } .modal-header { display: flex; align-items: center; justify-content: space-between; padding: 1.5rem; border-bottom: 1px solid #e2e8f0; } .modal-header h3 { margin: 0; font-size: 1.25rem; font-weight: 600; color: #2d3748; } .close-btn { background: none; border: none; font-size: 1.5rem; cursor: pointer; color: #718096; padding: 0.25rem; line-height: 1; } .close-btn:hover { color: #4a5568; } .modal-body { padding: 1.5rem; } .form-group { margin-bottom: 1rem; } .form-group label { display: block; margin-bottom: 0.5rem; font-weight: 500; color: #2d3748; } .form-input { width: 100%; padding: 0.75rem; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 1rem; transition: border-color 0.2s; } .form-input:focus { outline: none; border-color: #667eea; box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1); } .form-help { margin-top: 0.5rem; font-size: 0.875rem; color: #718096; } .modal-footer { display: flex; gap: 0.75rem; justify-content: flex-end; padding: 1.5rem; border-top: 1px solid #e2e8f0; background: #f8fafc; } @media (max-width: 768px) { .header { padding: 1.5rem 0; } .page-title { font-size: 2rem; } .tab-headers { flex-direction: column; } .tab-header { min-width: auto; } .role-header { flex-direction: column; align-items: flex-start; gap: 1rem; } .role-actions { width: 100%; justify-content: flex-start; } .permissions-grid { grid-template-columns: 1fr; gap: 1.5rem; } }'
+    '.access-management { padding: 0; min-height: 100vh; background: #f8fafc; } .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 2rem 0; margin-bottom: 2rem; } .header-content { max-width: 1200px; margin: 0 auto; padding: 0 1rem; } .page-title { font-size: 2.5rem; font-weight: 700; margin: 0 0 0.5rem 0; } .page-subtitle { font-size: 1.1rem; opacity: 0.9; margin: 0; } .tabs-container { max-width: 1200px; margin: 0 auto; padding: 0 1rem; } .tab-headers-wrapper { position: relative; display: flex; align-items: center; gap: 0.5rem; margin-bottom: 2rem; } .tab-arrow { display: none; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; border-radius: 50%; width: 40px; height: 40px; cursor: pointer; flex-shrink: 0; transition: all 0.2s; box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3); z-index: 2; } .tab-arrow:hover:not(:disabled) { transform: scale(1.05); box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4); } .tab-arrow:disabled { opacity: 0.3; cursor: not-allowed; } .tab-arrow svg { display: block; margin: auto; } .tab-headers { display: flex; gap: 0.5rem; flex-wrap: wrap; flex: 1; overflow-x: visible; } .tab-header { background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 1rem 1.5rem; cursor: pointer; transition: all 0.2s; min-width: 160px; text-align: left; flex-shrink: 0; } .tab-header:hover { border-color: #667eea; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1); } .tab-header.active { border-color: #667eea; background: #667eea; color: white; } .add-role-tab { border: 2px dashed #cbd5e0; background: transparent; color: #4a5568; } .add-role-tab:hover { border-color: #667eea; background: #f7fafc; color: #667eea; } .tab-content { display: flex; flex-direction: column; gap: 0.25rem; } .tab-label { font-weight: 600; font-size: 1rem; } .tab-details { font-size: 0.875rem; opacity: 0.7; } .tab-content-area { background: white; border-radius: 12px; padding: 2rem; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1); margin-bottom: 2rem; } .role-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; padding-bottom: 1rem; border-bottom: 1px solid #e2e8f0; } .role-title { font-size: 1.875rem; font-weight: 700; color: #1a202c; margin: 0; } .role-actions { display: flex; gap: 0.75rem; } .permissions-section { margin-top: 2rem; } .permissions-title { font-size: 1.5rem; font-weight: 600; color: #2d3748; margin: 0 0 0.5rem 0; } .permissions-subtitle { color: #718096; margin: 0 0 2rem 0; font-size: 0.95rem; } .permissions-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 2rem; margin-bottom: 2rem; } .permission-group { background: #f8fafc; border-radius: 8px; padding: 1.5rem; border: 1px solid #e2e8f0; } .group-title { font-size: 1.125rem; font-weight: 600; color: #2d3748; margin: 0 0 1rem 0; padding-bottom: 0.75rem; border-bottom: 1px solid #e2e8f0; } .permission-items { display: flex; flex-direction: column; gap: 1rem; } .permission-item { background: white; border-radius: 6px; padding: 1rem; border: 1px solid #e2e8f0; transition: border-color 0.2s; } .permission-item:hover { border-color: #cbd5e0; } .permission-label { display: flex; align-items: flex-start; gap: 0.75rem; cursor: pointer; font-weight: 500; } .permission-label input[type="checkbox"] { width: 18px; height: 18px; margin: 0; cursor: pointer; } .permission-text { flex: 1; display: flex; flex-direction: column; gap: 0.25rem; } .permission-name { font-weight: 500; color: #2d3748; font-size: 0.95rem; } .permission-desc { color: #718096; font-size: 0.875rem; line-height: 1.4; } .save-section { margin-top: 2rem; padding-top: 1.5rem; border-top: 1px solid #e2e8f0; display: flex; justify-content: flex-end; } .save-btn { padding: 0.75rem 2rem; font-size: 1rem; } .btn { border: none; border-radius: 6px; padding: 0.5rem 1rem; font-weight: 500; cursor: pointer; transition: all 0.2s; display: inline-flex; align-items: center; gap: 0.5rem; text-decoration: none; } .btn:disabled { opacity: 0.6; cursor: not-allowed; } .btn-primary { background: #667eea; color: white; } .btn-primary:hover:not(:disabled) { background: #5a6fd8; } .btn-secondary { background: #e2e8f0; color: #4a5568; } .btn-secondary:hover:not(:disabled) { background: #cbd5e0; } .btn-danger { background: #f56565; color: white; } .btn-danger:hover:not(:disabled) { background: #e53e3e; } .btn-gradient { display: inline-flex; align-items: center; gap: 6px; background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%); color: white; border: none; padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.2s ease; box-shadow: 0 2px 4px rgba(79, 70, 229, 0.2); } .btn-gradient:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3); background: linear-gradient(135deg, #4338ca 0%, #6d28d9 100%); } .btn-gradient:disabled { opacity: 0.6; cursor: not-allowed; transform: none; } .btn-gradient svg { width: 16px; height: 16px; } .empty-state, .loading-state { text-align: center; padding: 4rem 2rem; color: #718096; } .empty-content h3, .loading-content p { margin-bottom: 1rem; } .spinner { width: 40px; height: 40px; border: 4px solid #e2e8f0; border-top-color: #667eea; border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 1rem; } @keyframes spin { to { transform: rotate(360deg); } } .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.5); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 1rem; } .modal { background: white; border-radius: 12px; max-width: 500px; width: 100%; max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3); } .modal-header { display: flex; align-items: center; justify-content: space-between; padding: 1.5rem; border-bottom: 1px solid #e2e8f0; } .modal-header h3 { margin: 0; font-size: 1.25rem; font-weight: 600; color: #2d3748; } .close-btn { background: none; border: none; font-size: 1.5rem; cursor: pointer; color: #718096; padding: 0.25rem; line-height: 1; } .close-btn:hover { color: #4a5568; } .modal-body { padding: 1.5rem; } .form-group { margin-bottom: 1rem; } .form-group label { display: block; margin-bottom: 0.5rem; font-weight: 500; color: #2d3748; } .form-input { width: 100%; padding: 0.75rem; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 1rem; transition: border-color 0.2s; } .form-input:focus { outline: none; border-color: #667eea; box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1); } .form-help { margin-top: 0.5rem; font-size: 0.875rem; color: #718096; } .modal-footer { display: flex; gap: 0.75rem; justify-content: flex-end; padding: 1.5rem; border-top: 1px solid #e2e8f0; background: #f8fafc; } @media (max-width: 768px) { .header { padding: 1.5rem 0; } .page-title { font-size: 2rem; } .tab-arrow { display: flex; align-items: center; justify-content: center; } .tab-headers-wrapper { gap: 0.25rem; } .tab-headers { flex-wrap: nowrap; overflow-x: auto; scroll-behavior: smooth; scrollbar-width: none; -ms-overflow-style: none; padding: 0.25rem 0; } .tab-headers::-webkit-scrollbar { display: none; } .tab-header { min-width: 140px; flex-shrink: 0; } .role-header { flex-direction: column; align-items: flex-start; gap: 1rem; } .role-actions { width: 100%; justify-content: flex-start; } .permissions-grid { grid-template-columns: 1fr; gap: 1.5rem; } } @media (max-width: 480px) { .page-title { font-size: 1.25rem; } .page-subtitle { font-size: 0.8125rem; } .header-content { padding: 0 1rem; } .tabs-container { padding: 0 0.5rem; } .tab-content-area { padding: 1rem; } .tab-arrow { width: 36px; height: 36px; } .tab-arrow svg { width: 18px; height: 18px; } .tab-header { min-width: 120px; padding: 0.75rem 1rem; } .tab-label { font-size: 0.875rem; } .tab-details { font-size: 0.75rem; } .role-title { font-size: 1.25rem; } .permissions-title { font-size: 1.125rem; } .permission-group { padding: 1rem; } .group-title { font-size: 1rem; } .permission-item { padding: 0.75rem; } .permission-name { font-size: 0.875rem; } .permission-desc { font-size: 0.8125rem; } .btn-gradient { font-size: 0.75rem; padding: 6px 12px; } .modal { width: 95%; max-height: 95vh; } .modal-header { padding: 1rem 1.5rem; } .modal-body { padding: 1rem; } .modal-footer { padding: 1rem 1.5rem; } }'
   ]
 })
 export class AccessComponent implements OnInit {
+  // ViewChild for tab scrolling
+  @ViewChild('tabHeadersContainer', { read: ElementRef }) tabHeadersContainer?: ElementRef;
+  
   // Component properties
   roles: RoleDefinition[] = [];
   activeTabIndex = 0;
@@ -257,6 +279,9 @@ export class AccessComponent implements OnInit {
   roleNameError = '';
   selectedStoreId = '';
   stores: Store[] = [];
+  
+  // Tab scrolling properties
+  tabScrollPosition = 0;
 
   // Confirmation dialog properties
   showConfirmDialog = false;
@@ -608,5 +633,30 @@ export class AccessComponent implements OnInit {
     this.roles = [];
     this.activeRole = null;
     this.activeTabIndex = 0;
+  }
+
+  // Tab scrolling methods for mobile
+  scrollTabsLeft(): void {
+    if (this.tabHeadersContainer) {
+      const container = this.tabHeadersContainer.nativeElement;
+      const scrollAmount = container.clientWidth * 0.8;
+      container.scrollBy({ left: -scrollAmount, behavior: 'smooth' });
+      this.tabScrollPosition = Math.max(0, container.scrollLeft - scrollAmount);
+    }
+  }
+
+  scrollTabsRight(): void {
+    if (this.tabHeadersContainer) {
+      const container = this.tabHeadersContainer.nativeElement;
+      const scrollAmount = container.clientWidth * 0.8;
+      container.scrollBy({ left: scrollAmount, behavior: 'smooth' });
+      this.tabScrollPosition = container.scrollLeft + scrollAmount;
+    }
+  }
+
+  isScrollAtEnd(): boolean {
+    if (!this.tabHeadersContainer) return true;
+    const container = this.tabHeadersContainer.nativeElement;
+    return container.scrollLeft + container.clientWidth >= container.scrollWidth - 10;
   }
 }
