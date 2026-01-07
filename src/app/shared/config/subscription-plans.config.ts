@@ -37,45 +37,16 @@ export interface SubscriptionPlan {
 
 export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
   {
-    tier: 'freemium',
-    name: 'Freemium (Trial)',
-    price: 0,
-    billingCycle: 'monthly',
-    currency: '₱',
-    description: 'Start free for 14 days with basic POS access (Billed quarterly)',
-    cta: 'Start Free Trial',
-    features: [
-      '14-day free trial',
-      '1 Store Location',
-      'Any Laptop, Computer, or Android device',
-      '4 Users (Owner + Store Manager + 2 Cashiers)',
-      '30 Products Maximum',
-      '100 Transactions',
-      'Basic POS with Barcode support',
-      'Thermal Receipt Printing',
-      '⚠️ Trial ends after 14 days'
-    ],
-    limits: {
-      stores: 1,
-      users: '4 (Owner + Store Manager + 2 Cashiers)',
-      devices: 'unlimited',
-      transactions: 100,
-      products: 30,
-      dataRetention: '14 days (trial duration)'
-    }
-  },
-  {
     tier: 'standard',
-    name: 'Standard',
+    name: 'Basic Plan',
     price: 599,
     billingCycle: 'monthly',
     currency: '₱',
-    description: 'Perfect for small businesses (Billed quarterly)',
-    cta: 'Subscribe Now',
+    description: 'Perfect for small businesses',
+    cta: 'Start 14-Day Trial',
     features: [
-      '14-day free trial added when you subscribe',
+      '14-day free trial',
       '1 Store Location',
-      '1 POS Device per Store',
       'Any Laptop, Computer, or Android device',
       '4 Users (Owner + Store Manager + 2 Cashiers)',
       '50 Products Maximum',
@@ -85,8 +56,7 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
       'Thermal Receipt Printing',
       'Expansion: +₱500 per additional store',
       '+50 Products & +10,000 Transactions per added store',
-      '+4 Users (Owner + Manager + 2 Cashiers) per added store',
-      '⚠️ Trial ends when subscription expires'
+      '+4 Users (Owner + Manager + 2 Cashiers) per added store'
     ],
     limits: {
       stores: 1,
@@ -99,69 +69,67 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
   },
   {
     tier: 'premium',
-    name: 'Premium',
+    name: 'Standard Plan',
     price: 1099,
     billingCycle: 'monthly',
     currency: '₱',
     popular: true,
     badge: 'Most Popular',
-    description: 'Built for growing teams (Billed quarterly)',
-    cta: 'Start Premium',
+    description: 'Built for growing teams',
+    cta: 'Start 14-Day Trial',
     features: [
-      '14-day free trial added when you subscribe',
+      '14-day free trial',
       '1 Store Location',
-      '1 POS Device per Store',
       'Any Laptop, Computer, or Android device',
-      '7 Users (Owner + 2 Store Managers + 4 Cashiers)',
-      '120 Products Maximum',
+      '10 Users (Owner + Store Managers + Cashiers)',
+      '150 Products Maximum',
       '25,000 Transactions',
       '1-Year Data History',
       'Cash + GCash/Maya',
       'Thermal Receipt Printing',
-      'Expansion: +₱500 per additional store',
-      '+100 Products & +25,000 Transactions per added store',
-      '+7 Users (Owner + 2 Managers + 4 Cashiers) per added store',
-      '⚠️ Trial ends when subscription expires'
+      'Additional features available',
+      'Priority email support'
     ],
     limits: {
       stores: 1,
-      users: '7 (Owner + 2 Store Managers + 4 Cashiers)',
+      users: '10 (Owner + Store Managers + Cashiers)',
       devices: 'unlimited',
       transactions: 25000,
-      products: 120,
+      products: 150,
       dataRetention: '1 year'
     }
   },
   {
     tier: 'enterprise',
-    name: 'Enterprise',
+    name: 'Premium Plan',
     price: 3999,
     billingCycle: 'monthly',
     currency: '₱',
     description: 'Designed for large businesses (Billed quarterly)',
     cta: 'Contact Us',
     features: [
-      'Dedicated Database (Private & Secure)',
-      '5-Year Data History',
       'Up to 10 Branches included',
-      'Unlimited Users (Full Staffing for all branches)',
       'Any Laptop, Computer, or Android device',
-      'Unlimited Products',
-      'Unlimited Transactions',
-      'Cash, GCash, Maya, & Credit Card (Manual Ref. No.)',
+      '50 Users (Full Staffing for all branches)',
+      '1,500 Products Maximum',
+      '150,000 Transactions',
+      '3+ Years Data History',
+      'Cash, GCash, Maya, & Credit Card',
+      'Dedicated Pipeline (Private & Secure)',
+      'Domain Integration (yourbrand.com)',
       'New Requests & Custom Features (Prioritized)',
-      'Included up to 10 branches (Contact for 11+)',
+      'Thermal Receipt Printing',
       'Early access to Integrated Payment APIs',
       'Priority Support (Direct Line to Developer)',
-      'Thermal Receipt Printing'
+      'Billed quarterly with annual options'
     ],
     limits: {
       stores: 10,
-      users: 'unlimited',
+      users: '50 (Full Staffing for all branches)',
       devices: 'unlimited',
-      transactions: 'unlimited',
-      products: 'unlimited',
-      dataRetention: '5 years'
+      transactions: 150000,
+      products: 1500,
+      dataRetention: '3+ years'
     }
   }
 ];
