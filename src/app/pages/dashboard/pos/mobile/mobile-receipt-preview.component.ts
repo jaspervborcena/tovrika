@@ -238,7 +238,7 @@ export class MobileReceiptPreviewComponent implements OnInit {
     this.router.navigate(['/pos/mobile']);
   }
 
-  printReceipt() {
+  async printReceipt() {
     this.isPrinting.set(true);
     
     try {

@@ -1944,7 +1944,7 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
         console.log('� Navigating to receipt preview...');
         const escposContent = this.printService.generateESCPOSCommands(receiptData);
         this.router.navigate(['/pos/mobile/receipt-preview'], {
-          state: { receiptContent: escposContent }
+          state: { receiptContent: escposContent, receiptData: receiptData }
         });
       } else {
         // Fallback: prepare receipt data from current state
@@ -1953,7 +1953,7 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
         this.receiptDataSignal.set(fallbackReceiptData);
         const escposContent = this.printService.generateESCPOSCommands(fallbackReceiptData);
         this.router.navigate(['/pos/mobile/receipt-preview'], {
-          state: { receiptContent: escposContent }
+          state: { receiptContent: escposContent, receiptData: fallbackReceiptData }
         });
       }
       
@@ -2061,7 +2061,7 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
       console.log('� Navigating to receipt preview...');
       const escposContent = this.printService.generateESCPOSCommands(receiptData);
       this.router.navigate(['/pos/mobile/receipt-preview'], {
-        state: { receiptContent: escposContent }
+        state: { receiptContent: escposContent, receiptData: receiptData }
       });
       
       // Close the modal after successful save and navigation
@@ -2073,7 +2073,7 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
       try {
         const escposContent = this.printService.generateESCPOSCommands(receiptData);
         this.router.navigate(['/pos/mobile/receipt-preview'], {
-          state: { receiptContent: escposContent }
+          state: { receiptContent: escposContent, receiptData: receiptData }
         });
         this.closeReceiptModal();
       } catch (printError) {

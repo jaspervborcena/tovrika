@@ -237,65 +237,68 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
                 </div>
               </div>
               <div class="donut-chart">
-                <div class="bar-chart">
-                  <!-- Sale Analytics header removed -->
-
-                  <div class="bars">
-                    <div class="bar-row">
-                      <div class="bar-label">Completed</div>
-                      <div class="bar">
-                        <div class="bar-fill" 
-                             [class.completed]="salesAnalytics().completed.percentage > 0"
-                             [class.no-data]="salesAnalytics().completed.percentage === 0"
-                             [style.width.%]="salesAnalytics().completed.percentage || 100"></div>
-                      </div>
-                      <div class="bar-percent">{{ salesAnalytics().completed.percentage | number:'1.1-1' }}%</div>
-                    </div>
-                    <div class="bar-row">
-                      <div class="bar-label">Cancelled</div>
-                      <div class="bar">
-                        <div class="bar-fill" 
-                             [class.cancelled]="salesAnalytics().cancelled.percentage > 0"
-                             [class.no-data]="salesAnalytics().cancelled.percentage === 0"
-                             [style.width.%]="salesAnalytics().cancelled.percentage || 100"></div>
-                      </div>
-                      <div class="bar-percent">{{ salesAnalytics().cancelled.percentage | number:'1.1-1' }}%</div>
-                    </div>
-                    <div class="bar-row">
-                      <div class="bar-label">Returned</div>
-                      <div class="bar">
-                        <div class="bar-fill" 
-                             [class.returned]="salesAnalytics().returned.percentage > 0"
-                             [class.no-data]="salesAnalytics().returned.percentage === 0"
-                             [style.width.%]="salesAnalytics().returned.percentage || 100"></div>
-                      </div>
-                      <div class="bar-percent">{{ salesAnalytics().returned.percentage | number:'1.1-1' }}%</div>
-                    </div>
-                    <div class="bar-row">
-                      <div class="bar-label">Refunded</div>
-                      <div class="bar">
-                        <div class="bar-fill" 
-                             [class.refunded]="salesAnalytics().refunded.percentage > 0"
-                             [class.no-data]="salesAnalytics().refunded.percentage === 0"
-                             [style.width.%]="salesAnalytics().refunded.percentage || 100"></div>
-                      </div>
-                      <div class="bar-percent">{{ salesAnalytics().refunded.percentage | number:'1.1-1' }}%</div>
-                    </div>
-                    <div class="bar-row">
-                      <div class="bar-label">Damage</div>
-                      <div class="bar">
-                        <div class="bar-fill" 
-                             [class.damage]="salesAnalytics().damage.percentage > 0"
-                             [class.no-data]="salesAnalytics().damage.percentage === 0"
-                             [style.width.%]="salesAnalytics().damage.percentage || 100"></div>
-                      </div>
-                      <div class="bar-percent">{{ salesAnalytics().damage.percentage | number:'1.1-1' }}%</div>
-                    </div>
-                  </div>
-
-                  
-
-                  <!-- Total Expenses removed -->
+                <div class="sales-analytics-table">
+                  <table class="analytics-table">
+                    <thead>
+                      <tr>
+                        <th>Status</th>
+                        <th class="text-right">Count</th>
+                        <th class="text-right">Percentage</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr class="completed-row">
+                        <td>
+                          <div class="status-label">
+                            <span class="status-dot completed-dot"></span>
+                            <span>Completed</span>
+                          </div>
+                        </td>
+                        <td class="text-right">{{ salesAnalytics().completed.count }}</td>
+                        <td class="text-right">{{ salesAnalytics().completed.percentage | number:'1.1-1' }}%</td>
+                      </tr>
+                      <tr class="cancelled-row">
+                        <td>
+                          <div class="status-label">
+                            <span class="status-dot cancelled-dot"></span>
+                            <span>Cancelled</span>
+                          </div>
+                        </td>
+                        <td class="text-right">{{ salesAnalytics().cancelled.count }}</td>
+                        <td class="text-right">{{ salesAnalytics().cancelled.percentage | number:'1.1-1' }}%</td>
+                      </tr>
+                      <tr class="returned-row">
+                        <td>
+                          <div class="status-label">
+                            <span class="status-dot returned-dot"></span>
+                            <span>Returned</span>
+                          </div>
+                        </td>
+                        <td class="text-right">{{ salesAnalytics().returned.count }}</td>
+                        <td class="text-right">{{ salesAnalytics().returned.percentage | number:'1.1-1' }}%</td>
+                      </tr>
+                      <tr class="refunded-row">
+                        <td>
+                          <div class="status-label">
+                            <span class="status-dot refunded-dot"></span>
+                            <span>Refunded</span>
+                          </div>
+                        </td>
+                        <td class="text-right">{{ salesAnalytics().refunded.count }}</td>
+                        <td class="text-right">{{ salesAnalytics().refunded.percentage | number:'1.1-1' }}%</td>
+                      </tr>
+                      <tr class="damage-row">
+                        <td>
+                          <div class="status-label">
+                            <span class="status-dot damage-dot"></span>
+                            <span>Damage</span>
+                          </div>
+                        </td>
+                        <td class="text-right">{{ salesAnalytics().damage.count }}</td>
+                        <td class="text-right">{{ salesAnalytics().damage.percentage | number:'1.1-1' }}%</td>
+                      </tr>
+                    </tbody>
+                  </table>
                 </div>
               </div>
             </div>
@@ -521,7 +524,7 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
     }
 
     .orders-card {
-      background: #8b5cf6;
+      background: #ec4899;
     }
 
     .customers-card {
@@ -977,6 +980,136 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
     .bar-fill.damage { background:#8b5cf6; }
     .bar-fill.no-data { background:#eab308; }
     .bar-percent { width:48px; text-align:right; font-weight:600; color:#111827; }
+
+    /* Sales Analytics Table */
+    .sales-analytics-table {
+      width: 100%;
+      overflow-x: auto;
+    }
+
+    .analytics-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 1rem;
+    }
+
+    .analytics-table thead {
+      background: #f9fafb;
+      border-bottom: 2px solid #e5e7eb;
+    }
+
+    .analytics-table th {
+      padding: 12px 16px;
+      text-align: left;
+      font-weight: 600;
+      color: #374151;
+      font-size: 0.875rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .analytics-table th.text-right {
+      text-align: right;
+    }
+
+    .analytics-table tbody tr {
+      border-bottom: 1px solid #f3f4f6;
+      transition: background-color 0.15s ease;
+    }
+
+    .analytics-table tbody tr:hover {
+      background: #f9fafb;
+    }
+
+    .analytics-table td {
+      padding: 14px 16px;
+      color: #111827;
+      font-size: 1rem;
+      font-weight: 500;
+    }
+
+    .analytics-table td.text-right {
+      text-align: right;
+    }
+
+    .status-label {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .status-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .completed-row:hover {
+      background: #ecfeff !important;
+    }
+
+    .cancelled-row:hover {
+      background: #fef2f2 !important;
+    }
+
+    .returned-row:hover {
+      background: #fff7ed !important;
+    }
+
+    .refunded-row:hover {
+      background: #fffbeb !important;
+    }
+
+    .damage-row:hover {
+      background: #faf5ff !important;
+    }
+
+    @media (max-width: 768px) {
+      .analytics-table {
+        font-size: 0.9rem;
+      }
+
+      .analytics-table th {
+        padding: 10px 12px;
+        font-size: 0.8rem;
+      }
+
+      .analytics-table td {
+        padding: 12px;
+        font-size: 0.9rem;
+      }
+
+      .status-dot {
+        width: 10px;
+        height: 10px;
+      }
+    }
+
+    @media (max-width: 640px) {
+      .analytics-table {
+        font-size: 0.85rem;
+      }
+
+      .analytics-table th {
+        padding: 8px 10px;
+        font-size: 0.75rem;
+      }
+
+      .analytics-table td {
+        padding: 10px;
+        font-size: 0.85rem;
+      }
+
+      .status-label {
+        gap: 8px;
+      }
+
+      .status-dot {
+        width: 8px;
+        height: 8px;
+      }
+    }
 
     /* Orders Overview pie chart */
     .orders-pie-wrapper { display:flex; gap:20px; align-items:center; margin-top:12px; }
