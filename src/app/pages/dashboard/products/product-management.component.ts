@@ -1650,6 +1650,18 @@ import { AppConstants } from '../../../shared/enums/app-constants.enum';
                   </label>
                 </div>
 
+                <!-- Inventory Tracking Toggle -->
+                <div class="form-group" style="display:flex; align-items:center; gap:8px;">
+                  <input 
+                    type="checkbox" 
+                    id="isInventory"
+                    formControlName="isInventory"
+                    style="width:16px; height:16px; cursor:pointer;"/>
+                  <label for="isInventory" style="margin:0; cursor:pointer;">
+                    📦 Track Inventory (uncheck for services/non-inventory items)
+                  </label>
+                </div>
+
                 <!-- VAT notice removed from here and moved before new-product-inventory -->
               </div>
 
@@ -2617,6 +2629,8 @@ export class ProductManagementComponent implements OnInit {
   imageUrl: [''],
   // Favorites
   isFavorite: [false],
+  // Inventory tracking
+  isInventory: [true],
   // Tax and Discount Fields
   isVatApplicable: [true],
   vatRate: [AppConstants.DEFAULT_VAT_RATE, [Validators.min(0), Validators.max(100)]],
@@ -3114,6 +3128,7 @@ export class ProductManagementComponent implements OnInit {
           barcodeId: formValue.barcodeId,
           imageUrl: formValue.imageUrl,
           isFavorite: !!formValue.isFavorite,
+          isInventory: formValue.isInventory !== false,
           // Tax and Discount Fields
           isVatApplicable: formValue.isVatApplicable || false,
           vatRate: formValue.vatRate ?? AppConstants.DEFAULT_VAT_RATE,
@@ -3256,6 +3271,7 @@ export class ProductManagementComponent implements OnInit {
           barcodeId: formValue.barcodeId,
           imageUrl: formValue.imageUrl,
           isFavorite: !!formValue.isFavorite,
+          isInventory: formValue.isInventory !== false,
           totalStock: hasInitial ? Number(formValue.initialQuantity || 0) : Number(formValue.totalStock || 0),
           
           // Tax and Discount Fields from form
