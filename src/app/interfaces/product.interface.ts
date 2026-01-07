@@ -39,9 +39,6 @@ export interface Product {
   discountType: 'percentage' | 'fixed';
   discountValue: number;
   
-  // Price and Quantity Tracking
-  // priceHistory?: PriceChange[];
-  // quantityAdjustments removed: tracking moved to productInventoryEntries and deduction history
   
   status?: ProductStatus;
   createdAt?: Date;
