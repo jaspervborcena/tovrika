@@ -181,8 +181,6 @@ export class FIFOInventoryService {
       const deductionRef = doc(collection(this.firestore, 'inventoryDeductions'));
       batch.set(deductionRef, deductionRecord);
 
-      console.log(`📦 Batch ${allocation.batchId}: ${batchData.quantity} -> ${newQuantity} (status: ${newStatus})`);
-
       // Add to deduction details
       deductions.push({
         batchId: allocation.batchId,
@@ -343,8 +341,6 @@ export class FIFOInventoryService {
       };
       const reversalRef = doc(collection(this.firestore, 'inventoryDeductionReversals'));
       batch.set(reversalRef, reversalRecord);
-
-      console.log(`📦 Batch ${deduction.batchId}: restored ${deduction.quantity} units (now ${newQuantity})`);
     }
 
     // Commit batch writes
