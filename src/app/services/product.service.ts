@@ -217,8 +217,6 @@ export class ProductService implements OnDestroy {
     } catch (e) {
       console.warn('⚠️ Failed to register onProductSummaryUpdated hook:', e);
     }
-    console.log('🐛 Debug methods available at window.debugProducts');
-    console.log('🐛 Available methods: load, getProducts, getCount, getState, forceReload, testFirestore, testQuery');
   }
 
   ngOnDestroy(): void {
@@ -446,7 +444,6 @@ export class ProductService implements OnDestroy {
       // Check if we already have this store loaded and don't need to reload
       if (!forceReload && this.currentStoreId === storeId && this.hasInitialLoad() && this.products().length > 0) {
         this.logger.debug('Products already loaded for store, skipping reload', { area: 'products', storeId });
-        console.log('✅ Products already loaded for store, skipping reload');
         return;
       }
 
@@ -590,8 +587,6 @@ export class ProductService implements OnDestroy {
    */
   private async setupRealtimeListener(companyId: string, storeId: string): Promise<void> {
     try {
-      console.log('🎯 Setting up Firestore real-time listener...');
-      
       // CRITICAL: Verify auth state before creating query
       const currentUser = this.authService.getCurrentUser();
       if (!currentUser) {
@@ -614,10 +609,8 @@ export class ProductService implements OnDestroy {
         limit(10)
       );
       const debugSnapshot = await getDocs(debugQuery);
-      console.log('🐛 DEBUG: Total products in DB (any status):', debugSnapshot.size);
 
       // Create query with proper error handling - avoid orderBy to prevent index requirements
-      console.log('🔧 Building Firestore query without orderBy to avoid index requirements...');
       let q;
       try {
         // Use simple query first - we'll sort in JavaScript
@@ -628,7 +621,6 @@ export class ProductService implements OnDestroy {
           where('status', '==', 'active'),
           limit(100)
         );
-        console.log('✅ Simple Firestore query created successfully');
       } catch (queryError) {
         console.error('❌ Error creating Firestore query:', queryError);
         // Even simpler fallback - just company and store
@@ -674,7 +666,6 @@ export class ProductService implements OnDestroy {
         }
       );
 
-      console.log('✅ Real-time listener setup complete', { companyId, storeId });
       this.logger.debug('Real-time listener setup complete', { area: 'products', companyId, storeId });
 
     } catch (error) {
@@ -755,7 +746,6 @@ export class ProductService implements OnDestroy {
 
       // Firestore snapshot with includeMetadataChanges automatically handles caching
       // No need for custom IndexedDB - Firestore manages its own cache
-      console.log(`✅ Products cache updated (Firestore ${isFromCache ? 'CACHE' : 'SERVER'})`);
 
       this.logger.dbSuccess('Products cache updated', { 
         area: 'products', 
@@ -781,10 +771,8 @@ export class ProductService implements OnDestroy {
   private unsubscribeFromRealTimeUpdates(): void {
     if (this.unsubscribeSnapshot) {
       try {
-        console.log('🔄 Unsubscribing from real-time updates...');
         this.unsubscribeSnapshot();
         this.unsubscribeSnapshot = null;
-        console.log('✅ Successfully unsubscribed from real-time updates');
         this.logger.debug('Unsubscribed from real-time updates', { area: 'products' });
       } catch (error) {
         console.error('❌ Error during unsubscribe from real-time updates:', error);
@@ -792,8 +780,6 @@ export class ProductService implements OnDestroy {
         // Force clear the reference even if unsubscribe failed
         this.unsubscribeSnapshot = null;
       }
-    } else {
-      console.log('📝 No active subscription to unsubscribe from');
     }
   }
 
@@ -931,7 +917,6 @@ export class ProductService implements OnDestroy {
       const currentPermission = this.authService.getCurrentPermission();
       
       if (currentUser && currentPermission?.companyId) {
-        console.log('✅ Auth already available');
         resolve(currentPermission.companyId);
         return;
       }
@@ -1293,7 +1278,6 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
   async initializeProducts(storeId: string, forceReload = false): Promise<void> {
     try {
       const result = await this.loadProductsRealTime(storeId, forceReload);
-      console.log('✅ initializeProducts completed');
       return result;
     } catch (error) {
       console.error('❌ initializeProducts failed:', error);
@@ -1338,7 +1322,6 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
    */
   getProductsSignal() {
     const signal = this.products;
-    console.log('📡 getProductsSignal() called - returning signal function');
     return signal;
   }
 
@@ -1377,7 +1360,6 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
   // Getter methods
   getProducts(): Product[] {
     const products = this.products();
-    console.log('🔍 getProducts() called:', products.length);
     return products;
   }
 

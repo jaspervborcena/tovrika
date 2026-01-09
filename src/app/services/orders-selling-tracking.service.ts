@@ -1418,7 +1418,6 @@ async markOrderTrackingDamaged(orderId: string, damagedBy?: string, reason?: str
       }
 
       const productSnaps: any = await getDocs(productsQ as any);
-      console.log(`getTopProductsCompletedCounts: fetched ${productSnaps?.docs?.length || 0} products for company=${companyId} store=${storeId || 'ALL'}`);
       const results: { productId: string; productName: string; skuId: string; completedCount: number }[] = [];
 
       for (const p of productSnaps.docs) {

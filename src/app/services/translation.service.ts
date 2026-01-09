@@ -68,7 +68,6 @@ export class TranslationService {
       if (enResponse.ok) {
         const enTranslations = await enResponse.json();
         this.translateService.setTranslation('en', enTranslations, true); // true = merge with existing
-        console.log('📄 English translations loaded:', Object.keys(enTranslations));
       }
       
       // Load Chinese translations  
@@ -76,7 +75,6 @@ export class TranslationService {
       if (zhResponse.ok) {
         const zhTranslations = await zhResponse.json();
         this.translateService.setTranslation('zh-cn', zhTranslations, true); // true = merge with existing
-        console.log('📄 Chinese translations loaded:', Object.keys(zhTranslations));
       }
       
       console.log('✅ Translation files loaded successfully');
@@ -112,12 +110,10 @@ export class TranslationService {
   public setLanguage(languageCode: string): void {
     const language = this.availableLanguages.find(lang => lang.code === languageCode);
     if (language) {
-      console.log('🔄 Setting language to:', languageCode);
       this.translateService.use(languageCode);
       this.currentLanguage.set(language);
       this.languageChange$.next(languageCode);
       this.saveLanguagePreference(languageCode);
-      console.log('✅ Language set successfully to:', languageCode);
     } else {
       console.error('❌ Language not found:', languageCode);
     }

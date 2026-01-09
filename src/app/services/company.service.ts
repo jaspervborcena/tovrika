@@ -178,7 +178,6 @@ export class CompanyService {
                 lastSync: new Date()
               } as any;
               await this.indexedDBService.saveCompanies([offlineCompany]);
-              console.log('💾 CompanyService: Saved company snapshot to IndexedDB.companies for offline use:', company.id);
             } catch (saveErr) {
               console.warn('💾 CompanyService: Failed to save company snapshot to IndexedDB.companies:', saveErr);
             }
@@ -208,7 +207,6 @@ export class CompanyService {
       }
       // If user has no companyId, set empty array (they need to create a company)
 
-      console.log('CompanyService.loadCompanies: loaded companies count =', companies.length, 'companies =', companies);
       this.companiesSignal.set(companies);
     } catch (error) {
       console.error('Error loading companies:', error);
@@ -275,7 +273,6 @@ export class CompanyService {
           lastSync: new Date()
         } as any;
         await this.indexedDBService.saveCompanies([offlineCompany]);
-        console.log('💾 CompanyService: Saved company snapshot to IndexedDB.companies (getCompanyById):', company.id);
       } catch (saveErr) {
         console.warn('💾 CompanyService: Failed to save company snapshot to IndexedDB.companies (getCompanyById):', saveErr);
       }

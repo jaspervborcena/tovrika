@@ -61,17 +61,14 @@ export class HeaderComponent implements OnInit {
   // App constants and network status
   protected isOnline = computed(() => {
     const status = this.networkService.isOnline();
-    console.log('🎨 Header: Network status is:', status ? 'ONLINE' : 'OFFLINE');
     return status;
   });
   protected appName = computed(() => {
     const name = this.isOnline() ? AppConstants.APP_NAME : AppConstants.APP_NAME_OFFLINE;
-    console.log('🏷️ Header: App name is:', name);
     return name;
   });
   protected headerClass = computed(() => {
     const cssClass = this.isOnline() ? 'dashboard-header' : 'dashboard-header offline';
-    console.log('💄 Header: CSS class is:', cssClass);
     return cssClass;
   });
   
@@ -138,11 +135,6 @@ export class HeaderComponent implements OnInit {
 
   ngOnInit() {
     this.loadDashboardData();
-    
-    // Subscribe to language changes for debugging
-    this.translationService.getLanguageChange().subscribe(lang => {
-      console.log('🌐 Header: Language changed to:', lang);
-    });
   }
 
   private async loadDashboardData() {
@@ -168,7 +160,6 @@ export class HeaderComponent implements OnInit {
         if (!userRolesSnap.empty) {
           const userRoleData = userRolesSnap.docs[0].data();
           roleId = userRoleData['roleId'];
-          console.log('Header UserRoles:', userRoleData);
         }
       }
 

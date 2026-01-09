@@ -28,22 +28,18 @@ export class OfflineStorageService {
 
   private async initOfflineStorage(): Promise<void> {
     try {
-      console.log('💾 OfflineStorage: Initializing...');
       await this.indexedDBService.initDB();
       
       // Check IndexedDB status after initialization
       const status = this.indexedDBService.getStatus();
       if (!status.available) {
         console.warn('⚠️ OfflineStorage: IndexedDB not available:', status.reason);
-        console.warn('� App will run in online-only mode - all data comes from Firestore');
-        console.warn('� This is normal if browser storage is full or corrupted');
-        console.warn('� To restore offline features: Clear browser data and refresh');
-      } else {
-        console.log('✅ OfflineStorage: IndexedDB available and ready');
+        console.warn('🔐 App will run in online-only mode - all data comes from Firestore');
+        console.warn('👍 This is normal if browser storage is full or corrupted');
+        console.warn('💡 To restore offline features: Clear browser data and refresh');
       }
       
       await this.loadOfflineData();
-      console.log('💾 OfflineStorage: Initialization complete');
     } catch (error: any) {
       console.error('💾 OfflineStorage: Initialization failed:', error);
       console.warn('📱 App will continue in online-only mode');
@@ -54,8 +50,6 @@ export class OfflineStorageService {
   // Load offline data into signals
   async loadOfflineData(): Promise<void> {
     try {
-      console.log('💾 OfflineStorage: Loading offline data...');
-      
       // Ensure database is initialized
       await this.indexedDBService.initDB();
       
@@ -82,8 +76,6 @@ export class OfflineStorageService {
         
         //console.log('💾 OfflineStorage: Store data loaded for store:', currentUser.currentStoreId);
       }
-
-      console.log('💾 OfflineStorage: Data loaded successfully');
     } catch (error: any) {
       //console.error('💾 OfflineStorage: Failed to load data:', error);
       // Always gracefully handle - don't block the app
@@ -101,8 +93,6 @@ export class OfflineStorageService {
     currentStoreId?: string;
   }): Promise<void> {
     try {
-      console.log('💾 OfflineStorage: Saving user session for:', userData.email);
-      
       // Get the current store ID from permissions or passed parameter
       const currentStoreId = userData.currentStoreId || 
                            userData.permissions?.[0]?.storeId || 
@@ -164,15 +154,6 @@ export class OfflineStorageService {
         lastSync: new Date()
       };
       
-      // Debug: Log what we're saving to IndexedDB
-      console.log('💾 OfflineStorage: Saving user data to IndexedDB:', {
-        email: offlineUserData.email,
-        roleId: offlineUserData.roleId,
-        permissions: offlineUserData.permissions,
-        originalUserPermissions: userData.permissions,
-        activePermissionSelected: activePermission
-      });
-      
       // Always set the signal first (so user data is available even if IndexedDB fails)
       this.currentUserSignal.set(offlineUserData);
       
@@ -181,7 +162,6 @@ export class OfflineStorageService {
         await this.indexedDBService.initDB();
         // Use the new method that clears all previous users and saves only the current one
         await this.indexedDBService.saveUserDataAsOnlyUser(offlineUserData);
-        console.log('💾 OfflineStorage: User session saved to IndexedDB as only user');
       } catch (dbError: any) {
         // Check if IndexedDB is permanently broken
         if (dbError.message?.includes('permanently unavailable')) {
@@ -195,7 +175,6 @@ export class OfflineStorageService {
         try {
           await this.indexedDBService.initDB();
           await this.indexedDBService.saveUserDataAsOnlyUser(offlineUserData);
-          console.log('💾 OfflineStorage: User session saved to IndexedDB as only user after retry');
         } catch (retryError: any) {
           if (retryError.message?.includes('permanently unavailable')) {
             console.warn('⚠️ OfflineStorage: IndexedDB permanently unavailable after retry - user data in memory only');
@@ -204,13 +183,6 @@ export class OfflineStorageService {
           throw retryError; // Re-throw other errors
         }
       }
-      
-      console.log('💾 OfflineStorage: User session saved successfully', {
-        uid: offlineUserData.uid,
-        email: offlineUserData.email,
-        currentStoreId: offlineUserData.currentStoreId,
-        isAgreedToPolicy: offlineUserData.isAgreedToPolicy
-      });
     } catch (error: any) {
       console.error('💾 OfflineStorage: Failed to save user session:', error);
       // Don't throw error - allow app to continue without offline storage
