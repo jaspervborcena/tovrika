@@ -33,36 +33,70 @@
             </svg>
           </a>
           
+          <!-- Dashboard button only for business users (not visitors) -->
+          <button *ngIf="isAuthenticated() && userRole() !== 'visitor'" 
+                  (click)="navigateToDashboard()" 
+                  class="header-btn dashboard-btn">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" class="btn-icon">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+            </svg>
+          </button>
+          
+          <!-- User Avatar (show only when authenticated) -->
+          <div *ngIf="isAuthenticated()" class="user-menu" data-user-menu>
+            <button 
+              (click)="toggleUserMenu()"
+              class="header-btn user-avatar"
+              [class.active]="isUserMenuOpen()"
+              title="Account"
+              [attr.aria-label]="'Account'"
+            >
+              <svg class="member-icon" width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 21a9 9 0 100-18 9 9 0 000 18z" />
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6.5 19.5a7 7 0 0111 0" />
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 12a3.5 3.5 0 100-7 3.5 3.5 0 000 7z" />
+              </svg>
+            </button>
+            
+            <div *ngIf="isUserMenuOpen()" class="user-dropdown">
+              <div class="user-info">
+                <div class="user-name">{{ currentUser()?.displayName || currentUser()?.email }}</div>
+                <div class="user-email">{{ currentUser()?.email }}</div>
+              </div>
+              <hr class="dropdown-divider">
+              <a routerLink="/dashboard/overview" 
+                 (click)="closeUserMenu()" 
+                 class="dropdown-item">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                </svg>
+                Dashboard Overview
+              </a>
+              <a routerLink="/account-settings" 
+                 (click)="closeUserMenu()" 
+                 class="dropdown-item">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                </svg>
+                Account Settings
+              </a>
+              <button (click)="logout()" class="dropdown-item logout">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                </svg>
+                Sign out
+              </button>
+            </div>
+          </div>
 
         </div>
         
         <!-- User menu when authenticated -->
         <div *ngIf="isAuthenticated(); else guestMenu" class="user-menu">
-          <div class="user-info">
-            <span class="user-name">{{ currentUser()?.displayName || currentUser()?.email }}</span>
-            <span class="user-role">{{ userRole() }}</span>
-          </div>
-          
-          <!-- Dashboard button only for business users (not visitors) -->
-    <button *ngIf="userRole() !== 'visitor'" 
-                  (click)="navigateToDashboard()" 
-                  class="dashboard-btn">
-            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" class="btn-icon">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
-            </svg>
-            Dashboard
-          </button>
-          
           <!-- Visitor welcome message -->
           <div *ngIf="userRole() === 'visitor'" class="visitor-welcome">
             <span class="welcome-text">Welcome! You're browsing as a visitor.</span>
           </div>
-          
-          <button (click)="logout()" class="logout-btn" title="Sign out" aria-label="Sign out">
-            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" class="btn-icon">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 0v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
-            </svg>
-          </button>
         </div>
         
         <!-- Guest menu template -->
