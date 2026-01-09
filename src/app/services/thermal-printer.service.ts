@@ -86,7 +86,6 @@ export class ThermalPrinterService {
           if (char.properties.write || char.properties.writeWithoutResponse) {
             this.serviceUuid = service.uuid;
             this.writeCharacteristic = char.uuid;
-            console.log('Γ£à Found write characteristic:', this.serviceUuid, this.writeCharacteristic);
             break;
           }
         }
@@ -151,26 +150,6 @@ export class ThermalPrinterService {
     }
 
     try {
-      // Log receipt data structure for debugging
-      const dataStructure = {
-        storeName: receiptData.storeInfo?.storeName || 'Missing',
-        storeAddress: receiptData.storeInfo?.address || 'Missing',
-        storePhone: receiptData.storeInfo?.phone || 'Missing',
-        storeTIN: receiptData.storeInfo?.tin || 'Missing',
-        invoiceNumber: receiptData.invoiceNumber || 'Missing',
-        receiptDate: receiptData.receiptDate || 'Missing',
-        cashier: receiptData.cashier || 'Missing',
-        items: receiptData.items ? `${receiptData.items.length} items` : 'No items',
-        subtotal: receiptData.subtotal || 'Missing',
-        discount: receiptData.discount || 0,
-        vatAmount: receiptData.vatAmount || 0,
-        totalAmount: receiptData.totalAmount || 'Missing',
-        paymentMethod: receiptData.paymentMethod || 'Missing'
-      };
-      
-      console.log('≡ƒû¿∩╕Å Printing receipt with data:', JSON.stringify(dataStructure, null, 2));
-      console.log('≡ƒû¿∩╕Å Full receipt data:', JSON.stringify(receiptData, null, 2));
-      
       const escposData = this.generateESCPOS(receiptData);
       console.log('≡ƒôñ ESC/POS data length:', escposData.length, 'bytes');
       
@@ -195,8 +174,7 @@ export class ThermalPrinterService {
 
     console.log('≡ƒôñ Sending data to printer...');
     console.log(`≡ƒôè Total bytes: ${data.length}`);
-    console.log(`≡ƒöº Service: ${this.serviceUuid}`);
-    console.log(`≡ƒöº Characteristic: ${this.writeCharacteristic}`);
+
 
     try {
       // Some printers work better with smaller chunks
@@ -207,8 +185,7 @@ export class ThermalPrinterService {
         const chunk = data.slice(i, Math.min(i + chunkSize, data.length));
         const dataView = new DataView(chunk.buffer);
         
-        console.log(`≡ƒôª Sending chunk ${Math.floor(i / chunkSize) + 1}/${Math.ceil(data.length / chunkSize)}: ${chunk.length} bytes`);
-        
+
         try {
           await BleClient.write(
             this.connectedDevice.deviceId,
@@ -235,7 +212,7 @@ export class ThermalPrinterService {
       
     } catch (error: any) {
       console.error('Γ¥î Send error:', error);
-      const errorMsg = `Send Error:\n${error.message || error}\n\nDevice: ${this.connectedDevice.name || 'Unknown'}\nService: ${this.serviceUuid}\nChar: ${this.writeCharacteristic}`;
+
       throw error;
     }
   }
@@ -246,7 +223,6 @@ export class ThermalPrinterService {
   private generateESCPOS(receiptData: any): Uint8Array {
     const commands: number[] = [];
 
-    console.log('≡ƒô¥ Generating receipt for:', receiptData);
 
     // Initialize printer - ESC @
     commands.push(0x1B, 0x40);
@@ -358,8 +334,7 @@ export class ThermalPrinterService {
     
     // Items
     if (receiptData.items && Array.isArray(receiptData.items)) {
-      console.log(`≡ƒôª Processing ${receiptData.items.length} items`);
-      
+
       for (const item of receiptData.items) {
         let name = String(item.name || item.productName || 'Item');
         if (name.length > 15) name = name.substring(0, 15);

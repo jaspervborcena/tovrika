@@ -33,17 +33,11 @@ export const onboardingGuard: CanActivateFn = async (route, state) => {
       currentPermission.companyId.trim() !== '' && 
       currentPermission.roleId !== 'visitor' &&
       (currentPermission.roleId === 'creator' || currentPermission.roleId === 'store_manager' || currentPermission.roleId === 'cashier')) {
-    console.log('🛡️ OnboardingGuard: User has valid permissions, allowing access:', {
-      companyId: currentPermission.companyId,
-      roleId: currentPermission.roleId
-    });
+    console.log('🛡️ OnboardingGuard: User has valid permissions, allowing access');
     return true;
   }
   
   console.log('🛡️ OnboardingGuard: Checking access for:', state.url);
-  console.log('🛡️ OnboardingGuard: Current user:', user);
-  console.log('🛡️ OnboardingGuard: User permissions:', user?.permissions);
-  console.log('🛡️ OnboardingGuard: Current permission:', currentPermission);
   
   // TEMPORARY: Allow POS access for testing (bypass company check for POS routes)
   if (state.url.includes('/pos') && !currentPermission?.companyId) {
