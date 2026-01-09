@@ -75,7 +75,6 @@ export class InventoryTransactionService {
     }
 
     console.log('🚀 Starting batch write: Add Inventory Batch');
-    console.log(`📦 Product: ${productId}, Quantity: ${batchData.quantity}, Price: ${batchData.unitPrice}`);
 
     const batch = writeBatch(this.firestore);
     
@@ -111,8 +110,6 @@ export class InventoryTransactionService {
       updatedAt: new Date()
     });
 
-    console.log(`📝 Batch creation queued: ${batchRef.id}`);
-
     // 2. Get product info and calculate summary
     const productRef = doc(this.firestore, 'products', productId);
     const productSnap = await getDoc(productRef);
@@ -147,8 +144,6 @@ export class InventoryTransactionService {
       updatedBy: currentUser.uid
     });
     
-    console.log(`📊 Product summary calculated: totalStock=${totalStock}, sellingPrice=${sellingPrice}`);
-    
     try {
       await batch.commit();
       console.log(`🎉 Batch write committed: Batch ${batchRef.id} added successfully!`);
@@ -178,7 +173,6 @@ export class InventoryTransactionService {
     }
 
     console.log('🚀 Starting MASTER TRANSACTION: Process Sale');
-    console.log(`🛒 Order: ${orderId}, Items: ${cartItems.length}`);
 
     // Pre-validate all stock before starting transaction
     for (const item of cartItems) {
@@ -196,8 +190,6 @@ export class InventoryTransactionService {
 
     // Process each cart item
     for (const item of cartItems) {
-      console.log(`📦 Processing: ${item.name} (${item.quantity} units)`);
-
       // Get FIFO plan for this item
       const plan = await this.fifoService.createFIFODeductionPlan(item.productId, item.quantity);
       if (!plan.canFulfill) {
@@ -254,8 +246,6 @@ export class InventoryTransactionService {
         const dedRef = doc(collection(this.firestore, 'inventoryDeductions'));
         batch.set(dedRef, deductionRecord);
 
-        console.log(`   📦 Batch ${allocation.batchId}: ${batchData.quantity} -> ${newQuantity} (${newStatus})`);
-
         // Track deduction
         itemDeductions.push({
           batchId: allocation.batchId,
@@ -294,13 +284,9 @@ export class InventoryTransactionService {
         totalStock: summary.totalStock,
         sellingPrice: summary.sellingPrice
       });
-
-      console.log(`   📊 ${item.name}: totalStock=${summary.totalStock}, sellingPrice=${summary.sellingPrice}`);
     }
 
     console.log(`🎉 Sale processing completed: Order ${orderId} processed successfully!`);
-    console.log(`   📦 Products affected: ${batchDeductions.length}`);
-    console.log(`   🔢 Total deductions: ${batchDeductions.reduce((sum, p) => sum + p.deductions.length, 0)}`);
     
     return {
       success: true,
@@ -324,14 +310,11 @@ export class InventoryTransactionService {
     }
 
     console.log('🚀 Starting batch write: Reverse Sale');
-    console.log(`🔄 Order: ${orderId}, Products: ${batchDeductions.length}`);
 
     const batch = writeBatch(this.firestore);
     console.log('📦 Reversing deductions for all products...');
 
     for (const productBatch of batchDeductions) {
-      console.log(`📦 Reversing: ${productBatch.productId} (${productBatch.deductions.length} batches)`);
-
       const updatedBatchesForProduct: ProductInventoryEntry[] = [];
 
       for (const deduction of productBatch.deductions) {
@@ -370,8 +353,6 @@ export class InventoryTransactionService {
         const reversalRef = doc(collection(this.firestore, 'inventoryDeductionReversals'));
         batch.set(reversalRef, reversalRecord);
 
-        console.log(`   📦 Batch ${deduction.batchId}: restored ${deduction.quantity} units (now ${newQuantity})`);
-
         // Capture updated batch state
         updatedBatchesForProduct.push({
           ...batchData,
@@ -389,7 +370,6 @@ export class InventoryTransactionService {
     // Update product summaries separately
     for (const productBatch of batchDeductions) {
       await this.productSummaryService.recomputeProductSummary(productBatch.productId);
-      console.log(`   📊 Product ${productBatch.productId} summary recomputed`);
     }
 
     console.log(`🎉 Sale reversal completed: Order ${orderId} reversed successfully!`);
@@ -408,7 +388,6 @@ export class InventoryTransactionService {
     }
 
     console.log('🚀 Starting MASTER TRANSACTION: Add Multiple Batches');
-    console.log(`📦 Batches: ${requests.length}`);
 
     return runTransaction(this.firestore, async (transaction) => {
       const results: AddBatchResult[] = [];
@@ -447,8 +426,6 @@ export class InventoryTransactionService {
           createdAt: new Date(),
           updatedAt: new Date()
         });
-
-        console.log(`📝 Batch queued for product ${productId}: ${batchRef.id}`);
         
         results.push({
           batchId: batchRef.id,
@@ -469,8 +446,6 @@ export class InventoryTransactionService {
           
           results[resultIndex].productSummary = summary;
           processedProductIds.delete(request.productId); // Only compute once per product
-          
-          console.log(`📊 Product ${request.productId}: totalStock=${summary.totalStock}, sellingPrice=${summary.sellingPrice}`);
         }
         resultIndex++;
       }

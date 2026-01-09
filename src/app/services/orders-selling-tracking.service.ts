@@ -454,7 +454,7 @@ async markOrderTrackingRefunded(orderId: string, refundedBy?: string, reason?: s
     errors.push({ id: 'pending-check', error: e });
   }
 
-  console.log(`Refund process completed for order ${orderId}: created=${created}, createdIds=${JSON.stringify(createdIds)}, errors=${errors.length}`);
+  console.log(`Refund process completed for order ${orderId}: created=${created}, errors=${errors.length}`);
   return { created, errors, createdIds };
 }
 
@@ -976,7 +976,7 @@ async markOrderTrackingDamaged(orderId: string, damagedBy?: string, reason?: str
     errors.push({ id: 'pending-check', error: e });
   }
 
-  console.log(`Damage process completed for order ${orderId}: created=${created}, createdIds=${JSON.stringify(createdIds)}, errors=${errors.length}`);
+  console.log(`Damage process completed for order ${orderId}: created=${created}, errors=${errors.length}`);
   return { created, errors, createdIds };
 }
 
@@ -1100,14 +1100,6 @@ async markOrderTrackingDamaged(orderId: string, damagedBy?: string, reason?: str
         const allBatches = batches;
         
         console.log(`📊 Retrieved ${allBatches.length} batches for product ${it.productId}`);
-        if (allBatches.length > 0) {
-          console.log(`📊 Sample batch:`, {
-            companyId: allBatches[0].companyId,
-            status: allBatches[0].status,
-            quantity: allBatches[0].quantity,
-            expectedCompanyId: ctx.companyId
-          });
-        }
         
         // Filter and sort client-side: active status, quantity > 0, matching companyId, FIFO order
         const filteredBatches = allBatches
@@ -1115,15 +1107,6 @@ async markOrderTrackingDamaged(orderId: string, damagedBy?: string, reason?: str
             const match = b.companyId === ctx.companyId &&
               (b.status || '').toLowerCase() === 'active' &&
               (b.quantity || 0) > 0;
-            if (!match && allBatches.length > 0) {
-              console.log(`🚫 Batch ${b.id} filtered out:`, {
-                companyIdMatch: b.companyId === ctx.companyId,
-                statusActive: (b.status || '').toLowerCase() === 'active',
-                hasQuantity: (b.quantity || 0) > 0,
-                actualStatus: b.status,
-                actualQuantity: b.quantity
-              });
-            }
             return match;
           })
           .sort((a, b) => {
@@ -1288,15 +1271,12 @@ async markOrderTrackingDamaged(orderId: string, damagedBy?: string, reason?: str
         }
 
         // Calculate weighted average cost from all batches used
-        console.log(`💰 Calculating weighted average for ${it.productId}:`);
         let totalCost = 0;
         batchDeductions.forEach((d, idx) => {
           const batchTotal = d.costPrice * d.deductedQty;
-          console.log(`  Batch ${idx + 1}: ₱${d.costPrice} × ${d.deductedQty} = ₱${batchTotal}`);
           totalCost += batchTotal;
         });
         const actualCost = batchDeductions.length > 0 ? totalCost / it.quantity : 0;
-        console.log(`  Total: ₱${totalCost} ÷ ${it.quantity} = ₱${actualCost.toFixed(2)} weighted average`);
 
         // Step 4: Create ordersSellingTracking record with actual cost
         const docData: OrdersSellingTrackingDoc = {

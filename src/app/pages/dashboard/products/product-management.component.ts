@@ -1650,6 +1650,18 @@ import { AppConstants } from '../../../shared/enums/app-constants.enum';
                   </label>
                 </div>
 
+                <!-- Inventory Tracking Toggle -->
+                <div class="form-group" style="display:flex; align-items:center; gap:8px;">
+                  <input 
+                    type="checkbox" 
+                    id="isInventory"
+                    formControlName="isInventory"
+                    style="width:16px; height:16px; cursor:pointer;"/>
+                  <label for="isInventory" style="margin:0; cursor:pointer;">
+                    📦 Track Inventory (uncheck for services/non-inventory items)
+                  </label>
+                </div>
+
                 <!-- VAT notice removed from here and moved before new-product-inventory -->
               </div>
 
@@ -2617,6 +2629,8 @@ export class ProductManagementComponent implements OnInit {
   imageUrl: [''],
   // Favorites
   isFavorite: [false],
+  // Inventory tracking
+  isInventory: [true],
   // Tax and Discount Fields
   isVatApplicable: [true],
   vatRate: [AppConstants.DEFAULT_VAT_RATE, [Validators.min(0), Validators.max(100)]],
@@ -3114,6 +3128,7 @@ export class ProductManagementComponent implements OnInit {
           barcodeId: formValue.barcodeId,
           imageUrl: formValue.imageUrl,
           isFavorite: !!formValue.isFavorite,
+          isInventory: formValue.isInventory !== false,
           // Tax and Discount Fields
           isVatApplicable: formValue.isVatApplicable || false,
           vatRate: formValue.vatRate ?? AppConstants.DEFAULT_VAT_RATE,
@@ -3233,13 +3248,11 @@ export class ProductManagementComponent implements OnInit {
 
         // Get current user for UID
         const currentUser = this.authService.getCurrentUser();
-        console.log('🔍 Current user check:', currentUser ? { uid: currentUser.uid, email: currentUser.email } : 'NULL');
         if (!currentUser) {
           throw new Error('User not authenticated');
         }
         
         const currentPermission = this.authService.getCurrentPermission();
-        console.log('🔍 Current permission check:', currentPermission ? { companyId: currentPermission.companyId, storeId: currentPermission.storeId } : 'NULL');
 
         const newProduct: Omit<Product, 'id' | 'createdAt' | 'updatedAt'> = {
           uid: currentUser.uid,  // Required by Product interface
@@ -3256,6 +3269,7 @@ export class ProductManagementComponent implements OnInit {
           barcodeId: formValue.barcodeId,
           imageUrl: formValue.imageUrl,
           isFavorite: !!formValue.isFavorite,
+          isInventory: formValue.isInventory !== false,
           totalStock: hasInitial ? Number(formValue.initialQuantity || 0) : Number(formValue.totalStock || 0),
           
           // Tax and Discount Fields from form
@@ -3326,7 +3340,7 @@ export class ProductManagementComponent implements OnInit {
             throw batchError; // Re-throw to show error to user
           }
         } else {
-          console.log('⚠️ Initial batch not created:', { hasInitial, productId, initialQuantity: formValue.initialQuantity });
+          console.log('⚠️ Initial batch not created');
           if (hasInitial && !productId) {
             console.warn('⚠️ Initial inventory requested but no productId returned');
           }
@@ -3821,7 +3835,7 @@ export class ProductManagementComponent implements OnInit {
       );
       if (!blob) continue;
       
-      console.log(`🔍 Quality ${q}: ${blob.size} bytes`);
+      // Image quality check
       if (blob.size <= maxBytes) {
         const compressedFile = new File([blob], file.name.replace(/\.(png|webp|gif)$/i, '.jpg'), { 
           type: 'image/jpeg' 

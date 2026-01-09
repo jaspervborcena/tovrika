@@ -156,22 +156,16 @@ export class InventoryDataService {
    */
   async addBatch(productId: string, entry: Omit<ProductInventoryEntry, 'id' | 'uid' | 'createdAt' | 'updatedAt' | 'productId'> & { productId?: string }): Promise<string> {
     console.log('🚀 Starting transactional addBatch process for productId:', productId);
-    console.log('📦 Batch entry data:', entry);
     
     // Enhanced authentication and UID verification
     const user = this.auth.getCurrentUser();
     const permission = this.auth.getCurrentPermission();
-    
-    console.log('🔍 Auth check - user:', user ? { uid: user.uid, email: user.email } : 'NULL');
-    console.log('🔍 Auth check - permission:', permission ? { companyId: permission.companyId, storeId: permission.storeId } : 'NULL');
     
     if (!user?.uid || !permission) {
       const error = `User not authenticated or no company permission found. User: ${user ? 'present' : 'null'}, Permission: ${permission ? 'present' : 'null'}`;
       console.error('❌ Authentication failed:', error);
       throw new Error(error);
     }
-
-    console.log('🔐 User authenticated for batch creation:', { uid: user.uid, email: user.email, companyId: permission.companyId });
 
     // Get the product's storeId first (before creating batch)
     const productRef = doc(this.firestore, 'products', productId);
@@ -183,7 +177,6 @@ export class InventoryDataService {
     
     const productData = productSnap.data();
     const productStoreId = productData?.['storeId'] || permission.storeId || '';
-    console.log('📦 Using storeId from product:', productStoreId, '(product storeId:', productData?.['storeId'], ', permission storeId:', permission.storeId, ')');
 
     // Prepare batch entry data
     const batchData: Omit<ProductInventoryEntry, 'id'> = {
@@ -218,7 +211,6 @@ export class InventoryDataService {
       // 1. Read the product document first (before any writes)
       const productRef = doc(this.firestore, 'products', productId);
       const prodSnap = await transaction.get(productRef);
-      console.log('📖 Product document read completed, exists:', prodSnap.exists());
 
       // 2. Now do all the writes after reads are complete
       
@@ -231,8 +223,6 @@ export class InventoryDataService {
         createdAt: new Date(),
         updatedAt: new Date()
       });
-
-      console.log('📦 Batch document queued for creation:', batchRef.id);
 
       // 2b. Update product summary within the same transaction
       try {
@@ -252,7 +242,7 @@ export class InventoryDataService {
             lastUpdated: new Date(),
             updatedBy: user.uid
           });
-          console.log('� Updated existing product totalStock in transaction:', newTotal);
+
         } else {
           // If the product document does not exist yet, create it with initial values
           // Post-commit recompute will correct the sellingPrice if needed
@@ -270,7 +260,6 @@ export class InventoryDataService {
             createdBy: user.uid,
             updatedBy: user.uid
           });
-          console.log('📊 Created new product with initial values:', { totalStock: newTotal, sellingPrice: cleanBatchData.unitPrice });
         }
       } catch (err) {
         // If product doesn't exist or update fails, still allow transaction to proceed
@@ -289,8 +278,7 @@ export class InventoryDataService {
         // Ensure product summary is fully recomputed from committed batches
         // so UI and other services see the authoritative values.
         // This will correctly calculate sellingPrice from the latest batch by receivedAt.
-        const summary = await this.productSummaryService.recomputeProductSummary(productId);
-        console.log('🔁 Post-commit product summary recompute completed for', productId, 'with summary:', summary);
+        await this.productSummaryService.recomputeProductSummary(productId);
         // After recompute, refresh products cache so UI reflects latest product doc
         try {
           const prod = this.productService.getProduct(productId);
@@ -323,8 +311,6 @@ export class InventoryDataService {
       throw new Error('User not authenticated or missing UID');
     }
 
-    console.log('🔐 User authenticated for batch update:', { uid: user.uid, email: user.email });
-
     // Use Firestore transaction for all-or-nothing operation
     await runTransaction(this.firestore, async (transaction) => {
       console.log('🔄 Starting Firestore transaction for updateBatch...');
@@ -338,14 +324,6 @@ export class InventoryDataService {
       }
       
       const existingBatch = batchSnap.data() as ProductInventoryEntry;
-      console.log('📦 Existing batch data:', {
-        id: batchDocId,
-        productId: existingBatch.productId,
-        companyId: existingBatch.companyId,
-        storeId: existingBatch.storeId,
-        quantity: existingBatch.quantity,
-        status: existingBatch.status
-      });
 
       // 2. Update batch document, PRESERVING critical query fields
       const cleanUpdates = this.cleanUndefined({
@@ -364,16 +342,8 @@ export class InventoryDataService {
         expiryDate: updates.expiryDate ? (updates.expiryDate instanceof Date ? updates.expiryDate : new Date(updates.expiryDate)) : existingBatch.expiryDate,
       });
 
-      console.log('📝 Update payload:', {
-        quantity: cleanUpdates.quantity,
-        productId: cleanUpdates.productId,
-        companyId: cleanUpdates.companyId,
-        storeId: cleanUpdates.storeId,
-        status: cleanUpdates.status
-      });
-
       transaction.update(batchRef, cleanUpdates);
-      console.log('� Batch update queued in transaction:', batchDocId);
+
 
       // NOTE: Do not perform summary recompute inside the transaction here because
       // recomputeProductSummaryInTransaction performs additional reads (queries)
@@ -388,8 +358,7 @@ export class InventoryDataService {
       // Recompute product summary from committed batches to ensure product doc reflects
       // latest originalPrice and sellingPrice (based on latest batch by receivedAt)
       try {
-        const summary = await this.productSummaryService.recomputeProductSummary(productId);
-        console.log('🔁 Post-commit product summary recompute completed for', productId, 'with summary:', summary);
+        await this.productSummaryService.recomputeProductSummary(productId);
       } catch (recomputeErr) {
         console.warn('⚠️ Post-commit recompute after batch update failed:', recomputeErr);
       }

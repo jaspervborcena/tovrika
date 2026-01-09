@@ -17,7 +17,6 @@ export const cashierGuard: CanActivateFn = async (route, state) => {
   }
 
   const currentPermission = authService.getCurrentPermission();
-  console.log('🛡️ CashierGuard: Current permission:', currentPermission);
   
   // If user is a cashier, redirect them to POS
   if (currentPermission?.roleId === 'cashier') {

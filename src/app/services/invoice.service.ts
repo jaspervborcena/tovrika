@@ -84,15 +84,6 @@ export class InvoiceService {
       
       if (exists) {
         console.log('⚠️ Duplicate invoice number detected:', invoiceNumber);
-        // Log the existing order details
-        snapshot.docs.forEach(doc => {
-          console.log('📋 Existing order:', {
-            id: doc.id,
-            invoiceNumber: doc.data()['invoiceNumber'],
-            createdAt: doc.data()['createdAt'],
-            totalAmount: doc.data()['totalAmount']
-          });
-        });
       }
       
       return exists;
@@ -182,12 +173,6 @@ export class InvoiceService {
         }
         
       } while (attempts < maxAttempts);
-
-      console.log('🧾 Invoice number generation:', {
-        generated: nextInvoiceNoOutside,
-        attempts: attempts,
-        storeId: storeId
-      });
 
       // Prepare order and orderDetails doc refs and security-enriched payloads BEFORE transaction
       const ordersRef = collection(this.firestore, 'orders');
