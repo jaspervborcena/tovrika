@@ -6,8 +6,6 @@ export const authGuard: CanActivateFn = (route, state) => {
   const router = inject(Router);
   const authService = inject(AuthService);
 
-  console.log('🛡️ AuthGuard: Starting check for URL:', state.url);
-
   // Check if user is authenticated
   if (!authService.isAuthenticated()) {
     console.warn(`🛡️ AuthGuard: Unauthenticated access attempt to ${state.url}`);

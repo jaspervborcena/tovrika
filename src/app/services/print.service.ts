@@ -28,7 +28,6 @@ export class PrintService {
       console.log(' Using Android Print Service (Capacitor Bluetooth LE)');
       this.implementation = androidService;
     } else {
-      console.log(' Using Web Print Service (USB + Web Bluetooth)');
       this.implementation = webService;
     }
   }

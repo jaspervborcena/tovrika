@@ -87,7 +87,6 @@ export class PrintServiceAndroid {
         console.log('≡ƒû¿∩╕Å Loaded printer config:', this.currentPrinterConfig);
         return this.currentPrinterConfig;
       }
-      console.log('ΓÜá∩╕Å No printer configuration found in IndexedDB');
       return null;
     } catch (error) {
       console.error('Failed to load printer config:', error);

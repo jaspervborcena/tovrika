@@ -48,7 +48,6 @@ export const appConfig: ApplicationConfig = {
       try {
         const app = getApp(); // Get the Firebase app instance
         const auth = getAuth(app); // Pass app to ensure proper linking
-        console.log('✅ Firebase Auth initialized with app');
         // Firebase Auth automatically uses IndexedDB for persistence on web
         // This ensures user sessions persist across browser tabs and page refreshes
         return auth;
@@ -73,7 +72,6 @@ export const appConfig: ApplicationConfig = {
       provide: APP_INITIALIZER,
       useFactory: (chunkErrorService: ChunkErrorService, routerErrorService: RouterErrorService) => {
         return async () => {
-          console.log('🛡️ Initializing chunk error protection...');
           // Attempt to enable Firestore IndexedDB persistence (multi-tab preferred)
           try {
             const db = getFirestore();
@@ -96,7 +94,7 @@ export const appConfig: ApplicationConfig = {
               }
             }
           } catch (err) {
-            console.warn('⚠️ Firestore persistence initialization failed:', err);
+            // Silently handle persistence initialization errors
           }
 
           // Services will initialize their error handlers when created

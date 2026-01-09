@@ -348,7 +348,6 @@ export class IndexedDBService {
           updateRequest.onsuccess = () => {
             completed++;
             if (completed === total) {
-              console.log('📦 IndexedDB: All users set to inactive');
               resolve();
             }
           };
@@ -451,7 +450,6 @@ export class IndexedDBService {
         const request = store.clear();
 
         request.onsuccess = () => {
-          console.log('📦 IndexedDB: All user data cleared');
           resolve();
         };
         request.onerror = () => {
@@ -482,7 +480,6 @@ export class IndexedDBService {
         const request = store.put(activeUserData);
 
         request.onsuccess = () => {
-          console.log('📦 IndexedDB: User data saved as only active user:', userData.email);
           resolve();
         };
         request.onerror = () => reject(request.error);
@@ -927,23 +924,17 @@ export class IndexedDBService {
 
   // Companies and Stores Methods
   async saveCompanies(companies: OfflineCompany[]): Promise<void> {
-    console.log('💾 saveCompanies called with:', companies.length, 'companies');
-    console.log('💾 Companies data:', JSON.stringify(companies, null, 2));
-    
     if (!this.db) await this.initDB();
     if (!this.db) {
       console.error('📦 IndexedDB: Database not initialized, cannot save companies');
       return;
     }
     
-    console.log('💾 Database initialized, creating transaction...');
-
     return new Promise((resolve, reject) => {
       const transaction = this.db!.transaction(['companies'], 'readwrite');
       const store = transaction.objectStore('companies');
 
       transaction.oncomplete = () => {
-        console.log(`📦 IndexedDB: Transaction complete - saved ${companies.length} companies`);
         resolve();
       };
       
@@ -952,9 +943,7 @@ export class IndexedDBService {
         reject(transaction.error);
       };
 
-      console.log('💾 Adding companies to store...');
       for (const company of companies) {
-        console.log('💾 Putting company:', company.id, company.name);
         // Normalize company shape to match Firestore document structure
         // Helper to convert various timestamp shapes into a JS Date or undefined
         const toDateValue = (val: any): Date | undefined => {
@@ -1006,14 +995,10 @@ export class IndexedDBService {
           lastSync: new Date()
         } as OfflineCompany;
         const request = store.put(normalized);
-        request.onsuccess = () => {
-          console.log('✅ Successfully added company:', company.id);
-        };
         request.onerror = () => {
           console.error('❌ Error saving company:', company.id, request.error);
         };
       }
-      console.log('💾 All companies added to transaction, waiting for oncomplete...');
     });
   }
 

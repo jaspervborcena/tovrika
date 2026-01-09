@@ -26,6 +26,5 @@ export class AppComponent {
   
   constructor() {
     // Service auto-initializes when injected
-    console.log('🛡️ Chunk error protection enabled');
   }
 }

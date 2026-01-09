@@ -4264,9 +4264,7 @@ export class ProductManagementComponent implements OnInit {
 
   async loadUnitTypes(): Promise<void> {
     try {
-      console.log('🔍 Loading unit types from predefined types...');
       this.unitTypes = await this.predefinedTypesService.getUnitTypes();
-      console.log('✅ Unit types loaded:', this.unitTypes.length);
       
       // If no unit types found in database, seed them
       if (this.unitTypes.length === 0) {
