@@ -9,7 +9,6 @@ export const visitorGuard: CanActivateFn = (route, state) => {
   console.log('👤 VisitorGuard: Starting check for URL:', state.url);
 
   const user = authService.currentUser();
-  console.log('👤 VisitorGuard: Current user:', user?.email, user?.uid);
   
   if (!user) {
     console.log('👤 VisitorGuard: No user, redirecting to login');
@@ -18,7 +17,6 @@ export const visitorGuard: CanActivateFn = (route, state) => {
   }
 
   const currentPermission = authService.getCurrentPermission();
-  console.log('👤 VisitorGuard: Current permission:', currentPermission);
   
   // Check if user is truly a visitor (no company permissions)
   const isVisitor = !currentPermission || 
@@ -26,15 +24,7 @@ export const visitorGuard: CanActivateFn = (route, state) => {
                    currentPermission.companyId.trim() === '' || 
                    currentPermission.roleId === 'visitor';
 
-  console.log('👤 VisitorGuard: Checking visitor status', {
-    isVisitor,
-    currentPermission,
-    requestedUrl: state.url,
-    hasPermission: !!currentPermission,
-    hasCompanyId: !!currentPermission?.companyId,
-    companyIdValue: currentPermission?.companyId,
-    roleIdValue: currentPermission?.roleId
-  });
+
 
   if (isVisitor) {
     if (state.url === '/onboarding') {

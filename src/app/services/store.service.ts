@@ -481,7 +481,6 @@ export class StoreService {
    */
   async getActiveStoresForDropdown(companyId: string): Promise<Store[]> {
     try {
-      console.log('🏪 getActiveStoresForDropdown called:', { companyId });
       
       const user = this.authService.getCurrentUser();
       if (!user) {
@@ -497,17 +496,8 @@ export class StoreService {
         where('userId', '==', user.uid)
       );
       
-      console.log('🔍 Querying userRoles for user access:', { companyId, userId: user.uid });
       const userRolesSnap = await getDocs(userRolesQuery);
       
-      console.log('📋 UserRoles query results:', {
-        found: userRolesSnap.size,
-        roles: userRolesSnap.docs.map(d => ({
-          storeId: d.data()['storeId'],
-          roleId: d.data()['roleId']
-        }))
-      });
-
       // Extract unique storeIds from userRoles
       const allowedStoreIds = new Set<string>();
       userRolesSnap.docs.forEach(doc => {
@@ -516,8 +506,6 @@ export class StoreService {
           allowedStoreIds.add(storeId);
         }
       });
-
-      console.log('🔐 Allowed store IDs from userRoles:', Array.from(allowedStoreIds));
 
       // If no specific stores found, user might not have access
       if (allowedStoreIds.size === 0) {
@@ -537,14 +525,6 @@ export class StoreService {
         limit(10)
       );
       const storeSnapshot = await getDocs(storeSnapshotQuery);
-      console.log('📸 Store Snapshot: Total stores in DB (any status):', storeSnapshot.size);
-      if (storeSnapshot.size > 0) {
-        console.log('📸 Store Snapshot: Sample store statuses:', storeSnapshot.docs.map(d => ({ 
-          id: d.id, 
-          name: d.data()['storeName'], 
-          status: d.data()['status'] 
-        })));
-      }
       
       // Get all stores for the company
       const allStores = this.getStoresByCompany(companyId);
@@ -554,21 +534,16 @@ export class StoreService {
         store.status === 'active' && allowedStoreIds.has(store.id || '')
       );
       
-      console.log('🏪 Active stores for dropdown (filtered by userRoles):', {
-        total: allStores.length,
-        active: allStores.filter(s => s.status === 'active').length,
-        accessible: accessibleStores.length,
-        stores: accessibleStores.map(s => ({ id: s.id, name: s.storeName, status: s.status }))
-      });
+      const activeCount = allStores.filter(s => s.status === 'active').length;
+      console.log(`🏪 Active stores for dropdown: ${allStores.length} total, ${activeCount} active, ${accessibleStores.length} accessible`);
       
       return accessibleStores;
     } catch (error) {
-      console.error('❌ Error getting active stores for dropdown:', error);
+      console.error('❌ Error loading active stores:', error);
       return [];
     }
   }
 
-  // Get a specific store
   getStore(storeId: string) {
     return this.stores().find(store => store.id === storeId);
   }
@@ -679,8 +654,6 @@ export class StoreService {
     }
   ): Promise<void> {
     try {
-      
-
       const storeRef = doc(this.firestore, 'stores', storeId);
       
       try {
@@ -721,8 +694,6 @@ export class StoreService {
     rejectionReason?: string
   ): Promise<void> {
     try {
-      
-
       const updateData: any = {
         birAccreditationStatus: status,
         updatedAt: new Date()
@@ -735,11 +706,9 @@ export class StoreService {
         updateData.birAccreditationRejectedReason = rejectionReason;
       }
 
-  const storeRef = doc(this.firestore, 'stores', storeId);
-  await this.offlineDocService.updateDocument('stores', storeId, updateData);
-
-      
-    } catch (error) {
+      const storeRef = doc(this.firestore, 'stores', storeId);
+      await this.offlineDocService.updateDocument('stores', storeId, updateData);
+    } catch (error: any) {
       console.error('❌ Error updating BIR accreditation status:', error);
       throw error;
     }
@@ -750,8 +719,7 @@ export class StoreService {
    */
   async getStoresPendingBirAccreditation(): Promise<Store[]> {
     try {
-      
-
+      const { collection, query, where, getDocs } = await import('@angular/fire/firestore');
       const storesRef = collection(this.firestore, 'stores');
       const storesQuery = query(
         storesRef,
@@ -799,36 +767,36 @@ export class StoreService {
         return store;
       });
 
-      
       return stores;
     } catch (error) {
       console.error('❌ Error loading pending BIR stores:', error);
       throw error;
     }
   }
-async generateStoreCode(): Promise<string> {
-  const MAX_ATTEMPTS = 5;
-  let attempt = 0;
 
-  while (attempt < MAX_ATTEMPTS) {
-    attempt++;
+  async generateStoreCode(): Promise<string> {
+    const MAX_ATTEMPTS = 5;
+    let attempt = 0;
 
-    // 1) Generate a unique base using epoch time + random suffix
-    const epoch = Date.now().toString(36).toUpperCase(); // e.g., 'L5Z3K8'
-    const rand = Math.floor(Math.random() * 1296).toString(36).toUpperCase(); // 2-char random (36^2 = 1296)
-    const candidate = (epoch + rand).slice(-6); // total length = 6
+    while (attempt < MAX_ATTEMPTS) {
+      attempt++;
 
-    // 2) Ensure uniqueness in 'stores' collection
-    const isUnique = await this.isStoreCodeUnique(candidate);
-    if (isUnique) {
-      return candidate;
+      // 1) Generate a unique base using epoch time + random suffix
+      const epoch = Date.now().toString(36).toUpperCase(); // e.g., 'L5Z3K8'
+      const rand = Math.floor(Math.random() * 1296).toString(36).toUpperCase(); // 2-char random (36^2 = 1296)
+      const candidate = (epoch + rand).slice(-6); // total length = 6
+
+      // 2) Ensure uniqueness in 'stores' collection
+      const isUnique = await this.isStoreCodeUnique(candidate);
+      if (isUnique) {
+        return candidate;
+      }
+
+      console.warn(`🔁 Collision on storeCode ${candidate}, retrying (attempt ${attempt}/${MAX_ATTEMPTS})`);
     }
 
-    console.warn(`🔁 Collision on storeCode ${candidate}, retrying (attempt ${attempt}/${MAX_ATTEMPTS})`);
+    throw new Error('Unable to generate a unique store code after multiple attempts');
   }
-
-  throw new Error('Unable to generate a unique store code after multiple attempts');
-}
 
   private async isStoreCodeUnique(code: string): Promise<boolean> {
     const storesRef = collection(this.firestore, 'stores');

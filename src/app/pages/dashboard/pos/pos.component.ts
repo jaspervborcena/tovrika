@@ -152,12 +152,6 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     const stores = this.storesSignal();
     
     console.log('🏪 availableStores computed - Stores from storesSignal:', stores.length, 'stores');
-    console.log('🏪 Store details:', stores.map(s => ({ 
-      id: s.id, 
-      name: s.storeName, 
-      status: s.status,
-      companyId: s.companyId
-    })));
     
     if (stores.length === 0) {
       console.warn('⚠️ No stores available - storesSignal is empty');
@@ -479,21 +473,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     const storeId = this.selectedStoreId();
     const stores = this.availableStores();
     
-    console.log('═══════════════════════════════════════════');
     console.log('🔍 FILTERING START - Total products:', allProducts.length);
-    console.log('═══════════════════════════════════════════');
-    
-    console.log('🔍 FILTERED PRODUCTS DEBUG:', {
-      totalProducts: allProducts.length,
-      selectedStoreId: storeId,
-      availableStores: stores.length,
-      storeNames: stores.map(s => s.storeName),
-      productTagsSample: allProducts.slice(0, 10).map(p => ({
-        name: p.productName,
-        tagLabels: p.tagLabels,
-        tags: p.tags
-      }))
-    });
 
     let filtered = allProducts;
 
@@ -511,13 +491,6 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
         
         return included;
       });
-      
-      console.log('🔍 After store filtering:', {
-        originalCount: allProducts.length,
-        filteredCount: filtered.length,
-        productsWithStoreId: filtered.filter(p => p.storeId === storeId).length,
-        globalProducts: filtered.filter(p => !p.storeId).length
-      });
     } else if (stores.length > 0) {
       // If no specific store selected but stores available, use all store products
       const storeIds = stores.map(s => s.id).filter(Boolean);
@@ -534,11 +507,6 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     if (category !== 'all') {
       const beforeCategoryCount = filtered.length;
       filtered = filtered.filter(p => p.category === category);
-      console.log('🔍 After category filtering:', {
-        category,
-        beforeCount: beforeCategoryCount,
-        afterCount: filtered.length
-      });
     }
 
     // Filter by search query
@@ -550,11 +518,6 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
         p.skuId.toLowerCase().includes(query) ||
         p.barcodeId?.toLowerCase().includes(query)
       );
-      console.log('🔍 After search filtering:', {
-        query,
-        beforeCount: beforeSearchCount,
-        afterCount: filtered.length
-      });
     }
 
     // Filter by active tag labels (AND logic - show products with ALL selected tags)
@@ -634,13 +597,6 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     if (view === 'list') {
       filtered = filtered.slice(0, 20);
     }
-    
-    console.log('🔍 FINAL FILTERED PRODUCTS:', {
-      finalCount: finalCount,
-      displayCount: filtered.length,
-      view: view,
-      sampleProducts: filtered.slice(0, 3).map(p => ({ name: p.productName, storeId: p.storeId, category: p.category }))
-    });
     
     return filtered;
   });
@@ -761,31 +717,11 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
           const hasCard = (order.cardAmount && order.cardAmount > 0) || false;
           const isBothPayment = order.paymentMethod?.toLowerCase().includes('both') || false;
           matches = (hasCashSale && hasChargeSale) || (hasCash && hasCard) || isBothPayment;
-          if (matches) {
-            console.log('✅ Split payment match:', order.invoiceNumber, { 
-              cashSale: order.cashSale, 
-              chargeSale: order.chargeSale, 
-              hasCash, 
-              hasCard, 
-              isBothPayment, 
-              paymentMethod: order.paymentMethod, 
-              cashAmount: order.cashAmount, 
-              cardAmount: order.cardAmount 
-            });
-          }
+          // Split payment matched
           break;
         case 'Discounts & Promotions':
           // Orders with discountAmount > 0
           matches = (order.discountAmount && order.discountAmount > 0) || false;
-          if (!matches) {
-            console.log('❌ No discount:', order.invoiceNumber, { 
-              discountAmount: order.discountAmount,
-              hasDiscountAmount: !!order.discountAmount,
-              allOrderFields: Object.keys(order)
-            });
-          } else {
-            console.log('✅ Discount match:', order.invoiceNumber, { discountAmount: order.discountAmount });
-          }
           break;
         default:
           matches = true;
@@ -1072,8 +1008,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       const storeInfo = this.currentStoreInfo();
       const companyId = storeInfo?.companyId;
       const storeId = this.selectedStoreId();
-      
-      console.log('🏪 Store info:', { storeInfo, companyId, storeId });
+
       
       if (!companyId) {
         console.warn('❌ No company ID available for loading recent orders');
@@ -1083,7 +1018,6 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       console.log('📡 Calling orderService.getRecentOrders...');
       const results = await this.orderService.getRecentOrders(companyId, storeId || undefined, 20);
       console.log('✅ Received results:', results.length, 'orders');
-      console.log('📋 Orders data:', results);
       
       this.ordersSignal.set(results);
     } catch (error) {
@@ -1267,13 +1201,6 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
 
       const order = this.selectedOrder();
       const orderId = order?.id || order?.orderId || '';
-
-      console.log('🔍 Debug: openManageItemStatus called', {
-        selectedOrder: order,
-        orderId: orderId,
-        orderKeys: order ? Object.keys(order) : 'No order',
-        mode: this.trackingMode()
-      });
       
       if (!orderId) {
         console.warn('No order id available for Manage Item Status');
@@ -1540,7 +1467,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
             // cast to the allowed union to satisfy the LedgerService signature.
             const typedEvent = eventType as 'completed' | 'returned' | 'refunded' | 'cancelled' | 'damaged';
             const res: any = await this.ledgerService.recordEvent(companyId, storeId, orderId, typedEvent, Number((sums as any).amount || 0), Number((sums as any).qty || 0), performedBy);
-            console.log('LedgerService: aggregated entry created', { orderId, eventType, amount: (sums as any).amount, qty: (sums as any).qty, id: res?.id });
+
           } catch (ledgerErr) {
             console.warn('LedgerService: failed to create aggregated ledger entry', ledgerErr);
           }
@@ -1719,7 +1646,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   async onManagerAuthConfirm(): Promise<void> {
     const userCode = (this.managerAuthUserCode() || '').toString();
     const pin = (this.managerAuthPin() || '').toString();
-    console.log('🔐 onManagerAuthConfirm: creds submitted (redacted)', { userCode: userCode ? 'present' : 'empty', pinProvided: !!pin });
+    console.log('🔐 onManagerAuthConfirm: creds submitted (redacted)');
 
     // Validate credentials against users collection and check store permission
     try {
@@ -1763,15 +1690,46 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
         ? query(usersRef, where('email', '==', userCode))
         : query(usersRef, where('userCode', '==', userCode));
       const snap = await getDocs(q);
-      if (!snap || snap.empty) return false;
+      
+
+      
+      if (!snap || snap.empty) {
+        console.log('❌ No user found with this code/email');
+        return false;
+      }
 
       const currentStore = this.selectedStoreId();
 
       for (const docSnap of snap.docs) {
         const data: any = docSnap.data();
+        
         // Basic pin match (assumes pin stored in users collection as plain or comparable string)
-        if ((data.pin || '').toString() !== pin.toString()) continue;
+        if ((data.pin || '').toString() !== pin.toString()) {
+          continue;
+        }
 
+        // Check if user has managerial role - bypass store check (check both 'role' and 'roleId' fields)
+        const userRole = (data.role || data.roleId || '').toLowerCase();
+        const managerialRoles = ['manager', 'admin', 'creator', 'owner', 'store_manager', 'store manager'];
+        if (managerialRoles.includes(userRole)) {
+          return true;
+        }
+
+        // Fallback: If no role but user has admin-like characteristics, allow authorization
+        if (!data.role || data.role === '') {
+          // Check if user has companyId (any company-level user can authorize)
+          if (data.companyId) {
+            console.log('✅ User has companyId, authorization granted');
+            return true;
+          }
+          // Check if user has access to multiple stores (likely an admin)
+          if (Array.isArray(data.permissions) && data.permissions.length > 1) {
+            console.log('✅ User has multiple store permissions, likely admin - authorization granted');
+            return true;
+          }
+        }
+
+        // Otherwise must be authorized for the currently selected store
         // Check permission/store mapping - flexible support for different shapes
         // 1) direct storeId on user
         if (data.storeId && currentStore && data.storeId === currentStore) return true;
@@ -1779,10 +1737,11 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
         // 2) permission object
         if (data.permission && data.permission.storeId && currentStore && data.permission.storeId === currentStore) return true;
 
-        // 3) permissions array - require permissions[0].storeId to match the current store
+        // 3) permissions array - check if any permission matches the current store
         if (Array.isArray(data.permissions) && data.permissions.length > 0 && currentStore) {
-          const first = data.permissions[0];
-          if (first && first.storeId && first.storeId === currentStore) return true;
+          for (const perm of data.permissions) {
+            if (perm && perm.storeId && perm.storeId === currentStore) return true;
+          }
         }
 
         // 4) if currentStore is falsy, accept pin/userCode match (fallback)
@@ -1967,7 +1926,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   // Process individual item actions (return, damage, refund, cancel)
   async processItemAction(orderId: string, itemIndex: number, action: string, item: any): Promise<void> {
     try {
-      console.log(`Processing ${action} for item:`, { orderId, itemIndex, action, item });
+
       
       const confirmed = await this.showConfirmationDialog({
         title: `${action.charAt(0).toUpperCase() + action.slice(1)} Item`,
@@ -2048,7 +2007,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   // Open order receipt for viewing/printing
   async openOrderReceipt(order: any): Promise<void> {
     try {
-      console.log('Opening receipt for order:', order);
+
       
       // Convert order data to receipt format (now async for company data)
       const receiptData = await this.convertOrderToReceiptData(order);
@@ -2321,184 +2280,6 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     // Add Firestore test
     await this.testFirestoreConnection();
     
-    // 🔍 DEBUG: Make debug methods available globally for console debugging
-    (window as any).debugPOS = {
-      refreshProducts: () => this.debugRefreshProducts(),
-      testProductService: async () => {
-        console.log('🧪 Testing ProductService manually...');
-        const currentPermission = this.authService.getCurrentPermission();
-        if (currentPermission?.storeId) {
-          console.log('🔄 Calling initializeProducts with storeId:', currentPermission.storeId);
-          await this.productService.initializeProducts(currentPermission.storeId, true);
-        } else {
-          console.log('❌ No storeId available');
-        }
-      },
-      showCurrentProducts: () => {
-        console.log('📊 Current products:', this.products());
-        console.log('📊 Current products count:', this.products().length);
-      },
-      showProductServiceState: () => {
-        console.log('📊 ProductService state:', {
-          products: this.productService.getProductsSignal()(),
-          isLoading: this.productService.getLoadingSignal()(),
-          error: this.productService.getErrorSignal()(),
-          hasInitialLoad: (this.productService as any).hasInitialLoad()
-        });
-      },
-      checkFilteredProducts: () => {
-        console.log('🔍 CURRENT STATE:', {
-          products: this.products().length,
-          filteredProducts: this.filteredProducts().length,
-          selectedStore: this.selectedStoreId(),
-          selectedCategory: this.selectedCategory(),
-          searchQuery: this.searchQuery(),
-          currentView: this.currentView()
-        });
-        return this.filteredProducts();
-      },
-      forceUpdate: () => {
-        // Force signal updates by accessing them
-        this.products();
-        this.categories();
-        this.filteredProducts();
-        console.log('🔍 Signals accessed - check console for update logs');
-      },
-      // Store debugging methods
-      refreshStores: () => this.refreshStores(),
-      checkStores: async () => {
-        const user = this.authService.getCurrentUser();
-        const permission = this.authService.getCurrentPermission();
-        console.log('🏪 STORE DEBUG STATE:', {
-          availableStores: this.availableStores().length,
-          availableStoreDetails: this.availableStores().map(s => ({ 
-            id: s.id, 
-            name: s.storeName, 
-            status: s.status,
-            companyId: s.companyId 
-          })),
-          selectedStore: this.selectedStoreId(),
-          hasStoreError: this.hasStoreLoadingError(),
-          storeServiceState: this.storeService.debugStoreStatus(),
-          user: user?.uid || 'No user',
-          userEmail: user?.email,
-          permission: permission
-        });
-        
-        // Check all stores in the service (not filtered)
-        const allStores = this.storeService.getStores();
-        console.log('🏪 ALL STORES IN SERVICE (unfiltered):', allStores.length, allStores.map(s => ({ 
-          id: s.id, 
-          name: s.storeName, 
-          status: s.status,
-          companyId: s.companyId 
-        })));
-        
-        // Check userRoles to see what stores user has access to
-        if (user?.uid && permission?.companyId) {
-          const { collection, query, where, getDocs } = await import('@angular/fire/firestore');
-          const userRolesRef = collection(this.firestore, 'userRoles');
-          const userRolesQuery = query(
-            userRolesRef,
-            where('companyId', '==', permission.companyId),
-            where('userId', '==', user.uid)
-          );
-          const userRolesSnap = await getDocs(userRolesQuery);
-          console.log('🔐 USER ROLES (access control):', userRolesSnap.docs.map(d => ({
-            storeId: d.data()['storeId'],
-            roleId: d.data()['roleId'],
-            companyId: d.data()['companyId']
-          })));
-        }
-        
-        return this.availableStores();
-      },
-      forceStoreRecovery: () => this.handleEmptyStores(),
-      debugUserData: async () => {
-        const user = this.authService.getCurrentUser();
-        if (user?.uid) {
-          const indexedData = await this.indexedDBService.getUserData(user.uid);
-          const userRole = this.userRoleService.getUserRoleByUserId(user.uid);
-          console.log('👤 USER DEBUG DATA:', {
-            user: { uid: user.uid, email: user.email },
-            indexedData,
-            userRole,
-            currentPermission: this.authService.getCurrentPermission()
-          });
-          return { indexedData, userRole };
-        }
-        return null;
-      },
-      // Hardware printer debugging
-      checkPrinterStatus: () => this.checkHardwarePrinterStatus(),
-      getPrinterStatus: () => {
-        console.log('🖨️ PRINTER STATUS:', {
-          status: this.hardwarePrinterStatus(),
-          displayText: this.getPrinterStatusText()
-        });
-        return this.hardwarePrinterStatus();
-      },
-      testDirectPrint: async () => {
-        const mockReceiptData = {
-          orderId: 'TEST-123',
-          invoiceNumber: 'TEST-INV-001',
-          items: [{ productName: 'Test Item', quantity: 1, sellingPrice: 10.00, total: 10.00 }],
-          totalAmount: 10.00
-        };
-        return await this.printService.printReceiptDirect(mockReceiptData);
-      },
-      // Order completion testing
-      simulateCompletedOrder: () => {
-        // Simulate a completed order for testing
-        this.nextInvoiceNumber.set('INV-2024-001234567890');
-        this.isNewOrderActive.set(true);
-        this.isOrderCompleted.set(true);
-        console.log('🧪 Simulated completed order state for testing');
-      },
-      checkOrderStatus: () => {
-        console.log('📋 ORDER STATUS CHECK:', {
-          isOrderCompleted: this.isOrderCompleted(),
-          invoiceNumber: this.nextInvoiceNumber(),
-          cartItems: this.cartItems().length,
-          isNewOrderActive: this.isNewOrderActive(),
-          canEditCart: this.canEditCartItems(),
-          canClearCart: this.canClearCart(),
-          canRemoveFromCart: this.canRemoveFromCart(),
-          canChangeQuantity: this.canChangeQuantity(),
-          buttonEnabled: this.isCompleteOrderButtonEnabled(),
-          buttonText: this.completeOrderButtonText(),
-          completedOrderData: this.completedOrderData()
-        });
-        return {
-          isCompleted: this.isOrderCompleted(),
-          canEdit: this.canEditCartItems(),
-          canClear: this.canClearCart(),
-          buttonEnabled: this.isCompleteOrderButtonEnabled()
-        };
-      },
-      resetOrderState: () => {
-        this.nextInvoiceNumber.set('INV-0000-000000');
-        this.isNewOrderActive.set(false);
-        this.isOrderCompleted.set(false);
-        this.completedOrderData.set(null);
-        this.posService.clearCart();
-        console.log('🔄 Order state reset to initial state');
-      }
-    };
-    console.log('🔍 DEBUG: Global debug methods available:');
-    console.log('  - window.debugPOS.refreshProducts() - Refresh product data');
-    console.log('  - window.debugPOS.checkFilteredProducts() - Check product filtering state');
-    console.log('  - window.debugPOS.forceUpdate() - Force signal updates');
-    console.log('  - window.debugPOS.refreshStores() - Manual store refresh');
-    console.log('  - window.debugPOS.checkStores() - Check store loading state');
-    console.log('  - window.debugPOS.forceStoreRecovery() - Force store recovery');
-    console.log('  - window.debugPOS.debugUserData() - Show user/permission data');
-    console.log('  - window.debugPOS.checkPrinterStatus() - Check hardware printers');
-    console.log('  - window.debugPOS.getPrinterStatus() - Show current printer status');
-    console.log('  - window.debugPOS.testDirectPrint() - Test direct printing');
-    console.log('  - window.debugPOS.simulateCompletedOrder() - Simulate completed order');
-    console.log('  - window.debugPOS.checkOrderStatus() - Check order completion status');
-    console.log('  - window.debugPOS.resetOrderState() - Reset order to initial state');
     try {
       console.log('📊 STEP 1: Loading data (stores, products, categories, company)...');
       // Load company data early for faster receipt preparation
@@ -2551,7 +2332,6 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       // 🔍 NEW: Force a small delay to let signals update, then check again
       setTimeout(() => {
         console.log('🔍 DELAYED CHECK (500ms) - filtered products count:', this.filteredProducts().length);
-        console.log('🔍 DELAYED CHECK - sample filtered products:', this.filteredProducts().slice(0, 3).map(p => ({ name: p.productName, storeId: p.storeId })));
       }, 500);
       
       // Sync local order state with service (for switching between desktop/mobile)
@@ -3226,16 +3006,6 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     this.paymentDescription = '';
   }
 
-  debugTenderedField(): void {
-    console.log('🔍 Tendered field debug:', {
-      currentValue: this.paymentAmountTendered,
-      fieldType: typeof this.paymentAmountTendered,
-      modalVisible: this.paymentModalVisible(),
-      element: document.getElementById('amount-tendered'),
-      cartTotal: this.cartSummary().netAmount
-    });
-  }
-
   // Handle input changes for amount tendered
   onAmountTenderedChange(value: any): void {
     console.log('💳 Amount tendered changed to:', value);
@@ -3471,13 +3241,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
         paymentType: this.paymentType
       };
       
-      console.log('💳 Payment validated:', {
-        totalAmount,
-        tendered,
-        change,
-        description: paymentInfo.paymentDescription,
-        type: paymentInfo.paymentType
-      });
+
       
       // Generate real invoice number when payment is being processed
       // CRITICAL: Always fetch fresh from Firestore to avoid duplicate invoice numbers
@@ -3511,10 +3275,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       // Use NetworkService which monitors Firestore connection (SOURCE OF TRUTH)
       const isOnline = this.networkService.isOnline();
       
-      console.log(`🌐 Network status check:`, {
-        firestoreConnected: isOnline,
-        finalDecision: isOnline ? 'Online' : 'Offline'
-      });
+
       
       // If offline or slow connection detected, inform user and proceed with offline mode
       if (!isOnline) {
@@ -3610,19 +3371,15 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     paymentType: string;
   }): Promise<void> {
     try {
-      console.log('💾 Completing order with payment info:', paymentInfo);
       
       // Prepare customer info and payments for the new structure
-      const processedCustomerInfo = this.processCustomerInfo();
+      const processedCustomerInfo = this.getCustomerInfoForOrder();
       const paymentsData = {
         amountTendered: paymentInfo.amountTendered,
         changeAmount: paymentInfo.changeAmount,
         paymentDescription: paymentInfo.paymentDescription,
         paymentType: paymentInfo.paymentType
       };
-      
-      console.log('📝 Processed customer info:', processedCustomerInfo);
-      console.log('💳 Payment data:', paymentsData);
       
       // Save customer first if this is a new customer (so we can attach the doc id to the order)
       let savedCustomer: any = null;
@@ -3726,9 +3483,10 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       this.nextInvoiceNumber.set(result.invoiceNumber);
 
       console.log('📋 Invoice number updated to final result:', result.invoiceNumber);
-
-      // If we didn't save the customer earlier (for some reason), try once more but avoid duplicate
-      if (!savedCustomer) {
+      console.log(`✅ Order processed successfully: ${result.orderId}, Invoice: ${result.invoiceNumber}`);
+      
+      // Save customer data if needed (fallback for post-order)
+      if (this.customerInfo.soldTo && this.customerInfo.soldTo.trim()) {
         try {
           if (!this.customerInfo.customerId && (this.customerInfo.soldTo && this.customerInfo.soldTo.trim())) {
             console.log('👤 Attempting post-order customer save (fallback)');
@@ -3775,11 +3533,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       // orderDetails.status is set at creation time by the invoice service
       this.completedOrderData.set(updatedReceiptData);
       console.log('✅ Completed order data stored');
-      
-      // Set receipt data signal (will update the already-visible modal)
-      this.receiptDataSignal.set(updatedReceiptData);
-      console.log('✅ Receipt data signal updated in modal');
-
+      console.log(`📋 Updated receipt data: ${updatedReceiptData.orderId}, Invoice: ${updatedReceiptData.invoiceNumber}`);
       console.log('🧾 Receipt modal opened with invoice:', result.invoiceNumber);
       console.log('🎯 Receipt modal state:', {
         isVisible: this.isReceiptModalVisible(),
@@ -3794,7 +3548,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   // Process customer information based on form state (for new order structure)
-  private processCustomerInfo(): any {
+  private getCustomerInfoForOrder() {
     const soldToField = this.customerInfo.soldTo?.trim();
     const addressField = this.customerInfo.businessAddress?.trim();
     const tinField = this.customerInfo.tin?.trim();
@@ -3900,17 +3654,8 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
         
         if (userRole && userRole.storeId) {
           // Load companies and stores based on user's assigned store
-          console.log('🏪 User has specific store access, loading store:', userRole.storeId);
+          console.log('🏪 User has specific store, loading stores and products:', userRole.storeId);
           await this.storeService.loadStores([userRole.storeId]);
-          console.log('🏪 Store loading completed, checking stores...');
-          
-          const loadedStores = this.storeService.getStores();
-          console.log('🏪 Loaded stores count:', loadedStores.length);
-          console.log('🏪 Loaded stores details:', loadedStores.map(s => ({ id: s.id, name: s.storeName })));
-          
-          // Load products for the user's company and selected store
-          // Note: initializeStore() will be called after this method completes
-          console.log('📦 Loading products for company and store...');
           await this.productService.initializeProducts(userRole.storeId);
           console.log('📦 Product loading completed');
         } else if (userRole && userRole.companyId) {
@@ -5927,33 +5672,13 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     }
   }
 
-  // 🔍 DEBUG: Manual product refresh for debugging
-  async debugRefreshProducts(): Promise<void> {
-    console.log('🔍 DEBUG: Manual product refresh triggered');
+  // Manual product refresh - forces reload of products from service
+  async manualRefreshProducts(): Promise<void> {
     const storeId = this.selectedStoreId();
     const storeInfo = this.currentStoreInfo();
     
-    console.log('🔍 DEBUG: Current state before refresh:', {
-      selectedStoreId: storeId,
-      storeInfo: storeInfo,
-      productsCount: this.products().length,
-      filteredProductsCount: this.filteredProducts().length
-    });
-    
     if (storeInfo?.companyId && storeId) {
-      console.log('🔍 DEBUG: Reloading products...');
       await this.productService.initializeProducts(storeId, true); // Force reload
-      
-      // Wait a moment for signals to update
-      setTimeout(() => {
-        console.log('🔍 DEBUG: After refresh:', {
-          productsCount: this.products().length,
-          filteredProductsCount: this.filteredProducts().length,
-          sampleProducts: this.products().slice(0, 3).map(p => ({ name: p.productName, storeId: p.storeId }))
-        });
-      }, 200);
-    } else {
-      console.log('🔍 DEBUG: Cannot refresh - missing store info');
     }
   }
 

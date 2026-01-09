@@ -18,9 +18,6 @@ export const authGuard: CanActivateFn = (route, state) => {
   const currentUser = authService.currentUser();
   const currentPermission = authService.getCurrentPermission();
 
-  console.log('🛡️ AuthGuard: Current user:', currentUser?.email, currentUser?.uid);
-  console.log('🛡️ AuthGuard: Current permission:', currentPermission);
-
   const isVisitor = !currentPermission?.companyId || currentPermission.roleId === 'visitor';
   const isCompanyProfileRoute = state.url.includes('/dashboard/company-profile');
   const isOnboardingRoute = state.url === '/onboarding';

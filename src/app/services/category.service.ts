@@ -100,13 +100,7 @@ export class CategoryService {
       console.log('✅ Categories loaded and signal updated. Current categories:', categories.length);
       
       // Debug: Log category details for troubleshooting
-      if (categories.length > 0) {
-        console.log('📋 Category details:', categories.map(c => ({ 
-          label: c.categoryLabel, 
-          active: c.isActive, 
-          storeId: c.storeId 
-        })));
-      } else {
+      if (categories.length === 0) {
         console.log('⚠️ No categories found for storeId:', storeId);
         console.log('🔍 This could mean:');
         console.log('  - No categories exist in Firestore for this store');
@@ -128,8 +122,6 @@ export class CategoryService {
    */
   async createCategory(categoryData: Omit<ProductCategory, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> {
     try {
-      console.log('🔍 createCategory called with:', categoryData);
-      
       // Test Firestore connection first
       console.log('🔍 Testing Firestore connection...');
       const testRef = collection(db, 'test');
@@ -142,8 +134,6 @@ export class CategoryService {
         updatedAt: now
       };
 
-      console.log('🔍 Full category object to create:', newCategory);
-      
       console.log('🔍 Creating category with offline-safe document service...');
       // 🔥 NEW APPROACH: Use OfflineDocumentService for offline-safe creation
       const documentId = await this.offlineDocService.createDocument('categories', newCategory);
@@ -176,7 +166,6 @@ export class CategoryService {
         throw new Error('Network error: Unable to connect to Firestore. Please check your internet connection.');
       }
       
-      console.error('❌ Full error object:', JSON.stringify(error, null, 2));
       throw error;
     }
   }
@@ -345,8 +334,6 @@ export class CategoryService {
     
     // Check if category already exists
     const exists = this.categoryExists(categoryLabel.trim());
-    console.log('🔍 Category exists check:', { categoryLabel: categoryLabel.trim(), exists });
-    console.log('🔍 Current categories:', this.categoriesSignal().map(c => c.categoryLabel));
     
     if (exists) {
       console.log('✅ Category already exists, skipping creation');
@@ -367,12 +354,10 @@ export class CategoryService {
         storeId: storeId
       };
 
-      console.log('🔍 Category data to create:', categoryData);
       await this.createCategory(categoryData);
       console.log('✅ Auto-created category:', categoryLabel);
     } catch (error) {
       console.error('❌ Error auto-creating category:', error);
-      console.error('❌ Full error details:', JSON.stringify(error, null, 2));
       // Don't throw error to avoid breaking product creation
     }
   }
@@ -387,12 +372,6 @@ export class CategoryService {
     console.log('  - Active categories:', this.activeCategories().length);
     console.log('  - Last load time:', this.loadTimestamp ? new Date(this.loadTimestamp).toLocaleTimeString() : 'Never');
     console.log('  - Is loading:', this.isLoading);
-    console.log('  - Categories:', categories.map(c => ({ 
-      id: c.id, 
-      label: c.categoryLabel, 
-      group: c.categoryGroup,
-      active: c.isActive 
-    })));
     return { 
       categories, 
       activeCount: this.activeCategories().length, 

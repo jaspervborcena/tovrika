@@ -3248,13 +3248,11 @@ export class ProductManagementComponent implements OnInit {
 
         // Get current user for UID
         const currentUser = this.authService.getCurrentUser();
-        console.log('🔍 Current user check:', currentUser ? { uid: currentUser.uid, email: currentUser.email } : 'NULL');
         if (!currentUser) {
           throw new Error('User not authenticated');
         }
         
         const currentPermission = this.authService.getCurrentPermission();
-        console.log('🔍 Current permission check:', currentPermission ? { companyId: currentPermission.companyId, storeId: currentPermission.storeId } : 'NULL');
 
         const newProduct: Omit<Product, 'id' | 'createdAt' | 'updatedAt'> = {
           uid: currentUser.uid,  // Required by Product interface
@@ -3342,7 +3340,7 @@ export class ProductManagementComponent implements OnInit {
             throw batchError; // Re-throw to show error to user
           }
         } else {
-          console.log('⚠️ Initial batch not created:', { hasInitial, productId, initialQuantity: formValue.initialQuantity });
+          console.log('⚠️ Initial batch not created');
           if (hasInitial && !productId) {
             console.warn('⚠️ Initial inventory requested but no productId returned');
           }
@@ -3837,7 +3835,7 @@ export class ProductManagementComponent implements OnInit {
       );
       if (!blob) continue;
       
-      console.log(`🔍 Quality ${q}: ${blob.size} bytes`);
+      // Image quality check
       if (blob.size <= maxBytes) {
         const compressedFile = new File([blob], file.name.replace(/\.(png|webp|gif)$/i, '.jpg'), { 
           type: 'image/jpeg' 
