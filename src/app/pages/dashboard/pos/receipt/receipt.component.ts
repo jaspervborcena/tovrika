@@ -20,7 +20,6 @@ export class ReceiptComponent implements OnInit {
   isPrinting: boolean = false;
 
   ngOnInit() {
-    console.log('Receipt Data:', this.receiptData);
   }
 
   ngAfterViewChecked(): void {

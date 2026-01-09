@@ -33,7 +33,6 @@ export const onboardingGuard: CanActivateFn = async (route, state) => {
       currentPermission.companyId.trim() !== '' && 
       currentPermission.roleId !== 'visitor' &&
       (currentPermission.roleId === 'creator' || currentPermission.roleId === 'store_manager' || currentPermission.roleId === 'cashier')) {
-    console.log('🛡️ OnboardingGuard: User has valid permissions, allowing access');
     return true;
   }
   

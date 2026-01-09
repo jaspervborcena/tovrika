@@ -1,4 +1,4 @@
-import { Component, OnInit, AfterViewInit, OnDestroy, HostListener, ViewChild, ElementRef, computed, signal, inject } from '@angular/core';
+import { Component, OnInit, AfterViewInit, OnDestroy, HostListener, ViewChild, ElementRef, computed, signal, inject, ChangeDetectorRef } from '@angular/core';
 import { Firestore, doc, getDoc, collection, query, where } from '@angular/fire/firestore';
 import { getDocs, onSnapshot } from 'firebase/firestore';
 import { ProductStatus } from '../../../interfaces/product.interface';
@@ -75,6 +75,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   private firestore = inject(Firestore);
   private router = inject(Router);
   private sanitizer = inject(DomSanitizer);
+  private cdr = inject(ChangeDetectorRef);
 
   private routerSubscription: any;
   private inventorySnapshotUnsubscribe?: (() => void) | null = null; // Firestore snapshot listener cleanup
@@ -103,15 +104,11 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   readonly Math = Math;
 
   constructor() {
-    console.log('🏗️ POS COMPONENT: Constructor called - Component is being created!');
-    console.log('🏗️ POS COMPONENT: Constructor timestamp:', new Date().toISOString());
     
     // Listen for navigation events
     this.routerSubscription = this.router.events.subscribe(event => {
       if (event instanceof NavigationEnd) {
-        console.log('🔄 Navigation event detected - URL:', event.url);
         if (event.url === '/pos') {
-          console.log('🎯 Navigation to POS detected - Reinitializing component');
           // Force reinitialize when navigating to POS
           setTimeout(() => this.reinitializeComponent(), 100);
         }
@@ -151,10 +148,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   readonly availableStores = computed(() => {
     const stores = this.storesSignal();
     
-    console.log('🏪 availableStores computed - Stores from storesSignal:', stores.length, 'stores');
-    
     if (stores.length === 0) {
-      console.warn('⚠️ No stores available - storesSignal is empty');
       return [];
     }
     
@@ -174,12 +168,10 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   
   readonly products = computed(() => {
     const prods = this.productService.getProductsSignal()();
-    console.log('🔍 PRODUCTS COMPUTED - Count:', prods.length);
     
     // Check for missing required fields in products
     if (prods.length > 0) {
       const sampleProduct = prods[0];
-      console.log('🔍 Sample product structure:', sampleProduct);
       
       const requiredFields = ['uid', 'productName', 'skuId', 'unitType', 'category', 'companyId', 'storeId', 'isVatApplicable', 'hasDiscount', 'discountType'];
       const missingFields = requiredFields.filter(field => 
@@ -190,8 +182,6 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       
       if (missingFields.length > 0) {
         console.warn('⚠️ Missing or empty required fields in products:', missingFields);
-      } else {
-        console.log('✅ All required fields present in products');
       }
     }
     
@@ -203,9 +193,6 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     const allProducts = this.products();
     const categorySet = new Set(allProducts.map(p => p.category).filter(cat => cat && cat.trim()));
     const cats = Array.from(categorySet).sort();
-    
-    const storeId = this.selectedStoreId();
-    console.log('🔍 CATEGORIES COMPUTED - Total products:', allProducts.length, 'Store:', storeId, 'Categories count:', cats.length, 'Categories:', cats);
     
     return cats;
   });
@@ -249,7 +236,6 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   readonly hasProductsWithTags = computed(() => {
     const filtered = this.filteredProducts();
     const hasTags = filtered.some(product => product.tagLabels && product.tagLabels.length > 0);
-    console.log('🏷️ Has products with tags:', hasTags, 'Total filtered products:', filtered.length);
     return hasTags;
   });
   
@@ -453,10 +439,8 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
         return;
       }
       
-      console.log('📋 Generating invoice preview for store:', storeId);
       const previewInvoice = await this.invoiceService.getNextInvoiceNumberPreview(storeId);
       
-      console.log('📋 Invoice preview generated:', previewInvoice, this.networkService.isOnline() ? '(online)' : '(offline)');
       this.nextInvoiceNumber.set(previewInvoice);
       this.invoiceNumber = previewInvoice;
     } catch (error) {
@@ -472,8 +456,6 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     const allProducts = this.products();
     const storeId = this.selectedStoreId();
     const stores = this.availableStores();
-    
-    console.log('🔍 FILTERING START - Total products:', allProducts.length);
 
     let filtered = allProducts;
 
@@ -486,7 +468,6 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
         const included = belongsToStore || isGlobalProduct;
         
         if (!included && p.storeId) {
-          console.log('🔍 Product filtered out:', p.productName, 'productStoreId:', p.storeId, 'selectedStoreId:', storeId);
         }
         
         return included;
@@ -495,11 +476,8 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       // If no specific store selected but stores available, use all store products
       const storeIds = stores.map(s => s.id).filter(Boolean);
       filtered = allProducts.filter(p => !p.storeId || storeIds.includes(p.storeId));
-      
-      console.log('🔍 No specific store - using all available stores:', storeIds);
     } else {
       // No stores available - show all products (fallback)
-      console.log('🔍 No stores available - showing all products as fallback');
     }
 
     // Filter by category
@@ -2250,13 +2228,9 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   async ngOnInit(): Promise<void> {
-    console.log('🎯 POS COMPONENT: ngOnInit called - POS is loading!');
-    console.log('🎯 POS COMPONENT: Current URL:', window.location.href);
-    console.log('🎯 POS COMPONENT: Timestamp:', new Date().toISOString());
     
     // Set default tab to first available tab
     if (this.accessTabs.length > 0) {
-      console.log('📑 Setting default tab to:', this.accessTabs[0]);
       this.accessTabSignal.set(this.accessTabs[0]);
     }
     
@@ -2281,67 +2255,32 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     await this.testFirestoreConnection();
     
     try {
-      console.log('📊 STEP 1: Loading data (stores, products, categories, company)...');
       // Load company data early for faster receipt preparation
       this.loadCompanyDataForReceipts();
       
       // Load data first to ensure stores and products are available
       await this.loadData();
-      console.log('✅ STEP 1 COMPLETED: Data loading finished');
       
-      console.log('📊 STEP 2: Loading stores for POS (using getActiveStoresForDropdown)...');
       // Load stores using the same method as Access Management
       await this.loadStoresForPOS();
-      console.log('✅ STEP 2 COMPLETED: Stores loaded');
       
-      console.log('📊 STEP 3: Setting current date and time...');
       // Set current date and time
       this.updateCurrentDateTime();
       
-      console.log('📊 STEP 4: Loading next invoice number preview...');
       // Load next invoice number preview
       await this.loadNextInvoicePreview();
-      console.log('✅ STEP 4 COMPLETED: Invoice number loaded');
       
-      console.log('📊 STEP 5: Initializing store selection...');
-      await this.initializeStore(); 
-      console.log('✅ STEP 5 COMPLETED: Store initialization finished');
+      await this.initializeStore();
       
-      console.log('📊 STEP 6: Loading product inventory for offline cache...');
       await this.preloadProductInventory();
-      console.log('✅ STEP 6 COMPLETED: Product inventory preloaded');
       
-      console.log('📊 STEP 7: Checking hardware printer availability...');
       await this.checkHardwarePrinterStatus();
-      console.log('✅ STEP 7 COMPLETED: Hardware printer status checked');
-      
-      // 🔍 ENHANCED DEBUG: More detailed final check
-      console.log('🔍 FINAL CHECK - currentUser:', this.authService.getCurrentUser());
-      console.log('🔍 FINAL CHECK - all stores:', this.storeService.getStores());
-      console.log('🔍 FINAL CHECK - available stores:', this.availableStores());
-      console.log('🔍 FINAL CHECK - selected store:', this.selectedStoreId());
-      console.log('🔍 FINAL CHECK - products count:', this.products().length);
-      console.log('🔍 FINAL CHECK - categories count:', this.categories().length);
-      
-      // 🔍 NEW: Check filtered products specifically
-      console.log('🔍 FINAL CHECK - filtered products count:', this.filteredProducts().length);
-      console.log('🔍 FINAL CHECK - selected category:', this.selectedCategory());
-      console.log('🔍 FINAL CHECK - search query:', this.searchQuery());
-      console.log('🔍 FINAL CHECK - current view:', this.currentView());
-      
-      // 🔍 NEW: Force a small delay to let signals update, then check again
-      setTimeout(() => {
-        console.log('🔍 DELAYED CHECK (500ms) - filtered products count:', this.filteredProducts().length);
-      }, 500);
       
       // Sync local order state with service (for switching between desktop/mobile)
       const serviceOrderActive = this.posService.isOrderActive();
       if (serviceOrderActive && !this.isNewOrderActive()) {
         this.isNewOrderActive.set(true);
-        console.log('🔄 Synced order state from service: order is active');
       }
-      
-      console.log('🎉 POS INITIALIZATION COMPLETED SUCCESSFULLY!');
     } catch (error) {
       console.error('❌ Error initializing POS:', error);
       console.error('❌ Error details:', error);
@@ -2497,6 +2436,9 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   async ngAfterViewInit(): Promise<void> {
+    // Trigger change detection to avoid ExpressionChangedAfterItHasBeenCheckedError
+    this.cdr.detectChanges();
+    
     // Generate barcode images for all products
     setTimeout(() => {
       const products = this.products();
@@ -2545,12 +2487,10 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
-    console.log('🏗️ POS COMPONENT: ngOnDestroy called - Component is being destroyed');
     if (this.routerSubscription) {
       this.routerSubscription.unsubscribe();
     }
     if (this.inventorySnapshotUnsubscribe) {
-      console.log('📦 Unsubscribing from productInventory snapshot listener');
       this.inventorySnapshotUnsubscribe();
       this.inventorySnapshotUnsubscribe = null;
     }
@@ -2790,8 +2730,6 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
         type: status.type,
         ready: status.details.ready || status.details.connected || false
       });
-      
-      console.log('🖨️ Hardware printer status updated:', this.hardwarePrinterStatus());
     } catch (error) {
       console.error('❌ Failed to check hardware printer status:', error);
       this.hardwarePrinterStatus.set({
@@ -3563,11 +3501,8 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
 
   // Method to reinitialize the component when navigating back to POS
   private async reinitializeComponent(): Promise<void> {
-    console.log('🔄 POS COMPONENT: Reinitializing component due to navigation');
-    
     // Check if products are already loaded to prevent unnecessary reloading
     const currentProductCount = this.products().length;
-    console.log('🔄 Current product count before reinit:', currentProductCount);
     
     // Only reinitialize if we don't have products or user context has changed
     const user = this.authService.getCurrentUser();
@@ -3580,7 +3515,6 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     }
     
     try {
-      console.log('🔄 Performing full reinitialization...');
       // Load data first to ensure stores and products are available
       await this.loadData();
       
@@ -3591,7 +3525,6 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       await this.loadNextInvoicePreview();
       await this.initializeStore(); 
       
-      console.log('🔄 POS COMPONENT: Reinitialization completed - products:', this.products().length);
     } catch (error) {
       console.error('🔄 Error reinitializing POS component:', error);
     }
@@ -3606,7 +3539,6 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       const company = await this.companyService.getActiveCompany();
       if (company) {
         this.cachedCompanySignal.set(company);
-        console.log('✅ Company data cached for receipts:', company.name);
       }
     } catch (error) {
       console.warn('⚠️ Could not load company data for receipts:', error);
@@ -3634,9 +3566,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
                 roleId: permission.roleId
               };
               useIndexedDBData = true;
-              console.log('💾 Selected permission from', offlineUserData.permissions.length, 'available permissions');
             }
-            console.log('� PRIORITY: Using user role from IndexedDB:', userRole);
           }
         } catch (error) {
           console.log('⚠️ Could not get user role from IndexedDB:', error);
@@ -3644,20 +3574,14 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
         
         // FALLBACK: Load from database if IndexedDB data not available
         if (!useIndexedDBData) {
-          console.log('🗄️ FALLBACK: Loading user roles from database...');
           await this.userRoleService.loadUserRoles();
           userRole = this.userRoleService.getUserRoleByUserId(user.uid);
-          console.log('🗄️ User role from database:', userRole);
         }
-        
-        console.log('user.uid:', user.uid);
         
         if (userRole && userRole.storeId) {
           // Load companies and stores based on user's assigned store
-          console.log('🏪 User has specific store, loading stores and products:', userRole.storeId);
           await this.storeService.loadStores([userRole.storeId]);
           await this.productService.initializeProducts(userRole.storeId);
-          console.log('📦 Product loading completed');
         } else if (userRole && userRole.companyId) {
           // If user has company access but no specific store, load all company stores
           console.log('🏪 User has company access but no specific store, loading all company stores');
@@ -3715,14 +3639,12 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   private async initializeStore(): Promise<void> {
-    console.log('🎯 Desktop initializeStore called - checking stores and loading if needed');
     
     // First, ensure stores are loaded by checking if we have any stores
     const currentUser = this.authService.getCurrentUser();
     let availableStores = this.availableStores();
     
     if (availableStores.length === 0 && currentUser?.uid) {
-      console.log('🏪 Desktop No stores available, loading from database...');
       
       try {
         // Load user roles first to get store access permissions
@@ -3730,21 +3652,17 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
         
         // Get the current user's role by userId
         const userRole = this.userRoleService.getUserRoleByUserId(currentUser.uid);
-        console.log('👤 Desktop User role loaded:', userRole);
         
         if (userRole && userRole.storeId) {
           // Load companies first
-          console.log('📊 Desktop Loading companies...');
           await this.companyService.loadCompanies();
           
           // Load stores based on user's assigned store
-          console.log('🏪 Desktop Loading stores for user role:', userRole.storeId);
           await this.storeService.loadStores([userRole.storeId]);
           
           // Wait a bit for signals to update
           await new Promise(resolve => setTimeout(resolve, 100));
           
-          console.log('✅ Desktop Stores loaded, refreshing available stores...');
         } else {
           console.warn('⚠️ Desktop No user role or store ID found');
           return;
@@ -3753,8 +3671,6 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
         console.error('❌ Desktop Error loading stores:', error);
         return;
       }
-    } else {
-      console.log('✅ Desktop Stores already available, count:', availableStores.length);
     }
 
     // PRIORITY: Use IndexedDB as primary source for all user data (uid, companyId, storeId, roleId)
@@ -3762,20 +3678,16 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       const offlineUserData = await this.indexedDBService.getUserData(currentUser?.uid || '');
       
       if (offlineUserData?.currentStoreId) {
-        console.log('💾 PRIORITY: Using IndexedDB data - uid:', offlineUserData.uid, 'storeId:', offlineUserData.currentStoreId);
         
         // Verify the store exists in availableStores before selecting
         availableStores = this.availableStores(); // Refresh after potential loading
         const storeExists = availableStores.find(store => store.id === offlineUserData.currentStoreId);
         
         if (storeExists) {
-          console.log('✅ IndexedDB store verified, selecting store');
           await this.selectStore(offlineUserData.currentStoreId);
-          console.log('✅ Store selection from IndexedDB completed');
           return; // Success - exit early
         } else {
           console.warn('⚠️ IndexedDB store not found in available stores');
-          console.log('🏪 Available stores:', availableStores.map(s => ({ id: s.id, name: s.storeName })));
         }
       }
       
@@ -3783,13 +3695,11 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       if (offlineUserData?.permissions && offlineUserData.permissions.length > 0) {
         const permission = this.getActivePermission(offlineUserData);
         if (permission?.storeId) {
-          console.log('💾 Using storeId from IndexedDB permissions:', permission.storeId);
           availableStores = this.availableStores(); // Refresh after potential loading
           const storeExists = availableStores.find(store => store.id === permission.storeId);
           
           if (storeExists) {
             await this.selectStore(permission.storeId);
-            console.log('✅ Store selection from IndexedDB permissions completed');
             return;
           }
         }
@@ -3808,17 +3718,12 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       const stores = this.availableStores();
       const currentlySelected = this.selectedStoreId();
       
-      console.log(`🏪 Store initialization attempt ${retryCount + 1}/${maxRetries} - Available stores:`, stores.length);
-      
       if (stores.length > 0) {
-        console.log('🏪 Stores found, proceeding with auto-selection');
-        console.log('🏪 Currently selected store:', currentlySelected);
         
         // Check if currently selected store is valid in available stores
         const selectedStore = stores.find(store => store.id === currentlySelected);
         
         if (currentlySelected && selectedStore) {
-          console.log('✅ Valid store already selected from persistent state:', selectedStore.storeName);
           
           // Load products for the already selected store
           if (selectedStore.companyId) {
@@ -3847,8 +3752,6 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
                   const indexedDbStore = stores.find(store => store.id === indexedDbStoreId);
                   if (indexedDbStore && indexedDbStoreId) {
                     storeIdToSelect = indexedDbStoreId;
-                    console.log('💾 PRIORITY: Using storeId from IndexedDB permissions:', storeIdToSelect);
-                    console.log('💾 Selected from', offlineUserData.permissions.length, 'available permissions');
                   }
                 }
               }
@@ -3870,31 +3773,21 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
             
             if (storeWithProducts?.id) {
               storeIdToSelect = storeWithProducts.id || null;
-              console.log('🗄️ FALLBACK: Using store with products:', storeIdToSelect, 
-                `(${allProducts.filter(p => p.storeId === storeIdToSelect).length} products)`);
             } else {
               // If no stores have products, use first available store
               storeIdToSelect = stores[0]?.id || null;
-              console.log('🗄️ FALLBACK: No stores with products, using first available store:', storeIdToSelect);
             }
           }
           
           const storeToSelect = stores.find(store => store.id === storeIdToSelect);
           
           if (storeToSelect?.id) {
-            if (stores.length === 1) {
-              console.log('🏪 Single store detected, auto-selecting:', storeToSelect.storeName, '(ID:', storeToSelect.id, ')');
-            } else {
-              console.log('🏪 Multiple stores available, auto-selecting:', storeToSelect.storeName, '(ID:', storeToSelect.id, ')');
-            }
             
             await this.selectStore(storeToSelect.id);
-            console.log('✅ Auto-selection completed for store:', storeToSelect.storeName);
             
             // Verify the selection worked
             const afterSelection = this.selectedStoreId();
             if (afterSelection === storeToSelect.id) {
-              console.log('✅ Store auto-selection verified successful');
               return; // Success, exit the function
             } else {
               console.warn('⚠️ Store auto-selection may have failed - expected:', storeToSelect.id, 'actual:', afterSelection);
@@ -3905,7 +3798,6 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
         // If we reach here, something went wrong but we have stores
         break;
       } else {
-        console.log(`⏳ No stores available yet, waiting... (attempt ${retryCount + 1}/${maxRetries})`);
         retryCount++;
         
         if (retryCount < maxRetries) {
@@ -4006,11 +3898,9 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
         return;
       }
 
-      console.log('📦 Preloading product inventory for store:', storeId);
       
       // Unsubscribe from any existing snapshot listener
       if (this.inventorySnapshotUnsubscribe) {
-        console.log('📦 Cleaning up existing inventory snapshot listener');
         this.inventorySnapshotUnsubscribe();
         this.inventorySnapshotUnsubscribe = null;
       }
@@ -4033,7 +3923,6 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       // 2. Real-time updates when online
       // 3. Automatic sync when connection is restored
       // 4. Better metadata tracking (fromCache, hasPendingWrites)
-      console.log('📦 Setting up Firestore snapshot listener for productInventory...');
       
       this.inventorySnapshotUnsubscribe = onSnapshot(
         inventoryQuery,
@@ -4041,13 +3930,6 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
         (snapshot) => {
           const fromCache = snapshot.metadata.fromCache;
           const hasPendingWrites = snapshot.metadata.hasPendingWrites;
-          
-          console.log(`📦 Inventory snapshot received:`, {
-            size: snapshot.size,
-            fromCache,
-            hasPendingWrites,
-            source: fromCache ? 'CACHE' : 'SERVER'
-          });
 
           if (snapshot.size > 0) {
             const products = new Set<string>();
@@ -4057,16 +3939,6 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
                 products.add(data['productId']);
               }
             });
-            
-            console.log(`✅ Firestore cached ${snapshot.size} inventory batches (${products.size} products)`);
-            
-            if (!fromCache) {
-              console.log('📡 Data synced from server - Firestore cache updated');
-            } else {
-              console.log('💾 Data loaded from Firestore cache');
-            }
-          } else {
-            console.log('⚠️ No inventory batches found for this store');
           }
         },
         (error) => {
@@ -4075,7 +3947,6 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
         }
       );
       
-      console.log('✅ Inventory snapshot listener registered - Firestore will handle caching');
       
       // REMARKED: Custom IndexedDB preload logic - replaced with Firestore snapshot listener
       /*
@@ -4178,28 +4049,14 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   // Load stores using getActiveStoresForDropdown (same as Access Management)
   async loadStoresForPOS(): Promise<void> {
     try {
-      console.log('🏪 loadStoresForPOS: Starting...');
       const currentPermission = this.authService.getCurrentPermission();
-      console.log('🏪 loadStoresForPOS: Current permission:', currentPermission);
       
       if (currentPermission?.companyId) {
-        console.log('🏪 loadStoresForPOS: Calling getActiveStoresForDropdown with companyId:', currentPermission.companyId);
         // Use the same centralized method as Access Management
         const stores = await this.storeService.getActiveStoresForDropdown(currentPermission.companyId);
-        console.log('🏪 loadStoresForPOS: Received stores:', stores.length);
-        console.log('🏪 loadStoresForPOS: Store details:', stores.map(s => ({ 
-          id: s.id, 
-          name: s.storeName, 
-          status: s.status,
-          companyId: s.companyId
-        })));
         
         this.storesSignal.set(stores);
-        console.log('✅ loadStoresForPOS: Stores set in signal:', stores.length, 'stores');
         
-        // Verify signal was set correctly
-        const verifyStores = this.storesSignal();
-        console.log('🔍 loadStoresForPOS: Verification - storesSignal now contains:', verifyStores.length, 'stores');
       } else {
         console.warn('⚠️ loadStoresForPOS: No companyId available for loading stores');
       }
@@ -4211,9 +4068,6 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
 
   // Event handlers
   async selectStore(storeId: string): Promise<void> {
-    console.log('🎯 selectStore called with storeId:', storeId);
-    console.log('🏪 Available stores:', this.availableStores().map(s => ({ id: s.id, name: s.storeName, companyId: s.companyId })));
-    
     // Get companyId for the selected store first
     const storeInfo = this.availableStores().find(s => s.id === storeId);
     const companyIdForStore = storeInfo?.companyId;
@@ -4221,11 +4075,9 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     // Update IndexedDB immediately with the new selected store
     try {
       const currentUser = this.authService.getCurrentUser();
-      console.log('💾 Current user for IndexedDB update:', currentUser?.uid);
       
       if (currentUser?.uid) {
         const existingUserData = await this.indexedDBService.getUserData(currentUser.uid);
-        console.log('💾 Existing user data from IndexedDB:', existingUserData);
         
         if (existingUserData) {
           // Update permissions array to reflect the new store selection
@@ -4241,7 +4093,6 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
                 ...updatedPermissions[permissionIndex],
                 storeId: storeId
               };
-              console.log('💾 Updated permission for company:', companyIdForStore, 'with storeId:', storeId);
             } else {
               // Add new permission if it doesn't exist
               const roleId = existingUserData.roleId || 'creator';
@@ -4250,7 +4101,6 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
                 storeId: storeId,
                 roleId: roleId
               });
-              console.log('💾 Added new permission for company:', companyIdForStore, 'with storeId:', storeId);
             }
           }
           
@@ -4261,15 +4111,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
             updatedAt: new Date()
           };
           
-          console.log('💾 About to save updated user data:', updatedUserData);
           await this.indexedDBService.saveUserData(updatedUserData);
-          console.log('💾 ✅ Store selection and permissions updated in IndexedDB:', storeId);
-          console.log('💾 ✅ Updated permissions:', updatedPermissions);
-          
-          // Verify the save by reading back
-          const verifyData = await this.indexedDBService.getUserData(currentUser.uid);
-          console.log('💾 ✅ VERIFICATION - Data read back from IndexedDB:', verifyData);
-          console.log('💾 ✅ VERIFICATION - currentStoreId:', verifyData?.currentStoreId);
         } else {
           console.error('❌ No existing user data found in IndexedDB for uid:', currentUser.uid);
         }
@@ -4291,16 +4133,12 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       const currentUser = this.authService.getCurrentUser();
       if (currentUser?.uid) {
         const offlineUserData = await this.indexedDBService.getUserData(currentUser.uid);
-        console.log('💾 IndexedDB user data:', offlineUserData);
         
         if (offlineUserData?.permissions && offlineUserData.permissions.length > 0) {
           const permission = this.getActivePermission(offlineUserData, storeId);
-          console.log('🔑 Active permission found:', permission);
           
           if (permission) {
             companyId = permission.companyId;
-            console.log('💾 PRIORITY: Using companyId from IndexedDB:', companyId);
-            console.log('💾 Selected permission from', offlineUserData.permissions.length, 'available permissions');
           }
         }
       }
@@ -4312,23 +4150,16 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     if (!companyId) {
       const storeInfo = this.availableStores().find(s => s.id === storeId);
       companyId = storeInfo?.companyId;
-      console.log('🗄️ FALLBACK: Using companyId from database store info:', companyId);
-      console.log('🗄️ Store info found:', storeInfo);
     }
     
     if (companyId) {
-      console.log('📦 Loading products for companyId:', companyId, 'storeId:', storeId);
       await this.productService.initializeProducts(storeId);
-      console.log('✅ Product loading completed');
-      console.log('🛍️ Total products loaded:', this.productService.getProductsSignal()().length);
       
       // Load available tags for the store
       await this.loadAvailableTags();
       
       // Preload productInventory for this store to IndexedDB
-      console.log('📦 Preloading inventory for new store...');
       await this.preloadProductInventory();
-      console.log('✅ Inventory preloaded for store:', storeId);
       
   // Reset grid pagination when store changes
   this.gridRowsVisible.set(4);
@@ -4676,7 +4507,6 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       
       // Clear cart directly without confirmation (order is completed)
       this.posService.clearCart();
-      console.log('🗑️ Cart cleared after successful offline order');
       
     } catch (error) {
       console.error('❌ Error processing offline order:', error);
@@ -4944,7 +4774,6 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     if (confirmed) {
       this.posService.clearCart();
       // Keep order active - don't reset state, user can continue adding items
-      console.log('🗑️ Cart cleared - order still active for new items');
     }
   }
 
@@ -5716,18 +5545,9 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
    */
   private async testFirestoreConnection(): Promise<void> {
     try {
-      console.log('🧪 === FIRESTORE CONNECTION TEST ===');
-      
       // Test 1: Check authentication
       const currentUser = this.authService.getCurrentUser();
       const currentPermission = this.authService.getCurrentPermission();
-      
-      console.log('🔑 Auth Status:', {
-        user: currentUser?.email || 'No user',
-        permission: currentPermission || 'No permission',
-        companyId: currentPermission?.companyId || 'No company',
-        storeId: currentPermission?.storeId || 'No store'
-      });
       
       if (!currentUser) {
         console.log('❌ Test skipped - no user authenticated');
@@ -5735,15 +5555,12 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       }
       
       // Test 2: Direct Firestore query
-      console.log('🔍 Testing direct Firestore access...');
       const { collection, query, where, getDocs, limit } = await import('@angular/fire/firestore');
       const firestore = (this.productService as any)['firestore']; // Access private firestore instance
       
       const productsRef = collection(firestore, 'products');
       const basicQuery = query(productsRef, limit(5));
       const basicSnapshot = await getDocs(basicQuery);
-      
-      console.log('📊 Total products in collection:', basicSnapshot.size);
       
       if (basicSnapshot.empty) {
         console.log('❌ Products collection is empty!');
@@ -5757,27 +5574,14 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       
       basicSnapshot.docs.forEach(doc => {
         const data = doc.data();
-        console.log('📦 Sample product:', {
-          id: doc.id,
-          name: data['productName'],
-          company: data['companyId'],
-          store: data['storeId'],
-          status: data['status']
-        });
         
         if (data['companyId']) companies.add(data['companyId']);
         if (data['storeId']) stores.add(data['storeId']);
         if (data['status']) statuses.add(data['status']);
       });
       
-      console.log('📈 Data Summary:');
-      console.log('🏢 Companies:', Array.from(companies));
-      console.log('🏪 Stores:', Array.from(stores));
-      console.log('📊 Statuses:', Array.from(statuses));
-      
       // Test 4: Try ProductService query pattern
       if (currentPermission?.companyId) {
-        console.log('🎯 Testing ProductService query pattern...');
         
         const testQuery = query(
           productsRef,
@@ -5787,21 +5591,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
         );
         
         const testSnapshot = await getDocs(testQuery);
-        console.log('🎯 ProductService pattern results:', testSnapshot.size, 'products');
-        
-        if (testSnapshot.empty) {
-          console.log('❌ No products found with ProductService query!');
-          console.log('💡 Check if products have correct companyId and status=active');
-        } else {
-          console.log('✅ ProductService query pattern works!');
-          testSnapshot.docs.forEach(doc => {
-            const data = doc.data();
-            console.log('  📦', data['productName'], '(Store:', data['storeId'], ')');
-          });
-        }
       }
-      
-      console.log('🧪 === END FIRESTORE TEST ===');
       
     } catch (error) {
       console.error('❌ Firestore test error:', error);
@@ -5864,9 +5654,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     }
 
     try {
-      console.log('🏷️ Loading tags from database for store:', storeId);
       const tags = await this.posService.getTagsForStore(storeId);
-      console.log('🏷️ Loaded tags from database:', tags);
 
       // Group tags by their group field and track first createdAt per group
       const groupMap = new Map<string, { id: string; label: string; createdAt?: any }[]>();
@@ -5900,7 +5688,6 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
           return timeA - timeB;
         });
 
-      console.log('🏷️ Tags grouped by category:', tagsByGroup);
       this.availableTagsByGroup.set(tagsByGroup);
     } catch (error) {
       console.error('❌ Failed to load tags:', error);
@@ -5988,8 +5775,9 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   isAccessTabScrollAtEnd(): boolean {
-    if (!this.accessTabListContainer) return true;
+    if (!this.accessTabListContainer?.nativeElement) return true;
     const container = this.accessTabListContainer.nativeElement;
-    return container.scrollLeft + container.clientWidth >= container.scrollWidth - 10;
+    const isAtEnd = container.scrollLeft + container.clientWidth >= container.scrollWidth - 10;
+    return isAtEnd;
   }
 }
