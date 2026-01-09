@@ -100,7 +100,6 @@ export class RoleDefinitionService {
       
       const roleDefs = querySnapshot.docs.map(doc => {
         const data = doc.data();
-        console.log('🔍 [RoleDefinitionService] Processing role definition:', doc.id, data);
         const created = this.toDateValue(data['createdAt']) || new Date();
         const updated = this.toDateValue(data['updatedAt']) || new Date();
         return {
@@ -111,7 +110,6 @@ export class RoleDefinitionService {
         };
       }) as RoleDefinition[];
       
-      console.log('🔍 [RoleDefinitionService] Final role definitions array:', roleDefs);
       console.log('🔍 [RoleDefinitionService] Checking for duplicates...');
       
       // Check for duplicates by roleId + storeId combination
@@ -202,7 +200,6 @@ export class RoleDefinitionService {
         updatedAt: new Date()
       };
       
-      console.log('🔍 [RoleDefinitionService] Creating new role definition:', docData);
       // 🔥 NEW APPROACH: Use OfflineDocumentService for offline-safe creation
       const documentId = await this.offlineDocService.createDocument('roleDefinition', docData);
       await this.loadRoleDefinitions(); // Refresh the data

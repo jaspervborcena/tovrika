@@ -41,8 +41,6 @@ export class BillingService {
    */
   async createBillingHistory(data: Omit<CompanyBillingHistory, 'id'>): Promise<string> {
     try {
-      console.log('💳 Creating billing history record:', data);
-
       const billingData = {
         ...data,
         paidAt: data.paidAt instanceof Date ? Timestamp.fromDate(data.paidAt) : Timestamp.now(),
@@ -86,12 +84,6 @@ export class BillingService {
       
       const history = querySnapshot.docs.map(doc => {
         const data = doc.data();
-        console.log('📄 Document data:', {
-          id: doc.id,
-          storeId: data['storeId'],
-          companyId: data['companyId'],
-          tier: data['tier']
-        });
         return {
           id: doc.id,
           companyId: data['companyId'],

@@ -20,6 +20,12 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
   standalone: true,
   imports: [CommonModule, ConfirmationDialogComponent],
   template: `
+    <!-- Loading Overlay -->
+    <div *ngIf="isLoading()" class="loading-overlay">
+      <div class="loading-spinner"></div>
+      <p class="loading-text">Loading dashboard data...</p>
+    </div>
+
     <div class="dashboard-container">
       <!-- Header -->
       <div class="header">
@@ -345,6 +351,42 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
     />
   `,
   styles: [`
+    /* Loading Overlay */
+    .loading-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(255, 255, 255, 0.95);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 9999;
+      backdrop-filter: blur(4px);
+    }
+
+    .loading-spinner {
+      width: 48px;
+      height: 48px;
+      border: 4px solid #e5e7eb;
+      border-top-color: #667eea;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .loading-text {
+      margin-top: 16px;
+      color: #6b7280;
+      font-size: 1rem;
+      font-weight: 500;
+    }
+
     .dashboard-container {
       min-height: 100vh;
       background-color: #f9fafb;
@@ -2374,7 +2416,7 @@ export class OverviewComponent implements OnInit {
         console.log('🎯 Using permission store ID:', currentPermission.storeId);
       } else if (stores.length > 0 && stores[0].id) {
         this.selectedStoreId.set(stores[0].id);
-        console.log('🎯 Using first store ID:', stores[0].id);
+        console.log('🎯 Using first store ID');
       }
     } catch (error) {
       console.error('❌ Error loading stores:', error);
@@ -2441,7 +2483,7 @@ export class OverviewComponent implements OnInit {
         }
 
         const monthTotal = (monthExpenses || []).reduce((s, e) => s + (Number((e as any).amount || 0) / 100), 0);
-        console.log('Overview: monthExpenses count=', (monthExpenses || []).length, 'monthTotal=', monthTotal);
+        console.log('Overview: monthExpenses loaded');
         // Start with expense service total (PHP units)
         this.monthExpensesTotal.set(monthTotal);
 
@@ -2489,7 +2531,7 @@ export class OverviewComponent implements OnInit {
         } catch (ledgerErr) {
           console.warn('Overview: failed to compute ledger yesterday expenses', ledgerErr);
         }
-        console.log('Overview: yesterdayExpenses count=', (yExpenses || []).length, 'yTotal=', yTotal);
+        console.log('Overview: yesterdayExpenses loaded');
         this.yesterdayExpensesTotal.set(yTotal);
       } catch (e) {
         console.warn('Overview: Failed to load expense aggregates', e);
@@ -2509,7 +2551,6 @@ export class OverviewComponent implements OnInit {
       if (this.orders().length > 0) {
         const totalRevenue = this.totalRevenue();
         console.log('💰 Dashboard total revenue:', totalRevenue);
-        console.log('📋 Dashboard sample order:', this.orders()[0]);
       }
 
       // Fetch ledger-driven totals from orderAccountingLedger for the selected period
@@ -2749,6 +2790,13 @@ export class OverviewComponent implements OnInit {
       // Use orderService's hybrid date-range loader (it prefers Firestore and falls back to API if configured)
       const orders = await this.orderService.getOrdersByDateRange(storeId, startDate || refDate, endDate || refDate);
 
+      // Early exit if no orders - skip normalization
+      if (!orders || orders.length === 0) {
+        this.orders.set([]);
+        console.log(`⚡ No orders found for store=${storeId}, skipping normalization`);
+        return;
+      }
+
       const normalized = (orders || []).map((o: any, idx: number) => ({
         ...o,
         id: o.id || `order-${idx}`,
@@ -2780,7 +2828,7 @@ export class OverviewComponent implements OnInit {
         return;
       }
 
-      console.log('📊 Loading analytics data for store:', storeId, { startDate, endDate, period: this.selectedPeriod() });
+      console.log('📊 Loading analytics data for store:', storeId);
 
       // Load orders (Firestore-first) and normalize
       await this.loadSalesFromCloudFunction(storeId, startDate, endDate, 'completed');
