@@ -136,7 +136,6 @@ export class DashboardComponent implements OnInit {
     if (!user) return;
 
     const currentPermission = this.authService.getCurrentPermission();
-    console.log('🔍 Dashboard: Current permission:', currentPermission);
     
     // Check if BOTH companyId AND storeId exist
     if (!currentPermission?.companyId || !currentPermission?.storeId) {
@@ -164,7 +163,6 @@ export class DashboardComponent implements OnInit {
       return;
     }
 
-    console.log('✅ Dashboard: Has both companyId and storeId, querying userRoles collection...');
     // Try to get roleId from userRoles collection
     const userRolesRef = collection(this.firestore, 'userRoles');
     const userRolesQuery = query(
@@ -211,8 +209,6 @@ export class DashboardComponent implements OnInit {
       this.accessService.setPermissions({}, 'creator');
       return;
     }
-
-    console.log('🔍 Dashboard: Detected roleId:', roleId);
 
     if (roleId === 'admin') {
       this.userRole.set('admin');
@@ -283,11 +279,6 @@ export class DashboardComponent implements OnInit {
       const currentPermission = this.authService.getCurrentPermission();
       if (currentPermission?.companyId) {
         // Load company-specific data with offline support
-        console.log('📊 Dashboard: Loading data...', { 
-          isOnline: this.isOnline(), 
-          companyId: currentPermission.companyId 
-        });
-        
         try {
           await this.storeService.loadStoresByCompany(currentPermission.companyId);
           this.stores.set(this.storeService.getStores().filter(store => store.status === 'active'));
@@ -298,8 +289,6 @@ export class DashboardComponent implements OnInit {
           if (initialStoreId) {
             this.storeSelectionService.setSelectedStore(initialStoreId);
           }
-          
-          console.log('✅ Dashboard: Stores loaded:', this.totalStores());
         } catch (storeError) {
           console.warn('⚠️ Dashboard: Failed to load stores (will use cached data):', storeError);
           // Still set the stores from service in case there's cached data
@@ -315,7 +304,6 @@ export class DashboardComponent implements OnInit {
           if (targetStoreId) {
             await this.productService.loadProducts(targetStoreId as string);
             this.totalProducts.set(this.productService.totalProducts());
-            console.log('✅ Dashboard: Products loaded:', this.totalProducts());
           } else {
             console.warn('⚠️ Dashboard: No storeId available to load products');
           }
@@ -324,12 +312,6 @@ export class DashboardComponent implements OnInit {
           // Still set the products count from service in case there's cached data
           this.totalProducts.set(this.productService.totalProducts());
         }
-        
-        console.log('📊 Dashboard: Data loading complete', {
-          stores: this.totalStores(),
-          products: this.totalProducts(),
-          isOnline: this.isOnline()
-        });
       }
     } catch (error) {
       console.error('❌ Dashboard: Error loading dashboard data:', error);

@@ -36,7 +36,6 @@ export class StoreService {
   // Public signals and computed values
   readonly stores = computed(() => {
     const currentStores = this.storesSignal();
-    console.log('📊 StoreService: current stores =', currentStores);
     // Log when stores change
     if (currentStores.length === 0 && this.loadTimestamp > 0) {
       console.warn('🚨 STORES SIGNAL IS EMPTY! Last loaded:', new Date(this.loadTimestamp).toLocaleTimeString());
@@ -535,7 +534,6 @@ export class StoreService {
       );
       
       const activeCount = allStores.filter(s => s.status === 'active').length;
-      console.log(`🏪 Active stores for dropdown: ${allStores.length} total, ${activeCount} active, ${accessibleStores.length} accessible`);
       
       return accessibleStores;
     } catch (error) {

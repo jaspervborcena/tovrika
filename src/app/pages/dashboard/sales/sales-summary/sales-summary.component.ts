@@ -1645,11 +1645,6 @@ export class SalesSummaryComponent implements OnInit {
     // Ensure default date range is ordered correctly and stay as last-7-days set in constructor
     this.ensureDateOrder();
     const today = new Date(this.toDate);
-    console.log('📅 Default date range set:', { 
-      from: this.fromDate, 
-      to: this.toDate,
-      formattedTo: this.formatDate(today)
-    });
     
     await this.loadStores();
     
@@ -1718,21 +1713,12 @@ export class SalesSummaryComponent implements OnInit {
   async loadCurrentDateData(): Promise<void> {
     // Ensure date order before loading
     this.ensureDateOrder();
-    console.log('🔄 Loading current date data via API (override - API only)');
-    console.log('📅 Date range:', { from: this.fromDate, to: this.toDate });
-    console.log('🏪 Selected store:', this.selectedStoreId());
     
     // Use Firestore for Sales Summary (orders are few) — query by updatedAt/createdAt range
     this.dataSource.set('firebase');
     
     // Check if we have any stores and data first
     const storeId = this.selectedStoreId() || this.authService.getCurrentPermission()?.storeId;
-    console.log('🔍 Debug - Store availability:', {
-      selectedStoreId: this.selectedStoreId(),
-      permissionStoreId: this.authService.getCurrentPermission()?.storeId,
-      finalStoreId: storeId,
-      allStores: this.stores().map(s => ({ id: s.id, name: s.storeName }))
-    });
     
     await this.loadSalesData();
   }
@@ -1808,12 +1794,6 @@ export class SalesSummaryComponent implements OnInit {
     try {
       // Use selected store ID or get from permission
       const storeId = this.selectedStoreId() || this.authService.getCurrentPermission()?.storeId;
-      console.log('🏪 Store ID resolution:', {
-        selectedStoreId: this.selectedStoreId(),
-        permissionStoreId: this.authService.getCurrentPermission()?.storeId,
-        finalStoreId: storeId,
-        allStores: this.stores().map(s => ({ id: s.id, name: s.storeName }))
-      });
       
       if (!storeId) {
         console.warn('❌ No storeId found - cannot load data');
@@ -1828,18 +1808,10 @@ export class SalesSummaryComponent implements OnInit {
       // Set end date to end of day
       endDate.setHours(23, 59, 59, 999);
 
-      console.log('Loading sales data for store:', storeId, 'from:', startDate, 'to:', endDate);
-      console.log('Data source:', this.dataSource() === 'api' ? 'External API (2+ days old)' : 'Firebase (Recent data)');
-
       // Use Firestore-only flow: query `orders` collection by `storeId` and `updatedAt` (fallback to createdAt)
-      console.log('📊 Using Firestore-only data loading (orders collection)');
       let orders: any[] = [];
       try {
         const results = await this.orderService.getOrdersFromFirestoreByRange(storeId, startDate, endDate);
-        console.log('📊 Firestore returned:', results?.length ?? 0, 'orders');
-        if (results && results.length > 0) {
-          console.log('📊 Sample first order:', results[0]);
-        }
         orders = results || [];
       } catch (e) {
         console.warn('Firestore sales query failed, setting orders to empty', e);
@@ -1848,10 +1820,8 @@ export class SalesSummaryComponent implements OnInit {
 
       // If no results from date-range query (likely missing composite index), fetch store orders and filter client-side
       if (!orders || orders.length === 0) {
-        console.log('📊 No results from date-range query - fetching all store orders for client-side filtering');
         try {
           const rawDocs = await this.orderService.getSampleOrdersForDebug(storeId, 500);
-          console.log('📊 Raw docs fetched:', rawDocs?.length ?? 0);
           if (rawDocs && rawDocs.length > 0) {
             // Transform raw docs to Order objects and filter by date range
             const allOrders = rawDocs.map((doc: any) => {
@@ -1932,21 +1902,14 @@ export class SalesSummaryComponent implements OnInit {
         console.warn('Failed to save orders snapshot to IndexedDB', saveErr);
       }
 
-      // Debug: Check what we got back
-      console.log('📊 Order Service returned:', orders.length, 'orders');
-
       // If service returned no orders, attempt IndexedDB snapshot fallback
       if (!orders || orders.length === 0) {
         try {
-          console.warn('⚠️ No orders from API - attempting IndexedDB snapshot fallback');
           const saved: any[] = await this.indexedDb.getSetting(`orders_snapshot_${storeId}`);
           if (saved && Array.isArray(saved) && saved.length > 0) {
-            console.log(`📦 Loaded ${saved.length} orders from IndexedDB snapshot for store ${storeId}`);
             orders = saved;
             // mark data source as offline fallback
             this.dataSource.set('api');
-          } else {
-            console.log('📦 No orders snapshot available in IndexedDB');
           }
         } catch (dbErr) {
           console.warn('📦 Failed to read orders snapshot from IndexedDB:', dbErr);
@@ -1954,9 +1917,8 @@ export class SalesSummaryComponent implements OnInit {
         // If still no orders, fetch a few sample docs for debugging (helps identify field names/storeId)
         try {
           const samples = await this.orderService.getSampleOrdersForDebug(storeId, 5);
-          console.warn('🔎 Sample orders for debug (raw):', samples);
         } catch (dbgErr) {
-          console.warn('🔎 Failed to fetch sample orders for debug', dbgErr);
+          console.warn('Failed to fetch sample orders for debug', dbgErr);
         }
       }
 
