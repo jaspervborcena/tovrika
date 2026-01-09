@@ -543,13 +543,6 @@ async updateOrderStatus(orderId: string, status: string, reason?: string): Promi
             const data: any = d.data() || {};
             const lineTotal = Number(data.total || data.lineTotal || (Number(data.price || 0) * Number(data.quantity || 0)) || 0);
             const itemQty = Number(data.quantity || 0);
-            console.log(`  📦 Tracking entry:`, { 
-              id: d.id, 
-              status: data.status, 
-              quantity: itemQty, 
-              lineTotal,
-              productName: data.productName 
-            });
             amount += lineTotal;
             qty += itemQty;
           }
@@ -1092,11 +1085,6 @@ public async restockOrderAndInventoryTransactional(orderId: string, performedBy 
         return [];
       }
 
-      console.log('🚀 Calling manage_item_status Cloud Function:', {
-        orderId,
-        storeId: currentStoreId
-      });
-
       // Use HttpClient so auth interceptor can automatically add Authorization header
       const data = await this.http.post<any>(`${environment.api.baseUrl}/manage_item_status`, {
         storeId: currentStoreId,
@@ -1106,7 +1094,6 @@ public async restockOrderAndInventoryTransactional(orderId: string, performedBy 
           'Content-Type': 'application/json'
         }
       }).toPromise();
-      console.log('📦 Cloud Function response data:', data);
       
       // The Cloud Function returns: { success: true, storeId, orderId, count, rows: [...] }
       // Each row contains: productName, SKU, quantity, discountType, discount, vat, isVatApplicable, isVatExempt, total, updatedAt, status
@@ -1223,9 +1210,6 @@ public async restockOrderAndInventoryTransactional(orderId: string, performedBy 
           { headers }
         ).toPromise();
 
-        // Log the raw API response for easier debugging in browser console
-        try { console.log('[OrderService] getOrdersFromApi response for', apiUrl, response); } catch (e) {}
-
   this.logger.info('API call success', { area: 'orders', payload: { apiUrl, responseSummary: response?.success ? 'success' : 'no-data' } });
 
         if (response?.success && response.orders) {
@@ -1327,9 +1311,6 @@ public async restockOrderAndInventoryTransactional(orderId: string, performedBy 
         // Auth interceptor automatically adds Authorization header
 
   const response = await this.http.get<any>(`${apiUrl}?${params.toString()}`, { headers }).toPromise();
-
-  // Console log for debugging of paged API responses
-  try { console.log('[OrderService] getOrdersPage response for', apiUrl, response); } catch (e) {}
 
   if (response?.success && response.orders) {
           const orders = response.orders.map((order: any) => this.transformApiOrder(order));

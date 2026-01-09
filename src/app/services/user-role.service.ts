@@ -276,12 +276,9 @@ export class UserRoleService {
 
   async deleteUserRole(userRoleId: string): Promise<void> {
     try {
-      console.log('🔍 [UserRoleService] Starting deletion for userRoleId:', userRoleId);
       
       const currentUser = await this.authService.waitForAuth();
       const currentPermission = this.authService.getCurrentPermission();
-      console.log('🔍 [UserRoleService] Current user:', currentUser?.email);
-      console.log('🔍 [UserRoleService] Current permission:', currentPermission);
       
       if (!currentUser || !currentPermission?.companyId) {
         throw new Error('No authenticated user or company ID found');
@@ -289,7 +286,6 @@ export class UserRoleService {
 
       // Verify the user role belongs to the current user's company
       const existingUserRole = this.getUserRole(userRoleId);
-      console.log('🔍 [UserRoleService] Found existing user role:', existingUserRole);
       
       if (!existingUserRole || existingUserRole.companyId !== currentPermission.companyId) {
         console.error('🔍 [UserRoleService] User role not found or access denied');
@@ -298,12 +294,9 @@ export class UserRoleService {
         throw new Error('User role not found or access denied');
       }
 
-      console.log('🔍 [UserRoleService] Proceeding with deletion...');
   const userRoleDocRef = doc(this.firestore, 'userRoles', userRoleId);
   await this.offlineDocService.deleteDocument('userRoles', userRoleId);
-      console.log('🔍 [UserRoleService] Document deleted successfully');
       await this.loadUserRoles(); // Refresh the data
-      console.log('🔍 [UserRoleService] Data reloaded');
     } catch (error) {
       console.error('Error deleting user role:', error);
       throw error;
@@ -313,25 +306,17 @@ export class UserRoleService {
   getUserRole(userRoleId: string): UserRole | undefined {
     const currentUser = this.authService.currentUser();
     const currentPermission = this.authService.getCurrentPermission();
-    console.log('🔍 [UserRoleService] getUserRole called with ID:', userRoleId);
-    console.log('🔍 [UserRoleService] Current user:', currentUser?.email);
-    console.log('🔍 [UserRoleService] Current permission:', currentPermission);
     
     if (!currentUser || !currentPermission?.companyId) {
-      console.log('🔍 [UserRoleService] No current user or companyId, returning undefined');
       return undefined;
     }
     
     const allUserRoles = this.userRolesSignal();
-    console.log('🔍 [UserRoleService] All user roles count:', allUserRoles.length);
-    console.log('🔍 [UserRoleService] Looking for userRoleId:', userRoleId, 'in companyId:', currentPermission.companyId);
     
     const foundRole = allUserRoles.find(userRole => {
-      console.log('🔍 [UserRoleService] Checking role:', userRole.id, 'companyId:', userRole.companyId);
       return userRole.id === userRoleId && userRole.companyId === currentPermission.companyId;
     });
     
-    console.log('🔍 [UserRoleService] Found role:', foundRole);
     return foundRole;
   }
 

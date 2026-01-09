@@ -97,8 +97,6 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
     
     if (stores.length === 0) {
       console.warn('⚠️ No stores available from role-based loading');
-    } else {
-      console.log('🏪 Mobile store details:', stores.map(s => ({ id: s.id, name: s.storeName, companyId: s.companyId })));
     }
     
     return stores;
@@ -382,7 +380,7 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
   async onManagerAuthConfirm(): Promise<void> {
     const userCode = (this.managerAuthUserCode() || '').toString();
     const pin = (this.managerAuthPin() || '').toString();
-    console.log('🔐 Mobile onManagerAuthConfirm: creds submitted (redacted)', { userCode: userCode ? 'present' : 'empty', pinProvided: !!pin });
+    console.log('🔐 Mobile onManagerAuthConfirm: creds submitted (redacted)');
 
     try {
       const isValid = await this.validateManagerCredentials(userCode, pin);
@@ -423,19 +421,47 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
         ? query(usersRef, where('email', '==', userCode))
         : query(usersRef, where('userCode', '==', userCode));
       const snap = await getDocs(q);
-      if (!snap || snap.empty) return false;
+      
+      if (!snap || snap.empty) {
+        console.log('❌ No user found with this code/email');
+        return false;
+      }
 
       const currentStore = this.selectedStoreId();
 
       for (const docSnap of snap.docs) {
         const data: any = docSnap.data();
-        if ((data.pin || '').toString() !== pin.toString()) continue;
+        
+        if ((data.pin || '').toString() !== pin.toString()) {
+          continue;
+        }
 
+        // Check if user has managerial role - bypass store check (check both 'role' and 'roleId' fields)
+        const userRole = (data.role || data.roleId || '').toLowerCase();
+        const managerialRoles = ['manager', 'admin', 'creator', 'owner', 'store_manager', 'store manager'];
+        if (managerialRoles.includes(userRole)) {
+          return true;
+        }
+
+        // Fallback: If no role but user has admin-like characteristics, allow authorization
+        if (!data.role || data.role === '') {
+          // Check if user has companyId (any company-level user can authorize)
+          if (data.companyId) {
+            return true;
+          }
+          // Check if user has access to multiple stores (likely an admin)
+          if (Array.isArray(data.permissions) && data.permissions.length > 1) {
+            return true;
+          }
+        }
+
+        // Otherwise must be authorized for the currently selected store
         if (data.storeId && currentStore && data.storeId === currentStore) return true;
         if (data.permission && data.permission.storeId && currentStore && data.permission.storeId === currentStore) return true;
         if (Array.isArray(data.permissions) && data.permissions.length > 0 && currentStore) {
-          const first = data.permissions[0];
-          if (first && first.storeId && first.storeId === currentStore) return true;
+          for (const perm of data.permissions) {
+            if (perm && perm.storeId && perm.storeId === currentStore) return true;
+          }
         }
 
         if (!currentStore) return true;
@@ -642,7 +668,7 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
   // Process individual item actions (return, damage, refund, cancel)
   async processItemAction(orderId: string, itemIndex: number, action: string, item: any): Promise<void> {
     try {
-      console.log(`Mobile Processing ${action} for item:`, { orderId, itemIndex, action, item });
+
       
       const confirmed = await this.showConfirmationDialog({
         title: `${action.charAt(0).toUpperCase() + action.slice(1)} Item`,
@@ -1315,7 +1341,7 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
         isActive: true
       };
 
-      console.log('💾 Mobile Saving customer data:', customerData);
+
       const savedCustomer = await this.customerService.saveCustomerFromPOS(
         {
           soldTo: customerName,
@@ -1325,7 +1351,6 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
         currentPermission.companyId,
         storeInfo.id
       );
-      console.log('✅ Mobile Customer saved:', savedCustomer);
       
       // Update the customerInfo with the saved customer ID for future reference
       if (savedCustomer) {
@@ -1405,7 +1430,6 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
     
     // Load user roles to get store access permissions
     const user = this.authService.getCurrentUser();
-    console.log('👤 User in loadData:', user ? { uid: user.uid } : 'null');
     
     if (user?.uid) {
       try {
@@ -1537,7 +1561,6 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
           return; // Success - exit early
         } else {
           console.warn('⚠️ Mobile IndexedDB store not found in available stores');
-          console.log('� Mobile Available stores:', availableStores.map(s => ({ id: s.id, name: s.storeName })));
         }
       }
       
@@ -1700,7 +1723,6 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
   // Event handlers
   async selectStore(storeId: string): Promise<void> {
     console.log('🎯 Mobile selectStore called with storeId:', storeId);
-    console.log('🏪 Mobile Available stores:', this.availableStores().map(s => ({ id: s.id, name: s.storeName, companyId: s.companyId })));
     
     // Set the selected store first - preserve cart to prevent disappearing
     await this.posService.setSelectedStore(storeId, { preserveCart: true });
@@ -1901,10 +1923,6 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
       // Use the new invoice service to get both order ID and invoice number
       const result = await this.posService.processOrderWithInvoice(customerData);
       if (result) {
-        console.log('Mobile Order processed with invoice:', {
-          orderId: result.orderId,
-          invoiceNumber: result.invoiceNumber
-        });
 
         // Update the invoice number with the new result
         this.invoiceNumber = result.invoiceNumber;

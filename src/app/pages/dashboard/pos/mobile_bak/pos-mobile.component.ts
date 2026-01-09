@@ -1753,10 +1753,7 @@ export class PosMobileBakComponent implements OnInit, AfterViewInit, OnDestroy {
       // Use the new invoice service to get both order ID and invoice number
       const result = await this.posService.processOrderWithInvoice(customerData);
       if (result) {
-        console.log('Mobile Order processed with invoice:', {
-          orderId: result.orderId,
-          invoiceNumber: result.invoiceNumber
-        });
+        console.log(`Mobile Order processed with invoice: ${result.orderId}, Invoice: ${result.invoiceNumber}`);
 
         // Update the invoice number with the new result
         this.invoiceNumber = result.invoiceNumber;

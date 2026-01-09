@@ -660,7 +660,7 @@ export class PosService {
         createdAt: new Date()
       };
 
-      console.log('📦 Complete orderData being sent to invoice service:', JSON.stringify(orderData, null, 2));
+      console.log('📦 Processing order with invoice service...');
       
       // 🧾 Execute invoice transaction with NEW structure
       // Only apply timeout when online - offline mode should work without timeout

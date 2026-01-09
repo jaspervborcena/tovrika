@@ -35,6 +35,12 @@ export interface Product {
    */
   isFavorite?: boolean;
   /**
+   * Flag to indicate if this product requires inventory tracking.
+   * Set to true for physical products, false for services or non-inventory items.
+   * Optional to keep backward compatibility; defaults to true when missing.
+   */
+  isInventory?: boolean;
+  /**
    * Deprecated: inventory is managed in productInventory collection.
    * Kept optional for backward compatibility during migration.
    */

@@ -69,14 +69,7 @@ export const roleGuard: CanActivateFn = async (route, state) => {
   const roleId = normalizeRole(roleIdRaw);
   const normalizedRequired = requiredRoles.map(normalizeRole);
 
-  console.log('🛡️ RoleGuard:', {
-    url: state.url,
-    requiredRoles,
-    normalizedRequired,
-    resolvedRole: roleIdRaw,
-    normalizedRole: roleId,
-    companyId: perm?.companyId
-  });
+
 
   // Admin has access to everything
   if (roleId === 'admin') {

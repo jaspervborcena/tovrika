@@ -126,19 +126,7 @@ export class LedgerService {
       throw error;
     }
 
-    console.log(
-      `✅ LedgerService: recorded ${eventType} for order ${orderId}:`,
-      {
-        amount,
-        qty,
-        runningBalanceAmount: newBalanceAmount,
-        runningBalanceQty: newBalanceQty,
-        runningBalanceOrderQty: newOrderBalanceQty,
-        docId: ref.id,
-        companyId,
-        storeId
-      }
-    );
+    console.log(`✅ LedgerService: recorded ${eventType} for order ${orderId}`);
 
     return {
       id: ref.id,
@@ -209,7 +197,6 @@ export class LedgerService {
         runningBalanceQty: totalQty,
         runningBalanceOrderQty: totalOrderQty
       };
-      console.log(`📊 LedgerService.getLatestOrderBalances result for ${eventType}:`, result);
       return result;
     } catch (err) {
       console.warn('LedgerService.getLatestOrderBalances fallback', err);

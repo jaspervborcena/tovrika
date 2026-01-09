@@ -282,13 +282,6 @@ export class PolicyAgreementComponent implements OnInit {
                                  currentPermission.roleId !== 'visitor';
                                  
       console.log('📍 Policy Agreement: hasValidPermissions:', hasValidPermissions);
-      console.log('📍 Policy Agreement: Permission details:', {
-        hasCurrentPermission: !!currentPermission,
-        companyId: currentPermission?.companyId,
-        roleId: currentPermission?.roleId,
-        isEmptyCompanyId: !currentPermission?.companyId || currentPermission.companyId.trim() === '',
-        isVisitorRole: currentPermission?.roleId === 'visitor'
-      });
       
       if (hasValidPermissions) {
         // Redirect based on role
