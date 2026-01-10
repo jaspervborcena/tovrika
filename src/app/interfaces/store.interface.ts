@@ -34,7 +34,17 @@ export interface Store {
   // UI state (optional) - for displaying nested data
   isExpanded?: boolean;
   branches?: any[]; // Import from branch.interface.ts when needed
+  charges?: Charge[];
 }
+export interface  Charge {
+  name: string,
+  type: "percentage",
+  value: 10,
+  isVatApplicable: true,
+  amount: 100,   // computed
+  vatAmount: 12  // computed if isVatApplicable
+}
+
 
 export interface BirDetails {
   birPermitNo: string;

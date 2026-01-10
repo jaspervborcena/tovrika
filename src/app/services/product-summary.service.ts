@@ -1,4 +1,4 @@
-import { Injectable, inject } from '@angular/core';
+import { Injectable, inject, Injector } from '@angular/core';
 import { 
   Firestore, 
   collection, 
@@ -24,6 +24,7 @@ import { Product } from '../interfaces/product.interface';
 export class ProductSummaryService {
   private firestore = inject(Firestore);
   private authService = inject(AuthService);
+  private injector = inject(Injector);
 
   /**
    * Recomputes product totalStock and sellingPrice based on current active batches
@@ -36,7 +37,7 @@ export class ProductSummaryService {
     productId: string,
     productRef?: DocumentReference,
     updatedBatches?: ProductInventoryEntry[]
-  ): Promise<{ totalStock: number; sellingPrice: number; originalPrice: number }> {
+  ): Promise<{ totalStock: number; sellingPrice: number; originalPrice: number; isStockTracked: boolean }> {
     const currentUser = this.authService.getCurrentUser();
     const permission = this.authService.getCurrentPermission();
     
@@ -137,23 +138,41 @@ export class ProductSummaryService {
 
     // Update product document with batch or transaction
     const productDocRef = productRef || doc(this.firestore, 'products', productId);
+    // Check if we're using Transaction or WriteBatch
+    const isTransaction = 'get' in batchOrTransaction;
+    
+    // Read current product data to check if stock tracking is enabled
+    let prodSnap: any;
+    if (isTransaction) {
+      prodSnap = await (batchOrTransaction as Transaction).get(productDocRef);
+    } else {
+      prodSnap = await getDoc(productDocRef);
+    }
+    
+    const currentProductData = prodSnap.exists() ? prodSnap.data() : null;
+    const isStockTracked = currentProductData?.isStockTracked ?? true; // Default to true for safety
+    
+    // Build payload - only update stock if isStockTracked is true
     const payload: any = {
-      totalStock,
-      sellingPrice,
-      originalPrice,
       hasDiscount,
       discountType,
       discountValue,
       lastUpdated: new Date(),
       updatedBy: currentUser.uid
     };
-
-    // Check if we're using Transaction or WriteBatch
-    const isTransaction = 'get' in batchOrTransaction;
+    
+    // Only overwrite stock and prices if product uses batch/stock tracking
+    if (isStockTracked) {
+      payload.totalStock = totalStock;
+      payload.sellingPrice = sellingPrice;
+      payload.originalPrice = originalPrice;
+      console.log('📊 Product isStockTracked=true, updating stock from batches:', { totalStock, sellingPrice, originalPrice });
+    } else {
+      console.log('🔒 Product isStockTracked=false, preserving manual stock values');
+    }
     
     if (isTransaction) {
       // Transaction path - can read before write
-      const prodSnap = await (batchOrTransaction as Transaction).get(productDocRef);
       if (prodSnap.exists()) {
         (batchOrTransaction as Transaction).update(productDocRef, payload);
       } else {
@@ -168,9 +187,7 @@ export class ProductSummaryService {
         });
       }
     } else {
-      // WriteBatch path - just update (or set if needed)
-      // Pre-check existence with getDoc for WriteBatch
-      const prodSnap = await getDoc(productDocRef);
+      // WriteBatch path - already read prodSnap above
       if (prodSnap.exists()) {
         (batchOrTransaction as WriteBatch).update(productDocRef, payload);
       } else {
@@ -186,13 +203,13 @@ export class ProductSummaryService {
       }
     }
 
-    return { totalStock, sellingPrice, originalPrice };
+    return { totalStock, sellingPrice, originalPrice, isStockTracked };
   }
 
   /**
    * Standalone method to recompute product summary (creates its own transaction)
    */
-  async recomputeProductSummary(productId: string): Promise<{ totalStock: number; sellingPrice: number; originalPrice: number }> {
+  async recomputeProductSummary(productId: string): Promise<{ totalStock: number; sellingPrice: number; originalPrice: number; isStockTracked: boolean }> {
     const batch = writeBatch(this.firestore);
     const result = await this.recomputeProductSummaryInTransaction(batch, productId);
     await batch.commit();
@@ -201,12 +218,17 @@ export class ProductSummaryService {
     try {
       const cb = (window as any).onProductSummaryUpdated;
       if (typeof cb === 'function') {
-        cb(productId, {
-          totalStock: result.totalStock,
-          sellingPrice: result.sellingPrice,
-          originalPrice: result.originalPrice,
-          lastUpdated: new Date()
-        });
+        const updates: any = { lastUpdated: new Date() };
+        // Only include stock and prices if product uses batch tracking
+        if (result.isStockTracked) {
+          updates.totalStock = result.totalStock;
+          updates.sellingPrice = result.sellingPrice;
+          updates.originalPrice = result.originalPrice;
+          console.log('📊 Notifying cache update with stock tracking values:', updates);
+        } else {
+          console.log('🔒 Notifying cache update WITHOUT stock values (manual stock product)');
+        }
+        cb(productId, updates);
       }
     } catch (e) {
       // Non-fatal: if the callback isn't present or errors, we still return the recompute result.
@@ -222,11 +244,11 @@ export class ProductSummaryService {
   async recomputeMultipleProductSummaries(productIds: string[]): Promise<void> {
     if (productIds.length === 0) return;
 
-    const results: Array<{ productId: string; totalStock: number; sellingPrice: number; originalPrice: number }> = [];
+    const results: Array<{ productId: string; totalStock: number; sellingPrice: number; originalPrice: number; isStockTracked: boolean }> = [];
     const batch = writeBatch(this.firestore);
     for (const productId of productIds) {
       const res = await this.recomputeProductSummaryInTransaction(batch, productId);
-      results.push({ productId, totalStock: res.totalStock, sellingPrice: res.sellingPrice, originalPrice: res.originalPrice });
+      results.push({ productId, totalStock: res.totalStock, sellingPrice: res.sellingPrice, originalPrice: res.originalPrice, isStockTracked: res.isStockTracked });
     }
     await batch.commit();
 
@@ -236,7 +258,14 @@ export class ProductSummaryService {
       if (typeof cb === 'function') {
         for (const r of results) {
           try {
-            cb(r.productId, { totalStock: r.totalStock, sellingPrice: r.sellingPrice, originalPrice: r.originalPrice, lastUpdated: new Date() });
+            const updates: any = { lastUpdated: new Date() };
+            // Only include stock and prices if product uses batch tracking
+            if (r.isStockTracked) {
+              updates.totalStock = r.totalStock;
+              updates.sellingPrice = r.sellingPrice;
+              updates.originalPrice = r.originalPrice;
+            }
+            cb(r.productId, updates);
           } catch (e) { /* ignore per-product notification errors */ }
         }
       }
