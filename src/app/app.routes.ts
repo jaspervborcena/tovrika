@@ -88,19 +88,11 @@ export const routes: Routes = [
         attempts++;
       }
       
-      console.log('🔐 Login Guard: Auth state loaded after', attempts * 100, 'ms');
-      
       // If user is already authenticated with remember me, redirect them
       if (authService.isAuthenticated()) {
         const currentUser = authService.getCurrentUser();
         const currentPermission = authService.getCurrentPermission();
         const rememberMe = localStorage.getItem('rememberMe') === 'true';
-        
-        console.log('🔐 Login Guard: Already authenticated', {
-          email: currentUser?.email,
-          rememberMe,
-          hasAgreedToPolicy: currentUser?.isAgreedToPolicy
-        });
         
         if (rememberMe) {
           const isVisitor = !currentPermission || 

@@ -20,7 +20,6 @@ export class StoreSelectionService {
    * This will trigger updates in all components that subscribe to selectedStoreId
    */
   setSelectedStore(storeId: string): void {
-    console.log('🏪 Global store selection changed to:', storeId);
     this._selectedStoreId.set(storeId);
   }
   

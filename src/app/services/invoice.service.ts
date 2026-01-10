@@ -346,12 +346,6 @@ export class InvoiceService {
       // Works both online and offline - no Firestore dependency
       const previewInvoice = this.storeService.generateRandomInvoiceNo();
       
-      console.log('📋 Invoice number preview (random):', {
-        preview: previewInvoice,
-        mode: this.networkService.isOnline() ? 'online' : 'offline',
-        note: 'Actual invoice will be generated during order creation'
-      });
-      
       return previewInvoice;
     } catch (error) {
       console.error('❌ Error generating invoice preview:', error);

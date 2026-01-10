@@ -8,6 +8,7 @@ import {
   getDocs,
   doc,
   setDoc,
+  updateDoc,
   Firestore
 } from '@angular/fire/firestore';
 
@@ -21,8 +22,9 @@ export class LedgerService {
 
   /**
    * Record an accounting ledger event for an order.
-   * Creates a new document in `orderAccountingLedger` with running balances
-   * computed from the latest ledger entry for the same company/store for today.
+   * Creates ONE document per day per eventType that gets updated throughout the day.
+   * First transaction: creates document with createdAt/createdBy = updatedAt/updatedBy
+   * Subsequent transactions: updates document with new updatedAt/updatedBy
    */
   async recordEvent(
   companyId: string,
@@ -34,66 +36,78 @@ export class LedgerService {
   performedBy: string
 ): Promise<any> {
   try {
+    console.log('🎯 LedgerService.recordEvent called:', { 
+      companyId, 
+      storeId, 
+      orderId, 
+      eventType, 
+      amount, 
+      qty, 
+      performedBy 
+    });
+    
     // Get start of today to reset balances daily
     const now = new Date();
     const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
     const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
     
-    // Check if an entry already exists for this orderId + eventType today
+    // Check if a document already exists for this day's eventType
     const existingQ = query(
       collection(this.firestore, 'orderAccountingLedger'),
       where('companyId', '==', companyId),
       where('storeId', '==', storeId),
-      where('orderId', '==', orderId),
       where('eventType', '==', eventType),
       where('createdAt', '>=', startOfToday),
-      where('createdAt', '<=', endOfToday)
+      where('createdAt', '<=', endOfToday),
+      limit(1)
     );
 
     const existingSnaps = await getDocs(existingQ);
     
     if (!existingSnaps.empty) {
-      console.log(`⚠️ LedgerService: Entry already exists for orderId=${orderId}, eventType=${eventType} today. Skipping duplicate.`);
-      const existing = existingSnaps.docs[0].data() as any;
+      // Document exists for today - UPDATE it
+      const existingDoc = existingSnaps.docs[0];
+      const existing = existingDoc.data() as any;
+      
+      // Add new values to existing balances
+      const newBalanceAmount = Number(existing.runningBalanceAmount || 0) + amount;
+      const newBalanceQty = Number(existing.runningBalanceQty || 0) + qty;
+      const newOrderBalanceQty = Number(existing.runningBalanceOrderQty || 0) + 
+        (eventType === 'completed' ? qty : 0);
+      
+      const updateData = {
+        orderId, // Update to latest order ID
+        amount: Number(existing.amount || 0) + amount,
+        quantity: Number(existing.quantity || 0) + qty,
+        runningBalanceAmount: newBalanceAmount,
+        runningBalanceQty: newBalanceQty,
+        runningBalanceOrderQty: newOrderBalanceQty,
+        updatedAt: new Date(),
+        updatedBy: performedBy
+      };
+      
+      try {
+        await updateDoc(existingDoc.ref, updateData);
+      } catch (error) {
+        console.warn('⚠️ Failed to update ledger entry online:', error);
+        throw error;
+      }
+      
+      console.log(`✅ LedgerService: updated ${eventType} for order ${orderId}`);
+      
       return {
-        id: existingSnaps.docs[0].id,
-        runningBalanceAmount: existing.runningBalanceAmount,
-        runningBalanceQty: existing.runningBalanceQty,
-        runningBalanceOrderQty: existing.runningBalanceOrderQty,
-        duplicate: true
+        id: existingDoc.id,
+        runningBalanceAmount: newBalanceAmount,
+        runningBalanceQty: newBalanceQty,
+        runningBalanceOrderQty: newOrderBalanceQty,
+        updated: true
       };
     }
 
-    // Query latest ledger entry for this company/store/eventType from TODAY only
-    const q = query(
-      collection(this.firestore, 'orderAccountingLedger'),
-      where('companyId', '==', companyId),
-      where('storeId', '==', storeId),
-      where('eventType', '==', eventType),
-      where('createdAt', '>=', startOfToday),
-      orderBy('createdAt', 'desc'),
-      limit(1)
-    );
-
-    let latestBalanceAmount = 0;
-    let latestBalanceQty = 0;
-    let latestOrderBalanceQty = 0;
-
-    const snaps = await getDocs(q);
-    if (!snaps.empty) {
-      const latest = snaps.docs[0].data() as any;
-      latestBalanceAmount = Number(latest.runningBalanceAmount || 0);
-      latestBalanceQty = Number(latest.runningBalanceQty || 0);
-      latestOrderBalanceQty = Number(latest.runningBalanceOrderQty || 0);
-    }
-
-    // Always add new values to balances
-    const newBalanceAmount = latestBalanceAmount + amount;
-    const newBalanceQty = latestBalanceQty + qty;
-
-    // Only add to order-specific balance if eventType is 'completed'
-    const newOrderBalanceQty =
-      latestOrderBalanceQty + (eventType === 'completed' ? qty : 0);
+    // No document exists for today - CREATE new one
+    const newBalanceAmount = amount;
+    const newBalanceQty = qty;
+    const newOrderBalanceQty = eventType === 'completed' ? qty : 0;
 
     const newDoc = {
       companyId,
@@ -106,7 +120,9 @@ export class LedgerService {
       runningBalanceQty: newBalanceQty,
       runningBalanceOrderQty: newOrderBalanceQty,
       createdAt: new Date(),
-      createdBy: performedBy
+      createdBy: performedBy,
+      updatedAt: new Date(),
+      updatedBy: performedBy
     };
 
     const ref = doc(collection(this.firestore, 'orderAccountingLedger'));
@@ -114,25 +130,18 @@ export class LedgerService {
     try {
       await setDoc(ref, newDoc);
     } catch (error) {
-      console.warn('⚠️ Failed to record ledger entry online, trying offline mode:', error);
-      
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      const isNetworkError = errorMessage.includes('timeout') || 
-                            errorMessage.includes('network') || 
-                            errorMessage.includes('connection') ||
-                            !navigator.onLine;
-      
-      // Firestore's native offline persistence handles this automatically
+      console.warn('⚠️ Failed to create ledger entry online:', error);
       throw error;
     }
 
-    console.log(`✅ LedgerService: recorded ${eventType} for order ${orderId}`);
+    console.log(`✅ LedgerService: created ${eventType} for order ${orderId}`);
 
     return {
       id: ref.id,
       runningBalanceAmount: newBalanceAmount,
       runningBalanceQty: newBalanceQty,
-      runningBalanceOrderQty: newOrderBalanceQty
+      runningBalanceOrderQty: newOrderBalanceQty,
+      created: true
     };
   } catch (err) {
     console.error('LedgerService.recordEvent error', err);
@@ -151,11 +160,8 @@ export class LedgerService {
     eventType: 'completed' | 'returned' | 'refunded' | 'cancelled' | 'damaged' = 'completed'
   ): Promise<{ runningBalanceAmount: number; runningBalanceQty: number; runningBalanceOrderQty: number }> {
     try {
-      console.log(`📊 LedgerService.getLatestOrderBalances called:`, { companyId, storeId, date: date.toISOString(), eventType });
       const startOfDay = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0, 0);
       const endOfDay = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59, 999);
-      
-      console.log(`📊 Querying entries FROM ${startOfDay.toISOString()} TO ${endOfDay.toISOString()}`);
       
       // Query for ALL ledger entries within the specified day
       const q = query(
@@ -169,7 +175,6 @@ export class LedgerService {
       );
       
       const snaps = await getDocs(q);
-      console.log(`📊 Found ${snaps.docs.length} ledger entries for ${eventType} on ${date.toDateString()}`);
       
       // Sum up all entries for the day
       let totalAmount = 0;

@@ -1890,7 +1890,6 @@ export class OverviewComponent implements OnInit {
     try {
       const companyId = this.authService.getCurrentPermission()?.companyId || '';
       const storeId = this.selectedStoreId() || this.authService.getCurrentPermission()?.storeId;
-      console.log('🔍 fetchTodayAnalytics - companyId:', companyId, 'storeId:', storeId);
       if (!companyId || !storeId) {
         //console.log('🔍 fetchTodayAnalytics - returning early, missing companyId or storeId');
         return;
@@ -1901,7 +1900,6 @@ export class OverviewComponent implements OnInit {
 
       // Fetch completed orders for today
       const ledger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, today, 'completed');
-      console.log('💰 fetchTodayAnalytics - ledger response:', ledger);
       if (ledger) {
         this.ledgerTotalRevenue.set(Math.max(0, Number(ledger.runningBalanceAmount || 0)));
         this.ledgerTotalOrders.set(Math.max(0, Number(ledger.runningBalanceOrderQty || ledger.runningBalanceQty || 0)));
@@ -2322,7 +2320,6 @@ export class OverviewComponent implements OnInit {
   // Compute start/end dates for selected period and call analytics loader
   protected applyPeriodAndLoad() {
     const period = this.selectedPeriod();
-    console.log('⚡ applyPeriodAndLoad called with period:', period, 'at', new Date().toISOString());
     
     // Note: Signal reset moved to loadAnalyticsData to prevent race conditions
     // where duplicate calls reset data while loading is in progress
@@ -2398,7 +2395,6 @@ export class OverviewComponent implements OnInit {
   async loadStores(): Promise<void> {
     try {
       const currentPermission = this.authService.getCurrentPermission();
-      console.log('🔐 Dashboard permission:', currentPermission);
       
       if (!currentPermission?.companyId) {
         console.warn('⚠️ No companyId found in current permission');
@@ -2408,12 +2404,10 @@ export class OverviewComponent implements OnInit {
       // Use centralized method - filters by active status and userRoles access
       const stores = await this.storeService.getActiveStoresForDropdown(currentPermission.companyId);
       this.stores.set(stores);
-      console.log('🏪 Dashboard stores loaded:', stores?.length || 0);
 
       // Set selected store - EXACT same logic as sales-summary
       if (currentPermission?.storeId) {
         this.selectedStoreId.set(currentPermission.storeId);
-        console.log('🎯 Using permission store ID:', currentPermission.storeId);
       } else if (stores.length > 0 && stores[0].id) {
         this.selectedStoreId.set(stores[0].id);
         console.log('🎯 Using first store ID');
@@ -2545,7 +2539,6 @@ export class OverviewComponent implements OnInit {
           console.warn('Overview: failed to refresh top products during analytics load', tpErr);
           this.topProductsList.set([]);
         }
-        console.log('📈 Analytics data loaded:', this.orders().length);
 
       console.log('📊 Dashboard sales data loaded from Cloud Function:', this.orders().length, 'orders');
       if (this.orders().length > 0) {
@@ -2793,7 +2786,6 @@ export class OverviewComponent implements OnInit {
       // Early exit if no orders - skip normalization
       if (!orders || orders.length === 0) {
         this.orders.set([]);
-        console.log(`⚡ No orders found for store=${storeId}, skipping normalization`);
         return;
       }
 
@@ -2827,8 +2819,6 @@ export class OverviewComponent implements OnInit {
         this.analyticsLoadInProgress = false;
         return;
       }
-
-      console.log('📊 Loading analytics data for store:', storeId);
 
       // Load orders (Firestore-first) and normalize
       await this.loadSalesFromCloudFunction(storeId, startDate, endDate, 'completed');
@@ -2882,8 +2872,6 @@ export class OverviewComponent implements OnInit {
         this.topProductsList.set([]);
       }
 
-      console.log('📈 Analytics data loaded:', this.orders().length, 'orders');
-
     } catch (error) {
       console.error('❌ Error loading analytics data:', error);
     } finally {
@@ -2918,8 +2906,6 @@ export class OverviewComponent implements OnInit {
         return;
       }
 
-      console.log(`🔍 Querying daily ledger balances from ${startDate.toISOString()} to ${endDate.toISOString()}`);
-
       // Query all ledger entries within the date range
       const q = query(
         collection(this.firestore, 'orderAccountingLedger'),
@@ -2933,7 +2919,6 @@ export class OverviewComponent implements OnInit {
       );
 
       const snaps = await getDocs(q);
-      console.log(`📊 Found ${snaps.docs.length} ledger entries`);
 
       // Group by day and get the latest (first in desc order) entry for each day
       const dailyBalances = new Map<string, { amount: number; orders: number }>();
@@ -2965,8 +2950,6 @@ export class OverviewComponent implements OnInit {
 
       this.ledgerTotalRevenue.set(totalAmount);
       this.ledgerTotalOrders.set(totalOrders);
-
-      console.log(`📈 Total for ${dailyBalances.size} days: Revenue=₱${totalAmount}, Orders=${totalOrders}`);
     } catch (err) {
       console.error('fetchLedgerTotalsForPeriod error:', err);
       this.ledgerTotalRevenue.set(0);
@@ -2990,14 +2973,12 @@ export class OverviewComponent implements OnInit {
       }
 
       const top = await this.ordersSellingTrackingService.getTopProductsCompletedCounts(companyId, resolvedStoreId, 10);
-      console.log('Overview.fetchTopProducts: raw', top?.length || 0);
       const mapped = (top || []).slice(0, 10).map((p: any) => ({
         avatar: (p.productName || '').split(' ').map((s: string) => s.charAt(0)).slice(0,2).join('').toUpperCase() || 'P',
         name: p.productName || 'Product',
         code: p.skuId || '',
         count: Number(p.completedCount || 0)
       }));
-      console.log('Overview.fetchTopProducts: mapped', mapped);
       this.topProductsList.set(mapped);
     } catch (err) {
       console.warn('fetchTopProducts error', err);

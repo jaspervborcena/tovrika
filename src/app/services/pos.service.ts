@@ -343,7 +343,6 @@ export class PosService {
         if (existingUserData) {
           existingUserData.currentStoreId = storeId;
           await this.indexedDBService.saveUserData(existingUserData);
-          console.log('💾 Store selection saved to IndexedDB:', storeId);
         }
       }
     } catch (error) {
@@ -366,7 +365,6 @@ export class PosService {
         const offlineUserData = await this.indexedDBService.getUserData(currentUser.uid);
         if (offlineUserData?.currentStoreId) {
           this.selectedStoreIdSignal.set(offlineUserData.currentStoreId);
-          console.log('💾 Restored store selection from IndexedDB:', offlineUserData.currentStoreId);
         }
       }
     } catch (error) {
@@ -1117,16 +1115,12 @@ export class PosService {
 
   async loadProductTags(storeId: string): Promise<void> {
     try {
-      console.log('🏷️ Loading product tags for store:', storeId);
       const tags = await this.tagsService.getTagsByStore(storeId, false);
-      console.log('🏷️ Loaded tags:', tags.length);
       const tagsMap = new Map<string, string>();
       tags.forEach(tag => {
         tagsMap.set(tag.tagId, tag.label);
-        console.log('🏷️ Tag mapping:', tag.tagId, '->', tag.label);
       });
       this.productTagsCache.set(tagsMap);
-      console.log('🏷️ Tags cache updated. Total tags:', tagsMap.size);
     } catch (error) {
       console.error('❌ Error loading product tags:', error);
     }

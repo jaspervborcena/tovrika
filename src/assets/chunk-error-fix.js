@@ -2,8 +2,6 @@
 (function() {
   'use strict';
   
-  console.log('🛡️ Aggressive chunk error protection loading...');
-  
   let hasReloaded = false;
   let reloadTimeout = null;
   
@@ -98,6 +96,4 @@
       throw error;
     }
   };
-  
-  console.log('✅ Aggressive chunk error protection active');
 })();
