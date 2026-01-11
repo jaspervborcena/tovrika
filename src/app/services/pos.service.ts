@@ -1164,9 +1164,35 @@ export class PosService {
     cartItems: CartItem[],
     context?: { orderId?: string; invoiceNumber?: string }
   ): Promise<void> {
+    // Filter out items that don't have stock tracking enabled
+    const trackedItems = [];
+    for (const item of cartItems) {
+      try {
+        const productDoc = await getDoc(doc(this.firestore, 'products', item.productId) as any);
+        if (productDoc.exists()) {
+          const productData = productDoc.data() as any;
+          if (productData.isStockTracked !== false) {
+            trackedItems.push(item);
+          } else {
+            console.log(`⏭️ Skipping inventory deduction for ${item.productName} (isStockTracked=false)`);
+          }
+        } else {
+          trackedItems.push(item); // If product not found, process anyway (backward compatibility)
+        }
+      } catch (err) {
+        console.warn(`⚠️ Error checking isStockTracked for ${item.productName}, including in deduction:`, err);
+        trackedItems.push(item);
+      }
+    }
+
+    if (trackedItems.length === 0) {
+      console.log('⏭️ No tracked items to process inventory for');
+      return;
+    }
+
     const mode = environment.inventory?.reconciliationMode || 'legacy';
     if (mode === 'recon') {
-      console.log('� Tracking sale for reconciliation mode (no client-side FIFO). Items:', cartItems.length);
+      console.log('📊 Tracking sale for reconciliation mode (no client-side FIFO). Items:', trackedItems.length);
       const user = this.authService.getCurrentUser();
       const company = await this.companyService.getActiveCompany();
       const storeId = this.selectedStoreId();
@@ -1175,7 +1201,7 @@ export class PosService {
         throw new Error('Missing user/company/store for tracking');
       }
 
-      const items = cartItems.map(ci => ({
+      const items = trackedItems.map(ci => ({
         productId: ci.productId,
         productName: ci.productName,
         quantity: ci.quantity,
@@ -1200,10 +1226,10 @@ export class PosService {
     }
 
     // Legacy: client-side FIFO deduction
-    console.log('🔄 Starting FIFO inventory deduction for cart items:', cartItems.length);
+    console.log('🔄 Starting FIFO inventory deduction for cart items:', trackedItems.length);
     const { InventoryDataService } = await import('./inventory-data.service');
     const inventoryService = this.injector.get(InventoryDataService);
-    for (const cartItem of cartItems) {
+    for (const cartItem of trackedItems) {
       try {
         await this.deductInventoryFifo(cartItem.productId, cartItem.quantity, inventoryService);
         console.log(`✅ Inventory deducted for ${cartItem.productName}: ${cartItem.quantity} units`);
