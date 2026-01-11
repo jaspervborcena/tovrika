@@ -26,6 +26,8 @@ export interface InvoiceTransactionData {
   orderData: any; // The complete order data to be saved
   customerInfo?: any;
   paymentsData?: any; // Payment information
+  saveAsOpen?: boolean; // If true, save with OPEN status and skip tracking/inventory/ledger
+  tableNumber?: string; // Table number (stored at order root level)
 }
 
 export interface InvoiceResult {
@@ -102,9 +104,13 @@ export class InvoiceService {
    * Now includes duplicate prevention check
    */
   async processInvoiceTransaction(transactionData: InvoiceTransactionData): Promise<InvoiceResult> {
-    const { storeId, orderData, customerInfo, paymentsData } = transactionData;
+    const { storeId, orderData, customerInfo, paymentsData, saveAsOpen, tableNumber } = transactionData;
     
-    console.log('🧾 Starting invoice transaction for store:', storeId);
+    console.log('🧯 Starting invoice transaction for store:', storeId);
+    console.log('📋 Table number received in invoice service:', tableNumber);
+    if (saveAsOpen) {
+      console.log('💼 OPEN order mode: Will save to orders/orderDetails only');
+    }
     
     // Check if we're offline first - no need to try online operations
     if (!this.networkService.isOnline()) {
@@ -192,8 +198,8 @@ export class InvoiceService {
             storeId: storeId,
             batchNumber: batch.batchNumber,
             items: batch.items,
-            // Ensure orderDetails created for a completed order are marked as COMPLETED
-            status: OrderDetailsStatus.COMPLETED
+            // If saveAsOpen, set status to OPEN, otherwise COMPLETED
+            status: saveAsOpen ? 'OPEN' : OrderDetailsStatus.COMPLETED
           });
 
           orderDetailsBatchDocs.push({ ref: orderDetailsDocRef as DocumentReference, data: orderDetailsWithSecurity });
@@ -215,15 +221,15 @@ export class InvoiceService {
         invoiceNumber: nextInvoiceNoOutside,
         storeId: storeId,
         companyTaxId: storeTaxId,
-        status: 'completed',
+        status: saveAsOpen ? 'OPEN' : 'completed',
         createdBy: currentUserId,
         // Initialize status tracking
         statusHistory: [{
-          status: 'completed',
+          status: saveAsOpen ? 'OPEN' : 'completed',
           changedAt: now,
           changedBy: currentUserId
         }],
-        statusTags: ['completed']
+        statusTags: [saveAsOpen ? 'OPEN' : 'completed']
       });
 
       const completeOrderDataPre = {
@@ -249,7 +255,8 @@ export class InvoiceService {
           changeAmount: 0,
           paymentDescription: 'Cash Payment',
           paymentType: 'Cash'
-        }
+        },
+        tableNumber: tableNumber || '' // Add table number at root level
       };
 
       console.log('🔥 Main order structure prepared (pre-transaction) for orderId:', orderDocRef.id);
@@ -457,7 +464,7 @@ export class InvoiceService {
    * Uses offline document service to queue the order for later sync
    */
   private async processOfflineInvoiceTransaction(transactionData: InvoiceTransactionData): Promise<InvoiceResult> {
-    const { storeId, orderData, customerInfo, paymentsData } = transactionData;
+    const { storeId, orderData, customerInfo, paymentsData, tableNumber } = transactionData;
     
     try {
       // Generate random invoice number for offline mode
@@ -484,16 +491,16 @@ export class InvoiceService {
         ...orderData,
         invoiceNumber: nextInvoiceNo,
         storeId: storeId,
-        status: 'completed',
+        status: transactionData.saveAsOpen ? 'OPEN' : 'completed',
         createdBy: currentUserId,
         createdAt: now,
         updatedAt: now,
         statusHistory: [{
-          status: 'completed',
+          status: transactionData.saveAsOpen ? 'OPEN' : 'completed',
           changedAt: now,
           changedBy: currentUserId
         }],
-        statusTags: ['completed'],
+        statusTags: [transactionData.saveAsOpen ? 'OPEN' : 'completed'],
         customerInfo: customerInfo ? {
           customerId: customerInfo.customerId || '',
           fullName: customerInfo.fullName || 'Walk-in Customer',
@@ -516,6 +523,7 @@ export class InvoiceService {
           paymentDescription: 'Cash Payment',
           paymentType: 'Cash'
         },
+        tableNumber: tableNumber || '', // Add table number at root level
         _offlineId: tempOrderId,
         _offlineCreated: true
       };
@@ -546,7 +554,7 @@ export class InvoiceService {
             storeId: storeId,
             batchNumber: batch.batchNumber,
             items: batch.items,
-            status: OrderDetailsStatus.COMPLETED,
+            status: transactionData.saveAsOpen ? 'OPEN' : OrderDetailsStatus.COMPLETED,
             createdBy: currentUserId,
             createdAt: now,
             updatedAt: now,

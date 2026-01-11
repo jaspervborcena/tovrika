@@ -41,6 +41,9 @@ export interface Order {
   logoUrl?: string;
   date?: Date;
   
+  // Table Information
+  tableNumber?: string;
+  
   // Company Information
   companyName?: string;
   companyAddress?: string;
