@@ -1004,7 +1004,7 @@
       font-size: 0.75rem; /* Reduced for mobile */
       min-width: auto;
       border: none;
-      border-bottom: 2px solid transparent;
+      border-bottom: 3px solid transparent;
       background: transparent;
       border-radius: 0;
       cursor: pointer;
@@ -1112,23 +1112,38 @@
   .tab-header {
     padding: 0.5rem 0.75rem !important;
     min-width: 80px !important;
-    font-size: 0.7rem !important;
+    font-size: 0.65rem !important;
   }
 
   .tab-label.small-text {
-    font-size: 0.65rem !important;
+    font-size: 0.6rem !important;
   }
 }
+    .tab-header[data-tab="New"] {
+      background: #10b981 !important; /* Green */
+      color: #ffffff !important;
+      border-bottom-color: #10b981 !important;
+    }
+
     .tab-header[data-tab="Orders"] {
       background: #06b6d4 !important; /* Cyan */
       color: #ffffff !important;
       border-bottom-color: #06b6d4 !important;
     }
 
+    .tab-header[data-tab="Open"] {
+      background: #eab308 !important; /* Yellow - Pending/Unpaid */
+      color: #ffffff !important;
+      border-bottom-color: #eab308 !important;
+    }
+
     .tab-header[data-tab="Cancelled"] {
       background: #ef4444 !important; /* Red */
       color: #ffffff !important;
       border-bottom-color: #ef4444 !important;
+      min-height: 48px !important;
+      display: inline-flex !important;
+      align-items: center !important;
     }
 
     .tab-header[data-tab="Returns"] {
@@ -1172,6 +1187,12 @@
       background: #0891b2 !important;
       border-bottom-color: #0891b2 !important;
       box-shadow: 0 2px 4px rgba(6, 182, 212, 0.3) !important;
+    }
+
+    .tab-header[data-tab="Open"].active {
+      background: #ca8a04 !important;
+      border-bottom-color: #ca8a04 !important;
+      box-shadow: 0 2px 4px rgba(234, 179, 8, 0.3) !important;
     }
 
     .tab-header[data-tab="Cancelled"].active {
@@ -3108,6 +3129,39 @@
   background: #f9fafb;
   color: #6b7280;
   cursor: not-allowed;
+}
+
+.payment-table {
+  margin-bottom: 1.5rem;
+}
+
+.payment-table label {
+  display: block;
+  font-weight: 500;
+  color: #374151;
+  margin-bottom: 0.5rem;
+  font-size: 0.9rem;
+}
+
+.payment-input {
+  width: 100%;
+  padding: 0.75rem;
+  border: 2px solid #e5e7eb;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  font-family: inherit;
+  background-color: white;
+  transition: all 0.2s ease;
+}
+
+.payment-input:hover {
+  border-color: #d1d5db;
+}
+
+.payment-input:focus {
+  outline: none;
+  border-color: #4f46e5;
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
 }
 
 .payment-type {

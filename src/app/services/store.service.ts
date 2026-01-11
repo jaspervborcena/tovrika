@@ -563,10 +563,10 @@ export class StoreService {
     const yy = String(now.getFullYear()).slice(-2);
     const mm = String(now.getMonth() + 1).padStart(2, '0');
     
-    // Use timestamp (last 5 digits) + 4 random chars for better uniqueness
+    // Use timestamp (last 5 digits) + 4 random digits for better uniqueness
     // This prevents collisions when creating multiple orders quickly
     const timestamp = String(Date.now()).slice(-5); // Last 5 digits of timestamp
-    const random = Math.random().toString(36).substring(2, 6).toUpperCase(); // 4 random chars
+    const random = String(Math.floor(Math.random() * 10000)).padStart(4, '0'); // 4 random digits
     
     return `INV-${yy}${mm}-${timestamp}${random}`;
   }

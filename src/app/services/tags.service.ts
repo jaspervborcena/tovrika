@@ -85,34 +85,82 @@ export class TagsService {
   }
 
   async getTagsByStore(storeId: string, includeInactive: boolean = false): Promise<ProductTag[]> {
-    let q;
-    
-    if (includeInactive) {
-      // Get all tags regardless of active status
-      q = query(
-        collection(this.firestore, 'productTags'),
-        where('storeId', '==', storeId),
-        orderBy('group'),
-        orderBy('createdAt', 'asc')
-      );
-    } else {
-      // Get only active tags
-      q = query(
-        collection(this.firestore, 'productTags'),
-        where('storeId', '==', storeId),
-        where('isActive', '==', true),
-        orderBy('group'),
-        orderBy('createdAt', 'asc')
-      );
-    }
+    try {
+      console.log('🏷️ TagsService.getTagsByStore called with:', { storeId, includeInactive });
+      
+      let q;
+      
+      if (includeInactive) {
+        // Get all tags regardless of active status
+        q = query(
+          collection(this.firestore, 'productTags'),
+          where('storeId', '==', storeId),
+          orderBy('group'),
+          orderBy('createdAt', 'asc')
+        );
+      } else {
+        // Get only active tags
+        q = query(
+          collection(this.firestore, 'productTags'),
+          where('storeId', '==', storeId),
+          where('isActive', '==', true),
+          orderBy('group'),
+          orderBy('createdAt', 'asc')
+        );
+      }
 
-    const snapshot = await getDocs(q);
-    return snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data(),
-      createdAt: doc.data()['createdAt']?.toDate?.() || doc.data()['createdAt'],
-      updatedAt: doc.data()['updatedAt']?.toDate?.() || doc.data()['updatedAt']
-    })) as ProductTag[];
+      console.log('🏷️ Executing Firestore query for productTags...');
+      const snapshot = await getDocs(q);
+      console.log('🏷️ Firestore snapshot received. Docs count:', snapshot.docs.length);
+      
+      if (snapshot.empty) {
+        console.log('⚠️ No productTags found for storeId:', storeId);
+        // Try a simpler query without orderBy to test
+        console.log('🏷️ Attempting fallback query without orderBy...');
+        const fallbackQuery = query(
+          collection(this.firestore, 'productTags'),
+          where('storeId', '==', storeId)
+        );
+        const fallbackSnapshot = await getDocs(fallbackQuery);
+        console.log('🏷️ Fallback query results:', fallbackSnapshot.docs.length, 'tags');
+        
+        if (fallbackSnapshot.empty) {
+          console.log('⚠️ No productTags found even with basic query. Checking if collection exists...');
+          const allTagsQuery = collection(this.firestore, 'productTags');
+          const allTagsSnapshot = await getDocs(allTagsQuery);
+          console.log('🏷️ Total productTags in collection:', allTagsSnapshot.docs.length);
+          if (allTagsSnapshot.docs.length > 0) {
+            console.log('🏷️ Sample tag document:', allTagsSnapshot.docs[0].data());
+          }
+        }
+        
+        return fallbackSnapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data(),
+          createdAt: doc.data()['createdAt']?.toDate?.() || doc.data()['createdAt'],
+          updatedAt: doc.data()['updatedAt']?.toDate?.() || doc.data()['updatedAt']
+        })) as ProductTag[];
+      }
+      
+      const results = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+        createdAt: doc.data()['createdAt']?.toDate?.() || doc.data()['createdAt'],
+        updatedAt: doc.data()['updatedAt']?.toDate?.() || doc.data()['updatedAt']
+      })) as ProductTag[];
+      
+      console.log('🏷️ Returning', results.length, 'tags');
+      return results;
+    } catch (error) {
+      console.error('❌ Error in getTagsByStore:', error);
+      console.error('❌ Error details:', {
+        message: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined,
+        storeId,
+        includeInactive
+      });
+      return [];
+    }
   }
 
   async getAllTagGroups(storeId: string, includeInactive: boolean = false): Promise<string[]> {

@@ -16,6 +16,19 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../confirma
           <button class="close-btn" (click)="onCancel()">×</button>
         </div>
 
+        <!-- Store selector -->
+        <div class="store-selector" *ngIf="stores && stores.length > 0">
+          <label class="store-label">Store</label>
+          <select 
+            class="store-select" 
+            [(ngModel)]="selectedStoreId" 
+            (ngModelChange)="onSelectedStoreChange($event)">
+            <option *ngFor="let s of stores" [value]="s.id">
+              {{ s.storeName || s.name || s.id }}
+            </option>
+          </select>
+        </div>
+
         <!-- Tab Navigation -->
         <div class="tab-navigation">
           <button 
@@ -282,6 +295,37 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../confirma
       font-size: 0.75rem;
       color: #9ca3af;
       margin-top: 0.375rem;
+    }
+
+    .store-selector {
+      display: flex;
+      align-items: center;
+      padding: 0.75rem 2rem 0.5rem 2rem;
+      gap: 0.5rem;
+      background: #f9fafb;
+      border-bottom: 1px solid #e5e7eb;
+    }
+
+    .store-label {
+      font-size: 0.875rem;
+      color: #4b5563;
+      font-weight: 500;
+    }
+
+    .store-select {
+      flex: 1;
+      padding: 0.5rem 0.75rem;
+      border-radius: 0.5rem;
+      border: 1px solid #e5e7eb;
+      font-size: 0.875rem;
+      color: #111827;
+      background-color: #ffffff;
+    }
+
+    .store-select:focus {
+      outline: none;
+      border-color: #6366f1;
+      box-shadow: 0 0 0 1px rgba(129, 140, 248, 0.4);
     }
 
     .checkbox-group {
@@ -567,6 +611,7 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../confirma
 export class CreateTagModalComponent {
   @Input() existingTag?: ProductTag;
   @Input() storeId!: string;
+  @Input() stores: any[] = [];
   @Output() saved = new EventEmitter<ProductTag>();
   @Output() cancelled = new EventEmitter<void>();
 
@@ -583,6 +628,7 @@ export class CreateTagModalComponent {
   protected activeTab = signal<'list' | 'create'>('list');
   protected allTags = signal<ProductTag[]>([]);
   protected tagGroups = signal<string[]>([]);
+  protected selectedStoreId: string = '';
   
   // Delete confirmation dialog
   protected showDeleteConfirmation = signal<boolean>(false);
@@ -590,6 +636,14 @@ export class CreateTagModalComponent {
   private tagToDelete: ProductTag | null = null;
 
   async ngOnInit() {
+    // Initialize selectedStoreId from input or available stores
+    if (this.storeId) {
+      this.selectedStoreId = this.storeId;
+    } else if (this.stores && this.stores.length > 0) {
+      this.selectedStoreId = this.stores[0].id;
+      this.storeId = this.selectedStoreId;
+    }
+
     if (this.existingTag) {
       this.editMode.set(true);
       this.group = this.existingTag.group;
@@ -606,16 +660,28 @@ export class CreateTagModalComponent {
 
   private async loadTags() {
     try {
+      const effectiveStoreId = this.selectedStoreId || this.storeId;
+      if (!effectiveStoreId) {
+        this.allTags.set([]);
+        this.tagGroups.set([]);
+        return;
+      }
       // Load all tags including inactive ones for the list view
-      const tags = await this.tagsService.getTagsByStore(this.storeId, true);
+      const tags = await this.tagsService.getTagsByStore(effectiveStoreId, true);
       this.allTags.set(tags);
-      const groups = await this.tagsService.getAllTagGroups(this.storeId, true);
+      const groups = await this.tagsService.getAllTagGroups(effectiveStoreId, true);
       this.tagGroups.set(groups);
-      console.log('Loaded tags:', tags);
-      console.log('Tag groups:', groups);
+      console.log('Loaded tags for store:', effectiveStoreId, tags);
+      console.log('Tag groups for store:', effectiveStoreId, groups);
     } catch (error) {
       console.error('Error loading tags:', error);
     }
+  }
+
+  protected async onSelectedStoreChange(storeId: string) {
+    this.selectedStoreId = storeId;
+    this.storeId = storeId;
+    await this.loadTags();
   }
 
   protected getTagsByGroup(group: string): ProductTag[] {

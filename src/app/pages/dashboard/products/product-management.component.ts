@@ -2247,6 +2247,7 @@ import { AppConstants } from '../../../shared/enums/app-constants.enum';
       <app-create-tag-modal
         *ngIf="showCreateTagModal()"
         [storeId]="getCurrentStoreId()"
+        [stores]="stores()"
         (saved)="onTagSaved($event)"
         (cancelled)="onTagCancelled()"
       />
@@ -2793,7 +2794,7 @@ export class ProductManagementComponent implements OnInit {
       discountValue: 0
     });
     
-    // Load categories for the default store if available
+    // Load categories and tags for the default store if available
     if (defaultStoreId) {
       console.log('📋 Loading categories for default store:', defaultStoreId);
       try {
@@ -2811,13 +2812,18 @@ export class ProductManagementComponent implements OnInit {
           console.log('  - Firestore permissions issue');
         }
         
+        // Load tags for the default store
+        console.log('🏷️ Loading tags for default store:', defaultStoreId);
+        await this.loadTags(defaultStoreId);
+        console.log('✅ Tags loaded for store. Count:', this.availableTags().length);
+        
         // Force change detection to update dropdown
         this.cdr.detectChanges();
       } catch (error) {
-        console.error('❌ Error loading categories for default store:', error);
+        console.error('❌ Error loading categories/tags for default store:', error);
       }
     } else {
-      console.log('⚠️ No default store ID available for category loading');
+      console.log('⚠️ No default store ID available for category/tag loading');
     }
     // Ensure required defaults after reset
     this.productForm.patchValue({
@@ -2837,11 +2843,18 @@ export class ProductManagementComponent implements OnInit {
     this.cdr.detectChanges();
   }
 
-  openEditModal(product: Product): void {
+  async openEditModal(product: Product): Promise<void> {
     this.isEditMode = true;
     this.selectedProduct = product;
     // Load product tags into signal
     this.selectedTagIds.set(product.tags || []);
+    
+    // Load tags for the product's store to ensure only relevant tags are shown
+    if (product.storeId) {
+      console.log('🏷️ Loading tags for product store:', product.storeId);
+      await this.loadTags(product.storeId);
+    }
+    
     // Patch the form silently to avoid triggering valueChange subscriptions
     this.productForm.patchValue(product, { emitEvent: false });
     // Set costPrice to 0 initially (will be loaded from latest batch if available)
@@ -4292,10 +4305,17 @@ export class ProductManagementComponent implements OnInit {
         
         // Clear current category selection since categories are store-specific
         this.productForm.patchValue({ category: '' });
+        
+        // Load tags for the selected store
+        console.log('🏷️ Loading tags for selected store:', selectedStoreId);
+        await this.loadTags(selectedStoreId);
       } else {
-        console.log('⚠️ No store selected, clearing categories');
+        console.log('⚠️ No store selected, clearing categories and tags');
         // Clear category selection when no store is selected
         this.productForm.patchValue({ category: '' });
+        // Clear tags as well
+        this.availableTags.set([]);
+        this.tagGroups.set([]);
       }
     }, 100);
   }
@@ -4489,6 +4509,19 @@ export class ProductManagementComponent implements OnInit {
   }
 
   getCurrentStoreId(): string {
+    // Priority 1: Use storeId from product form when editing/adding a product
+    const formStoreId = this.productForm?.get('storeId')?.value;
+    if (formStoreId) {
+      return formStoreId;
+    }
+    
+    // Priority 2: Use the selected store from store selection service (filters products list)
+    const selectedStoreId = this.selectedStore();
+    if (selectedStoreId) {
+      return selectedStoreId;
+    }
+    
+    // Fallback: Use current permission's storeId
     return this.authService.getCurrentPermission()?.storeId || '';
   }
 
