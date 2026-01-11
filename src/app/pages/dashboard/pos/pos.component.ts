@@ -1,6 +1,6 @@
 import { Component, OnInit, AfterViewInit, OnDestroy, HostListener, ViewChild, ElementRef, computed, signal, inject, ChangeDetectorRef } from '@angular/core';
-import { Firestore, doc, getDoc, collection, query, where } from '@angular/fire/firestore';
-import { getDocs, onSnapshot } from 'firebase/firestore';
+import { Firestore, doc, getDoc, getDocs, updateDoc, collection, query, where } from '@angular/fire/firestore';
+import { onSnapshot } from 'firebase/firestore';
 import { ProductStatus } from '../../../interfaces/product.interface';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -412,9 +412,11 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   
   // Payment Dialog State
   readonly paymentModalVisible = signal<boolean>(false);
+  readonly payingForExistingOrder = signal<any | null>(null); // Tracks if paying for existing OPEN order
   paymentAmountTendered: number = 0;
   paymentDescription: string = '';
   paymentType: string = 'Cash';
+  tableNumber: string = '';
 
   // Cart Information Dialog State
   readonly cartInformationModalVisible = signal<boolean>(false);
@@ -616,7 +618,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   readonly showReceiptPanel = computed(() => this.showReceiptPanelSignal());
   
   // Access tabs for POS management
-  readonly accessTabs = ['New', 'Orders', 'Cancelled', 'Returns', 'Refunds', 'Damage', 'Split Payments', 'Discounts & Promotions'] as const;
+  readonly accessTabs = ['New', 'Orders', 'Open', 'Cancelled', 'Returns', 'Refunds', 'Damage', 'Split Payments', 'Discounts & Promotions'] as const;
   private accessTabSignal = signal<string>('New');
   readonly accessTab = computed(() => this.accessTabSignal());
   
@@ -628,6 +630,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     const tabKeyMap: { [key: string]: string } = {
       'New': 'pos.newTab',
       'Orders': 'pos.ordersTab',
+      'Open': 'pos.openTab',
       'Cancelled': 'pos.cancelledTab',
       'Returns': 'pos.returnsTab',
       'Refunds': 'pos.refundsTab',
@@ -653,8 +656,17 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     
     console.log('🔍 Filtering orders for tab:', tab, 'Total orders:', allOrders.length);
     
-    if (tab === 'New' || tab === 'Orders') {
-      return allOrders;
+    // New tab shows nothing (for creating new orders)
+    if (tab === 'New') {
+      return [];
+    }
+    
+    // Orders tab shows closed orders (completed + unpaid)
+    if (tab === 'Orders') {
+      return allOrders.filter(order => {
+        const status = (order.status || '').toString().toLowerCase();
+        return status === 'completed' || status === 'unpaid';
+      });
     }
     
     const filtered = allOrders.filter(order => {
@@ -675,6 +687,10 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       let matches = false;
       
       switch (tab) {
+        case 'Open':
+          // Only show orders with current status OPEN (not historical)
+          matches = order.status?.toLowerCase() === 'open';
+          break;
         case 'Cancelled':
           matches = hasStatusInHistory('cancelled');
           break;
@@ -749,6 +765,14 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   readonly isOrderDamaged = computed(() => {
     const s = (this.selectedOrder()?.status || '').toString().toLowerCase();
     return s === 'damaged';
+  });
+
+  readonly isOrderOpen = computed(() => {
+    const order = this.selectedOrder();
+    const s = (order?.status || '').toString().toLowerCase();
+    const isOpen = s === 'open';
+    console.log('🔍 isOrderOpen check:', { status: order?.status, isOpen, currentTab: this.accessTab() });
+    return isOpen;
   });
 
   // Lock actions (Cancel / Manage Item Status) when order is in any final/adjusted state.
@@ -926,7 +950,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     this.accessTabSignal.set(tab);
     
     // When any order-related tab is activated, ensure orders are loaded
-    const orderRelatedTabs = ['Orders', 'Cancelled', 'Returns', 'Refunds', 'Damage', 'Split Payments', 'Discounts & Promotions'];
+    const orderRelatedTabs = ['Orders', 'Open', 'Cancelled', 'Returns', 'Refunds', 'Damage', 'Split Payments', 'Discounts & Promotions'];
     if (orderRelatedTabs.includes(tab)) {
       // Only load if we don't have orders yet
       if (this.ordersSignal().length === 0) {
@@ -1164,11 +1188,475 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   // (Removed debug-only createTestOrder method)
 
   openOrder(order: any): void {
+    console.log('📋 Opening order:', { id: order.id, status: order.status, invoiceNumber: order.invoiceNumber });
     this.selectedOrderSignal.set(order);
   }
 
   closeOrder(): void {
     this.selectedOrderSignal.set(null);
+  }
+
+  // Handle "Update Order" button for OPEN orders - loads order back into cart for editing
+  async updateOpenOrder(): Promise<void> {
+    const order = this.selectedOrder();
+    if (!order) {
+      console.warn('No order selected');
+      return;
+    }
+
+    try {
+      // Fetch orderDetails documents for this order
+      const orderDetailsQuery = query(
+        collection(this.firestore, 'orderDetails'),
+        where('orderId', '==', order.id)
+      );
+      const orderDetailsSnapshot = await getDocs(orderDetailsQuery);
+
+      if (orderDetailsSnapshot.empty) {
+        await this.showConfirmationDialog({
+          title: 'No Items Found',
+          message: 'No items found for this order.',
+          confirmText: 'OK',
+          cancelText: '',
+          type: 'warning'
+        });
+        return;
+      }
+
+      // Clear current cart first
+      if (this.cartItems().length > 0) {
+        const confirmed = await this.showConfirmationDialog({
+          title: 'Clear Current Cart?',
+          message: 'Current cart will be cleared to load this order. Continue?',
+          confirmText: 'Yes',
+          cancelText: 'No',
+          type: 'warning'
+        });
+        if (!confirmed) return;
+        this.posService.clearCart();
+      }
+
+      // Collect all items from orderDetails batches
+      let allItems: any[] = [];
+      orderDetailsSnapshot.forEach(doc => {
+        const data = doc.data();
+        if (data['items'] && Array.isArray(data['items'])) {
+          allItems = allItems.concat(data['items']);
+        }
+      });
+
+      // Load items into cart
+      for (const item of allItems) {
+        // Find the product from the products list
+        const product = this.products().find(p => p.id === item.productId);
+        if (product) {
+          // Add to cart with the original quantity
+          this.posService.addToCart(product, item.quantity);
+          
+          // Update cart item with original pricing and settings
+          const cartItem = this.cartItems().find(ci => ci.productId === item.productId);
+          if (cartItem) {
+            const updatedCartItem = {
+              ...cartItem,
+              sellingPrice: item.unitPrice || item.sellingPrice || cartItem.sellingPrice,
+              discount: item.discount || 0,
+              discountType: item.discountType || 'fixed',
+              isVatExempt: item.isVatExempt || false,
+              isVatApplicable: item.isVatApplicable !== undefined ? item.isVatApplicable : cartItem.isVatApplicable
+            };
+            this.posService.updateCartItem(updatedCartItem);
+          }
+        }
+      }
+
+      // Close the order detail modal and switch to NEW tab
+      this.closeOrder();
+      this.accessTabSignal.set('New');
+      
+      // Activate new order state so user can add products
+      this.isNewOrderActive.set(true);
+
+      await this.showConfirmationDialog({
+        title: 'Order Loaded',
+        message: `${allItems.length} item(s) loaded into cart for editing.`,
+        confirmText: 'OK',
+        cancelText: '',
+        type: 'info'
+      });
+
+    } catch (error) {
+      console.error('Error loading order into cart:', error);
+      await this.showConfirmationDialog({
+        title: 'Error',
+        message: 'Failed to load order into cart.',
+        confirmText: 'OK',
+        cancelText: '',
+        type: 'danger'
+      });
+    }
+  }
+
+  // Handle "Pay Now" button for OPEN orders - shows payment dialog to complete the order
+  async payNowForOpenOrder(): Promise<void> {
+    const order = this.selectedOrder();
+    if (!order) {
+      console.warn('No order selected');
+      return;
+    }
+
+    try {
+      // Fetch orderDetails to get items
+      const orderDetailsQuery = query(
+        collection(this.firestore, 'orderDetails'),
+        where('orderId', '==', order.id)
+      );
+      const orderDetailsSnapshot = await getDocs(orderDetailsQuery);
+
+      if (orderDetailsSnapshot.empty) {
+        await this.showConfirmationDialog({
+          title: 'No Items Found',
+          message: 'No items found for this order.',
+          confirmText: 'OK',
+          cancelText: '',
+          type: 'warning'
+        });
+        return;
+      }
+
+      // Collect all items
+      let allItems: any[] = [];
+      orderDetailsSnapshot.forEach(doc => {
+        const data = doc.data();
+        if (data['items'] && Array.isArray(data['items'])) {
+          allItems = allItems.concat(data['items']);
+        }
+      });
+
+      // Store reference to the order being paid for
+      this.payingForExistingOrder.set({
+        ...order,
+        items: allItems
+      });
+
+      // Close order detail modal
+      this.closeOrder();
+
+      // Pre-fill payment dialog with order amount and table number
+      this.paymentAmountTendered = order.totalAmount || 0;
+      this.tableNumber = order.tableNumber || '';
+      
+      // Set default payment method based on order type, default to cash
+      if (order.cashSale && order.chargeSale) {
+        this.posService.setPaymentMethod('both');
+        this.paymentType = 'Both';
+      } else if (order.chargeSale) {
+        this.posService.setPaymentMethod('charge');
+        this.paymentType = 'Charge';
+      } else {
+        // Default to cash if not specified or if cashSale is true
+        this.posService.setPaymentMethod('cash');
+        this.paymentType = 'Cash';
+      }
+      
+      console.log('💳 Pre-filling payment dialog for OPEN order - Table Number:', this.tableNumber, 'Amount:', this.paymentAmountTendered, 'Payment Type:', this.paymentType);
+
+      // Show payment dialog
+      this.paymentModalVisible.set(true);
+
+    } catch (error) {
+      console.error('Error preparing payment for open order:', error);
+      await this.showConfirmationDialog({
+        title: 'Error',
+        message: 'Failed to prepare payment dialog.',
+        confirmText: 'OK',
+        cancelText: '',
+        type: 'danger'
+      });
+    }
+  }
+
+  // Mark an OPEN order as UNPAID while executing background operations
+  async markOpenOrderAsUnpaid(): Promise<void> {
+    const order = this.selectedOrder();
+    if (!order) {
+      console.warn('No order selected for UNPAID processing');
+      await this.showConfirmationDialog({
+        title: 'No Order',
+        message: 'No order selected.',
+        confirmText: 'OK',
+        cancelText: '',
+        type: 'info'
+      });
+      return;
+    }
+
+    // Only allow this when the current status is OPEN
+    const status = (order.status || '').toString().toLowerCase();
+    if (status !== 'open') {
+      console.warn('markOpenOrderAsUnpaid called for non-OPEN status:', status);
+      await this.showConfirmationDialog({
+        title: 'Not Open',
+        message: 'Only OPEN orders can be marked as UNPAID.',
+        confirmText: 'OK',
+        cancelText: '',
+        type: 'warning'
+      });
+      return;
+    }
+
+    const confirmed = await this.showConfirmationDialog({
+      title: 'Mark as UNPAID',
+      message: 'This will close the order as UNPAID and process inventory, tracking, and ledger like a completed order. Continue?',
+      confirmText: 'Yes',
+      cancelText: 'No',
+      type: 'warning'
+    });
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      this.posService['isProcessingSignal']?.set(true);
+
+      const orderId = order.id;
+      if (!orderId) {
+        throw new Error('Order ID is missing');
+      }
+
+      // Update the order and orderDetails status from OPEN to UNPAID
+      const orderRef = doc(this.firestore, 'orders', orderId);
+
+      const orderDetailsQuery = query(
+        collection(this.firestore, 'orderDetails'),
+        where('orderId', '==', orderId)
+      );
+      const orderDetailsSnapshot = await getDocs(orderDetailsQuery);
+
+      const currentUser = this.authService.getCurrentUser();
+      const existingStatusHistory = order.statusHistory || [];
+      const existingStatusTags = order.statusTags || [];
+
+      const orderUpdate: any = {
+        status: 'unpaid',
+        tableNumber: order.tableNumber || '',
+        statusHistory: [
+          ...existingStatusHistory,
+          {
+            status: 'unpaid',
+            changedAt: new Date(),
+            changedBy: currentUser?.uid || 'system'
+          }
+        ],
+        statusTags: [...existingStatusTags, 'unpaid'],
+        updatedAt: new Date()
+      };
+
+      await updateDoc(orderRef, orderUpdate);
+
+      const updatePromises: Promise<void>[] = [];
+      orderDetailsSnapshot.forEach(docSnap => {
+        updatePromises.push(
+          updateDoc(docSnap.ref, {
+            status: 'UNPAID',
+            updatedAt: new Date().toISOString()
+          })
+        );
+      });
+      await Promise.all(updatePromises);
+
+      console.log('✅ Order status updated to UNPAID');
+
+      // Execute background operations (tracking, inventory, ledger)
+      console.log('🔄 Executing background operations for UNPAID order...');
+      try {
+        await this.posService.executeBackgroundOperationsForExistingOrder(
+          orderId,
+          order.invoiceNumber
+        );
+        console.log('✅ Background operations completed successfully for UNPAID order');
+      } catch (bgError) {
+        console.warn('⚠️ Background operations failed for UNPAID order (non-critical):', bgError);
+      }
+
+      // Close details modal and refresh list
+      this.closeOrder();
+      await this.loadRecentOrders();
+
+      await this.showConfirmationDialog({
+        title: 'Marked as UNPAID',
+        message: `Order ${order.invoiceNumber || orderId} has been closed as UNPAID.`,
+        confirmText: 'OK',
+        cancelText: '',
+        type: 'info'
+      });
+
+    } catch (error) {
+      console.error('❌ Error marking OPEN order as UNPAID:', error);
+      await this.showConfirmationDialog({
+        title: 'Failed',
+        message: 'Failed to mark order as UNPAID. Please try again.',
+        confirmText: 'OK',
+        cancelText: '',
+        type: 'danger'
+      });
+    } finally {
+      this.posService['isProcessingSignal']?.set(false);
+    }
+  }
+
+  // Process payment for an existing OPEN order (converts it to completed)
+  async processPaymentForExistingOrder(orderData: any): Promise<void> {
+    try {
+      this.posService['isProcessingSignal']?.set(true);
+      console.log('💳 Processing payment for existing OPEN order:', orderData.id);
+
+      const totalAmount = orderData.totalAmount || 0;
+      const tendered = this.paymentAmountTendered || 0;
+
+      // Validate payment amount
+      if (tendered < totalAmount) {
+        console.warn('⚠️ Insufficient amount tendered');
+        await this.showConfirmationDialog({
+          title: 'Insufficient Amount',
+          message: `Please tender at least ₱${totalAmount.toFixed(2)}`,
+          confirmText: 'OK',
+          cancelText: '',
+          type: 'warning'
+        });
+        this.posService['isProcessingSignal']?.set(false);
+        return;
+      }
+
+      const change = tendered - totalAmount;
+
+      // Capture payment info and table number BEFORE closing dialog
+      const tableNumber = this.tableNumber;
+      const paymentType = this.paymentType;
+      const paymentDescription = this.paymentDescription;
+      
+      const paymentsData = {
+        amountTendered: tendered,
+        changeAmount: Math.max(0, change),
+        paymentDescription: paymentDescription || 'Payment for OPEN order',
+        paymentType: paymentType
+      };
+
+      // Determine cashSale and chargeSale flags based on payment type
+      const isCashSale = this.posService.isCashSale();
+      const isChargeSale = this.posService.isChargeSale();
+
+      // Close payment dialog
+      this.closePaymentDialog();
+
+      // Update the order and orderDetails status from OPEN to completed
+      const orderRef = doc(this.firestore, 'orders', orderData.id);
+      
+      // Get all orderDetails docs for this order
+      const orderDetailsQuery = query(
+        collection(this.firestore, 'orderDetails'),
+        where('orderId', '==', orderData.id)
+      );
+      const orderDetailsSnapshot = await getDocs(orderDetailsQuery);
+
+      // Prepare order update with all payment-related fields
+      const currentUser = this.authService.getCurrentUser();
+      const existingStatusHistory = orderData.statusHistory || [];
+      const existingStatusTags = orderData.statusTags || [];
+      
+      const orderUpdate: any = {
+        status: 'completed',
+        payments: {
+          amountTendered: paymentsData.amountTendered,
+          changeAmount: paymentsData.changeAmount,
+          paymentDescription: paymentsData.paymentDescription,
+          paymentType: paymentsData.paymentType
+        },
+        tableNumber: tableNumber || '',
+        cashSale: isCashSale,
+        chargeSale: isChargeSale,
+        statusHistory: [...existingStatusHistory, {
+          status: 'completed',
+          changedAt: new Date(),
+          changedBy: currentUser?.uid || 'system'
+        }],
+        statusTags: [...existingStatusTags, 'completed'],
+        updatedAt: new Date()
+      };
+
+      // Update order document
+      await updateDoc(orderRef, orderUpdate);
+
+      // Update all orderDetails documents
+      const updatePromises: Promise<void>[] = [];
+      orderDetailsSnapshot.forEach(doc => {
+        updatePromises.push(
+          updateDoc(doc.ref, {
+            status: 'COMPLETED',
+            updatedAt: new Date().toISOString()
+          })
+        );
+      });
+      await Promise.all(updatePromises);
+
+      console.log('✅ Order status updated to completed');
+
+      // Execute background operations (tracking, inventory, ledger)
+      console.log('🔄 Executing background operations for existing order...');
+      try {
+        await this.posService.executeBackgroundOperationsForExistingOrder(
+          orderData.id,
+          orderData.invoiceNumber
+        );
+        console.log('✅ Background operations completed successfully');
+      } catch (bgError) {
+        console.warn('⚠️ Background operations failed (non-critical):', bgError);
+        // Continue with success flow even if background operations fail
+      }
+
+      // Clear the paying flag
+      this.payingForExistingOrder.set(null);
+      
+      // Close order details modal
+      this.closeOrder();
+
+      // Show success and receipt
+      await this.showConfirmationDialog({
+        title: '✅ Payment Successful',
+        message: `Order ${orderData.invoiceNumber} has been completed.`,
+        confirmText: 'OK',
+        cancelText: '',
+        type: 'info'
+      });
+
+      // Show receipt with updated payment information
+      const receiptData = {
+        ...orderData,
+        payments: paymentsData,
+        tableNumber: tableNumber,
+        cashSale: isCashSale,
+        chargeSale: isChargeSale,
+        status: 'completed'
+      };
+      this.receiptDataSignal.set(receiptData);
+      this.isReceiptModalVisibleSignal.set(true);
+
+      // Refresh orders list
+      await this.loadRecentOrders();
+
+    } catch (error) {
+      console.error('❌ Error processing payment for existing order:', error);
+      await this.showConfirmationDialog({
+        title: 'Payment Failed',
+        message: 'Failed to process payment. Please try again.',
+        confirmText: 'OK',
+        cancelText: '',
+        type: 'danger'
+      });
+    } finally {
+      this.posService['isProcessingSignal']?.set(false);
+      this.payingForExistingOrder.set(null);
+    }
   }
 
   // Open Manage Item Status modal and load tracking entries for the currently selected order
@@ -2075,21 +2563,55 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
           }
         }
 
-        return (itemsSource || []).map((item: any) => ({
-          productName: item.productName || item.name,
-          skuId: item.skuId || item.sku,
-          quantity: item.quantity || 1,
-          unitType: item.unitType || 'pc',
-          sellingPrice: item.sellingPrice || item.price || item.amount,
-          originalPrice: item.originalPrice || item.unitPrice || item.sellingPrice || item.price || item.amount,
-          total: item.total || (item.quantity * (item.sellingPrice || item.price || item.amount)),
-          vatAmount: item.vatAmount || 0,
-          discountAmount: item.discountAmount || 0,
-          // Preserve any per-item customer name/pwdId if present on historical orders
-          customerName: item.customerName || (item as any).discountCustomerName || null,
-          pwdId: item.pwdId || null,
-          customerDiscount: item.customerDiscount || (item as any).customerDiscount || null
-        }));
+        // Use already-loaded products for SKU lookup when missing on order items
+        const allProducts: any[] = this.products ? this.products() : [];
+
+        return (itemsSource || []).map((item: any) => {
+          const productName = item.productName || item.name;
+
+          // Primary sources: explicit SKU fields on the order item
+          let skuId: string = item.skuId || item.sku || '';
+
+          // If SKU is missing, try to resolve it from cached products using productId / productCode / name
+          if (!skuId && Array.isArray(allProducts) && allProducts.length > 0) {
+            const productId = item.productId || item.product_id || '';
+            let matched: any = null;
+
+            if (productId) {
+              matched = allProducts.find((p: any) =>
+                p.id === productId ||
+                p.skuId === productId ||
+                p.productCode === productId
+              );
+            }
+
+            // As a last resort, try matching by product name
+            if (!matched && productName) {
+              matched = allProducts.find((p: any) => p.productName === productName);
+            }
+
+            if (matched?.skuId) {
+              skuId = matched.skuId;
+            }
+          }
+
+          return {
+            productName,
+            // Only use real SKU values (from order item or product), never document IDs
+            skuId,
+            quantity: item.quantity || 1,
+            unitType: item.unitType || 'pc',
+            sellingPrice: item.sellingPrice || item.price || item.amount,
+            originalPrice: item.originalPrice || item.unitPrice || item.sellingPrice || item.price || item.amount,
+            total: item.total || (item.quantity * (item.sellingPrice || item.price || item.amount)),
+            vatAmount: item.vatAmount || 0,
+            discountAmount: item.discountAmount || 0,
+            // Preserve any per-item customer name/pwdId if present on historical orders
+            customerName: item.customerName || (item as any).discountCustomerName || null,
+            pwdId: item.pwdId || null,
+            customerDiscount: item.customerDiscount || (item as any).customerDiscount || null
+          };
+        });
       } catch (err) {
         console.warn('Error normalizing order items', err);
         return [];
@@ -2228,6 +2750,9 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   async ngOnInit(): Promise<void> {
+    
+    // Set default payment method to cash
+    this.posService.setPaymentMethod('cash');
     
     // Set default tab to first available tab
     if (this.accessTabs.length > 0) {
@@ -2775,6 +3300,9 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     // Clear cart and all order-related data
     this.posService.clearCart();
     
+    // Set default payment method to cash
+    this.posService.setPaymentMethod('cash');
+    
     // Reset customer information with next invoice number
     await this.loadNextInvoicePreview();
     const nextInvoice = this.nextInvoiceNumber();
@@ -2942,6 +3470,8 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     this.paymentModalVisible.set(false);
     this.paymentAmountTendered = 0;
     this.paymentDescription = '';
+    this.tableNumber = '';
+    this.payingForExistingOrder.set(null); // Clear existing order flag
   }
 
   // Handle input changes for amount tendered
@@ -3150,10 +3680,94 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     console.log('✅ Cart VAT and discount settings applied to all items');
   }
 
+  // Save order as OPEN (Pay Later)
+  async saveOrderAsOpen(): Promise<void> {
+    // Prevent double-submission
+    if (this.isProcessing()) {
+      console.log('⚠️ Order already processing, ignoring duplicate request');
+      return;
+    }
+    
+    try {
+      console.log('💼 Saving order as OPEN (Pay Later)...');
+      const totalAmount = this.cartSummary().netAmount;
+      
+      // IMPORTANT: Capture payment info and table number BEFORE closing dialog
+      const paymentInfo = {
+        amountTendered: 0,
+        changeAmount: 0,
+        paymentDescription: this.paymentDescription || 'Pay Later - OPEN Order',
+        paymentType: this.paymentType
+      };
+      const tableNumber = this.tableNumber;
+      console.log('📋 Captured table number for OPEN order:', tableNumber);
+      
+      // Generate real invoice number
+      let realInvoiceNumber: string;
+      try {
+        console.log('📋 Fetching fresh invoice number from Firestore...');
+        realInvoiceNumber = await this.posService.getNextInvoiceNumberPreview();
+        
+        if (realInvoiceNumber.includes('ERROR') || realInvoiceNumber.includes('0000-000000')) {
+          console.warn('⚠️ Invalid invoice number received, retrying...');
+          await new Promise(resolve => setTimeout(resolve, 500));
+          realInvoiceNumber = await this.posService.getNextInvoiceNumberPreview();
+        }
+        
+        this.nextInvoiceNumber.set(realInvoiceNumber);
+        this.invoiceNumber = realInvoiceNumber;
+        console.log('📋 Fresh invoice number generated:', realInvoiceNumber);
+      } catch (invoiceError) {
+        console.warn('Warning: Could not generate invoice number:', invoiceError);
+        realInvoiceNumber = 'INV-0000-000000';
+      }
+      
+      // Close payment dialog
+      this.closePaymentDialog();
+      
+      // Process order as OPEN
+      console.log('📝 Processing OPEN order...');
+      await this.completeOrderWithPayment(paymentInfo, true, tableNumber); // Pass true for saveAsOpen and tableNumber separately
+      
+      console.log('✅ Order saved as OPEN successfully');
+      
+    } catch (error) {
+      console.error('❌ Error saving order as OPEN:', error);
+      
+      // Reset processing state
+      this.posService['isProcessingSignal']?.set(false);
+      
+      // Reload invoice number
+      try {
+        console.log('🔄 Reloading invoice number after failed order...');
+        await this.loadNextInvoicePreview();
+        const freshInvoiceNumber = this.nextInvoiceNumber();
+        this.invoiceNumber = freshInvoiceNumber === 'Loading...' ? 'INV-0000-000000' : freshInvoiceNumber;
+      } catch (invoiceReloadError) {
+        console.warn('⚠️ Failed to reload invoice number:', invoiceReloadError);
+      }
+      
+      // Show error dialog
+      await this.showConfirmationDialog({
+        title: 'Failed to Save Order',
+        message: `Failed to save order as OPEN. Please try again.\nReason: ${error instanceof Error ? error.message : String(error)}`,
+        confirmText: 'OK',
+        cancelText: ''
+      });
+    }
+  }
+
   async processPayment(): Promise<void> {
     // Prevent double-submission
     if (this.isProcessing()) {
       console.log('⚠️ Payment already processing, ignoring duplicate request');
+      return;
+    }
+
+    // Check if we're paying for an existing OPEN order
+    const existingOrder = this.payingForExistingOrder();
+    if (existingOrder) {
+      await this.processPaymentForExistingOrder(existingOrder);
       return;
     }
     
@@ -3171,13 +3785,14 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       
       const change = this.calculateChange();
       
-      // IMPORTANT: Capture payment info BEFORE closing dialog (dialog close resets these values)
+      // IMPORTANT: Capture payment info and table number BEFORE closing dialog (dialog close resets these values)
       const paymentInfo = {
         amountTendered: tendered,
         changeAmount: change,
         paymentDescription: this.paymentDescription,
         paymentType: this.paymentType
       };
+      const tableNumber = this.tableNumber;
       
 
       
@@ -3232,11 +3847,11 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
         
         // Process offline without any timeout
         console.log('📴 Processing in offline mode');
-        await this.completeOrderWithPayment(paymentInfo);
+        await this.completeOrderWithPayment(paymentInfo, false, tableNumber);
       } else {
         // Online mode - use short timeout to detect connection issues quickly
         console.log('🌐 Processing in online mode');
-        const orderPromise = this.completeOrderWithPayment(paymentInfo);
+        const orderPromise = this.completeOrderWithPayment(paymentInfo, false, tableNumber);
         const timeoutPromise = new Promise<never>((_, reject) => 
           setTimeout(() => reject(new Error('Connection timeout')), 5000) // Short 5 second timeout
         );
@@ -3307,8 +3922,9 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     changeAmount: number;
     paymentDescription: string;
     paymentType: string;
-  }): Promise<void> {
+  }, saveAsOpen: boolean = false, tableNumber: string = ''): Promise<void> {
     try {
+      console.log('💼 completeOrderWithPayment called with:', { saveAsOpen, tableNumber });
       
       // Prepare customer info and payments for the new structure
       const processedCustomerInfo = this.getCustomerInfoForOrder();
@@ -3350,7 +3966,9 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
         
         result = await this.posService.processOrderWithInvoiceAndPayment(
           processedCustomerInfo,
-          paymentsData
+          paymentsData,
+          saveAsOpen,
+          tableNumber
         );
         
         if (!this.networkService.isOnline()) {
@@ -3399,7 +4017,9 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
           // Retry with offline processing (Firestore persistence will handle it)
           result = await this.posService.processOrderWithInvoiceAndPayment(
             processedCustomerInfo,
-            paymentsData
+            paymentsData,
+            false,
+            tableNumber
           );
         } else {
           // Non-network error, re-throw
@@ -3436,14 +4056,49 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
         }
       }
 
-      // IMPORTANT: Clear processing state and show receipt modal IMMEDIATELY
-      // Don't wait for receipt data preparation - show the modal first for instant feedback
+      // IMPORTANT: Clear processing state
       this.posService['isProcessingSignal']?.set(false);
       console.log('✅ Processing state cleared');
       
-      // Show receipt modal immediately
+      // If this is an OPEN order, show simple success message instead of receipt
+      if (saveAsOpen) {
+        console.log('💼 OPEN order: Showing success message instead of receipt');
+        
+        // Prepare simple order summary
+        const cartItems = this.cartItems();
+        const itemsList = cartItems.map(item => 
+          `${item.productName} (x${item.quantity}) - ₱${item.total.toFixed(2)}`
+        ).join('\n');
+        
+        // Show success dialog with items
+        await this.showConfirmationDialog({
+          title: '✅ Order Successfully Saved',
+          message: `Invoice: ${result.invoiceNumber}\n${tableNumber ? `Table: ${tableNumber}\n` : ''}Status: OPEN (Pay Later)\n\nItems:\n${itemsList}\n\nTotal: ₱${this.cartSummary().netAmount.toFixed(2)}`,
+          confirmText: 'OK',
+          cancelText: ''
+        });
+        
+        // Clear cart after showing message (silent mode)
+        await this.clearCart(true);
+        
+        // Reset new order state so user must click "New" again
+        this.isNewOrderActive.set(false);
+        
+        // Refresh orders list to show new OPEN order
+        console.log('💼 OPEN order created, refreshing orders list...');
+        await new Promise(resolve => setTimeout(resolve, 1000)); // Wait for Firestore to complete
+        await this.loadRecentOrders();
+        
+        return; // Exit early, don't show receipt modal
+      }
+      
+      // For regular orders, show receipt modal immediately
       this.isReceiptModalVisibleSignal.set(true);
       console.log('✅ Receipt modal shown immediately');
+      
+      // Clear cart immediately for completed orders (silent mode)
+      await this.clearCart(true);
+      console.log('✅ Cart cleared after order completion');
       
       // Prepare receipt data in background (non-blocking)
       console.log('📝 Preparing receipt data for order:', result.orderId);
@@ -3478,6 +4133,14 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
         hasReceiptData: !!this.receiptData(),
         isOrderCompleted: this.isOrderCompleted()
       });
+      
+      // If this was an OPEN order, refresh the orders list so it appears in the Open tab
+      if (saveAsOpen) {
+        console.log('💼 OPEN order created, refreshing orders list...');
+        setTimeout(() => {
+          this.loadRecentOrders();
+        }, 500); // Small delay to ensure Firestore has processed the write
+      }
       
     } catch (error) {
       console.error('❌ Error completing order with payment:', error);
@@ -4161,6 +4824,10 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       // Preload productInventory for this store to IndexedDB
       await this.preloadProductInventory();
       
+      // Refresh orders for the selected store
+      console.log('🔄 Refreshing orders for selected store:', storeId);
+      await this.refreshOrders();
+      
   // Reset grid pagination when store changes
   this.gridRowsVisible.set(4);
     } else {
@@ -4737,29 +5404,37 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     console.log('✅ VAT applied to all cart items');
   }
 
-  async clearCart(): Promise<void> {
+  async clearCart(silent: boolean = false): Promise<void> {
     // Subscription gate: block if subscription expired or store inactive
     const ok = await this.checkSubscriptionGate();
     if (!ok) return;
     // Check if order is already completed
     if (this.isOrderCompleted()) {
-      await this.showConfirmationDialog({
-        title: 'Clear Cart Disabled',
-        message: 'This order is already completed. Please start a new order to clear the cart.',
-        confirmText: 'Start New Order',
-        cancelText: 'Cancel',
-        type: 'info'
-      }).then(async (confirmed) => {
-        if (confirmed) {
-          await this.startNewOrderDirect();
-        }
-      });
+      if (!silent) {
+        await this.showConfirmationDialog({
+          title: 'Clear Cart Disabled',
+          message: 'This order is already completed. Please start a new order to clear the cart.',
+          confirmText: 'Start New Order',
+          cancelText: 'Cancel',
+          type: 'info'
+        }).then(async (confirmed) => {
+          if (confirmed) {
+            await this.startNewOrderDirect();
+          }
+        });
+      }
       return;
     }
 
     // Check if new order is active before allowing cart clearing
-    if (!this.isNewOrderActive()) {
+    if (!this.isNewOrderActive() && !silent) {
       console.log('❌ Clear cart blocked: New order must be initiated first');
+      return;
+    }
+
+    // If silent mode, skip confirmation dialog
+    if (silent) {
+      this.posService.clearCart();
       return;
     }
 
@@ -5490,6 +6165,8 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       case 'paid':
       case 'completed':
         return '#059669'; // Green
+      case 'unpaid':
+        return '#eab308'; // Yellow
       case 'pending':
         return '#d97706'; // Orange
       case 'cancelled':
@@ -5648,6 +6325,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
    */
   async loadAvailableTags(): Promise<void> {
     const storeId = this.selectedStoreId();
+    console.log('🏷️ Loading tags for store:', storeId);
     if (!storeId) {
       this.availableTagsByGroup.set([]);
       return;
@@ -5655,6 +6333,22 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
 
     try {
       const tags = await this.posService.getTagsForStore(storeId);
+      console.log('🏷️ Retrieved tags from service:', tags.length, 'tags');
+      console.log('🏷️ RAW TAGS DATA:', JSON.stringify(tags, null, 2));
+      
+      // Log each tag's structure
+      tags.forEach((tag, index) => {
+        console.log(`🏷️ Tag ${index + 1}:`, {
+          id: tag.id,
+          tagId: tag.tagId,
+          label: tag.label,
+          group: tag.group,
+          storeId: tag.storeId,
+          isActive: tag.isActive,
+          createdAt: tag.createdAt,
+          allFields: Object.keys(tag)
+        });
+      });
 
       // Group tags by their group field and track first createdAt per group
       const groupMap = new Map<string, { id: string; label: string; createdAt?: any }[]>();
@@ -5662,6 +6356,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       
       tags.forEach(tag => {
         const group = tag.group || 'Other';
+        console.log(`🏷️ Processing tag "${tag.label}" with group: "${group}"`);
         if (!groupMap.has(group)) {
           groupMap.set(group, []);
           // Track the first createdAt for this group
@@ -5673,6 +6368,12 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
           createdAt: tag.createdAt
         });
       });
+
+      console.log('🏷️ Group Map entries:', Array.from(groupMap.entries()).map(([group, tags]) => ({
+        group,
+        tagCount: tags.length,
+        tags: tags.map(t => t.label)
+      })));
 
       // Convert to array and sort groups by their first createdAt (ascending)
       const tagsByGroup = Array.from(groupMap.entries())
@@ -5688,7 +6389,9 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
           return timeA - timeB;
         });
 
+      console.log('🏷️ FINAL Grouped tags (to be set):', JSON.stringify(tagsByGroup, null, 2));
       this.availableTagsByGroup.set(tagsByGroup);
+      console.log('🏷️ availableTagsByGroup signal updated. Current value:', this.availableTagsByGroup());
     } catch (error) {
       console.error('❌ Failed to load tags:', error);
       this.availableTagsByGroup.set([]);

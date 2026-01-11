@@ -5,6 +5,9 @@ import {
   addDoc,
   doc,
   getDoc,
+  getDocs,
+  query,
+  where,
   runTransaction,
   writeBatch,
   increment
@@ -561,7 +564,9 @@ export class PosService {
    */
   async processOrderWithInvoiceAndPayment(
     customerInfo: { fullName: string; address: string; tin: string; customerId: string }, 
-    payments: { amountTendered: number; changeAmount: number; paymentDescription: string; paymentType: string }
+    payments: { amountTendered: number; changeAmount: number; paymentDescription: string; paymentType: string },
+    saveAsOpen: boolean = false,
+    tableNumber: string = ''
   ): Promise<{ orderId: string; invoiceNumber: string } | null> {
     try {
       this.isProcessingSignal.set(true);
@@ -660,6 +665,10 @@ export class PosService {
 
       console.log('📦 Processing order with invoice service...');
       
+      if (saveAsOpen) {
+        console.log('💼 OPEN order mode: Will skip background operations (no tracking/inventory/ledger)');
+      }
+      
       // 🧾 Execute invoice transaction with NEW structure
       // Only apply timeout when online - offline mode should work without timeout
       let invoiceResult;
@@ -668,7 +677,9 @@ export class PosService {
           storeId: storeId,
           orderData: orderData,
           customerInfo: customerInfo, // Pass as separate parameter
-          paymentsData: payments      // Pass as separate parameter
+          paymentsData: payments,     // Pass as separate parameter
+          saveAsOpen: saveAsOpen,     // Pass OPEN flag
+          tableNumber: tableNumber    // Pass table number separately
         });
         
         // Apply very short timeout to quickly detect offline mode
@@ -711,18 +722,23 @@ export class PosService {
       };
 
       // Fire all background operations without blocking receipt display
-      // These will complete asynchronously and Firestore offline persistence will queue them
-      this.executeBackgroundOrderOperations(
-        company.id!,
-        storeId,
-        invoiceResult.orderId!,
-        invoiceResult.invoiceNumber!,
-        cartSummary,
-        cartItems,
-        user.uid
-      ).catch(err => {
-        console.warn('⚠️ Background operations error (non-critical):', err);
-      });
+      // Skip background operations for OPEN orders (no tracking/inventory/ledger)
+      if (!saveAsOpen) {
+        // These will complete asynchronously and Firestore offline persistence will queue them
+        this.executeBackgroundOrderOperations(
+          company.id!,
+          storeId,
+          invoiceResult.orderId!,
+          invoiceResult.invoiceNumber!,
+          cartSummary,
+          cartItems,
+          user.uid
+        ).catch(err => {
+          console.warn('⚠️ Background operations error (non-critical):', err);
+        });
+      } else {
+        console.log('💼 OPEN order: Skipping background operations (tracking/inventory/ledger)');
+      }
 
       return orderResult;
 
@@ -738,6 +754,83 @@ export class PosService {
    * Execute background operations after order is created
    * These operations run asynchronously and don't block receipt display
    */
+  /**
+   * Execute background operations for an existing order (public method for Pay Now on OPEN orders)
+   * This includes: orderSellingTracking, inventory updates, inventory deduction, and ledger entries
+   */
+  async executeBackgroundOperationsForExistingOrder(
+    orderId: string,
+    invoiceNumber: string
+  ): Promise<void> {
+    try {
+      console.log('🔄 Executing background operations for existing order:', orderId);
+      
+      // Get necessary data
+      const userData = await this.getUserAndCompanyData();
+      if (!userData) {
+        throw new Error('User or company not found');
+      }
+      
+      const { user, company } = userData;
+      const storeId = this.selectedStoreId();
+      if (!storeId) {
+        throw new Error('No store selected');
+      }
+
+      // Fetch order details to get items
+      const orderDetailsQuery = query(
+        collection(this.firestore, 'orderDetails'),
+        where('orderId', '==', orderId)
+      );
+      const orderDetailsSnapshot = await getDocs(orderDetailsQuery);
+      
+      if (orderDetailsSnapshot.empty) {
+        throw new Error('No order details found for this order');
+      }
+
+      // Collect all items from orderDetails
+      let allItems: any[] = [];
+      orderDetailsSnapshot.forEach(doc => {
+        const data = doc.data();
+        if (data['items'] && Array.isArray(data['items'])) {
+          allItems = allItems.concat(data['items']);
+        }
+      });
+
+      // Fetch the order document to get totals
+      const orderRef = doc(this.firestore, 'orders', orderId);
+      const orderDoc = await getDoc(orderRef);
+      
+      if (!orderDoc.exists()) {
+        throw new Error('Order not found');
+      }
+      
+      const orderData = orderDoc.data();
+      
+      // Create cart summary from order data
+      const cartSummary = {
+        netAmount: orderData['totalAmount'] || orderData['netAmount'] || 0,
+        totalQuantity: allItems.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0)
+      };
+
+      // Execute background operations
+      await this.executeBackgroundOrderOperations(
+        company.id!,
+        storeId,
+        orderId,
+        invoiceNumber,
+        cartSummary,
+        allItems,
+        user.uid
+      );
+
+      console.log('✅ Background operations completed for existing order:', orderId);
+    } catch (error) {
+      console.error('❌ Error executing background operations for existing order:', error);
+      throw error;
+    }
+  }
+
   private async executeBackgroundOrderOperations(
     companyId: string,
     storeId: string,
