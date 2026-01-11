@@ -1,4 +1,4 @@
-import { Injectable, inject } from '@angular/core';
+import { Injectable, inject, Injector } from '@angular/core';
 import { Firestore, collection, doc, getDocs, query, where, orderBy, limit, Timestamp, writeBatch, addDoc, getDoc, updateDoc, runTransaction } from '@angular/fire/firestore';
 import { applyCreateTimestamps } from '../core/utils/firestore-timestamps';
 import { deleteField } from 'firebase/firestore';
@@ -14,6 +14,7 @@ export class InventoryDataService {
   private readonly auth = inject(AuthService);
   private readonly productService = inject(ProductService);
   private readonly productSummaryService = inject(ProductSummaryService);
+  private readonly injector = inject(Injector);
 
   private collectionName = 'productInventory'; // Use existing productInventory collection
 
