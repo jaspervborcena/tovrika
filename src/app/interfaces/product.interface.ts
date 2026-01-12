@@ -16,6 +16,7 @@ export interface Product {
   unitType: string;
   category: string;
   totalStock: number;
+  costPrice?: number;
   originalPrice: number;
   sellingPrice: number;
   companyId: string;
@@ -34,17 +35,6 @@ export interface Product {
    * Optional to keep backward compatibility; defaults to false when missing.
    */
   isFavorite?: boolean;
-  /**
-   * Flag to indicate if this product requires inventory tracking.
-   * Set to true for physical products, false for services or non-inventory items.
-   * Optional to keep backward compatibility; defaults to true when missing.
-   */
-  isInventory?: boolean;
-  /**
-   * Deprecated: inventory is managed in productInventory collection.
-   * Kept optional for backward compatibility during migration.
-   */
-  // inventory?: ProductInventory[];
   
   // Tax and Discount Fields
   isVatApplicable: boolean;
@@ -56,7 +46,13 @@ export interface Product {
   // Price and Quantity Tracking
   // priceHistory?: PriceChange[];
   // quantityAdjustments removed: tracking moved to productInventoryEntries and deduction history
-  
+  /**
+   * Flag to track stock levels for this product.
+   * Set to true for products that need inventory tracking.
+   * Set to false for services or non-tracked items (no inventory/deductions processed).
+   * Defaults to false if not specified.
+   */
+  isStockTracked?: boolean;
   status?: ProductStatus;
   createdAt?: Date;
   updatedAt?: Date;

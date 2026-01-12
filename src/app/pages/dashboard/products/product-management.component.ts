@@ -1650,15 +1650,15 @@ import { AppConstants } from '../../../shared/enums/app-constants.enum';
                   </label>
                 </div>
 
-                <!-- Inventory Tracking Toggle -->
+                <!-- Stock Tracking Toggle -->
                 <div class="form-group" style="display:flex; align-items:center; gap:8px;">
                   <input 
                     type="checkbox" 
-                    id="isInventory"
-                    formControlName="isInventory"
+                    id="isStockTracked"
+                    formControlName="isStockTracked"
                     style="width:16px; height:16px; cursor:pointer;"/>
-                  <label for="isInventory" style="margin:0; cursor:pointer;">
-                    📦 Track Inventory (uncheck for services/non-inventory items)
+                  <label for="isStockTracked" style="margin:0; cursor:pointer;">
+                    📦 Keep track of product quantities and inventory
                   </label>
                 </div>
 
@@ -2247,6 +2247,7 @@ import { AppConstants } from '../../../shared/enums/app-constants.enum';
       <app-create-tag-modal
         *ngIf="showCreateTagModal()"
         [storeId]="getCurrentStoreId()"
+        [stores]="stores()"
         (saved)="onTagSaved($event)"
         (cancelled)="onTagCancelled()"
       />
@@ -2304,7 +2305,12 @@ export class ProductManagementComponent implements OnInit {
       });
     }
 
-    return filtered;
+    // Sort by updatedAt descending (most recently updated first)
+    return filtered.sort((a, b) => {
+      const aTime = a.updatedAt instanceof Date ? a.updatedAt.getTime() : 0;
+      const bTime = b.updatedAt instanceof Date ? b.updatedAt.getTime() : 0;
+      return bTime - aTime; // Descending order
+    });
   });
 
   // State
@@ -2629,8 +2635,8 @@ export class ProductManagementComponent implements OnInit {
   imageUrl: [''],
   // Favorites
   isFavorite: [false],
-  // Inventory tracking
-  isInventory: [true],
+  // Stock tracking (for inventory deductions)
+  isStockTracked: [false],
   // Tax and Discount Fields
   isVatApplicable: [true],
   vatRate: [AppConstants.DEFAULT_VAT_RATE, [Validators.min(0), Validators.max(100)]],
@@ -2788,7 +2794,7 @@ export class ProductManagementComponent implements OnInit {
       discountValue: 0
     });
     
-    // Load categories for the default store if available
+    // Load categories and tags for the default store if available
     if (defaultStoreId) {
       console.log('📋 Loading categories for default store:', defaultStoreId);
       try {
@@ -2806,13 +2812,18 @@ export class ProductManagementComponent implements OnInit {
           console.log('  - Firestore permissions issue');
         }
         
+        // Load tags for the default store
+        console.log('🏷️ Loading tags for default store:', defaultStoreId);
+        await this.loadTags(defaultStoreId);
+        console.log('✅ Tags loaded for store. Count:', this.availableTags().length);
+        
         // Force change detection to update dropdown
         this.cdr.detectChanges();
       } catch (error) {
-        console.error('❌ Error loading categories for default store:', error);
+        console.error('❌ Error loading categories/tags for default store:', error);
       }
     } else {
-      console.log('⚠️ No default store ID available for category loading');
+      console.log('⚠️ No default store ID available for category/tag loading');
     }
     // Ensure required defaults after reset
     this.productForm.patchValue({
@@ -2832,11 +2843,18 @@ export class ProductManagementComponent implements OnInit {
     this.cdr.detectChanges();
   }
 
-  openEditModal(product: Product): void {
+  async openEditModal(product: Product): Promise<void> {
     this.isEditMode = true;
     this.selectedProduct = product;
     // Load product tags into signal
     this.selectedTagIds.set(product.tags || []);
+    
+    // Load tags for the product's store to ensure only relevant tags are shown
+    if (product.storeId) {
+      console.log('🏷️ Loading tags for product store:', product.storeId);
+      await this.loadTags(product.storeId);
+    }
+    
     // Patch the form silently to avoid triggering valueChange subscriptions
     this.productForm.patchValue(product, { emitEvent: false });
     // Set costPrice to 0 initially (will be loaded from latest batch if available)
@@ -3014,6 +3032,7 @@ export class ProductManagementComponent implements OnInit {
 
     this.loading = true;
     try {
+      console.log('🚀 submitProduct called - isEditMode:', this.isEditMode);
       const rawFormValue = this.productForm.getRawValue(); // Use getRawValue() to include disabled fields
       
       // Clean undefined values before processing
@@ -3021,6 +3040,12 @@ export class ProductManagementComponent implements OnInit {
       console.log('🔍 Raw form value:', rawFormValue);
       console.log('🔍 Cleaned form value:', formValue);
       console.log('🔍 Category from form:', formValue.category);
+      console.log('💰 Price fields from form:', {
+        totalStock: formValue.totalStock,
+        costPrice: formValue.costPrice,
+        originalPrice: formValue.originalPrice,
+        sellingPrice: formValue.sellingPrice
+      });
       
       // Get storeId and companyId from current permission since Store section was removed
       const currentUser = this.authService.currentUser();
@@ -3128,7 +3153,8 @@ export class ProductManagementComponent implements OnInit {
           barcodeId: formValue.barcodeId,
           imageUrl: formValue.imageUrl,
           isFavorite: !!formValue.isFavorite,
-          isInventory: formValue.isInventory !== false,
+          isStockTracked: !!formValue.isStockTracked,
+          costPrice: Number(formValue.costPrice ?? this.selectedProduct.costPrice ?? 0),
           // Tax and Discount Fields
           isVatApplicable: formValue.isVatApplicable || false,
           vatRate: formValue.vatRate ?? AppConstants.DEFAULT_VAT_RATE,
@@ -3140,13 +3166,37 @@ export class ProductManagementComponent implements OnInit {
           tagLabels: this.getSelectedTagLabels()
         };
 
-        console.log('📝 Updating product with tags:', {
-          tags: this.selectedTagIds(),
-          tagLabels: this.getSelectedTagLabels(),
-          availableTags: this.availableTags().length
+        console.log('📝 Updating product with data:', {
+          updates,
+          hasExistingInventory: this.hasExistingInventory(),
+          selectedProduct: {
+            totalStock: this.selectedProduct.totalStock,
+            costPrice: this.selectedProduct.costPrice,
+            originalPrice: this.selectedProduct.originalPrice,
+            sellingPrice: this.selectedProduct.sellingPrice
+          },
+          formValue: {
+            totalStock: formValue.totalStock,
+            costPrice: formValue.costPrice,
+            originalPrice: formValue.originalPrice,
+            sellingPrice: formValue.sellingPrice
+          }
         });
 
+        console.log('� CRITICAL: Price fields IN updates object:', {
+          totalStock: updates.totalStock,
+          costPrice: updates.costPrice,
+          originalPrice: updates.originalPrice,
+          sellingPrice: updates.sellingPrice,
+          'updates has totalStock': 'totalStock' in updates,
+          'updates has costPrice': 'costPrice' in updates,
+          'updates has originalPrice': 'originalPrice' in updates,
+          'updates has sellingPrice': 'sellingPrice' in updates
+        });
+
+        console.log('�🔧 Calling productService.updateProduct with id:', this.selectedProduct.id);
         await this.productService.updateProduct(this.selectedProduct.id!, updates);
+        console.log('✅ Product update completed successfully');
 
         // Handle inventory batch updates based on current batches
         const currentBatches = await this.inventoryDataService.listBatches(this.selectedProduct.id!);
@@ -3269,7 +3319,8 @@ export class ProductManagementComponent implements OnInit {
           barcodeId: formValue.barcodeId,
           imageUrl: formValue.imageUrl,
           isFavorite: !!formValue.isFavorite,
-          isInventory: formValue.isInventory !== false,
+          isStockTracked: !!formValue.isStockTracked,
+          costPrice: hasInitial ? Number(formValue.initialCostPrice || 0) : Number(formValue.costPrice || 0),
           totalStock: hasInitial ? Number(formValue.initialQuantity || 0) : Number(formValue.totalStock || 0),
           
           // Tax and Discount Fields from form
@@ -4254,10 +4305,17 @@ export class ProductManagementComponent implements OnInit {
         
         // Clear current category selection since categories are store-specific
         this.productForm.patchValue({ category: '' });
+        
+        // Load tags for the selected store
+        console.log('🏷️ Loading tags for selected store:', selectedStoreId);
+        await this.loadTags(selectedStoreId);
       } else {
-        console.log('⚠️ No store selected, clearing categories');
+        console.log('⚠️ No store selected, clearing categories and tags');
         // Clear category selection when no store is selected
         this.productForm.patchValue({ category: '' });
+        // Clear tags as well
+        this.availableTags.set([]);
+        this.tagGroups.set([]);
       }
     }, 100);
   }
@@ -4451,6 +4509,19 @@ export class ProductManagementComponent implements OnInit {
   }
 
   getCurrentStoreId(): string {
+    // Priority 1: Use storeId from product form when editing/adding a product
+    const formStoreId = this.productForm?.get('storeId')?.value;
+    if (formStoreId) {
+      return formStoreId;
+    }
+    
+    // Priority 2: Use the selected store from store selection service (filters products list)
+    const selectedStoreId = this.selectedStore();
+    if (selectedStoreId) {
+      return selectedStoreId;
+    }
+    
+    // Fallback: Use current permission's storeId
     return this.authService.getCurrentPermission()?.storeId || '';
   }
 

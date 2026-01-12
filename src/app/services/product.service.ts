@@ -808,11 +808,35 @@ export class ProductService implements OnDestroy {
    */
   private updateProductInCache(productId: string, updates: Partial<Product>): void {
     const currentProducts = this.products();
-    const updatedProducts = currentProducts.map(product =>
-      product.id === productId
-        ? { ...product, ...updates, updatedAt: new Date() }
-        : product
-    );
+    const updatedProducts = currentProducts.map(product => {
+      if (product.id === productId) {
+        // Convert Timestamp to Date for updatedAt if present
+        const normalizedUpdates = { ...updates };
+        if (normalizedUpdates.updatedAt) {
+          normalizedUpdates.updatedAt = this.safeToDate(normalizedUpdates.updatedAt);
+        }
+        const updatedProduct = { ...product, ...normalizedUpdates };
+        console.log('🔄 Cache updated for product:', {
+          productId,
+          oldValues: {
+            totalStock: product.totalStock,
+            costPrice: product.costPrice,
+            originalPrice: product.originalPrice,
+            sellingPrice: product.sellingPrice,
+            updatedAt: product.updatedAt
+          },
+          newValues: {
+            totalStock: updatedProduct.totalStock,
+            costPrice: updatedProduct.costPrice,
+            originalPrice: updatedProduct.originalPrice,
+            sellingPrice: updatedProduct.sellingPrice,
+            updatedAt: updatedProduct.updatedAt
+          }
+        });
+        return updatedProduct;
+      }
+      return product;
+    });
 
     this.updateCacheState({
       products: this.normalizeAndDeduplicateProducts(updatedProducts)
@@ -847,6 +871,7 @@ export class ProductService implements OnDestroy {
         totalStock: Number(data['totalStock'] || 0),
         sellingPrice: Number(data['sellingPrice'] || 0),
         originalPrice: Number(data['originalPrice'] ?? data['unitPrice'] ?? data['sellingPrice'] ?? 0),
+        costPrice: Number(data['costPrice'] ?? 0),
         companyId: data['companyId'] || '',
         storeId: data['storeId'] || '',
         barcodeId: data['barcodeId'] || '',
@@ -972,6 +997,7 @@ export class ProductService implements OnDestroy {
       totalStock: Number(item.totalStock || item.stock || 0),
       sellingPrice: Number(item.sellingPrice || item.unitPrice || 0),
       originalPrice: Number(item.originalPrice || item.unitPrice || item.sellingPrice || 0),
+      costPrice: Number(item.costPrice ?? 0),
       companyId: item.companyId || '',
       storeId: item.storeId || '',
       barcodeId: item.barcodeId || item.barcode || '',
@@ -1178,6 +1204,17 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
 
   async updateProduct(productId: string, updates: Partial<Product>): Promise<void> {
     try {
+      console.log('🔧 ProductService.updateProduct called:', {
+        productId,
+        updates: {
+          totalStock: updates.totalStock,
+          costPrice: updates.costPrice,
+          originalPrice: updates.originalPrice,
+          sellingPrice: updates.sellingPrice,
+          ...updates
+        }
+      });
+      
       // Get current user ID
       const currentUser = this.authService.getCurrentUser();
       if (!currentUser) {
@@ -1186,6 +1223,9 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
 
       // Prepare update data with proper Timestamp conversion
       const updateData: any = { ...updates };
+      
+      console.log('🔍 updateProduct - Original updates object:', JSON.stringify(updates, null, 2));
+      
       // Normalize VAT fields when present
       if ('vatRate' in updates) {
         updateData.vatRate = Number((updates as any).vatRate || 0);
@@ -1195,6 +1235,9 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
       }
       if ('sellingPrice' in updates) {
         updateData.sellingPrice = Number((updates as any).sellingPrice || 0);
+      }
+      if ('costPrice' in updates) {
+        updateData.costPrice = Number((updates as any).costPrice || 0);
       }
       if ('isVatApplicable' in updates) {
         updateData.isVatApplicable = !!(updates as any).isVatApplicable;
@@ -1219,14 +1262,33 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
           updateData.totalStock = Number(stockValue);
         }
       }
+      
+      console.log('🔍 updateProduct - After normalization:', JSON.stringify(updateData, null, 2));
+
+      // Add updatedAt timestamp to track when product was last modified
+      updateData.updatedAt = Timestamp.now();
 
       // Clean undefined values to prevent Firestore errors
       const cleanedUpdateData = this.cleanUndefinedValues(updateData);
+      
+      console.log('💾 About to save to Firestore:', {
+        productId,
+        cleanedUpdateData: {
+          totalStock: cleanedUpdateData.totalStock,
+          costPrice: cleanedUpdateData.costPrice,
+          originalPrice: cleanedUpdateData.originalPrice,
+          sellingPrice: cleanedUpdateData.sellingPrice,
+          updatedAt: cleanedUpdateData.updatedAt,
+          ...cleanedUpdateData
+        }
+      });
       
       // Use Firestore updateDoc directly for automatic offline persistence
       // Firestore will queue this update if offline and update its cache automatically
       const productRef = doc(this.firestore, 'products', productId);
       await updateDoc(productRef, cleanedUpdateData);
+      
+      console.log('✅ Firestore update completed successfully');
 
       // Update the local cache optimistically with the cleaned/normalized data
       this.updateProductInCache(productId, cleanedUpdateData as Partial<Product>);
@@ -1634,6 +1696,7 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
           totalStock: p.totalStock !== undefined ? p.totalStock : (p.stock !== undefined ? p.stock : 0),
           originalPrice: p.originalPrice !== undefined ? p.originalPrice : (p.price !== undefined ? p.price : 0),
           sellingPrice: p.sellingPrice !== undefined ? p.sellingPrice : (p.price !== undefined ? p.price : 0),
+          costPrice: p.costPrice ?? 0,
           companyId: p.companyId || '',
           storeId: p.storeId || storeId,
           barcodeId: p.barcodeId || p.barcode || '',
