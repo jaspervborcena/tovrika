@@ -75,6 +75,8 @@
     "returnsTab": "Returns",
     "refundsTab": "Refunds",
     "damageTab": "Damage",
+    "unpaidTab": "Unpaid",
+    "recoveredTab": "Recovered",
     "splitPaymentsTab": "Split Payments",
     "discountsTab": "Discounts & Promotions",
     "newOrder": "New Order",
