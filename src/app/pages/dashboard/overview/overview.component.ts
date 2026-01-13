@@ -101,8 +101,8 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
                 </svg>
               </div>
               <div class="card-content">
-                <div class="card-value">{{ totalOrders() }}</div>
-                <div class="card-label">Total Orders</div>
+                <div class="card-value">Orders: ({{ ledgerOrderQty() }})</div>
+                <div class="card-label">Items: ({{ ledgerItemsQty() }})</div>
                 <div class="card-change">
                   <span class="change-icon">{{ ordersChange().symbol }}</span>
                   <span class="change-text">{{ ordersChange().percent | number:'1.1-1' }}% {{ comparisonLabel() }}</span>
@@ -121,6 +121,40 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
                 <div class="card-value">Returns: ₱{{ ledgerReturnAmount() | number:'1.0-0' }} ({{ ledgerReturnQty() }})</div>
                 <div class="card-label">Refunds: ₱{{ ledgerRefundAmount() | number:'1.0-0' }} ({{ ledgerRefundQty() }})</div>
                 <div class="card-label">Damage: ₱{{ ledgerDamageAmount() | number:'1.0-0' }} ({{ ledgerDamageQty() }})</div>
+              </div>
+            </div>
+
+            <!-- Unpaid Card -->
+            <div class="sales-card unpaid-card">
+              <div class="card-icon">
+                <svg class="icon" fill="currentColor" viewBox="0 0 20 20">
+                  <path d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-11a1 1 0 10-2 0v3.586L7.707 11.293a1 1 0 00-1.414 1.414l3 3a1 1 0 001.414 0l3-3a1 1 0 00-1.414-1.414L11 10.586V7z"/>
+                </svg>
+              </div>
+              <div class="card-content">
+                <div class="card-value">₱{{ ledgerUnpaidAmount() | number:'1.0-0' }}</div>
+                <div class="card-label">Unpaid ({{ ledgerUnpaidQty() }})</div>
+                <div class="card-change">
+                  <span class="change-icon">⏳</span>
+                  <span class="change-text">Pending payments</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Recovered Card -->
+            <div class="sales-card recovered-card">
+              <div class="card-icon">
+                <svg class="icon" fill="currentColor" viewBox="0 0 20 20">
+                  <path d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"/>
+                </svg>
+              </div>
+              <div class="card-content">
+                <div class="card-value">₱{{ ledgerRecoveredAmount() | number:'1.0-0' }}</div>
+                <div class="card-label">Recovered ({{ ledgerRecoveredQty() }})</div>
+                <div class="card-change">
+                  <span class="change-icon">✓</span>
+                  <span class="change-text">Payments collected</span>
+                </div>
               </div>
             </div>
 
@@ -317,16 +351,17 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
               <div class="products-list">
                 <div class="products-header">
                   <span>Product</span>
-                  <span>SKU</span>
                   <span>Sales</span>
                 </div>
                 <div class="product-item" *ngFor="let product of topProducts()">
                   <div class="product-info">
                     <div class="product-avatar">{{ product.avatar }}</div>
-                    <span>{{ product.name }}</span>
+                    <div class="product-details">
+                      <span class="product-name">{{ product.name }}</span>
+                      <span class="product-sku" *ngIf="product.code">{{ product.code }}</span>
+                    </div>
                   </div>
-                  <span class="product-code">{{ product.code }}</span>
-                  <span class="product-sales">{{ product.count || product.sales || 0 }}</span>
+                  <span class="product-sales">{{ product.sales || 0 }}</span>
                 </div>
                 
                 <!-- Show message if no products -->
@@ -575,6 +610,14 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
 
     .adjustments-card {
       background: #f97316;
+    }
+
+    .unpaid-card {
+      background: #f59e0b;
+    }
+
+    .recovered-card {
+      background: #06b6d4;
     }
 
     .card-icon {
@@ -958,6 +1001,7 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
       display: flex;
       align-items: center;
       gap: 12px;
+      flex: 1;
     }
 
     .product-avatar {
@@ -971,10 +1015,23 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
       justify-content: center;
       font-size: 0.75rem;
       font-weight: 600;
+      flex-shrink: 0;
     }
 
-    .product-code {
+    .product-details {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .product-name {
       font-size: 0.875rem;
+      font-weight: 500;
+      color: #111827;
+    }
+
+    .product-sku {
+      font-size: 0.75rem;
       color: #6b7280;
     }
 
@@ -1293,61 +1350,6 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
         margin-right: -4px; /* Extend to right edge */
       }
 
-      .chart-title {
-        font-size: 0.8125rem; /* Slightly reduced from 0.875rem */
-        margin-bottom: 6px; /* Reduced from 8px */
-      }
-
-      .chart-content {
-        height: 140px; /* Further reduced from 150px */
-        margin-left: -4px; /* Move chart content left */
-        display: flex;
-        flex-direction: column;
-      }
-
-      .chart-placeholder {
-        order: 2; /* Chart goes after orders pie */
-      }
-
-      .orders-pie-wrapper {
-        order: 1; /* Orders pie wrapper goes first */
-        margin-top: 0;
-        margin-bottom: 8px; /* Add spacing below */
-        gap: 12px; /* Reduce gap for mobile */
-      }
-
-      .orders-pie {
-        width: 120px; /* Further reduced for mobile */
-        height: 120px;
-      }
-
-      .orders-donut {
-        width: 120px; /* Match orders-pie */
-        height: 120px;
-      }
-
-      .orders-donut-hole {
-        width: 60px; /* Half of orders-donut */
-        height: 60px;
-      }
-
-      .orders-count {
-        font-size: 0.875rem; /* Smaller text for mobile donut */
-      }
-
-      .orders-profit {
-        font-size: 0.75rem; /* Smaller profit text */
-      }
-
-      .chart-header {
-        order: 0; /* Chart title stays at top */
-        margin-bottom: 8px;
-      }
-
-      .chart-placeholder {
-        height: 100px; /* Further reduced from 110px */
-      }
-
       .sales-cards {
         margin-left: -6px; /* Move further to the left */
         margin-right: -4px; /* Extend to right edge */
@@ -1584,9 +1586,14 @@ export class OverviewComponent implements OnInit {
   protected ledgerRefundQty = signal<number>(0);
   protected ledgerDamageAmount = signal<number>(0);
   protected ledgerDamageQty = signal<number>(0);
+  protected ledgerUnpaidAmount = signal<number>(0);
+  protected ledgerUnpaidQty = signal<number>(0);
+  protected ledgerRecoveredAmount = signal<number>(0);
+  protected ledgerRecoveredQty = signal<number>(0);
   protected ledgerCompletedAmount = signal<number>(0);
   // Ledger-sourced order counts
   protected ledgerOrderQty = signal<number>(0);
+  protected ledgerItemsQty = signal<number>(0);
   protected ledgerCancelQty = signal<number>(0);
   protected ledgerCompletedQty = signal<number>(0);
   protected topProductsList = signal<any[]>([]);
@@ -1946,6 +1953,28 @@ export class OverviewComponent implements OnInit {
         this.ledgerDamageQty.set(0);
       }
 
+      // Fetch unpaid for today
+      const unpaidLedger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, today, 'unpaid');
+      console.log('🔍 Unpaid Ledger Query - companyId:', companyId, 'storeId:', storeId, 'result:', unpaidLedger);
+      if (unpaidLedger && (unpaidLedger.runningBalanceAmount || unpaidLedger.runningBalanceQty || unpaidLedger.runningBalanceOrderQty)) {
+        this.ledgerUnpaidAmount.set(Number(unpaidLedger.runningBalanceAmount || 0));
+        this.ledgerUnpaidQty.set(Number(unpaidLedger.runningBalanceQty || unpaidLedger.runningBalanceOrderQty || 0));
+      } else {
+        this.ledgerUnpaidAmount.set(0);
+        this.ledgerUnpaidQty.set(0);
+      }
+
+      // Fetch recovered for today
+      const recoveredLedger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, today, 'recovered');
+      console.log('🔍 Recovered Ledger Query - companyId:', companyId, 'storeId:', storeId, 'result:', recoveredLedger);
+      if (recoveredLedger && (recoveredLedger.runningBalanceAmount || recoveredLedger.runningBalanceQty || recoveredLedger.runningBalanceOrderQty)) {
+        this.ledgerRecoveredAmount.set(Number(recoveredLedger.runningBalanceAmount || 0));
+        this.ledgerRecoveredQty.set(Number(recoveredLedger.runningBalanceQty || recoveredLedger.runningBalanceOrderQty || 0));
+      } else {
+        this.ledgerRecoveredAmount.set(0);
+        this.ledgerRecoveredQty.set(0);
+      }
+
       // Fetch cancels for today
       const cancelLedger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, today, 'cancelled');
       if (cancelLedger && cancelLedger.runningBalanceQty) {
@@ -1993,7 +2022,8 @@ export class OverviewComponent implements OnInit {
       let currentMonthDamageQty = 0;
       let currentMonthCancelQty = 0;
 
-      for (let day = 1; day <= currentDay; day++) {
+     
+      for ( let day = 1; day <= currentDay; day++) {
         const date = new Date(currentYear, currentMonth, day);
         
         // Completed orders
@@ -2188,6 +2218,10 @@ export class OverviewComponent implements OnInit {
       this.ledgerRefundQty.set(0);
       this.ledgerDamageAmount.set(0);
       this.ledgerDamageQty.set(0);
+      this.ledgerUnpaidAmount.set(0);
+      this.ledgerUnpaidQty.set(0);
+      this.ledgerRecoveredAmount.set(0);
+      this.ledgerRecoveredQty.set(0);
     }
   }
   
@@ -2244,9 +2278,14 @@ export class OverviewComponent implements OnInit {
     this.ledgerRefundQty.set(0);
     this.ledgerDamageAmount.set(0);
     this.ledgerDamageQty.set(0);
+    this.ledgerUnpaidAmount.set(0);
+    this.ledgerUnpaidQty.set(0);
+    this.ledgerRecoveredAmount.set(0);
+    this.ledgerRecoveredQty.set(0);
     this.ledgerCancelQty.set(0);
     this.ledgerCompletedQty.set(0);
     this.ledgerOrderQty.set(0);
+    this.ledgerItemsQty.set(0);
     this.ledgerTotalRevenue.set(0);
     this.ledgerTotalOrders.set(0);
     console.log('🔄 Reset all ledger signals to 0');
@@ -2364,6 +2403,23 @@ export class OverviewComponent implements OnInit {
     this.loadData();
   }
 
+  private loadAnalyticsData(startDate: Date, endDate: Date): void {
+    // Load analytics data for the given date range
+    // Called when date range is applied
+    this.loadCurrentDateData().then(() => {
+      this.fetchLedgerTotalsForPeriod(startDate, endDate);
+    }).catch(err => {
+      console.error('Error loading analytics data:', err);
+      this.isLoading.set(false);
+    });
+  }
+
+  private async loadSalesFromCloudFunction(storeId: string, startDate: Date, endDate: Date, status: string): Promise<void> {
+    // Load orders from the order service
+    const orders = await this.orderService.getOrdersByDateRange(storeId, startDate, endDate);
+    this.orders.set(orders || []);
+  }
+
   private async loadData() {
     try {
       this.isLoading.set(true);
@@ -2378,9 +2434,9 @@ export class OverviewComponent implements OnInit {
       
       // After stores load, use the selected period/store to load analytics
       // This ensures the new store/period controls drive the initial load
-      setTimeout(() => {
-        this.applyPeriodAndLoad();
-      }, 100);
+      await this.loadCurrentDateData();
+      await this.fetchTopProducts();
+      this.isLoading.set(false);
 
     } catch (error) {
       console.error('❌ Dashboard error loading data:', error);
@@ -2430,6 +2486,8 @@ export class OverviewComponent implements OnInit {
     try {
       // Use selected store ID or get from permission - EXACT same logic
       const storeId = this.selectedStoreId() || this.authService.getCurrentPermission()?.storeId;
+      const companyId = this.authService.getCurrentPermission()?.companyId || '';
+      
       console.log('🏪 Dashboard Store ID resolution:', {
         selectedStoreId: this.selectedStoreId(),
         permissionStoreId: this.authService.getCurrentPermission()?.storeId,
@@ -2443,7 +2501,7 @@ export class OverviewComponent implements OnInit {
         return;
       }
 
-      // Load TODAY's data - same as sales-summary
+      // Load TODAY's data
       const today = new Date();
       const startDate = new Date(today.toISOString().split('T')[0]); // Start of today
       const endDate = new Date(today.toISOString().split('T')[0]); // End of today
@@ -2451,9 +2509,58 @@ export class OverviewComponent implements OnInit {
 
       console.log('📅 Dashboard loading sales data for store:', storeId, 'from:', startDate, 'to:', endDate);
 
-  // Use Cloud Function API for sales data (same as sales summary)
-  // Explicitly request completed sales for the overview dashboard
-  await this.loadSalesFromCloudFunction(storeId, startDate, endDate, 'completed');
+      // Load today's orders from Firestore
+      const todayOrders = await this.orderService.getOrdersByDateRange(storeId, startDate, endDate);
+      this.orders.set(todayOrders || []);
+      
+      // Get revenue and order count from ledger's running balance for today
+      let totalRevenue = 0;
+      let totalOrderCount = 0;
+      let totalItemsCount = 0;
+      let refundedAmount = 0;
+      try {
+        // Count completed orders directly from orders collection
+        totalOrderCount = await this.orderService.countCompletedOrders(storeId, startDate, endDate);
+        
+        // Use getLatestOrderBalances to get the running totals from orderAccountingLedger
+        const ledger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, today, 'completed');
+        // Also get refunded amount for the same period
+        const refundedLedger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, today, 'refunded');
+        refundedAmount = Number(refundedLedger?.runningBalanceAmount || 0);
+        
+        if (ledger) {
+          // Revenue = runningBalanceAmount (no division, already in PHP)
+          const grossRevenue = Number(ledger.runningBalanceAmount || 0);
+          totalItemsCount = Number(ledger.runningBalanceQty || 0);
+          console.log('📊 Ledger running balances:', { amount: ledger.runningBalanceAmount, itemsQty: ledger.runningBalanceQty, refunded: refundedAmount });
+          
+          // Get today's expenses
+          const todayExpenses = await this.expenseService.getExpensesByStore(storeId, startDate, endDate);
+          const expenseTotal = (todayExpenses || []).reduce((s, e) => s + Number((e as any).amount || 0), 0);
+          
+          // Revenue = runningBalanceAmount - (expense + refunded)
+          totalRevenue = grossRevenue - (expenseTotal + refundedAmount);
+          console.log('📊 Revenue calculation:', { grossRevenue, expenseTotal, refundedAmount, netRevenue: totalRevenue });
+        }
+      } catch (ledgerErr) {
+        console.warn('Failed to fetch ledger balances, falling back to order count:', ledgerErr);
+        // Fallback: use order count and calculate revenue from orders
+        totalOrderCount = todayOrders?.length || 0;
+        if (todayOrders && Array.isArray(todayOrders)) {
+          totalRevenue = todayOrders.reduce((sum, order: any) => {
+            return sum + Number(order.totalAmount || 0);
+          }, 0);
+        }
+      }
+      
+      // Set ledger totals
+      this.ledgerTotalRevenue.set(totalRevenue);
+      this.ledgerTotalOrders.set(totalOrderCount);
+      this.ledgerOrderQty.set(totalOrderCount);
+      this.ledgerItemsQty.set(totalItemsCount);
+      this.ledgerCompletedQty.set(totalOrderCount);
+
+      console.log('📊 Today\'s totals - Revenue:', totalRevenue, 'Orders:', totalOrderCount);
 
       // Load today's expenses for the same date range
       const expenses = await this.expenseService.getExpensesByStore(storeId, startDate, endDate);
@@ -2480,97 +2587,17 @@ export class OverviewComponent implements OnInit {
         console.log('Overview: monthExpenses loaded');
         // Start with expense service total (PHP units)
         this.monthExpensesTotal.set(monthTotal);
-
-        // Also compute ledger expense/refund totals for the same month-to-date range and add to expenses
-        try {
-          const currentPermission = this.authService.getCurrentPermission();
-          const companyId = currentPermission?.companyId || '';
-          // Include both 'refund' and manual 'expense' ledger event types
-          const ledgerExpenses = await this.ledgerService.sumEventsInRange(companyId, storeId, monthStart, monthEnd, ['refunded', 'expense']);
-          const ledgerExpensesNum = Number(ledgerExpenses || 0);
-          this.ledgerTotalRefunds.set(ledgerExpensesNum);
-          // Add ledger expense/refund amounts to monthExpensesTotal
-          this.monthExpensesTotal.set(monthTotal + ledgerExpensesNum);
-        } catch (ledgerErr) {
-          console.warn('Overview: failed to compute ledger expenses', ledgerErr);
-        }
-
-        const yesterday = new Date(now);
-        yesterday.setDate(now.getDate() - 1);
-        const yStart = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate(), 0, 0, 0, 0);
-        const yEnd = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate(), 23, 59, 59, 999);
-        let yExpenses = await this.expenseService.getExpensesByStore(storeId, yStart, yEnd);
-        if ((!yExpenses || yExpenses.length === 0)) {
-          console.warn('Overview: yesterdayExpenses query returned 0 rows, trying fallback no-date query');
-          const fallbackY = await this.expenseService.getExpensesByStore(storeId);
-          if (fallbackY && fallbackY.length > 0) {
-            // Derive yesterday total by filtering fallback result locally
-            yExpenses = (fallbackY || []).filter((e: any) => {
-              const pd = (e.paymentDate && (e.paymentDate as any).toDate) ? (e.paymentDate as any).toDate() : (e.paymentDate ? new Date(e.paymentDate) : null);
-              if (!pd) return false;
-              const d = new Date(pd); d.setHours(0,0,0,0);
-              return d.getTime() === new Date(yStart).getTime();
-            });
-            console.warn('Overview: derived yesterdayExpenses count=', yExpenses.length);
-          }
-        }
-
-        let yTotal = (yExpenses || []).reduce((s, e) => s + (Number((e as any).amount || 0) / 100), 0);
-        try {
-          const currentPermission = this.authService.getCurrentPermission();
-          const companyId = currentPermission?.companyId || '';
-          const ledgerYesterday = await this.ledgerService.sumEventsInRange(companyId, storeId, yStart, yEnd, ['refunded', 'expense']);
-          const ledgerY = Number(ledgerYesterday || 0);
-          yTotal = yTotal + ledgerY;
-        } catch (ledgerErr) {
-          console.warn('Overview: failed to compute ledger yesterday expenses', ledgerErr);
-        }
-        console.log('Overview: yesterdayExpenses loaded');
-        this.yesterdayExpensesTotal.set(yTotal);
-      } catch (e) {
-        console.warn('Overview: Failed to load expense aggregates', e);
-        this.monthExpensesTotal.set(0);
-        this.yesterdayExpensesTotal.set(0);
-      }
-        // Ensure Top Products are refreshed for the currently selected store/company
-        try {
-          await this.fetchTopProducts(storeId);
-        } catch (tpErr) {
-          console.warn('Overview: failed to refresh top products during analytics load', tpErr);
-          this.topProductsList.set([]);
-        }
-
-      console.log('📊 Dashboard sales data loaded from Cloud Function:', this.orders().length, 'orders');
-      if (this.orders().length > 0) {
-        const totalRevenue = this.totalRevenue();
-        console.log('💰 Dashboard total revenue:', totalRevenue);
+      } catch (monthErr) {
+        console.warn('Overview: month expense query failed, will skip month expense calc:', monthErr);
       }
 
-      // Fetch ledger-driven totals from orderAccountingLedger for the selected period
-      try {
-        await this.fetchLedgerTotalsForPeriod(startDate, endDate);
-      } catch (err) {
-        console.warn('Overview: failed to load ledger totals', err);
+      // Mark loading complete
+      if (this.isLoading()) {
+        this.isLoading.set(false);
       }
-
-      // Load products for analytics
-      const products = await this.productService.getProducts();
-      this.products.set(products || []);
-
-      // Load top products by completed counts (prefer ledger/aggregates)
-      try {
-        await this.fetchTopProducts();
-      } catch (e) {
-        console.warn('Overview: failed to load top products', e);
-        this.topProductsList.set([]);
-      }
-
     } catch (error) {
-      console.error('❌ Dashboard error loading current date data:', error);
-      this.orders.set([]);
-    } finally {
+      console.error('❌ Error loading current date data:', error);
       this.isLoading.set(false);
-      console.log('✅ Dashboard data loading complete');
     }
   }
 
@@ -2687,43 +2714,35 @@ export class OverviewComponent implements OnInit {
   }
 
   readonly topProducts = computed(() => {
-    // Prefer topProductsList if available (from ledger aggregation)
     const topList = this.topProductsList();
-    if (topList && topList.length > 0) return topList;
+    if (topList && topList.length > 0) {
+      return topList.map(p => ({
+        name: p.name || 'Product',
+        code: p.code || '',
+        avatar: p.avatar || 'P',
+        sales: Number(p.sales || 0)
+      })).filter(item => item.sales > 0).sort((a, b) => b.sales - a.sales).slice(0, 10);
+    }
 
-    const products = this.products();
-    const orders = this.orders();
-
-    // Create a map to track product sales from orders
     const productSales = new Map<string, { product: any; sales: number; code: string }>();
-
-    // Initialize with existing products
-    products.forEach(product => {
+    this.products().forEach(product => {
       if (product.id) {
-        productSales.set(product.id, {
-          product: product,
-          sales: 0,
-          code: product.skuId || product.id.slice(-4).toUpperCase()
-        });
+        productSales.set(product.id, { product, sales: 0, code: product.skuId || '' });
       }
     });
 
-    // Count sales from orders (you would extend this to parse order items)
-    orders.forEach(order => {
-      // For now, simulate product sales distribution
-      const randomProducts = Array.from(productSales.keys()).slice(0, 3);
-      randomProducts.forEach(productId => {
+    this.orders().forEach(order => {
+      const keys = Array.from(productSales.keys());
+      keys.slice(0, Math.min(3, keys.length)).forEach(productId => {
         const existing = productSales.get(productId);
-        if (existing) {
-          existing.sales += Math.floor(Math.random() * 5) + 1;
-        }
+        if (existing) existing.sales += Math.floor(Math.random() * 5) + 1;
       });
     });
 
-    // Get top 4 products by sales
     return Array.from(productSales.values())
+      .filter(item => item.sales > 0)
       .sort((a, b) => b.sales - a.sales)
-      .slice(0, 4)
+      .slice(0, 10)
       .map(item => ({
         name: item.product.productName || 'Product',
         code: item.code,
@@ -2732,252 +2751,29 @@ export class OverviewComponent implements OnInit {
       }));
   });
 
-  readonly monthlyChartData = computed(() => {
-    const orders = this.orders();
-
-    // If the selected period is a single month, return daily data for that month
-    const period = this.selectedPeriod();
-    if (period === 'this_month' || period === 'previous_month') {
-      const now = new Date();
-      const ref = period === 'this_month' ? now : new Date(now.getFullYear(), now.getMonth() - 1, 1);
-      const year = ref.getFullYear();
-      const month = ref.getMonth();
-      const daysInMonth = new Date(year, month + 1, 0).getDate();
-
-      return Array.from({ length: daysInMonth }).map((_, idx) => {
-        const day = idx + 1;
-        const start = new Date(year, month, idx, 0, 0, 0, 0);
-        const end = new Date(year, month, idx, 23, 59, 59, 999);
-        const dayOrders = orders.filter(o => {
-          const d = o.createdAt ? new Date(o.createdAt) : null;
-          return d && d.getTime() >= start.getTime() && d.getTime() <= end.getTime();
-        });
-        const ordersCount = dayOrders.length;
-        const profit = dayOrders.reduce((s, o) => s + (Number(o.netAmount ?? o.totalAmount ?? 0) || 0), 0);
-        return { label: String(day), orders: ordersCount, profit: Math.round(profit) };
-      });
-    }
-
-    // Default: monthly overview across months
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    const currentMonth = new Date().getMonth();
-
-    return months.map((month, index) => {
-      const baseValue = orders.length > 0 ? this.totalRevenue() : 0;
-      const multiplier = index <= currentMonth ? Math.random() * 0.8 + 0.4 : 0;
-
-      return {
-        label: month,
-        orders: Math.floor(baseValue * multiplier / 1000),
-        profit: Math.floor(baseValue * multiplier * 0.3 / 1000)
-      };
-    });
-  });
-
-  protected chartLabels = computed(() => this.monthlyChartData().map(d => d.label));
-
-  // Rewritten: avoid calling Cloud Function / BigQuery API and use Firestore-first flows.
-  async loadSalesFromCloudFunction(storeId: string, startDate?: Date, endDate?: Date, status: string = 'completed'): Promise<void> {
-    const refDate = startDate || new Date();
-    try {
-      // Use orderService's hybrid date-range loader (it prefers Firestore and falls back to API if configured)
-      const orders = await this.orderService.getOrdersByDateRange(storeId, startDate || refDate, endDate || refDate);
-
-      // Early exit if no orders - skip normalization
-      if (!orders || orders.length === 0) {
-        this.orders.set([]);
-        return;
-      }
-
-      const normalized = (orders || []).map((o: any, idx: number) => ({
-        ...o,
-        id: o.id || `order-${idx}`,
-        customerName: o.soldTo || o.customerName || 'Walk-in Customer',
-        items: o.items || []
-      }));
-
-      this.orders.set(normalized);
-
-      // Note: Ledger-driven aggregates (revenue, orders) are now set by:
-      // - fetchTodayAnalytics() for 'today' period
-      // - fetchLedgerTotalsForPeriod() for other periods
-      // Removed redundant ledger lookup here to prevent race conditions
-
-      console.log(`✅ Loaded ${normalized.length} orders for store=${storeId} (Firestore-first)`);
-    } catch (err) {
-      console.error('❌ Failed to load orders for overview:', err);
-      this.orders.set([]);
-    }
-  }
-
-  // Method to load analytics data from Cloud Function API (clean, ledger-first)
-  async loadAnalyticsData(startDate: Date, endDate: Date): Promise<void> {
-    this.isLoading.set(true);
-    try {
-      const storeId = this.selectedStoreId() || this.authService.getCurrentPermission()?.storeId;
-      if (!storeId) {
-        this.analyticsLoadInProgress = false;
-        return;
-      }
-
-      // Load orders (Firestore-first) and normalize
-      await this.loadSalesFromCloudFunction(storeId, startDate, endDate, 'completed');
-
-      // Load expenses for the selected range (single, simple pass)
-      try {
-        const expenses = (await this.expenseService.getExpensesByStore(storeId, startDate, endDate)) || [];
-        this.expenses.set(expenses);
-        const periodTotal = (expenses || []).reduce((s, e) => s + (Number((e as any).amount || 0) / 100), 0);
-        this.monthExpensesTotal.set(periodTotal);
-      } catch (expErr) {
-        console.warn('Overview: failed to load expenses for selected range', expErr);
-        this.expenses.set([]);
-        this.monthExpensesTotal.set(0);
-        this.yesterdayExpensesTotal.set(0);
-      }
-
-      // Fetch ledger-driven totals for the selected period
-      try {
-        await this.fetchLedgerTotalsForPeriod(startDate, endDate);
-      } catch (ledgerErr) {
-        console.warn('Overview: failed to load ledger totals', ledgerErr);
-      }
-
-      // Fetch comparison data based on selected period
-      const period = this.selectedPeriod();
-      if (period === 'today') {
-        // fetchTodayAnalytics sets ledgerTotalRevenue from latest ledger entry
-        await Promise.all([this.fetchTodayAnalytics(), this.fetchYesterdayRevenue()]);
-      } else if (period === 'yesterday') {
-        // For yesterday, use fetchLedgerTotalsForPeriod for the date range
-        await this.fetchLedgerTotalsForPeriod(startDate, endDate);
-        await this.fetchYesterdayRevenue();
-      } else if (period === 'date_range') {
-        await this.fetchLedgerTotalsForPeriod(startDate, endDate);
-        await this.fetchDateRangeComparison();
-      } else if (period === 'this_month' || period === 'previous_month') {
-        await this.fetchLedgerTotalsForPeriod(startDate, endDate);
-        await this.fetchMonthlyComparison();
-      } else if (period === 'today') {
-        await Promise.all([this.fetchTodayAnalytics(), this.fetchYesterdayRevenue()]);
-      } else if (period === 'yesterday') {
-        await this.fetchYesterdayRevenue();
-      }
-
-      // Refresh top products
-      try {
-        await this.fetchTopProducts(storeId);
-      } catch (tpErr) {
-        console.warn('Overview: failed to refresh top products during analytics load', tpErr);
-        this.topProductsList.set([]);
-      }
-
-    } catch (error) {
-      console.error('❌ Error loading analytics data:', error);
-    } finally {
-      this.isLoading.set(false);
-      this.analyticsLoadInProgress = false;
-    }
-
-  }
-
-  // Method to refresh analytics for different date ranges
-  refreshAnalytics(days: number = 30): void {
-    const endDate = new Date();
-    const startDate = new Date();
-    startDate.setDate(startDate.getDate() - days);
-    this.loadAnalyticsData(startDate, endDate);
-  }
-
-  /**
-   * Fetch ledger totals from orderAccountingLedger for the selected period.
-   * Gets the last ledger entry for each day and sums their running balances.
-   * This gives accurate daily totals that accumulate to monthly totals.
-   */
-  private async fetchLedgerTotalsForPeriod(startDate: Date | null, endDate: Date | null): Promise<void> {
-    try {
-      const currentPermission = this.authService.getCurrentPermission();
-      const companyId = currentPermission?.companyId || '';
-      const storeId = this.selectedStoreId() || this.authService.getCurrentPermission()?.storeId || '';
-
-      if (!startDate || !endDate) {
-        this.ledgerTotalRevenue.set(0);
-        this.ledgerTotalOrders.set(0);
-        return;
-      }
-
-      // Query all ledger entries within the date range
-      const q = query(
-        collection(this.firestore, 'orderAccountingLedger'),
-        where('companyId', '==', companyId),
-        where('storeId', '==', storeId),
-        where('eventType', '==', 'completed'),
-        where('createdAt', '>=', startDate),
-        where('createdAt', '<=', endDate),
-        orderBy('createdAt', 'desc'),
-        limit(2000)
-      );
-
-      const snaps = await getDocs(q);
-
-      // Group by day and get the latest (first in desc order) entry for each day
-      const dailyBalances = new Map<string, { amount: number; orders: number }>();
-
-      snaps.docs.forEach(doc => {
-        const d: any = doc.data();
-        if (d && d.createdAt) {
-          const createdDate = d.createdAt?.toDate ? d.createdAt.toDate() : new Date(d.createdAt);
-          const dayKey = createdDate.toISOString().split('T')[0]; // YYYY-MM-DD
-
-          // Only take the first (latest) entry for each day since we sorted desc
-          if (!dailyBalances.has(dayKey)) {
-            dailyBalances.set(dayKey, {
-              amount: Number(d.runningBalanceAmount || 0),
-              orders: Number(d.runningBalanceOrderQty || d.runningBalanceQty || 0)
-            });
-            console.log(`  📅 ${dayKey}: ₱${d.runningBalanceAmount} (${d.runningBalanceOrderQty || d.runningBalanceQty} orders)`);
-          }
-        }
-      });
-
-      // Sum all daily running balances
-      let totalAmount = 0;
-      let totalOrders = 0;
-      dailyBalances.forEach((balance, day) => {
-        totalAmount += balance.amount;
-        totalOrders += balance.orders;
-      });
-
-      this.ledgerTotalRevenue.set(totalAmount);
-      this.ledgerTotalOrders.set(totalOrders);
-    } catch (err) {
-      console.error('fetchLedgerTotalsForPeriod error:', err);
-      this.ledgerTotalRevenue.set(0);
-      this.ledgerTotalOrders.set(0);
-    }
-  }
-
-  /**
-   * Fetch top products using OrdersSellingTrackingService.getTopProductsCompletedCounts
-   * and map results to the UI-friendly shape stored in `topProductsList`.
-   */
   private async fetchTopProducts(storeId?: string): Promise<void> {
     try {
       const currentPermission = this.authService.getCurrentPermission();
       const companyId = currentPermission?.companyId || '';
-      // Resolve store: prefer explicit arg, then selectedStoreId, then permission storeId, omit when 'all' or empty
-      let resolvedStoreId = storeId;
-      if (!resolvedStoreId) {
-        const sel = this.selectedStoreId();
-        resolvedStoreId = (sel && sel !== 'all') ? sel : (this.authService.getCurrentPermission()?.storeId || undefined);
-      }
+      let resolvedStoreId = storeId || this.selectedStoreId() || this.authService.getCurrentPermission()?.storeId || '';
 
-      const top = await this.ordersSellingTrackingService.getTopProductsCompletedCounts(companyId, resolvedStoreId, 10);
+      // Determine date based on selected period
+      const period = this.selectedPeriod();
+      let queryDate = new Date(); // Default to today
+      
+      if (period === 'yesterday') {
+        queryDate = new Date();
+        queryDate.setDate(queryDate.getDate() - 1);
+      }
+      
+      console.log(`fetchTopProducts: period=${period}, date=${queryDate.toLocaleDateString()}`);
+
+      const top = await this.ordersSellingTrackingService.getTopProductsCounts(companyId, resolvedStoreId, 10, queryDate);
       const mapped = (top || []).slice(0, 10).map((p: any) => ({
-        avatar: (p.productName || '').split(' ').map((s: string) => s.charAt(0)).slice(0,2).join('').toUpperCase() || 'P',
+        avatar: (p.productName || '').split(' ').map((s: string) => s.charAt(0)).slice(0, 2).join('').toUpperCase() || 'P',
         name: p.productName || 'Product',
         code: p.skuId || '',
-        count: Number(p.completedCount || 0)
+        sales: Number(p.count || 0)
       }));
       this.topProductsList.set(mapped);
     } catch (err) {
@@ -3026,6 +2822,94 @@ export class OverviewComponent implements OnInit {
     } catch (e) {
       return '';
     }
-  })
+  });
+
+  private async fetchLedgerTotalsForPeriod(startDate: Date, endDate: Date): Promise<void> {
+    // Get totals from ledger for the selected period (date range)
+    try {
+      const companyId = this.authService.getCurrentPermission()?.companyId || '';
+      const storeId = this.selectedStoreId() || this.authService.getCurrentPermission()?.storeId || '';
+      
+      console.log('📅 fetchLedgerTotalsForPeriod: Fetching for range', {
+        startDate: startDate.toISOString(),
+        endDate: endDate.toISOString(),
+        companyId,
+        storeId
+      });
+      
+      if (!companyId || !storeId) {
+        this.ledgerTotalRevenue.set(0);
+        this.ledgerTotalOrders.set(0);
+        this.ledgerOrderQty.set(0);
+        this.ledgerItemsQty.set(0);
+        this.ledgerCompletedQty.set(0);
+        return;
+      }
+
+      // Check if it's a single day query (today/yesterday) vs a range (this_month, etc.)
+      const isSingleDay = startDate.toDateString() === endDate.toDateString();
+      
+      let ledger: { runningBalanceAmount: number; runningBalanceQty: number; runningBalanceOrderQty: number } | null = null;
+      
+      if (isSingleDay) {
+        // Single day: use getLatestOrderBalances with the date
+        console.log('📅 Single day query - using getLatestOrderBalances');
+        ledger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, startDate, 'completed');
+      } else {
+        // Date range: use getOrderBalancesForRange
+        console.log('📅 Date range query - using getOrderBalancesForRange');
+        ledger = await this.ledgerService.getOrderBalancesForRange(companyId, storeId, startDate, endDate, 'completed');
+      }
+      
+      if (ledger) {
+        // Count completed orders directly from orders collection
+        const totalOrders = await this.orderService.countCompletedOrders(storeId, startDate, endDate);
+        
+        // Get refunded amount for the same period
+        let refundedAmount = 0;
+        if (isSingleDay) {
+          const refundedLedger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, startDate, 'refunded');
+          refundedAmount = Number(refundedLedger?.runningBalanceAmount || 0);
+        } else {
+          const refundedLedger = await this.ledgerService.getOrderBalancesForRange(companyId, storeId, startDate, endDate, 'refunded');
+          refundedAmount = Number(refundedLedger?.runningBalanceAmount || 0);
+        }
+        
+        // Get expenses for the period
+        const expenses = await this.expenseService.getExpensesByStore(storeId, startDate, endDate);
+        const expenseTotal = (expenses || []).reduce((s, e) => s + Number((e as any).amount || 0), 0);
+        
+        // Revenue = runningBalanceAmount - (expense + refunded)
+        const grossRevenue = Number(ledger.runningBalanceAmount || 0);
+        const totalRevenue = grossRevenue - (expenseTotal + refundedAmount);
+        const totalItems = Number(ledger.runningBalanceQty || 0);
+
+        // Set ledger signals
+        this.ledgerTotalRevenue.set(totalRevenue);
+        this.ledgerTotalOrders.set(totalOrders);
+        this.ledgerOrderQty.set(totalOrders);
+        this.ledgerItemsQty.set(totalItems);
+        this.ledgerCompletedQty.set(totalOrders);
+
+        console.log('📊 Ledger totals for period:', { grossRevenue, expenseTotal, refundedAmount, netRevenue: totalRevenue, orders: totalOrders, items: totalItems });
+      } else {
+        this.ledgerTotalRevenue.set(0);
+        this.ledgerTotalOrders.set(0);
+        this.ledgerOrderQty.set(0);
+        this.ledgerItemsQty.set(0);
+        this.ledgerCompletedQty.set(0);
+      }
+    } catch (err) {
+      console.warn('fetchLedgerTotalsForPeriod error:', err);
+      this.ledgerTotalRevenue.set(0);
+      this.ledgerTotalOrders.set(0);
+    }
+  }
+
+  private monthlyChartData = computed(() => {
+    // Stub: Return empty array or sample data for monthly chart
+    // This is used by chartPath() and chartPathProfit() computed properties
+    return [] as any[];
+  });
 }
 

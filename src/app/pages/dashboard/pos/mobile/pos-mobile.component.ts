@@ -207,7 +207,7 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
   readonly isNavigationCollapsed = computed(() => this.isNavigationCollapsedSignal());
   
   // Access tabs for POS management
-  readonly accessTabs = ['New', 'Orders', 'Cancelled', 'Refunds & Returns', 'Split Payments', 'Discounts & Promotions'] as const;
+  readonly accessTabs = ['New', 'Orders', 'Cancelled', 'Returns', 'Refunds', 'Damage', 'Unpaid', 'Recovered', 'Split Payments', 'Discounts & Promotions'] as const;
   private accessTabSignal = signal<string>('New');
   readonly accessTab = computed(() => this.accessTabSignal());
 
