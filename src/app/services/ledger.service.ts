@@ -30,7 +30,7 @@ export class LedgerService {
   companyId: string,
   storeId: string,
   orderId: string,
-  eventType: 'completed' | 'returned' | 'refunded' | 'cancelled' | 'damaged',
+  eventType: 'completed' | 'returned' | 'refunded' | 'cancelled' | 'damaged' | 'unpaid' | 'recovered',
   amount: number,
   qty: number,
   performedBy: string
@@ -151,19 +151,37 @@ export class LedgerService {
 
   /**
    * Get the latest running balances for 'order' eventType (or any provided eventType)
-   * Returns the SUM of all entries for the specified day (not running balance difference)
+   * Returns the runningBalanceAmount from the LATEST entry (cumulative total)
    */
   async getLatestOrderBalances(
     companyId: string,
     storeId: string,
     date: Date = new Date(),
-    eventType: 'completed' | 'returned' | 'refunded' | 'cancelled' | 'damaged' = 'completed'
+    eventType: 'completed' | 'returned' | 'refunded' | 'cancelled' | 'damaged' | 'unpaid' | 'recovered' = 'completed'
   ): Promise<{ runningBalanceAmount: number; runningBalanceQty: number; runningBalanceOrderQty: number }> {
     try {
       const startOfDay = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0, 0);
       const endOfDay = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59, 999);
       
-      // Query for ALL ledger entries within the specified day
+      console.log(`📅 getLatestOrderBalances: eventType=${eventType}, companyId=${companyId}, storeId=${storeId}`);
+      console.log(`📅 Date range: ${startOfDay.toISOString()} to ${endOfDay.toISOString()}`);
+      
+      // First, try a simpler query without date range to debug
+      if (eventType === 'unpaid' || eventType === 'recovered') {
+        const debugQ = query(
+          collection(this.firestore, 'orderAccountingLedger'),
+          where('eventType', '==', eventType),
+          limit(5)
+        );
+        const debugSnaps = await getDocs(debugQ);
+        console.log(`🔍 DEBUG: Found ${debugSnaps.docs.length} ${eventType} entries (no company/store/date filter)`);
+        debugSnaps.docs.forEach((doc, i) => {
+          const data = doc.data();
+          console.log(`🔍 DEBUG entry ${i}: companyId=${data['companyId']}, storeId=${data['storeId']}, amount=${data['runningBalanceAmount']}, createdAt=${data['createdAt']}`);
+        });
+      }
+      
+      // Query for the LATEST ledger entry within the specified day (ordered by createdAt desc, limit 1)
       const q = query(
         collection(this.firestore, 'orderAccountingLedger'),
         where('companyId', '==', companyId),
@@ -171,12 +189,82 @@ export class LedgerService {
         where('eventType', '==', eventType),
         where('createdAt', '>=', startOfDay),
         where('createdAt', '<=', endOfDay),
-        orderBy('createdAt', 'desc')
+        orderBy('createdAt', 'desc'),
+        limit(1)
       );
       
       const snaps = await getDocs(q);
+      console.log(`📊 Found ${snaps.docs.length} ledger entries for ${eventType} on ${date.toLocaleDateString()}`);
       
-      // Sum up all entries for the day
+      // If no entries found for today, return zeros
+      if (snaps.empty) {
+        console.log(`📊 No ${eventType} entries found for today - returning zeros`);
+        return { runningBalanceAmount: 0, runningBalanceQty: 0, runningBalanceOrderQty: 0 };
+      }
+      
+      // Get the LATEST entry and use its running balance fields (cumulative totals)
+      const latestDoc = snaps.docs[0];
+      const d: any = latestDoc.data();
+      
+      const runningBalanceAmount = Number(d.runningBalanceAmount || 0);
+      const runningBalanceQty = Number(d.runningBalanceQty || 0);
+      const runningBalanceOrderQty = Number(d.runningBalanceOrderQty || 0);
+      
+      const docCreatedAt = d.createdAt?.toDate ? d.createdAt.toDate() : new Date(d.createdAt);
+      console.log(`📊 Latest entry: createdAt=${docCreatedAt.toISOString()}, runningBalanceAmount=${runningBalanceAmount}, runningBalanceOrderQty=${runningBalanceOrderQty}`);
+      
+      const result = {
+        runningBalanceAmount,
+        runningBalanceQty,
+        runningBalanceOrderQty
+      };
+      console.log(`📊 Returning cumulative totals for ${eventType}: amount=${runningBalanceAmount} (₱${runningBalanceAmount/100}), orderQty=${runningBalanceOrderQty}`);
+      return result;
+    } catch (err) {
+      console.warn('LedgerService.getLatestOrderBalances fallback', err);
+      return { runningBalanceAmount: 0, runningBalanceQty: 0, runningBalanceOrderQty: 0 };
+    }
+  }
+
+  /**
+   * Get totals for a date RANGE by summing all entries.
+   * Sums amount, qty, and orderQty from all entries in the range.
+   * - runningBalanceAmount = sum of amounts (revenue for completed)
+   * - runningBalanceOrderQty = sum of orderQty (total orders)
+   * - runningBalanceQty = sum of qty (total items)
+   */
+  async getOrderBalancesForRange(
+    companyId: string,
+    storeId: string,
+    startDate: Date,
+    endDate: Date,
+    eventType: 'completed' | 'returned' | 'refunded' | 'cancelled' | 'damaged' | 'unpaid' | 'recovered' = 'completed'
+  ): Promise<{ runningBalanceAmount: number; runningBalanceQty: number; runningBalanceOrderQty: number }> {
+    try {
+      console.log(`📅 getOrderBalancesForRange: ${startDate.toISOString()} to ${endDate.toISOString()}`);
+      console.log(`📅 Query params: companyId=${companyId}, storeId=${storeId}, eventType=${eventType}`);
+      
+      // Query for ALL ledger entries in the date range
+      const q = query(
+        collection(this.firestore, 'orderAccountingLedger'),
+        where('companyId', '==', companyId),
+        where('storeId', '==', storeId),
+        where('eventType', '==', eventType),
+        where('createdAt', '>=', startDate),
+        where('createdAt', '<=', endDate),
+        orderBy('createdAt', 'desc'),
+        limit(2000)
+      );
+      
+      const snaps = await getDocs(q);
+      console.log(`📊 Found ${snaps.docs.length} ledger entries for ${eventType} in range`);
+      
+      if (snaps.empty) {
+        console.log(`📊 No ${eventType} entries found for range - returning zeros`);
+        return { runningBalanceAmount: 0, runningBalanceQty: 0, runningBalanceOrderQty: 0 };
+      }
+      
+      // Sum up all entries in the range
       let totalAmount = 0;
       let totalQty = 0;
       let totalOrderQty = 0;
@@ -184,16 +272,16 @@ export class LedgerService {
       snaps.docs.forEach((doc, idx) => {
         const d: any = doc.data();
         const amount = Number(d.amount || 0);
-        const qty = Number(d.qty || 1);
+        const qty = Number(d.qty || d.quantity || 1);
         const orderQty = Number(d.orderQty || 1);
         
         totalAmount += amount;
         totalQty += qty;
         totalOrderQty += orderQty;
         
-        if (idx < 3) { // Log first 3 for debugging
+        if (idx < 5) {
           const docCreatedAt = d.createdAt?.toDate ? d.createdAt.toDate() : new Date(d.createdAt);
-          console.log(`📊 Entry ${idx + 1}: createdAt=${docCreatedAt.toISOString()}, amount=${amount}, orderQty=${orderQty}`);
+          console.log(`📊 Entry ${idx + 1}: date=${docCreatedAt.toLocaleDateString()}, amount=${amount}, orderQty=${orderQty}, qty=${qty}`);
         }
       });
       
@@ -202,9 +290,10 @@ export class LedgerService {
         runningBalanceQty: totalQty,
         runningBalanceOrderQty: totalOrderQty
       };
+      console.log(`📊 Range totals for ${eventType}: revenue=₱${totalAmount/100}, orders=${totalOrderQty}, items=${totalQty}`);
       return result;
     } catch (err) {
-      console.warn('LedgerService.getLatestOrderBalances fallback', err);
+      console.warn('LedgerService.getOrderBalancesForRange error', err);
       return { runningBalanceAmount: 0, runningBalanceQty: 0, runningBalanceOrderQty: 0 };
     }
   }
