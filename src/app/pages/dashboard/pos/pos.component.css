@@ -1164,6 +1164,23 @@
       border-bottom-color: #8b5cf6 !important;
     }
 
+    .tab-header[data-tab="Unpaid"] {
+      background: #f59e0b !important; /* Amber */
+      color: #ffffff !important;
+      border-bottom-color: #f59e0b !important;
+    }
+
+    .tab-header[data-tab="Recovered"] {
+      background: #06b6d4 !important; /* Cyan */
+      color: #ffffff !important;
+      border-bottom-color: #06b6d4 !important;
+      font-size: 0.75rem !important;
+      padding: 0.75rem 1rem !important;
+      min-height: 48px !important;
+      display: inline-flex !important;
+      align-items: center !important;
+    }
+
     .tab-header[data-tab="Split Payments"] {
       background: #ec4899 !important; /* Pink */
       color: #ffffff !important;
@@ -1217,6 +1234,18 @@
       background: #7c3aed !important;
       border-bottom-color: #7c3aed !important;
       box-shadow: 0 2px 4px rgba(139, 92, 246, 0.3) !important;
+    }
+
+    .tab-header[data-tab="Unpaid"].active {
+      background: #d97706 !important; /* Darker amber */
+      border-bottom-color: #d97706 !important;
+      box-shadow: 0 2px 4px rgba(245, 158, 11, 0.3) !important;
+    }
+
+    .tab-header[data-tab="Recovered"].active {
+      background: #0891b2 !important; /* Darker cyan */
+      border-bottom-color: #0891b2 !important;
+      box-shadow: 0 2px 4px rgba(6, 182, 212, 0.3) !important;
     }
 
     .tab-header[data-tab="Split Payments"].active {
@@ -2553,6 +2582,37 @@
       box-shadow: 0 8px 22px rgba(99, 102, 241, 0.22);
     }
 
+    /* Unpaid and Recovered button styles (harmonize with existing palette, not duplicates) */
+    .btn-unpaid {
+      background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%); /* amber gradient */
+      color: #0f172a; /* dark text for contrast */
+      border: none;
+      padding: 0.55rem 0.9rem;
+      border-radius: 8px;
+      font-weight: 600;
+    }
+
+    .btn-unpaid:hover {
+      filter: brightness(0.95);
+      transform: translateY(-1px);
+    }
+
+    .btn-recovered {
+      background: linear-gradient(135deg, #22d3ee 0%, #06b6d4 100%); /* cyan gradient */
+      color: #042f2e; /* dark teal text for contrast */
+      border: none;
+      padding: 0.6rem 1rem;
+      border-radius: 8px;
+      font-weight: 600;
+      box-shadow: 0 6px 18px rgba(6,182,212,0.15);
+    }
+
+    .btn-recovered:hover {
+      filter: brightness(0.96);
+      transform: translateY(-1px);
+      box-shadow: 0 8px 22px rgba(6,182,212,0.2);
+    }
+
     /* Ensure the inline item-level buttons remain visually lighter */
     .item-action-btn.return-btn { background: #ddd6fe; color: #5b21b6; }
     .item-action-btn.damage-btn { background: #fed7aa; color: #c2410c; }
@@ -2579,6 +2639,25 @@
     }
 
     .btn.cancel-order-btn:hover { transform: translateY(-1px); filter: brightness(0.98); }
+
+    /* Ensure recovered and unpaid variants override the cancel-order-btn rules when combined */
+    .btn.btn-recovered {
+      background: linear-gradient(135deg, #67e8f9 0%, #06b6d4 100%); /* cyan gradient */
+      color: #042f2e;
+      border: none;
+      padding: 0.6rem 1rem;
+      border-radius: 8px;
+      font-weight: 600;
+    }
+    
+    .btn.btn-recovered:hover { transform: translateY(-1px); filter: brightness(0.98); }
+
+        
+    .btn.btn-unpaid {
+      background: linear-gradient(135deg, #fde68a 0%, #f59e0b 100%); /* amber gradient */
+      color: #0f172a;
+      padding: 0.55rem 0.9rem;
+    }
 
     /* Offline Invoice Dialog */
     .offline-invoice-dialog {

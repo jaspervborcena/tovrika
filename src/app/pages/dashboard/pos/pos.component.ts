@@ -618,7 +618,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   readonly showReceiptPanel = computed(() => this.showReceiptPanelSignal());
   
   // Access tabs for POS management
-  readonly accessTabs = ['New', 'Orders', 'Open', 'Cancelled', 'Returns', 'Refunds', 'Damage', 'Split Payments', 'Discounts & Promotions'] as const;
+  readonly accessTabs = ['New', 'Orders', 'Open', 'Cancelled', 'Returns', 'Refunds', 'Damage', 'Unpaid', 'Recovered', 'Split Payments', 'Discounts & Promotions'] as const;
   private accessTabSignal = signal<string>('New');
   readonly accessTab = computed(() => this.accessTabSignal());
   
@@ -635,6 +635,8 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       'Returns': 'pos.returnsTab',
       'Refunds': 'pos.refundsTab',
       'Damage': 'pos.damageTab',
+      'Unpaid': 'pos.unpaidTab',
+      'Recovered': 'pos.recoveredTab',
       'Split Payments': 'pos.splitPaymentsTab',
       'Discounts & Promotions': 'pos.discountsTab'
     };
@@ -702,6 +704,13 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
           break;
         case 'Damage':
           matches = hasStatusInHistory('damage') || hasStatusInHistory('damaged');
+          break;
+        case 'Unpaid':
+          // Only show orders with current status 'unpaid', exclude recovered orders
+          matches = order.status?.toLowerCase() === 'unpaid';
+          break;
+        case 'Recovered':
+          matches = order.status?.toLowerCase() === 'recovered' || hasStatusInHistory('recovered');
           break;
         case 'Split Payments':
           // Orders with both cash and charge payments
@@ -773,6 +782,16 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     const isOpen = s === 'open';
     console.log('🔍 isOrderOpen check:', { status: order?.status, isOpen, currentTab: this.accessTab() });
     return isOpen;
+  });
+
+  readonly isOrderUnpaid = computed(() => {
+    const s = (this.selectedOrder()?.status || '').toString().toLowerCase();
+    return s === 'unpaid';
+  });
+
+  readonly isOrderRecovered = computed(() => {
+    const s = (this.selectedOrder()?.status || '').toString().toLowerCase();
+    return s === 'recovered';
   });
 
   // Lock actions (Cancel / Manage Item Status) when order is in any final/adjusted state.
@@ -950,7 +969,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     this.accessTabSignal.set(tab);
     
     // When any order-related tab is activated, ensure orders are loaded
-    const orderRelatedTabs = ['Orders', 'Open', 'Cancelled', 'Returns', 'Refunds', 'Damage', 'Split Payments', 'Discounts & Promotions'];
+    const orderRelatedTabs = ['Orders', 'Open', 'Cancelled', 'Returns', 'Refunds', 'Damage', 'Unpaid', 'Recovered', 'Split Payments', 'Discounts & Promotions'];
     if (orderRelatedTabs.includes(tab)) {
       // Only load if we don't have orders yet
       if (this.ordersSignal().length === 0) {
@@ -1437,6 +1456,17 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       const existingStatusHistory = order.statusHistory || [];
       const existingStatusTags = order.statusTags || [];
 
+      // Collect items from orderDetails for tracking
+      let allItems: any[] = [];
+      orderDetailsSnapshot.forEach(docSnap => {
+        const data = docSnap.data();
+        console.log('🔍 orderDetails data:', data);
+        if (data['items'] && Array.isArray(data['items'])) {
+          allItems = allItems.concat(data['items']);
+        }
+      });
+      console.log('🔍 allItems collected:', allItems.length, 'items', allItems);
+
       const orderUpdate: any = {
         status: 'unpaid',
         tableNumber: order.tableNumber || '',
@@ -1467,16 +1497,61 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
 
       console.log('✅ Order status updated to UNPAID');
 
-      // Execute background operations (tracking, inventory, ledger)
-      console.log('🔄 Executing background operations for UNPAID order...');
+      // Create unpaid tracking entries directly from order items
+      console.log('🔄 Creating unpaid tracking entries from order items...');
+      
+      // Use same source as dashboard overview for companyId/storeId to ensure data matches
+      const companyId = order.companyId || this.authService.getCurrentPermission()?.companyId || '';
+      const storeId = order.storeId || this.posService.selectedStoreId() || '';
+      console.log('🔍 markOpenOrderAsUnpaid: using companyId=', companyId, 'storeId=', storeId);
+      
+      // Record ledger entry for unpaid (same pattern as completed orders)
       try {
-        await this.posService.executeBackgroundOperationsForExistingOrder(
+        const totalAmount = Number(order.totalAmount || order.netAmount || 0);
+        const totalQuantity = allItems.reduce((sum: number, item: any) => sum + (Number(item.quantity || item.qty) || 1), 0) || 1;
+        
+        await this.ledgerService.recordEvent(
+          companyId,
+          storeId,
           orderId,
-          order.invoiceNumber
+          'unpaid',
+          totalAmount,
+          totalQuantity,
+          currentUser?.uid || 'system'
         );
-        console.log('✅ Background operations completed successfully for UNPAID order');
-      } catch (bgError) {
-        console.warn('⚠️ Background operations failed for UNPAID order (non-critical):', bgError);
+        console.log('✅ Unpaid ledger entry recorded - amount:', totalAmount, 'qty:', totalQuantity);
+      } catch (ledgerError) {
+        console.warn('⚠️ Failed to record unpaid ledger entry:', ledgerError);
+      }
+      
+      // Create tracking entries (optional - for item-level tracking)
+      try {
+        // Map items to the format expected by createUnpaidTrackingFromOrder
+        const trackingItems = allItems.map((item: any) => ({
+          productId: item.productId || item.id,
+          productName: item.productName || item.name,
+          productCode: item.productCode || item.code,
+          sku: item.sku || item.skuId,
+          quantity: item.quantity || item.qty || 1,
+          price: item.price || item.sellingPrice || item.unitPrice || 0,
+          total: item.total || item.lineTotal || ((item.price || item.sellingPrice || 0) * (item.quantity || 1))
+        }));
+
+        if (trackingItems.length > 0) {
+          const unpaidResult = await this.ordersSellingTrackingService.createUnpaidTrackingFromOrder(
+            orderId,
+            companyId,
+            storeId,
+            trackingItems,
+            currentUser?.uid || 'system',
+            'Marked as unpaid from open order'
+          );
+          console.log('✅ Unpaid tracking entries created:', unpaidResult);
+        } else {
+          console.log('⚠️ No items found for tracking, skipping tracking creation');
+        }
+      } catch (trackingError) {
+        console.warn('⚠️ Failed to create unpaid tracking entries (non-critical):', trackingError);
       }
 
       // Close details modal and refresh list
@@ -1505,11 +1580,102 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     }
   }
 
+  // Pay Now for an UNPAID order (converts it to recovered)
+  async payNowForUnpaidOrder(): Promise<void> {
+    const order = this.selectedOrder();
+    if (!order) {
+      console.warn('No order selected');
+      return;
+    }
+
+    // Verify order is unpaid
+    const status = (order.status || '').toString().toLowerCase();
+    if (status !== 'unpaid') {
+      console.warn('payNowForUnpaidOrder called for non-UNPAID status:', status);
+      await this.showConfirmationDialog({
+        title: 'Not Unpaid',
+        message: 'Only UNPAID orders can be recovered.',
+        confirmText: 'OK',
+        cancelText: '',
+        type: 'warning'
+      });
+      return;
+    }
+
+    try {
+      // Fetch orderDetails to get items
+      const orderDetailsQuery = query(
+        collection(this.firestore, 'orderDetails'),
+        where('orderId', '==', order.id)
+      );
+      const orderDetailsSnapshot = await getDocs(orderDetailsQuery);
+
+      if (orderDetailsSnapshot.empty) {
+        await this.showConfirmationDialog({
+          title: 'No Items Found',
+          message: 'No items found for this order.',
+          confirmText: 'OK',
+          cancelText: '',
+          type: 'warning'
+        });
+        return;
+      }
+
+      // Collect all items
+      let allItems: any[] = [];
+      orderDetailsSnapshot.forEach(doc => {
+        const data = doc.data();
+        if (data['items'] && Array.isArray(data['items'])) {
+          allItems = allItems.concat(data['items']);
+        }
+      });
+
+      // Store reference to the unpaid order being recovered
+      this.payingForExistingOrder.set({
+        ...order,
+        items: allItems,
+        isRecovery: true // Flag to indicate this is a recovery from unpaid
+      });
+
+      // Close order detail modal
+      this.closeOrder();
+
+      // Pre-fill payment dialog with order amount
+      this.paymentAmountTendered = order.totalAmount || 0;
+      this.tableNumber = order.tableNumber || '';
+      
+      // Default to cash payment
+      this.posService.setPaymentMethod('cash');
+      this.paymentType = 'Cash';
+      
+      console.log('💳 Pre-filling payment dialog for UNPAID order recovery - Amount:', this.paymentAmountTendered);
+
+      // Show payment dialog
+      this.paymentModalVisible.set(true);
+
+    } catch (error) {
+      console.error('Error preparing payment for unpaid order:', error);
+      await this.showConfirmationDialog({
+        title: 'Error',
+        message: 'Failed to prepare payment dialog.',
+        confirmText: 'OK',
+        cancelText: '',
+        type: 'danger'
+      });
+    }
+  }
+
   // Process payment for an existing OPEN order (converts it to completed)
+  // Also handles UNPAID orders being recovered (converts to recovered)
   async processPaymentForExistingOrder(orderData: any): Promise<void> {
     try {
       this.posService['isProcessingSignal']?.set(true);
-      console.log('💳 Processing payment for existing OPEN order:', orderData.id);
+      
+      // Check if this is a recovery from unpaid status
+      const isRecovery = orderData.isRecovery === true;
+      const targetStatus = isRecovery ? 'recovered' : 'completed';
+      
+      console.log(`💳 Processing payment for existing ${isRecovery ? 'UNPAID' : 'OPEN'} order:`, orderData.id);
 
       const totalAmount = orderData.totalAmount || 0;
       const tendered = this.paymentAmountTendered || 0;
@@ -1538,7 +1704,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       const paymentsData = {
         amountTendered: tendered,
         changeAmount: Math.max(0, change),
-        paymentDescription: paymentDescription || 'Payment for OPEN order',
+        paymentDescription: paymentDescription || (isRecovery ? 'Payment for UNPAID order (recovered)' : 'Payment for OPEN order'),
         paymentType: paymentType
       };
 
@@ -1549,7 +1715,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       // Close payment dialog
       this.closePaymentDialog();
 
-      // Update the order and orderDetails status from OPEN to completed
+      // Update the order and orderDetails status
       const orderRef = doc(this.firestore, 'orders', orderData.id);
       
       // Get all orderDetails docs for this order
@@ -1565,7 +1731,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       const existingStatusTags = orderData.statusTags || [];
       
       const orderUpdate: any = {
-        status: 'completed',
+        status: targetStatus,
         payments: {
           amountTendered: paymentsData.amountTendered,
           changeAmount: paymentsData.changeAmount,
@@ -1576,11 +1742,11 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
         cashSale: isCashSale,
         chargeSale: isChargeSale,
         statusHistory: [...existingStatusHistory, {
-          status: 'completed',
+          status: targetStatus,
           changedAt: new Date(),
           changedBy: currentUser?.uid || 'system'
         }],
-        statusTags: [...existingStatusTags, 'completed'],
+        statusTags: [...existingStatusTags, targetStatus],
         updatedAt: new Date()
       };
 
@@ -1592,26 +1758,43 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       orderDetailsSnapshot.forEach(doc => {
         updatePromises.push(
           updateDoc(doc.ref, {
-            status: 'COMPLETED',
+            status: targetStatus.toUpperCase(),
             updatedAt: new Date().toISOString()
           })
         );
       });
       await Promise.all(updatePromises);
 
-      console.log('✅ Order status updated to completed');
+      console.log(`✅ Order status updated to ${targetStatus}`);
 
-      // Execute background operations (tracking, inventory, ledger)
-      console.log('🔄 Executing background operations for existing order...');
-      try {
-        await this.posService.executeBackgroundOperationsForExistingOrder(
-          orderData.id,
-          orderData.invoiceNumber
-        );
-        console.log('✅ Background operations completed successfully');
-      } catch (bgError) {
-        console.warn('⚠️ Background operations failed (non-critical):', bgError);
-        // Continue with success flow even if background operations fail
+      // Execute background operations (tracking, inventory, ledger) - only for non-recovery
+      if (!isRecovery) {
+        console.log('🔄 Executing background operations for existing order...');
+        try {
+          await this.posService.executeBackgroundOperationsForExistingOrder(
+            orderData.id,
+            orderData.invoiceNumber
+          );
+          console.log('✅ Background operations completed successfully');
+        } catch (bgError) {
+          console.warn('⚠️ Background operations failed (non-critical):', bgError);
+          // Continue with success flow even if background operations fail
+        }
+      }
+
+      // If this is a recovery from unpaid, create recovered tracking entries
+      if (isRecovery) {
+        console.log('🔄 Creating recovered tracking entries for unpaid order...');
+        try {
+          const recoveredResult = await this.ordersSellingTrackingService.markOrderTrackingRecovered(
+            orderData.id,
+            currentUser?.uid || 'system',
+            'Recovered from unpaid status - payment received'
+          );
+          console.log('✅ Recovered tracking entries created:', recoveredResult);
+        } catch (trackingError) {
+          console.warn('⚠️ Failed to create recovered tracking entries (non-critical):', trackingError);
+        }
       }
 
       // Clear the paying flag
@@ -1623,22 +1806,57 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       // Show success and receipt
       await this.showConfirmationDialog({
         title: '✅ Payment Successful',
-        message: `Order ${orderData.invoiceNumber} has been completed.`,
+        message: `Order ${orderData.invoiceNumber} has been ${isRecovery ? 'recovered' : 'completed'}.`,
         confirmText: 'OK',
         cancelText: '',
         type: 'info'
       });
 
-      // Show receipt with updated payment information
-      const receiptData = {
-        ...orderData,
+      // Build normalized receipt data for preview (ensure fields expected by receipt template exist)
+      const storeInfo: any = this.currentStoreInfo() || {};
+      const items = (orderData.items || orderData.orderItems || []).map((it: any) => ({
+        productName: it.productName || it.name || it.title || 'Item',
+        skuId: it.skuId || it.productId || '',
+        quantity: it.quantity || it.qty || 1,
+        unitType: it.unitType || 'pieces',
+        sellingPrice: it.price || it.sellingPrice || it.unitPrice || 0,
+        total: it.total || (it.price || it.sellingPrice || 0) * (it.quantity || 1),
+        vatAmount: it.vat || it.tax || 0,
+        discountAmount: it.discount || 0
+      }));
+
+      const normalizedReceipt: any = {
+        orderId: orderData.id || orderData.orderId || null,
+        invoiceNumber: orderData.invoiceNumber || orderData.invoice || this.nextInvoiceNumber(),
+        receiptDate: orderData.completedAt || orderData.updatedAt || new Date(),
+        storeInfo: {
+          storeName: storeInfo.storeName || storeInfo.name || 'Store Name',
+          address: storeInfo.address || '',
+          phone: storeInfo.phoneNumber || storeInfo.phone || '',
+          email: storeInfo.email || '',
+          tin: storeInfo.tinNumber || storeInfo.tin || 'N/A',
+          invoiceType: storeInfo.invoiceType || 'SALES INVOICE'
+        },
+        customerName: orderData.customerName || orderData.soldTo || null,
+        customerAddress: orderData.customerAddress || orderData.soldToAddress || null,
+        customerTin: orderData.customerTin || orderData.soldToTin || null,
+        cashier: orderData.cashier || orderData.cashierName || currentUser?.displayName || currentUser?.email || 'N/A',
+        paymentMethod: isCashSale ? 'Cash' : 'Charge',
+        isCashSale: isCashSale,
+        isChargeSale: isChargeSale,
+        items,
+        subtotal: orderData.subtotal || orderData.grossAmount || items.reduce((s: number, i: any) => s + (i.total || 0), 0),
+        vatAmount: orderData.vatAmount || orderData.tax || 0,
+        vatExempt: orderData.vatExempt || 0,
+        discount: orderData.discount || 0,
+        totalAmount: orderData.total || orderData.netAmount || orderData.amount || 0,
+        orderDiscount: orderData.orderDiscount || null,
         payments: paymentsData,
         tableNumber: tableNumber,
-        cashSale: isCashSale,
-        chargeSale: isChargeSale,
         status: 'completed'
       };
-      this.receiptDataSignal.set(receiptData);
+
+      this.receiptDataSignal.set(normalizedReceipt);
       this.isReceiptModalVisibleSignal.set(true);
 
       // Refresh orders list
@@ -4078,8 +4296,8 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
           cancelText: ''
         });
         
-        // Clear cart after showing message (silent mode)
-        await this.clearCart(true);
+        // Preserve cart so user can reprint — mark order completed instead
+        this.isOrderCompleted.set(true);
         
         // Reset new order state so user must click "New" again
         this.isNewOrderActive.set(false);
@@ -4096,9 +4314,8 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       this.isReceiptModalVisibleSignal.set(true);
       console.log('✅ Receipt modal shown immediately');
       
-      // Clear cart immediately for completed orders (silent mode)
-      await this.clearCart(true);
-      console.log('✅ Cart cleared after order completion');
+      // Preserve cart so user can reprint — mark order completed instead
+      console.log('ℹ️ Preserving cart after order completion so printing can be repeated');
       
       // Prepare receipt data in background (non-blocking)
       console.log('📝 Preparing receipt data for order:', result.orderId);
@@ -4125,6 +4342,8 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       
       // orderDetails.status is set at creation time by the invoice service
       this.completedOrderData.set(updatedReceiptData);
+      // Ensure receipt modal has data immediately when opened
+      this.receiptDataSignal.set(updatedReceiptData);
       console.log('✅ Completed order data stored');
       console.log(`📋 Updated receipt data: ${updatedReceiptData.orderId}, Invoice: ${updatedReceiptData.invoiceNumber}`);
       console.log('🧾 Receipt modal opened with invoice:', result.invoiceNumber);
@@ -5166,14 +5385,13 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
         invoiceNumber: this.invoiceNumber
       };
       
-      // Set receipt data and show modal
+      // Set receipt data and show modal, preserve cart for reprinting
       this.receiptDataSignal.set(updatedReceiptData);
       this.isReceiptModalVisibleSignal.set(true);
 
       console.log('🧾 Offline receipt modal opened with invoice:', this.invoiceNumber);
-      
-      // Clear cart directly without confirmation (order is completed)
-      this.posService.clearCart();
+      // Mark order completed so UI will prompt to start a new order when interacting
+      this.isOrderCompleted.set(true);
       
     } catch (error) {
       console.error('❌ Error processing offline order:', error);
