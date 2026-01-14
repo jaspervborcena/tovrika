@@ -4702,7 +4702,7 @@ export class ProductManagementComponent implements OnInit {
    */
   canCreateInitialInventory(): boolean {
     const userRole = this.authService.userRole();
-    return userRole === 'creator' || userRole === 'store_manager';
+    return userRole === 'creator' || userRole === 'store_manager' || userRole === 'admin';
   }
 
   /**

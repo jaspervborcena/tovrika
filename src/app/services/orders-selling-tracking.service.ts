@@ -87,6 +87,15 @@ export class OrdersSellingTrackingService {
     try {
       const q = query(collection(this.firestore, 'ordersSellingTracking'), where('orderId', '==', orderId), where('status', '==', 'processing'));
       const snaps = await getDocs(q as any);
+
+      // If there are no processing tracking docs yet (legacy flow), create completed
+      // tracking rows directly from the order document so completed status has entries.
+      // if (!snaps || snaps.empty) {
+        const partial = await this.createPartialTrackingFromOrderDoc(orderId, 'completed', completedBy);
+        updated += partial.created;
+        if (partial.errors && partial.errors.length) errors.push(...partial.errors);
+      // }
+
       for (const s of snaps.docs) {
         const id = s.id;
         const data: any = s.data() || {};
@@ -249,6 +258,15 @@ export class OrdersSellingTrackingService {
   try {
     const q = query(collection(this.firestore, 'ordersSellingTracking'), where('orderId', '==', orderId));
     const snaps = await getDocs(q as any);
+    // If no tracking rows exist yet for this order, create returned tracking
+    // directly from the order document items so that returns always have
+    // a corresponding entry in `ordersSellingTracking` (prevents ledger gaps).
+    if (!snaps || snaps.empty) {
+      const partial = await this.createPartialTrackingFromOrderDoc(orderId, 'returned', returnedBy, reason);
+      updated += partial.created;
+      if (partial.errors && partial.errors.length) errors.push(...partial.errors);
+    }
+
     for (const s of snaps.docs) {
       const id = s.id;
       const data: any = s.data() || {};
@@ -285,15 +303,38 @@ export class OrdersSellingTrackingService {
       
 
       try {
-        const colRef = collection(this.firestore, 'ordersSellingTracking');
-        const ref = doc(colRef as any);
-        const payload = this.sanitizeForFirestore(newDoc);
-        console.log(`markOrderTrackingReturned: creating returned copy for tracking=${id} -> newId=${ref.id}`);
-        // Use Firestore directly for automatic offline sync
-        await setDoc(ref as any, payload as any);
-        updated++;
+        // Avoid duplicates: if a 'returned' tracking doc already exists for the same
+        // orderDetailsId, update it instead of creating a new doc. We can inspect
+        // the already-fetched `snaps` for the order to find existing rows.
+        const targetOrderDetailsId = newDoc.orderDetailsId;
+        const existing = snaps.docs.find(d => {
+          const dd: any = d.data() || {};
+          return (dd.orderDetailsId === targetOrderDetailsId) && ((dd.status || '').toString().toLowerCase() === 'returned');
+        });
+
+        if (existing) {
+          const existingRef = doc(this.firestore, 'ordersSellingTracking', existing.id);
+          const upd: any = {
+            quantity: newDoc.quantity,
+            total: newDoc.total,
+            updatedAt: newDoc.updatedAt,
+            updatedBy: newDoc.updatedBy,
+            status: 'returned'
+          };
+          if (reason) upd.updateReason = reason;
+          await setDoc(existingRef as any, this.sanitizeForFirestore(upd), { merge: true } as any);
+          updated++;
+        } else {
+          const colRef = collection(this.firestore, 'ordersSellingTracking');
+          const ref = doc(colRef as any);
+          const payload = this.sanitizeForFirestore(newDoc);
+          console.log(`markOrderTrackingReturned: creating returned copy for tracking=${id} -> newId=${ref.id}`);
+          // Use Firestore directly for automatic offline sync
+          await setDoc(ref as any, payload as any);
+          updated++;
+        }
       } catch (e) {
-        console.error(`markOrderTrackingReturned: failed to create returned copy for ${id}`, e);
+        console.error(`markOrderTrackingReturned: failed to create/update returned copy for ${id}`, e);
         console.warn('⚠️ Firestore will retry automatically when connection is restored');
         const errMsg = (e && (e as any).message) ? (e as any).message : String(e);
         errors.push({ id, error: errMsg });
@@ -377,26 +418,60 @@ async markOrderTrackingRefunded(orderId: string, refundedBy?: string, reason?: s
       
 
       try {
-        if (navigator.onLine) {
-          // Create a brand new doc with auto-generated ID using collection ref
-          const colRef = collection(this.firestore, 'ordersSellingTracking');
-          const ref = doc(colRef as any);
-          console.log(`markOrderTrackingRefunded: creating refunded doc online for tracking=${s.id} -> tentativeId=${ref.id}`);
-          const payload = this.sanitizeForFirestore(newDoc);
-          await setDoc(ref as any, payload as any);
-          createdIds.push(ref.id);
+        // Avoid duplicates: if a 'refunded' tracking doc already exists for the same
+        // orderDetailsId, update it instead of creating a new doc.
+        const targetOrderDetailsId = newDoc.orderDetailsId;
+        const existing = snaps.docs.find(d => {
+          const dd: any = d.data() || {};
+          return (dd.orderDetailsId === targetOrderDetailsId) && ((dd.status || '').toString().toLowerCase() === 'refunded');
+        });
+
+        if (existing && navigator.onLine) {
+          const existingRef = doc(this.firestore, 'ordersSellingTracking', existing.id);
+          const upd: any = {
+            quantity: newDoc.quantity,
+            total: newDoc.total,
+            updatedAt: newDoc.updatedAt,
+            updatedBy: newDoc.updatedBy,
+            status: 'refunded'
+          };
+          if (reason) upd.updateReason = reason;
+          await setDoc(existingRef as any, this.sanitizeForFirestore(upd), { merge: true } as any);
           created++;
-          console.log(`markOrderTrackingRefunded: success created=${created}, pushed id=${ref.id}`);
+          createdIds.push(existing.id);
+          console.log(`markOrderTrackingRefunded: updated existing refunded doc ${existing.id} for tracking=${s.id}`);
+        } else if (existing && !navigator.onLine) {
+          // Offline: update pending document if possible
+          try {
+            await this.offlineDocService.updateDocument('ordersSellingTracking', existing.id, { status: 'refunded', updatedAt: newDoc.updatedAt, updatedBy: newDoc.updatedBy });
+            created++;
+            createdIds.push(existing.id);
+            console.log(`markOrderTrackingRefunded: offline-updated existing pending refunded doc ${existing.id}`);
+          } catch (updErr) {
+            console.warn('markOrderTrackingRefunded: failed to offline-update existing doc', updErr);
+          }
         } else {
-          // Offline mode: create a new pending doc (use concrete dates)
-          console.log(`markOrderTrackingRefunded: queuing offline refunded doc for tracking=${s.id}`);
-          const payload = this.sanitizeForFirestore(newDoc);
-          await this.offlineDocService.createDocument('ordersSellingTracking', payload as any);
-          created++;
-          console.log(`markOrderTrackingRefunded: offline queued created=${created}`);
+          if (navigator.onLine) {
+            // Create a brand new doc with auto-generated ID using collection ref
+            const colRef = collection(this.firestore, 'ordersSellingTracking');
+            const ref = doc(colRef as any);
+            console.log(`markOrderTrackingRefunded: creating refunded doc online for tracking=${s.id} -> tentativeId=${ref.id}`);
+            const payload = this.sanitizeForFirestore(newDoc);
+            await setDoc(ref as any, payload as any);
+            createdIds.push(ref.id);
+            created++;
+            console.log(`markOrderTrackingRefunded: success created=${created}, pushed id=${ref.id}`);
+          } else {
+            // Offline mode: create a new pending doc (use concrete dates)
+            console.log(`markOrderTrackingRefunded: queuing offline refunded doc for tracking=${s.id}`);
+            const payload = this.sanitizeForFirestore(newDoc);
+            await this.offlineDocService.createDocument('ordersSellingTracking', payload as any);
+            created++;
+            console.log(`markOrderTrackingRefunded: offline queued created=${created}`);
+          }
         }
       } catch (e) {
-        console.error(`markOrderTrackingRefunded: error creating refunded doc for tracking=${s.id}`, e);
+        console.error(`markOrderTrackingRefunded: error creating/updating refunded doc for tracking=${s.id}`, e);
         const errMsg = (e && (e as any).message) ? (e as any).message : String(e);
         errors.push({ id: s.id, error: errMsg });
       }
@@ -457,6 +532,76 @@ async markOrderTrackingRefunded(orderId: string, refundedBy?: string, reason?: s
   console.log(`Refund process completed for order ${orderId}: created=${created}, errors=${errors.length}`);
   return { created, errors, createdIds };
 }
+
+  /**
+   * Create partial tracking entries from the `orders` document items when
+   * no existing `ordersSellingTracking` rows are present for the order.
+   * Returns counts and errors.
+   */
+  private async createPartialTrackingFromOrderDoc(
+    orderId: string,
+    status: string,
+    performedBy?: string,
+    reason?: string
+  ): Promise<{ created: number; errors: any[] }> {
+    const errors: any[] = [];
+    let created = 0;
+    try {
+      const orderRef = doc(this.firestore, 'orders', orderId);
+      const orderSnap = await getDoc(orderRef as any);
+      if (!orderSnap || !orderSnap.exists()) return { created, errors };
+
+      const orderData: any = orderSnap.data() || {};
+      const items: any[] = Array.isArray(orderData.items) ? orderData.items : [];
+      let idxCreate = 0;
+      for (const it of items) {
+        try {
+          const now = new Date();
+          const newDocFromOrder: any = {
+            companyId: orderData.companyId || undefined,
+            storeId: orderData.storeId || undefined,
+            orderId: orderId,
+            batchNumber: (it.batchNumber as any) || 1,
+            itemIndex: idxCreate,
+            orderDetailsId: it.orderDetailsId || it.id || undefined,
+            productId: it.productId,
+            productName: it.productName || it.name || '',
+            productCode: it.productCode || undefined,
+            sku: it.sku || undefined,
+            price: it.price || it.unitPrice || 0,
+            quantity: it.quantity || 0,
+            total: it.total || it.lineTotal || (Number(it.price || 0) * Number(it.quantity || 0)),
+            uid: performedBy || 'system',
+            cashierId: performedBy || 'system',
+            status: status,
+            createdAt: now,
+            createdBy: performedBy || 'system',
+            updatedAt: now,
+            updatedBy: performedBy || 'system'
+          };
+          if (reason) newDocFromOrder.updateReason = reason;
+
+          const payload = this.sanitizeForFirestore(newDocFromOrder);
+          if (this.networkService.isOnline()) {
+            const colRef = collection(this.firestore, 'ordersSellingTracking');
+            const ref = doc(colRef as any);
+            await setDoc(ref as any, payload as any);
+            created++;
+          } else {
+            await this.offlineDocService.createDocument('ordersSellingTracking', payload as any);
+            created++;
+          }
+        } catch (ie) {
+          errors.push({ id: `item-create-${idxCreate}`, error: ie });
+        }
+        idxCreate++;
+      }
+    } catch (orderErr) {
+      errors.push({ id: 'order-fetch', error: orderErr });
+    }
+
+    return { created, errors };
+  }
 
 /**
  * Create a tracking record (partial or full) based on an existing tracking doc id.
@@ -741,188 +886,204 @@ async markOrderTrackingDamaged(orderId: string, damagedBy?: string, reason?: str
       if (reason) newDoc.updateReason = reason;
 
       try {
-        if (navigator.onLine) {
-          const colRef = collection(this.firestore, 'ordersSellingTracking');
-          const ref = doc(colRef as any);
-          const payload = this.sanitizeForFirestore(newDoc);
-          console.log(`markOrderTrackingDamaged: creating damaged doc online for tracking=${s.id} -> tentativeId=${ref.id}`);
-          await setDoc(ref as any, payload as any);
-          createdIds.push(ref.id);
+        // Avoid duplicate damaged rows for same orderDetailsId: update existing damaged doc if found.
+        const targetOrderDetailsId = newDoc.orderDetailsId;
+        const existing = snaps.docs.find(d => {
+          const dd: any = d.data() || {};
+          return (dd.orderDetailsId === targetOrderDetailsId) && ((dd.status || '').toString().toLowerCase() === 'damaged');
+        });
+        let createdRefId: string | undefined = undefined;
 
-          // After creating the damaged tracking doc, deduct from product.totalStock and latest productInventory batch
+        if (existing && navigator.onLine) {
+          const existingRef = doc(this.firestore, 'ordersSellingTracking', existing.id);
+          const upd: any = {
+            quantity: newDoc.quantity,
+            total: newDoc.total,
+            updatedAt: newDoc.updatedAt,
+            updatedBy: newDoc.updatedBy,
+            status: 'damaged'
+          };
+          if (reason) upd.updateReason = reason;
+          await setDoc(existingRef as any, this.sanitizeForFirestore(upd), { merge: true } as any);
+          createdIds.push(existing.id);
+          created++;
+          createdRefId = existing.id;
+          console.log(`markOrderTrackingDamaged: updated existing damaged doc ${existing.id} for tracking=${s.id}`);
+        } else if (existing && !navigator.onLine) {
           try {
-            const productId = data.productId;
-            const qty = Number(data.quantity || 0);
-            if (productId && qty > 0) {
-              // find latest active batch (most recent receivedAt)
-              // NOTE: querying with multiple where+orderBy combinations can require a composite index.
-              // To avoid requiring a composite index here, fetch the most recent batches for the product
-              // and select the first one with status === 'active' locally.
-              const batchQ = query(
-                collection(this.firestore, 'productInventory'),
-                where('productId', '==', productId),
-                orderBy('receivedAt', 'desc'),
-                limit(10)
-              );
-              let batchSnaps: any = null;
-              let latestBatch = null as any;
-              try {
-                batchSnaps = await getDocs(batchQ as any);
-                if (batchSnaps && !batchSnaps.empty) {
-                  for (const b of batchSnaps.docs) {
-                    const bd: any = b.data() || {};
-                    if ((bd.status || 'active').toString().toLowerCase() === 'active') {
-                      latestBatch = b;
-                      break;
-                    }
-                  }
-                  // fallback to the first snapshot if none are active
-                  if (!latestBatch) latestBatch = batchSnaps.docs[0];
-                }
-              } catch (queryErr) {
-                // If Firestore complains about missing composite index, fallback to a simpler query
-                const msg = (queryErr && (queryErr as any).message) ? (queryErr as any).message : String(queryErr);
-                console.warn('markOrderTrackingDamaged: batch query failed, falling back to simpler query:', msg);
+            await this.offlineDocService.updateDocument('ordersSellingTracking', existing.id, { status: 'damaged', updatedAt: newDoc.updatedAt, updatedBy: newDoc.updatedBy });
+            createdIds.push(existing.id);
+            created++;
+            createdRefId = existing.id;
+          } catch (updErr) {
+            console.warn('markOrderTrackingDamaged: failed to offline-update existing doc', updErr);
+          }
+        } else {
+          if (navigator.onLine) {
+            const colRef = collection(this.firestore, 'ordersSellingTracking');
+            const ref = doc(colRef as any);
+            const payload = this.sanitizeForFirestore(newDoc);
+            console.log(`markOrderTrackingDamaged: creating damaged doc online for tracking=${s.id} -> tentativeId=${ref.id}`);
+            await setDoc(ref as any, payload as any);
+            createdIds.push(ref.id);
+            createdRefId = ref.id;
+
+            // After creating the damaged tracking doc, deduct from product.totalStock and latest productInventory batch
+            try {
+              const productId = data.productId;
+              const qty = Number(data.quantity || 0);
+              if (productId && qty > 0) {
+                const batchQ = query(
+                  collection(this.firestore, 'productInventory'),
+                  where('productId', '==', productId),
+                  orderBy('receivedAt', 'desc'),
+                  limit(10)
+                );
+                let batchSnaps: any = null;
+                let latestBatch = null as any;
                 try {
-                  const fallbackQ = query(
-                    collection(this.firestore, 'productInventory'),
-                    where('productId', '==', productId),
-                    limit(10)
-                  );
-                  const fallbackSnaps = await getDocs(fallbackQ as any);
-                  if (fallbackSnaps && !fallbackSnaps.empty) {
-                    // Sort on client by receivedAt desc and pick first active
-                    const docs = fallbackSnaps.docs.slice().sort((a: any, b: any) => {
-                      const ad = (a.data()?.receivedAt as any) || new Date(0);
-                      const bd = (b.data()?.receivedAt as any) || new Date(0);
-                      const at = ad instanceof Date ? ad.getTime() : (typeof ad === 'number' ? ad : new Date(ad).getTime());
-                      const bt = bd instanceof Date ? bd.getTime() : (typeof bd === 'number' ? bd : new Date(bd).getTime());
-                      return bt - at;
-                    });
-                    for (const b of docs) {
+                  batchSnaps = await getDocs(batchQ as any);
+                  if (batchSnaps && !batchSnaps.empty) {
+                    for (const b of batchSnaps.docs) {
                       const bd: any = b.data() || {};
                       if ((bd.status || 'active').toString().toLowerCase() === 'active') {
                         latestBatch = b;
                         break;
                       }
                     }
-                    if (!latestBatch) latestBatch = docs[0];
+                    if (!latestBatch) latestBatch = batchSnaps.docs[0];
                   }
-                } catch (fbErr) {
-                  console.warn('markOrderTrackingDamaged: fallback batch query also failed', fbErr);
+                } catch (queryErr) {
+                  console.warn('markOrderTrackingDamaged: batch query failed, falling back to simpler query:', queryErr);
+                  try {
+                    const fallbackQ = query(
+                      collection(this.firestore, 'productInventory'),
+                      where('productId', '==', productId),
+                      limit(10)
+                    );
+                    const fallbackSnaps = await getDocs(fallbackQ as any);
+                    if (fallbackSnaps && !fallbackSnaps.empty) {
+                      const docs = fallbackSnaps.docs.slice().sort((a: any, b: any) => {
+                        const ad = (a.data()?.receivedAt as any) || new Date(0);
+                        const bd = (b.data()?.receivedAt as any) || new Date(0);
+                        const at = ad instanceof Date ? ad.getTime() : (typeof ad === 'number' ? ad : new Date(ad).getTime());
+                        const bt = bd instanceof Date ? bd.getTime() : (typeof bd === 'number' ? bd : new Date(bd).getTime());
+                        return bt - at;
+                      });
+                      for (const b of docs) {
+                        const bd: any = b.data() || {};
+                        if ((bd.status || 'active').toString().toLowerCase() === 'active') {
+                          latestBatch = b;
+                          break;
+                        }
+                      }
+                      if (!latestBatch) latestBatch = docs[0];
+                    }
+                  } catch (fbErr) {
+                    console.warn('markOrderTrackingDamaged: fallback batch query also failed', fbErr);
+                  }
                 }
+
+                await runTransaction(this.firestore, async (transaction) => {
+                  const productRef = doc(this.firestore, 'products', productId);
+                  const productSnap = await transaction.get(productRef as any);
+                  if (!productSnap.exists()) throw new Error(`Product ${productId} not found while applying damage deduction`);
+
+                  let batchRef: any = null;
+                  let batchSnap: any = null;
+                  let batchData: any = null;
+                  if (latestBatch) {
+                    batchRef = doc(this.firestore, 'productInventory', latestBatch.id as any);
+                    batchSnap = await transaction.get(batchRef as any);
+                    if (!batchSnap.exists()) throw new Error(`Batch ${latestBatch.id} not found during damage transaction`);
+                    batchData = batchSnap.data();
+                  }
+
+                  const prodData: any = productSnap.data();
+                  const currentTotal = Number(prodData.totalStock || 0);
+                  const newTotal = Math.max(0, currentTotal - qty);
+                  transaction.update(productRef as any, { totalStock: newTotal, lastUpdated: new Date(), updatedBy: damagedBy || 'system' } as any);
+
+                  if (batchSnap && batchData) {
+                    const currentQty = Number(batchData.quantity || 0);
+                    const newBatchQty = Math.max(0, currentQty - qty);
+                    const updateData: any = {
+                      quantity: newBatchQty,
+                      totalDeducted: (batchData.totalDeducted || 0) + qty,
+                      updatedAt: new Date(),
+                      status: newBatchQty === 0 ? 'inactive' : batchData.status
+                    };
+                    transaction.update(batchRef as any, updateData);
+
+                    const dedRecord = {
+                      productId,
+                      batchId: batchData.batchId || null,
+                      quantity: qty,
+                      deductedAt: new Date(),
+                      note: 'DAMAGED - client',
+                      deductedBy: damagedBy || null,
+                      orderId: orderId
+                    };
+                    const dedRef = doc(collection(this.firestore, 'inventoryDeductions'));
+                    transaction.set(dedRef, dedRecord as any);
+                  } else {
+                    const dedRecord = {
+                      productId,
+                      batchId: null,
+                      quantity: qty,
+                      deductedAt: new Date(),
+                      note: 'DAMAGED - no-batch',
+                      deductedBy: damagedBy || null,
+                      orderId: orderId
+                    };
+                    const dedRef = doc(collection(this.firestore, 'inventoryDeductions'));
+                    transaction.set(dedRef, dedRecord as any);
+                  }
+                });
+
+                console.log(`markOrderTrackingDamaged: inventory adjusted for product ${productId} qty ${qty}`);
               }
-
-              await runTransaction(this.firestore, async (transaction) => {
-                // First: read all documents needed by the transaction (product and batch)
-                const productRef = doc(this.firestore, 'products', productId);
-                const productSnap = await transaction.get(productRef as any);
-                if (!productSnap.exists()) {
-                  throw new Error(`Product ${productId} not found while applying damage deduction`);
-                }
-
-                let batchRef: any = null;
-                let batchSnap: any = null;
-                let batchData: any = null;
-                if (latestBatch) {
-                  batchRef = doc(this.firestore, 'productInventory', latestBatch.id as any);
-                  batchSnap = await transaction.get(batchRef as any);
-                  if (!batchSnap.exists()) {
-                    throw new Error(`Batch ${latestBatch.id} not found during damage transaction`);
-                  }
-                  batchData = batchSnap.data();
-                }
-
-                // All reads complete; now compute new values and perform writes
-                const prodData: any = productSnap.data();
-                const currentTotal = Number(prodData.totalStock || 0);
-                const newTotal = Math.max(0, currentTotal - qty);
-                transaction.update(productRef as any, { totalStock: newTotal, lastUpdated: new Date(), updatedBy: damagedBy || 'system' } as any);
-
-                if (batchSnap && batchData) {
-                  const currentQty = Number(batchData.quantity || 0);
-                  const newBatchQty = Math.max(0, currentQty - qty);
-                  const updateData: any = {
-                    quantity: newBatchQty,
-                    totalDeducted: (batchData.totalDeducted || 0) + qty,
-                    updatedAt: new Date(),
-                    status: newBatchQty === 0 ? 'inactive' : batchData.status
-                  };
-                  transaction.update(batchRef as any, updateData);
-
-                  // record deduction referencing batch
-                  const dedRecord = {
-                    productId,
-                    batchId: batchData.batchId || null,
-                    quantity: qty,
-                    deductedAt: new Date(),
-                    note: 'DAMAGED - client',
-                    deductedBy: damagedBy || null,
-                    orderId: orderId
-                  };
-                  const dedRef = doc(collection(this.firestore, 'inventoryDeductions'));
-                  transaction.set(dedRef, dedRecord as any);
-                } else {
-                  // No batch found — still record product deduction and an inventoryDeductions record without batch
-                  const dedRecord = {
-                    productId,
-                    batchId: null,
-                    quantity: qty,
-                    deductedAt: new Date(),
-                    note: 'DAMAGED - no-batch',
-                    deductedBy: damagedBy || null,
-                    orderId: orderId
-                  };
-                  const dedRef = doc(collection(this.firestore, 'inventoryDeductions'));
-                  transaction.set(dedRef, dedRecord as any);
-                }
-              });
-
-              console.log(`markOrderTrackingDamaged: inventory adjusted for product ${productId} qty ${qty}`);
+            } catch (invErr) {
+              console.error('markOrderTrackingDamaged: inventory adjustment failed', invErr);
+              errors.push({ id: createdRefId || (existing && existing.id) || s.id, error: (invErr && (invErr as any).message) ? (invErr as any).message : String(invErr) });
             }
-          } catch (invErr) {
-            console.error('markOrderTrackingDamaged: inventory adjustment failed', invErr);
-            // Continue; we already created the tracking doc — report error
-            errors.push({ id: ref.id, error: (invErr && (invErr as any).message) ? (invErr as any).message : String(invErr) });
-          }
 
-          // Record ledger entry for damage (online only)
-          try {
-            if (this.networkService.isOnline()) {
-              const companyId = data.companyId || newDoc.companyId;
-              const storeId = data.storeId || newDoc.storeId;
-              const ledgerOrderId = newDoc.orderId || data.orderId || orderId;
-              const amount = Number(data.total || 0);
-              const quantity = Number(data.quantity || 0);
-              await this.ledgerService.recordEvent(companyId, storeId, ledgerOrderId, 'damaged' as any, amount, quantity, damagedBy || data.updatedBy || data.createdBy || 'system');
-              console.log(`markOrderTrackingDamaged: ledger damage recorded for order ${ledgerOrderId}`);
+            try {
+              if (this.networkService.isOnline()) {
+                const companyId = data.companyId || newDoc.companyId;
+                const storeId = data.storeId || newDoc.storeId;
+                const ledgerOrderId = newDoc.orderId || data.orderId || orderId;
+                const amount = Number(data.total || 0);
+                const quantity = Number(data.quantity || 0);
+                await this.ledgerService.recordEvent(companyId, storeId, ledgerOrderId, 'damaged' as any, amount, quantity, damagedBy || data.updatedBy || data.createdBy || 'system');
+                console.log(`markOrderTrackingDamaged: ledger damage recorded for order ${ledgerOrderId}`);
+              }
+            } catch (ledgerErr) {
+              console.warn('markOrderTrackingDamaged: ledger recordEvent failed', ledgerErr);
             }
-          } catch (ledgerErr) {
-            console.warn('markOrderTrackingDamaged: ledger recordEvent failed', ledgerErr);
-          }
 
-          created++;
-          console.log(`markOrderTrackingDamaged: success created=${created}, pushed id=${ref.id}`);
-        } else {
-          const payload = this.sanitizeForFirestore(newDoc);
-          console.log(`markOrderTrackingDamaged: queueing offline damaged doc for tracking=${s.id}`);
-          await this.offlineDocService.createDocument('ordersSellingTracking', payload as any);
-          // Optimistic local product update when offline
-          try {
-            const productId = data.productId;
-            const qty = Number(data.quantity || 0);
-            if (productId && qty > 0) {
-              const product = this.productService.getProduct(productId);
-              const current = product?.totalStock ?? 0;
-              const newTotal = Math.max(0, current - qty);
-              await this.productService.updateProduct(productId, { totalStock: newTotal, lastUpdated: new Date() } as any);
-              console.log(`markOrderTrackingDamaged: optimistic product totalStock updated offline ${productId} ${current} -> ${newTotal}`);
+            created++;
+            console.log(`markOrderTrackingDamaged: success created=${created}, pushed id=${createdRefId || (existing && existing.id) || s.id}`);
+          } else {
+            const payload = this.sanitizeForFirestore(newDoc);
+            console.log(`markOrderTrackingDamaged: queueing offline damaged doc for tracking=${s.id}`);
+            await this.offlineDocService.createDocument('ordersSellingTracking', payload as any);
+            try {
+              const productId = data.productId;
+              const qty = Number(data.quantity || 0);
+              if (productId && qty > 0) {
+                const product = this.productService.getProduct(productId);
+                const current = product?.totalStock ?? 0;
+                const newTotal = Math.max(0, current - qty);
+                await this.productService.updateProduct(productId, { totalStock: newTotal, lastUpdated: new Date() } as any);
+                console.log(`markOrderTrackingDamaged: optimistic product totalStock updated offline ${productId} ${current} -> ${newTotal}`);
+              }
+            } catch (localErr) {
+              console.warn('markOrderTrackingDamaged: optimistic product update failed', localErr);
             }
-          } catch (localErr) {
-            console.warn('markOrderTrackingDamaged: optimistic product update failed', localErr);
+            created++;
+            console.log(`markOrderTrackingDamaged: offline queued created=${created}`);
           }
-          created++;
-          console.log(`markOrderTrackingDamaged: offline queued created=${created}`);
         }
       } catch (e) {
         console.error(`markOrderTrackingDamaged: error creating damaged doc for tracking=${s.id}`, e);

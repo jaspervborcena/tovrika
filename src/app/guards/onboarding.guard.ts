@@ -32,7 +32,7 @@ export const onboardingGuard: CanActivateFn = async (route, state) => {
       currentPermission.companyId && 
       currentPermission.companyId.trim() !== '' && 
       currentPermission.roleId !== 'visitor' &&
-      (currentPermission.roleId === 'creator' || currentPermission.roleId === 'store_manager' || currentPermission.roleId === 'cashier')) {
+      (currentPermission.roleId === 'creator' || currentPermission.roleId === 'store_manager' || currentPermission.roleId === 'cashier' || currentPermission.roleId === 'admin')) {
     return true;
   }
   

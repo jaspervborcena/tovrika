@@ -25,6 +25,7 @@ export class UserRoleService {
   async ensureDefaultRoles(companyId: string) {
     const defaultRoles = [
       { roleId: 'creator', name: 'Creator', description: 'Full access to all features.' },
+      { roleId: 'admin', name: 'Admin', description: 'Administrator with full access (treated like Creator).' },
       { roleId: 'store_manager', name: 'Store Manager', description: 'Manage stores and products.' },
       { roleId: 'cashier', name: 'Cashier', description: 'Access POS and products only.' }
     ];
@@ -50,7 +51,7 @@ export class UserRoleService {
 
   // Helper: get default permissions for a role
   getDefaultPermissionsForRole(roleId: string) {
-    if (roleId === 'creator') {
+    if (roleId === 'creator' || roleId === 'admin') {
       return {
         canViewAccess: true,
         canViewUserRoles: true,

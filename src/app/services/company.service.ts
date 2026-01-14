@@ -323,11 +323,11 @@ export class CompanyService {
         // Remove any legacy 'visitor' entries to avoid confusion
         const permissions = (currentUser.permissions || []).filter(p => p.roleId !== 'visitor');
         
-        // Check if user already has a creator permission without companyId
-        const creatorPermissionIndex = permissions.findIndex(p => p.roleId === 'creator' && !p.companyId);
+        // Check if user already has a creator/admin permission without companyId
+        const creatorPermissionIndex = permissions.findIndex(p => (p.roleId === 'creator' || p.roleId === 'admin') && !p.companyId);
         
         if (creatorPermissionIndex >= 0) {
-          // Update existing creator permission with the new company ID
+          // Update existing creator/admin permission with the new company ID
           permissions[creatorPermissionIndex].companyId = documentId;
         } else {
           // Add new creator permission for this company
