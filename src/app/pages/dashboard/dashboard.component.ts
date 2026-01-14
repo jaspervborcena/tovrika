@@ -132,117 +132,47 @@ export class DashboardComponent implements OnInit {
     window.addEventListener('resize', () => {
       this.updateScreenWidth();
     });
-        const user = this.currentUser();
+    
+    const user = this.currentUser();
     if (!user) return;
 
-    const currentPermission = this.authService.getCurrentPermission();
+    // Check if user's email exists in the 'admin' collection
+    await this.checkAdminStatus(user.email);
     
-    // Check if BOTH companyId AND storeId exist
-    if (!currentPermission?.companyId || !currentPermission?.storeId) {
-      console.log('⚠️ Dashboard: Missing companyId or storeId, checking early roleId...');
-      
-      // If either companyId or storeId is missing, check user's role directly from permissions
-      if (currentPermission?.roleId) {
-        console.log('🔍 Dashboard: Early check - roleId from permission:', currentPermission.roleId);
-        
-        if (currentPermission.roleId === 'admin') {
-          this.userRole.set('admin');
-          this.accessService.setPermissions({}, 'admin');
-          return;
-        } else if (currentPermission.roleId === 'cashier') {
-          this.accessService.setPermissions({}, 'cashier');
-          return;
-        } else if (currentPermission.roleId === 'store_manager') {
-          this.accessService.setPermissions({}, 'store_manager');
-          return;
-        }
-      }
-      
-      // If no specific role found or role is creator, default to creator (show all)
-      this.accessService.setPermissions({}, 'creator');
-      return;
-    }
-
-    // Try to get roleId from userRoles collection
-    const userRolesRef = collection(this.firestore, 'userRoles');
-    const userRolesQuery = query(
-      userRolesRef,
-      where('companyId', '==', currentPermission.companyId),
-      where('userId', '==', user.uid),
-      where('storeId', '==', currentPermission.storeId || '')
-    );
-    const userRolesSnap = await getDocs(userRolesQuery);
-    let roleId: string | undefined;
-    if (!userRolesSnap.empty) {
-      const userRoleData = userRolesSnap.docs[0].data();
-      roleId = userRoleData['roleId'];
-    } else {
-      console.log('⚠️ Dashboard: No matching document in userRoles collection');
-      // Fallback: use roleId from permissions array if available
-      if (currentPermission?.roleId) {
-        roleId = currentPermission.roleId;
-        console.log('📌 Dashboard: Using roleId from currentPermission:', roleId);
-      } else {
-        // Final fallback: get user doc from Firestore and check both roleId and permission.roleId
-        const userDocRef = collection(this.firestore, 'users');
-        const userDocSnap = await getDocs(query(userDocRef, where('uid', '==', user.uid)));
-        if (!userDocSnap.empty) {
-          const userDoc = userDocSnap.docs[0].data();
-          console.log('🔍 Dashboard: User doc from Firestore:', userDoc);
-          // Check direct roleId field first
-          if (userDoc['roleId']) {
-            roleId = userDoc['roleId'];
-            console.log('✅ Dashboard: Found direct roleId:', roleId);
-          }
-          // Fall back to nested permission.roleId
-          else if (userDoc['permission'] && userDoc['permission']['roleId']) {
-            roleId = userDoc['permission']['roleId'];
-            console.log('✅ Dashboard: Found nested roleId:', roleId);
-          }
-        }
-      }
-    }
-
-    if (!roleId) {
-      // If no roleId found, treat as creator
-      console.log('⚠️ Dashboard: No roleId found, defaulting to creator');
-      this.accessService.setPermissions({}, 'creator');
-      return;
-    }
-
-    if (roleId === 'admin') {
-      this.userRole.set('admin');
-      console.log('✅ Dashboard: Admin role set, userRole signal:', this.userRole());
-      this.accessService.setPermissions({}, 'admin');
-    } else if (roleId === 'cashier') {
-      this.userRole.set('cashier');
-      this.accessService.setPermissions({}, 'cashier');
-    } else if (roleId === 'store_manager') {
-      this.userRole.set('store_manager');
-      this.accessService.setPermissions({}, 'store_manager');
-    } else if (roleId === 'creator') {
-      this.userRole.set('creator');
-      this.accessService.setPermissions({}, 'creator');
-    } else {
-      this.userRole.set(roleId);
-      // For other custom roles, use roledefinition permissions
-      const roleDefRef = collection(this.firestore, 'roledefinition');
-      const roleDefQuery = query(
-        roleDefRef,
-        where('companyId', '==', currentPermission.companyId),
-        where('roleId', '==', roleId)
-      );
-      const roleDefSnap = await getDocs(roleDefQuery);
-      if (!roleDefSnap.empty) {
-        const roleDefData = roleDefSnap.docs[0].data();
-        if (roleDefData['permissions']) {
-          this.accessService.setPermissions(roleDefData['permissions'], roleId);
-        } else {
-          this.accessService.setPermissions({}, 'creator');
-        }
+    // Set default permissions based on role
+    const currentPermission = this.authService.getCurrentPermission();
+    if (this.userRole() !== 'admin') {
+      // For non-admin users, determine permissions based on their role
+      const roleId = currentPermission?.roleId;
+      if (roleId === 'cashier') {
+        this.accessService.setPermissions({}, 'cashier');
+      } else if (roleId === 'store_manager') {
+        this.accessService.setPermissions({}, 'store_manager');
       } else {
         this.accessService.setPermissions({}, 'creator');
       }
+    }
+  }
+
+  /**
+   * Check if user's email exists in the 'admin' collection
+   * If found, set userRole to 'admin' and grant admin permissions
+   */
+  private async checkAdminStatus(email: string): Promise<void> {
+    try {
+      const adminRef = collection(this.firestore, 'admin');
+      const adminQuery = query(adminRef, where('email', '==', email));
+      const adminSnap = await getDocs(adminQuery);
+      
+      if (!adminSnap.empty) {
+        console.log('✅ Dashboard: Admin detected from admin collection for email:', email);
+        this.userRole.set('admin');
+        this.accessService.setPermissions({}, 'admin');
+      } else {
+        console.log('📌 Dashboard: User is not an admin:', email);
+      }
+    } catch (error) {
+      console.error('❌ Dashboard: Error checking admin status:', error);
     }
   }
 
