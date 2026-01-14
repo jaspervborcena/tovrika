@@ -146,7 +146,7 @@ export class AdminComponent implements OnInit {
   }
 
   async approveRequest(request: SubscriptionRequestWithStore) {
-    if (!request.id || !request.subscriptionId) {
+    if (!request.id) {
       this.toast.error('Invalid request data');
       return;
     }
@@ -164,10 +164,42 @@ export class AdminComponent implements OnInit {
       const user = this.authService.getCurrentUser();
       if (!user) throw new Error('User not authenticated');
 
-      // 1. Update subscription status to active
-      await this.subscriptionService.updateSubscription(request.subscriptionId, {
-        status: 'active'
-      } as any);
+      // 1. If subscriptionId exists, update that subscription; otherwise create a new one
+      if (request.subscriptionId) {
+        await this.subscriptionService.updateSubscription(request.subscriptionId, {
+          status: 'active'
+        } as any);
+      } else if (request.companyId) {
+        // Create a new subscription for this company
+        const stores = await this.storeService.getStoresByCompany(request.companyId);
+        if (stores.length > 0) {
+          const store = stores[0];
+          const durationMonths = request.durationMonths || 1;
+          const startDate = new Date();
+          const endDate = new Date();
+          endDate.setMonth(endDate.getMonth() + durationMonths);
+          
+          const user = this.authService.getCurrentUser();
+          await this.subscriptionService.createSubscription({
+            subscriptionId: `sub_${Date.now()}`,
+            companyId: request.companyId,
+            storeId: store.id!,
+            uid: user?.uid || '',
+            planType: request.requestedTier,
+            status: 'active',
+            startDate,
+            endDate,
+            amountPaid: request.amountPaid || 0,
+            paymentMethod: request.paymentMethod || 'bank_transfer',
+            paymentReference: request.paymentReference || ''
+          });
+          
+          // Update store subscription end date
+          await this.storeService.updateStore(store.id!, {
+            subscriptionEndDate: endDate as any
+          });
+        }
+      }
 
       // 2. Update subscription request status
       const requestRef = doc(this.firestore, 'subscriptionRequests', request.id);
@@ -177,8 +209,8 @@ export class AdminComponent implements OnInit {
         reviewedBy: user.uid
       });
 
-      // 3. Update store subscription end date if we can find the store
-      if (request.companyId) {
+      // 3. Update store subscription end date if we can find the store (for existing subscriptions)
+      if (request.companyId && request.subscriptionId) {
         try {
           const stores = await this.storeService.getStoresByCompany(request.companyId);
           if (stores.length > 0) {
