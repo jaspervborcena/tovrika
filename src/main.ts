@@ -49,16 +49,25 @@ function softReloadWithBust() {
   }
 }
 
-bootstrapApplication(AppComponent, appConfig)
-  .then(() => {
-    // Dev-only: do NOT automatically seed at bootstrap. Seeding is performed post-login
-    // so that client auth tokens are available for Firestore reads. Keeping startup
-    // seeding can cause permission errors if it runs before login.
-  })
-  .catch(err => {
+// Wrap bootstrap in an async IIFE so we can conditionally ensure the JIT compiler
+// is available in development when components may require runtime compilation.
+(async () => {
+  try {
+    if (!environment.production) {
+      // Load compiler in dev to allow runtime/JIT compilation when necessary.
+      // This avoids the runtime error: "The component 'X' needs to be compiled using the JIT compiler"
+      // Keep this in development only; production should use AOT and not include the compiler.
+      // Note: '@angular/compiler' is declared in package.json dependencies.
+      // eslint-disable-next-line @typescript-eslint/no-floating-promises
+      await import('@angular/compiler');
+    }
+
+    await bootstrapApplication(AppComponent, appConfig);
+  } catch (err) {
     console.error('❌ Bootstrap error:', err);
     if (isChunkError(err)) {
       console.log('🔄 Bootstrap failed due to chunk error, reloading with cache-bust...');
       setTimeout(softReloadWithBust, 100);
     }
-  });
+  }
+})();

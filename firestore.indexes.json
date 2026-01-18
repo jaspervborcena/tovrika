@@ -48,6 +48,15 @@
       ]
     },
     {
+      "collectionGroup": "ordersSellingTracking",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "companyId", "order": "ASCENDING" },
+        { "fieldPath": "storeId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "productInventoryEntries",
       "queryScope": "COLLECTION",
       "fields": [

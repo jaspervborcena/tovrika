@@ -1665,7 +1665,7 @@ export class SalesSummaryComponent implements OnInit {
       if (!companyId || !storeId) return;
       const balances = await this.ledgerService.getLatestOrderBalances(companyId, storeId, new Date(), 'completed');
       this.ledgerTotalRevenue.set(Number(balances.runningBalanceAmount || 0));
-      this.ledgerTotalOrders.set(Number(balances.runningBalanceOrderQty || balances.runningBalanceQty || 0));
+      this.ledgerTotalOrders.set(Number(balances.runningBalanceQty || 0));
     } catch (err) {
       console.warn('SalesSummary: failed to load ledger totals', err);
     }

@@ -22,7 +22,10 @@ export const roleGuard: CanActivateFn = async (route, state) => {
   }
 
   // Ensure auth state is ready (handles race right after login/policy flow)
-  const user = (await authService.waitForAuth()) || authService.currentUser();
+  // Use a short timeout fallback to avoid hanging navigation if auth initialization stalls
+  const authPromise = authService.waitForAuth();
+  const timeoutPromise = new Promise(resolve => setTimeout(() => resolve(authService.currentUser()), 1500));
+  const user = (await Promise.race([authPromise, timeoutPromise])) as any || authService.currentUser();
   if (!user) {
     router.navigate(['/login'], { queryParams: { returnUrl: state.url } });
     return false;

@@ -75,6 +75,23 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
           
           <!-- Sales Cards -->
           <div class="sales-cards">
+            <!-- Gross Card (all orders regardless of status) -->
+            <div class="sales-card gross-card">
+              <div class="card-icon">
+                <svg class="icon" fill="currentColor" viewBox="0 0 20 20">
+                  <path d="M3 3h14v2H3V3zm0 4h14v2H3V7zm0 4h10v2H3v-2z" />
+                </svg>
+              </div>
+              <div class="card-content">
+                <div class="card-value">₱{{ grossTotal() | number:'1.0-0' }}</div>
+                <div class="card-label">Gross (All orders)</div>
+                <div class="card-change">
+                  <span class="change-icon">Σ</span>
+                  <span class="change-text">All order exposure</span>
+                </div>
+              </div>
+            </div>
+
             <!-- Total Revenue Card -->
             <div class="sales-card revenue-card">
               <div class="card-icon">
@@ -262,6 +279,8 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
                     <div class="legend-item"><div class="legend-dot returned-dot"></div><span>Returned</span><span class="legend-percent">{{ salesAnalytics().returned.percentage | number:'1.1-1' }}%</span></div>
                     <div class="legend-item"><div class="legend-dot refunded-dot"></div><span>Refunded</span><span class="legend-percent">{{ salesAnalytics().refunded.percentage | number:'1.1-1' }}%</span></div>
                     <div class="legend-item"><div class="legend-dot damage-dot"></div><span>Damage</span><span class="legend-percent">{{ salesAnalytics().damage.percentage | number:'1.1-1' }}%</span></div>
+                    <div class="legend-item"><div class="legend-dot unpaid-dot"></div><span>Unpaid</span><span class="legend-percent">{{ salesAnalytics().unpaid.percentage | number:'1.1-1' }}%</span></div>
+                    <div class="legend-item"><div class="legend-dot recovered-dot"></div><span>Recovered</span><span class="legend-percent">{{ salesAnalytics().recovered.percentage | number:'1.1-1' }}%</span></div>
                   </div>
                 </div>
             </div>
@@ -336,6 +355,26 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
                         </td>
                         <td class="text-right">{{ salesAnalytics().damage.count }}</td>
                         <td class="text-right">{{ salesAnalytics().damage.percentage | number:'1.1-1' }}%</td>
+                      </tr>
+                      <tr class="unpaid-row">
+                        <td>
+                          <div class="status-label">
+                            <span class="status-dot unpaid-dot"></span>
+                            <span>Unpaid</span>
+                          </div>
+                        </td>
+                        <td class="text-right">{{ salesAnalytics().unpaid.count }}</td>
+                        <td class="text-right">{{ salesAnalytics().unpaid.percentage | number:'1.1-1' }}%</td>
+                      </tr>
+                      <tr class="recovered-row">
+                        <td>
+                          <div class="status-label">
+                            <span class="status-dot recovered-dot"></span>
+                            <span>Recovered</span>
+                          </div>
+                        </td>
+                        <td class="text-right">{{ salesAnalytics().recovered.count }}</td>
+                        <td class="text-right">{{ salesAnalytics().recovered.percentage | number:'1.1-1' }}%</td>
                       </tr>
                     </tbody>
                   </table>
@@ -618,6 +657,10 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
 
     .recovered-card {
       background: #06b6d4;
+    }
+    .gross-card {
+      background: #7c3aed;
+      color: #ffffff;
     }
 
     .card-icon {
@@ -958,6 +1001,12 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
     }
     .damage-dot {
       background-color: #8b5cf6;
+    }
+    .unpaid-dot {
+      background-color: #eab308;
+    }
+    .recovered-dot {
+      background-color: #10b981;
     }
     .analytics-expenses {
       margin-top: 12px;
@@ -1718,7 +1767,25 @@ export class OverviewComponent implements OnInit {
     const symbol = diff > 0 ? '↗' : (diff < 0 ? '↘' : '→');
     return { symbol, percent, diff };
   });
-  protected netProfit = computed(() => this.totalRevenue() - this.totalExpenses());
+  // Net Profit per user request: (Revenue + Recovered) - Expenses
+  protected netProfit = computed(() => {
+    const revenue = this.totalRevenue();
+    const recovered = this.ledgerRecoveredAmount();
+    const expenses = this.totalExpenses();
+    return Math.round((revenue + recovered - expenses) * 100) / 100;
+  });
+
+  // Gross: all order exposure — sum of known ledger categories
+  protected grossTotal = computed(() => {
+    const completed = Number(this.ledgerTotalRevenue() || 0);
+    const unpaid = Number(this.ledgerUnpaidAmount() || 0);
+    const returnsAmt = Number(this.ledgerReturnAmount() || 0);
+    const refundsAmt = Number(this.ledgerRefundAmount() || 0);
+    const damageAmt = Number(this.ledgerDamageAmount() || 0);
+    const recoveredAmt = Number(this.ledgerRecoveredAmount() || 0);
+    const total = completed + unpaid + returnsAmt + refundsAmt + damageAmt + recoveredAmt;
+    return Math.max(0, Math.round(total * 100) / 100);
+  });
   protected totalCustomers = computed(() => {
     // Customers: not tracked in ledger, fallback to 0
     return 0;
@@ -1872,7 +1939,7 @@ export class OverviewComponent implements OnInit {
       
       if (ledger) {
         this.yesterdayRevenue.set(Number(ledger.runningBalanceAmount || 0));
-        this.yesterdayOrders.set(Number(ledger.runningBalanceOrderQty || ledger.runningBalanceQty || 0));
+        this.yesterdayOrders.set(Number(ledger.runningBalanceQty || 0));
       } else {
         this.yesterdayRevenue.set(0);
         this.yesterdayOrders.set(0);
@@ -1882,8 +1949,8 @@ export class OverviewComponent implements OnInit {
       // We only fetch yesterday's revenue and order count here for comparison purposes
       
       // Set completed and order quantities
-      this.ledgerCompletedQty.set(Number(ledger?.runningBalanceOrderQty || ledger?.runningBalanceQty || 0));
-      this.ledgerOrderQty.set(Number(ledger?.runningBalanceOrderQty || ledger?.runningBalanceQty || 0));
+      this.ledgerCompletedQty.set(Number(ledger?.runningBalanceQty || 0));
+      this.ledgerOrderQty.set(Number(ledger?.runningBalanceQty || 0));
     } catch (error) {
       console.error('Error fetching yesterday revenue:', error);
       this.yesterdayRevenue.set(0);
@@ -1891,6 +1958,7 @@ export class OverviewComponent implements OnInit {
     }
   }
 
+  
   // Fetch today's analytics data (all event types for Sale Analytics)
   protected async fetchTodayAnalytics(): Promise<void> {
     //console.log('🔍 fetchTodayAnalytics called');
@@ -1909,9 +1977,9 @@ export class OverviewComponent implements OnInit {
       const ledger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, today, 'completed');
       if (ledger) {
         this.ledgerTotalRevenue.set(Math.max(0, Number(ledger.runningBalanceAmount || 0)));
-        this.ledgerTotalOrders.set(Math.max(0, Number(ledger.runningBalanceOrderQty || ledger.runningBalanceQty || 0)));
-        this.ledgerCompletedQty.set(Math.max(0, Number(ledger.runningBalanceOrderQty || ledger.runningBalanceQty || 0)));
-        this.ledgerOrderQty.set(Math.max(0, Number(ledger.runningBalanceOrderQty || ledger.runningBalanceQty || 0)));
+        this.ledgerTotalOrders.set(Math.max(0, Number(ledger.runningBalanceQty || 0)));
+        this.ledgerCompletedQty.set(Math.max(0, Number(ledger.runningBalanceQty || 0)));
+        this.ledgerOrderQty.set(Math.max(0, Number(ledger.runningBalanceQty || 0)));
       }
 
       // Fetch returns for today
@@ -1945,9 +2013,9 @@ export class OverviewComponent implements OnInit {
 
       // Fetch damage for today
       const damageLedger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, today, 'damaged');
-      if (damageLedger && (damageLedger.runningBalanceAmount || damageLedger.runningBalanceQty || damageLedger.runningBalanceOrderQty)) {
+      if (damageLedger && (damageLedger.runningBalanceAmount || damageLedger.runningBalanceQty )) {
         this.ledgerDamageAmount.set(Number(damageLedger.runningBalanceAmount || 0));
-        this.ledgerDamageQty.set(Number(damageLedger.runningBalanceQty || damageLedger.runningBalanceOrderQty || 0));
+        this.ledgerDamageQty.set(Number(damageLedger.runningBalanceQty || 0));
       } else if (!damageLedger) {
         this.ledgerDamageAmount.set(0);
         this.ledgerDamageQty.set(0);
@@ -1956,10 +2024,10 @@ export class OverviewComponent implements OnInit {
       // Fetch unpaid for today
       const unpaidLedger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, today, 'unpaid');
       console.log('🔍 Unpaid Ledger Query - companyId:', companyId, 'storeId:', storeId, 'result:', unpaidLedger);
-      if (unpaidLedger && (unpaidLedger.runningBalanceAmount || unpaidLedger.runningBalanceQty || unpaidLedger.runningBalanceOrderQty)) {
+      if (unpaidLedger && (unpaidLedger.runningBalanceAmount || unpaidLedger.runningBalanceQty)) {
         this.ledgerUnpaidAmount.set(Number(unpaidLedger.runningBalanceAmount || 0));
-        this.ledgerUnpaidQty.set(Number(unpaidLedger.runningBalanceQty || unpaidLedger.runningBalanceOrderQty || 0));
-      } else {
+        this.ledgerUnpaidQty.set(Number(unpaidLedger.runningBalanceQty || 0));
+       } else if (!unpaidLedger) {
         this.ledgerUnpaidAmount.set(0);
         this.ledgerUnpaidQty.set(0);
       }
@@ -1967,10 +2035,10 @@ export class OverviewComponent implements OnInit {
       // Fetch recovered for today
       const recoveredLedger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, today, 'recovered');
       console.log('🔍 Recovered Ledger Query - companyId:', companyId, 'storeId:', storeId, 'result:', recoveredLedger);
-      if (recoveredLedger && (recoveredLedger.runningBalanceAmount || recoveredLedger.runningBalanceQty || recoveredLedger.runningBalanceOrderQty)) {
+      if (recoveredLedger && (recoveredLedger.runningBalanceAmount || recoveredLedger.runningBalanceQty)) {
         this.ledgerRecoveredAmount.set(Number(recoveredLedger.runningBalanceAmount || 0));
-        this.ledgerRecoveredQty.set(Number(recoveredLedger.runningBalanceQty || recoveredLedger.runningBalanceOrderQty || 0));
-      } else {
+        this.ledgerRecoveredQty.set(Number(recoveredLedger.runningBalanceQty || 0));
+      } else if (!recoveredLedger) {
         this.ledgerRecoveredAmount.set(0);
         this.ledgerRecoveredQty.set(0);
       }
@@ -2030,8 +2098,8 @@ export class OverviewComponent implements OnInit {
         const ledger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, date, 'completed');
         if (ledger) {
           currentMonthRevenueTotal += Number(ledger.runningBalanceAmount || 0);
-          currentMonthOrdersTotal += Number(ledger.runningBalanceOrderQty || ledger.runningBalanceQty || 0);
-          currentMonthCompletedQty += Number(ledger.runningBalanceOrderQty || ledger.runningBalanceQty || 0);
+          currentMonthOrdersTotal += Number(ledger.runningBalanceQty || 0);
+          currentMonthCompletedQty += Number(ledger.runningBalanceQty || 0);
         }
 
         // Returns
@@ -2052,7 +2120,7 @@ export class OverviewComponent implements OnInit {
         const damageLedger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, date, 'damaged');
         if (damageLedger) {
           currentMonthDamageAmount += Number(damageLedger.runningBalanceAmount || 0);
-          currentMonthDamageQty += Number(damageLedger.runningBalanceQty || damageLedger.runningBalanceOrderQty || 0);
+          currentMonthDamageQty += Number(damageLedger.runningBalanceQty || 0);
         }
 
         // Cancels
@@ -2071,7 +2139,7 @@ export class OverviewComponent implements OnInit {
         const ledger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, date, 'completed');
         if (ledger) {
           previousMonthRevenueTotal += Number(ledger.runningBalanceAmount || 0);
-          previousMonthOrdersTotal += Number(ledger.runningBalanceOrderQty || ledger.runningBalanceQty || 0);
+          previousMonthOrdersTotal += Number(ledger.runningBalanceQty || 0);
         }
       }
 
@@ -2135,8 +2203,8 @@ export class OverviewComponent implements OnInit {
         const ledger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, refDate, 'completed');
         if (ledger) {
           currentRangeRevenueTotal += Math.max(0, Number(ledger.runningBalanceAmount || 0));
-          currentRangeOrdersTotal += Math.max(0, Number(ledger.runningBalanceOrderQty || ledger.runningBalanceQty || 0));
-          currentRangeCompletedQty += Math.max(0, Number(ledger.runningBalanceOrderQty || ledger.runningBalanceQty || 0));
+          currentRangeOrdersTotal += Math.max(0, Number(ledger.runningBalanceQty || 0));
+          currentRangeCompletedQty += Math.max(0, Number(ledger.runningBalanceQty || 0));
         }
 
         const returnsLedger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, refDate, 'returned');
@@ -2154,7 +2222,7 @@ export class OverviewComponent implements OnInit {
         const damageLedger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, refDate, 'damaged');
         if (damageLedger) {
           currentRangeDamageAmount += Number(damageLedger.runningBalanceAmount || 0);
-          currentRangeDamageQty += Number(damageLedger.runningBalanceQty || damageLedger.runningBalanceOrderQty || 0);
+          currentRangeDamageQty += Number(damageLedger.runningBalanceQty || 0);
         }
 
         const cancelLedger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, refDate, 'cancelled');
@@ -2176,7 +2244,7 @@ export class OverviewComponent implements OnInit {
         const ledger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, new Date(d), 'completed');
         if (ledger) {
           previousRangeRevenueTotal += Math.max(0, Number(ledger.runningBalanceAmount || 0));
-          previousRangeOrdersTotal += Math.max(0, Number(ledger.runningBalanceOrderQty || ledger.runningBalanceQty || 0));
+          previousRangeOrdersTotal += Math.max(0, Number(ledger.runningBalanceQty || 0));
         }
       }
 
@@ -2591,6 +2659,13 @@ export class OverviewComponent implements OnInit {
         console.warn('Overview: month expense query failed, will skip month expense calc:', monthErr);
       }
 
+      // Also fetch today-specific analytics (returns, refunds, damage, unpaid, recovered)
+      try {
+        await this.fetchTodayAnalytics();
+      } catch (ftErr) {
+        console.warn('Overview: fetchTodayAnalytics failed:', ftErr);
+      }
+
       // Mark loading complete
       if (this.isLoading()) {
         this.isLoading.set(false);
@@ -2617,6 +2692,8 @@ export class OverviewComponent implements OnInit {
     const returnedCount = Math.max(0, Number(this.ledgerReturnQty() || 0));
     const refundedCount = Math.max(0, Number(this.ledgerRefundQty() || 0));
     const damageCount = Math.max(0, Number(this.ledgerDamageQty() || 0));
+    const unpaidCount = Math.max(0, Number(this.ledgerUnpaidQty() || 0));
+    const recoveredCount = Math.max(0, Number(this.ledgerRecoveredQty() || 0));
 
     // Cancelled: prefer ledger cancel qty when available, otherwise fallback to scanning orders
     let cancelledCount = 0;
@@ -2627,7 +2704,7 @@ export class OverviewComponent implements OnInit {
     }
 
     // Compute completed count: prefer ledger-computed completedQty when available (orders - cancels), otherwise infer from reported total
-    const knownSum = returnedCount + refundedCount + damageCount + cancelledCount;
+    const knownSum = returnedCount + refundedCount + damageCount + cancelledCount + unpaidCount + recoveredCount;
     let completedCount = ledgerCompletedQty > 0 ? ledgerCompletedQty : Math.max(0, reportedTotal - knownSum);
 
     // Base total for percentages: prefer ledgerOrderQty if available
@@ -2637,18 +2714,21 @@ export class OverviewComponent implements OnInit {
     if (ledgerOrderQty === 0 && ledgerCompletedQty > 0) {
       baseTotal = Math.max(1, ledgerCompletedQty + knownSum);
     }
-    if (baseTotal <= 0) baseTotal = Math.max(1, knownSum + completedCount);
+    // Ensure baseTotal covers all known category counts to avoid percentages > 100%
+    baseTotal = Math.max(baseTotal, knownSum + completedCount, 1);
 
     const result: any = {
       completed: { count: completedCount, percentage: 0 },
       cancelled: { count: cancelledCount, percentage: 0 },
       returned: { count: returnedCount, percentage: 0 },
       refunded: { count: refundedCount, percentage: 0 },
-      damage: { count: damageCount, percentage: 0 }
+      damage: { count: damageCount, percentage: 0 },
+      unpaid: { count: unpaidCount, percentage: 0 },
+      recovered: { count: recoveredCount, percentage: 0 }
     };
 
     // If there's no actual data (all counts are 0), show 0% for all
-    const hasData = completedCount > 0 || cancelledCount > 0 || returnedCount > 0 || refundedCount > 0 || damageCount > 0;
+    const hasData = completedCount > 0 || cancelledCount > 0 || returnedCount > 0 || refundedCount > 0 || damageCount > 0 || unpaidCount > 0 || recoveredCount > 0;
     
     if (!hasData) {
       // No data - show all 0%
@@ -2682,7 +2762,9 @@ export class OverviewComponent implements OnInit {
       { color: '#ef4444', pct: Number(sa.cancelled?.percentage || 0) },
       { color: '#f97316', pct: Number(sa.returned?.percentage || 0) },
       { color: '#f59e0b', pct: Number(sa.refunded?.percentage || 0) },
-      { color: '#8b5cf6', pct: Number(sa.damage?.percentage || 0) }
+      { color: '#8b5cf6', pct: Number(sa.damage?.percentage || 0) },
+      { color: '#eab308', pct: Number(sa.unpaid?.percentage || 0) },
+      { color: '#10b981', pct: Number(sa.recovered?.percentage || 0) }
     ];
 
     // Check if there's any data
@@ -2768,12 +2850,13 @@ export class OverviewComponent implements OnInit {
       
       console.log(`fetchTopProducts: period=${period}, date=${queryDate.toLocaleDateString()}`);
 
-      const top = await this.ordersSellingTrackingService.getTopProductsCounts(companyId, resolvedStoreId, 10, queryDate);
-      const mapped = (top || []).slice(0, 10).map((p: any) => ({
-        avatar: (p.productName || '').split(' ').map((s: string) => s.charAt(0)).slice(0, 2).join('').toUpperCase() || 'P',
-        name: p.productName || 'Product',
-        code: p.skuId || '',
-        sales: Number(p.count || 0)
+      const queryDateMs = queryDate.getTime();
+      const top = await this.ordersSellingTrackingService.getTopProductsCounts(companyId, resolvedStoreId, 10, queryDateMs);
+      const mapped = Object.entries(top || {}).slice(0, 10).map(([productId, count]) => ({
+        avatar: (productId || '').split(' ').map((s: string) => s.charAt(0)).slice(0, 2).join('').toUpperCase() || 'P',
+        name: productId || 'Product',
+        code: productId || '',
+        sales: Number(count || 0)
       }));
       this.topProductsList.set(mapped);
     } catch (err) {
