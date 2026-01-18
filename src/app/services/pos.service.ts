@@ -994,6 +994,8 @@ export class PosService {
         throw new Error('No store selected');
       }
 
+      console.log('📋 Company ID:', company.id, 'Store ID:', storeId, 'User ID:', user.uid);
+
       // Fetch order details to get items
       const orderDetailsQuery = query(
         collection(this.firestore, 'orderDetails'),
@@ -1014,6 +1016,8 @@ export class PosService {
         }
       });
 
+      console.log('📦 Found', allItems.length, 'items in order');
+
       // Fetch the order document to get totals
       const orderRef = doc(this.firestore, 'orders', orderId);
       const orderDoc = await getDoc(orderRef);
@@ -1029,6 +1033,8 @@ export class PosService {
         netAmount: orderData['totalAmount'] || orderData['netAmount'] || 0,
         totalQuantity: allItems.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0)
       };
+
+      console.log('💰 Cart Summary:', cartSummary);
 
       // Execute background operations
       await this.executeBackgroundOrderOperations(
@@ -1099,10 +1105,10 @@ export class PosService {
       );
       
       if (this.networkService.isOnline()) {
-        // Add short timeout (1s) only when online
+        // Add reasonable timeout (10s) only when online to prevent hanging
         const ledgerRes: any = await Promise.race([
           ledgerPromise,
-          new Promise((_, reject) => setTimeout(() => reject(new Error('Ledger recording timeout')), 1000))
+          new Promise((_, reject) => setTimeout(() => reject(new Error('Ledger recording timeout after 10s')), 10000))
         ]);
         console.log('✅ Ledger entry created:', ledgerRes?.id);
       } else {
@@ -1110,7 +1116,7 @@ export class PosService {
         await ledgerPromise;
       }
     } catch (error) {
-      console.warn('⚠️ Ledger recording failed:', error);
+      console.error('❌ Ledger recording failed:', error);
       throw error;
     }
   }

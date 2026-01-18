@@ -57,33 +57,16 @@ type Order = OrderDisplay;
             </ng-template>
           </div>
           
-          <div class="date-inputs">
-            <div class="date-input-group">
-              <label for="fromDate">From Date:</label>
-              <input 
-                type="date" 
-                id="fromDate"
-                [(ngModel)]="fromDate"
-                class="date-input"
-                title="Select start date">
-            </div>
-            <div class="date-input-group">
-              <label for="toDate">To Date:</label>
-              <input 
-                type="date" 
-                id="toDate"
-                [(ngModel)]="toDate"
-                class="date-input"
-                title="Select end date">
-            </div>
-            <div class="go-button-group">
-              <button 
-                (click)="loadSalesDataManual()"
-                [disabled]="isLoading()"
-                class="go-button">
-                <span *ngIf="!isLoading()">{{ getDataSourceButtonText() }}</span>
-                <span *ngIf="isLoading()" class="loading-text">Loading...</span>
-              </button>
+          <div class="control-row">
+            <label class="control-label">Period</label>
+            <select class="control-select" [(ngModel)]="selectedPeriod" (change)="onPeriodChange()">
+              <option *ngFor="let p of periodOptions" [value]="p.key">{{ p.label }}</option>
+            </select>
+
+            <div *ngIf="selectedPeriod === 'date_range'" class="date-range-inputs">
+              <input type="date" class="control-input" [(ngModel)]="fromDate" />
+              <input type="date" class="control-input" [(ngModel)]="toDate" />
+              <button class="control-go" (click)="loadSalesDataManual()">Go</button>
             </div>
           </div>
         </div>
@@ -436,6 +419,72 @@ type Order = OrderDisplay;
       padding: 0 2rem 2rem 2rem;
     }
 
+    /* Overview controls pattern */
+    .overview-controls {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+
+    .overview-controls .control-row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .control-label { 
+      font-weight: 600; 
+      color: #374151; 
+      min-width: 60px;
+    }
+    
+    .control-select { 
+      padding: 6px 8px; 
+      border-radius: 8px; 
+      border: 1px solid #e5e7eb; 
+      background: white;
+      min-width: 150px;
+    }
+    
+    .control-input { 
+      padding: 6px 8px; 
+      border-radius: 8px; 
+      border: 1px solid #e5e7eb; 
+    }
+    
+    .control-go { 
+      background: #3b82f6; 
+      color: white; 
+      border: none; 
+      padding: 6px 10px; 
+      border-radius: 8px; 
+      cursor: pointer;
+      font-weight: 500;
+    }
+
+    .control-go:hover {
+      background: #2563eb;
+    }
+
+    .date-range-inputs {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .single-store {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .single-store .store-name {
+      font-weight: 600;
+      color: #1f2937;
+    }
+
     .date-picker-section {
       display: flex;
       justify-content: space-between;
@@ -443,45 +492,6 @@ type Order = OrderDisplay;
       margin-bottom: 30px;
       flex-wrap: wrap;
       gap: 20px;
-    }
-
-    .date-inputs {
-      display: flex;
-      gap: 15px;
-      flex-wrap: wrap;
-    }
-
-    .date-input-group {
-      display: flex;
-      flex-direction: column;
-      gap: 5px;
-    }
-
-    .date-input-group label {
-      font-weight: 500;
-      color: #4a5568;
-      font-size: 14px;
-    }
-
-    .date-input {
-      padding: 10px 12px;
-      border: 1px solid #e2e8f0;
-      border-radius: 8px;
-      font-size: 14px;
-      width: 160px;
-      transition: border-color 0.2s;
-    }
-
-    .date-input:focus {
-      outline: none;
-      border-color: #4299e1;
-      box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.1);
-    }
-
-    .go-button-group {
-      display: flex;
-      align-items: flex-end;
-      gap: 10px;
     }
 
     .go-button {
@@ -551,41 +561,6 @@ type Order = OrderDisplay;
     .debug-button:disabled {
       opacity: 0.6;
       cursor: not-allowed;
-    }
-
-    .store-selection {
-      margin-bottom: 15px;
-      padding: 12px;
-      background: white;
-      border-radius: 8px;
-      border: 1px solid #e2e8f0;
-    }
-
-    .store-selector {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
-
-    .store-selector label, .single-store label {
-      font-weight: 600;
-      color: #2d3748;
-      min-width: 50px;
-    }
-
-    .store-select {
-      padding: 8px 12px;
-      border: 1px solid #e2e8f0;
-      border-radius: 6px;
-      font-size: 14px;
-      min-width: 200px;
-      background: white;
-    }
-
-    .single-store {
-      display: flex;
-      align-items: center;
-      gap: 10px;
     }
 
     /* Modal header styled to match BIR compliance dialog */
@@ -1532,6 +1507,16 @@ export class SalesSummaryComponent implements OnInit {
   fromDate: string = '';
   toDate: string = '';
 
+  // Period options
+  periodOptions = [
+    { key: 'today', label: 'Today' },
+    { key: 'yesterday', label: 'Yesterday' },
+    { key: 'this_month', label: 'This Month' },
+    { key: 'previous_month', label: 'Previous Month' },
+    { key: 'date_range', label: 'Date Range' }
+  ];
+  selectedPeriod: 'today' | 'yesterday' | 'this_month' | 'previous_month' | 'date_range' = 'this_month';
+
   // Computed for store display
   selectedStore = computed(() => {
     const storeId = this.selectedStoreId();
@@ -1708,6 +1693,40 @@ export class SalesSummaryComponent implements OnInit {
   }
 
   /**
+   * Handle period selection change
+   */
+  onPeriodChange(): void {
+    const period = this.selectedPeriod;
+    const now = new Date();
+    
+    if (period === 'today') {
+      const today = this.formatDateForInput(now);
+      this.fromDate = today;
+      this.toDate = today;
+      this.loadSalesDataManual();
+    } else if (period === 'yesterday') {
+      const yesterday = new Date(now);
+      yesterday.setDate(now.getDate() - 1);
+      const yesterdayStr = this.formatDateForInput(yesterday);
+      this.fromDate = yesterdayStr;
+      this.toDate = yesterdayStr;
+      this.loadSalesDataManual();
+    } else if (period === 'this_month') {
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      this.fromDate = this.formatDateForInput(startOfMonth);
+      this.toDate = this.formatDateForInput(now);
+      this.loadSalesDataManual();
+    } else if (period === 'previous_month') {
+      const startOfPrevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const endOfPrevMonth = new Date(now.getFullYear(), now.getMonth(), 0);
+      this.fromDate = this.formatDateForInput(startOfPrevMonth);
+      this.toDate = this.formatDateForInput(endOfPrevMonth);
+      this.loadSalesDataManual();
+    }
+    // For date_range, user will select dates and click Go button
+  }
+
+  /**
    * Load current date data from Firebase (default behavior)
    */
   async loadCurrentDateData(): Promise<void> {
@@ -1795,6 +1814,13 @@ export class SalesSummaryComponent implements OnInit {
       // Use selected store ID or get from permission
       const storeId = this.selectedStoreId() || this.authService.getCurrentPermission()?.storeId;
       
+      console.log('📊 SalesSummary loadSalesData called:', {
+        storeId,
+        fromDate: this.fromDate,
+        toDate: this.toDate,
+        selectedPeriod: this.selectedPeriod
+      });
+      
       if (!storeId) {
         console.warn('❌ No storeId found - cannot load data');
         this.orders.set([]);
@@ -1802,19 +1828,28 @@ export class SalesSummaryComponent implements OnInit {
         return;
       }
 
-      // Convert date strings to Date objects
-      const startDate = new Date(this.fromDate);
-      const endDate = new Date(this.toDate);
-      // Set end date to end of day
-      endDate.setHours(23, 59, 59, 999);
+      // Convert date strings to Date objects - use local timezone
+      const [fromYear, fromMonth, fromDay] = this.fromDate.split('-').map(Number);
+      const [toYear, toMonth, toDay] = this.toDate.split('-').map(Number);
+      
+      const startDate = new Date(fromYear, fromMonth - 1, fromDay, 0, 0, 0, 0);
+      const endDate = new Date(toYear, toMonth - 1, toDay, 23, 59, 59, 999);
+
+      console.log('🔍 Querying orders for date range:', {
+        startDate: startDate.toISOString(),
+        startDateLocal: startDate.toLocaleString(),
+        endDate: endDate.toISOString(),
+        endDateLocal: endDate.toLocaleString()
+      });
 
       // Use Firestore-only flow: query `orders` collection by `storeId` and `updatedAt` (fallback to createdAt)
       let orders: any[] = [];
       try {
-        const results = await this.orderService.getOrdersFromFirestoreByRange(storeId, startDate, endDate);
+        const results = await this.orderService.getOrdersByDateRange(storeId, startDate, endDate);
         orders = results || [];
+        console.log('✅ Orders loaded:', orders.length, 'orders found');
       } catch (e) {
-        console.warn('Firestore sales query failed, setting orders to empty', e);
+        console.warn('❌ Firestore sales query failed, setting orders to empty', e);
         orders = [];
       }
 
