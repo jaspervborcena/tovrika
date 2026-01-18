@@ -71,9 +71,14 @@ export class LedgerService {
       
       // Add new values to existing balances
       const newBalanceAmount = Number(existing.runningBalanceAmount || 0) + amount;
-      const newBalanceQty = Number(existing.runningBalanceQty || 0) + qty;
-      const newOrderBalanceQty = Number(existing.runningBalanceOrderQty || 0) + 
+      let newBalanceQty = Number(existing.runningBalanceQty || 0) + qty;
+      const newOrderBalanceQty = Number(existing.runningBalanceOrderQty || 0) +
         (eventType === 'completed' ? qty : 0);
+
+      // If qty was not provided (0) but we have an order-based qty, use that as a fallback
+      if ((!newBalanceQty || newBalanceQty === 0) && newOrderBalanceQty && newOrderBalanceQty > 0) {
+        newBalanceQty = newOrderBalanceQty;
+      }
       
       const updateData = {
         orderId, // Update to latest order ID
@@ -106,8 +111,12 @@ export class LedgerService {
 
     // No document exists for today - CREATE new one
     const newBalanceAmount = amount;
-    const newBalanceQty = qty;
+    // If qty is not provided (0) but this is a completed event, prefer order qty
+    let newBalanceQty = qty;
     const newOrderBalanceQty = eventType === 'completed' ? qty : 0;
+    if ((!newBalanceQty || newBalanceQty === 0) && newOrderBalanceQty && newOrderBalanceQty > 0) {
+      newBalanceQty = newOrderBalanceQty;
+    }
 
     const newDoc = {
       companyId,
@@ -139,7 +148,7 @@ export class LedgerService {
     return {
       id: ref.id,
       runningBalanceAmount: newBalanceAmount,
-      runningBalanceQty: newBalanceQty,
+        runningBalanceQty: newBalanceQty,
       runningBalanceOrderQty: newOrderBalanceQty,
       created: true
     };

@@ -152,11 +152,25 @@ export class ProductSummaryService {
     const currentProductData = prodSnap.exists() ? prodSnap.data() : null;
     const isStockTracked = currentProductData?.isStockTracked ?? true; // Default to true for safety
     
+    // If product is stock tracked but has NO batches, skip the update
+    // This prevents overwriting correct values with zeros during batch creation timing window
+    if (isStockTracked && activeBatches.length === 0) {
+      console.log('⚠️ Stock-tracked product has no batches yet - skipping update to preserve existing values');
+      // Return current product values without updating
+      return {
+        totalStock: currentProductData?.totalStock || 0,
+        sellingPrice: currentProductData?.sellingPrice || 0,
+        originalPrice: currentProductData?.originalPrice || 0,
+        isStockTracked: true
+      };
+    }
+    
     // Build payload - only update stock if isStockTracked is true
     const payload: any = {
       hasDiscount,
       discountType,
       discountValue,
+      isStockTracked, // Preserve the isStockTracked field
       lastUpdated: new Date(),
       updatedBy: currentUser.uid
     };

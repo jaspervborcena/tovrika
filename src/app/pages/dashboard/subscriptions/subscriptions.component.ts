@@ -357,24 +357,33 @@ export class SubscriptionsComponent implements OnInit {
   }
 
   // ===== Derived subscription helpers =====
+
   private getLatestSub(store: Store): SubscriptionDoc | undefined {
     if (!store?.id) return undefined;
     return this.subscriptionsMap()[store.id];
   }
 
   getStoreTier(store: Store): string {
+    // If you want to store tier in the store doc, add a field and use it here
+    // For now, fallback to subscription doc
     const sub = this.getLatestSub(store);
     return (sub?.planType as string) || 'freemium';
   }
 
   getStoreStatus(store: Store): 'active' | 'inactive' | 'expired' | 'cancelled' | 'pending' {
+    // Prefer store.status and store.subscriptionEndDate if present
+    const now = Date.now();
+    if (store.subscriptionEndDate) {
+      const endMs = new Date(store.subscriptionEndDate).getTime();
+      if (endMs < now) return 'expired';
+      if (store.status === 'active') return 'active';
+      // 'pending' and 'cancelled' are not valid Store.status values
+      return store.status as any;
+    }
+    // Fallback to subscription doc logic
     const sub = this.getLatestSub(store);
     if (!sub) return 'inactive';
-    
-    // Check if subscription is pending approval
     if (sub.status === 'pending') return 'pending';
-    
-    const now = Date.now();
     const endMs = sub.endDate ? new Date(sub.endDate).getTime() : 0;
     if (sub.status === 'cancelled') return 'cancelled';
     if (endMs && endMs < now) return 'expired';
@@ -382,13 +391,16 @@ export class SubscriptionsComponent implements OnInit {
   }
 
   getSubscribedAt(store: Store): Date | null {
+    // No reliable field in store doc, fallback to subscription doc
     const sub = this.getLatestSub(store);
     return (sub?.startDate as any) || null;
   }
 
   getExpiresAt(store: Store): Date | null {
+    // Prefer store.subscriptionEndDate if present
+    if (store.subscriptionEndDate) return new Date(store.subscriptionEndDate);
     const sub = this.getLatestSub(store);
-    return (sub?.endDate as any) || (store.subscriptionEndDate || null);
+    return (sub?.endDate as any) || null;
   }
 
   getAmountPaid(store: Store): number {

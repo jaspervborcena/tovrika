@@ -2849,6 +2849,45 @@ export class ProductManagementComponent implements OnInit {
     // Load product tags into signal
     this.selectedTagIds.set(product.tags || []);
     
+    // Load batches first to check inventory status
+    if (product.id) {
+      try {
+        this.currentBatches = await this.inventoryDataService.listBatches(product.id);
+        console.log('📦 Loaded batches for product:', {
+          productId: product.id,
+          batchCount: this.currentBatches.length
+        });
+      } catch (err) {
+        console.error('Failed to load batches:', err);
+        this.currentBatches = [];
+      }
+    } else {
+      this.currentBatches = [];
+    }
+    
+    // Add default values for fields that might not exist in older products
+    // For isStockTracked: if field is missing, check if product has inventory batches
+    // If has batches, assume it should be tracked (backward compatibility)
+    const hasInventoryBatches = this.currentBatches.length > 0;
+    const productWithDefaults = {
+      ...product,
+      isStockTracked: product.isStockTracked ?? hasInventoryBatches, // Default based on existing inventory
+      isFavorite: product.isFavorite ?? false // Default to false if undefined
+    };
+    
+    // Update selectedProduct with defaults so hasExistingInventory() can access it
+    this.selectedProduct = productWithDefaults;
+    
+    console.log('🔍 Opening edit modal for product:', {
+      productName: productWithDefaults.productName,
+      isStockTracked: productWithDefaults.isStockTracked,
+      isFavorite: productWithDefaults.isFavorite,
+      hasIsStockTrackedField: 'isStockTracked' in product,
+      hasIsFavoriteField: 'isFavorite' in product,
+      productKeys: Object.keys(product),
+      batchCount: this.currentBatches.length
+    });
+    
     // Load tags for the product's store to ensure only relevant tags are shown
     if (product.storeId) {
       console.log('🏷️ Loading tags for product store:', product.storeId);
@@ -2856,14 +2895,43 @@ export class ProductManagementComponent implements OnInit {
     }
     
     // Patch the form silently to avoid triggering valueChange subscriptions
-    this.productForm.patchValue(product, { emitEvent: false });
-    // Set costPrice to 0 initially (will be loaded from latest batch if available)
-    this.productForm.get('costPrice')?.setValue(0, { emitEvent: false });
+    this.productForm.patchValue(productWithDefaults, { emitEvent: false });
+    
+    console.log('📋 Form values after patchValue:', {
+      isStockTracked: this.productForm.get('isStockTracked')?.value,
+      isFavorite: this.productForm.get('isFavorite')?.value
+    });
+    
     // Ensure vatRate defaults to 12 if the product doesn't include it
     const currentVat = this.productForm.get('vatRate')?.value;
     if (currentVat === null || currentVat === undefined || currentVat === '') {
       this.productForm.get('vatRate')?.setValue(AppConstants.DEFAULT_VAT_RATE);
     }
+    
+    // Explicitly set critical fields to ensure they're shown correctly
+    // Handle undefined fields by defaulting to false
+    const isStockTrackedValue = productWithDefaults.isStockTracked === true;
+    const isFavoriteValue = productWithDefaults.isFavorite === true;
+    
+    console.log('🎯 About to explicitly set:', {
+      isStockTrackedValue,
+      isFavoriteValue,
+      productIsStockTracked: productWithDefaults.isStockTracked,
+      productIsFavorite: productWithDefaults.isFavorite,
+      isStockTrackedType: typeof productWithDefaults.isStockTracked,
+      isFavoriteType: typeof productWithDefaults.isFavorite
+    });
+    
+    this.productForm.get('isStockTracked')?.setValue(isStockTrackedValue);
+    this.productForm.get('isFavorite')?.setValue(isFavoriteValue);
+    
+    console.log('✅ Form values after explicit setValue:', {
+      isStockTracked: this.productForm.get('isStockTracked')?.value,
+      isFavorite: this.productForm.get('isFavorite')?.value
+    });
+    
+    // Set costPrice from product (will be overridden by latest batch if available)
+    this.productForm.get('costPrice')?.setValue(Number(product.costPrice || 0), { emitEvent: false });
     
     // Use denormalized totalStock from product (no longer calculate from embedded inventory)
     // Patch the denormalized summary controls if present
@@ -2900,17 +2968,14 @@ export class ProductManagementComponent implements OnInit {
     const hasInv = this.hasExistingInventory();
     this.toggleControlsForInventory(hasInv);
     
-    // Load costPrice from latest batch if available
-    if (product.id) {
-      this.inventoryDataService.listBatches(product.id).then(batches => {
-        if (batches.length > 0) {
-          const latestBatch = batches[0]; // Batches are sorted by receivedAt desc
-          this.productForm.get('costPrice')?.setValue(Number(latestBatch.costPrice || 0), { emitEvent: false });
-        }
-      }).catch(err => {
-        console.error('Failed to load batches for costPrice:', err);
-      });
+    // Set costPrice from latest batch if available (batches already loaded above)
+    if (this.currentBatches.length > 0) {
+      const latestBatch = this.currentBatches[0]; // Batches are sorted by receivedAt desc
+      this.productForm.get('costPrice')?.setValue(Number(latestBatch.costPrice || 0), { emitEvent: false });
     }
+    
+    // Force change detection to ensure checkbox reflects the value
+    this.cdr.detectChanges();
     
     this.showModal = true;
   }
@@ -3033,7 +3098,29 @@ export class ProductManagementComponent implements OnInit {
     this.loading = true;
     try {
       console.log('🚀 submitProduct called - isEditMode:', this.isEditMode);
+      console.log('🔍 Form state before getRawValue:', {
+        sellingPriceValue: this.productForm.get('sellingPrice')?.value,
+        originalPriceValue: this.productForm.get('originalPrice')?.value,
+        totalStockValue: this.productForm.get('totalStock')?.value,
+        costPriceValue: this.productForm.get('costPrice')?.value,
+        sellingPriceDisabled: this.productForm.get('sellingPrice')?.disabled,
+        originalPriceDisabled: this.productForm.get('originalPrice')?.disabled,
+        totalStockDisabled: this.productForm.get('totalStock')?.disabled,
+        selectedProductPrices: {
+          sellingPrice: this.selectedProduct?.sellingPrice,
+          originalPrice: this.selectedProduct?.originalPrice,
+          totalStock: this.selectedProduct?.totalStock,
+          costPrice: this.selectedProduct?.costPrice
+        }
+      });
       const rawFormValue = this.productForm.getRawValue(); // Use getRawValue() to include disabled fields
+      
+      console.log('🔍 getRawValue result:', {
+        sellingPrice: rawFormValue.sellingPrice,
+        originalPrice: rawFormValue.originalPrice,
+        totalStock: rawFormValue.totalStock,
+        costPrice: rawFormValue.costPrice
+      });
       
       // Clean undefined values before processing
       const formValue = this.cleanFormData(rawFormValue);
@@ -3099,15 +3186,32 @@ export class ProductManagementComponent implements OnInit {
       }
       
       // Get the values directly from the form (which already has VAT computed via valueChanges)
-      const computedSellingPrice = Number(formValue.sellingPrice || 0);
+      let computedSellingPrice = Number(formValue.sellingPrice || 0);
       let computedOriginalPrice = Number(formValue.originalPrice || 0);
+      
+      // In edit mode, preserve existing prices if form values are 0
+      if (this.isEditMode && this.selectedProduct) {
+        if (computedSellingPrice === 0 && this.selectedProduct.sellingPrice) {
+          computedSellingPrice = this.selectedProduct.sellingPrice;
+        }
+        if (computedOriginalPrice === 0 && this.selectedProduct.originalPrice) {
+          computedOriginalPrice = this.selectedProduct.originalPrice;
+        }
+      }
       
       console.log('💵 Price calculation debug:', {
         formOriginalPrice: formValue.originalPrice,
         formSellingPrice: formValue.sellingPrice,
+        formCostPrice: formValue.costPrice,
+        formTotalStock: formValue.totalStock,
+        formIsStockTracked: formValue.isStockTracked,
         computedSellingPrice: computedSellingPrice,
         computedOriginalPrice: computedOriginalPrice,
-        isEditMode: this.isEditMode
+        isEditMode: this.isEditMode,
+        existingSellingPrice: this.selectedProduct?.sellingPrice,
+        existingOriginalPrice: this.selectedProduct?.originalPrice,
+        existingCostPrice: this.selectedProduct?.costPrice,
+        existingTotalStock: this.selectedProduct?.totalStock
       });
       
       // If originalPrice is not set but sellingPrice is, calculate originalPrice (price before VAT)
@@ -3143,10 +3247,9 @@ export class ProductManagementComponent implements OnInit {
           productCode: formValue.productCode,
           unitType: formValue.unitType,
           category: formValue.category,
-          // sellingPrice: for products with existing inventory, prefer the stored summary (cannot edit)
-          sellingPrice: this.hasExistingInventory() ? (this.selectedProduct.sellingPrice || computedSellingPrice) : computedSellingPrice,
-          // originalPrice: base/unit price stored alongside sellingPrice
-          originalPrice: this.hasExistingInventory() ? (this.selectedProduct.originalPrice || computedOriginalPrice) : computedOriginalPrice,
+          // Use computed prices (already have fallback to existing values)
+          sellingPrice: computedSellingPrice,
+          originalPrice: computedOriginalPrice,
           // Use form value if edited, otherwise preserve existing totalStock
           totalStock: Number(formValue.totalStock ?? this.selectedProduct.totalStock ?? 0),
           storeId: storeId,  // Use storeId from permission
@@ -3198,11 +3301,18 @@ export class ProductManagementComponent implements OnInit {
         await this.productService.updateProduct(this.selectedProduct.id!, updates);
         console.log('✅ Product update completed successfully');
 
-        // Handle inventory batch updates based on current batches
+        // Handle inventory batch updates based on current batches and isStockTracked
         const currentBatches = await this.inventoryDataService.listBatches(this.selectedProduct.id!);
         
-        if (currentBatches.length === 0 && Number(formValue.totalStock || 0) > 0) {
-          // No inventory exists and user provided totalStock - create an inventory entry
+        console.log('🔍 Batch creation check:', {
+          currentBatchesLength: currentBatches.length,
+          totalStock: formValue.totalStock,
+          isStockTracked: formValue.isStockTracked,
+          condition: currentBatches.length === 0 && Number(formValue.totalStock || 0) > 0 && !!formValue.isStockTracked
+        });
+        
+        if (currentBatches.length === 0 && Number(formValue.totalStock || 0) > 0 && !!formValue.isStockTracked) {
+          // No inventory exists, user provided totalStock, and stock tracking is enabled - create an inventory entry
           console.log('📦 No inventory exists for product, creating initial batch...');
           try {
             const currentPermission = this.authService.getCurrentPermission();
@@ -3238,6 +3348,8 @@ export class ProductManagementComponent implements OnInit {
             console.error('❌ Failed to create inventory batch for edited product:', batchError);
             this.toastService.error('Product updated but failed to create inventory batch');
           }
+        } else if (currentBatches.length === 0 && !formValue.isStockTracked) {
+          console.log('⚠️ Stock tracking disabled - no inventory batch created');
         } else if (currentBatches.length === 1) {
           // Single batch exists - update it with new quantity/prices if changed
           const newQuantity = Number(formValue.totalStock || 0);
@@ -3346,8 +3458,8 @@ export class ProductManagementComponent implements OnInit {
         const productId = await this.productService.createProduct(newProduct);
         console.log('✅ Product created successfully with ID:', productId);
         
-        // If initial batch exists, create it in separate collection and recompute summary
-        if (hasInitial && productId) {
+        // If initial batch exists AND product is stock tracked, create it in separate collection
+        if (hasInitial && productId && formValue.isStockTracked === true) {
           console.log('🎯 Creating initial inventory batch for new product:', productId);
           console.log('📦 Initial batch data:', initialBatch);
           console.log('🔍 Form values for initial batch:', {
@@ -3355,6 +3467,7 @@ export class ProductManagementComponent implements OnInit {
             originalPrice: formValue.originalPrice,
             initialCostPrice: formValue.initialCostPrice,
             hasInitial,
+            isStockTracked: formValue.isStockTracked,
             productId
           });
           
@@ -3391,8 +3504,11 @@ export class ProductManagementComponent implements OnInit {
             throw batchError; // Re-throw to show error to user
           }
         } else {
-          console.log('⚠️ Initial batch not created');
-          if (hasInitial && !productId) {
+          if (!formValue.isStockTracked) {
+            console.log('⚠️ Initial batch not created - product is not stock tracked');
+          } else if (!hasInitial) {
+            console.log('⚠️ Initial batch not created - no initial quantity provided');
+          } else if (!productId) {
             console.warn('⚠️ Initial inventory requested but no productId returned');
           }
         }
@@ -4684,7 +4800,15 @@ export class ProductManagementComponent implements OnInit {
       return false; // New product, no existing inventory
     }
     
-    // Allow editing prices when there's 0 or 1 batch
+    // Check if product uses stock tracking
+    const isStockTracked = this.selectedProduct?.isStockTracked === true;
+    
+    // If stock is tracked, show manage inventory if there are ANY batches
+    if (isStockTracked && this.currentBatches && this.currentBatches.length > 0) {
+      return true;
+    }
+    
+    // Legacy behavior: Allow editing prices when there's 0 or 1 batch
     // Only lock when there are multiple batches (complex inventory)
     return (this.currentBatches && this.currentBatches.length > 1);
   }
@@ -4702,7 +4826,7 @@ export class ProductManagementComponent implements OnInit {
    */
   canCreateInitialInventory(): boolean {
     const userRole = this.authService.userRole();
-    return userRole === 'creator' || userRole === 'store_manager';
+    return userRole === 'creator' || userRole === 'store_manager' || userRole === 'admin';
   }
 
   /**

@@ -738,6 +738,9 @@
                 <button class="btn open-receipt-btn" (click)="openOrderReceipt(selectedOrder())">
                   📄 Open Receipt
                 </button>
+                <button class="btn cancel-order-btn" (click)="authorizeAndCancelOpenOrder(selectedOrder()?.id)">
+                  ❌ Cancel
+                </button>
                 <button class="btn btn-primary" (click)="updateOpenOrder()">
                   ✏️ Update Order
                 </button>
@@ -1280,9 +1283,19 @@
     <!-- Payment Dialog -->
     <div *ngIf="showPaymentModal()" class="modal-overlay" (keydown.enter)="onPaymentDialogEnter($event)">
       <div class="payment-dialog">
-        <div class="dialog-header">
-          <h3>💳 {{ 'pos.paymentProcessing' | translate }}</h3>
-          <p>{{ 'pos.enterPaymentDetails' | translate }}</p>
+        <div class="dialog-header" style="position: relative;">
+          <div>
+            <h3>💳 {{ 'pos.paymentProcessing' | translate }}</h3>
+            <p>{{ 'pos.enterPaymentDetails' | translate }}</p>
+          </div>
+          <button 
+            type="button"
+            class="close-btn"
+            (click)="closePaymentDialog()"
+            title="Pay Later"
+            style="position: absolute; top: 0.5rem; right: 0.5rem; background: none; border: none; font-size: 2rem; cursor: pointer; color: white !important; padding: 0; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; line-height: 1; font-weight: 300;">
+            ×
+          </button>
         </div>
         
         <div class="dialog-content">
@@ -1371,13 +1384,6 @@
         
         <div class="dialog-actions">
           <button 
-            type="button"
-            class="btn-secondary"
-            #cancelPaymentButton
-            (click)="closePaymentDialog()">
-            {{ 'buttons.cancel' | translate }}
-          </button>
-          <button 
             *ngIf="!payingForExistingOrder()"
             type="button"
             class="btn-warning"
@@ -1391,7 +1397,7 @@
             #processPaymentButton
             autofocus
             (click)="processPayment()">
-            {{ 'pos.processPayment' | translate }}
+            💳 {{ 'pos.processPayment' | translate }}
           </button>
         </div>
       </div>
