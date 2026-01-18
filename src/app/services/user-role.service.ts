@@ -192,27 +192,36 @@ export class UserRoleService {
       
       // Check if permission for this company already exists
       const existingPermIdx = permissions.findIndex(p => p.companyId === currentPermission.companyId);
+      // Compose the new/updated permission object
+      const newPermission: any = {
+        companyId: currentPermission.companyId,
+        storeId: userRoleData.storeId,
+        roleId: userRoleData.roleId,
+        status: 'active',
+        uid: userRoleData.userId,
+        email: userRoleData.email,
+        updatedAt: new Date(),
+      };
+      // Optionally add pin if present
+      if ((userRoleData as any).pin) newPermission.pin = (userRoleData as any).pin;
+      // Add any other custom fields as needed
+
       if (existingPermIdx >= 0) {
         // Update existing permission
         permissions[existingPermIdx] = {
           ...permissions[existingPermIdx],
-          storeId: userRoleData.storeId,
-          roleId: userRoleData.roleId
+          ...newPermission
         };
       } else {
         // Add new permission
-        permissions.push({
-          companyId: currentPermission.companyId,
-          storeId: userRoleData.storeId,
-          roleId: userRoleData.roleId
-        });
+        permissions.push(newPermission);
       }
-      
+
       const permissionUpdate = {
         permissions: permissions,
         updatedAt: new Date()
       };
-      
+
       try {
         await this.offlineDocService.updateDocument('users', userRoleData.userId, permissionUpdate);
       } catch (updateError) {

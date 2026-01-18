@@ -2850,12 +2850,13 @@ export class OverviewComponent implements OnInit {
       
       console.log(`fetchTopProducts: period=${period}, date=${queryDate.toLocaleDateString()}`);
 
-      const top = await this.ordersSellingTrackingService.getTopProductsCounts(companyId, resolvedStoreId, 10, queryDate);
-      const mapped = (top || []).slice(0, 10).map((p: any) => ({
-        avatar: (p.productName || '').split(' ').map((s: string) => s.charAt(0)).slice(0, 2).join('').toUpperCase() || 'P',
-        name: p.productName || 'Product',
-        code: p.skuId || '',
-        sales: Number(p.count || 0)
+      const queryDateMs = queryDate.getTime();
+      const top = await this.ordersSellingTrackingService.getTopProductsCounts(companyId, resolvedStoreId, 10, queryDateMs);
+      const mapped = Object.entries(top || {}).slice(0, 10).map(([productId, count]) => ({
+        avatar: (productId || '').split(' ').map((s: string) => s.charAt(0)).slice(0, 2).join('').toUpperCase() || 'P',
+        name: productId || 'Product',
+        code: productId || '',
+        sales: Number(count || 0)
       }));
       this.topProductsList.set(mapped);
     } catch (err) {

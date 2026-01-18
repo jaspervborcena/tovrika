@@ -1,5 +1,5 @@
 import { Component, OnInit, AfterViewInit, OnDestroy, HostListener, ViewChild, ElementRef, computed, signal, inject, ChangeDetectorRef } from '@angular/core';
-import { Firestore, doc, getDoc, getDocs, updateDoc, collection, query, where } from '@angular/fire/firestore';
+import { Firestore, doc, getDoc, getDocs, updateDoc, collection, query, where, increment, setDoc } from '@angular/fire/firestore';
 import { onSnapshot } from 'firebase/firestore';
 import { ProductStatus } from '../../../interfaces/product.interface';
 import { CommonModule } from '@angular/common';
@@ -346,7 +346,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   // New Order Workflow State
   readonly isNewOrderActive = signal<boolean>(false);
   readonly offlineInvoicePreference = signal<'manual' | 'auto'>('auto');
-  readonly offlineManualInvoiceNumber = signal<string>('INV-0000-000000');
+  readonly offlineManualInvoiceNumber = signal<string>('INV-0000-000000000');
   
   // Store availability status
   readonly hasStoreLoadingError = computed(() => {
@@ -375,7 +375,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   readonly completedOrderData = signal<any>(null); // Store completed order data for reprinting
   
   // Regular properties for ngModel binding (signals don't work well with ngModel)
-  manualInvoiceInput: string = 'INV-0000-000000';
+  manualInvoiceInput: string = 'INV-0000-000000000';
   
   // Computed properties for UI display
   readonly completeOrderButtonText = computed(() => {
@@ -436,8 +436,8 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       const storeId = this.selectedStoreId();
       if (!storeId) {
         console.log('📋 No store selected - using default placeholder');
-        this.nextInvoiceNumber.set('INV-0000-000000');
-        this.invoiceNumber = 'INV-0000-000000';
+        this.nextInvoiceNumber.set('INV-0000-000000000');
+        this.invoiceNumber = 'INV-0000-000000000';
         return;
       }
       
@@ -447,8 +447,8 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       this.invoiceNumber = previewInvoice;
     } catch (error) {
       console.error('Error loading invoice preview:', error);
-      // Even on error, generate a basic preview
-      const fallback = this.storeService.generateRandomInvoiceNo();
+      // Fallback to default format
+      const fallback = 'INV-0000-000000000';
       this.nextInvoiceNumber.set(fallback);
       this.invoiceNumber = fallback;
     }
@@ -602,7 +602,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   };
 
   // Order-level information (moved from customerInfo)
-  invoiceNumber: string = 'INV-0000-000000';
+  invoiceNumber: string = 'INV-0000-000000000';
   datetime: string = new Date().toISOString().slice(0, 16); // Format for datetime-local input
 
   // UI State for collapsible customer panel
@@ -663,11 +663,11 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       return [];
     }
     
-    // Orders tab shows closed orders (completed + unpaid)
+    // Orders tab shows closed orders (completed + unpaid + OPEN)
     if (tab === 'Orders') {
       return allOrders.filter(order => {
         const status = (order.status || '').toString().toLowerCase();
-        return status === 'completed' || status === 'unpaid';
+        return status === 'completed' || status === 'unpaid' || status === 'open';
       });
     }
     
@@ -1387,6 +1387,149 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       await this.showConfirmationDialog({
         title: 'Error',
         message: 'Failed to prepare payment dialog.',
+        confirmText: 'OK',
+        cancelText: '',
+        type: 'danger'
+      });
+    }
+  }
+
+  // Cancel an OPEN order - update all three collections to 'cancelled' status
+  async authorizeAndCancelOpenOrder(orderId: string | undefined): Promise<void> {
+    if (!orderId) {
+      console.warn('No orderId provided for canceling OPEN order');
+      return;
+    }
+
+    // Request manager authorization
+    const creds = await this.showManagerAuthDialog();
+    if (!creds) return; // cancelled
+
+    const confirmed = await this.showConfirmationDialog({
+      title: 'Cancel OPEN Order',
+      message: 'Are you sure you want to cancel this OPEN order? This will update orders, orderDetails, and ordersSellingTracking to cancelled status.',
+      confirmText: 'Yes, Cancel',
+      cancelText: 'No',
+      type: 'warning',
+      showReason: true,
+      reasonLabel: 'Cancellation Reason (optional)',
+      reasonPlaceholder: 'Enter reason for cancellation...'
+    });
+
+    if (!confirmed) return;
+
+    try {
+      const reason = this.lastConfirmationReason() || undefined;
+      const currentUser = this.authService.getCurrentUser();
+      const performedBy = currentUser?.uid || 'system';
+      const now = new Date();
+
+      // 1. Update orders collection
+      const orderRef = doc(this.firestore, 'orders', orderId);
+      const orderSnap = await getDoc(orderRef);
+      
+      if (orderSnap.exists()) {
+        const orderData: any = orderSnap.data();
+        const existingStatusHistory = orderData.statusHistory || [];
+        const existingStatusTags = orderData.statusTags || [];
+
+        const newHistoryEntry = {
+          status: 'cancelled',
+          changedAt: now,
+          changedBy: performedBy,
+          ...(reason && { reason })
+        };
+
+        const updatedStatusHistory = [...existingStatusHistory, newHistoryEntry];
+        const updatedStatusTags = existingStatusTags.includes('cancelled') 
+          ? existingStatusTags 
+          : [...existingStatusTags, 'cancelled'];
+
+        await updateDoc(orderRef, {
+          status: 'cancelled',
+          updatedAt: now,
+          statusHistory: updatedStatusHistory,
+          statusTags: updatedStatusTags,
+          ...(reason && { updateReason: reason })
+        });
+        console.log(`✅ Updated orders collection for orderId=${orderId} to cancelled`);
+      }
+
+      // 2. Update orderDetails collection
+      const orderDetailsQuery = query(
+        collection(this.firestore, 'orderDetails'),
+        where('orderId', '==', orderId)
+      );
+      const orderDetailsSnapshot = await getDocs(orderDetailsQuery);
+
+      for (const detailDoc of orderDetailsSnapshot.docs) {
+        const detailRef = doc(this.firestore, 'orderDetails', detailDoc.id);
+        await updateDoc(detailRef, {
+          status: 'cancelled',
+          updatedAt: now
+        });
+      }
+      console.log(`✅ Updated ${orderDetailsSnapshot.docs.length} orderDetails documents to cancelled`);
+
+      // 3. Update ordersSellingTracking collection
+      await this.ordersSellingTrackingService.markOrderTrackingCancelled(orderId, performedBy, reason);
+      console.log(`✅ Updated ordersSellingTracking entries to cancelled`);
+
+      // 4. Restore inventory - add back the quantities that were deducted
+      console.log('🔄 Restoring inventory after canceling OPEN order...');
+      try {
+        // Get order items to identify which products to restore
+        let allItems: any[] = [];
+        for (const detailDoc of orderDetailsSnapshot.docs) {
+          const data = detailDoc.data();
+          if (data['items'] && Array.isArray(data['items'])) {
+            allItems = allItems.concat(data['items']);
+          }
+        }
+
+        if (allItems.length > 0) {
+          // Restore stock by incrementing back the quantities
+          for (const item of allItems) {
+            if (item.productId && item.quantity) {
+              try {
+                const productRef = doc(this.firestore, 'products', item.productId);
+                await updateDoc(productRef, {
+                  totalStock: increment(item.quantity), // Add back the quantity
+                  updatedAt: now,
+                  lastModified: now
+                });
+                console.log(`✅ Restored ${item.quantity} units to product ${item.productId}`);
+              } catch (err) {
+                console.warn(`⚠️ Failed to restore inventory for product ${item.productId}:`, err);
+              }
+            }
+          }
+          
+          // Re-sync products from Firestore to update UI cache
+          await this.posService['syncProductsFromOrder'](allItems);
+          console.log(`✅ Inventory restored and synced for ${allItems.length} products`);
+        }
+      } catch (syncErr) {
+        console.warn('⚠️ Failed to restore inventory (non-critical):', syncErr);
+      }
+
+      // Refresh and close
+      await this.searchOrders();
+      this.closeOrder();
+
+      await this.showConfirmationDialog({
+        title: 'Success',
+        message: 'Order successfully cancelled.',
+        confirmText: 'OK',
+        cancelText: '',
+        type: 'info'
+      });
+
+    } catch (error) {
+      console.error('Error canceling OPEN order:', error);
+      await this.showConfirmationDialog({
+        title: 'Error',
+        message: 'Failed to cancel order. Please try again.',
         confirmText: 'OK',
         cancelText: '',
         type: 'danger'
@@ -3521,10 +3664,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     // Set default payment method to cash
     this.posService.setPaymentMethod('cash');
     
-    // Reset customer information with next invoice number
-    await this.loadNextInvoicePreview();
-    const nextInvoice = this.nextInvoiceNumber();
-    
+    // Reset customer information and invoice number to default
     this.customerInfo = {
       soldTo: '',
       tin: '',
@@ -3533,8 +3673,29 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       customerId: ''
     };
     
-    this.invoiceNumber = nextInvoice === 'Loading...' ? 'INV-0000-000000' : nextInvoice;
+    // Reset to default invoice number (will be updated when order is completed)
+    this.invoiceNumber = 'INV-0000-000000000';
+    this.nextInvoiceNumber.set('INV-0000-000000000');
     this.datetime = new Date().toISOString().slice(0, 16);
+    
+    // Refresh products to show updated stock after previous order
+    try {
+      const currentUser = await this.authService.getCurrentUser();
+      if (currentUser?.uid) {
+        const userRole = this.userRoleService.getUserRoleByUserId(currentUser.uid);
+        if (userRole?.companyId) {
+          await this.productService.loadProductsByCompanyAndStore(userRole.companyId);
+          console.log('✅ Products refreshed with latest stock');
+        }
+      }
+    } catch (error) {
+      console.warn('⚠️ Failed to refresh products:', error);
+    }
+    
+    // Load next invoice preview in background (non-blocking)
+    this.loadNextInvoicePreview().catch(err => 
+      console.warn('⚠️ Failed to load invoice preview:', err)
+    );
     
     // Auto-focus search input after new order
     setTimeout(() => {
@@ -3937,7 +4098,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
         console.log('📋 Fresh invoice number generated:', realInvoiceNumber);
       } catch (invoiceError) {
         console.warn('Warning: Could not generate invoice number:', invoiceError);
-        realInvoiceNumber = 'INV-0000-000000';
+        realInvoiceNumber = 'INV-0000-000000000';
       }
       
       // Close payment dialog
@@ -3960,7 +4121,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
         console.log('🔄 Reloading invoice number after failed order...');
         await this.loadNextInvoicePreview();
         const freshInvoiceNumber = this.nextInvoiceNumber();
-        this.invoiceNumber = freshInvoiceNumber === 'Loading...' ? 'INV-0000-000000' : freshInvoiceNumber;
+        this.invoiceNumber = freshInvoiceNumber === 'Loading...' ? 'INV-0000-000000000' : freshInvoiceNumber;
       } catch (invoiceReloadError) {
         console.warn('⚠️ Failed to reload invoice number:', invoiceReloadError);
       }
@@ -3969,6 +4130,89 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       await this.showConfirmationDialog({
         title: 'Failed to Save Order',
         message: `Failed to save order as OPEN. Please try again.\nReason: ${error instanceof Error ? error.message : String(error)}`,
+        confirmText: 'OK',
+        cancelText: ''
+      });
+    }
+  }
+
+  /**
+   * STAGE 1: Complete Order - Create OPEN order and show payment dialog
+   * This creates orders, orderDetails, and ordersSellingTracking with OPEN/processing status
+   * NO inventory changes yet
+   */
+  async completeOrder(): Promise<void> {
+    // Prevent double-submission
+    if (this.isProcessing()) {
+      console.log('⚠️ Order already processing, ignoring duplicate request');
+      return;
+    }
+
+    try {
+      console.log('📝 STAGE 1: Creating OPEN order (no inventory changes)...');
+      
+      // Validate cart is not empty
+      const cartItems = this.cartItems();
+      if (cartItems.length === 0) {
+        await this.showConfirmationDialog({
+          title: 'Empty Cart',
+          message: 'Please add items to cart before completing order.',
+          confirmText: 'OK',
+          cancelText: ''
+        });
+        return;
+      }
+
+      // Get customer info if provided
+      const processedCustomerInfo = this.getCustomerInfoForOrder();
+      
+      // Save customer first if needed
+      if (!processedCustomerInfo.customerId && (this.customerInfo.soldTo && this.customerInfo.soldTo.trim())) {
+        console.log('👤 Saving customer before order...');
+        try {
+          const savedCustomer = await this.saveCustomerData();
+          if (savedCustomer && savedCustomer.id) {
+            processedCustomerInfo.customerId = savedCustomer.id;
+            console.log('👤 Customer saved:', savedCustomer.id);
+          }
+        } catch (err) {
+          console.warn('⚠️ Failed to save customer:', err);
+        }
+      }
+
+      // Create OPEN order (orders + orderDetails + ordersSellingTracking with processing status)
+      console.log('📦 Creating OPEN order...');
+      const orderResult = await this.posService.createOpenOrder(processedCustomerInfo);
+
+      if (!orderResult) {
+        throw new Error('Failed to create OPEN order');
+      }
+
+      console.log('✅ OPEN order created:', orderResult);
+
+      // Store the created order info for payment processing
+      this.completedOrderData.set({
+        orderId: orderResult.orderId,
+        invoiceNumber: orderResult.invoiceNumber,
+        items: cartItems,
+        totalAmount: this.cartSummary().netAmount
+      });
+
+      // Update invoice number display
+      this.invoiceNumber = orderResult.invoiceNumber;
+      this.nextInvoiceNumber.set(orderResult.invoiceNumber);
+
+      // Show payment dialog with two options
+      this.showPaymentDialog();
+      
+    } catch (error) {
+      console.error('❌ Error creating OPEN order:', error);
+      
+      this.posService['isProcessingSignal']?.set(false);
+      
+      await this.showConfirmationDialog({
+        title: 'Order Creation Failed',
+        message: `Failed to create order. Please try again.\nReason: ${error instanceof Error ? error.message : String(error)}`,
         confirmText: 'OK',
         cancelText: ''
       });
@@ -4036,7 +4280,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
         console.log('📋 Fresh invoice number generated from Firestore:', realInvoiceNumber);
       } catch (invoiceError) {
         console.warn('Warning: Could not generate invoice number:', invoiceError);
-        realInvoiceNumber = 'INV-0000-000000';
+        realInvoiceNumber = 'INV-0000-000000000';
       }
       
       // Close payment dialog after capturing values
@@ -4280,21 +4524,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       
       // If this is an OPEN order, show simple success message instead of receipt
       if (saveAsOpen) {
-        console.log('💼 OPEN order: Showing success message instead of receipt');
-        
-        // Prepare simple order summary
-        const cartItems = this.cartItems();
-        const itemsList = cartItems.map(item => 
-          `${item.productName} (x${item.quantity}) - ₱${item.total.toFixed(2)}`
-        ).join('\n');
-        
-        // Show success dialog with items
-        await this.showConfirmationDialog({
-          title: '✅ Order Successfully Saved',
-          message: `Invoice: ${result.invoiceNumber}\n${tableNumber ? `Table: ${tableNumber}\n` : ''}Status: OPEN (Pay Later)\n\nItems:\n${itemsList}\n\nTotal: ₱${this.cartSummary().netAmount.toFixed(2)}`,
-          confirmText: 'OK',
-          cancelText: ''
-        });
+        console.log('💼 OPEN order: Saved successfully');
         
         // Preserve cart so user can reprint — mark order completed instead
         this.isOrderCompleted.set(true);
@@ -4307,7 +4537,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
         await new Promise(resolve => setTimeout(resolve, 1000)); // Wait for Firestore to complete
         await this.loadRecentOrders();
         
-        return; // Exit early, don't show receipt modal
+        return; // Exit early, don't show receipt modal or success dialog
       }
       
       // For regular orders, show receipt modal immediately
@@ -5347,7 +5577,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   generateNewInvoiceNumber(): void {
-    this.invoiceNumber = 'INV-0000-000000';
+    this.invoiceNumber = 'INV-0000-000000000';
   }
 
   // Offline invoice handling methods
@@ -5764,9 +5994,9 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
         return;
       }
       
-      // Both online and offline modes - Open payment dialog first
-      console.log('💳 Opening payment dialog for order completion...');
-      this.showPaymentDialog();
+      // NEW FLOW: Create OPEN order first, then show payment dialog
+      console.log('📝 Creating OPEN order...');
+      await this.completeOrder();
     } catch (error) {
       console.error('❌ Error processing order:', error);
       
