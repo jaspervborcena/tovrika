@@ -43,7 +43,7 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
                 </ng-container>
                 <ng-template #singleStore>
                   <div class="single-store">
-                    <span class="store-name">{{ storeList().length ? (storeList()[0].storeName | uppercase) : 'All Stores' }}</span>
+                    <span class="store-name">{{ storeList().length > 0 ? (getSelectedStoreName() | uppercase) : '--' }}</span>
                   </div>
                 </ng-template>
               </div>
@@ -2332,6 +2332,30 @@ export class OverviewComponent implements OnInit {
     }
   }
 
+  // Get the name of the currently selected store
+  protected getSelectedStoreName(): string {
+    const stores = this.storeList();
+    const storeId = this.selectedStoreId();
+    
+    console.log('🏪 getSelectedStoreName called:', {
+      storesCount: stores.length,
+      selectedStoreId: storeId,
+      stores: stores.map(s => ({ id: s.id, name: s.storeName }))
+    });
+    
+    // Find the selected store by ID
+    const store = stores.find(s => s.id === storeId);
+    
+    // If not found by ID, use first store as fallback
+    const result = store?.storeName || stores[0]?.storeName || '--';
+    
+    if (!store && storeId && storeId !== 'all') {
+      console.warn('⚠️ Store not found with ID:', storeId, 'Using first store:', stores[0]?.storeName);
+    }
+    
+    return result;
+  }
+
   // Handler: when user changes period selection
   protected onOverviewPeriodChange(event: Event) {
     const target = event.target as HTMLSelectElement;
@@ -2500,10 +2524,10 @@ export class OverviewComponent implements OnInit {
       // EXACT same approach as sales-summary
       await this.loadStores();
       
-      // After stores load, use the selected period/store to load analytics
-      // This ensures the new store/period controls drive the initial load
-      await this.loadCurrentDateData();
-      await this.fetchTopProducts();
+      // After stores load, trigger the same load flow as when period/store changes
+      // This ensures consistent data loading behavior
+      this.applyPeriodAndLoad();
+      
       this.isLoading.set(false);
 
     } catch (error) {
@@ -2527,14 +2551,22 @@ export class OverviewComponent implements OnInit {
 
       // Use centralized method - filters by active status and userRoles access
       const stores = await this.storeService.getActiveStoresForDropdown(currentPermission.companyId);
+      
+      console.log('🏪 loadStores result:', {
+        storesCount: stores.length,
+        stores: stores.map(s => ({ id: s.id, name: s.storeName })),
+        companyId: currentPermission.companyId
+      });
+      
       this.stores.set(stores);
 
-      // Set selected store - EXACT same logic as sales-summary
-      if (currentPermission?.storeId) {
-        this.selectedStoreId.set(currentPermission.storeId);
-      } else if (stores.length > 0 && stores[0].id) {
+      // Set selected store - use actual store ID from loaded stores
+      if (stores.length > 0 && stores[0].id) {
+        // Always use the actual store ID from the stores array
         this.selectedStoreId.set(stores[0].id);
-        console.log('🎯 Using first store ID');
+        console.log('🎯 Selected store ID:', stores[0].id, 'Name:', stores[0].storeName);
+      } else {
+        console.warn('⚠️ No stores loaded from getActiveStoresForDropdown');
       }
     } catch (error) {
       console.error('❌ Error loading stores:', error);
@@ -2848,10 +2880,17 @@ export class OverviewComponent implements OnInit {
         queryDate.setDate(queryDate.getDate() - 1);
       }
       
-      console.log(`fetchTopProducts: period=${period}, date=${queryDate.toLocaleDateString()}`);
+      console.log(`🔍 fetchTopProducts query params:`, {
+        companyId,
+        storeId: resolvedStoreId,
+        period,
+        queryDate: queryDate.toLocaleDateString(),
+        queryDateMs: queryDate.getTime()
+      });
 
       const queryDateMs = queryDate.getTime();
       const top = await this.ordersSellingTrackingService.getTopProductsCounts(companyId, resolvedStoreId, 10, queryDateMs);
+      console.log('📊 getTopProductsCounts result:', top);
       const mapped = Object.entries(top || {}).slice(0, 10).map(([productId, count]) => ({
         avatar: (productId || '').split(' ').map((s: string) => s.charAt(0)).slice(0, 2).join('').toUpperCase() || 'P',
         name: productId || 'Product',

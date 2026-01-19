@@ -35,7 +35,7 @@ import { AuthService } from '../../../services/auth.service';
           <ng-template #singleStore>
             <div class="single-store">
               <label>Store:</label>
-              <span class="store-name">{{ stores()[0].storeName.toUpperCase() }}</span>
+              <span class="store-name">{{ stores().length > 0 ? (getSelectedStoreName() | uppercase) : '--' }}</span>
             </div>
           </ng-template>
         </div>
@@ -261,21 +261,22 @@ export class InventoryComponent implements OnInit {
       // Use centralized method from store.service
       const activeStores = await this.storeService.getActiveStoresForDropdown(currentPermission.companyId);
       
-      this.stores.set(activeStores);
-      console.log('🏪 Inventory: After setting stores signal', {
-        storesLength: this.stores().length,
-        hasMultiple: this.hasMultipleStores(),
-        stores: this.stores().map(s => s.storeName)
+      console.log('🏪 Inventory: loadStores result', {
+        storesLength: activeStores.length,
+        stores: activeStores.map(s => ({ id: s.id, name: s.storeName })),
+        companyId: currentPermission.companyId
       });
-
-      // Set selected store - if user has storeId, use it, otherwise use first store
-      if (currentPermission?.storeId) {
-        this.selectedStoreId.set(currentPermission.storeId);
-      } else if (activeStores.length > 0 && activeStores[0].id) {
-        this.selectedStoreId.set(activeStores[0].id);
-      }
       
-      console.log('🏪 Inventory: Selected store ID:', this.selectedStoreId());
+      this.stores.set(activeStores);
+
+      // Set selected store - use actual store ID from loaded stores
+      if (activeStores.length > 0 && activeStores[0].id) {
+        // Always use the actual store ID from the stores array
+        this.selectedStoreId.set(activeStores[0].id);
+        console.log('🎯 Inventory: Selected store ID:', activeStores[0].id, 'Name:', activeStores[0].storeName);
+      } else {
+        console.warn('⚠️ Inventory: No stores loaded');
+      }
     } catch (error) {
       console.error('Error loading stores:', error);
       this.stores.set([]);
@@ -288,7 +289,25 @@ export class InventoryComponent implements OnInit {
   }
 
   getSelectedStoreName(): string {
-    const store = this.stores().find(s => s.id === this.selectedStoreId());
-    return store ? store.storeName : '';
+    const stores = this.stores();
+    const storeId = this.selectedStoreId();
+    
+    console.log('🏪 Inventory getSelectedStoreName called:', {
+      storesCount: stores.length,
+      selectedStoreId: storeId,
+      stores: stores.map(s => ({ id: s.id, name: s.storeName }))
+    });
+    
+    // Find the selected store by ID
+    const store = stores.find(s => s.id === storeId);
+    
+    // If not found by ID, use first store as fallback
+    const result = store?.storeName || stores[0]?.storeName || '--';
+    
+    if (!store && storeId) {
+      console.warn('⚠️ Inventory: Store not found with ID:', storeId, 'Using first store:', stores[0]?.storeName);
+    }
+    
+    return result;
   }
 }

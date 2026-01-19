@@ -325,8 +325,26 @@ export class InventoryComponent implements OnInit {
   }
 
   getSelectedStoreName(): string {
-    const store = this.stores().find(s => s.id === this.selectedStoreId());
-    return store?.storeName.toUpperCase() || 'BREW ORGANICS INC';
+    const stores = this.stores();
+    const storeId = this.selectedStoreId();
+    
+    console.log('🏪 Inventory getSelectedStoreName called:', {
+      storesCount: stores.length,
+      selectedStoreId: storeId,
+      stores: stores.map(s => ({ id: s.id, name: s.storeName }))
+    });
+    
+    // Find the selected store by ID
+    const store = stores.find(s => s.id === storeId);
+    
+    // If not found by ID, use first store as fallback
+    const result = store?.storeName || stores[0]?.storeName || '--';
+    
+    if (!store && storeId) {
+      console.warn('⚠️ Inventory: Store not found with ID:', storeId, 'Using first store:', stores[0]?.storeName);
+    }
+    
+    return result.toUpperCase();
   }
 
   // UI controls (simple, mock-driven for now)
