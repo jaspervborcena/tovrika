@@ -3,6 +3,7 @@ import {
   Firestore, 
   collection, 
   doc, 
+  getDoc,
   setDoc, 
   updateDoc, 
   deleteDoc, 
@@ -506,6 +507,13 @@ export class StoreService {
         }
       });
 
+      console.log('🔑 UserRoles check:', {
+        userId: user.uid,
+        companyId,
+        userRolesFound: userRolesSnap.docs.length,
+        allowedStoreIds: Array.from(allowedStoreIds)
+      });
+
       // If no specific stores found, user might not have access
       if (allowedStoreIds.size === 0) {
         console.warn('🚨 No store access found in userRoles for this user');
@@ -528,10 +536,52 @@ export class StoreService {
       // Get all stores for the company
       const allStores = this.getStoresByCompany(companyId);
       
+      console.log('🏪 All stores for company:', {
+        allStoresCount: allStores.length,
+        stores: allStores.map(s => ({ id: s.id, name: s.storeName, status: s.status }))
+      });
+      
+      // If allStores is empty but we have allowedStoreIds, fetch directly from Firestore
+      if (allStores.length === 0 && allowedStoreIds.size > 0) {
+        console.log('📥 Fetching stores directly from Firestore:', Array.from(allowedStoreIds));
+        const directStores: Store[] = [];
+        
+        for (const storeId of allowedStoreIds) {
+          try {
+            const storeDocRef = doc(this.firestore, 'stores', storeId);
+            const storeDoc = await getDoc(storeDocRef);
+            if (storeDoc.exists()) {
+              const storeData = storeDoc.data();
+              const store: Store = {
+                id: storeDoc.id,
+                ...storeData,
+                createdAt: storeData['createdAt']?.toDate?.() || new Date(),
+                updatedAt: storeData['updatedAt']?.toDate?.() || new Date(),
+              } as Store;
+              
+              if (store.status === 'active' && store.companyId === companyId) {
+                directStores.push(store);
+                console.log('✅ Fetched store:', store.storeName);
+              }
+            }
+          } catch (err) {
+            console.error('Error fetching store:', storeId, err);
+          }
+        }
+        
+        console.log('📦 Direct fetch result:', directStores.length, 'stores');
+        return directStores;
+      }
+      
       // Filter by: active status AND user has access (from userRoles)
       const accessibleStores = allStores.filter(store => 
         store.status === 'active' && allowedStoreIds.has(store.id || '')
       );
+      
+      console.log('✅ Accessible stores:', {
+        accessibleCount: accessibleStores.length,
+        stores: accessibleStores.map(s => ({ id: s.id, name: s.storeName }))
+      });
       
       const activeCount = allStores.filter(s => s.status === 'active').length;
       

@@ -2266,11 +2266,9 @@ export class ProductManagementComponent implements OnInit {
   // Signals
   readonly products = computed(() => this.productService.getProducts());
   readonly stores = computed(() => this.storeService.getStores().filter(store => store.status === 'active'));
-  // Get unique categories from products instead of category service
+  // Get categories from CategoryService (includes newly created categories)
   readonly categories = computed(() => {
-    const allProducts = this.products();
-    const categorySet = new Set(allProducts.map(product => product.category).filter(cat => cat && cat.trim()));
-    return Array.from(categorySet).sort();
+    return this.categoryService.getCategoryLabels();
   });
 
   // Reactive filtered products - automatically updates when products change or filters change
