@@ -170,7 +170,6 @@ export class OfflineOrderService {
           cartItem.productId,
           cartItem.quantity,
           orderId,
-          orderId, // Using orderId as orderDetailId for now
           false // isOffline = false
         );
 

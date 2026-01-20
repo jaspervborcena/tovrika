@@ -69,7 +69,6 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   private userRoleService = inject(UserRoleService);
   private customerService = inject(CustomerService);
   private companyService = inject(CompanyService);
-  
   private translationService = inject(TranslationService);
   private subscriptionService = inject(SubscriptionService);
   private firestore = inject(Firestore);

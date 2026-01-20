@@ -38,7 +38,7 @@
       ]
     },
     {
-      "collectionGroup": "productInventoryEntries",
+      "collectionGroup": "productInventory",
       "queryScope": "COLLECTION",
       "fields": [
         { "fieldPath": "productId", "order": "ASCENDING" },
@@ -274,6 +274,31 @@
         { "fieldPath": "status", "order": "ASCENDING" },
         { "fieldPath": "storeId", "order": "ASCENDING" },
         { "fieldPath": "createdAt", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "inventoryDeductions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "storeId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "inventoryDeductions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "storeId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "inventoryDeductions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "companyId", "order": "ASCENDING" },
+        { "fieldPath": "storeId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
       ]
     }
   ],
