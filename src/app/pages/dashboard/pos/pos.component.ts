@@ -166,6 +166,9 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   readonly cartSummary = computed(() => this.posService.cartSummary());
   readonly isProcessing = computed(() => this.posService.isProcessing());
   
+  // Loading state for initial data load
+  readonly isLoading = signal<boolean>(true);
+  
   readonly products = computed(() => {
     const prods = this.productService.getProductsSignal()();
     
@@ -3111,6 +3114,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   async ngOnInit(): Promise<void> {
+    this.isLoading.set(true);
     
     // Set default payment method to cash
     this.posService.setPaymentMethod('cash');
@@ -3170,6 +3174,8 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     } catch (error) {
       console.error('❌ Error initializing POS:', error);
       console.error('❌ Error details:', error);
+    } finally {
+      this.isLoading.set(false);
     }
   }
 

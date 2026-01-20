@@ -958,6 +958,17 @@ public async restockOrderAndInventoryTransactional(orderId: string, performedBy 
       const startTimestamp = Timestamp.fromDate(startDate);
       const endTimestamp = Timestamp.fromDate(endDate);
       
+      this.logger.info('🔍 Query parameters', { 
+        area: 'orders', 
+        storeId, 
+        payload: { 
+          startDate: startDate.toISOString(), 
+          endDate: endDate.toISOString(),
+          startTimestamp: startTimestamp.toDate().toISOString(),
+          endTimestamp: endTimestamp.toDate().toISOString()
+        } 
+      });
+      
       try {
         const dateRangeQuery = query(
           ordersRef, 
@@ -970,6 +981,16 @@ public async restockOrderAndInventoryTransactional(orderId: string, performedBy 
         
   const dateRangeSnapshot = await getDocs(dateRangeQuery);
   this.logger.info('Orders for store in date range', { area: 'orders', storeId, payload: { count: dateRangeSnapshot.docs.length } });
+  
+        // Log first few orders if any found
+        if (dateRangeSnapshot.docs.length > 0) {
+          const sampleOrders = dateRangeSnapshot.docs.slice(0, 3).map(doc => ({
+            id: doc.id,
+            createdAt: doc.data()['createdAt']?.toDate?.()?.toISOString() || doc.data()['createdAt'],
+            storeId: doc.data()['storeId']
+          }));
+          this.logger.info('📋 Sample orders found', { area: 'orders', payload: sampleOrders });
+        }
 
         if (dateRangeSnapshot.docs.length > 0) {
           this.logger.info('Found orders for this store in date range', { area: 'orders', storeId });

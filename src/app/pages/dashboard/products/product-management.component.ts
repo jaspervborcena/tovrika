@@ -24,6 +24,70 @@ import { AppConstants } from '../../../shared/enums/app-constants.enum';
   imports: [CommonModule, FormsModule, ReactiveFormsModule, ConfirmationDialogComponent, CreateTagModalComponent],
   styles: [
     `
+    /* Loading Overlay */
+    /* Loading State for Table Container */
+    .loading-state {
+      position: absolute;
+      top: 60px; /* Below table-header */
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(255, 255, 255, 0.98);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      backdrop-filter: blur(8px);
+    }
+
+    .loading-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(255, 255, 255, 0.98);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 9999;
+      backdrop-filter: blur(8px);
+    }
+
+    .loading-content {
+      text-align: center;
+      padding: 40px;
+    }
+
+    .loading-spinner {
+      width: 56px;
+      height: 56px;
+      border: 5px solid #e5e7eb;
+      border-top-color: #667eea;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin: 0 auto 24px;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    .loading-text {
+      margin: 0 0 8px 0;
+      color: #2d3748;
+      font-size: 1.125rem;
+      font-weight: 600;
+    }
+
+    .loading-subtext {
+      margin: 0;
+      color: #718096;
+      font-size: 0.875rem;
+      font-weight: 400;
+    }
+
     .products-management { 
       padding: 0; 
       min-height: 100vh; 
@@ -184,6 +248,7 @@ import { AppConstants } from '../../../shared/enums/app-constants.enum';
     }
 
     .table-container {
+      position: relative;
       max-width: 1200px;
       margin: 0 auto;
       padding: 0 1rem;
@@ -1233,6 +1298,15 @@ import { AppConstants } from '../../../shared/enums/app-constants.enum';
   ],
   template: `
     <div class="products-management">
+      <!-- Loading Overlay -->
+      <div *ngIf="isLoading()" class="loading-overlay">
+        <div class="loading-content">
+          <div class="loading-spinner"></div>
+          <p class="loading-text">Loading products...</p>
+          <p class="loading-subtext">Please wait while we fetch your product catalog</p>
+        </div>
+      </div>
+
       <!-- Header -->
       <div class="header">
         <div class="header-content">
@@ -1274,6 +1348,15 @@ import { AppConstants } from '../../../shared/enums/app-constants.enum';
 
       <!-- Products Table -->
       <div class="table-container">
+        <!-- Loading State -->
+        <div *ngIf="isLoading()" class="loading-state">
+          <div class="spinner-wrapper">
+            <div class="spinner"></div>
+            <p class="loading-text">Loading products...</p>
+            <p class="loading-subtext">Please wait</p>
+          </div>
+        </div>
+
         <div class="table-header">
           <h3>Products ({{ filteredProducts().length }})</h3>
           <button 
@@ -1656,9 +1739,15 @@ import { AppConstants } from '../../../shared/enums/app-constants.enum';
                     type="checkbox" 
                     id="isStockTracked"
                     formControlName="isStockTracked"
-                    style="width:16px; height:16px; cursor:pointer;"/>
-                  <label for="isStockTracked" style="margin:0; cursor:pointer;">
+                    [disabled]="hasExistingInventory()"
+                    style="width:16px; height:16px; cursor:pointer;"
+                    [style.cursor]="hasExistingInventory() ? 'not-allowed' : 'pointer'"
+                    [style.opacity]="hasExistingInventory() ? '0.6' : '1'"/>
+                  <label for="isStockTracked" style="margin:0; cursor:pointer;" [style.opacity]="hasExistingInventory() ? '0.6' : '1'">
                     📦 Keep track of product quantities and inventory
+                    <span *ngIf="hasExistingInventory()" style="font-size:0.75rem; color:#6b7280; margin-left:8px;">
+                      (Cannot be disabled - inventory data exists)
+                    </span>
                   </label>
                 </div>
 
@@ -2342,6 +2431,7 @@ export class ProductManagementComponent implements OnInit {
   // Confirmation dialog state
   showDeleteConfirmation = signal<boolean>(false);
   deleteConfirmationData = signal<ConfirmationDialogData | null>(null);
+  isLoading = signal<boolean>(true);
   productToDelete: Product | null = null;
   pendingBatchId: string | null = null;
   pendingBatchDocId: string | null = null;
@@ -2573,6 +2663,7 @@ export class ProductManagementComponent implements OnInit {
 
   async ngOnInit(): Promise<void> {
     try {
+      this.isLoading.set(true);
       const currentPermission = this.authService.getCurrentPermission();
       if (currentPermission?.companyId) {
         await this.storeService.loadStoresByCompany(currentPermission.companyId);
@@ -2587,11 +2678,13 @@ export class ProductManagementComponent implements OnInit {
           await this.productService.initializeProducts(currentPermission.storeId);
           // Load tags for the current store
           await this.loadTags(currentPermission.storeId);
+          // Load categories for the current store
+          console.log('📋 Loading categories in ngOnInit for store:', currentPermission.storeId);
+          await this.categoryService.loadCategoriesByStore(currentPermission.storeId);
+          console.log('✅ Categories loaded. Count:', this.categories().length);
         } else {
           console.warn('No storeId available - cannot load products');
         }
-        
-        // No need to load categories from service - we get them from products signal
         
         // Store service sets empty arrays for creator accounts without companies
       } else {
@@ -2603,6 +2696,8 @@ export class ProductManagementComponent implements OnInit {
       await this.loadUnitTypes();
     } catch (error) {
       console.error('Error loading data:', error);
+    } finally {
+      this.isLoading.set(false);
     }
   }
 
@@ -2890,6 +2985,18 @@ export class ProductManagementComponent implements OnInit {
     if (product.storeId) {
       console.log('🏷️ Loading tags for product store:', product.storeId);
       await this.loadTags(product.storeId);
+      
+      // Load categories for the product's store
+      console.log('📋 Loading categories for product store:', product.storeId);
+      try {
+        await this.categoryService.loadCategoriesByStore(product.storeId);
+        console.log('✅ Categories loaded for store. Count:', this.categories().length);
+        if (this.categories().length > 0) {
+          console.log('📋 Available categories:', this.categories());
+        }
+      } catch (err) {
+        console.error('❌ Failed to load categories:', err);
+      }
     }
     
     // Patch the form silently to avoid triggering valueChange subscriptions
@@ -2917,7 +3024,10 @@ export class ProductManagementComponent implements OnInit {
       productIsStockTracked: productWithDefaults.isStockTracked,
       productIsFavorite: productWithDefaults.isFavorite,
       isStockTrackedType: typeof productWithDefaults.isStockTracked,
-      isFavoriteType: typeof productWithDefaults.isFavorite
+      isFavoriteType: typeof productWithDefaults.isFavorite,
+      rawProductIsStockTracked: product.isStockTracked,
+      hasInventoryBatches,
+      batchCount: this.currentBatches.length
     });
     
     this.productForm.get('isStockTracked')?.setValue(isStockTrackedValue);
@@ -2925,7 +3035,9 @@ export class ProductManagementComponent implements OnInit {
     
     console.log('✅ Form values after explicit setValue:', {
       isStockTracked: this.productForm.get('isStockTracked')?.value,
-      isFavorite: this.productForm.get('isFavorite')?.value
+      isFavorite: this.productForm.get('isFavorite')?.value,
+      isStockTrackedDisabled: this.productForm.get('isStockTracked')?.disabled,
+      hasExistingInventory: this.hasExistingInventory()
     });
     
     // Set costPrice from product (will be overridden by latest batch if available)
@@ -4314,13 +4426,20 @@ export class ProductManagementComponent implements OnInit {
 
   onSelectedStoreChange(storeId: string): void {
     console.log('Store filter changed to:', storeId);
+    // Show loading spinner while switching stores
+    this.isLoading.set(true);
     // Update the global store selection service instead of local property
     this.storeSelectionService.setSelectedStore(storeId);
     // Try to initialize products for the selected store to ensure list is in sync
     if (storeId) {
-      this.productService.initializeProducts(storeId).catch(err => {
+      this.productService.initializeProducts(storeId).then(() => {
+        this.isLoading.set(false);
+      }).catch(err => {
         console.error('Failed to initialize products for store filter change:', err);
+        this.isLoading.set(false);
       });
+    } else {
+      this.isLoading.set(false);
     }
     // Force change detection to update filteredProducts UI
     try { this.cdr.detectChanges(); } catch {}

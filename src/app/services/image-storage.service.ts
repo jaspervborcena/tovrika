@@ -63,7 +63,7 @@ export class ImageStorageService {
         contentType: file.type,
         customMetadata: {
           uploadedBy: this.authService.currentUser()?.uid || 'unknown',
-          uploadedAt: new Date().toISOString(),
+          uploadedAt: new Date().getTime().toString(),
           storeId: storeId,
           imageType: 'logo'
         }
@@ -112,7 +112,7 @@ export class ImageStorageService {
         contentType: file.type,
         customMetadata: {
           uploadedBy: this.authService.currentUser()?.uid || 'unknown',
-          uploadedAt: new Date().toISOString(),
+          uploadedAt: new Date().getTime().toString(),
           storeId: storeId,
           productId: productId,
           imageType: 'product'

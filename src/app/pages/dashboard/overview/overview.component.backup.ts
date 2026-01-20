@@ -90,7 +90,7 @@ import { AuthService } from '../../../services/auth.service';
             </div>
 
             <!-- Total Customers Card -->
-            <div class="rounded-2xl p-6 shadow-sm" style="background: linear-gradient(135deg, #cffafe 0%, #bfdbfe 100%);">
+            <!-- <div class="rounded-2xl p-6 shadow-sm" style="background: linear-gradient(135deg, #cffafe 0%, #bfdbfe 100%);">
               <div class="flex items-center gap-3 mb-3">
                 <div class="w-10 h-10 bg-cyan-500 rounded-full flex items-center justify-center">
                   <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -107,7 +107,7 @@ import { AuthService } from '../../../services/auth.service';
                 <span class="text-green-500 font-semibold">{{ customersChangePercent() | number:'1.0-1' }}%</span>
                 <span class="text-gray-500">From Last Day</span>
               </div>
-            </div>
+            </div> -->
 
             <!-- Sales Summary Card -->
             <div class="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
