@@ -1,4 +1,13 @@
 <div class="pos-container">
+      <!-- Loading Overlay -->
+      <div *ngIf="isLoading()" class="loading-overlay">
+        <div class="spinner-wrapper">
+          <div class="spinner"></div>
+          <p class="loading-text">Loading POS...</p>
+          <p class="loading-subtext">Please wait while we prepare your point of sale</p>
+        </div>
+      </div>
+
       <app-header></app-header>
       
       

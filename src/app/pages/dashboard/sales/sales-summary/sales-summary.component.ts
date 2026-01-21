@@ -41,8 +41,8 @@ type Order = OrderDisplay;
               <label for="storeSelect">Store:</label>
               <select 
                 id="storeSelect"
-                [(ngModel)]="selectedStoreId"
-                (change)="onStoreChange()"
+                [value]="selectedStoreId()"
+                (change)="onStoreSelectChange($event)"
                 class="store-select">
                 <option *ngFor="let store of stores()" [value]="store.id">
                   {{ store.storeName.toUpperCase() }}
@@ -1515,7 +1515,7 @@ export class SalesSummaryComponent implements OnInit {
     { key: 'previous_month', label: 'Previous Month' },
     { key: 'date_range', label: 'Date Range' }
   ];
-  selectedPeriod: 'today' | 'yesterday' | 'this_month' | 'previous_month' | 'date_range' = 'this_month';
+  selectedPeriod: 'today' | 'yesterday' | 'this_month' | 'previous_month' | 'date_range' = 'today';
 
   // Computed for store display
   selectedStore = computed(() => {
@@ -1631,14 +1631,17 @@ export class SalesSummaryComponent implements OnInit {
     this.ensureDateOrder();
     const today = new Date(this.toDate);
     
+    console.log('🚀 SalesSummary ngOnInit - loading stores...');
     await this.loadStores();
     
-    // Wait a bit for stores to be set, then load today's data automatically from Firebase
-    setTimeout(() => {
-      this.loadCurrentDateData();
-      // Also load ledger totals for the selected store
-      this.loadLedgerTotalsForStore();
-    }, 100);
+    console.log('✅ Stores loaded, selectedStoreId:', this.selectedStoreId());
+    
+    // Trigger onPeriodChange to set dates and load data for 'today' period
+    // No setTimeout needed - loadStores is already awaited
+    this.onPeriodChange();
+    
+    // Also load ledger totals for the selected store
+    this.loadLedgerTotalsForStore();
   }
 
   // Load ledger totals when loading current date data
@@ -1668,11 +1671,29 @@ export class SalesSummaryComponent implements OnInit {
       const activeStores = await this.storeService.getActiveStoresForDropdown(currentPermission.companyId);
       this.stores.set(activeStores);
 
-      // Set selected store - if user has storeId, use it, otherwise use first store
-      if (currentPermission?.storeId) {
+      console.log('📊 SalesSummary stores loaded:', {
+        storesCount: activeStores.length,
+        stores: activeStores.map(s => ({ id: s.id, name: s.storeName })),
+        permissionStoreId: currentPermission?.storeId
+      });
+
+      // IMPORTANT: Prioritize actual store IDs from loaded stores array over permission storeId
+      // This prevents using a permission storeId that doesn't match actual store records
+      if (activeStores.length > 0) {
+        // If permission storeId matches one of the loaded stores, use it
+        const matchingStore = activeStores.find(s => s.id === currentPermission?.storeId);
+        if (matchingStore) {
+          this.selectedStoreId.set(matchingStore.id!);
+          console.log('✅ Using matching permission storeId:', matchingStore.id);
+        } else {
+          // Otherwise use first loaded store
+          this.selectedStoreId.set(activeStores[0].id!);
+          console.log('⚠️ Permission storeId not found in stores, using first store:', activeStores[0].id);
+        }
+      } else if (currentPermission?.storeId) {
+        // Fallback to permission storeId only if no stores loaded
         this.selectedStoreId.set(currentPermission.storeId);
-      } else if (activeStores.length > 0 && activeStores[0].id) {
-        this.selectedStoreId.set(activeStores[0].id);
+        console.log('⚠️ No stores loaded, falling back to permission storeId:', currentPermission.storeId);
       }
     } catch (error) {
       console.error('Error loading stores:', error);
@@ -1683,6 +1704,15 @@ export class SalesSummaryComponent implements OnInit {
   onDateChange(): void {
     // Ensure user-entered dates maintain a valid range (From <= To).
     this.ensureDateOrder();
+  }
+
+  onStoreSelectChange(event: Event): void {
+    const target = event.target as HTMLSelectElement;
+    const newStoreId = target.value;
+    console.log('🏪 Store changed to:', newStoreId);
+    this.selectedStoreId.set(newStoreId);
+    this.isLoading.set(true);
+    this.onStoreChange();
   }
 
   onStoreChange(): void {
@@ -1696,18 +1726,22 @@ export class SalesSummaryComponent implements OnInit {
    * Handle period selection change
    */
   onPeriodChange(): void {
+    this.isLoading.set(true);
     const period = this.selectedPeriod;
     const now = new Date();
+    console.log('[PERIOD] Period selected:', period, 'Current date:', now);
     
     if (period === 'today') {
       const today = this.formatDateForInput(now);
+      console.log('[PERIOD] Today formatted:', today, 'from date:', now);
       this.fromDate = today;
       this.toDate = today;
       this.loadSalesDataManual();
     } else if (period === 'yesterday') {
       const yesterday = new Date(now);
-      yesterday.setDate(now.getDate() - 1);
+      yesterday.setDate(yesterday.getDate() - 1);
       const yesterdayStr = this.formatDateForInput(yesterday);
+      console.log('[PERIOD] Yesterday formatted:', yesterdayStr, 'from date:', yesterday);
       this.fromDate = yesterdayStr;
       this.toDate = yesterdayStr;
       this.loadSalesDataManual();
@@ -1939,57 +1973,52 @@ export class SalesSummaryComponent implements OnInit {
 
       // If service returned no orders, attempt IndexedDB snapshot fallback
       if (!orders || orders.length === 0) {
-        try {
-          const saved: any[] = await this.indexedDb.getSetting(`orders_snapshot_${storeId}`);
-          if (saved && Array.isArray(saved) && saved.length > 0) {
-            orders = saved;
-            // mark data source as offline fallback
-            this.dataSource.set('api');
-          }
-        } catch (dbErr) {
-          console.warn('📦 Failed to read orders snapshot from IndexedDB:', dbErr);
-        }
-        // If still no orders, fetch a few sample docs for debugging (helps identify field names/storeId)
+        console.log('📊 No orders found for selected date range - setting empty results');
+        // Clear orders to show "No data" instead of loading cached data from other dates
+        this.orders.set([]);
+        
+        // Still try to fetch sample for debugging, but don't use as actual data
         try {
           const samples = await this.orderService.getSampleOrdersForDebug(storeId, 5);
         } catch (dbgErr) {
           console.warn('Failed to fetch sample orders for debug', dbgErr);
         }
-      }
+      } else {
+        // Only transform and display orders if we found data for the selected date range
+        // No need to filter on client side - the service handles it when possible
+        const filteredOrders = orders || [];
 
-      // No need to filter on client side - the service handles it when possible
-  const filteredOrders = orders || [];
+        // Transform to match our interface - spread all existing properties and add display properties
+        const transformedOrders: Order[] = filteredOrders.map((order: any) => ({
+          ...order, // Spread all existing order properties
+          id: order.id || '', // Ensure id is not undefined
+          customerName: order.soldTo || 'Walk-in Customer',
+          paymentMethod: order.paymentMethod || 'cash'
+        }));
 
-      // Transform to match our interface - spread all existing properties and add display properties
-      const transformedOrders: Order[] = filteredOrders.map((order: any) => ({
-        ...order, // Spread all existing order properties
-        id: order.id || '', // Ensure id is not undefined
-        customerName: order.soldTo || 'Walk-in Customer',
-        paymentMethod: order.paymentMethod || 'cash'
-      }));
-
-      // Deduplicate results by a stable key (prefer `invoiceNumber`, then `id`, then fallback).
-      // If duplicates exist, keep the most recent entry by `createdAt`.
-      const dedupMap = new Map<string, Order>();
-      for (const o of transformedOrders) {
-        const key = this.makeOrderKey(o);
-        const existing = dedupMap.get(key);
-        if (!existing) {
-          dedupMap.set(key, o);
-        } else {
-          try {
-            const existingTime = new Date(existing.createdAt as any).getTime() || 0;
-            const newTime = new Date(o.createdAt as any).getTime() || 0;
-            if (newTime > existingTime) dedupMap.set(key, o);
-          } catch {
-            // If parsing fails, prefer the new one by default
+        // Deduplicate results by a stable key (prefer `invoiceNumber`, then `id`, then fallback).
+        // If duplicates exist, keep the most recent entry by `createdAt`.
+        const dedupMap = new Map<string, Order>();
+        for (const o of transformedOrders) {
+          const key = this.makeOrderKey(o);
+          const existing = dedupMap.get(key);
+          if (!existing) {
             dedupMap.set(key, o);
+          } else {
+            try {
+              const existingTime = new Date(existing.createdAt as any).getTime() || 0;
+              const newTime = new Date(o.createdAt as any).getTime() || 0;
+              if (newTime > existingTime) dedupMap.set(key, o);
+            } catch {
+              // If parsing fails, prefer the new one by default
+              dedupMap.set(key, o);
+            }
           }
         }
-      }
 
-      const deduped = Array.from(dedupMap.values());
-      this.orders.set(deduped);
+        const deduped = Array.from(dedupMap.values());
+        this.orders.set(deduped);
+      }
     } catch (error) {
       console.error('Error loading sales data:', error);
       this.orders.set([]);
@@ -2102,7 +2131,13 @@ export class SalesSummaryComponent implements OnInit {
   }
 
   private formatDateForInput(date: Date): string {
-    return date.toISOString().split('T')[0];
+    // Create date in local timezone, not UTC
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const formatted = `${year}-${month}-${day}`;
+    console.log('[DATE FORMAT] Input:', date, 'Output:', formatted);
+    return formatted;
   }
 
   /**

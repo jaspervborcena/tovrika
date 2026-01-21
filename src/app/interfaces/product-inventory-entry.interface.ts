@@ -55,7 +55,6 @@ export interface ProductInventoryEntry {
 
 export interface BatchDeduction {
   orderId: string;
-  orderDetailId: string;
   quantity: number;
   deductedAt: Date;
   deductedBy: string;

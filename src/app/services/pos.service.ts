@@ -31,6 +31,7 @@ import { Device } from '../interfaces/device.interface';
 import { OrdersSellingTrackingService } from './orders-selling-tracking.service';
 import { LedgerService } from './ledger.service';
 import { TagsService } from './tags.service';
+import { FIFOInventoryService }  from './fifo-inventory.service';
 import { environment } from '../../environments/environment';
 
 @Injectable({
@@ -38,6 +39,7 @@ import { environment } from '../../environments/environment';
 })
 export class PosService {
     private ordersSellingTrackingService = inject(OrdersSellingTrackingService);
+  private fifoService = inject(FIFOInventoryService);
   private readonly cartItemsSignal = signal<CartItem[]>([]);
   private readonly selectedStoreIdSignal = signal<string>('');
   private readonly isProcessingSignal = signal<boolean>(false);
@@ -1534,7 +1536,9 @@ export class PosService {
       productName: ci.productName,
       quantity: ci.quantity,
       unitPrice: ci.sellingPrice,
-      lineTotal: ci.total
+      lineTotal: ci.total,
+      orderId: context?.orderId,
+      orderDetailId: context?.orderId // Using orderId as orderDetailId for now
     }));
 
     console.log('📦 Mapped items for tracking:', items);
@@ -1561,6 +1565,21 @@ export class PosService {
     if (!this.networkService.isOnline()) {
       console.log('📱 Offline: Skipping inventory, deductions, and ledger updates until online');
       return;
+    } else{
+      for (const item of items) {
+      try {
+        await this.fifoService.executeFIFODeduction(
+          item.productId,
+          item.quantity,
+          item.orderId || '',
+          false // isOffline = false
+        );
+      } catch (err) {
+        console.warn(`⚠️ Error checking isStockTracked for ${item.productName}, including in deduction:`, err);
+        trackedItems.push(item);
+      }
+    }
+       
     }
 
     // Inventory deduction, audit trail, and ledger updates

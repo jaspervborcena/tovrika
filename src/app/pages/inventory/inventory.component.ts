@@ -306,11 +306,28 @@ export class InventoryComponent implements OnInit {
       const activeStores = await this.storeService.getActiveStoresForDropdown(currentPermission.companyId);
       this.stores.set(activeStores);
 
-      // Set selected store
-      if (currentPermission?.storeId) {
+      console.log('📦 Inventory: Stores loaded:', {
+        storesCount: activeStores.length,
+        stores: activeStores.map(s => ({ id: s.id, name: s.storeName })),
+        permissionStoreId: currentPermission?.storeId
+      });
+
+      // IMPORTANT: Prioritize actual store IDs from loaded stores array over permission storeId
+      if (activeStores.length > 0) {
+        // If permission storeId matches one of the loaded stores, use it
+        const matchingStore = activeStores.find(s => s.id === currentPermission?.storeId);
+        if (matchingStore) {
+          this.selectedStoreId.set(matchingStore.id!);
+          console.log('✅ Using matching permission storeId:', matchingStore.id);
+        } else {
+          // Otherwise use first loaded store
+          this.selectedStoreId.set(activeStores[0].id!);
+          console.log('⚠️ Permission storeId not found in stores, using first store:', activeStores[0].id);
+        }
+      } else if (currentPermission?.storeId) {
+        // Fallback to permission storeId only if no stores loaded
         this.selectedStoreId.set(currentPermission.storeId);
-      } else if (activeStores.length > 0 && activeStores[0].id) {
-        this.selectedStoreId.set(activeStores[0].id);
+        console.log('⚠️ No stores loaded, falling back to permission storeId:', currentPermission.storeId);
       }
     } catch (error) {
       console.error('Error loading stores:', error);

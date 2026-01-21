@@ -22,8 +22,11 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
   template: `
     <!-- Loading Overlay -->
     <div *ngIf="isLoading()" class="loading-overlay">
-      <div class="loading-spinner"></div>
-      <p class="loading-text">Loading dashboard data...</p>
+      <div class="loading-content">
+        <div class="loading-spinner"></div>
+        <p class="loading-text">Loading dashboard data...</p>
+        <p class="loading-subtext">Please wait while we fetch your sales information</p>
+      </div>
     </div>
 
     <div class="dashboard-container">
@@ -31,7 +34,7 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
       <div class="header">
         <div class="header-content">
           <h1 class="page-title">Dashboard Overview</h1>
-          <p class="page-subtitle">Welcome, {{ currentUserName() }} 🎉 - Here's what's happening in your store</p>
+          <p class="page-subtitle">Welcome, {{ currentUserName() }} 🎉</p>
           <!-- Overview controls: store selector and period -->
           <div class="overview-controls">
             <div class="control-row">
@@ -210,7 +213,7 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
             </div>
 
             <!-- Total Customers Card -->
-            <div class="sales-card customers-card">
+            <!-- <div class="sales-card customers-card">
               <div class="card-icon">
                 <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z"/>
@@ -224,7 +227,7 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
                   <span class="change-text">{{ customersChange().percent | number:'1.1-1' }}% From Last Day</span>
                 </div>
               </div>
-            </div>
+            </div> -->
 
             <!-- Sales Stats Card removed -->
           </div>
@@ -432,33 +435,46 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
       left: 0;
       right: 0;
       bottom: 0;
-      background: rgba(255, 255, 255, 0.95);
+      background: rgba(255, 255, 255, 0.98);
       display: flex;
-      flex-direction: column;
       align-items: center;
       justify-content: center;
       z-index: 9999;
-      backdrop-filter: blur(4px);
+      backdrop-filter: blur(8px);
+    }
+
+    .loading-content {
+      text-align: center;
+      padding: 40px;
     }
 
     .loading-spinner {
-      width: 48px;
-      height: 48px;
-      border: 4px solid #e5e7eb;
-      border-top-color: #667eea;
+      width: 56px;
+      height: 56px;
+      border: 5px solid #e5e7eb;
+      border-top-color: #4299e1;
       border-radius: 50%;
       animation: spin 0.8s linear infinite;
+      margin: 0 auto 24px;
     }
 
     @keyframes spin {
-      to { transform: rotate(360deg); }
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
     }
 
     .loading-text {
-      margin-top: 16px;
-      color: #6b7280;
-      font-size: 1rem;
-      font-weight: 500;
+      margin: 0 0 8px 0;
+      color: #2d3748;
+      font-size: 1.125rem;
+      font-weight: 600;
+    }
+
+    .loading-subtext {
+      margin: 0;
+      color: #718096;
+      font-size: 0.875rem;
+      font-weight: 400;
     }
 
     .dashboard-container {
@@ -1075,7 +1091,7 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
 
     .product-name {
       font-size: 0.875rem;
-      font-weight: 500;
+      font-weight: 700;
       color: #111827;
     }
 
@@ -2328,6 +2344,8 @@ export class OverviewComponent implements OnInit {
     const target = event.target as HTMLSelectElement;
     if (target && target.value) {
       this.selectedStoreId.set(target.value);
+      // Show loading spinner while data is being fetched
+      this.isLoading.set(true);
       this.applyPeriodAndLoad();
     }
   }
@@ -2362,6 +2380,9 @@ export class OverviewComponent implements OnInit {
     if (!target) return;
     const v = target.value as 'today' | 'yesterday' | 'this_month' | 'previous_month' | 'date_range';
     console.log('🔄 Period changed to:', v);
+    
+    // Show loading spinner while data is being fetched
+    this.isLoading.set(true);
     
     // Reset all ledger signals to 0 when period changes to prevent stale data
     this.ledgerReturnAmount.set(0);
@@ -2521,8 +2542,18 @@ export class OverviewComponent implements OnInit {
       const isOnline = navigator.onLine;
       console.log('🌐 Dashboard: Network status:', isOnline ? 'ONLINE' : 'OFFLINE');
       
-      // EXACT same approach as sales-summary
+      // Load stores and products
       await this.loadStores();
+      
+      // Load products for product lookups in top products
+      const storeId = this.selectedStoreId() || this.authService.getCurrentPermission()?.storeId;
+      if (storeId && storeId !== 'all') {
+        console.log('📦 Loading products for store:', storeId);
+        await this.productService.initializeProducts(storeId);
+        const loadedProducts = this.productService.getProducts();
+        this.products.set(loadedProducts);
+        console.log('✅ Products loaded:', loadedProducts.length);
+      }
       
       // After stores load, trigger the same load flow as when period/store changes
       // This ensures consistent data loading behavior
@@ -2601,11 +2632,10 @@ export class OverviewComponent implements OnInit {
         return;
       }
 
-      // Load TODAY's data
+      // Load TODAY's data - using local timezone to avoid UTC shift
       const today = new Date();
-      const startDate = new Date(today.toISOString().split('T')[0]); // Start of today
-      const endDate = new Date(today.toISOString().split('T')[0]); // End of today
-      endDate.setHours(23, 59, 59, 999);
+      const startDate = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0, 0);
+      const endDate = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999);
 
       console.log('📅 Dashboard loading sales data for store:', storeId, 'from:', startDate, 'to:', endDate);
 
@@ -2871,7 +2901,7 @@ export class OverviewComponent implements OnInit {
       const companyId = currentPermission?.companyId || '';
       let resolvedStoreId = storeId || this.selectedStoreId() || this.authService.getCurrentPermission()?.storeId || '';
 
-      // Determine date based on selected period
+      // Determine date based on selected period - need START of day in epoch ms
       const period = this.selectedPeriod();
       let queryDate = new Date(); // Default to today
       
@@ -2880,23 +2910,41 @@ export class OverviewComponent implements OnInit {
         queryDate.setDate(queryDate.getDate() - 1);
       }
       
+      // Get start of day (00:00:00) for the query date in local timezone
+      const startOfDay = new Date(queryDate.getFullYear(), queryDate.getMonth(), queryDate.getDate(), 0, 0, 0, 0);
+      const queryDateMs = startOfDay.getTime();
+      
       console.log(`🔍 fetchTopProducts query params:`, {
         companyId,
         storeId: resolvedStoreId,
         period,
         queryDate: queryDate.toLocaleDateString(),
-        queryDateMs: queryDate.getTime()
+        startOfDay: startOfDay.toLocaleString(),
+        queryDateMs
       });
 
-      const queryDateMs = queryDate.getTime();
       const top = await this.ordersSellingTrackingService.getTopProductsCounts(companyId, resolvedStoreId, 10, queryDateMs);
       console.log('📊 getTopProductsCounts result:', top);
-      const mapped = Object.entries(top || {}).slice(0, 10).map(([productId, count]) => ({
-        avatar: (productId || '').split(' ').map((s: string) => s.charAt(0)).slice(0, 2).join('').toUpperCase() || 'P',
-        name: productId || 'Product',
-        code: productId || '',
-        sales: Number(count || 0)
-      }));
+      console.log('📦 Available products count:', this.products().length);
+      
+      // Map productIds to actual product details
+      const mapped = Object.entries(top || {}).slice(0, 10).map(([productId, count]) => {
+        const product = this.productService.getProduct(productId);
+        console.log(`🔍 Looking up productId: ${productId}, found:`, product);
+        
+        const productName = product?.productName || 'Unknown Product';
+        const skuId = product?.skuId || '';
+        const avatar = productName.split(' ').map((s: string) => s.charAt(0)).slice(0, 2).join('').toUpperCase() || 'P';
+        
+        return {
+          avatar,
+          name: productName,
+          code: skuId,
+          sales: Number(count || 0)
+        };
+      });
+      
+      console.log('📊 Mapped top products:', mapped);
       this.topProductsList.set(mapped);
     } catch (err) {
       console.warn('fetchTopProducts error', err);
