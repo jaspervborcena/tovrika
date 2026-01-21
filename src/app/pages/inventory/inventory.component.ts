@@ -376,9 +376,8 @@ export class InventoryComponent implements OnInit {
   dateFrom: string | null = null; // YYYY-MM-DD
   dateTo: string | null = null;
 
-  onPeriodChange(event: Event) {
-    const t = event.target as HTMLSelectElement;
-    this.selectedPeriod = t.value as 'today' | 'yesterday' | 'this_month' | 'previous_month' | 'date_range';
+  onPeriodChange(value: string) {
+    this.selectedPeriod = value as 'today' | 'yesterday' | 'this_month' | 'previous_month' | 'date_range';
     if (this.selectedPeriod === 'date_range') {
       // default dateTo = today, dateFrom = today - 30 days
       const now = new Date();
