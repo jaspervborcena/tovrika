@@ -1,3 +1,4 @@
+ 
 import { Injectable, signal, computed, inject } from '@angular/core';
 import {
   Firestore,
@@ -94,6 +95,125 @@ export class InventoryService {
     }
 
     return null;
+  }
+
+  /**
+   * Build a detailed invoice report for a given orderId or for a date range.
+   * If orderId is provided, filters by orderId. Otherwise, filters by date range.
+   *
+   * @param params { orderId?: string, period?: 'today'|'yesterday'|'this_month'|'previous_month'|'range', range?: {start: Date, end: Date} }
+   */
+  async buildInvoiceReport(params: {
+    orderId?: string;
+    period?: 'today'|'yesterday'|'this_month'|'previous_month'|'range';
+    range?: { start: Date; end: Date };
+  }): Promise<any[]> {
+    const reportRows: any[] = [];
+
+    // 1. Build filters for ordersSellingTracking
+    const filters: any[] = [];
+    if (params.orderId) {
+      filters.push(where('orderId', '==', params.orderId));
+    } else if (params.period) {
+      const now = new Date();
+      let start: Date, end: Date;
+      if (params.period === 'today') {
+        start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+        end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+      } else if (params.period === 'yesterday') {
+        const y = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+        start = new Date(y.getFullYear(), y.getMonth(), y.getDate(), 0, 0, 0, 0);
+        end = new Date(y.getFullYear(), y.getMonth(), y.getDate(), 23, 59, 59, 999);
+      } else if (params.period === 'this_month') {
+        start = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+        end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+      } else if (params.period === 'previous_month') {
+        const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        start = new Date(prev.getFullYear(), prev.getMonth(), 1, 0, 0, 0, 0);
+        end = new Date(prev.getFullYear(), prev.getMonth() + 1, 0, 23, 59, 59, 999);
+      } else if (params.period === 'range' && params.range) {
+        start = params.range.start;
+        end = params.range.end;
+      } else {
+        throw new Error('Invalid period or range');
+      }
+      filters.push(where('createdAt', '>=', start));
+      filters.push(where('createdAt', '<=', end));
+    }
+
+    // 2. Query ordersSellingTracking
+    const trackingQ = query(
+      collection(this.firestore, 'ordersSellingTracking'),
+      ...filters
+    );
+    const trackingSnap = await getDocs(trackingQ as any);
+    const trackDocs = trackingSnap.docs;
+
+    // Batch fetch product info and deductions for all lines
+    const productIds = Array.from(new Set(trackDocs.map(d => (d.data() as any).productId)));
+    const productRefs = productIds.map(pid => doc(this.firestore, 'products', pid));
+    const productSnaps = await Promise.all(productRefs.map(ref => getDoc(ref as any)));
+    const productMap = new Map<string, any>();
+    productSnaps.forEach((snap, idx) => {
+      if (snap.exists()) productMap.set(productIds[idx], snap.data());
+    });
+
+    // For each track line, batch deduction and batch info
+    await Promise.all(trackDocs.map(async (trackDoc) => {
+      const track: any = trackDoc.data();
+      let productName = track.productName;
+      let sku = null;
+      const productData = productMap.get(track.productId);
+      if (productData) {
+        productName = productData.productName || productName;
+        sku = productData.skuId || null;
+      }
+      const row: any = {
+        invoiceNumber: track.invoiceNumber || null,
+        orderId: track.orderId,
+        productId: track.productId,
+        productName,
+        sku,
+        sellingPrice: track.price,
+        quantity: track.quantity,
+        totalGross: track.price * track.quantity,
+      };
+      // Find matching deduction
+      const deductionQ = query(
+        collection(this.firestore, 'inventoryDeductions'),
+        where('orderId', '==', row.orderId),
+        where('productId', '==', row.productId)
+      );
+      const deductionSnap = await getDocs(deductionQ as any);
+      if (!deductionSnap.empty) {
+        const ded: any = deductionSnap.docs[0].data();
+        row.batchId = ded.batchId;
+        row.deductedAt = ded.deductedAt;
+        row.performedBy = ded.deductedBy;
+        row.costPrice = ded.costPrice;
+        row.profitPerUnit = row.sellingPrice - ded.costPrice;
+        row.totalProfit = (row.sellingPrice - ded.costPrice) * row.quantity;
+      } else {
+        row.batchId = null;
+        row.deductedAt = null;
+        row.performedBy = null;
+        row.costPrice = null;
+        row.profitPerUnit = null;
+        row.totalProfit = null;
+      }
+      // Optionally enrich with productInventory (for unitPrice, status, etc.)
+      if (row.batchId) {
+        const batchRef = doc(this.firestore, 'productInventory', row.batchId);
+        const batchSnap = await getDoc(batchRef as any);
+        if (batchSnap.exists()) {
+          const batchData: any = batchSnap.data();
+          row.unitPrice = batchData.unitPrice;
+          row.status = batchData.status;
+        }
+      }
+      reportRows.push(row);
+    }));
+    return reportRows;
   }
 
   /**
