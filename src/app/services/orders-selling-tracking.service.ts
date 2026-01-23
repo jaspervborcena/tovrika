@@ -45,6 +45,7 @@ export interface OrdersSellingTrackingDoc {
   uid?: string;
   cashierId?: string;
   orderDetailsId?: string;
+  invoiceNumber?: string;
   status: 'open'|'completed'|'cancelled'|'returned'|'refunded'|'damaged'|'partial_return'|'partial_refund'|'partial_damage'|'recovered';
   createdAt: number;          // epoch ms
   createdAtText?: string;     // optional human-readable
@@ -145,6 +146,7 @@ export class OrdersSellingTrackingService {
       quantity: Number(partial.quantity ?? 0),
       total: Number(partial.total ?? (Number(partial.price ?? 0) * Number(partial.quantity ?? 0))),
       status,
+      invoiceNumber: partial.invoiceNumber,
       createdAt,
       createdAtText: partial.createdAtText ?? this.formatDateForDisplay(new Date(createdAt)),
       updatedAt,
@@ -196,7 +198,11 @@ export class OrdersSellingTrackingService {
           quantity: item.quantity,
           price: item.unitPrice || item.price,
           total: item.lineTotal || item.total,
-          status
+          // Populate invoiceNumber from trackingInfo or nested order object if present
+          invoiceNumber: trackingInfo?.invoiceNumber ?? trackingInfo?.order?.invoiceNumber,
+          status,
+          // Ensure createdBy uses cashierId when available to avoid 'system'
+          createdBy: trackingInfo?.cashierId ?? trackingInfo?.createdBy
         });
         
         console.log(`[ordersSellingTracking] 🔨 Built tracking base:`, {
@@ -207,13 +213,51 @@ export class OrdersSellingTrackingService {
           price: base.price
         });
 
-        if (this.networkService.isOnline()) {
-          const colRef = collection(this.firestore, 'ordersSellingTracking');
-          const docRef = await addDoc(colRef as any, this.sanitizeForFirestore(base) as any);
-          console.log(`[ordersSellingTracking] ✅ Firestore write SUCCESS: docId=${docRef.id}, productId=${base.productId}, orderId=${base.orderId}, status=${base.status}`);
-        } else {
-          await this.offlineDocService.createDocument('ordersSellingTracking', this.sanitizeForFirestore(base));
-          console.log(`[ordersSellingTracking] 📴 Queued offline tracking for productId=${base.productId}, orderId=${base.orderId}, status=${base.status}`);
+        // Idempotency: skip if an OPEN tracking entry already exists for same orderId+productId+itemIndex
+        try {
+          const dupQ = query(
+            collection(this.firestore, 'ordersSellingTracking'),
+            where('orderId', '==', base.orderId),
+            where('productId', '==', base.productId),
+            where('itemIndex', '==', base.itemIndex ?? 0),
+            where('status', '==', base.status?.toString().toLowerCase() === 'open' ? 'open' : base.status)
+          );
+          const dupSnaps = await getDocs(dupQ as any);
+          if (dupSnaps && !dupSnaps.empty) {
+            console.log(`[ordersSellingTracking] ⏭️ Skipping duplicate tracking for orderId=${base.orderId}, productId=${base.productId}, itemIndex=${base.itemIndex}`);
+          } else {
+            if (this.networkService.isOnline()) {
+              const colRef = collection(this.firestore, 'ordersSellingTracking');
+              const docRef = await addDoc(colRef as any, this.sanitizeForFirestore(base) as any);
+              console.log(`[ordersSellingTracking] ✅ Firestore write SUCCESS: docId=${docRef.id}, productId=${base.productId}, orderId=${base.orderId}, status=${base.status}`);
+            } else {
+              // Before queuing offline, ensure no pending document already represents this tracking
+              try {
+                const pending = this.offlineDocService.getPendingDocuments();
+                const hasPending = pending && pending.some((pd: any) => pd.collectionName === 'ordersSellingTracking' && pd.data && pd.data.orderId === base.orderId && pd.data.productId === base.productId && (pd.data.itemIndex ?? 0) === (base.itemIndex ?? 0) && ((pd.data.status || '').toString().toLowerCase() === (base.status || '').toString().toLowerCase()));
+                if (hasPending) {
+                  console.log(`[ordersSellingTracking] ⏭️ Skipping queueing duplicate offline tracking for orderId=${base.orderId}, productId=${base.productId}`);
+                } else {
+                  await this.offlineDocService.createDocument('ordersSellingTracking', this.sanitizeForFirestore(base));
+                  console.log(`[ordersSellingTracking] 📴 Queued offline tracking for productId=${base.productId}, orderId=${base.orderId}, status=${base.status}`);
+                }
+              } catch (pdErr) {
+                console.warn('[ordersSellingTracking] ⚠️ Pending-check failed, queuing offline doc anyway:', pdErr);
+                await this.offlineDocService.createDocument('ordersSellingTracking', this.sanitizeForFirestore(base));
+                console.log(`[ordersSellingTracking] 📴 Queued offline tracking for productId=${base.productId}, orderId=${base.orderId}, status=${base.status}`);
+              }
+            }
+          }
+        } catch (dupErr) {
+          console.warn('[ordersSellingTracking] ⚠️ Dup-check failed, proceeding to write:', dupErr);
+          if (this.networkService.isOnline()) {
+            const colRef = collection(this.firestore, 'ordersSellingTracking');
+            const docRef = await addDoc(colRef as any, this.sanitizeForFirestore(base) as any);
+            console.log(`[ordersSellingTracking] ✅ Firestore write SUCCESS: docId=${docRef.id}, productId=${base.productId}, orderId=${base.orderId}, status=${base.status}`);
+          } else {
+            await this.offlineDocService.createDocument('ordersSellingTracking', this.sanitizeForFirestore(base));
+            console.log(`[ordersSellingTracking] 📴 Queued offline tracking for productId=${base.productId}, orderId=${base.orderId}, status=${base.status}`);
+          }
         }
       } catch (e) {
         console.error('[ordersSellingTracking] ❌ Error creating tracking doc:', e);
@@ -239,10 +283,51 @@ export class OrdersSellingTrackingService {
       const q = query(collection(this.firestore, 'ordersSellingTracking'), where('orderId', '==', orderId));
       const snaps = await getDocs(q as any);
 
-      // Always ensure at least one completed row exists (legacy safety)
-      const partial = await this.createPartialTrackingFromOrderDoc(orderId, 'completed', completedBy);
-      updated += partial.created;
-      if (partial.errors?.length) errors.push(...partial.errors);
+      // If there are no existing 'completed' rows, create a single completed record
+      const hasCompleted = snaps.docs.some(s => (((s.data() as any).status || '') as string).toString().toLowerCase() === 'completed');
+      if (!hasCompleted && snaps.docs.length > 0) {
+        try {
+          // Use the first tracking doc as a template to create one completed row
+          const first = snaps.docs[0];
+          const d: any = first.data() || {};
+          const t = this.now();
+          const product = this.productService.getProduct?.(d.productId);
+          const newDoc = this.buildTrackingBase({
+            companyId: d.companyId,
+            storeId: d.storeId,
+            orderId: d.orderId,
+            batchNumber: d.batchNumber ?? 1,
+            itemIndex: d.itemIndex ?? 0,
+            orderDetailsId: d.orderDetailsId,
+            productId: d.productId,
+            productName: d.productName,
+            productCode: d.productCode || product?.productCode,
+            sku: d.sku || product?.skuId,
+            price: d.price,
+            quantity: d.quantity,
+            total: d.total ?? (Number(d.price) * Number(d.quantity || 0)),
+            uid: d.uid || completedBy,
+            cashierId: d.cashierId || completedBy,
+            status: 'completed',
+            createdAt: t.epoch,
+            createdAtText: t.text,
+            createdBy: completedBy || d.updatedBy || d.createdBy || 'system',
+            updatedAt: t.epoch,
+            updatedAtText: t.text,
+            updatedBy: completedBy || d.updatedBy || d.createdBy || 'system'
+          });
+
+          if (this.networkService.isOnline()) {
+            const colRef = collection(this.firestore, 'ordersSellingTracking');
+            await addDoc(colRef as any, this.sanitizeForFirestore(newDoc) as any);
+          } else {
+            await this.offlineDocService.createDocument('ordersSellingTracking', this.sanitizeForFirestore(newDoc));
+          }
+          updated++;
+        } catch (e) {
+          errors.push({ id: 'create_completed', error: e });
+        }
+      }
 
       for (const s of snaps.docs) {
         const id = s.id;

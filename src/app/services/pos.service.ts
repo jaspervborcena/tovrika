@@ -1775,6 +1775,7 @@ export class PosService {
       deductedBy: currentUser?.uid || null
     };
     const dedRef = doc(collection(this.firestore, 'inventoryDeductions'));
+    console.log('🧾 FIFO deduction record queued:', { productId, batchId: p.batchId, qty: p.deduct, dedRefId: dedRef.id });
     batch.set(dedRef, dedRecord);
   }
   
@@ -1792,6 +1793,7 @@ export class PosService {
   
   // Commit batch (queues offline, syncs when online)
   try {
+    console.log('🔔 Committing FIFO batch for product', productId, { plan });
     await Promise.race([
       batch.commit(),
       new Promise<never>((_, reject) => 

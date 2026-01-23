@@ -292,7 +292,7 @@ export class InventoryComponent implements OnInit {
 
   async ngOnInit(): Promise<void> {
     await this.loadStores();
-    await this.inventoryService.loadRowsForPeriod(this.selectedPeriod, 1);
+    await this.fetchInvoiceReport();
   }
 
   async loadStores(): Promise<void> {
@@ -376,9 +376,8 @@ export class InventoryComponent implements OnInit {
   dateFrom: string | null = null; // YYYY-MM-DD
   dateTo: string | null = null;
 
-  onPeriodChange(event: Event) {
-    const t = event.target as HTMLSelectElement;
-    this.selectedPeriod = t.value as 'today' | 'yesterday' | 'this_month' | 'previous_month' | 'date_range';
+  onPeriodChange(value: string) {
+    this.selectedPeriod = value as 'today' | 'yesterday' | 'this_month' | 'previous_month' | 'date_range';
     if (this.selectedPeriod === 'date_range') {
       // default dateTo = today, dateFrom = today - 30 days
       const now = new Date();
@@ -394,20 +393,64 @@ export class InventoryComponent implements OnInit {
       this.dateTo = null;
     }
     // trigger reload/filter for page 1
-    this.inventoryService.loadRowsForPeriod(this.selectedPeriod, 1);
+    this.fetchInvoiceReport();
   }
 
   onApplyDateRange() {
     if (!this.dateFrom || !this.dateTo) return;
     // trigger reload with custom date range
-    this.inventoryService.loadRowsForPeriod(this.selectedPeriod, 1);
+    this.fetchInvoiceReport();
   }
 
   async goToPage(pageOrValue: any) {
     const page = Number(pageOrValue);
     if (!isFinite(page) || page < 1) return;
-    await this.inventoryService.loadRowsForPeriod(this.selectedPeriod, page);
+    // For pagination we keep the previous approach (service supports paging by slicing rows)
+    await this.fetchInvoiceReport(page);
     try { window.scrollTo({ top: 120, behavior: 'smooth' }); } catch {}
+  }
+
+  private async fetchInvoiceReport(page: number = 1) {
+    try {
+      this.inventoryService.isLoading.set(true);
+
+      const params: any = {};
+      if (this.selectedPeriod === 'date_range' && this.dateFrom && this.dateTo) {
+        params.period = 'range';
+        params.range = { start: new Date(this.dateFrom), end: new Date(this.dateTo) };
+      } else if (this.selectedPeriod === 'today' || this.selectedPeriod === 'yesterday' || this.selectedPeriod === 'this_month' || this.selectedPeriod === 'previous_month') {
+        // map UI selectedPeriod to service period keys
+        params.period = this.selectedPeriod as any;
+      }
+
+      const rows = await this.inventoryService.buildInvoiceReport(params);
+
+      // Map returned rows to the service `rows` shape (invoiceNo, batchId, date, performedBy, productCode, sku, costPrice, sellingPrice, quantity, profitPerUnit, totalGross, totalProfit)
+      const mapped = (rows || []).map((r: any) => ({
+        invoiceNo: r.invoiceNumber || r.orderId || '',
+        batchId: r.batchId || null,
+        date: r.deductedAt || r.date || null,
+        performedBy: r.performedBy || null,
+        productCode: r.productName || r.productCode || '',
+        sku: r.sku || '',
+        costPrice: typeof r.costPrice === 'number' ? r.costPrice : Number(r.costPrice || 0),
+        sellingPrice: typeof r.sellingPrice === 'number' ? r.sellingPrice : Number(r.sellingPrice || 0),
+        quantity: Number(r.quantity || 0),
+        profitPerUnit: typeof r.profitPerUnit === 'number' ? r.profitPerUnit : (Number(r.sellingPrice || 0) - Number(r.costPrice || 0)),
+        totalGross: typeof r.totalGross === 'number' ? r.totalGross : (Number(r.sellingPrice || 0) * Number(r.quantity || 0)),
+        totalProfit: typeof r.totalProfit === 'number' ? r.totalProfit : ((Number(r.sellingPrice || 0) - Number(r.costPrice || 0)) * Number(r.quantity || 0))
+      }));
+
+      this.inventoryService.rows.set(mapped as any);
+      this.inventoryService.totalCount.set(mapped.length);
+      this.inventoryService.currentPage.set(page);
+    } catch (err) {
+      console.error('Failed to fetch invoice report:', err);
+      this.inventoryService.rows.set([]);
+      this.inventoryService.totalCount.set(0);
+    } finally {
+      this.inventoryService.isLoading.set(false);
+    }
   }
 
   pagesToShow(): Array<number | '...'> {

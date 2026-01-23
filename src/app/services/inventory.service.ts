@@ -1,3 +1,4 @@
+ 
 import { Injectable, signal, computed, inject } from '@angular/core';
 import {
   Firestore,
@@ -70,6 +71,8 @@ export class InventoryService {
    */
   private async getUserDisplayName(uid: string | undefined): Promise<string | null> {
     if (!uid) return null;
+    // Normalize system/service accounts to a friendly label to avoid raw uid duplicates
+    if (uid === 'system' || uid === 'SYSTEM') return 'System';
     
     // Check cache first
     if (this.userDisplayNameCache.has(uid)) {
@@ -94,6 +97,263 @@ export class InventoryService {
     }
 
     return null;
+  }
+
+  /**
+   * Build a detailed invoice report for a given orderId or for a date range.
+   * If orderId is provided, filters by orderId. Otherwise, filters by date range.
+   *
+   * @param params { orderId?: string, period?: 'today'|'yesterday'|'this_month'|'previous_month'|'range', range?: {start: Date, end: Date} }
+   */
+  async buildInvoiceReport(params: {
+    orderId?: string;
+    period?: 'today'|'yesterday'|'this_month'|'previous_month'|'range';
+    range?: { start: Date; end: Date };
+  }): Promise<any[]> {
+    const reportRows: any[] = [];
+
+    // Helpers to compute period start/end Dates
+    const computePeriodRange = (): { start: Date; end: Date } => {
+      const now = new Date();
+      if (params.period === 'today') {
+        return {
+          start: new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0),
+          end: new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999)
+        };
+      }
+      if (params.period === 'yesterday') {
+        const y = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+        return {
+          start: new Date(y.getFullYear(), y.getMonth(), y.getDate(), 0, 0, 0, 0),
+          end: new Date(y.getFullYear(), y.getMonth(), y.getDate(), 23, 59, 59, 999)
+        };
+      }
+      if (params.period === 'this_month') {
+        return {
+          start: new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0),
+          end: new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999)
+        };
+      }
+      if (params.period === 'previous_month') {
+        const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        return {
+          start: new Date(prev.getFullYear(), prev.getMonth(), 1, 0, 0, 0, 0),
+          end: new Date(prev.getFullYear(), prev.getMonth() + 1, 0, 23, 59, 59, 999)
+        };
+      }
+      if (params.period === 'range' && params.range) {
+        return { start: params.range.start, end: params.range.end };
+      }
+      throw new Error('Invalid period or range');
+    };
+
+    // Normalize various timestamp values to Date
+    const normalizeToDate = (v: any): Date | null => {
+      if (!v && v !== 0) return null;
+      if (v instanceof Date) return v;
+      if (typeof v === 'number') return new Date(v);
+      if (typeof v === 'string') {
+        const d = new Date(v);
+        return isNaN(d.getTime()) ? null : d;
+      }
+      if (v && typeof v.toDate === 'function') {
+        try { return v.toDate(); } catch { return null; }
+      }
+      return null;
+    };
+
+    // Build filters for tracking (ordersSellingTracking) and deductions (inventoryDeductions)
+    const trackingFilters: any[] = [];
+    const deductionFilters: any[] = [];
+
+    if (params.orderId) {
+      trackingFilters.push(where('orderId', '==', params.orderId));
+      deductionFilters.push(where('orderId', '==', params.orderId));
+    } else if (params.period) {
+      const { start, end } = computePeriodRange();
+      // ordersSellingTracking.createdAt is often stored as epoch ms (number)
+      trackingFilters.push(where('createdAt', '>=', start.getTime()));
+      trackingFilters.push(where('createdAt', '<=', end.getTime()));
+      // deductions tend to use Date/Timestamp
+      deductionFilters.push(where('createdAt', '>=', start));
+      deductionFilters.push(where('createdAt', '<=', end));
+    }
+
+    // Query tracking documents
+    let trackDocs: any[] = [];
+    try {
+      const trackingQ = query(collection(this.firestore, 'ordersSellingTracking'), ...trackingFilters);
+      const trackSnap = await getDocs(trackingQ as any);
+      trackDocs = trackSnap.docs;
+    } catch (err) {
+      console.warn('ordersSellingTracking query failed, returning empty list for tracking:', err);
+      trackDocs = [];
+    }
+
+    // Query deductions (merge multiple queries to cover different timestamp fields)
+    const dedById = new Map<string, any>();
+    try {
+      const deductionQ = query(collection(this.firestore, 'inventoryDeductions'), ...deductionFilters);
+      const deductionSnapAll = await getDocs(deductionQ as any);
+      for (const d of deductionSnapAll.docs) dedById.set(d.id, d);
+    } catch (err) {
+      console.warn('Primary deduction query failed (createdAt):', err);
+    }
+
+    // Also try querying by deductedAt if period provided (some docs use deductedAt)
+    if (params.period) {
+      try {
+        const { start, end } = computePeriodRange();
+        const dedFilters: any[] = [where('deductedAt', '>=', start), where('deductedAt', '<=', end)];
+        const deductionQ2 = query(collection(this.firestore, 'inventoryDeductions'), ...dedFilters);
+        const deductionSnap2 = await getDocs(deductionQ2 as any);
+        for (const d of deductionSnap2.docs) if (!dedById.has(d.id)) dedById.set(d.id, d);
+      } catch (err) {
+        console.warn('Fallback deduction query failed (deductedAt):', err);
+      }
+    }
+
+    const deductionDocs = Array.from(dedById.values());
+
+    // Collect productIds from tracking + deduction docs
+    const productIds = new Set<string>();
+    for (const d of trackDocs) {
+      const pd = (d.data() as any).productId;
+      if (pd) productIds.add(pd);
+    }
+    for (const d of deductionDocs) {
+      const pd = (d.data() as any).productId;
+      if (pd) productIds.add(pd);
+    }
+
+    const productIdsArr = Array.from(productIds);
+    const productRefs = productIdsArr.map(pid => doc(this.firestore, 'products', pid));
+    const productSnaps = await Promise.all(productRefs.map(ref => getDoc(ref as any)));
+    const productMap = new Map<string, any>();
+    productSnaps.forEach((snap, idx) => { if (snap.exists()) productMap.set(productIdsArr[idx], snap.data()); });
+
+    // Index deductions by orderId::productId
+    const dedIndex = new Map<string, any>();
+    for (const d of deductionDocs) {
+      const dd: any = d.data();
+      const key = `${dd.orderId || ''}::${dd.productId || ''}`;
+      if (!dedIndex.has(key)) dedIndex.set(key, dd);
+    }
+
+    // Process tracking rows
+    for (const trackDoc of trackDocs) {
+      const track: any = trackDoc.data();
+      const productData = productMap.get(track.productId) || {};
+      const productName = productData.productName || track.productName || '';
+      const sku = productData.skuId || track.sku || '';
+      const resolvedSellingPrice = Number(track.price ?? productData.sellingPrice ?? 0) || 0;
+      const qty = Number(track.quantity || 0) || 0;
+
+      const row: any = {
+        invoiceNumber: track.invoiceNumber || null,
+        invoiceNo: track.invoiceNumber || null,
+        orderId: track.orderId,
+        productId: track.productId,
+        productName,
+        sku,
+        sellingPrice: resolvedSellingPrice,
+        quantity: qty,
+        totalGross: +(resolvedSellingPrice * qty)
+      };
+
+      const dedKey = `${row.orderId || ''}::${row.productId || ''}`;
+      const ded = dedIndex.get(dedKey);
+      if (ded) {
+        row.batchId = ded.batchId;
+        row.deductedAt = normalizeToDate(ded.deductedAt) || normalizeToDate(ded.createdAt) || null;
+        const dedUid = ded.deductedBy || ded.deductedByUid || null;
+        const fallbackUid = track.createdBy || track.cashierId || null;
+        row.performedBy = (await this.getUserDisplayName(dedUid)) || (await this.getUserDisplayName(fallbackUid)) || dedUid || fallbackUid || null;
+        row.costPrice = typeof ded.costPrice === 'number' ? ded.costPrice : (ded.costPrice ? Number(ded.costPrice) : null);
+        row.profitPerUnit = (row.sellingPrice || 0) - (row.costPrice ?? 0);
+        row.totalProfit = +(row.profitPerUnit * (row.quantity || 0));
+      } else {
+        row.batchId = null;
+        row.deductedAt = null;
+        const trackUid = track.createdBy || track.cashierId || null;
+        row.performedBy = (await this.getUserDisplayName(trackUid)) || trackUid || null;
+        row.costPrice = null;
+        row.profitPerUnit = null;
+        row.totalProfit = null;
+      }
+
+      // Enrich with batch if available
+      if (row.batchId) {
+        try {
+          const batchRef = doc(this.firestore, 'productInventory', row.batchId);
+          const batchSnap = await getDoc(batchRef as any);
+          if (batchSnap.exists()) {
+            const batchData: any = batchSnap.data();
+            row.unitPrice = batchData.unitPrice;
+            if (row.costPrice == null && typeof batchData.unitPrice === 'number') {
+              row.costPrice = batchData.unitPrice;
+              row.profitPerUnit = (row.sellingPrice || 0) - (row.costPrice || 0);
+              row.totalProfit = +(row.profitPerUnit * (row.quantity || 0));
+            }
+            row.status = batchData.status;
+          }
+        } catch (err) {
+          // ignore batch fetch errors
+        }
+      }
+
+      reportRows.push(row);
+    }
+
+    // Add deduction-only rows
+    for (const d of deductionDocs) {
+      const ded: any = d.data();
+      const key = `${ded.orderId || ''}::${ded.productId || ''}`;
+      const exists = reportRows.find(r => (r.orderId || '') === (ded.orderId || '') && (r.productId || '') === (ded.productId || ''));
+      if (exists) continue;
+
+      const productData = productMap.get(ded.productId) || {};
+      const productName = productData.productName || ded.productName || '';
+      const sku = productData.skuId || ded.sku || '';
+      const resolvedSelling = Number(ded.sellingPrice ?? productData.sellingPrice ?? 0) || 0;
+      const resolvedQty = Number(ded.quantity || 0) || 0;
+
+      const row: any = {
+        invoiceNumber: ded.invoiceNumber || null,
+        invoiceNo: ded.invoiceNumber || null,
+        orderId: ded.orderId,
+        productId: ded.productId,
+        productName,
+        sku,
+        sellingPrice: resolvedSelling,
+        quantity: resolvedQty,
+        totalGross: +(resolvedSelling * resolvedQty),
+        batchId: ded.batchId,
+        deductedAt: normalizeToDate(ded.deductedAt) || normalizeToDate(ded.createdAt) || null,
+        performedBy: (await this.getUserDisplayName(ded.deductedBy)) || ded.deductedBy || null,
+        costPrice: typeof ded.costPrice === 'number' ? ded.costPrice : (ded.costPrice ? Number(ded.costPrice) : null)
+      };
+      row.profitPerUnit = (row.sellingPrice || 0) - (row.costPrice ?? 0);
+      row.totalProfit = +(row.profitPerUnit * (row.quantity || 0));
+
+      if (row.batchId) {
+        try {
+          const batchRef = doc(this.firestore, 'productInventory', row.batchId);
+          const batchSnap = await getDoc(batchRef as any);
+          if (batchSnap.exists()) {
+            const batchData: any = batchSnap.data();
+            row.unitPrice = batchData.unitPrice;
+            row.status = batchData.status;
+          }
+        } catch (err) {
+          // ignore
+        }
+      }
+
+      reportRows.push(row);
+    }
+
+    return reportRows;
   }
 
   /**
