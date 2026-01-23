@@ -2545,16 +2545,6 @@ export class OverviewComponent implements OnInit {
       // Load stores and products
       await this.loadStores();
       
-      // Load products for product lookups in top products
-      const storeId = this.selectedStoreId() || this.authService.getCurrentPermission()?.storeId;
-      if (storeId && storeId !== 'all') {
-        console.log('📦 Loading products for store:', storeId);
-        await this.productService.initializeProducts(storeId);
-        const loadedProducts = this.productService.getProducts();
-        this.products.set(loadedProducts);
-        console.log('✅ Products loaded:', loadedProducts.length);
-      }
-      
       // After stores load, trigger the same load flow as when period/store changes
       // This ensures consistent data loading behavior
       this.applyPeriodAndLoad();
@@ -2910,41 +2900,22 @@ export class OverviewComponent implements OnInit {
         queryDate.setDate(queryDate.getDate() - 1);
       }
       
-      // Get start of day (00:00:00) for the query date in local timezone
-      const startOfDay = new Date(queryDate.getFullYear(), queryDate.getMonth(), queryDate.getDate(), 0, 0, 0, 0);
-      const queryDateMs = startOfDay.getTime();
-      
       console.log(`🔍 fetchTopProducts query params:`, {
         companyId,
         storeId: resolvedStoreId,
         period,
         queryDate: queryDate.toLocaleDateString(),
-        startOfDay: startOfDay.toLocaleString(),
-        queryDateMs
+        queryDateMs: queryDate.getTime()
       });
 
       const top = await this.ordersSellingTrackingService.getTopProductsCounts(companyId, resolvedStoreId, 10, queryDateMs);
       console.log('📊 getTopProductsCounts result:', top);
-      console.log('📦 Available products count:', this.products().length);
-      
-      // Map productIds to actual product details
-      const mapped = Object.entries(top || {}).slice(0, 10).map(([productId, count]) => {
-        const product = this.productService.getProduct(productId);
-        console.log(`🔍 Looking up productId: ${productId}, found:`, product);
-        
-        const productName = product?.productName || 'Unknown Product';
-        const skuId = product?.skuId || '';
-        const avatar = productName.split(' ').map((s: string) => s.charAt(0)).slice(0, 2).join('').toUpperCase() || 'P';
-        
-        return {
-          avatar,
-          name: productName,
-          code: skuId,
-          sales: Number(count || 0)
-        };
-      });
-      
-      console.log('📊 Mapped top products:', mapped);
+      const mapped = Object.entries(top || {}).slice(0, 10).map(([productId, count]) => ({
+        avatar: (productId || '').split(' ').map((s: string) => s.charAt(0)).slice(0, 2).join('').toUpperCase() || 'P',
+        name: productId || 'Product',
+        code: productId || '',
+        sales: Number(count || 0)
+      }));
       this.topProductsList.set(mapped);
     } catch (err) {
       console.warn('fetchTopProducts error', err);

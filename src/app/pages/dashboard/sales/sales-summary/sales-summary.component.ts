@@ -1515,7 +1515,7 @@ export class SalesSummaryComponent implements OnInit {
     { key: 'previous_month', label: 'Previous Month' },
     { key: 'date_range', label: 'Date Range' }
   ];
-  selectedPeriod: 'today' | 'yesterday' | 'this_month' | 'previous_month' | 'date_range' = 'today';
+  selectedPeriod: 'today' | 'yesterday' | 'this_month' | 'previous_month' | 'date_range' = 'this_month';
 
   // Computed for store display
   selectedStore = computed(() => {
@@ -1726,22 +1726,18 @@ export class SalesSummaryComponent implements OnInit {
    * Handle period selection change
    */
   onPeriodChange(): void {
-    this.isLoading.set(true);
     const period = this.selectedPeriod;
     const now = new Date();
-    console.log('[PERIOD] Period selected:', period, 'Current date:', now);
     
     if (period === 'today') {
       const today = this.formatDateForInput(now);
-      console.log('[PERIOD] Today formatted:', today, 'from date:', now);
       this.fromDate = today;
       this.toDate = today;
       this.loadSalesDataManual();
     } else if (period === 'yesterday') {
       const yesterday = new Date(now);
-      yesterday.setDate(yesterday.getDate() - 1);
+      yesterday.setDate(now.getDate() - 1);
       const yesterdayStr = this.formatDateForInput(yesterday);
-      console.log('[PERIOD] Yesterday formatted:', yesterdayStr, 'from date:', yesterday);
       this.fromDate = yesterdayStr;
       this.toDate = yesterdayStr;
       this.loadSalesDataManual();
