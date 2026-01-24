@@ -4185,27 +4185,27 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
         }
       }
 
-      // Create OPEN order (orders + orderDetails + ordersSellingTracking with processing status)
-      console.log('📦 Creating OPEN order...');
-      const orderResult = await this.posService.createOpenOrder(processedCustomerInfo);
+      // // Create OPEN order (orders + orderDetails + ordersSellingTracking with processing status)
+      // console.log('📦 Creating OPEN order...');
+      // const orderResult = await this.posService.createOpenOrder(processedCustomerInfo);
 
-      if (!orderResult) {
-        throw new Error('Failed to create OPEN order');
-      }
+      // if (!orderResult) {
+      //   throw new Error('Failed to create OPEN order');
+      // }
 
-      console.log('✅ OPEN order created:', orderResult);
+      // console.log('✅ OPEN order created:', orderResult);
 
-      // Store the created order info for payment processing
-      this.completedOrderData.set({
-        orderId: orderResult.orderId,
-        invoiceNumber: orderResult.invoiceNumber,
-        items: cartItems,
-        totalAmount: this.cartSummary().netAmount
-      });
+      // // Store the created order info for payment processing
+      // this.completedOrderData.set({
+      //   orderId: orderResult.orderId,
+      //   invoiceNumber: orderResult.invoiceNumber,
+      //   items: cartItems,
+      //   totalAmount: this.cartSummary().netAmount
+      // });
 
       // Update invoice number display
-      this.invoiceNumber = orderResult.invoiceNumber;
-      this.nextInvoiceNumber.set(orderResult.invoiceNumber);
+      // this.invoiceNumber = orderResult.invoiceNumber;
+      // this.nextInvoiceNumber.set(orderResult.invoiceNumber);
 
       // Show payment dialog with two options
       this.showPaymentDialog();
