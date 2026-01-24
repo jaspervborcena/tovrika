@@ -38,4 +38,5 @@ export interface OrdersSellingTrackingDoc {
   cashierId?: string;
   cashierEmail?: string;
   cashierName?: string;
+  invoiceNumber?: string;
 }

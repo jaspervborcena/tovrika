@@ -15,8 +15,8 @@
       <select 
         *ngIf="hasMultipleStores(); else singleStore"
         class="control-select" 
-        [(ngModel)]="selectedStoreId" 
-        (change)="onStoreChange()">
+        [ngModel]="selectedStoreId()"
+        (ngModelChange)="selectedStoreId.set($event); onStoreChange()">
         <option *ngFor="let store of stores()" [value]="store.id">
           {{ store.storeName.toUpperCase() }}
         </option>
@@ -32,7 +32,7 @@
 
     <div class="control-row">
       <label class="control-label">Period</label>
-      <select class="control-select" [(ngModel)]="selectedPeriod" (change)="onPeriodChange($event)">
+      <select class="control-select" [(ngModel)]="selectedPeriod" (ngModelChange)="onPeriodChange($event)">
         <option *ngFor="let p of periodOptions" [value]="p.key">{{ p.label }}</option>
       </select>
 

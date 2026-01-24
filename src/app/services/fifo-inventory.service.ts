@@ -98,7 +98,6 @@ export class FIFOInventoryService {
     productId: string, 
     quantityToDeduct: number, 
     orderId: string,
-    orderDetailId: string,
     isOffline: boolean = false
   ): Promise<BatchDeductionDetail[]> {
     if (isOffline) {
@@ -135,12 +134,24 @@ export class FIFOInventoryService {
     const updatedBatches: ProductInventoryEntry[] = [];
     
     for (const allocation of plan.batchAllocations) {
-      const batchRef = doc(this.firestore, 'productInventory', allocation.batchId);
-      const batchDoc = await getDoc(batchRef);
-      
-      if (!batchDoc.exists()) {
+      // Query for the batch document by batchId field
+      const inventoryRef = collection(this.firestore, 'productInventory');
+      const batchQuery = query(inventoryRef, where('batchId', '==', allocation.batchId));
+      const batchSnapshot = await getDocs(batchQuery);
+      if (batchSnapshot.empty) {
+        console.error('[FIFO DEBUG] Batch not found by batchId field:', {
+          batchId: allocation.batchId
+        });
         throw new Error(`Batch ${allocation.batchId} not found`);
       }
+      const batchDocSnap = batchSnapshot.docs[0];
+      const batchRef = batchDocSnap.ref;
+      const batchDoc = batchDocSnap;
+      // Debug log for batch lookup
+      console.error('[FIFO DEBUG] Found batch by batchId:', {
+        batchId: allocation.batchId,
+        docId: batchDoc.id
+      });
 
       const batchData = batchDoc.data() as ProductInventoryEntry;
       
@@ -156,7 +167,6 @@ export class FIFOInventoryService {
       // Create deduction record in a dedicated collection
       const deductionRecord: BatchDeduction & { productId: string; batchId: string } = {
         orderId,
-        orderDetailId,
         quantity: allocation.allocatedQuantity,
         deductedAt: new Date(),
         deductedBy: currentUser.uid,

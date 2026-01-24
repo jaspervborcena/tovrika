@@ -69,7 +69,6 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   private userRoleService = inject(UserRoleService);
   private customerService = inject(CustomerService);
   private companyService = inject(CompanyService);
-  
   private translationService = inject(TranslationService);
   private subscriptionService = inject(SubscriptionService);
   private firestore = inject(Firestore);
@@ -165,6 +164,9 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   });
   readonly cartSummary = computed(() => this.posService.cartSummary());
   readonly isProcessing = computed(() => this.posService.isProcessing());
+  
+  // Loading state for initial data load
+  readonly isLoading = signal<boolean>(true);
   
   readonly products = computed(() => {
     const prods = this.productService.getProductsSignal()();
@@ -3111,6 +3113,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   async ngOnInit(): Promise<void> {
+    this.isLoading.set(true);
     
     // Set default payment method to cash
     this.posService.setPaymentMethod('cash');
@@ -3170,6 +3173,8 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     } catch (error) {
       console.error('❌ Error initializing POS:', error);
       console.error('❌ Error details:', error);
+    } finally {
+      this.isLoading.set(false);
     }
   }
 
@@ -4180,27 +4185,27 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
         }
       }
 
-      // Create OPEN order (orders + orderDetails + ordersSellingTracking with processing status)
-      console.log('📦 Creating OPEN order...');
-      const orderResult = await this.posService.createOpenOrder(processedCustomerInfo);
+      // // Create OPEN order (orders + orderDetails + ordersSellingTracking with processing status)
+      // console.log('📦 Creating OPEN order...');
+      // const orderResult = await this.posService.createOpenOrder(processedCustomerInfo);
 
-      if (!orderResult) {
-        throw new Error('Failed to create OPEN order');
-      }
+      // if (!orderResult) {
+      //   throw new Error('Failed to create OPEN order');
+      // }
 
-      console.log('✅ OPEN order created:', orderResult);
+      // console.log('✅ OPEN order created:', orderResult);
 
-      // Store the created order info for payment processing
-      this.completedOrderData.set({
-        orderId: orderResult.orderId,
-        invoiceNumber: orderResult.invoiceNumber,
-        items: cartItems,
-        totalAmount: this.cartSummary().netAmount
-      });
+      // // Store the created order info for payment processing
+      // this.completedOrderData.set({
+      //   orderId: orderResult.orderId,
+      //   invoiceNumber: orderResult.invoiceNumber,
+      //   items: cartItems,
+      //   totalAmount: this.cartSummary().netAmount
+      // });
 
       // Update invoice number display
-      this.invoiceNumber = orderResult.invoiceNumber;
-      this.nextInvoiceNumber.set(orderResult.invoiceNumber);
+      // this.invoiceNumber = orderResult.invoiceNumber;
+      // this.nextInvoiceNumber.set(orderResult.invoiceNumber);
 
       // Show payment dialog with two options
       this.showPaymentDialog();
