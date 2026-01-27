@@ -2868,30 +2868,49 @@ export class OverviewComponent implements OnInit {
       })).filter(item => item.sales > 0).sort((a, b) => b.sales - a.sales).slice(0, 10);
     }
 
-    const productSales = new Map<string, { product: any; sales: number; code: string }>();
-    this.products().forEach(product => {
-      if (product.id) {
-        productSales.set(product.id, { product, sales: 0, code: product.skuId || '' });
+    // Fallback: Calculate from actual orders
+    const productSales = new Map<string, { product: Product; sales: number; quantity: number; code: string }>();
+    
+    // Get filtered orders based on selected period
+    const ordersToCount = this.filteredOrders();
+    
+    // Count products from actual order items
+    ordersToCount.forEach(order => {
+      if (order.items && Array.isArray(order.items)) {
+        order.items.forEach(item => {
+          // Try to match by productId or productName
+          const matchedProduct = this.products().find(p => 
+            p.id === item.productId || 
+            p.productName === item.productName
+          );
+          
+          if (matchedProduct && matchedProduct.id) {
+            const existing = productSales.get(matchedProduct.id);
+            if (existing) {
+              existing.sales += 1; // Count number of orders
+              existing.quantity += item.quantity || 1;
+            } else {
+              productSales.set(matchedProduct.id, {
+                product: matchedProduct,
+                sales: 1,
+                quantity: item.quantity || 1,
+                code: matchedProduct.skuId || ''
+              });
+            }
+          }
+        });
       }
-    });
-
-    this.orders().forEach(order => {
-      const keys = Array.from(productSales.keys());
-      keys.slice(0, Math.min(3, keys.length)).forEach(productId => {
-        const existing = productSales.get(productId);
-        if (existing) existing.sales += Math.floor(Math.random() * 5) + 1;
-      });
     });
 
     return Array.from(productSales.values())
       .filter(item => item.sales > 0)
-      .sort((a, b) => b.sales - a.sales)
+      .sort((a, b) => b.quantity - a.quantity) // Sort by total quantity sold
       .slice(0, 10)
       .map(item => ({
         name: item.product.productName || 'Product',
         code: item.code,
-        avatar: item.product.productName?.charAt(0).toUpperCase() || 'P',
-        sales: item.sales
+        avatar: item.product.productName?.split(' ').map((s: string) => s.charAt(0)).slice(0, 2).join('').toUpperCase() || 'P',
+        sales: item.quantity // Show total quantity sold
       }));
   });
 
@@ -2900,6 +2919,15 @@ export class OverviewComponent implements OnInit {
       const currentPermission = this.authService.getCurrentPermission();
       const companyId = currentPermission?.companyId || '';
       let resolvedStoreId = storeId || this.selectedStoreId() || this.authService.getCurrentPermission()?.storeId || '';
+
+      // Load products for the store if not already loaded
+      if (resolvedStoreId && resolvedStoreId !== 'all') {
+        console.log('📦 Ensuring products are loaded for store:', resolvedStoreId);
+        await this.productService.initializeProducts(resolvedStoreId);
+        const loadedProducts = this.productService.getProducts();
+        this.products.set(loadedProducts);
+        console.log('✅ Products loaded for lookup:', loadedProducts.length);
+      }
 
       // Determine date based on selected period - need START of day in epoch ms
       const period = this.selectedPeriod();
