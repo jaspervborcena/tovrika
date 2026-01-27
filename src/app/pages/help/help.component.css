@@ -212,6 +212,14 @@
   margin: 0;
 }
 
+.text-tovrika-primary {
+  color: #667eea;
+}
+
+.text-tovrika-dark {
+  color: #5a67d8;
+}
+
 /* Responsive Design */
 @media (max-width: 768px) {
   .header-content {
