@@ -156,6 +156,10 @@ export const routes: Routes = [
     loadComponent: () => import('./pages/help/help.component').then(m => m.HelpComponent)
   },
   {
+    path: 'contact',
+    loadComponent: () => import('./pages/contact/contact.component').then(m => m.ContactComponent)
+  },
+  {
     path: 'account-settings',
     loadComponent: () => import('./pages/account-settings/account-settings.component').then(m => m.AccountSettingsComponent)
   },
