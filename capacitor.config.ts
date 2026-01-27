@@ -2,7 +2,7 @@ import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
   appId: 'com.tovrika.pos',
-  appName: 'Tovrika POS',
+  appName: 'TovrikaPOS',
   webDir: 'dist/pos-system/browser',
   server: {
     androidScheme: 'https',
