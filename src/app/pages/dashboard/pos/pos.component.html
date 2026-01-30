@@ -138,7 +138,7 @@
                         [attr.data-tab]="t"
                         class="tab-header">
                   <div class="tab-content">
-                    <span class="tab-label" [class.small-text]="t === 'Split Payments' || t === 'Discounts & Promotions'">{{ getAccessTabTranslation(t) }}</span>
+                    <span class="tab-label" [class.small-text]="t === 'Cancelled' || t === 'Split Payments' || t === 'Discounts & Promotions' || t === 'Recovered'">{{ getAccessTabTranslation(t) }}</span>
                   </div>
                 </button>
               </div>
@@ -170,7 +170,7 @@
                     (ngModelChange)="setSearchQuery($event)"
                     (input)="onSearch()"
                     (keydown.enter)="handleBarcodeSearch(searchQuery())"
-                    [placeholder]="accessTab() === 'Orders' ? 'Search Orders (Invoice #, Customer Name, Address, Date YYYYMMDD)' : 'Search by barcode, SKU, or name...'"
+                    [placeholder]="accessTab() === 'Orders' ? 'Search Orders (Invoice #, Customer Name, Address, Status, Date YYYYMMDD)' : 'Search by barcode, SKU, or name...'"
                     class="search-input">
                   <button *ngIf="searchQuery()" (click)="clearSearch()" class="clear-btn" title="Clear">×</button>
                 </div>
@@ -209,7 +209,7 @@
           </div>
 
           <!-- Tag Filter Tabs (shown before product tabs if tags exist) -->
-          <div class="tag-filter-section" *ngIf="accessTab() === 'New' && availableTagsByGroup().length > 0 && hasProductsWithTags()">
+          <div class="tag-filter-section" *ngIf="accessTab() === 'New' && availableTagsByGroup().length > 0">
             <div class="tag-filter-header" (click)="toggleTagFilterSection()">
               <span class="tag-filter-title">Classification</span>
               <span class="tag-filter-toggle" [class.expanded]="isTagFilterExpanded()">▼</span>
@@ -548,7 +548,7 @@
           </div>
 
           <!-- Orders results use the same display area when Orders tab is active -->
-          <div class="products-display" *ngIf="accessTab() === 'Orders' || accessTab() === 'Cancelled' || accessTab() === 'Returns' || accessTab() === 'Refunds' || accessTab() === 'Damage' || accessTab() === 'Split Payments' || accessTab() === 'Discounts & Promotions'" style="padding:1rem;">
+          <div class="products-display" *ngIf="accessTab() === 'Orders' || accessTab() === 'Open' || accessTab() === 'Cancelled' || accessTab() === 'Returns' || accessTab() === 'Refunds' || accessTab() === 'Damage' || accessTab() === 'Unpaid' || accessTab() === 'Recovered' || accessTab() === 'Split Payments' || accessTab() === 'Discounts & Promotions'" style="padding:1rem;">
             <!-- Control buttons for Orders tab -->
             <div style="margin-bottom: 1rem;">
               <!-- Refresh button -->
@@ -576,6 +576,9 @@
               <ng-container *ngIf="accessTab() === 'Orders'">
                 No recent orders available. Orders will appear here once you start processing transactions.
               </ng-container>
+              <ng-container *ngIf="accessTab() === 'Open'">
+                No open orders found. Orders with Pay Later status will appear here.
+              </ng-container>
               <ng-container *ngIf="accessTab() === 'Cancelled'">
                 No cancelled orders found.
               </ng-container>
@@ -588,6 +591,12 @@
               <ng-container *ngIf="accessTab() === 'Damage'">
                 No damage orders found.
               </ng-container>
+              <ng-container *ngIf="accessTab() === 'Unpaid'">
+                No unpaid orders found. Orders marked as unpaid will appear here.
+              </ng-container>
+              <ng-container *ngIf="accessTab() === 'Recovered'">
+                No recovered orders found. Orders that have been recovered will appear here.
+              </ng-container>
               <ng-container *ngIf="accessTab() === 'Split Payments'">
                 No split payment orders found.
               </ng-container>
@@ -598,8 +607,9 @@
             
             <!-- Enhanced Order List Display -->
             <div class="orders-list" *ngIf="!isLoadingOrders() && filteredOrders().length > 0">
-              <div class="orders-header" style="display: grid; grid-template-columns: 2fr 1fr 2fr 1fr; gap: 1rem; padding: 0.75rem; background: #f8fafc; border-radius: 6px; font-weight: 600; color: #374151; margin-bottom: 0.5rem;">
+              <div class="orders-header" style="display: grid; grid-template-columns: 2fr 1fr 2fr 1fr 1fr; gap: 1rem; padding: 0.75rem; background: #f8fafc; border-radius: 6px; font-weight: 600; color: #374151; margin-bottom: 0.5rem;">
                 <div>Invoice Number</div>
+                <div>Table Number</div>
                 <div>Date</div>
                 <div>Customer Name</div>
                 <div style="text-align: right;">Amount</div>
@@ -608,7 +618,7 @@
               <div *ngFor="let order of filteredOrders()" 
                    class="order-list-item" 
                    (dblclick)="openOrder(order)" 
-                   style="display: grid; grid-template-columns: 2fr 1fr 2fr 1fr; gap: 1rem; padding: 0.75rem; border-bottom: 1px solid #f1f5f9; cursor: pointer; transition: background-color 0.2s;"
+                   style="display: grid; grid-template-columns: 2fr 1fr 2fr 1fr 1fr; gap: 1rem; padding: 0.75rem; border-bottom: 1px solid #f1f5f9; cursor: pointer; transition: background-color 0.2s;"
                    onmouseover="this.style.backgroundColor='#f8fafc'"
                    onmouseout="this.style.backgroundColor='transparent'">
                 
@@ -618,6 +628,11 @@
                   <div *ngIf="order.businessAddress" style="font-size: 0.8rem; color: #6b7280; font-weight: 400; margin-top: 2px;">
                     📍 {{ order.businessAddress }}
                   </div>
+                </div>
+                
+                <!-- Table Number -->
+                <div class="order-table" style="color: #374151; font-weight: 500;">
+                  {{ order.tableNumber || '-' }}
                 </div>
                 
                 <!-- Date -->
@@ -635,14 +650,7 @@
                   </div>
                   <div style="font-size: 0.8rem; color: #6b7280; margin-top: 2px;">
                     Status: 
-                    <ng-container *ngIf="order.statusTags && order.statusTags.length > 0; else singleStatus">
-                      <span *ngFor="let tag of order.statusTags; let last = last" [style.color]="getOrderStatusColor(tag)">
-                        {{ tag | titlecase }}<ng-container *ngIf="!last">, </ng-container>
-                      </span>
-                    </ng-container>
-                    <ng-template #singleStatus>
-                      <span [style.color]="getOrderStatusColor(order.status)">{{ order.status | titlecase }}</span>
-                    </ng-template>
+                    <span [style.color]="getOrderStatusColor(order.status)">{{ order.status | titlecase }}</span>
                   </div>
                 </div>
                 
@@ -685,6 +693,10 @@
                   <div style="color: #6b7280;">{{ selectedOrder()?.invoiceNumber || selectedOrder()?.id || 'N/A' }}</div>
                 </div>
                 <div>
+                  <div style="font-weight: 600; color: #374151;">Table Number</div>
+                  <div style="color: #6b7280;">{{ selectedOrder()?.tableNumber || '-' }}</div>
+                </div>
+                <div>
                   <div style="font-weight: 600; color: #374151;">Date</div>
                   <div style="color: #6b7280;">{{ selectedOrder()?.date ? (selectedOrder()?.date | date:'full') : (selectedOrder()?.createdAt | date:'full') }}</div>
                 </div>
@@ -719,36 +731,68 @@
             
          
             
-            <!-- Action Buttons (manager authorization required for sensitive actions) -->
+            <!-- Action Buttons -->
             <div style="display: flex; gap: 0.5rem; justify-content: flex-end; flex-wrap: wrap;">
-                    <button class="btn open-receipt-btn" (click)="openOrderReceipt(selectedOrder())">
-                📄 Open Receipt
-              </button>
-                    <button *ngIf="selectedOrder()" class="btn cancel-order-btn"
-                      [disabled]="!canCancelOrder() || isOrderActionLocked() || postDamageLock()"
-                      [title]="(!canCancelOrder() || isOrderActionLocked() || postDamageLock()) ? 'Cancel disabled for this order' : 'Cancel Order'"
-                      (click)="authorizeAndUpdateOrderStatus(selectedOrder()?.id, 'cancelled')">Cancel Order</button>
+              <!-- OPEN Order Buttons -->
+              <ng-container *ngIf="isOrderOpen()">
+                <button class="btn open-receipt-btn" (click)="openOrderReceipt(selectedOrder())">
+                  📄 Open Receipt
+                </button>
+                <button class="btn btn-primary" (click)="updateOpenOrder()">
+                  ✏️ Update Order
+                </button>
+                <button class="btn btn-unpaid" (click)="markOpenOrderAsUnpaid()">
+                  🧾 Unpaid
+                </button>
+                <button class="btn btn-success" (click)="payNowForOpenOrder()">
+                  💰 Pay Now
+                </button>
+              </ng-container>
+              
+              <!-- UNPAID Order Buttons -->
+              <ng-container *ngIf="isOrderUnpaid()">
+                <button class="btn open-receipt-btn" (click)="openOrderReceipt(selectedOrder())">
+                  📄 Open Receipt
+                </button>
+                <button class="btn btn-recovered" (click)="payNowForUnpaidOrder()">
+                  💰 Pay Now (Recover)
+                </button>
+              </ng-container>
+              
+              <!-- Regular Order Buttons (for non-OPEN and non-UNPAID orders) -->
+              <ng-container *ngIf="!isOrderOpen() && !isOrderUnpaid()">
+                <button class="btn open-receipt-btn" (click)="openOrderReceipt(selectedOrder())">
+                  📄 Open Receipt
+                </button>
+                <button *ngIf="selectedOrder()" class="btn cancel-order-btn"
+                  [disabled]="!canCancelOrder() || isOrderActionLocked() || postDamageLock()"
+                  [title]="(!canCancelOrder() || isOrderActionLocked() || postDamageLock()) ? 'Cancel disabled for this order' : 'Cancel Order'"
+                  (click)="authorizeAndUpdateOrderStatus(selectedOrder()?.id, 'cancelled')">Cancel Order</button>
 
-                    <!-- Show or hide Return depending on order status and whether a return tracking row already exists -->
-                    <button *ngIf="shouldShowReturnButton()" class="btn btn-warning return-btn"
-                      [disabled]="isOrderActionLocked() || postDamageLock()"
-                      [title]="(isOrderActionLocked() || postDamageLock()) ? 'Action disabled for this order' : 'Return'"
-                      (click)="authorizeAndUpdateOrderStatus(selectedOrder()?.id, 'returned')">Return</button>
+                <!-- Show or hide Return depending on order status and whether a return tracking row already exists -->
+                <button *ngIf="shouldShowReturnButton()" class="btn btn-warning return-btn"
+                  [disabled]="isOrderActionLocked() || postDamageLock()"
+                  [title]="(isOrderActionLocked() || postDamageLock()) ? 'Action disabled for this order' : 'Return'"
+                  (click)="authorizeAndUpdateOrderStatus(selectedOrder()?.id, 'returned')">Return</button>
+                
+                <!-- Recovered button: same font-size/appearance as cancel-order-btn but with recovered color -->
+                <button *ngIf="isOrderRecovered()" class="btn btn-recovered" (click)="authorizeAndUpdateOrderStatus(selectedOrder()?.id, 'recovered')" title="Mark as Recovered">Recovered</button>
 
-                    <button *ngIf="selectedOrder()?.status !== 'refunded'" class="btn btn-primary"
-                      [disabled]="isRefundDisabled() || postDamageLock()"
-                      [title]="(isRefundDisabled() || postDamageLock()) ? 'Action disabled for this order' : 'Refund'"
-                      (click)="authorizeAndUpdateOrderStatus(selectedOrder()?.id, 'refunded')">Refund</button>
+                <button *ngIf="selectedOrder()?.status !== 'refunded'" class="btn btn-primary"
+                  [disabled]="isRefundDisabled() || postDamageLock()"
+                  [title]="(isRefundDisabled() || postDamageLock()) ? 'Action disabled for this order' : 'Refund'"
+                  (click)="authorizeAndUpdateOrderStatus(selectedOrder()?.id, 'refunded')">Refund</button>
 
-                    <button *ngIf="shouldShowDamageButton()" class="btn btn-danger damage-btn"
-                      [disabled]="isDamageDisabled() || postDamageLock()"
-                      [title]="(isDamageDisabled() || postDamageLock()) ? 'Action disabled for this order' : 'Damage'"
-                      (click)="openManageItemStatusAuthorized('damage')">Damage</button>
+                <button *ngIf="shouldShowDamageButton()" class="btn btn-danger damage-btn"
+                  [disabled]="isDamageDisabled() || postDamageLock()"
+                  [title]="(isDamageDisabled() || postDamageLock()) ? 'Action disabled for this order' : 'Damage'"
+                  (click)="openManageItemStatusAuthorized('damage')">Damage</button>
 
-                    <button class="btn btn-secondary manage-status-btn"
-                      [disabled]="isManageStatusDisabled() || postDamageLock()"
-                      [title]="(isManageStatusDisabled() || postDamageLock()) ? 'Action disabled for this order' : 'Manage Item Status'"
-                      (click)="openManageItemStatusAuthorized()">Manage Item Status</button>
+                <button class="btn btn-secondary manage-status-btn"
+                  [disabled]="isManageStatusDisabled() || postDamageLock()"
+                  [title]="(isManageStatusDisabled() || postDamageLock()) ? 'Action disabled for this order' : 'Manage Item Status'"
+                  (click)="openManageItemStatusAuthorized()">Manage Item Status</button>
+              </ng-container>
             </div>
 
             <!-- Manager Authorization Modal (collect userCode + pin) -->
@@ -1260,7 +1304,7 @@
               <input 
                 type="text" 
                 id="total-amount"
-                [value]="'₱' + cartSummary().netAmount.toFixed(2)"
+                [value]="'₱' + (payingForExistingOrder() ? payingForExistingOrder().totalAmount.toFixed(2) : cartSummary().netAmount.toFixed(2))"
                 readonly
                 class="amount-input readonly">
             </div>
@@ -1286,6 +1330,16 @@
                 readonly
                 class="amount-input readonly">
             </div>
+          </div>
+          
+          <div class="payment-table">
+            <label for="table-number">Table Number (Optional):</label>
+            <input 
+              type="text" 
+              id="table-number"
+              [(ngModel)]="tableNumber"
+              placeholder="Enter table number"
+              class="payment-input">
           </div>
           
           <div class="payment-type">
@@ -1322,6 +1376,14 @@
             #cancelPaymentButton
             (click)="closePaymentDialog()">
             {{ 'buttons.cancel' | translate }}
+          </button>
+          <button 
+            *ngIf="!payingForExistingOrder()"
+            type="button"
+            class="btn-warning"
+            (click)="saveOrderAsOpen()"
+            style="background: #f59e0b; color: white;">
+            💼 Pay Later
           </button>
           <button 
             type="button"

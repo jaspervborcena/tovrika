@@ -8,6 +8,7 @@ import {
   getDocs,
   doc,
   setDoc,
+  updateDoc,
   Firestore
 } from '@angular/fire/firestore';
 
@@ -21,79 +22,92 @@ export class LedgerService {
 
   /**
    * Record an accounting ledger event for an order.
-   * Creates a new document in `orderAccountingLedger` with running balances
-   * computed from the latest ledger entry for the same company/store for today.
+   * Creates ONE document per day per eventType that gets updated throughout the day.
+   * First transaction: creates document with createdAt/createdBy = updatedAt/updatedBy
+   * Subsequent transactions: updates document with new updatedAt/updatedBy
    */
   async recordEvent(
   companyId: string,
   storeId: string,
   orderId: string,
-  eventType: 'completed' | 'returned' | 'refunded' | 'cancelled' | 'damaged',
+  eventType: 'completed' | 'returned' | 'refunded' | 'cancelled' | 'damaged' | 'unpaid' | 'recovered',
   amount: number,
   qty: number,
   performedBy: string
 ): Promise<any> {
   try {
+    console.log('🎯 LedgerService.recordEvent called:', { 
+      companyId, 
+      storeId, 
+      orderId, 
+      eventType, 
+      amount, 
+      qty, 
+      performedBy 
+    });
+    
     // Get start of today to reset balances daily
     const now = new Date();
     const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
     const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
     
-    // Check if an entry already exists for this orderId + eventType today
+    // Check if a document already exists for this day's eventType
     const existingQ = query(
       collection(this.firestore, 'orderAccountingLedger'),
       where('companyId', '==', companyId),
       where('storeId', '==', storeId),
-      where('orderId', '==', orderId),
       where('eventType', '==', eventType),
       where('createdAt', '>=', startOfToday),
-      where('createdAt', '<=', endOfToday)
+      where('createdAt', '<=', endOfToday),
+      limit(1)
     );
 
     const existingSnaps = await getDocs(existingQ);
     
     if (!existingSnaps.empty) {
-      console.log(`⚠️ LedgerService: Entry already exists for orderId=${orderId}, eventType=${eventType} today. Skipping duplicate.`);
-      const existing = existingSnaps.docs[0].data() as any;
+      // Document exists for today - UPDATE it
+      const existingDoc = existingSnaps.docs[0];
+      const existing = existingDoc.data() as any;
+      
+      // Add new values to existing balances
+      const newBalanceAmount = Number(existing.runningBalanceAmount || 0) + amount;
+      const newBalanceQty = Number(existing.runningBalanceQty || 0) + qty;
+      const newOrderBalanceQty = Number(existing.runningBalanceOrderQty || 0) + 
+        (eventType === 'completed' ? qty : 0);
+      
+      const updateData = {
+        orderId, // Update to latest order ID
+        amount: Number(existing.amount || 0) + amount,
+        quantity: Number(existing.quantity || 0) + qty,
+        runningBalanceAmount: newBalanceAmount,
+        runningBalanceQty: newBalanceQty,
+        runningBalanceOrderQty: newOrderBalanceQty,
+        updatedAt: new Date(),
+        updatedBy: performedBy
+      };
+      
+      try {
+        await updateDoc(existingDoc.ref, updateData);
+      } catch (error) {
+        console.warn('⚠️ Failed to update ledger entry online:', error);
+        throw error;
+      }
+      
+      console.log(`✅ LedgerService: updated ${eventType} for order ${orderId}`);
+      
       return {
-        id: existingSnaps.docs[0].id,
-        runningBalanceAmount: existing.runningBalanceAmount,
-        runningBalanceQty: existing.runningBalanceQty,
-        runningBalanceOrderQty: existing.runningBalanceOrderQty,
-        duplicate: true
+        id: existingDoc.id,
+        runningBalanceAmount: newBalanceAmount,
+        runningBalanceQty: newBalanceQty,
+        runningBalanceOrderQty: newOrderBalanceQty,
+        updated: true
       };
     }
 
-    // Query latest ledger entry for this company/store/eventType from TODAY only
-    const q = query(
-      collection(this.firestore, 'orderAccountingLedger'),
-      where('companyId', '==', companyId),
-      where('storeId', '==', storeId),
-      where('eventType', '==', eventType),
-      where('createdAt', '>=', startOfToday),
-      orderBy('createdAt', 'desc'),
-      limit(1)
-    );
-
-    let latestBalanceAmount = 0;
-    let latestBalanceQty = 0;
-    let latestOrderBalanceQty = 0;
-
-    const snaps = await getDocs(q);
-    if (!snaps.empty) {
-      const latest = snaps.docs[0].data() as any;
-      latestBalanceAmount = Number(latest.runningBalanceAmount || 0);
-      latestBalanceQty = Number(latest.runningBalanceQty || 0);
-      latestOrderBalanceQty = Number(latest.runningBalanceOrderQty || 0);
-    }
-
-    // Always add new values to balances
-    const newBalanceAmount = latestBalanceAmount + amount;
-    const newBalanceQty = latestBalanceQty + qty;
-
-    // Only add to order-specific balance if eventType is 'completed'
-    const newOrderBalanceQty =
-      latestOrderBalanceQty + (eventType === 'completed' ? qty : 0);
+    // No document exists for today - CREATE new one
+    const newBalanceAmount = amount;
+    const newBalanceQty = qty;
+    const newOrderBalanceQty = eventType === 'completed' ? qty : 0;
 
     const newDoc = {
       companyId,
@@ -106,7 +120,9 @@ export class LedgerService {
       runningBalanceQty: newBalanceQty,
       runningBalanceOrderQty: newOrderBalanceQty,
       createdAt: new Date(),
-      createdBy: performedBy
+      createdBy: performedBy,
+      updatedAt: new Date(),
+      updatedBy: performedBy
     };
 
     const ref = doc(collection(this.firestore, 'orderAccountingLedger'));
@@ -114,25 +130,18 @@ export class LedgerService {
     try {
       await setDoc(ref, newDoc);
     } catch (error) {
-      console.warn('⚠️ Failed to record ledger entry online, trying offline mode:', error);
-      
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      const isNetworkError = errorMessage.includes('timeout') || 
-                            errorMessage.includes('network') || 
-                            errorMessage.includes('connection') ||
-                            !navigator.onLine;
-      
-      // Firestore's native offline persistence handles this automatically
+      console.warn('⚠️ Failed to create ledger entry online:', error);
       throw error;
     }
 
-    console.log(`✅ LedgerService: recorded ${eventType} for order ${orderId}`);
+    console.log(`✅ LedgerService: created ${eventType} for order ${orderId}`);
 
     return {
       id: ref.id,
       runningBalanceAmount: newBalanceAmount,
       runningBalanceQty: newBalanceQty,
-      runningBalanceOrderQty: newOrderBalanceQty
+      runningBalanceOrderQty: newOrderBalanceQty,
+      created: true
     };
   } catch (err) {
     console.error('LedgerService.recordEvent error', err);
@@ -142,22 +151,37 @@ export class LedgerService {
 
   /**
    * Get the latest running balances for 'order' eventType (or any provided eventType)
-   * Returns the SUM of all entries for the specified day (not running balance difference)
+   * Returns the runningBalanceAmount from the LATEST entry (cumulative total)
    */
   async getLatestOrderBalances(
     companyId: string,
     storeId: string,
     date: Date = new Date(),
-    eventType: 'completed' | 'returned' | 'refunded' | 'cancelled' | 'damaged' = 'completed'
+    eventType: 'completed' | 'returned' | 'refunded' | 'cancelled' | 'damaged' | 'unpaid' | 'recovered' = 'completed'
   ): Promise<{ runningBalanceAmount: number; runningBalanceQty: number; runningBalanceOrderQty: number }> {
     try {
-      console.log(`📊 LedgerService.getLatestOrderBalances called:`, { companyId, storeId, date: date.toISOString(), eventType });
       const startOfDay = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0, 0);
       const endOfDay = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59, 999);
       
-      console.log(`📊 Querying entries FROM ${startOfDay.toISOString()} TO ${endOfDay.toISOString()}`);
+      console.log(`📅 getLatestOrderBalances: eventType=${eventType}, companyId=${companyId}, storeId=${storeId}`);
+      console.log(`📅 Date range: ${startOfDay.toISOString()} to ${endOfDay.toISOString()}`);
       
-      // Query for ALL ledger entries within the specified day
+      // First, try a simpler query without date range to debug
+      if (eventType === 'unpaid' || eventType === 'recovered') {
+        const debugQ = query(
+          collection(this.firestore, 'orderAccountingLedger'),
+          where('eventType', '==', eventType),
+          limit(5)
+        );
+        const debugSnaps = await getDocs(debugQ);
+        console.log(`🔍 DEBUG: Found ${debugSnaps.docs.length} ${eventType} entries (no company/store/date filter)`);
+        debugSnaps.docs.forEach((doc, i) => {
+          const data = doc.data();
+          console.log(`🔍 DEBUG entry ${i}: companyId=${data['companyId']}, storeId=${data['storeId']}, amount=${data['runningBalanceAmount']}, createdAt=${data['createdAt']}`);
+        });
+      }
+      
+      // Query for the LATEST ledger entry within the specified day (ordered by createdAt desc, limit 1)
       const q = query(
         collection(this.firestore, 'orderAccountingLedger'),
         where('companyId', '==', companyId),
@@ -165,13 +189,82 @@ export class LedgerService {
         where('eventType', '==', eventType),
         where('createdAt', '>=', startOfDay),
         where('createdAt', '<=', endOfDay),
-        orderBy('createdAt', 'desc')
+        orderBy('createdAt', 'desc'),
+        limit(1)
       );
       
       const snaps = await getDocs(q);
-      console.log(`📊 Found ${snaps.docs.length} ledger entries for ${eventType} on ${date.toDateString()}`);
+      console.log(`📊 Found ${snaps.docs.length} ledger entries for ${eventType} on ${date.toLocaleDateString()}`);
       
-      // Sum up all entries for the day
+      // If no entries found for today, return zeros
+      if (snaps.empty) {
+        console.log(`📊 No ${eventType} entries found for today - returning zeros`);
+        return { runningBalanceAmount: 0, runningBalanceQty: 0, runningBalanceOrderQty: 0 };
+      }
+      
+      // Get the LATEST entry and use its running balance fields (cumulative totals)
+      const latestDoc = snaps.docs[0];
+      const d: any = latestDoc.data();
+      
+      const runningBalanceAmount = Number(d.runningBalanceAmount || 0);
+      const runningBalanceQty = Number(d.runningBalanceQty || 0);
+      const runningBalanceOrderQty = Number(d.runningBalanceOrderQty || 0);
+      
+      const docCreatedAt = d.createdAt?.toDate ? d.createdAt.toDate() : new Date(d.createdAt);
+      console.log(`📊 Latest entry: createdAt=${docCreatedAt.toISOString()}, runningBalanceAmount=${runningBalanceAmount}, runningBalanceOrderQty=${runningBalanceOrderQty}`);
+      
+      const result = {
+        runningBalanceAmount,
+        runningBalanceQty,
+        runningBalanceOrderQty
+      };
+      console.log(`📊 Returning cumulative totals for ${eventType}: amount=${runningBalanceAmount} (₱${runningBalanceAmount/100}), orderQty=${runningBalanceOrderQty}`);
+      return result;
+    } catch (err) {
+      console.warn('LedgerService.getLatestOrderBalances fallback', err);
+      return { runningBalanceAmount: 0, runningBalanceQty: 0, runningBalanceOrderQty: 0 };
+    }
+  }
+
+  /**
+   * Get totals for a date RANGE by summing all entries.
+   * Sums amount, qty, and orderQty from all entries in the range.
+   * - runningBalanceAmount = sum of amounts (revenue for completed)
+   * - runningBalanceOrderQty = sum of orderQty (total orders)
+   * - runningBalanceQty = sum of qty (total items)
+   */
+  async getOrderBalancesForRange(
+    companyId: string,
+    storeId: string,
+    startDate: Date,
+    endDate: Date,
+    eventType: 'completed' | 'returned' | 'refunded' | 'cancelled' | 'damaged' | 'unpaid' | 'recovered' = 'completed'
+  ): Promise<{ runningBalanceAmount: number; runningBalanceQty: number; runningBalanceOrderQty: number }> {
+    try {
+      console.log(`📅 getOrderBalancesForRange: ${startDate.toISOString()} to ${endDate.toISOString()}`);
+      console.log(`📅 Query params: companyId=${companyId}, storeId=${storeId}, eventType=${eventType}`);
+      
+      // Query for ALL ledger entries in the date range
+      const q = query(
+        collection(this.firestore, 'orderAccountingLedger'),
+        where('companyId', '==', companyId),
+        where('storeId', '==', storeId),
+        where('eventType', '==', eventType),
+        where('createdAt', '>=', startDate),
+        where('createdAt', '<=', endDate),
+        orderBy('createdAt', 'desc'),
+        limit(2000)
+      );
+      
+      const snaps = await getDocs(q);
+      console.log(`📊 Found ${snaps.docs.length} ledger entries for ${eventType} in range`);
+      
+      if (snaps.empty) {
+        console.log(`📊 No ${eventType} entries found for range - returning zeros`);
+        return { runningBalanceAmount: 0, runningBalanceQty: 0, runningBalanceOrderQty: 0 };
+      }
+      
+      // Sum up all entries in the range
       let totalAmount = 0;
       let totalQty = 0;
       let totalOrderQty = 0;
@@ -179,16 +272,16 @@ export class LedgerService {
       snaps.docs.forEach((doc, idx) => {
         const d: any = doc.data();
         const amount = Number(d.amount || 0);
-        const qty = Number(d.qty || 1);
+        const qty = Number(d.qty || d.quantity || 1);
         const orderQty = Number(d.orderQty || 1);
         
         totalAmount += amount;
         totalQty += qty;
         totalOrderQty += orderQty;
         
-        if (idx < 3) { // Log first 3 for debugging
+        if (idx < 5) {
           const docCreatedAt = d.createdAt?.toDate ? d.createdAt.toDate() : new Date(d.createdAt);
-          console.log(`📊 Entry ${idx + 1}: createdAt=${docCreatedAt.toISOString()}, amount=${amount}, orderQty=${orderQty}`);
+          console.log(`📊 Entry ${idx + 1}: date=${docCreatedAt.toLocaleDateString()}, amount=${amount}, orderQty=${orderQty}, qty=${qty}`);
         }
       });
       
@@ -197,9 +290,10 @@ export class LedgerService {
         runningBalanceQty: totalQty,
         runningBalanceOrderQty: totalOrderQty
       };
+      console.log(`📊 Range totals for ${eventType}: revenue=₱${totalAmount/100}, orders=${totalOrderQty}, items=${totalQty}`);
       return result;
     } catch (err) {
-      console.warn('LedgerService.getLatestOrderBalances fallback', err);
+      console.warn('LedgerService.getOrderBalancesForRange error', err);
       return { runningBalanceAmount: 0, runningBalanceQty: 0, runningBalanceOrderQty: 0 };
     }
   }

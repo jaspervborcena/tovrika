@@ -1,4 +1,4 @@
-import { Component, inject, computed } from '@angular/core';
+import { Component, inject, computed, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink, Router } from '@angular/router';
 import { AuthService } from '../../services/auth.service';
@@ -22,6 +22,9 @@ export class HomeComponent {
   readonly isAuthenticated = this.authService.isAuthenticated;
   readonly currentUser = this.authService.currentUser;
   readonly userRole = this.authService.userRole;
+  
+  // User menu state
+  protected isUserMenuOpen = signal<boolean>(false);
   
   // Expose app constants and network status to template
   readonly isOnline = this.networkService.isOnline;
@@ -51,8 +54,17 @@ export class HomeComponent {
       this.router.navigate(['/dashboard']);
     }
   }
+  
+  protected toggleUserMenu() {
+    this.isUserMenuOpen.set(!this.isUserMenuOpen());
+  }
+  
+  protected closeUserMenu() {
+    this.isUserMenuOpen.set(false);
+  }
 
   async logout() {
+    this.closeUserMenu();
     await this.authService.logout();
   }
 

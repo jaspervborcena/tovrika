@@ -60,6 +60,9 @@ export class OrderService {
       logoUrl: data.logoUrl,
       date: toDateValue(data.date) ?? toDateValue(data.createdAt) ?? new Date(),
       
+      // Table Information
+      tableNumber: data.tableNumber || '',
+      
       // Payment Information
       paymentMethod: data.paymentMethod || data.payment || 'cash',
       cashAmount: data.cashAmount || 0,
@@ -284,6 +287,114 @@ export class OrderService {
       // If no search query, return recent orders
       if (!searchLower) {
         return await this.getRecentOrders(companyId, storeId, 20);
+      }
+      
+      // If the search query looks like a status value, search by status as well
+      const statusMap: Record<string, string> = {
+        // Map common text to stored status field values
+        'open': 'open',
+        'unpaid': 'unpaid',
+        'completed': 'completed',
+        'paid': 'completed',
+        'cancelled': 'cancelled',
+        'canceled': 'cancelled',
+        'returned': 'returned',
+        'return': 'returned',
+        'refunded': 'refunded',
+        'refund': 'refunded',
+        'damaged': 'damaged',
+        'damage': 'damaged'
+      };
+
+      // Map to statusTags values (note: OPEN is uppercase in initial docs)
+      const statusTagMap: Record<string, string> = {
+        'open': 'OPEN',
+        'unpaid': 'unpaid',
+        'completed': 'completed',
+        'paid': 'completed',
+        'cancelled': 'cancelled',
+        'canceled': 'cancelled',
+        'returned': 'returned',
+        'return': 'returned',
+        'refunded': 'refunded',
+        'refund': 'refunded',
+        'damaged': 'damage',
+        'damage': 'damage'
+      };
+
+      const statusFromQuery = statusMap[searchLower];
+      const statusTagFromQuery = statusTagMap[searchLower];
+
+      if (statusFromQuery) {
+        // 4a. Direct status field search
+        try {
+          let statusQuery;
+          if (storeId) {
+            statusQuery = query(
+              ordersRef,
+              where('companyId', '==', companyId),
+              where('storeId', '==', storeId),
+              where('status', '==', statusFromQuery),
+              limit(20)
+            );
+          } else {
+            statusQuery = query(
+              ordersRef,
+              where('companyId', '==', companyId),
+              where('status', '==', statusFromQuery),
+              limit(20)
+            );
+          }
+
+          const statusSnapshot = await getDocs(statusQuery);
+          const statusResults = statusSnapshot.docs.map(d => this.transformDoc(d));
+
+          statusResults.forEach(order => {
+            if (!results.find(r => r.id === order.id)) {
+              results.push(order);
+            }
+          });
+
+          this.logger.info('Status-based search result', { area: 'orders', payload: { status: statusFromQuery, count: statusResults.length } });
+        } catch (statusError) {
+          this.logger.warn('Status-based search failed', { area: 'orders', payload: { status: statusFromQuery, error: String(statusError) } });
+        }
+
+        // 4b. statusTags array search (e.g., statusTags: ['OPEN', 'unpaid'])
+        if (statusTagFromQuery) {
+          try {
+            let tagQuery;
+            if (storeId) {
+              tagQuery = query(
+                ordersRef,
+                where('companyId', '==', companyId),
+                where('storeId', '==', storeId),
+                where('statusTags', 'array-contains', statusTagFromQuery),
+                limit(20)
+              );
+            } else {
+              tagQuery = query(
+                ordersRef,
+                where('companyId', '==', companyId),
+                where('statusTags', 'array-contains', statusTagFromQuery),
+                limit(20)
+              );
+            }
+
+            const tagSnapshot = await getDocs(tagQuery);
+            const tagResults = tagSnapshot.docs.map(d => this.transformDoc(d));
+
+            tagResults.forEach(order => {
+              if (!results.find(r => r.id === order.id)) {
+                results.push(order);
+              }
+            });
+
+            this.logger.info('statusTags-based search result', { area: 'orders', payload: { statusTag: statusTagFromQuery, count: tagResults.length } });
+          } catch (tagError) {
+            this.logger.warn('statusTags-based search failed', { area: 'orders', payload: { statusTag: statusTagFromQuery, error: String(tagError) } });
+          }
+        }
       }
       
       // Search strategies: try multiple fields for comprehensive search
@@ -752,6 +863,42 @@ public async restockOrderAndInventoryTransactional(orderId: string, performedBy 
     throw err;
   }
 }
+
+  /**
+   * Count completed orders for a store within a date range
+   */
+  async countCompletedOrders(storeId: string, startDate: Date, endDate: Date): Promise<number> {
+    try {
+      console.log(`📊 countCompletedOrders: storeId=${storeId}, start=${startDate.toISOString()}, end=${endDate.toISOString()}`);
+      
+      const ordersRef = collection(this.firestore, 'orders');
+      const q = query(
+        ordersRef,
+        where('storeId', '==', storeId),
+        where('status', '==', 'completed'),
+        where('createdAt', '>=', startDate),
+        where('createdAt', '<=', endDate)
+      );
+      
+      const snapshot = await getDocs(q);
+      const count = snapshot.docs.length;
+      
+      // Log first few docs for debugging
+      if (snapshot.docs.length > 0) {
+        snapshot.docs.slice(0, 3).forEach((doc, i) => {
+          const data = doc.data();
+          const createdAt = data['createdAt']?.toDate ? data['createdAt'].toDate() : data['createdAt'];
+          console.log(`📊 Order ${i + 1}: id=${doc.id}, status=${data['status']}, createdAt=${createdAt}`);
+        });
+      }
+      
+      console.log(`📊 Completed orders count for ${storeId}: ${count} (${startDate.toLocaleDateString()} - ${endDate.toLocaleDateString()})`);
+      return count;
+    } catch (err) {
+      console.error('Error counting completed orders:', err);
+      return 0;
+    }
+  }
 
   async getOrdersByDateRange(storeId: string, startDate: Date, endDate: Date): Promise<Order[]> {
     try {

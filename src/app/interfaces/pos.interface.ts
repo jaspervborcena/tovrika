@@ -41,6 +41,9 @@ export interface Order {
   logoUrl?: string;
   date?: Date;
   
+  // Table Information
+  tableNumber?: string;
+  
   // Company Information
   companyName?: string;
   companyAddress?: string;
@@ -81,7 +84,7 @@ export interface OrderAccountingLedger {
   // Event type describing the kind of ledger entry
   eventType: 'order' | 'returned' | 'refunded' | 'cancelled' | 'damaged';
 
-  // Monetary and quantity impact of this event
+  // Monetary and quantity impact of this event (cumulative for the day)
   amount: number;
   quantity: number;
 
@@ -94,6 +97,8 @@ export interface OrderAccountingLedger {
   // Audit fields
   createdAt: Date;
   createdBy?: string;
+  updatedAt: Date;
+  updatedBy?: string;
 }
 
 export interface OrderDetail {

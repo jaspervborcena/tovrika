@@ -980,6 +980,298 @@ async markOrderTrackingDamaged(orderId: string, damagedBy?: string, reason?: str
   return { created, errors, createdIds };
 }
 
+/**
+ * Create unpaid tracking entries directly from order items.
+ * Also records the unpaid ledger entry.
+ */
+async createUnpaidTrackingFromOrder(
+  orderId: string,
+  companyId: string,
+  storeId: string,
+  items: Array<{
+    productId: string;
+    productName?: string;
+    productCode?: string;
+    sku?: string;
+    quantity: number;
+    price: number;
+    total: number;
+  }>,
+  unpaidBy?: string,
+  reason?: string
+): Promise<{ created: number; errors: any[]; createdIds?: string[] }> {
+  const errors: any[] = [];
+  let created = 0;
+  const createdIds: string[] = [];
+  let totalAmount = 0;
+  let totalQuantity = 0;
+
+  console.log(`createUnpaidTrackingFromOrder: creating unpaid tracking for order ${orderId} with ${items.length} items`);
+  console.log(`createUnpaidTrackingFromOrder: companyId=${companyId}, storeId=${storeId}`);
+  let idx = 0;
+  for (const item of items) {
+    try {
+      totalAmount += Number(item.total || 0);
+      totalQuantity += Number(item.quantity || 0);
+
+      const now = new Date();
+      const newDoc: any = {
+        companyId,
+        storeId,
+        orderId,
+        batchNumber: 1,
+        itemIndex: idx,
+        productId: item.productId,
+        productName: item.productName,
+        productCode: item.productCode,
+        sku: item.sku,
+        price: item.price,
+        quantity: item.quantity,
+        total: item.total,
+        uid: unpaidBy || 'system',
+        cashierId: unpaidBy || 'system',
+        status: 'unpaid',
+        createdAt: now,
+        createdBy: unpaidBy || 'system',
+        updatedAt: now,
+        updatedBy: unpaidBy || 'system'
+      };
+      if (reason) newDoc.updateReason = reason;
+
+      const colRef = collection(this.firestore, 'ordersSellingTracking');
+      const ref = doc(colRef as any);
+      const payload = this.sanitizeForFirestore(newDoc);
+      console.log(`createUnpaidTrackingFromOrder: creating unpaid doc for item ${idx} -> newId=${ref.id}`);
+      await setDoc(ref as any, payload as any);
+      createdIds.push(ref.id);
+      created++;
+      idx++;
+    } catch (e) {
+      console.error(`createUnpaidTrackingFromOrder: error creating unpaid doc for item ${idx}`, e);
+      const errMsg = (e && (e as any).message) ? (e as any).message : String(e);
+      errors.push({ id: `item-${idx}`, error: errMsg });
+      idx++;
+    }
+  }
+
+  // Record ledger event once for the whole order total
+  if (created > 0) {
+    try {
+      await this.ledgerService.recordEvent(
+        companyId,
+        storeId,
+        orderId,
+        'unpaid' as any,
+        totalAmount,
+        totalQuantity,
+        unpaidBy || 'system'
+      );
+      console.log(`createUnpaidTrackingFromOrder: ledger unpaid recorded for order ${orderId}, amount=${totalAmount}, qty=${totalQuantity}`);
+    } catch (ledgerErr) {
+      console.warn('createUnpaidTrackingFromOrder: ledger recordEvent failed', ledgerErr);
+    }
+  }
+
+  console.log(`Unpaid tracking created for order ${orderId}: created=${created}, errors=${errors.length}`);
+  return { created, errors, createdIds };
+}
+
+/**
+ * Mark order tracking as 'unpaid'.
+ * Creates new tracking docs with status 'unpaid' from existing 'completed' or 'processing' items.
+ * @deprecated Use createUnpaidTrackingFromOrder instead for direct creation from order items
+ */
+async markOrderTrackingUnpaid(orderId: string, unpaidBy?: string, reason?: string): Promise<{ created: number; errors: any[]; createdIds?: string[] }> {
+  const errors: any[] = [];
+  let created = 0;
+  const createdIds: string[] = [];
+  let totalAmount = 0;
+  let totalQuantity = 0;
+  let firstCompanyId = '';
+  let firstStoreId = '';
+  
+  try {
+    const q = query(collection(this.firestore, 'ordersSellingTracking'), where('orderId', '==', orderId));
+    const snaps = await getDocs(q as any);
+
+    console.log(`markOrderTrackingUnpaid: found ${snaps.docs.length} tracking docs for order ${orderId}`);
+    for (const s of snaps.docs) {
+      const data: any = s.data() || {};
+      const status = (data.status || '').toString().toLowerCase();
+      console.log(`markOrderTrackingUnpaid: doc=${s.id} status=${status}`);
+      // Create unpaid copies for completed or processing items
+      if (status !== 'completed' && status !== 'processing') continue;
+
+      // Track totals for single ledger entry
+      if (!firstCompanyId) firstCompanyId = data.companyId;
+      if (!firstStoreId) firstStoreId = data.storeId;
+      totalAmount += Number(data.total || 0);
+      totalQuantity += Number(data.quantity || 0);
+
+      const now = new Date();
+      const newDoc: any = {
+        companyId: data.companyId || undefined,
+        storeId: data.storeId || undefined,
+        orderId: data.orderId || orderId,
+        batchNumber: data.batchNumber || 1,
+        itemIndex: data.itemIndex ?? 0,
+        orderDetailsId: data.orderDetailsId || undefined,
+        productId: data.productId,
+        productName: data.productName,
+        productCode: data.productCode,
+        sku: data.sku,
+        price: data.price,
+        quantity: data.quantity,
+        total: data.total,
+        uid: data.uid || data.createdBy || undefined,
+        cashierId: data.cashierId || data.createdBy || undefined,
+        status: 'unpaid',
+        createdAt: now,
+        createdBy: unpaidBy || data.updatedBy || data.createdBy || 'system',
+        updatedAt: now,
+        updatedBy: unpaidBy || data.updatedBy || data.createdBy || 'system'
+      };
+      if (reason) newDoc.updateReason = reason;
+
+      try {
+        const colRef = collection(this.firestore, 'ordersSellingTracking');
+        const ref = doc(colRef as any);
+        const payload = this.sanitizeForFirestore(newDoc);
+        console.log(`markOrderTrackingUnpaid: creating unpaid doc for tracking=${s.id} -> newId=${ref.id}`);
+        await setDoc(ref as any, payload as any);
+        createdIds.push(ref.id);
+        created++;
+        console.log(`markOrderTrackingUnpaid: success created=${created}, pushed id=${ref.id}`);
+      } catch (e) {
+        console.error(`markOrderTrackingUnpaid: error creating unpaid doc for tracking=${s.id}`, e);
+        const errMsg = (e && (e as any).message) ? (e as any).message : String(e);
+        errors.push({ id: s.id, error: errMsg });
+      }
+    }
+
+    // Record ledger event once for the whole order total (like completed does)
+    if (created > 0 && firstCompanyId && firstStoreId) {
+      try {
+        await this.ledgerService.recordEvent(
+          firstCompanyId, 
+          firstStoreId, 
+          orderId, 
+          'unpaid' as any, 
+          totalAmount, 
+          totalQuantity, 
+          unpaidBy || 'system'
+        );
+        console.log(`markOrderTrackingUnpaid: ledger unpaid recorded for order ${orderId}, amount=${totalAmount}, qty=${totalQuantity}`);
+      } catch (ledgerErr) {
+        console.warn('markOrderTrackingUnpaid: ledger recordEvent failed', ledgerErr);
+      }
+    }
+  } catch (e) {
+    errors.push({ id: 'query', error: e });
+  }
+
+  console.log(`Unpaid process completed for order ${orderId}: created=${created}, errors=${errors.length}`);
+  return { created, errors, createdIds };
+}
+
+/**
+ * Mark order tracking as 'recovered'.
+ * Creates new tracking docs with status 'recovered' from existing 'unpaid' items.
+ * Called when an unpaid order is paid.
+ */
+async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?: string): Promise<{ created: number; errors: any[]; createdIds?: string[] }> {
+  const errors: any[] = [];
+  let created = 0;
+  const createdIds: string[] = [];
+  let totalAmount = 0;
+  let totalQuantity = 0;
+  let firstCompanyId = '';
+  let firstStoreId = '';
+
+  try {
+    const q = query(collection(this.firestore, 'ordersSellingTracking'), where('orderId', '==', orderId));
+    const snaps = await getDocs(q as any);
+
+    console.log(`markOrderTrackingRecovered: found ${snaps.docs.length} tracking docs for order ${orderId}`);
+    for (const s of snaps.docs) {
+      const data: any = s.data() || {};
+      const status = (data.status || '').toString().toLowerCase();
+      console.log(`markOrderTrackingRecovered: doc=${s.id} status=${status}`);
+      // Only create recovered copies for unpaid items
+      if (status !== 'unpaid') continue;
+
+      // Track totals for single ledger entry
+      if (!firstCompanyId) firstCompanyId = data.companyId;
+      if (!firstStoreId) firstStoreId = data.storeId;
+      totalAmount += Number(data.total || 0);
+      totalQuantity += Number(data.quantity || 0);
+
+      const now = new Date();
+      const newDoc: any = {
+        companyId: data.companyId || undefined,
+        storeId: data.storeId || undefined,
+        orderId: data.orderId || orderId,
+        batchNumber: data.batchNumber || 1,
+        itemIndex: data.itemIndex ?? 0,
+        orderDetailsId: data.orderDetailsId || undefined,
+        productId: data.productId,
+        productName: data.productName,
+        productCode: data.productCode,
+        sku: data.sku,
+        price: data.price,
+        quantity: data.quantity,
+        total: data.total,
+        uid: data.uid || data.createdBy || undefined,
+        cashierId: data.cashierId || data.createdBy || undefined,
+        status: 'recovered',
+        createdAt: now,
+        createdBy: recoveredBy || data.updatedBy || data.createdBy || 'system',
+        updatedAt: now,
+        updatedBy: recoveredBy || data.updatedBy || data.createdBy || 'system'
+      };
+      if (reason) newDoc.updateReason = reason;
+
+      try {
+        const colRef = collection(this.firestore, 'ordersSellingTracking');
+        const ref = doc(colRef as any);
+        const payload = this.sanitizeForFirestore(newDoc);
+        console.log(`markOrderTrackingRecovered: creating recovered doc for tracking=${s.id} -> newId=${ref.id}`);
+        await setDoc(ref as any, payload as any);
+        createdIds.push(ref.id);
+        created++;
+        console.log(`markOrderTrackingRecovered: success created=${created}, pushed id=${ref.id}`);
+      } catch (e) {
+        console.error(`markOrderTrackingRecovered: error creating recovered doc for tracking=${s.id}`, e);
+        const errMsg = (e && (e as any).message) ? (e as any).message : String(e);
+        errors.push({ id: s.id, error: errMsg });
+      }
+    }
+
+    // Record ledger event once for the whole order total (like completed does)
+    if (created > 0 && firstCompanyId && firstStoreId) {
+      try {
+        await this.ledgerService.recordEvent(
+          firstCompanyId, 
+          firstStoreId, 
+          orderId, 
+          'recovered' as any, 
+          totalAmount, 
+          totalQuantity, 
+          recoveredBy || 'system'
+        );
+        console.log(`markOrderTrackingRecovered: ledger recovered recorded for order ${orderId}, amount=${totalAmount}, qty=${totalQuantity}`);
+      } catch (ledgerErr) {
+        console.warn('markOrderTrackingRecovered: ledger recordEvent failed', ledgerErr);
+      }
+    }
+  } catch (e) {
+    errors.push({ id: 'query', error: e });
+  }
+
+  console.log(`Recovered process completed for order ${orderId}: created=${created}, errors=${errors.length}`);
+  return { created, errors, createdIds };
+}
+
   /**
    * Remove undefined fields from object (Firestore rejects undefined values)
    */
@@ -1418,7 +1710,6 @@ async markOrderTrackingDamaged(orderId: string, damagedBy?: string, reason?: str
       }
 
       const productSnaps: any = await getDocs(productsQ as any);
-      console.log(`getTopProductsCompletedCounts: fetched ${productSnaps?.docs?.length || 0} products for company=${companyId} store=${storeId || 'ALL'}`);
       const results: { productId: string; productName: string; skuId: string; completedCount: number }[] = [];
 
       for (const p of productSnaps.docs) {
@@ -1470,6 +1761,81 @@ async markOrderTrackingDamaged(orderId: string, damagedBy?: string, reason?: str
       return results;
     } catch (err) {
       console.warn('getTopProductsCompletedCounts error', err);
+      return [];
+    }
+  }
+
+  async getTopProductsCounts(companyId: string, storeId: string, limit: number, date: Date = new Date()): Promise<any[]> {
+    try {
+      // Calculate start and end of the specified date
+      const startOfDay = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0, 0);
+      const endOfDay = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59, 999);
+      
+      console.log(`getTopProductsCounts: querying for date ${startOfDay.toISOString()} to ${endOfDay.toISOString()}`);
+      
+      // Query ordersSellingTracking filtered by company, store, status=completed, and date
+      let q: any;
+      if (storeId && storeId !== 'all') {
+        q = query(
+          collection(this.firestore, 'ordersSellingTracking'),
+          where('companyId', '==', companyId),
+          where('storeId', '==', storeId),
+          where('status', '==', 'completed'),
+          where('createdAt', '>=', startOfDay),
+          where('createdAt', '<=', endOfDay)
+        );
+      } else {
+        q = query(
+          collection(this.firestore, 'ordersSellingTracking'),
+          where('companyId', '==', companyId),
+          where('status', '==', 'completed'),
+          where('createdAt', '>=', startOfDay),
+          where('createdAt', '<=', endOfDay)
+        );
+      }
+      
+      const snaps = await getDocs(q);
+      console.log(`getTopProductsCounts: found ${snaps.docs.length} tracking records`);
+      
+      // Group by productId and sum quantities
+      const productMap = new Map<string, { productId: string; productName: string; skuId: string; totalQty: number }>();
+      
+      snaps.docs.forEach(doc => {
+        const data: any = doc.data();
+        const productId = data.productId || '';
+        const productName = data.productName || data.name || '';
+        const skuId = data.skuId || data.sku || '';
+        const quantity = Number(data.quantity || data.qty || 1);
+        
+        if (productId) {
+          const existing = productMap.get(productId);
+          if (existing) {
+            existing.totalQty += quantity;
+            // Update name/sku if not set
+            if (!existing.productName && productName) existing.productName = productName;
+            if (!existing.skuId && skuId) existing.skuId = skuId;
+          } else {
+            productMap.set(productId, { productId, productName, skuId, totalQty: quantity });
+          }
+        }
+      });
+      
+      // Convert to array, filter out 0 qty, sort by totalQty desc, and limit
+      const results = Array.from(productMap.values())
+        .filter(p => p.totalQty > 0)
+        .sort((a, b) => b.totalQty - a.totalQty)
+        .slice(0, limit)
+        .map(p => ({
+          productId: p.productId,
+          productName: p.productName,
+          skuId: p.skuId,
+          count: p.totalQty
+        }));
+      
+      console.log(`getTopProductsCounts: returning ${results.length} products`);
+      return results;
+    } catch (err) {
+      console.warn('getTopProductsCounts error', err);
       return [];
     }
   }

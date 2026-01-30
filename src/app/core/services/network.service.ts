@@ -39,10 +39,8 @@ export class NetworkService {
           const isConnected = !snapshot.metadata.fromCache;
           
           if (isConnected) {
-            console.log('🌐 Firestore: Connected to server (ONLINE)');
             this.updateNetworkStatus(true);
           } else {
-            console.log('📴 Firestore: Reading from cache (OFFLINE)');
             this.updateNetworkStatus(false);
           }
         },
@@ -52,8 +50,6 @@ export class NetworkService {
           this.updateNetworkStatus(false);
         }
       );
-      
-      console.log('✅ Firestore connection monitor initialized (SOURCE OF TRUTH)');
     } catch (error) {
       console.error('❌ Failed to initialize Firestore connection monitor:', error);
       // Fallback to navigator.onLine if Firestore monitoring fails
@@ -82,7 +78,6 @@ export class NetworkService {
   private updateNetworkStatus(isOnline: boolean): void {
     const currentStatus = this.isOnlineSignal();
     if (currentStatus !== isOnline) {
-      console.log(`🔄 Network: Status changed from ${currentStatus ? 'ONLINE' : 'OFFLINE'} to ${isOnline ? 'ONLINE' : 'OFFLINE'}`);
       this.isOnlineSignal.set(isOnline);
     }
   }

@@ -1,6 +1,6 @@
-import { Component, OnInit, AfterViewInit, OnDestroy, HostListener, ViewChild, ElementRef, computed, signal, inject } from '@angular/core';
-import { Firestore, doc, getDoc, collection, query, where } from '@angular/fire/firestore';
-import { getDocs, onSnapshot } from 'firebase/firestore';
+import { Component, OnInit, AfterViewInit, OnDestroy, HostListener, ViewChild, ElementRef, computed, signal, inject, ChangeDetectorRef } from '@angular/core';
+import { Firestore, doc, getDoc, getDocs, updateDoc, collection, query, where } from '@angular/fire/firestore';
+import { onSnapshot } from 'firebase/firestore';
 import { ProductStatus } from '../../../interfaces/product.interface';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -75,6 +75,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   private firestore = inject(Firestore);
   private router = inject(Router);
   private sanitizer = inject(DomSanitizer);
+  private cdr = inject(ChangeDetectorRef);
 
   private routerSubscription: any;
   private inventorySnapshotUnsubscribe?: (() => void) | null = null; // Firestore snapshot listener cleanup
@@ -103,15 +104,11 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   readonly Math = Math;
 
   constructor() {
-    console.log('🏗️ POS COMPONENT: Constructor called - Component is being created!');
-    console.log('🏗️ POS COMPONENT: Constructor timestamp:', new Date().toISOString());
     
     // Listen for navigation events
     this.routerSubscription = this.router.events.subscribe(event => {
       if (event instanceof NavigationEnd) {
-        console.log('🔄 Navigation event detected - URL:', event.url);
         if (event.url === '/pos') {
-          console.log('🎯 Navigation to POS detected - Reinitializing component');
           // Force reinitialize when navigating to POS
           setTimeout(() => this.reinitializeComponent(), 100);
         }
@@ -151,10 +148,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   readonly availableStores = computed(() => {
     const stores = this.storesSignal();
     
-    console.log('🏪 availableStores computed - Stores from storesSignal:', stores.length, 'stores');
-    
     if (stores.length === 0) {
-      console.warn('⚠️ No stores available - storesSignal is empty');
       return [];
     }
     
@@ -174,12 +168,10 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   
   readonly products = computed(() => {
     const prods = this.productService.getProductsSignal()();
-    console.log('🔍 PRODUCTS COMPUTED - Count:', prods.length);
     
     // Check for missing required fields in products
     if (prods.length > 0) {
       const sampleProduct = prods[0];
-      console.log('🔍 Sample product structure:', sampleProduct);
       
       const requiredFields = ['uid', 'productName', 'skuId', 'unitType', 'category', 'companyId', 'storeId', 'isVatApplicable', 'hasDiscount', 'discountType'];
       const missingFields = requiredFields.filter(field => 
@@ -190,8 +182,6 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       
       if (missingFields.length > 0) {
         console.warn('⚠️ Missing or empty required fields in products:', missingFields);
-      } else {
-        console.log('✅ All required fields present in products');
       }
     }
     
@@ -203,9 +193,6 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     const allProducts = this.products();
     const categorySet = new Set(allProducts.map(p => p.category).filter(cat => cat && cat.trim()));
     const cats = Array.from(categorySet).sort();
-    
-    const storeId = this.selectedStoreId();
-    console.log('🔍 CATEGORIES COMPUTED - Total products:', allProducts.length, 'Store:', storeId, 'Categories count:', cats.length, 'Categories:', cats);
     
     return cats;
   });
@@ -249,7 +236,6 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   readonly hasProductsWithTags = computed(() => {
     const filtered = this.filteredProducts();
     const hasTags = filtered.some(product => product.tagLabels && product.tagLabels.length > 0);
-    console.log('🏷️ Has products with tags:', hasTags, 'Total filtered products:', filtered.length);
     return hasTags;
   });
   
@@ -426,9 +412,11 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   
   // Payment Dialog State
   readonly paymentModalVisible = signal<boolean>(false);
+  readonly payingForExistingOrder = signal<any | null>(null); // Tracks if paying for existing OPEN order
   paymentAmountTendered: number = 0;
   paymentDescription: string = '';
   paymentType: string = 'Cash';
+  tableNumber: string = '';
 
   // Cart Information Dialog State
   readonly cartInformationModalVisible = signal<boolean>(false);
@@ -453,10 +441,8 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
         return;
       }
       
-      console.log('📋 Generating invoice preview for store:', storeId);
       const previewInvoice = await this.invoiceService.getNextInvoiceNumberPreview(storeId);
       
-      console.log('📋 Invoice preview generated:', previewInvoice, this.networkService.isOnline() ? '(online)' : '(offline)');
       this.nextInvoiceNumber.set(previewInvoice);
       this.invoiceNumber = previewInvoice;
     } catch (error) {
@@ -472,8 +458,6 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     const allProducts = this.products();
     const storeId = this.selectedStoreId();
     const stores = this.availableStores();
-    
-    console.log('🔍 FILTERING START - Total products:', allProducts.length);
 
     let filtered = allProducts;
 
@@ -486,7 +470,6 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
         const included = belongsToStore || isGlobalProduct;
         
         if (!included && p.storeId) {
-          console.log('🔍 Product filtered out:', p.productName, 'productStoreId:', p.storeId, 'selectedStoreId:', storeId);
         }
         
         return included;
@@ -495,11 +478,8 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       // If no specific store selected but stores available, use all store products
       const storeIds = stores.map(s => s.id).filter(Boolean);
       filtered = allProducts.filter(p => !p.storeId || storeIds.includes(p.storeId));
-      
-      console.log('🔍 No specific store - using all available stores:', storeIds);
     } else {
       // No stores available - show all products (fallback)
-      console.log('🔍 No stores available - showing all products as fallback');
     }
 
     // Filter by category
@@ -638,7 +618,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   readonly showReceiptPanel = computed(() => this.showReceiptPanelSignal());
   
   // Access tabs for POS management
-  readonly accessTabs = ['New', 'Orders', 'Cancelled', 'Returns', 'Refunds', 'Damage', 'Split Payments', 'Discounts & Promotions'] as const;
+  readonly accessTabs = ['New', 'Orders', 'Open', 'Cancelled', 'Returns', 'Refunds', 'Damage', 'Unpaid', 'Recovered', 'Split Payments', 'Discounts & Promotions'] as const;
   private accessTabSignal = signal<string>('New');
   readonly accessTab = computed(() => this.accessTabSignal());
   
@@ -650,10 +630,13 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     const tabKeyMap: { [key: string]: string } = {
       'New': 'pos.newTab',
       'Orders': 'pos.ordersTab',
+      'Open': 'pos.openTab',
       'Cancelled': 'pos.cancelledTab',
       'Returns': 'pos.returnsTab',
       'Refunds': 'pos.refundsTab',
       'Damage': 'pos.damageTab',
+      'Unpaid': 'pos.unpaidTab',
+      'Recovered': 'pos.recoveredTab',
       'Split Payments': 'pos.splitPaymentsTab',
       'Discounts & Promotions': 'pos.discountsTab'
     };
@@ -675,8 +658,17 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     
     console.log('🔍 Filtering orders for tab:', tab, 'Total orders:', allOrders.length);
     
-    if (tab === 'New' || tab === 'Orders') {
-      return allOrders;
+    // New tab shows nothing (for creating new orders)
+    if (tab === 'New') {
+      return [];
+    }
+    
+    // Orders tab shows closed orders (completed + unpaid)
+    if (tab === 'Orders') {
+      return allOrders.filter(order => {
+        const status = (order.status || '').toString().toLowerCase();
+        return status === 'completed' || status === 'unpaid';
+      });
     }
     
     const filtered = allOrders.filter(order => {
@@ -697,6 +689,10 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       let matches = false;
       
       switch (tab) {
+        case 'Open':
+          // Only show orders with current status OPEN (not historical)
+          matches = order.status?.toLowerCase() === 'open';
+          break;
         case 'Cancelled':
           matches = hasStatusInHistory('cancelled');
           break;
@@ -708,6 +704,13 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
           break;
         case 'Damage':
           matches = hasStatusInHistory('damage') || hasStatusInHistory('damaged');
+          break;
+        case 'Unpaid':
+          // Only show orders with current status 'unpaid', exclude recovered orders
+          matches = order.status?.toLowerCase() === 'unpaid';
+          break;
+        case 'Recovered':
+          matches = order.status?.toLowerCase() === 'recovered' || hasStatusInHistory('recovered');
           break;
         case 'Split Payments':
           // Orders with both cash and charge payments
@@ -771,6 +774,24 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   readonly isOrderDamaged = computed(() => {
     const s = (this.selectedOrder()?.status || '').toString().toLowerCase();
     return s === 'damaged';
+  });
+
+  readonly isOrderOpen = computed(() => {
+    const order = this.selectedOrder();
+    const s = (order?.status || '').toString().toLowerCase();
+    const isOpen = s === 'open';
+    console.log('🔍 isOrderOpen check:', { status: order?.status, isOpen, currentTab: this.accessTab() });
+    return isOpen;
+  });
+
+  readonly isOrderUnpaid = computed(() => {
+    const s = (this.selectedOrder()?.status || '').toString().toLowerCase();
+    return s === 'unpaid';
+  });
+
+  readonly isOrderRecovered = computed(() => {
+    const s = (this.selectedOrder()?.status || '').toString().toLowerCase();
+    return s === 'recovered';
   });
 
   // Lock actions (Cancel / Manage Item Status) when order is in any final/adjusted state.
@@ -948,7 +969,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     this.accessTabSignal.set(tab);
     
     // When any order-related tab is activated, ensure orders are loaded
-    const orderRelatedTabs = ['Orders', 'Cancelled', 'Returns', 'Refunds', 'Damage', 'Split Payments', 'Discounts & Promotions'];
+    const orderRelatedTabs = ['Orders', 'Open', 'Cancelled', 'Returns', 'Refunds', 'Damage', 'Unpaid', 'Recovered', 'Split Payments', 'Discounts & Promotions'];
     if (orderRelatedTabs.includes(tab)) {
       // Only load if we don't have orders yet
       if (this.ordersSignal().length === 0) {
@@ -1186,11 +1207,674 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   // (Removed debug-only createTestOrder method)
 
   openOrder(order: any): void {
+    console.log('📋 Opening order:', { id: order.id, status: order.status, invoiceNumber: order.invoiceNumber });
     this.selectedOrderSignal.set(order);
   }
 
   closeOrder(): void {
     this.selectedOrderSignal.set(null);
+  }
+
+  // Handle "Update Order" button for OPEN orders - loads order back into cart for editing
+  async updateOpenOrder(): Promise<void> {
+    const order = this.selectedOrder();
+    if (!order) {
+      console.warn('No order selected');
+      return;
+    }
+
+    try {
+      // Fetch orderDetails documents for this order
+      const orderDetailsQuery = query(
+        collection(this.firestore, 'orderDetails'),
+        where('orderId', '==', order.id)
+      );
+      const orderDetailsSnapshot = await getDocs(orderDetailsQuery);
+
+      if (orderDetailsSnapshot.empty) {
+        await this.showConfirmationDialog({
+          title: 'No Items Found',
+          message: 'No items found for this order.',
+          confirmText: 'OK',
+          cancelText: '',
+          type: 'warning'
+        });
+        return;
+      }
+
+      // Clear current cart first
+      if (this.cartItems().length > 0) {
+        const confirmed = await this.showConfirmationDialog({
+          title: 'Clear Current Cart?',
+          message: 'Current cart will be cleared to load this order. Continue?',
+          confirmText: 'Yes',
+          cancelText: 'No',
+          type: 'warning'
+        });
+        if (!confirmed) return;
+        this.posService.clearCart();
+      }
+
+      // Collect all items from orderDetails batches
+      let allItems: any[] = [];
+      orderDetailsSnapshot.forEach(doc => {
+        const data = doc.data();
+        if (data['items'] && Array.isArray(data['items'])) {
+          allItems = allItems.concat(data['items']);
+        }
+      });
+
+      // Load items into cart
+      for (const item of allItems) {
+        // Find the product from the products list
+        const product = this.products().find(p => p.id === item.productId);
+        if (product) {
+          // Add to cart with the original quantity
+          this.posService.addToCart(product, item.quantity);
+          
+          // Update cart item with original pricing and settings
+          const cartItem = this.cartItems().find(ci => ci.productId === item.productId);
+          if (cartItem) {
+            const updatedCartItem = {
+              ...cartItem,
+              sellingPrice: item.unitPrice || item.sellingPrice || cartItem.sellingPrice,
+              discount: item.discount || 0,
+              discountType: item.discountType || 'fixed',
+              isVatExempt: item.isVatExempt || false,
+              isVatApplicable: item.isVatApplicable !== undefined ? item.isVatApplicable : cartItem.isVatApplicable
+            };
+            this.posService.updateCartItem(updatedCartItem);
+          }
+        }
+      }
+
+      // Close the order detail modal and switch to NEW tab
+      this.closeOrder();
+      this.accessTabSignal.set('New');
+      
+      // Activate new order state so user can add products
+      this.isNewOrderActive.set(true);
+
+      await this.showConfirmationDialog({
+        title: 'Order Loaded',
+        message: `${allItems.length} item(s) loaded into cart for editing.`,
+        confirmText: 'OK',
+        cancelText: '',
+        type: 'info'
+      });
+
+    } catch (error) {
+      console.error('Error loading order into cart:', error);
+      await this.showConfirmationDialog({
+        title: 'Error',
+        message: 'Failed to load order into cart.',
+        confirmText: 'OK',
+        cancelText: '',
+        type: 'danger'
+      });
+    }
+  }
+
+  // Handle "Pay Now" button for OPEN orders - shows payment dialog to complete the order
+  async payNowForOpenOrder(): Promise<void> {
+    const order = this.selectedOrder();
+    if (!order) {
+      console.warn('No order selected');
+      return;
+    }
+
+    try {
+      // Fetch orderDetails to get items
+      const orderDetailsQuery = query(
+        collection(this.firestore, 'orderDetails'),
+        where('orderId', '==', order.id)
+      );
+      const orderDetailsSnapshot = await getDocs(orderDetailsQuery);
+
+      if (orderDetailsSnapshot.empty) {
+        await this.showConfirmationDialog({
+          title: 'No Items Found',
+          message: 'No items found for this order.',
+          confirmText: 'OK',
+          cancelText: '',
+          type: 'warning'
+        });
+        return;
+      }
+
+      // Collect all items
+      let allItems: any[] = [];
+      orderDetailsSnapshot.forEach(doc => {
+        const data = doc.data();
+        if (data['items'] && Array.isArray(data['items'])) {
+          allItems = allItems.concat(data['items']);
+        }
+      });
+
+      // Store reference to the order being paid for
+      this.payingForExistingOrder.set({
+        ...order,
+        items: allItems
+      });
+
+      // Close order detail modal
+      this.closeOrder();
+
+      // Pre-fill payment dialog with order amount and table number
+      this.paymentAmountTendered = order.totalAmount || 0;
+      this.tableNumber = order.tableNumber || '';
+      
+      // Set default payment method based on order type, default to cash
+      if (order.cashSale && order.chargeSale) {
+        this.posService.setPaymentMethod('both');
+        this.paymentType = 'Both';
+      } else if (order.chargeSale) {
+        this.posService.setPaymentMethod('charge');
+        this.paymentType = 'Charge';
+      } else {
+        // Default to cash if not specified or if cashSale is true
+        this.posService.setPaymentMethod('cash');
+        this.paymentType = 'Cash';
+      }
+      
+      console.log('💳 Pre-filling payment dialog for OPEN order - Table Number:', this.tableNumber, 'Amount:', this.paymentAmountTendered, 'Payment Type:', this.paymentType);
+
+      // Show payment dialog
+      this.paymentModalVisible.set(true);
+
+    } catch (error) {
+      console.error('Error preparing payment for open order:', error);
+      await this.showConfirmationDialog({
+        title: 'Error',
+        message: 'Failed to prepare payment dialog.',
+        confirmText: 'OK',
+        cancelText: '',
+        type: 'danger'
+      });
+    }
+  }
+
+  // Mark an OPEN order as UNPAID while executing background operations
+  async markOpenOrderAsUnpaid(): Promise<void> {
+    const order = this.selectedOrder();
+    if (!order) {
+      console.warn('No order selected for UNPAID processing');
+      await this.showConfirmationDialog({
+        title: 'No Order',
+        message: 'No order selected.',
+        confirmText: 'OK',
+        cancelText: '',
+        type: 'info'
+      });
+      return;
+    }
+
+    // Only allow this when the current status is OPEN
+    const status = (order.status || '').toString().toLowerCase();
+    if (status !== 'open') {
+      console.warn('markOpenOrderAsUnpaid called for non-OPEN status:', status);
+      await this.showConfirmationDialog({
+        title: 'Not Open',
+        message: 'Only OPEN orders can be marked as UNPAID.',
+        confirmText: 'OK',
+        cancelText: '',
+        type: 'warning'
+      });
+      return;
+    }
+
+    const confirmed = await this.showConfirmationDialog({
+      title: 'Mark as UNPAID',
+      message: 'This will close the order as UNPAID and process inventory, tracking, and ledger like a completed order. Continue?',
+      confirmText: 'Yes',
+      cancelText: 'No',
+      type: 'warning'
+    });
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      this.posService['isProcessingSignal']?.set(true);
+
+      const orderId = order.id;
+      if (!orderId) {
+        throw new Error('Order ID is missing');
+      }
+
+      // Update the order and orderDetails status from OPEN to UNPAID
+      const orderRef = doc(this.firestore, 'orders', orderId);
+
+      const orderDetailsQuery = query(
+        collection(this.firestore, 'orderDetails'),
+        where('orderId', '==', orderId)
+      );
+      const orderDetailsSnapshot = await getDocs(orderDetailsQuery);
+
+      const currentUser = this.authService.getCurrentUser();
+      const existingStatusHistory = order.statusHistory || [];
+      const existingStatusTags = order.statusTags || [];
+
+      // Collect items from orderDetails for tracking
+      let allItems: any[] = [];
+      orderDetailsSnapshot.forEach(docSnap => {
+        const data = docSnap.data();
+        console.log('🔍 orderDetails data:', data);
+        if (data['items'] && Array.isArray(data['items'])) {
+          allItems = allItems.concat(data['items']);
+        }
+      });
+      console.log('🔍 allItems collected:', allItems.length, 'items', allItems);
+
+      const orderUpdate: any = {
+        status: 'unpaid',
+        tableNumber: order.tableNumber || '',
+        statusHistory: [
+          ...existingStatusHistory,
+          {
+            status: 'unpaid',
+            changedAt: new Date(),
+            changedBy: currentUser?.uid || 'system'
+          }
+        ],
+        statusTags: [...existingStatusTags, 'unpaid'],
+        updatedAt: new Date()
+      };
+
+      await updateDoc(orderRef, orderUpdate);
+
+      const updatePromises: Promise<void>[] = [];
+      orderDetailsSnapshot.forEach(docSnap => {
+        updatePromises.push(
+          updateDoc(docSnap.ref, {
+            status: 'UNPAID',
+            updatedAt: new Date().toISOString()
+          })
+        );
+      });
+      await Promise.all(updatePromises);
+
+      console.log('✅ Order status updated to UNPAID');
+
+      // Create unpaid tracking entries directly from order items
+      console.log('🔄 Creating unpaid tracking entries from order items...');
+      
+      // Use same source as dashboard overview for companyId/storeId to ensure data matches
+      const companyId = order.companyId || this.authService.getCurrentPermission()?.companyId || '';
+      const storeId = order.storeId || this.posService.selectedStoreId() || '';
+      console.log('🔍 markOpenOrderAsUnpaid: using companyId=', companyId, 'storeId=', storeId);
+      
+      // Record ledger entry for unpaid (same pattern as completed orders)
+      try {
+        const totalAmount = Number(order.totalAmount || order.netAmount || 0);
+        const totalQuantity = allItems.reduce((sum: number, item: any) => sum + (Number(item.quantity || item.qty) || 1), 0) || 1;
+        
+        await this.ledgerService.recordEvent(
+          companyId,
+          storeId,
+          orderId,
+          'unpaid',
+          totalAmount,
+          totalQuantity,
+          currentUser?.uid || 'system'
+        );
+        console.log('✅ Unpaid ledger entry recorded - amount:', totalAmount, 'qty:', totalQuantity);
+      } catch (ledgerError) {
+        console.warn('⚠️ Failed to record unpaid ledger entry:', ledgerError);
+      }
+      
+      // Create tracking entries (optional - for item-level tracking)
+      try {
+        // Map items to the format expected by createUnpaidTrackingFromOrder
+        const trackingItems = allItems.map((item: any) => ({
+          productId: item.productId || item.id,
+          productName: item.productName || item.name,
+          productCode: item.productCode || item.code,
+          sku: item.sku || item.skuId,
+          quantity: item.quantity || item.qty || 1,
+          price: item.price || item.sellingPrice || item.unitPrice || 0,
+          total: item.total || item.lineTotal || ((item.price || item.sellingPrice || 0) * (item.quantity || 1))
+        }));
+
+        if (trackingItems.length > 0) {
+          const unpaidResult = await this.ordersSellingTrackingService.createUnpaidTrackingFromOrder(
+            orderId,
+            companyId,
+            storeId,
+            trackingItems,
+            currentUser?.uid || 'system',
+            'Marked as unpaid from open order'
+          );
+          console.log('✅ Unpaid tracking entries created:', unpaidResult);
+        } else {
+          console.log('⚠️ No items found for tracking, skipping tracking creation');
+        }
+      } catch (trackingError) {
+        console.warn('⚠️ Failed to create unpaid tracking entries (non-critical):', trackingError);
+      }
+
+      // Close details modal and refresh list
+      this.closeOrder();
+      await this.loadRecentOrders();
+
+      await this.showConfirmationDialog({
+        title: 'Marked as UNPAID',
+        message: `Order ${order.invoiceNumber || orderId} has been closed as UNPAID.`,
+        confirmText: 'OK',
+        cancelText: '',
+        type: 'info'
+      });
+
+    } catch (error) {
+      console.error('❌ Error marking OPEN order as UNPAID:', error);
+      await this.showConfirmationDialog({
+        title: 'Failed',
+        message: 'Failed to mark order as UNPAID. Please try again.',
+        confirmText: 'OK',
+        cancelText: '',
+        type: 'danger'
+      });
+    } finally {
+      this.posService['isProcessingSignal']?.set(false);
+    }
+  }
+
+  // Pay Now for an UNPAID order (converts it to recovered)
+  async payNowForUnpaidOrder(): Promise<void> {
+    const order = this.selectedOrder();
+    if (!order) {
+      console.warn('No order selected');
+      return;
+    }
+
+    // Verify order is unpaid
+    const status = (order.status || '').toString().toLowerCase();
+    if (status !== 'unpaid') {
+      console.warn('payNowForUnpaidOrder called for non-UNPAID status:', status);
+      await this.showConfirmationDialog({
+        title: 'Not Unpaid',
+        message: 'Only UNPAID orders can be recovered.',
+        confirmText: 'OK',
+        cancelText: '',
+        type: 'warning'
+      });
+      return;
+    }
+
+    try {
+      // Fetch orderDetails to get items
+      const orderDetailsQuery = query(
+        collection(this.firestore, 'orderDetails'),
+        where('orderId', '==', order.id)
+      );
+      const orderDetailsSnapshot = await getDocs(orderDetailsQuery);
+
+      if (orderDetailsSnapshot.empty) {
+        await this.showConfirmationDialog({
+          title: 'No Items Found',
+          message: 'No items found for this order.',
+          confirmText: 'OK',
+          cancelText: '',
+          type: 'warning'
+        });
+        return;
+      }
+
+      // Collect all items
+      let allItems: any[] = [];
+      orderDetailsSnapshot.forEach(doc => {
+        const data = doc.data();
+        if (data['items'] && Array.isArray(data['items'])) {
+          allItems = allItems.concat(data['items']);
+        }
+      });
+
+      // Store reference to the unpaid order being recovered
+      this.payingForExistingOrder.set({
+        ...order,
+        items: allItems,
+        isRecovery: true // Flag to indicate this is a recovery from unpaid
+      });
+
+      // Close order detail modal
+      this.closeOrder();
+
+      // Pre-fill payment dialog with order amount
+      this.paymentAmountTendered = order.totalAmount || 0;
+      this.tableNumber = order.tableNumber || '';
+      
+      // Default to cash payment
+      this.posService.setPaymentMethod('cash');
+      this.paymentType = 'Cash';
+      
+      console.log('💳 Pre-filling payment dialog for UNPAID order recovery - Amount:', this.paymentAmountTendered);
+
+      // Show payment dialog
+      this.paymentModalVisible.set(true);
+
+    } catch (error) {
+      console.error('Error preparing payment for unpaid order:', error);
+      await this.showConfirmationDialog({
+        title: 'Error',
+        message: 'Failed to prepare payment dialog.',
+        confirmText: 'OK',
+        cancelText: '',
+        type: 'danger'
+      });
+    }
+  }
+
+  // Process payment for an existing OPEN order (converts it to completed)
+  // Also handles UNPAID orders being recovered (converts to recovered)
+  async processPaymentForExistingOrder(orderData: any): Promise<void> {
+    try {
+      this.posService['isProcessingSignal']?.set(true);
+      
+      // Check if this is a recovery from unpaid status
+      const isRecovery = orderData.isRecovery === true;
+      const targetStatus = isRecovery ? 'recovered' : 'completed';
+      
+      console.log(`💳 Processing payment for existing ${isRecovery ? 'UNPAID' : 'OPEN'} order:`, orderData.id);
+
+      const totalAmount = orderData.totalAmount || 0;
+      const tendered = this.paymentAmountTendered || 0;
+
+      // Validate payment amount
+      if (tendered < totalAmount) {
+        console.warn('⚠️ Insufficient amount tendered');
+        await this.showConfirmationDialog({
+          title: 'Insufficient Amount',
+          message: `Please tender at least ₱${totalAmount.toFixed(2)}`,
+          confirmText: 'OK',
+          cancelText: '',
+          type: 'warning'
+        });
+        this.posService['isProcessingSignal']?.set(false);
+        return;
+      }
+
+      const change = tendered - totalAmount;
+
+      // Capture payment info and table number BEFORE closing dialog
+      const tableNumber = this.tableNumber;
+      const paymentType = this.paymentType;
+      const paymentDescription = this.paymentDescription;
+      
+      const paymentsData = {
+        amountTendered: tendered,
+        changeAmount: Math.max(0, change),
+        paymentDescription: paymentDescription || (isRecovery ? 'Payment for UNPAID order (recovered)' : 'Payment for OPEN order'),
+        paymentType: paymentType
+      };
+
+      // Determine cashSale and chargeSale flags based on payment type
+      const isCashSale = this.posService.isCashSale();
+      const isChargeSale = this.posService.isChargeSale();
+
+      // Close payment dialog
+      this.closePaymentDialog();
+
+      // Update the order and orderDetails status
+      const orderRef = doc(this.firestore, 'orders', orderData.id);
+      
+      // Get all orderDetails docs for this order
+      const orderDetailsQuery = query(
+        collection(this.firestore, 'orderDetails'),
+        where('orderId', '==', orderData.id)
+      );
+      const orderDetailsSnapshot = await getDocs(orderDetailsQuery);
+
+      // Prepare order update with all payment-related fields
+      const currentUser = this.authService.getCurrentUser();
+      const existingStatusHistory = orderData.statusHistory || [];
+      const existingStatusTags = orderData.statusTags || [];
+      
+      const orderUpdate: any = {
+        status: targetStatus,
+        payments: {
+          amountTendered: paymentsData.amountTendered,
+          changeAmount: paymentsData.changeAmount,
+          paymentDescription: paymentsData.paymentDescription,
+          paymentType: paymentsData.paymentType
+        },
+        tableNumber: tableNumber || '',
+        cashSale: isCashSale,
+        chargeSale: isChargeSale,
+        statusHistory: [...existingStatusHistory, {
+          status: targetStatus,
+          changedAt: new Date(),
+          changedBy: currentUser?.uid || 'system'
+        }],
+        statusTags: [...existingStatusTags, targetStatus],
+        updatedAt: new Date()
+      };
+
+      // Update order document
+      await updateDoc(orderRef, orderUpdate);
+
+      // Update all orderDetails documents
+      const updatePromises: Promise<void>[] = [];
+      orderDetailsSnapshot.forEach(doc => {
+        updatePromises.push(
+          updateDoc(doc.ref, {
+            status: targetStatus.toUpperCase(),
+            updatedAt: new Date().toISOString()
+          })
+        );
+      });
+      await Promise.all(updatePromises);
+
+      console.log(`✅ Order status updated to ${targetStatus}`);
+
+      // Execute background operations (tracking, inventory, ledger) - only for non-recovery
+      if (!isRecovery) {
+        console.log('🔄 Executing background operations for existing order...');
+        try {
+          await this.posService.executeBackgroundOperationsForExistingOrder(
+            orderData.id,
+            orderData.invoiceNumber
+          );
+          console.log('✅ Background operations completed successfully');
+        } catch (bgError) {
+          console.warn('⚠️ Background operations failed (non-critical):', bgError);
+          // Continue with success flow even if background operations fail
+        }
+      }
+
+      // If this is a recovery from unpaid, create recovered tracking entries
+      if (isRecovery) {
+        console.log('🔄 Creating recovered tracking entries for unpaid order...');
+        try {
+          const recoveredResult = await this.ordersSellingTrackingService.markOrderTrackingRecovered(
+            orderData.id,
+            currentUser?.uid || 'system',
+            'Recovered from unpaid status - payment received'
+          );
+          console.log('✅ Recovered tracking entries created:', recoveredResult);
+        } catch (trackingError) {
+          console.warn('⚠️ Failed to create recovered tracking entries (non-critical):', trackingError);
+        }
+      }
+
+      // Clear the paying flag
+      this.payingForExistingOrder.set(null);
+      
+      // Close order details modal
+      this.closeOrder();
+
+      // Show success and receipt
+      await this.showConfirmationDialog({
+        title: '✅ Payment Successful',
+        message: `Order ${orderData.invoiceNumber} has been ${isRecovery ? 'recovered' : 'completed'}.`,
+        confirmText: 'OK',
+        cancelText: '',
+        type: 'info'
+      });
+
+      // Build normalized receipt data for preview (ensure fields expected by receipt template exist)
+      const storeInfo: any = this.currentStoreInfo() || {};
+      const items = (orderData.items || orderData.orderItems || []).map((it: any) => ({
+        productName: it.productName || it.name || it.title || 'Item',
+        skuId: it.skuId || it.productId || '',
+        quantity: it.quantity || it.qty || 1,
+        unitType: it.unitType || 'pieces',
+        sellingPrice: it.price || it.sellingPrice || it.unitPrice || 0,
+        total: it.total || (it.price || it.sellingPrice || 0) * (it.quantity || 1),
+        vatAmount: it.vat || it.tax || 0,
+        discountAmount: it.discount || 0
+      }));
+
+      const normalizedReceipt: any = {
+        orderId: orderData.id || orderData.orderId || null,
+        invoiceNumber: orderData.invoiceNumber || orderData.invoice || this.nextInvoiceNumber(),
+        receiptDate: orderData.completedAt || orderData.updatedAt || new Date(),
+        storeInfo: {
+          storeName: storeInfo.storeName || storeInfo.name || 'Store Name',
+          address: storeInfo.address || '',
+          phone: storeInfo.phoneNumber || storeInfo.phone || '',
+          email: storeInfo.email || '',
+          tin: storeInfo.tinNumber || storeInfo.tin || 'N/A',
+          invoiceType: storeInfo.invoiceType || 'SALES INVOICE'
+        },
+        customerName: orderData.customerName || orderData.soldTo || null,
+        customerAddress: orderData.customerAddress || orderData.soldToAddress || null,
+        customerTin: orderData.customerTin || orderData.soldToTin || null,
+        cashier: orderData.cashier || orderData.cashierName || currentUser?.displayName || currentUser?.email || 'N/A',
+        paymentMethod: isCashSale ? 'Cash' : 'Charge',
+        isCashSale: isCashSale,
+        isChargeSale: isChargeSale,
+        items,
+        subtotal: orderData.subtotal || orderData.grossAmount || items.reduce((s: number, i: any) => s + (i.total || 0), 0),
+        vatAmount: orderData.vatAmount || orderData.tax || 0,
+        vatExempt: orderData.vatExempt || 0,
+        discount: orderData.discount || 0,
+        totalAmount: orderData.total || orderData.netAmount || orderData.amount || 0,
+        orderDiscount: orderData.orderDiscount || null,
+        payments: paymentsData,
+        tableNumber: tableNumber,
+        status: 'completed'
+      };
+
+      this.receiptDataSignal.set(normalizedReceipt);
+      this.isReceiptModalVisibleSignal.set(true);
+
+      // Refresh orders list
+      await this.loadRecentOrders();
+
+    } catch (error) {
+      console.error('❌ Error processing payment for existing order:', error);
+      await this.showConfirmationDialog({
+        title: 'Payment Failed',
+        message: 'Failed to process payment. Please try again.',
+        confirmText: 'OK',
+        cancelText: '',
+        type: 'danger'
+      });
+    } finally {
+      this.posService['isProcessingSignal']?.set(false);
+      this.payingForExistingOrder.set(null);
+    }
   }
 
   // Open Manage Item Status modal and load tracking entries for the currently selected order
@@ -2097,21 +2781,55 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
           }
         }
 
-        return (itemsSource || []).map((item: any) => ({
-          productName: item.productName || item.name,
-          skuId: item.skuId || item.sku,
-          quantity: item.quantity || 1,
-          unitType: item.unitType || 'pc',
-          sellingPrice: item.sellingPrice || item.price || item.amount,
-          originalPrice: item.originalPrice || item.unitPrice || item.sellingPrice || item.price || item.amount,
-          total: item.total || (item.quantity * (item.sellingPrice || item.price || item.amount)),
-          vatAmount: item.vatAmount || 0,
-          discountAmount: item.discountAmount || 0,
-          // Preserve any per-item customer name/pwdId if present on historical orders
-          customerName: item.customerName || (item as any).discountCustomerName || null,
-          pwdId: item.pwdId || null,
-          customerDiscount: item.customerDiscount || (item as any).customerDiscount || null
-        }));
+        // Use already-loaded products for SKU lookup when missing on order items
+        const allProducts: any[] = this.products ? this.products() : [];
+
+        return (itemsSource || []).map((item: any) => {
+          const productName = item.productName || item.name;
+
+          // Primary sources: explicit SKU fields on the order item
+          let skuId: string = item.skuId || item.sku || '';
+
+          // If SKU is missing, try to resolve it from cached products using productId / productCode / name
+          if (!skuId && Array.isArray(allProducts) && allProducts.length > 0) {
+            const productId = item.productId || item.product_id || '';
+            let matched: any = null;
+
+            if (productId) {
+              matched = allProducts.find((p: any) =>
+                p.id === productId ||
+                p.skuId === productId ||
+                p.productCode === productId
+              );
+            }
+
+            // As a last resort, try matching by product name
+            if (!matched && productName) {
+              matched = allProducts.find((p: any) => p.productName === productName);
+            }
+
+            if (matched?.skuId) {
+              skuId = matched.skuId;
+            }
+          }
+
+          return {
+            productName,
+            // Only use real SKU values (from order item or product), never document IDs
+            skuId,
+            quantity: item.quantity || 1,
+            unitType: item.unitType || 'pc',
+            sellingPrice: item.sellingPrice || item.price || item.amount,
+            originalPrice: item.originalPrice || item.unitPrice || item.sellingPrice || item.price || item.amount,
+            total: item.total || (item.quantity * (item.sellingPrice || item.price || item.amount)),
+            vatAmount: item.vatAmount || 0,
+            discountAmount: item.discountAmount || 0,
+            // Preserve any per-item customer name/pwdId if present on historical orders
+            customerName: item.customerName || (item as any).discountCustomerName || null,
+            pwdId: item.pwdId || null,
+            customerDiscount: item.customerDiscount || (item as any).customerDiscount || null
+          };
+        });
       } catch (err) {
         console.warn('Error normalizing order items', err);
         return [];
@@ -2250,13 +2968,12 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   async ngOnInit(): Promise<void> {
-    console.log('🎯 POS COMPONENT: ngOnInit called - POS is loading!');
-    console.log('🎯 POS COMPONENT: Current URL:', window.location.href);
-    console.log('🎯 POS COMPONENT: Timestamp:', new Date().toISOString());
+    
+    // Set default payment method to cash
+    this.posService.setPaymentMethod('cash');
     
     // Set default tab to first available tab
     if (this.accessTabs.length > 0) {
-      console.log('📑 Setting default tab to:', this.accessTabs[0]);
       this.accessTabSignal.set(this.accessTabs[0]);
     }
     
@@ -2281,67 +2998,32 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     await this.testFirestoreConnection();
     
     try {
-      console.log('📊 STEP 1: Loading data (stores, products, categories, company)...');
       // Load company data early for faster receipt preparation
       this.loadCompanyDataForReceipts();
       
       // Load data first to ensure stores and products are available
       await this.loadData();
-      console.log('✅ STEP 1 COMPLETED: Data loading finished');
       
-      console.log('📊 STEP 2: Loading stores for POS (using getActiveStoresForDropdown)...');
       // Load stores using the same method as Access Management
       await this.loadStoresForPOS();
-      console.log('✅ STEP 2 COMPLETED: Stores loaded');
       
-      console.log('📊 STEP 3: Setting current date and time...');
       // Set current date and time
       this.updateCurrentDateTime();
       
-      console.log('📊 STEP 4: Loading next invoice number preview...');
       // Load next invoice number preview
       await this.loadNextInvoicePreview();
-      console.log('✅ STEP 4 COMPLETED: Invoice number loaded');
       
-      console.log('📊 STEP 5: Initializing store selection...');
-      await this.initializeStore(); 
-      console.log('✅ STEP 5 COMPLETED: Store initialization finished');
+      await this.initializeStore();
       
-      console.log('📊 STEP 6: Loading product inventory for offline cache...');
       await this.preloadProductInventory();
-      console.log('✅ STEP 6 COMPLETED: Product inventory preloaded');
       
-      console.log('📊 STEP 7: Checking hardware printer availability...');
       await this.checkHardwarePrinterStatus();
-      console.log('✅ STEP 7 COMPLETED: Hardware printer status checked');
-      
-      // 🔍 ENHANCED DEBUG: More detailed final check
-      console.log('🔍 FINAL CHECK - currentUser:', this.authService.getCurrentUser());
-      console.log('🔍 FINAL CHECK - all stores:', this.storeService.getStores());
-      console.log('🔍 FINAL CHECK - available stores:', this.availableStores());
-      console.log('🔍 FINAL CHECK - selected store:', this.selectedStoreId());
-      console.log('🔍 FINAL CHECK - products count:', this.products().length);
-      console.log('🔍 FINAL CHECK - categories count:', this.categories().length);
-      
-      // 🔍 NEW: Check filtered products specifically
-      console.log('🔍 FINAL CHECK - filtered products count:', this.filteredProducts().length);
-      console.log('🔍 FINAL CHECK - selected category:', this.selectedCategory());
-      console.log('🔍 FINAL CHECK - search query:', this.searchQuery());
-      console.log('🔍 FINAL CHECK - current view:', this.currentView());
-      
-      // 🔍 NEW: Force a small delay to let signals update, then check again
-      setTimeout(() => {
-        console.log('🔍 DELAYED CHECK (500ms) - filtered products count:', this.filteredProducts().length);
-      }, 500);
       
       // Sync local order state with service (for switching between desktop/mobile)
       const serviceOrderActive = this.posService.isOrderActive();
       if (serviceOrderActive && !this.isNewOrderActive()) {
         this.isNewOrderActive.set(true);
-        console.log('🔄 Synced order state from service: order is active');
       }
-      
-      console.log('🎉 POS INITIALIZATION COMPLETED SUCCESSFULLY!');
     } catch (error) {
       console.error('❌ Error initializing POS:', error);
       console.error('❌ Error details:', error);
@@ -2497,6 +3179,9 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   async ngAfterViewInit(): Promise<void> {
+    // Trigger change detection to avoid ExpressionChangedAfterItHasBeenCheckedError
+    this.cdr.detectChanges();
+    
     // Generate barcode images for all products
     setTimeout(() => {
       const products = this.products();
@@ -2545,12 +3230,10 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
-    console.log('🏗️ POS COMPONENT: ngOnDestroy called - Component is being destroyed');
     if (this.routerSubscription) {
       this.routerSubscription.unsubscribe();
     }
     if (this.inventorySnapshotUnsubscribe) {
-      console.log('📦 Unsubscribing from productInventory snapshot listener');
       this.inventorySnapshotUnsubscribe();
       this.inventorySnapshotUnsubscribe = null;
     }
@@ -2790,8 +3473,6 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
         type: status.type,
         ready: status.details.ready || status.details.connected || false
       });
-      
-      console.log('🖨️ Hardware printer status updated:', this.hardwarePrinterStatus());
     } catch (error) {
       console.error('❌ Failed to check hardware printer status:', error);
       this.hardwarePrinterStatus.set({
@@ -2836,6 +3517,9 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     
     // Clear cart and all order-related data
     this.posService.clearCart();
+    
+    // Set default payment method to cash
+    this.posService.setPaymentMethod('cash');
     
     // Reset customer information with next invoice number
     await this.loadNextInvoicePreview();
@@ -3004,6 +3688,8 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     this.paymentModalVisible.set(false);
     this.paymentAmountTendered = 0;
     this.paymentDescription = '';
+    this.tableNumber = '';
+    this.payingForExistingOrder.set(null); // Clear existing order flag
   }
 
   // Handle input changes for amount tendered
@@ -3212,10 +3898,94 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     console.log('✅ Cart VAT and discount settings applied to all items');
   }
 
+  // Save order as OPEN (Pay Later)
+  async saveOrderAsOpen(): Promise<void> {
+    // Prevent double-submission
+    if (this.isProcessing()) {
+      console.log('⚠️ Order already processing, ignoring duplicate request');
+      return;
+    }
+    
+    try {
+      console.log('💼 Saving order as OPEN (Pay Later)...');
+      const totalAmount = this.cartSummary().netAmount;
+      
+      // IMPORTANT: Capture payment info and table number BEFORE closing dialog
+      const paymentInfo = {
+        amountTendered: 0,
+        changeAmount: 0,
+        paymentDescription: this.paymentDescription || 'Pay Later - OPEN Order',
+        paymentType: this.paymentType
+      };
+      const tableNumber = this.tableNumber;
+      console.log('📋 Captured table number for OPEN order:', tableNumber);
+      
+      // Generate real invoice number
+      let realInvoiceNumber: string;
+      try {
+        console.log('📋 Fetching fresh invoice number from Firestore...');
+        realInvoiceNumber = await this.posService.getNextInvoiceNumberPreview();
+        
+        if (realInvoiceNumber.includes('ERROR') || realInvoiceNumber.includes('0000-000000')) {
+          console.warn('⚠️ Invalid invoice number received, retrying...');
+          await new Promise(resolve => setTimeout(resolve, 500));
+          realInvoiceNumber = await this.posService.getNextInvoiceNumberPreview();
+        }
+        
+        this.nextInvoiceNumber.set(realInvoiceNumber);
+        this.invoiceNumber = realInvoiceNumber;
+        console.log('📋 Fresh invoice number generated:', realInvoiceNumber);
+      } catch (invoiceError) {
+        console.warn('Warning: Could not generate invoice number:', invoiceError);
+        realInvoiceNumber = 'INV-0000-000000';
+      }
+      
+      // Close payment dialog
+      this.closePaymentDialog();
+      
+      // Process order as OPEN
+      console.log('📝 Processing OPEN order...');
+      await this.completeOrderWithPayment(paymentInfo, true, tableNumber); // Pass true for saveAsOpen and tableNumber separately
+      
+      console.log('✅ Order saved as OPEN successfully');
+      
+    } catch (error) {
+      console.error('❌ Error saving order as OPEN:', error);
+      
+      // Reset processing state
+      this.posService['isProcessingSignal']?.set(false);
+      
+      // Reload invoice number
+      try {
+        console.log('🔄 Reloading invoice number after failed order...');
+        await this.loadNextInvoicePreview();
+        const freshInvoiceNumber = this.nextInvoiceNumber();
+        this.invoiceNumber = freshInvoiceNumber === 'Loading...' ? 'INV-0000-000000' : freshInvoiceNumber;
+      } catch (invoiceReloadError) {
+        console.warn('⚠️ Failed to reload invoice number:', invoiceReloadError);
+      }
+      
+      // Show error dialog
+      await this.showConfirmationDialog({
+        title: 'Failed to Save Order',
+        message: `Failed to save order as OPEN. Please try again.\nReason: ${error instanceof Error ? error.message : String(error)}`,
+        confirmText: 'OK',
+        cancelText: ''
+      });
+    }
+  }
+
   async processPayment(): Promise<void> {
     // Prevent double-submission
     if (this.isProcessing()) {
       console.log('⚠️ Payment already processing, ignoring duplicate request');
+      return;
+    }
+
+    // Check if we're paying for an existing OPEN order
+    const existingOrder = this.payingForExistingOrder();
+    if (existingOrder) {
+      await this.processPaymentForExistingOrder(existingOrder);
       return;
     }
     
@@ -3233,13 +4003,14 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       
       const change = this.calculateChange();
       
-      // IMPORTANT: Capture payment info BEFORE closing dialog (dialog close resets these values)
+      // IMPORTANT: Capture payment info and table number BEFORE closing dialog (dialog close resets these values)
       const paymentInfo = {
         amountTendered: tendered,
         changeAmount: change,
         paymentDescription: this.paymentDescription,
         paymentType: this.paymentType
       };
+      const tableNumber = this.tableNumber;
       
 
       
@@ -3294,11 +4065,11 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
         
         // Process offline without any timeout
         console.log('📴 Processing in offline mode');
-        await this.completeOrderWithPayment(paymentInfo);
+        await this.completeOrderWithPayment(paymentInfo, false, tableNumber);
       } else {
         // Online mode - use short timeout to detect connection issues quickly
         console.log('🌐 Processing in online mode');
-        const orderPromise = this.completeOrderWithPayment(paymentInfo);
+        const orderPromise = this.completeOrderWithPayment(paymentInfo, false, tableNumber);
         const timeoutPromise = new Promise<never>((_, reject) => 
           setTimeout(() => reject(new Error('Connection timeout')), 5000) // Short 5 second timeout
         );
@@ -3369,8 +4140,9 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     changeAmount: number;
     paymentDescription: string;
     paymentType: string;
-  }): Promise<void> {
+  }, saveAsOpen: boolean = false, tableNumber: string = ''): Promise<void> {
     try {
+      console.log('💼 completeOrderWithPayment called with:', { saveAsOpen, tableNumber });
       
       // Prepare customer info and payments for the new structure
       const processedCustomerInfo = this.getCustomerInfoForOrder();
@@ -3412,7 +4184,9 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
         
         result = await this.posService.processOrderWithInvoiceAndPayment(
           processedCustomerInfo,
-          paymentsData
+          paymentsData,
+          saveAsOpen,
+          tableNumber
         );
         
         if (!this.networkService.isOnline()) {
@@ -3461,7 +4235,9 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
           // Retry with offline processing (Firestore persistence will handle it)
           result = await this.posService.processOrderWithInvoiceAndPayment(
             processedCustomerInfo,
-            paymentsData
+            paymentsData,
+            false,
+            tableNumber
           );
         } else {
           // Non-network error, re-throw
@@ -3498,14 +4274,48 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
         }
       }
 
-      // IMPORTANT: Clear processing state and show receipt modal IMMEDIATELY
-      // Don't wait for receipt data preparation - show the modal first for instant feedback
+      // IMPORTANT: Clear processing state
       this.posService['isProcessingSignal']?.set(false);
       console.log('✅ Processing state cleared');
       
-      // Show receipt modal immediately
+      // If this is an OPEN order, show simple success message instead of receipt
+      if (saveAsOpen) {
+        console.log('💼 OPEN order: Showing success message instead of receipt');
+        
+        // Prepare simple order summary
+        const cartItems = this.cartItems();
+        const itemsList = cartItems.map(item => 
+          `${item.productName} (x${item.quantity}) - ₱${item.total.toFixed(2)}`
+        ).join('\n');
+        
+        // Show success dialog with items
+        await this.showConfirmationDialog({
+          title: '✅ Order Successfully Saved',
+          message: `Invoice: ${result.invoiceNumber}\n${tableNumber ? `Table: ${tableNumber}\n` : ''}Status: OPEN (Pay Later)\n\nItems:\n${itemsList}\n\nTotal: ₱${this.cartSummary().netAmount.toFixed(2)}`,
+          confirmText: 'OK',
+          cancelText: ''
+        });
+        
+        // Preserve cart so user can reprint — mark order completed instead
+        this.isOrderCompleted.set(true);
+        
+        // Reset new order state so user must click "New" again
+        this.isNewOrderActive.set(false);
+        
+        // Refresh orders list to show new OPEN order
+        console.log('💼 OPEN order created, refreshing orders list...');
+        await new Promise(resolve => setTimeout(resolve, 1000)); // Wait for Firestore to complete
+        await this.loadRecentOrders();
+        
+        return; // Exit early, don't show receipt modal
+      }
+      
+      // For regular orders, show receipt modal immediately
       this.isReceiptModalVisibleSignal.set(true);
       console.log('✅ Receipt modal shown immediately');
+      
+      // Preserve cart so user can reprint — mark order completed instead
+      console.log('ℹ️ Preserving cart after order completion so printing can be repeated');
       
       // Prepare receipt data in background (non-blocking)
       console.log('📝 Preparing receipt data for order:', result.orderId);
@@ -3532,6 +4342,8 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       
       // orderDetails.status is set at creation time by the invoice service
       this.completedOrderData.set(updatedReceiptData);
+      // Ensure receipt modal has data immediately when opened
+      this.receiptDataSignal.set(updatedReceiptData);
       console.log('✅ Completed order data stored');
       console.log(`📋 Updated receipt data: ${updatedReceiptData.orderId}, Invoice: ${updatedReceiptData.invoiceNumber}`);
       console.log('🧾 Receipt modal opened with invoice:', result.invoiceNumber);
@@ -3540,6 +4352,14 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
         hasReceiptData: !!this.receiptData(),
         isOrderCompleted: this.isOrderCompleted()
       });
+      
+      // If this was an OPEN order, refresh the orders list so it appears in the Open tab
+      if (saveAsOpen) {
+        console.log('💼 OPEN order created, refreshing orders list...');
+        setTimeout(() => {
+          this.loadRecentOrders();
+        }, 500); // Small delay to ensure Firestore has processed the write
+      }
       
     } catch (error) {
       console.error('❌ Error completing order with payment:', error);
@@ -3563,11 +4383,8 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
 
   // Method to reinitialize the component when navigating back to POS
   private async reinitializeComponent(): Promise<void> {
-    console.log('🔄 POS COMPONENT: Reinitializing component due to navigation');
-    
     // Check if products are already loaded to prevent unnecessary reloading
     const currentProductCount = this.products().length;
-    console.log('🔄 Current product count before reinit:', currentProductCount);
     
     // Only reinitialize if we don't have products or user context has changed
     const user = this.authService.getCurrentUser();
@@ -3580,7 +4397,6 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     }
     
     try {
-      console.log('🔄 Performing full reinitialization...');
       // Load data first to ensure stores and products are available
       await this.loadData();
       
@@ -3591,7 +4407,6 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       await this.loadNextInvoicePreview();
       await this.initializeStore(); 
       
-      console.log('🔄 POS COMPONENT: Reinitialization completed - products:', this.products().length);
     } catch (error) {
       console.error('🔄 Error reinitializing POS component:', error);
     }
@@ -3606,7 +4421,6 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       const company = await this.companyService.getActiveCompany();
       if (company) {
         this.cachedCompanySignal.set(company);
-        console.log('✅ Company data cached for receipts:', company.name);
       }
     } catch (error) {
       console.warn('⚠️ Could not load company data for receipts:', error);
@@ -3634,9 +4448,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
                 roleId: permission.roleId
               };
               useIndexedDBData = true;
-              console.log('💾 Selected permission from', offlineUserData.permissions.length, 'available permissions');
             }
-            console.log('� PRIORITY: Using user role from IndexedDB:', userRole);
           }
         } catch (error) {
           console.log('⚠️ Could not get user role from IndexedDB:', error);
@@ -3644,20 +4456,14 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
         
         // FALLBACK: Load from database if IndexedDB data not available
         if (!useIndexedDBData) {
-          console.log('🗄️ FALLBACK: Loading user roles from database...');
           await this.userRoleService.loadUserRoles();
           userRole = this.userRoleService.getUserRoleByUserId(user.uid);
-          console.log('🗄️ User role from database:', userRole);
         }
-        
-        console.log('user.uid:', user.uid);
         
         if (userRole && userRole.storeId) {
           // Load companies and stores based on user's assigned store
-          console.log('🏪 User has specific store, loading stores and products:', userRole.storeId);
           await this.storeService.loadStores([userRole.storeId]);
           await this.productService.initializeProducts(userRole.storeId);
-          console.log('📦 Product loading completed');
         } else if (userRole && userRole.companyId) {
           // If user has company access but no specific store, load all company stores
           console.log('🏪 User has company access but no specific store, loading all company stores');
@@ -3715,14 +4521,12 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   private async initializeStore(): Promise<void> {
-    console.log('🎯 Desktop initializeStore called - checking stores and loading if needed');
     
     // First, ensure stores are loaded by checking if we have any stores
     const currentUser = this.authService.getCurrentUser();
     let availableStores = this.availableStores();
     
     if (availableStores.length === 0 && currentUser?.uid) {
-      console.log('🏪 Desktop No stores available, loading from database...');
       
       try {
         // Load user roles first to get store access permissions
@@ -3730,21 +4534,17 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
         
         // Get the current user's role by userId
         const userRole = this.userRoleService.getUserRoleByUserId(currentUser.uid);
-        console.log('👤 Desktop User role loaded:', userRole);
         
         if (userRole && userRole.storeId) {
           // Load companies first
-          console.log('📊 Desktop Loading companies...');
           await this.companyService.loadCompanies();
           
           // Load stores based on user's assigned store
-          console.log('🏪 Desktop Loading stores for user role:', userRole.storeId);
           await this.storeService.loadStores([userRole.storeId]);
           
           // Wait a bit for signals to update
           await new Promise(resolve => setTimeout(resolve, 100));
           
-          console.log('✅ Desktop Stores loaded, refreshing available stores...');
         } else {
           console.warn('⚠️ Desktop No user role or store ID found');
           return;
@@ -3753,8 +4553,6 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
         console.error('❌ Desktop Error loading stores:', error);
         return;
       }
-    } else {
-      console.log('✅ Desktop Stores already available, count:', availableStores.length);
     }
 
     // PRIORITY: Use IndexedDB as primary source for all user data (uid, companyId, storeId, roleId)
@@ -3762,20 +4560,16 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       const offlineUserData = await this.indexedDBService.getUserData(currentUser?.uid || '');
       
       if (offlineUserData?.currentStoreId) {
-        console.log('💾 PRIORITY: Using IndexedDB data - uid:', offlineUserData.uid, 'storeId:', offlineUserData.currentStoreId);
         
         // Verify the store exists in availableStores before selecting
         availableStores = this.availableStores(); // Refresh after potential loading
         const storeExists = availableStores.find(store => store.id === offlineUserData.currentStoreId);
         
         if (storeExists) {
-          console.log('✅ IndexedDB store verified, selecting store');
           await this.selectStore(offlineUserData.currentStoreId);
-          console.log('✅ Store selection from IndexedDB completed');
           return; // Success - exit early
         } else {
           console.warn('⚠️ IndexedDB store not found in available stores');
-          console.log('🏪 Available stores:', availableStores.map(s => ({ id: s.id, name: s.storeName })));
         }
       }
       
@@ -3783,13 +4577,11 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       if (offlineUserData?.permissions && offlineUserData.permissions.length > 0) {
         const permission = this.getActivePermission(offlineUserData);
         if (permission?.storeId) {
-          console.log('💾 Using storeId from IndexedDB permissions:', permission.storeId);
           availableStores = this.availableStores(); // Refresh after potential loading
           const storeExists = availableStores.find(store => store.id === permission.storeId);
           
           if (storeExists) {
             await this.selectStore(permission.storeId);
-            console.log('✅ Store selection from IndexedDB permissions completed');
             return;
           }
         }
@@ -3808,17 +4600,12 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       const stores = this.availableStores();
       const currentlySelected = this.selectedStoreId();
       
-      console.log(`🏪 Store initialization attempt ${retryCount + 1}/${maxRetries} - Available stores:`, stores.length);
-      
       if (stores.length > 0) {
-        console.log('🏪 Stores found, proceeding with auto-selection');
-        console.log('🏪 Currently selected store:', currentlySelected);
         
         // Check if currently selected store is valid in available stores
         const selectedStore = stores.find(store => store.id === currentlySelected);
         
         if (currentlySelected && selectedStore) {
-          console.log('✅ Valid store already selected from persistent state:', selectedStore.storeName);
           
           // Load products for the already selected store
           if (selectedStore.companyId) {
@@ -3847,8 +4634,6 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
                   const indexedDbStore = stores.find(store => store.id === indexedDbStoreId);
                   if (indexedDbStore && indexedDbStoreId) {
                     storeIdToSelect = indexedDbStoreId;
-                    console.log('💾 PRIORITY: Using storeId from IndexedDB permissions:', storeIdToSelect);
-                    console.log('💾 Selected from', offlineUserData.permissions.length, 'available permissions');
                   }
                 }
               }
@@ -3870,31 +4655,21 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
             
             if (storeWithProducts?.id) {
               storeIdToSelect = storeWithProducts.id || null;
-              console.log('🗄️ FALLBACK: Using store with products:', storeIdToSelect, 
-                `(${allProducts.filter(p => p.storeId === storeIdToSelect).length} products)`);
             } else {
               // If no stores have products, use first available store
               storeIdToSelect = stores[0]?.id || null;
-              console.log('🗄️ FALLBACK: No stores with products, using first available store:', storeIdToSelect);
             }
           }
           
           const storeToSelect = stores.find(store => store.id === storeIdToSelect);
           
           if (storeToSelect?.id) {
-            if (stores.length === 1) {
-              console.log('🏪 Single store detected, auto-selecting:', storeToSelect.storeName, '(ID:', storeToSelect.id, ')');
-            } else {
-              console.log('🏪 Multiple stores available, auto-selecting:', storeToSelect.storeName, '(ID:', storeToSelect.id, ')');
-            }
             
             await this.selectStore(storeToSelect.id);
-            console.log('✅ Auto-selection completed for store:', storeToSelect.storeName);
             
             // Verify the selection worked
             const afterSelection = this.selectedStoreId();
             if (afterSelection === storeToSelect.id) {
-              console.log('✅ Store auto-selection verified successful');
               return; // Success, exit the function
             } else {
               console.warn('⚠️ Store auto-selection may have failed - expected:', storeToSelect.id, 'actual:', afterSelection);
@@ -3905,7 +4680,6 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
         // If we reach here, something went wrong but we have stores
         break;
       } else {
-        console.log(`⏳ No stores available yet, waiting... (attempt ${retryCount + 1}/${maxRetries})`);
         retryCount++;
         
         if (retryCount < maxRetries) {
@@ -4006,11 +4780,9 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
         return;
       }
 
-      console.log('📦 Preloading product inventory for store:', storeId);
       
       // Unsubscribe from any existing snapshot listener
       if (this.inventorySnapshotUnsubscribe) {
-        console.log('📦 Cleaning up existing inventory snapshot listener');
         this.inventorySnapshotUnsubscribe();
         this.inventorySnapshotUnsubscribe = null;
       }
@@ -4033,7 +4805,6 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       // 2. Real-time updates when online
       // 3. Automatic sync when connection is restored
       // 4. Better metadata tracking (fromCache, hasPendingWrites)
-      console.log('📦 Setting up Firestore snapshot listener for productInventory...');
       
       this.inventorySnapshotUnsubscribe = onSnapshot(
         inventoryQuery,
@@ -4041,13 +4812,6 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
         (snapshot) => {
           const fromCache = snapshot.metadata.fromCache;
           const hasPendingWrites = snapshot.metadata.hasPendingWrites;
-          
-          console.log(`📦 Inventory snapshot received:`, {
-            size: snapshot.size,
-            fromCache,
-            hasPendingWrites,
-            source: fromCache ? 'CACHE' : 'SERVER'
-          });
 
           if (snapshot.size > 0) {
             const products = new Set<string>();
@@ -4057,16 +4821,6 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
                 products.add(data['productId']);
               }
             });
-            
-            console.log(`✅ Firestore cached ${snapshot.size} inventory batches (${products.size} products)`);
-            
-            if (!fromCache) {
-              console.log('📡 Data synced from server - Firestore cache updated');
-            } else {
-              console.log('💾 Data loaded from Firestore cache');
-            }
-          } else {
-            console.log('⚠️ No inventory batches found for this store');
           }
         },
         (error) => {
@@ -4075,7 +4829,6 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
         }
       );
       
-      console.log('✅ Inventory snapshot listener registered - Firestore will handle caching');
       
       // REMARKED: Custom IndexedDB preload logic - replaced with Firestore snapshot listener
       /*
@@ -4178,28 +4931,14 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   // Load stores using getActiveStoresForDropdown (same as Access Management)
   async loadStoresForPOS(): Promise<void> {
     try {
-      console.log('🏪 loadStoresForPOS: Starting...');
       const currentPermission = this.authService.getCurrentPermission();
-      console.log('🏪 loadStoresForPOS: Current permission:', currentPermission);
       
       if (currentPermission?.companyId) {
-        console.log('🏪 loadStoresForPOS: Calling getActiveStoresForDropdown with companyId:', currentPermission.companyId);
         // Use the same centralized method as Access Management
         const stores = await this.storeService.getActiveStoresForDropdown(currentPermission.companyId);
-        console.log('🏪 loadStoresForPOS: Received stores:', stores.length);
-        console.log('🏪 loadStoresForPOS: Store details:', stores.map(s => ({ 
-          id: s.id, 
-          name: s.storeName, 
-          status: s.status,
-          companyId: s.companyId
-        })));
         
         this.storesSignal.set(stores);
-        console.log('✅ loadStoresForPOS: Stores set in signal:', stores.length, 'stores');
         
-        // Verify signal was set correctly
-        const verifyStores = this.storesSignal();
-        console.log('🔍 loadStoresForPOS: Verification - storesSignal now contains:', verifyStores.length, 'stores');
       } else {
         console.warn('⚠️ loadStoresForPOS: No companyId available for loading stores');
       }
@@ -4211,9 +4950,6 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
 
   // Event handlers
   async selectStore(storeId: string): Promise<void> {
-    console.log('🎯 selectStore called with storeId:', storeId);
-    console.log('🏪 Available stores:', this.availableStores().map(s => ({ id: s.id, name: s.storeName, companyId: s.companyId })));
-    
     // Get companyId for the selected store first
     const storeInfo = this.availableStores().find(s => s.id === storeId);
     const companyIdForStore = storeInfo?.companyId;
@@ -4221,11 +4957,9 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     // Update IndexedDB immediately with the new selected store
     try {
       const currentUser = this.authService.getCurrentUser();
-      console.log('💾 Current user for IndexedDB update:', currentUser?.uid);
       
       if (currentUser?.uid) {
         const existingUserData = await this.indexedDBService.getUserData(currentUser.uid);
-        console.log('💾 Existing user data from IndexedDB:', existingUserData);
         
         if (existingUserData) {
           // Update permissions array to reflect the new store selection
@@ -4241,7 +4975,6 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
                 ...updatedPermissions[permissionIndex],
                 storeId: storeId
               };
-              console.log('💾 Updated permission for company:', companyIdForStore, 'with storeId:', storeId);
             } else {
               // Add new permission if it doesn't exist
               const roleId = existingUserData.roleId || 'creator';
@@ -4250,7 +4983,6 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
                 storeId: storeId,
                 roleId: roleId
               });
-              console.log('💾 Added new permission for company:', companyIdForStore, 'with storeId:', storeId);
             }
           }
           
@@ -4261,15 +4993,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
             updatedAt: new Date()
           };
           
-          console.log('💾 About to save updated user data:', updatedUserData);
           await this.indexedDBService.saveUserData(updatedUserData);
-          console.log('💾 ✅ Store selection and permissions updated in IndexedDB:', storeId);
-          console.log('💾 ✅ Updated permissions:', updatedPermissions);
-          
-          // Verify the save by reading back
-          const verifyData = await this.indexedDBService.getUserData(currentUser.uid);
-          console.log('💾 ✅ VERIFICATION - Data read back from IndexedDB:', verifyData);
-          console.log('💾 ✅ VERIFICATION - currentStoreId:', verifyData?.currentStoreId);
         } else {
           console.error('❌ No existing user data found in IndexedDB for uid:', currentUser.uid);
         }
@@ -4291,16 +5015,12 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       const currentUser = this.authService.getCurrentUser();
       if (currentUser?.uid) {
         const offlineUserData = await this.indexedDBService.getUserData(currentUser.uid);
-        console.log('💾 IndexedDB user data:', offlineUserData);
         
         if (offlineUserData?.permissions && offlineUserData.permissions.length > 0) {
           const permission = this.getActivePermission(offlineUserData, storeId);
-          console.log('🔑 Active permission found:', permission);
           
           if (permission) {
             companyId = permission.companyId;
-            console.log('💾 PRIORITY: Using companyId from IndexedDB:', companyId);
-            console.log('💾 Selected permission from', offlineUserData.permissions.length, 'available permissions');
           }
         }
       }
@@ -4312,23 +5032,20 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     if (!companyId) {
       const storeInfo = this.availableStores().find(s => s.id === storeId);
       companyId = storeInfo?.companyId;
-      console.log('🗄️ FALLBACK: Using companyId from database store info:', companyId);
-      console.log('🗄️ Store info found:', storeInfo);
     }
     
     if (companyId) {
-      console.log('📦 Loading products for companyId:', companyId, 'storeId:', storeId);
       await this.productService.initializeProducts(storeId);
-      console.log('✅ Product loading completed');
-      console.log('🛍️ Total products loaded:', this.productService.getProductsSignal()().length);
       
       // Load available tags for the store
       await this.loadAvailableTags();
       
       // Preload productInventory for this store to IndexedDB
-      console.log('📦 Preloading inventory for new store...');
       await this.preloadProductInventory();
-      console.log('✅ Inventory preloaded for store:', storeId);
+      
+      // Refresh orders for the selected store
+      console.log('🔄 Refreshing orders for selected store:', storeId);
+      await this.refreshOrders();
       
   // Reset grid pagination when store changes
   this.gridRowsVisible.set(4);
@@ -4668,15 +5385,13 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
         invoiceNumber: this.invoiceNumber
       };
       
-      // Set receipt data and show modal
+      // Set receipt data and show modal, preserve cart for reprinting
       this.receiptDataSignal.set(updatedReceiptData);
       this.isReceiptModalVisibleSignal.set(true);
 
       console.log('🧾 Offline receipt modal opened with invoice:', this.invoiceNumber);
-      
-      // Clear cart directly without confirmation (order is completed)
-      this.posService.clearCart();
-      console.log('🗑️ Cart cleared after successful offline order');
+      // Mark order completed so UI will prompt to start a new order when interacting
+      this.isOrderCompleted.set(true);
       
     } catch (error) {
       console.error('❌ Error processing offline order:', error);
@@ -4907,29 +5622,37 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     console.log('✅ VAT applied to all cart items');
   }
 
-  async clearCart(): Promise<void> {
+  async clearCart(silent: boolean = false): Promise<void> {
     // Subscription gate: block if subscription expired or store inactive
     const ok = await this.checkSubscriptionGate();
     if (!ok) return;
     // Check if order is already completed
     if (this.isOrderCompleted()) {
-      await this.showConfirmationDialog({
-        title: 'Clear Cart Disabled',
-        message: 'This order is already completed. Please start a new order to clear the cart.',
-        confirmText: 'Start New Order',
-        cancelText: 'Cancel',
-        type: 'info'
-      }).then(async (confirmed) => {
-        if (confirmed) {
-          await this.startNewOrderDirect();
-        }
-      });
+      if (!silent) {
+        await this.showConfirmationDialog({
+          title: 'Clear Cart Disabled',
+          message: 'This order is already completed. Please start a new order to clear the cart.',
+          confirmText: 'Start New Order',
+          cancelText: 'Cancel',
+          type: 'info'
+        }).then(async (confirmed) => {
+          if (confirmed) {
+            await this.startNewOrderDirect();
+          }
+        });
+      }
       return;
     }
 
     // Check if new order is active before allowing cart clearing
-    if (!this.isNewOrderActive()) {
+    if (!this.isNewOrderActive() && !silent) {
       console.log('❌ Clear cart blocked: New order must be initiated first');
+      return;
+    }
+
+    // If silent mode, skip confirmation dialog
+    if (silent) {
+      this.posService.clearCart();
       return;
     }
 
@@ -4944,7 +5667,6 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     if (confirmed) {
       this.posService.clearCart();
       // Keep order active - don't reset state, user can continue adding items
-      console.log('🗑️ Cart cleared - order still active for new items');
     }
   }
 
@@ -5661,6 +6383,8 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       case 'paid':
       case 'completed':
         return '#059669'; // Green
+      case 'unpaid':
+        return '#eab308'; // Yellow
       case 'pending':
         return '#d97706'; // Orange
       case 'cancelled':
@@ -5716,18 +6440,9 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
    */
   private async testFirestoreConnection(): Promise<void> {
     try {
-      console.log('🧪 === FIRESTORE CONNECTION TEST ===');
-      
       // Test 1: Check authentication
       const currentUser = this.authService.getCurrentUser();
       const currentPermission = this.authService.getCurrentPermission();
-      
-      console.log('🔑 Auth Status:', {
-        user: currentUser?.email || 'No user',
-        permission: currentPermission || 'No permission',
-        companyId: currentPermission?.companyId || 'No company',
-        storeId: currentPermission?.storeId || 'No store'
-      });
       
       if (!currentUser) {
         console.log('❌ Test skipped - no user authenticated');
@@ -5735,15 +6450,12 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       }
       
       // Test 2: Direct Firestore query
-      console.log('🔍 Testing direct Firestore access...');
       const { collection, query, where, getDocs, limit } = await import('@angular/fire/firestore');
       const firestore = (this.productService as any)['firestore']; // Access private firestore instance
       
       const productsRef = collection(firestore, 'products');
       const basicQuery = query(productsRef, limit(5));
       const basicSnapshot = await getDocs(basicQuery);
-      
-      console.log('📊 Total products in collection:', basicSnapshot.size);
       
       if (basicSnapshot.empty) {
         console.log('❌ Products collection is empty!');
@@ -5757,27 +6469,14 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       
       basicSnapshot.docs.forEach(doc => {
         const data = doc.data();
-        console.log('📦 Sample product:', {
-          id: doc.id,
-          name: data['productName'],
-          company: data['companyId'],
-          store: data['storeId'],
-          status: data['status']
-        });
         
         if (data['companyId']) companies.add(data['companyId']);
         if (data['storeId']) stores.add(data['storeId']);
         if (data['status']) statuses.add(data['status']);
       });
       
-      console.log('📈 Data Summary:');
-      console.log('🏢 Companies:', Array.from(companies));
-      console.log('🏪 Stores:', Array.from(stores));
-      console.log('📊 Statuses:', Array.from(statuses));
-      
       // Test 4: Try ProductService query pattern
       if (currentPermission?.companyId) {
-        console.log('🎯 Testing ProductService query pattern...');
         
         const testQuery = query(
           productsRef,
@@ -5787,21 +6486,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
         );
         
         const testSnapshot = await getDocs(testQuery);
-        console.log('🎯 ProductService pattern results:', testSnapshot.size, 'products');
-        
-        if (testSnapshot.empty) {
-          console.log('❌ No products found with ProductService query!');
-          console.log('💡 Check if products have correct companyId and status=active');
-        } else {
-          console.log('✅ ProductService query pattern works!');
-          testSnapshot.docs.forEach(doc => {
-            const data = doc.data();
-            console.log('  📦', data['productName'], '(Store:', data['storeId'], ')');
-          });
-        }
       }
-      
-      console.log('🧪 === END FIRESTORE TEST ===');
       
     } catch (error) {
       console.error('❌ Firestore test error:', error);
@@ -5858,15 +6543,30 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
    */
   async loadAvailableTags(): Promise<void> {
     const storeId = this.selectedStoreId();
+    console.log('🏷️ Loading tags for store:', storeId);
     if (!storeId) {
       this.availableTagsByGroup.set([]);
       return;
     }
 
     try {
-      console.log('🏷️ Loading tags from database for store:', storeId);
       const tags = await this.posService.getTagsForStore(storeId);
-      console.log('🏷️ Loaded tags from database:', tags);
+      console.log('🏷️ Retrieved tags from service:', tags.length, 'tags');
+      console.log('🏷️ RAW TAGS DATA:', JSON.stringify(tags, null, 2));
+      
+      // Log each tag's structure
+      tags.forEach((tag, index) => {
+        console.log(`🏷️ Tag ${index + 1}:`, {
+          id: tag.id,
+          tagId: tag.tagId,
+          label: tag.label,
+          group: tag.group,
+          storeId: tag.storeId,
+          isActive: tag.isActive,
+          createdAt: tag.createdAt,
+          allFields: Object.keys(tag)
+        });
+      });
 
       // Group tags by their group field and track first createdAt per group
       const groupMap = new Map<string, { id: string; label: string; createdAt?: any }[]>();
@@ -5874,6 +6574,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       
       tags.forEach(tag => {
         const group = tag.group || 'Other';
+        console.log(`🏷️ Processing tag "${tag.label}" with group: "${group}"`);
         if (!groupMap.has(group)) {
           groupMap.set(group, []);
           // Track the first createdAt for this group
@@ -5885,6 +6586,12 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
           createdAt: tag.createdAt
         });
       });
+
+      console.log('🏷️ Group Map entries:', Array.from(groupMap.entries()).map(([group, tags]) => ({
+        group,
+        tagCount: tags.length,
+        tags: tags.map(t => t.label)
+      })));
 
       // Convert to array and sort groups by their first createdAt (ascending)
       const tagsByGroup = Array.from(groupMap.entries())
@@ -5900,8 +6607,9 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
           return timeA - timeB;
         });
 
-      console.log('🏷️ Tags grouped by category:', tagsByGroup);
+      console.log('🏷️ FINAL Grouped tags (to be set):', JSON.stringify(tagsByGroup, null, 2));
       this.availableTagsByGroup.set(tagsByGroup);
+      console.log('🏷️ availableTagsByGroup signal updated. Current value:', this.availableTagsByGroup());
     } catch (error) {
       console.error('❌ Failed to load tags:', error);
       this.availableTagsByGroup.set([]);
@@ -5988,8 +6696,9 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   isAccessTabScrollAtEnd(): boolean {
-    if (!this.accessTabListContainer) return true;
+    if (!this.accessTabListContainer?.nativeElement) return true;
     const container = this.accessTabListContainer.nativeElement;
-    return container.scrollLeft + container.clientWidth >= container.scrollWidth - 10;
+    const isAtEnd = container.scrollLeft + container.clientWidth >= container.scrollWidth - 10;
+    return isAtEnd;
   }
 }

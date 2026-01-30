@@ -10,8 +10,6 @@ export const policyGuard: CanActivateFn = async (route, state) => {
   const offlineStorageService = inject(OfflineStorageService);
   const networkService = inject(NetworkService);
   const router = inject(Router);
-
-  console.log('🛡️ PolicyGuard: Starting policy check for URL:', state.url);
   
   // In offline mode, bypass policy check to avoid chunk loading issues
   if (networkService.isOffline()) {
@@ -31,7 +29,6 @@ export const policyGuard: CanActivateFn = async (route, state) => {
   try {
     const accepted = await authService.hasAcceptedPolicyAndTerms(currentUser.uid);
     if (accepted) {
-      console.log('🛡️ PolicyGuard: User has accepted policy & terms (IndexedDB), allowing access');
       return true;
     }
   } catch (e) {

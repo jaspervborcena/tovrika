@@ -5,6 +5,9 @@ import {
   addDoc,
   doc,
   getDoc,
+  getDocs,
+  query,
+  where,
   runTransaction,
   writeBatch,
   increment
@@ -343,7 +346,6 @@ export class PosService {
         if (existingUserData) {
           existingUserData.currentStoreId = storeId;
           await this.indexedDBService.saveUserData(existingUserData);
-          console.log('💾 Store selection saved to IndexedDB:', storeId);
         }
       }
     } catch (error) {
@@ -366,7 +368,6 @@ export class PosService {
         const offlineUserData = await this.indexedDBService.getUserData(currentUser.uid);
         if (offlineUserData?.currentStoreId) {
           this.selectedStoreIdSignal.set(offlineUserData.currentStoreId);
-          console.log('💾 Restored store selection from IndexedDB:', offlineUserData.currentStoreId);
         }
       }
     } catch (error) {
@@ -563,7 +564,9 @@ export class PosService {
    */
   async processOrderWithInvoiceAndPayment(
     customerInfo: { fullName: string; address: string; tin: string; customerId: string }, 
-    payments: { amountTendered: number; changeAmount: number; paymentDescription: string; paymentType: string }
+    payments: { amountTendered: number; changeAmount: number; paymentDescription: string; paymentType: string },
+    saveAsOpen: boolean = false,
+    tableNumber: string = ''
   ): Promise<{ orderId: string; invoiceNumber: string } | null> {
     try {
       this.isProcessingSignal.set(true);
@@ -662,6 +665,10 @@ export class PosService {
 
       console.log('📦 Processing order with invoice service...');
       
+      if (saveAsOpen) {
+        console.log('💼 OPEN order mode: Will skip background operations (no tracking/inventory/ledger)');
+      }
+      
       // 🧾 Execute invoice transaction with NEW structure
       // Only apply timeout when online - offline mode should work without timeout
       let invoiceResult;
@@ -670,7 +677,9 @@ export class PosService {
           storeId: storeId,
           orderData: orderData,
           customerInfo: customerInfo, // Pass as separate parameter
-          paymentsData: payments      // Pass as separate parameter
+          paymentsData: payments,     // Pass as separate parameter
+          saveAsOpen: saveAsOpen,     // Pass OPEN flag
+          tableNumber: tableNumber    // Pass table number separately
         });
         
         // Apply very short timeout to quickly detect offline mode
@@ -713,18 +722,23 @@ export class PosService {
       };
 
       // Fire all background operations without blocking receipt display
-      // These will complete asynchronously and Firestore offline persistence will queue them
-      this.executeBackgroundOrderOperations(
-        company.id!,
-        storeId,
-        invoiceResult.orderId!,
-        invoiceResult.invoiceNumber!,
-        cartSummary,
-        cartItems,
-        user.uid
-      ).catch(err => {
-        console.warn('⚠️ Background operations error (non-critical):', err);
-      });
+      // Skip background operations for OPEN orders (no tracking/inventory/ledger)
+      if (!saveAsOpen) {
+        // These will complete asynchronously and Firestore offline persistence will queue them
+        this.executeBackgroundOrderOperations(
+          company.id!,
+          storeId,
+          invoiceResult.orderId!,
+          invoiceResult.invoiceNumber!,
+          cartSummary,
+          cartItems,
+          user.uid
+        ).catch(err => {
+          console.warn('⚠️ Background operations error (non-critical):', err);
+        });
+      } else {
+        console.log('💼 OPEN order: Skipping background operations (tracking/inventory/ledger)');
+      }
 
       return orderResult;
 
@@ -740,6 +754,83 @@ export class PosService {
    * Execute background operations after order is created
    * These operations run asynchronously and don't block receipt display
    */
+  /**
+   * Execute background operations for an existing order (public method for Pay Now on OPEN orders)
+   * This includes: orderSellingTracking, inventory updates, inventory deduction, and ledger entries
+   */
+  async executeBackgroundOperationsForExistingOrder(
+    orderId: string,
+    invoiceNumber: string
+  ): Promise<void> {
+    try {
+      console.log('🔄 Executing background operations for existing order:', orderId);
+      
+      // Get necessary data
+      const userData = await this.getUserAndCompanyData();
+      if (!userData) {
+        throw new Error('User or company not found');
+      }
+      
+      const { user, company } = userData;
+      const storeId = this.selectedStoreId();
+      if (!storeId) {
+        throw new Error('No store selected');
+      }
+
+      // Fetch order details to get items
+      const orderDetailsQuery = query(
+        collection(this.firestore, 'orderDetails'),
+        where('orderId', '==', orderId)
+      );
+      const orderDetailsSnapshot = await getDocs(orderDetailsQuery);
+      
+      if (orderDetailsSnapshot.empty) {
+        throw new Error('No order details found for this order');
+      }
+
+      // Collect all items from orderDetails
+      let allItems: any[] = [];
+      orderDetailsSnapshot.forEach(doc => {
+        const data = doc.data();
+        if (data['items'] && Array.isArray(data['items'])) {
+          allItems = allItems.concat(data['items']);
+        }
+      });
+
+      // Fetch the order document to get totals
+      const orderRef = doc(this.firestore, 'orders', orderId);
+      const orderDoc = await getDoc(orderRef);
+      
+      if (!orderDoc.exists()) {
+        throw new Error('Order not found');
+      }
+      
+      const orderData = orderDoc.data();
+      
+      // Create cart summary from order data
+      const cartSummary = {
+        netAmount: orderData['totalAmount'] || orderData['netAmount'] || 0,
+        totalQuantity: allItems.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0)
+      };
+
+      // Execute background operations
+      await this.executeBackgroundOrderOperations(
+        company.id!,
+        storeId,
+        orderId,
+        invoiceNumber,
+        cartSummary,
+        allItems,
+        user.uid
+      );
+
+      console.log('✅ Background operations completed for existing order:', orderId);
+    } catch (error) {
+      console.error('❌ Error executing background operations for existing order:', error);
+      throw error;
+    }
+  }
+
   private async executeBackgroundOrderOperations(
     companyId: string,
     storeId: string,
@@ -1117,16 +1208,12 @@ export class PosService {
 
   async loadProductTags(storeId: string): Promise<void> {
     try {
-      console.log('🏷️ Loading product tags for store:', storeId);
       const tags = await this.tagsService.getTagsByStore(storeId, false);
-      console.log('🏷️ Loaded tags:', tags.length);
       const tagsMap = new Map<string, string>();
       tags.forEach(tag => {
         tagsMap.set(tag.tagId, tag.label);
-        console.log('🏷️ Tag mapping:', tag.tagId, '->', tag.label);
       });
       this.productTagsCache.set(tagsMap);
-      console.log('🏷️ Tags cache updated. Total tags:', tagsMap.size);
     } catch (error) {
       console.error('❌ Error loading product tags:', error);
     }
@@ -1170,9 +1257,35 @@ export class PosService {
     cartItems: CartItem[],
     context?: { orderId?: string; invoiceNumber?: string }
   ): Promise<void> {
+    // Filter out items that don't have stock tracking enabled
+    const trackedItems = [];
+    for (const item of cartItems) {
+      try {
+        const productDoc = await getDoc(doc(this.firestore, 'products', item.productId) as any);
+        if (productDoc.exists()) {
+          const productData = productDoc.data() as any;
+          if (productData.isStockTracked !== false) {
+            trackedItems.push(item);
+          } else {
+            console.log(`⏭️ Skipping inventory deduction for ${item.productName} (isStockTracked=false)`);
+          }
+        } else {
+          trackedItems.push(item); // If product not found, process anyway (backward compatibility)
+        }
+      } catch (err) {
+        console.warn(`⚠️ Error checking isStockTracked for ${item.productName}, including in deduction:`, err);
+        trackedItems.push(item);
+      }
+    }
+
+    if (trackedItems.length === 0) {
+      console.log('⏭️ No tracked items to process inventory for');
+      return;
+    }
+
     const mode = environment.inventory?.reconciliationMode || 'legacy';
     if (mode === 'recon') {
-      console.log('� Tracking sale for reconciliation mode (no client-side FIFO). Items:', cartItems.length);
+      console.log('📊 Tracking sale for reconciliation mode (no client-side FIFO). Items:', trackedItems.length);
       const user = this.authService.getCurrentUser();
       const company = await this.companyService.getActiveCompany();
       const storeId = this.selectedStoreId();
@@ -1181,7 +1294,7 @@ export class PosService {
         throw new Error('Missing user/company/store for tracking');
       }
 
-      const items = cartItems.map(ci => ({
+      const items = trackedItems.map(ci => ({
         productId: ci.productId,
         productName: ci.productName,
         quantity: ci.quantity,
@@ -1206,10 +1319,10 @@ export class PosService {
     }
 
     // Legacy: client-side FIFO deduction
-    console.log('🔄 Starting FIFO inventory deduction for cart items:', cartItems.length);
+    console.log('🔄 Starting FIFO inventory deduction for cart items:', trackedItems.length);
     const { InventoryDataService } = await import('./inventory-data.service');
     const inventoryService = this.injector.get(InventoryDataService);
-    for (const cartItem of cartItems) {
+    for (const cartItem of trackedItems) {
       try {
         await this.deductInventoryFifo(cartItem.productId, cartItem.quantity, inventoryService);
         console.log(`✅ Inventory deducted for ${cartItem.productName}: ${cartItem.quantity} units`);

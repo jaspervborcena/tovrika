@@ -2159,13 +2159,6 @@ export class StoresManagementComponent implements OnInit {
         this.stores = this.storeService.getStoresByCompany(currentPermission.companyId);
         this.filteredStores = [...this.stores];
         
-        // Debug: Log store statuses
-        console.log('🏪 Loaded stores with statuses:', this.stores.map(s => ({
-          name: s.storeName,
-          code: s.storeCode,
-          status: s.status,
-          type: typeof s.status
-        })));
 
         // Load latest subscription per store
         const subs = await Promise.all(
