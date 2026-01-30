@@ -52,7 +52,7 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
       '50 Products Maximum',
       '10,000 Transactions',
       '3-Month Data History',
-      'Cash + GCash/Maya',
+      'Cash + GCash',
       'Thermal Receipt Printing',
       'Expansion: +₱500 per additional store',
       '+50 Products & +10,000 Transactions per added store',
@@ -85,7 +85,7 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
       '150 Products Maximum',
       '25,000 Transactions',
       '1-Year Data History',
-      'Cash + GCash/Maya',
+      'Cash + GCash',
       'Thermal Receipt Printing',
       'Additional features available',
       'Priority email support'
@@ -114,7 +114,7 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
       '1,500 Products Maximum',
       '150,000 Transactions',
       '3+ Years Data History',
-      'Cash, GCash, Maya, & Credit Card',
+      'Cash, GCash, & Credit Card',
       'Dedicated Pipeline (Private & Secure)',
       'Domain Integration (yourbrand.com)',
       'New Requests & Custom Features (Prioritized)',
@@ -223,7 +223,7 @@ export const SUBSCRIPTION_FEATURES: SubscriptionPlanFeature[] = [
     premium: 'Cash + 5 methods',
     enterprise: 'All + custom',
     icon: 'payment',
-    tooltip: 'GCash, Maya, cards, etc.'
+    tooltip: 'GCash, cards, etc.'
   },
   {
     name: 'Receipts',

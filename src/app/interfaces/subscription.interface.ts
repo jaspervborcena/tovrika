@@ -32,12 +32,12 @@ export interface Subscription {
   promoCode?: string | null;   // Optional promo code used
   referralCode?: string | null;// Optional referral code used
 
-  paymentMethod?: string;      // 'gcash', 'paymaya', 'paypal', etc.
+  paymentMethod?: string;      // 'gcash', 'paypal', etc.
   paymentReference?: string;   // Transaction ID / GCash reference
   amountPaid?: number;         // Amount paid
   currency?: string;           // 'PHP', etc.
 
-  paymentReceiptUrl?: string;  // Screenshot URL (GCash/PayMaya)
+  paymentReceiptUrl?: string;  // Screenshot URL (GCash)
 
   features: SubscriptionFeatures; // Feature flags/limits
 

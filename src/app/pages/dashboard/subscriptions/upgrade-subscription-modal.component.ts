@@ -285,6 +285,10 @@ export class UpgradeSubscriptionModalComponent implements OnChanges {
       try {
         const docRef = await addDoc(requestsRef, requestData);
         console.log('✅ Subscription request created for admin approval:', docRef.id);
+        
+        // Send email notification to admin
+        await this.sendEmailNotification(docRef.id, requestData);
+        
         this.toast.success('Subscription upgrade request submitted! Waiting for admin approval.');
       } catch (error) {
         console.warn('⚠️ Failed to create subscription request online, trying offline mode:', error);
@@ -410,6 +414,49 @@ export class UpgradeSubscriptionModalComponent implements OnChanges {
       if (!(typeof amt === 'number' && !isNaN(amt) && amt > 0)) {
         this.amountPaid = this.finalAmount();
       }
+    }
+  }
+
+  /**
+   * Send email notification to admin about new subscription request
+   */
+  private async sendEmailNotification(requestId: string, requestData: any): Promise<void> {
+    try {
+      const emailSubject = `New Subscription Request - ${requestData.companyName}`;
+      const emailBody = `
+        <h2>New Subscription Request</h2>
+        <p><strong>Request ID:</strong> ${requestId}</p>
+        <p><strong>Company:</strong> ${requestData.companyName}</p>
+        <p><strong>Store:</strong> ${requestData.storeName} (${requestData.storeCode || 'N/A'})</p>
+        <p><strong>Owner Email:</strong> ${requestData.ownerEmail}</p>
+        <p><strong>Contact Phone:</strong> ${requestData.contactPhone}</p>
+        <p><strong>Requested Tier:</strong> ${requestData.requestedTier?.toUpperCase()}</p>
+        <p><strong>Duration:</strong> ${requestData.durationMonths} month(s)</p>
+        <p><strong>Payment Method:</strong> ${requestData.paymentMethod?.toUpperCase()}</p>
+        <p><strong>Payment Reference:</strong> ${requestData.paymentReference}</p>
+        <p><strong>Amount Paid:</strong> ${requestData.currency} ${requestData.amountPaid}</p>
+        <p><strong>Payer:</strong> ${requestData.payerName} (${requestData.payerMobile})</p>
+        ${requestData.paymentReceiptUrl ? `<p><strong>Receipt URL:</strong> <a href="${requestData.paymentReceiptUrl}">View Receipt</a></p>` : ''}
+        <p><strong>Notes:</strong> ${requestData.notes || 'None'}</p>
+        <p><strong>Requested At:</strong> ${new Date(requestData.requestedAt).toLocaleString()}</p>
+        <hr>
+        <p>Please review and approve this subscription request in the admin dashboard.</p>
+      `;
+
+      // Add email to mail collection for Firebase Extension to send
+      const mailRef = collection(this.firestore, 'mail');
+      await addDoc(mailRef, {
+        to: 'tovrikapos@gmail.com',
+        message: {
+          subject: emailSubject,
+          html: emailBody,
+        },
+      });
+
+      console.log('✅ Email notification queued for admin');
+    } catch (error) {
+      console.error('❌ Failed to send email notification:', error);
+      // Don't throw error - email is not critical for subscription request
     }
   }
 }

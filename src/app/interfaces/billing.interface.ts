@@ -10,7 +10,7 @@ export interface CompanyBillingHistory {
   finalAmount: number;
   promoCode?: string;
   referralCode?: string;
-  paymentMethod: 'credit_card' | 'paypal' | 'bank_transfer' | 'gcash' | 'paymaya';
+  paymentMethod: 'credit_card' | 'paypal' | 'bank_transfer' | 'gcash';
   paidAt: Date;
   createdAt?: Date;
   updatedAt?: Date;
@@ -18,4 +18,4 @@ export interface CompanyBillingHistory {
 
 export type BillingTier = 'freemium' | 'standard' | 'premium' | 'enterprise';
 export type BillingCycle = 'monthly' | 'quarterly' | 'yearly';
-export type PaymentMethod = 'credit_card' | 'paypal' | 'bank_transfer' | 'gcash' | 'paymaya';
+export type PaymentMethod = 'credit_card' | 'paypal' | 'bank_transfer' | 'gcash';

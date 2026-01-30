@@ -1,5 +1,10 @@
 # Capacitor Android (generated)
 android/
+
+# APK files
+*.apk
+TovrikaPOS.apk
+
 # See https://docs.github.com/get-started/getting-started-with-git/ignoring-files for more about ignoring files.
 
 # See https://docs.github.com/get-started/getting-started-with-git/ignoring-files for more about ignoring files.

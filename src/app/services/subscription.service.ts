@@ -174,7 +174,7 @@ export class SubscriptionService {
   }
 
   /** Upload a payment receipt screenshot to Firebase Storage and return the URL */
-  async uploadPaymentReceipt(file: File, params: { companyId: string; storeId: string; subscriptionId: string; paymentMethod: 'gcash' | 'paymaya' | string }): Promise<string> {
+  async uploadPaymentReceipt(file: File, params: { companyId: string; storeId: string; subscriptionId: string; paymentMethod: 'gcash' | string }): Promise<string> {
     const storage = getStorage(app); // Use environment-configured Firebase app
     const user = this.auth.getCurrentUser();
     if (!user?.uid) throw new Error('Not authenticated');

@@ -487,7 +487,7 @@ export class BillingHistoryModalComponent implements OnInit {
       'paypal': 'PayPal',
       'bank_transfer': 'Bank Transfer',
       'gcash': 'GCash',
-      'paymaya': 'PayMaya'
+
     };
     return methodMap[method] || method;
   }

@@ -33,7 +33,7 @@ export class SubscriptionModalComponent implements OnInit {
     discountPercent: number;
     amountPaid: number;
     finalAmount: number;
-    paymentMethod: 'gcash' | 'paymaya' | 'bank_transfer' | 'credit_card';
+    paymentMethod: 'gcash' | 'bank_transfer' | 'credit_card';
   }>();
 
   // Notify parent to open centralized upgrade modal (passes selected plan & billing info)
@@ -66,7 +66,7 @@ export class SubscriptionModalComponent implements OnInit {
   enterpriseNotes = signal('');
 
   // Payment form
-  paymentMethod = signal<'gcash' | 'paymaya' | 'bank_transfer' | 'credit_card'>('gcash');
+  paymentMethod = signal<'gcash' | 'bank_transfer' | 'credit_card'>('gcash');
   accountNumber = signal('');
   accountName = signal('');
 
