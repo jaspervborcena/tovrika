@@ -168,11 +168,14 @@ export class StoreService {
 
   async loadStoresByCompany(companyId: string) {
     if (this.isLoading) {
+      console.log('⏸️ loadStoresByCompany: Already loading, skipping...');
       return;
     }
     
     try {
   this.isLoading = true;
+      console.log('📥 loadStoresByCompany: Starting for company:', companyId);
+      
       // Ensure auth state is settled before making Firestore requests.
       try {
         await this.authService.waitForAuth();
@@ -185,10 +188,13 @@ export class StoreService {
       const storesRef = collection(this.firestore, 'stores');
       const storesQuery = query(storesRef, where('companyId', '==', companyId));
 
+      console.log('🔍 Querying Firestore for stores...');
       const querySnapshot = await getDocs(storesQuery);
+      console.log('📦 Query returned', querySnapshot.docs.length, 'documents');
       
       const stores = querySnapshot.docs.map(doc => {
         const data = doc.data() as any;
+        console.log('📄 Store doc:', { id: doc.id, name: data.storeName, status: data.status, companyId: data.companyId });
         const store: Store = {
           id: doc.id,
           companyId: data.companyId || '',
@@ -201,7 +207,7 @@ export class StoreService {
           phoneNumber: data.phoneNumber || '',
           email: data.email || '',
           uid: data.uid || '',
-          status: data.status || 'inactive',
+          status: data.status || 'active',
           createdAt: toDateValue(data.createdAt) || new Date(),
           updatedAt: toDateValue(data.updatedAt) || new Date(),
           logoUrl: data.logoUrl || '',
@@ -226,8 +232,11 @@ export class StoreService {
         return store;
       });
       
+      console.log('✅ Setting storesSignal with', stores.length, 'stores');
       this.storesSignal.set(stores);
       this.loadTimestamp = Date.now();
+      console.log('📊 StoresSignal now contains:', this.storesSignal().length, 'stores');
+      
       // Persist snapshot to IndexedDB for offline use
       try {
         await this.indexedDb.saveSetting(`stores_${companyId}`, stores);
@@ -345,14 +354,27 @@ export class StoreService {
         updatedAt: new Date()
       };
       
+      console.log('🏪 Creating store with data:', { 
+        storeName: newStore.storeName, 
+        status: newStore.status, 
+        companyId: newStore.companyId 
+      });
+      
       // 🔥 NEW APPROACH: Use OfflineDocumentService for offline-safe creation
       const documentId = await this.offlineDocService.createDocument('stores', newStore);
       const createdStore: Store = {
         id: documentId,
         ...newStore
       };
+      
+      console.log('✅ Store created with ID:', documentId, 'status:', createdStore.status);
+      
       // Update the signal
-      this.storesSignal.update(stores => [...stores, createdStore]);
+      this.storesSignal.update(stores => {
+        const updated = [...stores, createdStore];
+        console.log('📊 StoresSignal updated. Total stores:', updated.length);
+        return updated;
+      });
       
       // Add default roles for this store
       const defaultRolesService = new (await import('./default-roles.service')).DefaultRolesService(this.firestore, this.offlineDocService);
@@ -392,11 +414,28 @@ export class StoreService {
             createdAt: new Date(),
             updatedAt: new Date()
           };
+          console.log('👤 Creating userRoles entry:', { userId: user.uid, storeId: documentId, roleId: 'creator' });
           await this.offlineDocService.createDocument('userRoles', userRole);
+          console.log('✅ UserRoles entry created successfully');
+          
+          // Wait a moment for Firestore to replicate
+          await new Promise(resolve => setTimeout(resolve, 300));
         } catch (e) {
           console.warn('⚠️ Failed to create userRoles entry for creator:', e);
         }
       }
+
+      // Reload all stores for this company to ensure the new store appears in all dropdowns immediately
+      try {
+        console.log('🔄 Reloading stores for company:', store.companyId);
+        await this.loadStoresByCompany(store.companyId);
+        const reloadedStores = this.getStoresByCompany(store.companyId);
+        console.log('✅ Stores reloaded. Total for company:', reloadedStores.length, 'Active:', reloadedStores.filter(s => s.status === 'active').length);
+      } catch (e) {
+        console.warn('⚠️ Failed to reload stores after creation:', e);
+      }
+
+      console.log('✅ Store creation complete. ID:', documentId);
 
       return documentId;
     } catch (error) {
@@ -480,6 +519,7 @@ export class StoreService {
    */
   async getActiveStoresForDropdown(companyId: string): Promise<Store[]> {
     try {
+      console.log('🔍 getActiveStoresForDropdown called for company:', companyId);
       
       const user = this.authService.getCurrentUser();
       if (!user) {
@@ -487,33 +527,54 @@ export class StoreService {
         return [];
       }
 
+      // Ensure stores are loaded first
+      await this.loadStoresByCompany(companyId);
+
       // Query userRoles collection to get stores this user has access to
-      const userRolesRef = collection(this.firestore, 'userRoles');
-      const userRolesQuery = query(
-        userRolesRef,
-        where('companyId', '==', companyId),
-        where('userId', '==', user.uid)
-      );
+      // Add retry logic to handle Firestore replication lag
+      let userRolesSnap: any = null;
+      let retries = 0;
+      const maxRetries = 3;
       
-      const userRolesSnap = await getDocs(userRolesQuery);
+      while (retries < maxRetries) {
+        const userRolesRef = collection(this.firestore, 'userRoles');
+        const userRolesQuery = query(
+          userRolesRef,
+          where('companyId', '==', companyId),
+          where('userId', '==', user.uid)
+        );
+        
+        userRolesSnap = await getDocs(userRolesQuery);
+        
+        if (userRolesSnap?.docs?.length > 0 || retries === maxRetries - 1) {
+          break;
+        }
+        
+        // Wait 500ms before retrying
+        await new Promise(resolve => setTimeout(resolve, 500));
+        retries++;
+        console.log(`⏳ Retrying userRoles query (${retries}/${maxRetries})...`);
+      }
+      
+      console.log('👤 UserRoles found:', userRolesSnap?.docs?.length || 0);
       
       // Extract unique storeIds from userRoles
       const allowedStoreIds = new Set<string>();
-      userRolesSnap.docs.forEach(doc => {
-        const storeId = doc.data()['storeId'];
-        if (storeId) {
-          allowedStoreIds.add(storeId);
-        }
-      });
-
-      // If no specific stores found, user might not have access
-      if (allowedStoreIds.size === 0) {
-        console.warn('🚨 No store access found in userRoles for this user');
-        return [];
+      if (userRolesSnap?.docs) {
+        userRolesSnap.docs.forEach((doc: any) => {
+          const storeId = doc.data()['storeId'];
+          if (storeId) {
+            allowedStoreIds.add(storeId);
+            console.log('  ✓ User has access to store:', storeId);
+          }
+        });
       }
 
-      // Ensure stores are loaded
-      await this.loadStoresByCompany(companyId);
+      // If still no stores found after retries, return empty
+      if (allowedStoreIds.size === 0) {
+        console.warn('🚨 No store access found in userRoles for this user after retries');
+        return [];
+      }
       
       const storesRef = collection(this.firestore, 'stores');
       
@@ -527,6 +588,8 @@ export class StoreService {
       
       // Get all stores for the company
       const allStores = this.getStoresByCompany(companyId);
+      console.log('🏪 All stores for company:', allStores.length);
+      allStores.forEach(s => console.log('  - Store:', s.storeName, 'ID:', s.id, 'Status:', s.status));
       
       // Filter by: active status AND user has access (from userRoles)
       const accessibleStores = allStores.filter(store => 
@@ -534,6 +597,7 @@ export class StoreService {
       );
       
       const activeCount = allStores.filter(s => s.status === 'active').length;
+      console.log('✅ Accessible stores:', accessibleStores.length, '(Active:', activeCount, ')');
       
       return accessibleStores;
     } catch (error) {

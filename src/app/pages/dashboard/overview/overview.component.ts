@@ -2429,7 +2429,7 @@ export class OverviewComponent implements OnInit {
       const isOnline = navigator.onLine;
       console.log('🌐 Dashboard: Network status:', isOnline ? 'ONLINE' : 'OFFLINE');
       
-      // EXACT same approach as sales-summary
+      // ALWAYS reload stores from Firestore to get latest changes (including newly created stores)
       await this.loadStores();
       
       // After stores load, use the selected period/store to load analytics
@@ -2457,21 +2457,30 @@ export class OverviewComponent implements OnInit {
         return;
       }
 
-      // Use centralized method - filters by active status and userRoles access
+      console.log('🔄 Overview: Loading stores for company:', currentPermission.companyId);
+
+      // Load stores into StoreService
+      await this.storeService.loadStoresByCompany(currentPermission.companyId);
+      
+      // Get stores with userRoles filtering
       const stores = await this.storeService.getActiveStoresForDropdown(currentPermission.companyId);
+      console.log('✅ Overview: Stores loaded:', stores.length, stores.map(s => ({ id: s.id, name: s.storeName, status: s.status })));
+      
       this.stores.set(stores);
 
-      // Set selected store - EXACT same logic as sales-summary
+      // Set selected store after stores are loaded
       if (currentPermission?.storeId) {
         this.selectedStoreId.set(currentPermission.storeId);
+        console.log('🎯 Overview: Selected store from permission:', currentPermission.storeId);
       } else if (stores.length > 0 && stores[0].id) {
         this.selectedStoreId.set(stores[0].id);
-        console.log('🎯 Using first store ID');
+        console.log('🎯 Overview: Using first store ID:', stores[0].id, stores[0].storeName);
+      } else {
+        console.warn('⚠️ Overview: No stores available to select');
       }
     } catch (error) {
       console.error('❌ Error loading stores:', error);
       console.warn('⚠️ Will use cached store data if available');
-      this.stores.set([]);
       // Try to set selectedStoreId from permission even if store load failed
       const currentPermission = this.authService.getCurrentPermission();
       if (currentPermission?.storeId) {
