@@ -2567,8 +2567,9 @@ export class StoresManagementComponent implements OnInit {
       };
 
       console.log('💾 Saving store data:', {
-        formData,
-        storeData,
+        storeName: storeData.storeName,
+        status: storeData.status,
+        companyId: storeData.companyId,
         editingStore: this.editingStore?.id
       });
 

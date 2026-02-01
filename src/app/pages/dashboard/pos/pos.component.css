@@ -1044,19 +1044,22 @@
       border: none !important;
       border-bottom: 3px solid transparent !important;
       border-radius: 0;
-      padding: 0.75rem 1rem;
+      padding: 0.75rem 0.5rem !important;
       cursor: pointer;
       transition: all 0.2s;
-      min-width: 100px;
+      width: 120px !important;
+      min-width: 120px !important;
+      max-width: 120px !important;
+      min-height: 48px !important;
       text-align: center;
-      display: inline-flex;
-      align-items: center;
+      display: inline-flex !important;
+      align-items: center !important;
       justify-content: center;
       gap: 0.5rem;
       background: transparent;
       color: #6b7280;
-      font-size: 0.75rem;
-      white-space: nowrap;
+      font-size: 0.7rem !important;
+      white-space: normal !important;
       margin-bottom: -2px; /* Overlap container border */
       position: relative;
       z-index: 1;
@@ -1094,7 +1097,9 @@
 
   .tab-header {
     flex-shrink: 0;
-    min-width: 90px !important;
+    width: 120px !important;
+    min-width: 120px !important;
+    max-width: 120px !important;
   }
 }
 
@@ -1110,8 +1115,10 @@
   }
 
   .tab-header {
-    padding: 0.5rem 0.75rem !important;
-    min-width: 80px !important;
+    padding: 0.5rem 0.4rem !important;
+    width: 120px !important;
+    min-width: 120px !important;
+    max-width: 120px !important;
     font-size: 0.65rem !important;
   }
 
@@ -1141,9 +1148,6 @@
       background: #ef4444 !important; /* Red */
       color: #ffffff !important;
       border-bottom-color: #ef4444 !important;
-      min-height: 48px !important;
-      display: inline-flex !important;
-      align-items: center !important;
     }
 
     .tab-header[data-tab="Returns"] {
@@ -1174,11 +1178,6 @@
       background: #06b6d4 !important; /* Cyan */
       color: #ffffff !important;
       border-bottom-color: #06b6d4 !important;
-      font-size: 0.75rem !important;
-      padding: 0.75rem 1rem !important;
-      min-height: 48px !important;
-      display: inline-flex !important;
-      align-items: center !important;
     }
 
     .tab-header[data-tab="Split Payments"] {
@@ -1268,17 +1267,18 @@
 
     .tab-label {
       font-weight: 600;
-      font-size: 0.95rem;
-      white-space: normal;
-      line-height: 1.2;
+      font-size: 0.7rem !important;
+      white-space: normal !important;
+      line-height: 1.1 !important;
       text-align: center;
       word-break: break-word;
+      max-width: 100%;
     }
     
     /* Smaller font for longer tab labels */
     .tab-label.small-text {
-      font-size: 0.7rem;
-      line-height: 1.1;
+      font-size: 0.6rem !important;
+      line-height: 1.05 !important;
     }
 
     .products-display {

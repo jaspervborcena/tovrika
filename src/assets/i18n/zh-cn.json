@@ -73,6 +73,8 @@
     "returnsTab": "退货",
     "refundsTab": "退款",
     "damageTab": "损坏",
+    "unpaidTab": "未付款",
+    "recoveredTab": "已恢复",
     "splitPaymentsTab": "分期付款",
     "discountsTab": "折扣和促销",
     "newOrder": "新订单",
