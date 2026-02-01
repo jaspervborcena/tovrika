@@ -138,23 +138,12 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   readonly selectedCategory = computed(() => this.posSharedService.selectedCategory());
   readonly currentView = computed(() => this.posSharedService.currentView());
   
-  // Stores signal - loaded via getActiveStoresForDropdown (same as Access Management)
-  private storesSignal = signal<Store[]>([]);
-  
   // Cached company data for faster receipt preparation
   private cachedCompanySignal = signal<any>(null);
   
-  // Show stores filtered by userRoles and active status only (same as dropdowns in other components)
-  readonly availableStores = computed(() => {
-    const stores = this.storesSignal();
-    
-    if (stores.length === 0) {
-      return [];
-    }
-    
-    // Return stores without any additional filtering
-    return stores;
-  });
+  // Available stores signal
+  private storesSignal = signal<Store[]>([]);
+  readonly availableStores = computed(() => this.storesSignal());
   readonly selectedStoreId = computed(() => this.posService.selectedStoreId());
   readonly cartItems = computed(() => this.posService.cartItems());
   // Show most recently added cart item at the top for display purposes
@@ -4934,13 +4923,15 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       const currentPermission = this.authService.getCurrentPermission();
       
       if (currentPermission?.companyId) {
-        // Use the same centralized method as Access Management
+        // Load stores into StoreService first
+        await this.storeService.loadStoresByCompany(currentPermission.companyId);
+        
+        // Get stores with userRoles filtering
         const stores = await this.storeService.getActiveStoresForDropdown(currentPermission.companyId);
-        
         this.storesSignal.set(stores);
-        
       } else {
         console.warn('⚠️ loadStoresForPOS: No companyId available for loading stores');
+        this.storesSignal.set([]);
       }
     } catch (error) {
       console.error('❌ loadStoresForPOS: Error loading stores:', error);
