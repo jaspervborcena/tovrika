@@ -1067,10 +1067,22 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
       // Remove uid from productData since we'll add it in the transaction
       const { uid, ...productDataWithoutUid } = productData;
       
+      console.log('📋 Product data received for creation:', {
+        category: productData.category,
+        productName: productData.productName,
+        hasCategory: !!productData.category
+      });
+      
       const baseData: any = this.cleanUndefinedValues({
         ...productDataWithoutUid,
         companyId,
         status: productData.status || 'active'
+      });
+      
+      console.log('📋 Base data after cleaning undefined values:', {
+        category: baseData.category,
+        productName: baseData.productName,
+        hasCategory: !!baseData.category
       });
 
       // Use batch writes for all-or-nothing product + inventory creation
@@ -1123,6 +1135,13 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
       productPayload.discountValue = Number(baseData?.discountValue || 0);
 
       // 4. Queue product creation in batch
+      console.log('💾 Final product payload being saved:', {
+        id: productId,
+        category: productPayload.category,
+        productName: productPayload.productName,
+        hasCategory: !!productPayload.category,
+        fullPayload: productPayload
+      });
       batch.set(productRef, productPayload);
       console.log('📝 Product creation queued in batch');
 
