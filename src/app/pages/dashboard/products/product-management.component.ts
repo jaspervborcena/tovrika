@@ -1322,7 +1322,7 @@ import { AppConstants } from '../../../shared/enums/app-constants.enum';
                   </div>
                 </td>
                 <td class="product-stock-cell">{{ product.totalStock }}</td>
-                <td class="product-price-cell">\${{ displayPrice(product).toFixed(2) }}</td>
+                <td class="product-price-cell">{{ displayPrice(product).toFixed(2) }}</td>
                 <td class="product-status-cell">
                   <span [class]="getStatusBadgeClass(product.status || ProductStatus.Inactive)">
                     {{ (product.status || ProductStatus.Inactive) | titlecase }}
@@ -1406,7 +1406,7 @@ import { AppConstants } from '../../../shared/enums/app-constants.enum';
            style="position: fixed !important; z-index: 9999 !important; background: rgba(0, 0, 0, 0.8) !important;">
         <div class="modal store-modal" (click)="$event.stopPropagation()">
           <div class="modal-header">
-            <h3>{{ isCategoryMode ? '➕ Add Category' : (isEditMode ? '✏️ Edit Product' : '📦 Add New Product') }}</h3>
+            <h3>{{ isManageCategoriesMode ? '🏷️ Update Category' : (isCategoryMode ? '➕ Add Category' : (isEditMode ? '✏️ Edit Product' : '📦 Add New Product')) }}</h3>
             <button class="close-btn" (click)="closeModal()">×</button>
           </div>
           <div class="modal-body">
@@ -1459,10 +1459,9 @@ import { AppConstants } from '../../../shared/enums/app-constants.enum';
                     <button 
                       type="button" 
                       class="btn btn-sm btn-outline-danger"
-                      (click)="deleteSelectedCategory()"
-                      [disabled]="!productForm.get('category')?.value"
-                      title="Delete selected category"
-                      aria-label="Delete selected category"
+                      (click)="openManageCategoriesDialog()"
+                      title="Manage categories"
+                      aria-label="Manage categories"
                       style="display:inline-flex; align-items:center; justify-content:center; width:32px; height:32px; line-height:1; margin-left:4px;">
                       <span aria-hidden="true">➖</span>
                     </button>
@@ -1688,14 +1687,14 @@ import { AppConstants } from '../../../shared/enums/app-constants.enum';
                       <div class="summary-item">
                         <label>Selling Price</label>
                         <div class="calculated-value">
-                          ₱{{ (selectedProduct?.sellingPrice || 0) | number:'1.2-2' }}
+                          {{ (selectedProduct?.sellingPrice || 0) | number:'1.2-2' }}
                           <small>Price from most recent inventory batch</small>
                         </div>
                       </div>
                       <div class="summary-item">
                         <label>Original Price</label>
                         <div class="calculated-value">
-                          ₱{{ (selectedProduct?.originalPrice || 0) | number:'1.2-2' }}
+                          {{ (selectedProduct?.originalPrice || 0) | number:'1.2-2' }}
                           <small>Base/unit price (before VAT)</small>
                         </div>
                       </div>
@@ -1781,7 +1780,7 @@ import { AppConstants } from '../../../shared/enums/app-constants.enum';
                       <div class="form-group">
                         <label>Inventory Value</label>
                         <div class="calculated-value">
-                          ₱{{ ((productForm.get('sellingPrice')?.value || 0) * (productForm.get('totalStock')?.value || 0)) | number:'1.2-2' }}
+                          {{ ((productForm.get('sellingPrice')?.value || 0) * (productForm.get('totalStock')?.value || 0)) | number:'1.2-2' }}
                         </div>
                         <small class="text-muted">Selling Price × Total Stock</small>
                       </div>
@@ -1929,6 +1928,46 @@ import { AppConstants } from '../../../shared/enums/app-constants.enum';
                 </div>
               </form>
             </ng-container>
+
+            <!-- Manage Categories Mode -->
+            <ng-container *ngIf="isManageCategoriesMode">
+              <div class="form-section">
+                <div *ngIf="categoryObjects().length === 0" style="padding: 20px; text-align: center; color: #666;">
+                  No categories found for this store.
+                </div>
+                <div *ngIf="categoryObjects().length > 0" style="max-height: 400px; overflow-y: auto; padding: 10px;">
+                  <table class="data-table" style="width: 100%; border-collapse: collapse;">
+                    <thead>
+                      <tr style="border-bottom: 2px solid #e5e7eb;">
+                        <th style="padding: 12px; text-align: left; font-weight: 600; width: 40%;">Category Name</th>
+                        <th style="padding: 12px; text-align: left; font-weight: 600; width: 30%;">Group</th>
+                        <th style="padding: 12px; text-align: center; font-weight: 600; width: 30%;">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr *ngFor="let category of categoryObjects()" style="border-bottom: 1px solid #e5e7eb;">
+                        <td style="padding: 12px;">{{ category.categoryLabel }}</td>
+                        <td style="padding: 12px;">{{ category.categoryGroup || 'General' }}</td>
+                        <td style="padding: 12px; text-align: center;">
+                          <button 
+                            type="button"
+                            class="btn btn-sm btn-danger"
+                            (click)="deleteCategoryFromDialog(category.id!, category.categoryLabel)"
+                            [disabled]="!category.id"
+                            title="Delete category"
+                            style="padding: 6px 16px; min-width: 80px;">
+                            Delete
+                          </button>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              <div class="modal-footer" style="justify-content:flex-end; gap:8px; padding-top: 16px;">
+                <button type="button" class="btn btn-secondary" (click)="switchToProductMode()">Close</button>
+              </div>
+            </ng-container>
           </div>
           <div class="modal-footer" *ngIf="isProductMode">
             <button class="btn btn-secondary" (click)="closeModal()">Cancel</button>
@@ -2001,8 +2040,8 @@ import { AppConstants } from '../../../shared/enums/app-constants.enum';
                     <tr *ngFor="let batch of filteredInventory; let i = index; trackBy: trackByBatch" (click)="openEditBatch(batch)" class="inventory-row">
                       <td class="batch-id-cell">{{ batch.batchId }}</td>
                       <td class="quantity-cell">{{ batch.quantity }}</td>
-                      <td class="price-cell">\${{ batch.unitPrice.toFixed(2) }}</td>
-                      <td class="price-cell">\${{ (batch.sellingPrice ?? batch.unitPrice).toFixed(2) }}</td>
+                      <td class="price-cell">{{ batch.unitPrice.toFixed(2) }}</td>
+                      <td class="price-cell">{{ (batch.sellingPrice ?? batch.unitPrice).toFixed(2) }}</td>
                       <td class="date-cell">{{ batch.receivedAt | date:'short' }}</td>
                       <td class="status-cell">
                         <span class="status-badge" [class]="'status-' + batch.status">
@@ -2266,12 +2305,13 @@ export class ProductManagementComponent implements OnInit {
   // Signals
   readonly products = computed(() => this.productService.getProducts());
   readonly stores = computed(() => this.storeService.getStores().filter(store => store.status === 'active'));
-  // Get unique categories from products instead of category service
+  // Get categories from category service
   readonly categories = computed(() => {
-    const allProducts = this.products();
-    const categorySet = new Set(allProducts.map(product => product.category).filter(cat => cat && cat.trim()));
-    return Array.from(categorySet).sort();
+    const categoryObjects = this.categoryService.getCategories();
+    return categoryObjects.map(cat => cat.categoryLabel).filter(label => label && label.trim()).sort();
   });
+  // Get full category objects for manage dialog
+  readonly categoryObjects = computed(() => this.categoryService.getCategories());
 
   // Reactive filtered products - automatically updates when products change or filters change
   readonly filteredProducts = computed(() => {
@@ -2366,11 +2406,14 @@ export class ProductManagementComponent implements OnInit {
   tempSelectedTagIds: string[] = [];
 
   // Modal mode management
-  modalMode: 'product' | 'category' = 'product';
+  modalMode: 'product' | 'category' | 'manageCategories' = 'product';
   get isProductMode(): boolean { return this.modalMode === 'product'; }
   get isCategoryMode(): boolean { return this.modalMode === 'category'; }
+  get isManageCategoriesMode(): boolean { return this.modalMode === 'manageCategories'; }
   get modalTitle(): string { 
-    return this.modalMode === 'product' ? 'Add New Product' : 'Add New Category';
+    if (this.modalMode === 'category') return 'Add New Category';
+    if (this.modalMode === 'manageCategories') return 'Manage Categories';
+    return 'Add New Product';
   }
 
   // Forms
@@ -2767,6 +2810,7 @@ export class ProductManagementComponent implements OnInit {
     this.isEditMode = false;
     this.selectedProduct = null;
     this.selectedTagIds.set([]); // Reset tags for new product
+    this.modalMode = 'product'; // Ensure product mode when opening Add Product modal
     
     // Set default storeId based on available stores
     const currentPermission = this.authService.getCurrentPermission();
@@ -3031,6 +3075,7 @@ export class ProductManagementComponent implements OnInit {
     if (this.productForm.invalid) return;
 
     this.loading = true;
+    let productId: string | undefined; // Declare at function scope for access in refresh logic
     try {
       console.log('🚀 submitProduct called - isEditMode:', this.isEditMode);
       const rawFormValue = this.productForm.getRawValue(); // Use getRawValue() to include disabled fields
@@ -3304,6 +3349,12 @@ export class ProductManagementComponent implements OnInit {
         
         const currentPermission = this.authService.getCurrentPermission();
 
+        console.log('📋 Form values before creating product:', {
+          category: formValue.category,
+          productName: formValue.productName,
+          allFormValues: formValue
+        });
+
         const newProduct: Omit<Product, 'id' | 'createdAt' | 'updatedAt'> = {
           uid: currentUser.uid,  // Required by Product interface
           productName: formValue.productName,
@@ -3338,12 +3389,13 @@ export class ProductManagementComponent implements OnInit {
         };
 
         console.log('🚀 About to create product with data:', newProduct);
+        console.log('📦 Category being saved:', newProduct.category);
         console.log('📝 Creating product with tags:', {
           tags: this.selectedTagIds(),
           tagLabels: this.getSelectedTagLabels(),
           availableTags: this.availableTags().length
         });
-        const productId = await this.productService.createProduct(newProduct);
+        productId = await this.productService.createProduct(newProduct);
         console.log('✅ Product created successfully with ID:', productId);
         
         // If initial batch exists, create it in separate collection and recompute summary
@@ -3398,13 +3450,32 @@ export class ProductManagementComponent implements OnInit {
         }
       }
 
+      // Refresh products to show the newly created/updated product with correct data
+      if (storeId) {
+        console.log('🔄 Refreshing products for store:', storeId);
+        await this.productService.refreshProducts(storeId);
+        console.log('✅ Products refreshed. Current products count:', this.products().length);
+        console.log('📋 Current categories:', this.categories());
+        const newlyCreatedProduct = this.products().find(p => p.id === productId);
+        if (newlyCreatedProduct) {
+          console.log('✅ Newly created product found:', {
+            id: newlyCreatedProduct.id,
+            name: newlyCreatedProduct.productName,
+            category: newlyCreatedProduct.category
+          });
+        } else {
+          console.warn('⚠️ Newly created product not found in refreshed list');
+        }
+      }
+
       this.closeModal();
+      this.toastService.success(this.isEditMode ? 'Product updated successfully' : 'Product created successfully');
     } catch (error) {
       console.error('Error saving product:', error);
       
       // Log the error
-      const currentPermission = this.authService.getCurrentPermission();
-      const storeId = currentPermission?.storeId || '';
+      const errorPermission = this.authService.getCurrentPermission();
+      const errorStoreId = errorPermission?.storeId || '';
       const action = this.isEditMode ? 'UPDATE' : 'CREATE';
       const productName = this.productForm.get('productName')?.value || 'Unknown Product';
       
@@ -3412,7 +3483,7 @@ export class ProductManagementComponent implements OnInit {
         productId: this.selectedProduct?.id || 'new-product',
         action,
         error: error instanceof Error ? error.message : 'Unknown error',
-        storeId
+        storeId: errorStoreId
       });
       
       this.toastService.error('Error saving product. Please try again.');
@@ -3421,26 +3492,19 @@ export class ProductManagementComponent implements OnInit {
     }
   }
 
-  // Delete the currently selected category from the dropdown
-  async deleteSelectedCategory(): Promise<void> {
-    const selectedLabel: string = this.productForm.get('category')?.value;
-    if (!selectedLabel) {
-      this.toastService.error('Please select a category to delete.');
-      return;
-    }
+  // Open dialog to manage (delete) categories
+  async openManageCategoriesDialog(): Promise<void> {
+    this.modalMode = 'manageCategories';
+    this.showModal = true;
+  }
 
-    const category = this.categoryService.getCategoryByLabel(selectedLabel);
-    if (!category || !category.id) {
-      this.toastService.error('Selected category not found.');
-      return;
-    }
-
-    // Use standard confirmation dialog
-    this.categoryToDeleteId = category.id;
-    this.categoryToDeleteLabel = selectedLabel;
+  // Delete a specific category from the manage dialog
+  async deleteCategoryFromDialog(categoryId: string, categoryLabel: string): Promise<void> {
+    this.categoryToDeleteId = categoryId;
+    this.categoryToDeleteLabel = categoryLabel;
     this.deleteConfirmationData.set({
       title: 'Delete Category',
-      message: `Delete category "${selectedLabel}"? This cannot be undone.`,
+      message: `Delete category "${categoryLabel}"? This cannot be undone.`,
       confirmText: 'Delete',
       cancelText: 'Cancel',
       type: 'danger'
