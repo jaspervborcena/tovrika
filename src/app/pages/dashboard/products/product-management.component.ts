@@ -3789,8 +3789,21 @@ export class ProductManagementComponent implements OnInit {
     const batches = await this.inventoryDataService.listBatches(this.selectedProduct.id!);
     this.setCurrentBatches(batches || []);
     
+    // Set isStockTracked to true since product now has inventory batches
+    if (this.selectedProduct.isStockTracked === false) {
+      await this.productService.updateProduct(this.selectedProduct.id!, {
+        isStockTracked: true
+      });
+    }
+    
     // Reload the specific product from Firestore to get updated totalStock and sellingPrice
     await this.reloadProductFromFirestore(this.selectedProduct.id!);
+    
+    // Update the form and selectedProduct after reload
+    if (this.selectedProduct) {
+      this.selectedProduct.isStockTracked = true;
+      this.productForm.patchValue({ isStockTracked: true }, { emitEvent: false });
+    }
     
     this.inventoryForm.reset();
     this.inventoryForm.patchValue({ receivedAt: new Date().toISOString().split('T')[0] });

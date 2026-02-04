@@ -99,7 +99,7 @@ export class HeaderComponent implements OnInit {
     if (!this.currentUser()) return;
     // Only one dropdown at a time
     this.isLanguageMenuOpen.set(false);
-    this.isUserMenuOpen.set(!this.isUserMenuOpen());
+    this.isUserMenuOpen.update(val => !val);
   }
 
   protected closeUserMenu() {
@@ -126,10 +126,16 @@ export class HeaderComponent implements OnInit {
 
   @HostListener('document:click', ['$event'])
   onDocumentClick(event: Event) {
-    // Close user menu when clicking outside
     const target = event.target as HTMLElement;
-    if (!target.closest('[data-user-menu]')) {
+
+    // Close user menu when clicking outside
+    if (!target.closest('[data-user-menu]') && this.isUserMenuOpen()) {
       this.isUserMenuOpen.set(false);
+    }
+
+    // Close language menu when clicking outside
+    if (!target.closest('[data-language-menu]') && this.isLanguageMenuOpen()) {
+      this.isLanguageMenuOpen.set(false);
     }
   }
 
@@ -224,13 +230,5 @@ export class HeaderComponent implements OnInit {
   showHeader(): void {
     this.isHeaderCollapsed.set(false);
     document.body.classList.remove('header-collapsed-mode');
-  }
-
-  @HostListener('document:click', ['$event'])
-  closeLanguageMenu(event: Event): void {
-    const target = event.target as HTMLElement;
-    if (!target.closest('.language-selector')) {
-      this.isLanguageMenuOpen.set(false);
-    }
   }
 }

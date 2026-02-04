@@ -37,7 +37,7 @@ export class ProductSummaryService {
     productId: string,
     productRef?: DocumentReference,
     updatedBatches?: ProductInventoryEntry[]
-  ): Promise<{ totalStock: number; sellingPrice: number; originalPrice: number; isStockTracked: boolean }> {
+  ): Promise<{ totalStock: number; sellingPrice: number; originalPrice: number; costPrice: number; isStockTracked: boolean }> {
     const currentUser = this.authService.getCurrentUser();
     const permission = this.authService.getCurrentPermission();
     
@@ -68,15 +68,14 @@ export class ProductSummaryService {
       activeBatches = await this.getActiveBatchesFIFO(productId);
     }
     
-    console.log('🔢 Product Summary Calculation for productId:', productId);
-    console.log('📦 Active batches found:', activeBatches.length);
-    activeBatches.forEach((batch, index) => {
-      console.log(`  Batch ${index + 1}: ID=${batch.batchId}, Qty=${batch.quantity}, Price=${batch.unitPrice}, Status=${batch.status}`);
-    });
-    
     // Calculate totalStock (sum of all active batch quantities)
     const totalStock = activeBatches.reduce((sum, batch) => sum + (batch.quantity || 0), 0);
-    console.log('📊 Calculated totalStock:', totalStock);
+    
+    // Calculate costPrice (sum of all batch costs: quantity * unitPrice)
+    const costPrice = activeBatches.reduce((sum, batch) => {
+      const batchCost = (batch.quantity || 0) * (batch.unitPrice || 0);
+      return sum + batchCost;
+    }, 0);
     
     // Calculate sellingPrice (LIFO - latest batch unitPrice) and originalPrice (base/unit price)
     let sellingPrice = 0;
@@ -131,9 +130,6 @@ export class ProductSummaryService {
         }
       }
 
-      console.log('💰 Calculated sellingPrice from latest batch:', sellingPrice, 'from batch:', latest?.batchId);
-      console.log('🔎 Determined originalPrice for product from latest batch:', originalPrice);
-      console.log('🏷️ Synced discount from latest batch:', { hasDiscount, discountType, discountValue });
     }
 
     // Update product document with batch or transaction
@@ -150,7 +146,9 @@ export class ProductSummaryService {
     }
     
     const currentProductData = prodSnap.exists() ? prodSnap.data() : null;
-    const isStockTracked = currentProductData?.isStockTracked ?? true; // Default to true for safety
+    // If product has active batches, it should be treated as stock-tracked regardless of flag
+    const hasActiveBatches = activeBatches.length > 0;
+    const isStockTracked = hasActiveBatches ? true : (currentProductData?.isStockTracked ?? true);
     
     // Build payload - only update stock if isStockTracked is true
     const payload: any = {
@@ -166,9 +164,7 @@ export class ProductSummaryService {
       payload.totalStock = totalStock;
       payload.sellingPrice = sellingPrice;
       payload.originalPrice = originalPrice;
-      console.log('📊 Product isStockTracked=true, updating stock from batches:', { totalStock, sellingPrice, originalPrice });
-    } else {
-      console.log('🔒 Product isStockTracked=false, preserving manual stock values');
+      payload.costPrice = costPrice;
     }
     
     if (isTransaction) {
@@ -203,13 +199,13 @@ export class ProductSummaryService {
       }
     }
 
-    return { totalStock, sellingPrice, originalPrice, isStockTracked };
+    return { totalStock, sellingPrice, originalPrice, costPrice, isStockTracked };
   }
 
   /**
    * Standalone method to recompute product summary (creates its own transaction)
    */
-  async recomputeProductSummary(productId: string): Promise<{ totalStock: number; sellingPrice: number; originalPrice: number; isStockTracked: boolean }> {
+  async recomputeProductSummary(productId: string): Promise<{ totalStock: number; sellingPrice: number; originalPrice: number; costPrice: number; isStockTracked: boolean }> {
     const batch = writeBatch(this.firestore);
     const result = await this.recomputeProductSummaryInTransaction(batch, productId);
     await batch.commit();
@@ -224,9 +220,7 @@ export class ProductSummaryService {
           updates.totalStock = result.totalStock;
           updates.sellingPrice = result.sellingPrice;
           updates.originalPrice = result.originalPrice;
-          console.log('📊 Notifying cache update with stock tracking values:', updates);
-        } else {
-          console.log('🔒 Notifying cache update WITHOUT stock values (manual stock product)');
+          updates.costPrice = result.costPrice;
         }
         cb(productId, updates);
       }
@@ -244,11 +238,11 @@ export class ProductSummaryService {
   async recomputeMultipleProductSummaries(productIds: string[]): Promise<void> {
     if (productIds.length === 0) return;
 
-    const results: Array<{ productId: string; totalStock: number; sellingPrice: number; originalPrice: number; isStockTracked: boolean }> = [];
+    const results: Array<{ productId: string; totalStock: number; sellingPrice: number; originalPrice: number; costPrice: number; isStockTracked: boolean }> = [];
     const batch = writeBatch(this.firestore);
     for (const productId of productIds) {
       const res = await this.recomputeProductSummaryInTransaction(batch, productId);
-      results.push({ productId, totalStock: res.totalStock, sellingPrice: res.sellingPrice, originalPrice: res.originalPrice, isStockTracked: res.isStockTracked });
+      results.push({ productId, totalStock: res.totalStock, sellingPrice: res.sellingPrice, originalPrice: res.originalPrice, costPrice: res.costPrice, isStockTracked: res.isStockTracked });
     }
     await batch.commit();
 
@@ -264,6 +258,7 @@ export class ProductSummaryService {
               updates.totalStock = r.totalStock;
               updates.sellingPrice = r.sellingPrice;
               updates.originalPrice = r.originalPrice;
+              updates.costPrice = r.costPrice;
             }
             cb(r.productId, updates);
           } catch (e) { /* ignore per-product notification errors */ }
@@ -347,7 +342,6 @@ export class ProductSummaryService {
       return filteredBatches;
     }
   }
-
   /**
    * Validates that a product summary matches its batches
    * Useful for debugging and data integrity checks
