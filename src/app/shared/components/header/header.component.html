@@ -65,9 +65,9 @@
           }
 
           <!-- Language Selector -->
-          <div class="language-selector" (click)="$event.stopPropagation()">
+          <div class="language-selector" data-language-menu>
             <button class="header-btn language-btn" 
-                    (click)="toggleLanguageMenu()" 
+                    (click)="toggleLanguageMenu(); $event.stopPropagation()" 
                     [title]="'common.selectLanguage' | translate">
               <svg class="language-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 21a9 9 0 100-18 9 9 0 000 18z" />
@@ -118,9 +118,14 @@
 
         </div>
         
+        <!-- Backdrop for closing menu when clicking outside -->
+        @if (isUserMenuOpen()) {
+          <div class="menu-backdrop" (click)="closeUserMenu()" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 998; background: transparent;"></div>
+        }
+        
         <!-- User Menu (only when authenticated); otherwise show Sign In -->
         @if (isAuthenticated()) {
-          <div class="user-menu" data-user-menu>
+          <div class="user-menu" data-user-menu style="position: relative; z-index: 999;">
             <button 
               (click)="toggleUserMenu()" 
               class="header-btn user-avatar"
