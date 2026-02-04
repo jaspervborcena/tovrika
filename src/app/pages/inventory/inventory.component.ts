@@ -291,8 +291,11 @@ export class InventoryComponent implements OnInit {
   }
 
   async ngOnInit(): Promise<void> {
+    console.log('🔵 Inventory Component - ngOnInit started');
     await this.loadStores();
+    console.log('🔵 Inventory Component - Loading rows for period:', this.selectedPeriod);
     await this.inventoryService.loadRowsForPeriod(this.selectedPeriod, 1);
+    console.log('🔵 Inventory Component - Rows loaded:', this.inventoryService.rows().length);
   }
 
   async loadStores(): Promise<void> {

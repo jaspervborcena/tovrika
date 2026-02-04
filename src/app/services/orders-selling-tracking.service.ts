@@ -1469,11 +1469,25 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
         }
 
         // Step 3: Create inventoryDeductions records (one per batch used, sorted by batchId asc)
-        // If no batches found but offline, create a generic deduction record for reconciliation
-        if (batchDeductions.length === 0 && !this.networkService.isOnline()) {
-          console.log(`📱 Offline: Creating generic deduction for product ${it.productId} (no batches available)`);
+        // If no batches found, create a generic deduction record for non-batch products
+        if (batchDeductions.length === 0) {
+          console.log(`📦 No batches found for product ${it.productId} - creating non-batch deduction`);
           
-          const genericDeduction = {
+          // Get product's costPrice from products collection
+          let productCostPrice = 0;
+          try {
+            const productRef = doc(this.firestore, 'products', it.productId);
+            const productSnap = await getDoc(productRef);
+            if (productSnap.exists()) {
+              const productData = productSnap.data();
+              productCostPrice = Number(productData?.costPrice || 0);
+              console.log(`💰 Using product costPrice: ₱${productCostPrice}`);
+            }
+          } catch (productError) {
+            console.warn(`⚠️ Failed to fetch product costPrice for ${it.productId}:`, productError);
+          }
+          
+          const nonBatchDeduction = {
             companyId: ctx.companyId,
             storeId: ctx.storeId,
             orderId: ctx.orderId,
@@ -1483,10 +1497,10 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
             sku: (it as any).sku || it.productId,
             productName: it.productName || '',
             
-            // Generic batch info - will be reconciled when online
-            batchId: 'PENDING_RECONCILIATION',
-            refId: 'PENDING_RECONCILIATION',
-            costPrice: 0,
+            // No batch tracking - set batchId to null
+            batchId: null,
+            refId: null,
+            costPrice: productCostPrice,
             
             // Deduction details
             quantity: it.quantity,
@@ -1494,20 +1508,21 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
             
             // Audit
             deductedBy: ctx.cashierId,
+            createdBy: ctx.cashierId,
             createdAt: this.sanitizeForFirestore(new Date()),
             
-            // Mark as offline-created for reconciliation
-            _offlineCreated: true,
-            _needsReconciliation: true
+            // Mark as non-batch product sale
+            note: 'Non-batch product sale',
+            ...(this.networkService.isOnline() ? {} : { _offlineCreated: true })
           };
 
           try {
             const deductionsRef = collection(this.firestore, 'inventoryDeductions');
-            const cleanedDoc = this.removeUndefinedFields(genericDeduction);
+            const cleanedDoc = this.removeUndefinedFields(nonBatchDeduction);
             await addDoc(deductionsRef, cleanedDoc);
-            console.log(`📝 Created generic deduction for offline reconciliation: product=${it.productId}, qty=${it.quantity}`);
+            console.log(`📝 Created non-batch deduction: product=${it.productId}, qty=${it.quantity}, cost=₱${productCostPrice}`);
           } catch (error) {
-            console.warn(`⚠️ Failed to create generic deduction:`, error);
+            console.warn(`⚠️ Failed to create non-batch deduction:`, error);
           }
         }
         
@@ -1563,12 +1578,29 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
         }
 
         // Calculate weighted average cost from all batches used
+        // If no batches, use product's costPrice
         let totalCost = 0;
-        batchDeductions.forEach((d, idx) => {
-          const batchTotal = d.costPrice * d.deductedQty;
-          totalCost += batchTotal;
-        });
-        const actualCost = batchDeductions.length > 0 ? totalCost / it.quantity : 0;
+        let actualCost = 0;
+        
+        if (batchDeductions.length > 0) {
+          batchDeductions.forEach((d, idx) => {
+            const batchTotal = d.costPrice * d.deductedQty;
+            totalCost += batchTotal;
+          });
+          actualCost = totalCost / it.quantity;
+        } else {
+          // No batches - get costPrice from product
+          try {
+            const productRef = doc(this.firestore, 'products', it.productId);
+            const productSnap = await getDoc(productRef);
+            if (productSnap.exists()) {
+              const productData = productSnap.data();
+              actualCost = Number(productData?.costPrice || 0);
+            }
+          } catch (error) {
+            console.warn(`⚠️ Failed to fetch product costPrice for tracking:`, error);
+          }
+        }
 
         // Step 4: Create ordersSellingTracking record with actual cost
         const docData: OrdersSellingTrackingDoc = {

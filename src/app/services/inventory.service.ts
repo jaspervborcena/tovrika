@@ -106,11 +106,13 @@ export class InventoryService {
     fetchLimit: number = 1000,
     updatedAtRange?: { start?: Date | null; end?: Date | null }
   ): Promise<InventoryRow[]> {
+    console.log('🟡 fetchRowsFromCollection:', { collectionName, filterCount: baseFilters.length, fetchLimit });
     const col = collection(this.firestore, collectionName);
     const out: InventoryRow[] = [];
     try {
       const q = query(col, ...baseFilters, orderBy('createdAt', 'desc'), limit(fetchLimit));
       const snaps = await getDocs(q as any);
+      console.log('🟡 fetchRowsFromCollection got', snaps.docs.length, 'docs from', collectionName);
       for (const s of snaps.docs) {
         const data: any = s.data() || {};
       const productId: string = data.productId;
@@ -167,11 +169,14 @@ export class InventoryService {
       return out;
     } catch (err) {
       // Likely index required or other query error — fall back to a simpler query and client-side filter
-      console.warn('fetchRowsFromCollection primary query failed, falling back:', err);
+      console.warn('🟡 fetchRowsFromCollection primary query failed, falling back:', err);
+      console.warn('🟡 Error details:', { collectionName, error: err });
       // Attempt to use the first filter (commonly status equality) and order by createdAt
       const fallbackFilters = baseFilters && baseFilters.length > 0 ? [baseFilters[0]] : [];
+      console.log('🟡 Trying fallback query with filters:', fallbackFilters.length);
       const fallbackQ = query(col, ...fallbackFilters, orderBy('createdAt', 'desc'), limit(fetchLimit));
       const snapsFallback = await getDocs(fallbackQ as any);
+      console.log('🟡 Fallback query got', snapsFallback.docs.length, 'docs from', collectionName);
       for (const s of snapsFallback.docs) {
         const data: any = s.data() || {};
           // if updatedAtRange provided, enforce it client-side
@@ -240,15 +245,163 @@ export class InventoryService {
       return out;
     }
   }
+
+  /**
+   * Fetch rows from ordersSellingTracking collection (sales data)
+   */
+  async fetchRowsFromOrdersSellingTracking(
+    baseFilters: any[] = [],
+    fetchLimit: number = 1000,
+    updatedAtRange?: { start?: Date | null; end?: Date | null }
+  ): Promise<InventoryRow[]> {
+    console.log('🟡 fetchRowsFromOrdersSellingTracking:', { filterCount: baseFilters.length, fetchLimit });
+    const col = collection(this.firestore, 'ordersSellingTracking');
+    const out: InventoryRow[] = [];
+    try {
+      // Only include completed status for sales
+      const statusFilter = where('status', '==', 'completed');
+      const q = query(col, statusFilter, ...baseFilters, orderBy('createdAt', 'desc'), limit(fetchLimit));
+      const snaps = await getDocs(q as any);
+      console.log('🟡 fetchRowsFromOrdersSellingTracking got', snaps.docs.length, 'docs');
+      
+      for (const s of snaps.docs) {
+        const data: any = s.data() || {};
+        const productId: string = data.productId;
+        const quantity: number = Number(data.quantity || 0);
+        const product = this.productService.getProduct(productId);
+
+        const productCode = (product && product.productCode) ? product.productCode : (data.productCode || '');
+        const sku = (product && product.skuId) ? product.skuId : (data.sku || '');
+
+        // Use costPrice from the tracking document
+        const costPrice = Number(data.costPrice || 0) || 0;
+        const batchId: string | null = data.batchId ? String(data.batchId) : null;
+
+        const sellingPrice = Number(data.sellingPrice || product?.sellingPrice || 0) || 0;
+        const profitPerUnit = +(sellingPrice - costPrice);
+        const totalGross = +(sellingPrice * quantity);
+        const totalProfit = +(profitPerUnit * quantity);
+
+        const outProductCode = (productCode && productCode.trim().length > 0) ? productCode : '';
+        const outSku = (sku && sku.trim().length > 0) ? sku : '';
+        const finalProductCode = outProductCode || outSku ? outProductCode : productId;
+
+        // Extract date from createdAt
+        let saleDate: Date | string | undefined = undefined;
+        if (data.createdAt) {
+          if (typeof data.createdAt === 'string') {
+            saleDate = data.createdAt;
+          } else if (data.createdAt instanceof Date) {
+            saleDate = data.createdAt;
+          } else if (typeof data.createdAt.toDate === 'function') {
+            saleDate = data.createdAt.toDate();
+          }
+        }
+
+        // Get user displayName from createdBy (uid)
+        const performedBy = await this.getUserDisplayName(data.createdBy) || data.createdBy || '';
+
+        out.push({
+          invoiceNo: data.orderId || '',
+          batchId,
+          date: saleDate,
+          performedBy,
+          productCode: finalProductCode,
+          sku: outSku,
+          costPrice,
+          sellingPrice,
+          quantity,
+          profitPerUnit,
+          totalGross,
+          totalProfit
+        });
+      }
+      return out;
+    } catch (err) {
+      console.warn('🟡 fetchRowsFromOrdersSellingTracking query failed, trying fallback:', err);
+      console.warn('🟡 Error details:', err);
+      // Fallback with simplified query
+      const statusFilter = where('status', '==', 'completed');
+      const fallbackQ = query(col, statusFilter, orderBy('createdAt', 'desc'), limit(fetchLimit));
+      const snapsFallback = await getDocs(fallbackQ as any);
+      console.log('🟡 Fallback query got', snapsFallback.docs.length, 'docs from ordersSellingTracking');
+      
+      for (const s of snapsFallback.docs) {
+        const data: any = s.data() || {};
+        
+        // if updatedAtRange provided, enforce it client-side
+        if (updatedAtRange && (updatedAtRange.start || updatedAtRange.end)) {
+          const ca = data.createdAt;
+          let createdAtDate: Date | null = null;
+          if (!ca) continue;
+          if (typeof ca.toDate === 'function') createdAtDate = ca.toDate();
+          else if (ca instanceof Date) createdAtDate = ca as Date;
+          else createdAtDate = new Date(ca);
+          if (!createdAtDate) continue;
+          if (updatedAtRange.start && createdAtDate < updatedAtRange.start) continue;
+          if (updatedAtRange.end && createdAtDate > updatedAtRange.end) continue;
+        }
+        
+        const productId: string = data.productId;
+        const quantity: number = Number(data.quantity || 0);
+        const product = this.productService.getProduct(productId);
+
+        const productCode = (product && product.productCode) ? product.productCode : (data.productCode || '');
+        const sku = (product && product.skuId) ? product.skuId : (data.sku || '');
+
+        const costPrice = Number(data.costPrice || 0) || 0;
+        const batchId: string | null = data.batchId ? String(data.batchId) : null;
+
+        const sellingPrice = Number(data.sellingPrice || product?.sellingPrice || 0) || 0;
+        const profitPerUnit = +(sellingPrice - costPrice);
+        const totalGross = +(sellingPrice * quantity);
+        const totalProfit = +(profitPerUnit * quantity);
+
+        const outProductCode = (productCode && productCode.trim().length > 0) ? productCode : '';
+        const outSku = (sku && sku.trim().length > 0) ? sku : '';
+        const finalProductCode = outProductCode || outSku ? outProductCode : productId;
+
+        let saleDate: Date | string | undefined = undefined;
+        if (data.createdAt) {
+          if (typeof data.createdAt === 'string') {
+            saleDate = data.createdAt;
+          } else if (data.createdAt instanceof Date) {
+            saleDate = data.createdAt;
+          } else if (typeof data.createdAt.toDate === 'function') {
+            saleDate = data.createdAt.toDate();
+          }
+        }
+
+        const performedBy = await this.getUserDisplayName(data.createdBy) || data.createdBy || '';
+
+        out.push({
+          invoiceNo: data.orderId || '',
+          batchId,
+          date: saleDate,
+          performedBy,
+          productCode: finalProductCode,
+          sku: outSku,
+          costPrice,
+          sellingPrice,
+          quantity,
+          profitPerUnit,
+          totalGross,
+          totalProfit
+        });
+      }
+      return out;
+    }
+  }
+
 /**
- * Load rows for a given period and page (uses fetchRowsFromCollection internally).
+ * Load rows for a given period and page (fetches from both inventoryDeductions and ordersSellingTracking).
  */
 async loadRowsForPeriod(period: string, page: number = 1): Promise<void> {
+  console.log('🟢 InventoryService.loadRowsForPeriod - Started', { period, page });
   this.isLoading.set(true);
   this.currentPage.set(page);
 
   try {
-    const trackingColName = 'inventoryDeductions';
     const filters: any[] = [];
 
     const now = new Date();
@@ -269,6 +422,7 @@ async loadRowsForPeriod(period: string, page: number = 1): Promise<void> {
       filters.push(where('createdAt', '>=', start));
       filters.push(where('createdAt', '<=', end));
       updatedAtRange = { start, end };
+      console.log('🟢 Date range for', period, { start, end });
     } else if (period === 'today' || period === 'yesterday') {
       // keep using exact date range for daily queries
       let start: Date | null = null;
@@ -285,6 +439,7 @@ async loadRowsForPeriod(period: string, page: number = 1): Promise<void> {
         filters.push(where('createdAt', '>=', start));
         filters.push(where('createdAt', '<=', end));
         updatedAtRange = { start, end };
+        console.log('🟢 Date range for', period, { start, end });
       }
     }
     // Note: we intentionally do not rely on a `yearMonth` field here because historical
@@ -292,15 +447,42 @@ async loadRowsForPeriod(period: string, page: number = 1): Promise<void> {
 
     const pageSize = this.pageSize;
     const fetchLimit = Math.max(page * pageSize, pageSize);
-    const allRows = await this.fetchRowsFromCollection(trackingColName, filters, fetchLimit, updatedAtRange);
+    
+    console.log('🟢 Fetching from both collections...');
+    // Fetch from both collections
+    const [deductionRows, salesRows] = await Promise.all([
+      this.fetchRowsFromCollection('inventoryDeductions', filters, fetchLimit, updatedAtRange),
+      this.fetchRowsFromOrdersSellingTracking(filters, fetchLimit, updatedAtRange)
+    ]);
+
+    console.log('🟢 Fetch results:', { 
+      deductionRows: deductionRows.length, 
+      salesRows: salesRows.length 
+    });
+
+    // Combine both arrays
+    const allRows = [...deductionRows, ...salesRows];
+    
+    // Sort by date descending
+    allRows.sort((a, b) => {
+      const dateA = a.date ? (a.date instanceof Date ? a.date : new Date(a.date)) : new Date(0);
+      const dateB = b.date ? (b.date instanceof Date ? b.date : new Date(b.date)) : new Date(0);
+      return dateB.getTime() - dateA.getTime();
+    });
 
     this.totalCount.set(allRows.length);
 
     const startIndex = Math.max(0, (page - 1) * pageSize);
     const pageItems = allRows.slice(startIndex, startIndex + pageSize);
     this.rows.set(pageItems);
+    console.log('🟢 Final results:', { 
+      totalRows: allRows.length, 
+      pageItems: pageItems.length,
+      totalCount: this.totalCount(),
+      currentPage: this.currentPage()
+    });
   } catch (e) {
-    console.error('InventoryService.loadRowsForPeriod failed', e);
+    console.error('❌ InventoryService.loadRowsForPeriod failed', e);
     this.rows.set([]);
     this.totalCount.set(0);
   } finally {
