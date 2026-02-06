@@ -1480,7 +1480,7 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
             const productSnap = await getDoc(productRef);
             if (productSnap.exists()) {
               const productData = productSnap.data();
-              productCostPrice = Number(productData?.costPrice || 0);
+              productCostPrice = Number(productData?.['costPrice'] || 0);
               console.log(`💰 Using product costPrice: ₱${productCostPrice}`);
             }
           } catch (productError) {
@@ -1595,7 +1595,7 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
             const productSnap = await getDoc(productRef);
             if (productSnap.exists()) {
               const productData = productSnap.data();
-              actualCost = Number(productData?.costPrice || 0);
+              actualCost = Number(productData?.['costPrice'] || 0);
             }
           } catch (error) {
             console.warn(`⚠️ Failed to fetch product costPrice for tracking:`, error);
