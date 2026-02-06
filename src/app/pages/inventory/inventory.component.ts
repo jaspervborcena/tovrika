@@ -294,7 +294,13 @@ export class InventoryComponent implements OnInit {
     console.log('🔵 Inventory Component - ngOnInit started');
     await this.loadStores();
     console.log('🔵 Inventory Component - Loading rows for period:', this.selectedPeriod);
-    await this.inventoryService.loadRowsForPeriod(this.selectedPeriod, 1);
+    const currentPermission = this.authService.getCurrentPermission();
+    await this.inventoryService.loadRowsForPeriod(
+      this.selectedPeriod, 
+      1, 
+      this.selectedStoreId(),
+      currentPermission?.companyId
+    );
     console.log('🔵 Inventory Component - Rows loaded:', this.inventoryService.rows().length);
   }
 
@@ -323,8 +329,14 @@ export class InventoryComponent implements OnInit {
 
   onStoreChange(): void {
     console.log('Store changed to:', this.selectedStoreId());
+    const currentPermission = this.authService.getCurrentPermission();
     // Reload inventory data for selected store
-    this.inventoryService.loadRowsForPeriod(this.selectedPeriod, 1);
+    this.inventoryService.loadRowsForPeriod(
+      this.selectedPeriod, 
+      1, 
+      this.selectedStoreId(),
+      currentPermission?.companyId
+    );
   }
 
   getSelectedStoreName(): string {
@@ -362,19 +374,37 @@ export class InventoryComponent implements OnInit {
       this.dateTo = null;
     }
     // trigger reload/filter for page 1
-    this.inventoryService.loadRowsForPeriod(this.selectedPeriod, 1);
+    const currentPermission = this.authService.getCurrentPermission();
+    this.inventoryService.loadRowsForPeriod(
+      this.selectedPeriod, 
+      1, 
+      this.selectedStoreId(),
+      currentPermission?.companyId
+    );
   }
 
   onApplyDateRange() {
     if (!this.dateFrom || !this.dateTo) return;
+    const currentPermission = this.authService.getCurrentPermission();
     // trigger reload with custom date range
-    this.inventoryService.loadRowsForPeriod(this.selectedPeriod, 1);
+    this.inventoryService.loadRowsForPeriod(
+      this.selectedPeriod, 
+      1, 
+      this.selectedStoreId(),
+      currentPermission?.companyId
+    );
   }
 
   async goToPage(pageOrValue: any) {
     const page = Number(pageOrValue);
     if (!isFinite(page) || page < 1) return;
-    await this.inventoryService.loadRowsForPeriod(this.selectedPeriod, page);
+    const currentPermission = this.authService.getCurrentPermission();
+    await this.inventoryService.loadRowsForPeriod(
+      this.selectedPeriod, 
+      page, 
+      this.selectedStoreId(),
+      currentPermission?.companyId
+    );
     try { window.scrollTo({ top: 120, behavior: 'smooth' }); } catch {}
   }
 
