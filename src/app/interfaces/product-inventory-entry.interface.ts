@@ -1,3 +1,5 @@
+import { Timestamp } from '@angular/fire/firestore';
+
 export type InventoryStatus = 'active' | 'inactive' | 'removed' | 'expired';
 export type SyncStatus = 'PENDING' | 'SYNCED' | 'PENDING_ADJUSTMENT' | 'CONFLICT';
 
@@ -57,7 +59,8 @@ export interface BatchDeduction {
   orderId: string;
   orderDetailId: string;
   quantity: number;
-  deductedAt: Date;
+  deductedAt: Date | Timestamp;
+  createdAt?: Date | Timestamp;
   deductedBy: string;
   isOffline: boolean;
   syncStatus: SyncStatus;

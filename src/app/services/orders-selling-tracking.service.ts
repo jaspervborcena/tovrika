@@ -18,8 +18,9 @@ export class OrdersSellingTrackingService {
     for (const k of Object.keys(obj || {})) {
       const v = obj[k];
       if (v !== undefined) {
-        // For *At fields (createdAt/updatedAt) store a human-readable string
-        // with epoch in parentheses: "December 9, 2025 at 1:52:05 PM UTC+8 (170...)"
+        // For *At fields (createdAt/updatedAt/deductedAt) store BOTH:
+        // 1. Original field as Date (Firestore converts to Timestamp for querying)
+        // 2. *Formatted field as human-readable string for display
         if (k && typeof k === 'string' && /At$/.test(k)) {
           let d: Date | null = null;
           if (v instanceof Date) d = v;
@@ -29,11 +30,15 @@ export class OrdersSellingTrackingService {
             const parsed = new Date(v as any);
             d = isNaN(parsed.getTime()) ? null : parsed;
           }
-          if (d) out[k] = this.formatDateForFirestore(d);
-          else out[k] = v;
+          if (d) {
+            out[k] = d; // Keep as Date for Firestore querying
+            out[k + 'Formatted'] = this.formatDateForFirestore(d); // Add formatted version
+          } else {
+            out[k] = v;
+          }
         } else {
           // Keep other values unchanged
-          if (v instanceof Date) out[k] = v.getTime();
+          if (v instanceof Date) out[k] = v;
           else out[k] = v;
         }
       }
@@ -623,30 +628,34 @@ async createPartialTrackingFromDoc(trackingId: string, newStatus: string, qty: n
                   status: newBatchQty === 0 ? 'inactive' : batchData.status
                 };
                 transaction.update(batchRef as any, updateData);
-
+                
                 const dedRecord = {
                   productId,
                   batchId: batchData.batchId || null,
                   quantity: dedQty,
                   deductedAt: new Date(),
+                  createdAt: new Date(),
                   note: 'DAMAGED - client',
                   deductedBy: createdBy || null,
                   orderId: data.orderId
                 };
                 const dedRef = doc(collection(this.firestore, 'inventoryDeductions'));
-                transaction.set(dedRef, dedRecord as any);
+                const sanitizedDedRecord = this.sanitizeForFirestore(dedRecord);
+                transaction.set(dedRef, sanitizedDedRecord as any);
               } else {
                 const dedRecord = {
                   productId,
                   batchId: null,
                   quantity: dedQty,
                   deductedAt: new Date(),
+                  createdAt: new Date(),
                   note: 'DAMAGED - no-batch',
                   deductedBy: createdBy || null,
                   orderId: data.orderId
                 };
                 const dedRef = doc(collection(this.firestore, 'inventoryDeductions'));
-                transaction.set(dedRef, dedRecord as any);
+                const sanitizedDedRecord = this.sanitizeForFirestore(dedRecord);
+                transaction.set(dedRef, sanitizedDedRecord as any);
               }
             });
           }
@@ -856,12 +865,14 @@ async markOrderTrackingDamaged(orderId: string, damagedBy?: string, reason?: str
                     batchId: batchData.batchId || null,
                     quantity: qty,
                     deductedAt: new Date(),
+                    createdAt: new Date(),
                     note: 'DAMAGED - client',
                     deductedBy: damagedBy || null,
                     orderId: orderId
                   };
                   const dedRef = doc(collection(this.firestore, 'inventoryDeductions'));
-                  transaction.set(dedRef, dedRecord as any);
+                  const sanitizedDedRecord = this.sanitizeForFirestore(dedRecord);
+                  transaction.set(dedRef, sanitizedDedRecord as any);
                 } else {
                   // No batch found — still record product deduction and an inventoryDeductions record without batch
                   const dedRecord = {
@@ -869,12 +880,14 @@ async markOrderTrackingDamaged(orderId: string, damagedBy?: string, reason?: str
                     batchId: null,
                     quantity: qty,
                     deductedAt: new Date(),
+                    createdAt: new Date(),
                     note: 'DAMAGED - no-batch',
                     deductedBy: damagedBy || null,
                     orderId: orderId
                   };
                   const dedRef = doc(collection(this.firestore, 'inventoryDeductions'));
-                  transaction.set(dedRef, dedRecord as any);
+                  const sanitizedDedRecord = this.sanitizeForFirestore(dedRecord);
+                  transaction.set(dedRef, sanitizedDedRecord as any);
                 }
               });
 
@@ -1504,12 +1517,12 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
             
             // Deduction details
             quantity: it.quantity,
-            deductedAt: this.sanitizeForFirestore(new Date()),
+            deductedAt: new Date(),
             
             // Audit
             deductedBy: ctx.cashierId,
             createdBy: ctx.cashierId,
-            createdAt: this.sanitizeForFirestore(new Date()),
+            createdAt: new Date(),
             
             // Mark as non-batch product sale
             note: 'Non-batch product sale',
@@ -1518,7 +1531,8 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
 
           try {
             const deductionsRef = collection(this.firestore, 'inventoryDeductions');
-            const cleanedDoc = this.removeUndefinedFields(nonBatchDeduction);
+            const sanitizedNonBatch = this.sanitizeForFirestore(nonBatchDeduction);
+            const cleanedDoc = this.removeUndefinedFields(sanitizedNonBatch);
             await addDoc(deductionsRef, cleanedDoc);
             console.log(`📝 Created non-batch deduction: product=${it.productId}, qty=${it.quantity}, cost=₱${productCostPrice}`);
           } catch (error) {
@@ -1547,11 +1561,11 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
             
             // Deduction details
             quantity: deduction.deductedQty,
-            deductedAt: this.sanitizeForFirestore(new Date()),
+            deductedAt: new Date(),
             
             // Audit
             deductedBy: ctx.cashierId,
-            createdAt: this.sanitizeForFirestore(new Date()),
+            createdAt: new Date(),
             
             // Mark as offline-created if offline
             ...(this.networkService.isOnline() ? {} : { _offlineCreated: true })
@@ -1560,7 +1574,8 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
           // Use Firestore directly for automatic offline sync
           try {
             const deductionsRef = collection(this.firestore, 'inventoryDeductions');
-            const cleanedDoc = this.removeUndefinedFields(deductionDoc);
+            const sanitizedDeduction = this.sanitizeForFirestore(deductionDoc);
+            const cleanedDoc = this.removeUndefinedFields(sanitizedDeduction);
             await addDoc(deductionsRef, cleanedDoc);
             console.log(`📝 Created deduction log: batch=${deduction.batchId}, qty=${deduction.deductedQty}, cost=₱${deduction.costPrice}`);
           } catch (error) {

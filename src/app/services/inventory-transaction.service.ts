@@ -9,7 +9,7 @@ import {
   getDocs,
   query,
   where,
-  DocumentReference 
+  DocumentReference
 } from '@angular/fire/firestore';
 import { AuthService } from './auth.service';
 import { ProductSummaryService } from './product-summary.service';
@@ -58,7 +58,65 @@ export class InventoryTransactionService {
   private authService = inject(AuthService);
   private productSummaryService = inject(ProductSummaryService);
   private fifoService = inject(FIFOInventoryService);
+  private sanitizeForFirestore(obj: any): any {
+    const out: any = {};
+    for (const k of Object.keys(obj || {})) {
+      const v = obj[k];
+      if (v !== undefined) {
+        // For *At fields (createdAt/updatedAt/deductedAt) store BOTH:
+        // 1. Original field as Date (Firestore converts to Timestamp for querying)
+        // 2. *Formatted field as human-readable string for display
+        if (k && typeof k === 'string' && /At$/.test(k)) {
+          let d: Date | null = null;
+          if (v instanceof Date) d = v;
+          else if (v && typeof v.toDate === 'function') {
+            try { d = v.toDate(); } catch (e) { d = null; }
+          } else if (typeof v === 'number' || typeof v === 'string') {
+            const parsed = new Date(v as any);
+            d = isNaN(parsed.getTime()) ? null : parsed;
+          }
+          if (d) {
+            out[k] = d; // Keep as Date for Firestore querying
+            out[k + 'Formatted'] = this.formatDateForFirestore(d); // Add formatted version
+          } else {
+            out[k] = v;
+          }
+        } else {
+          // Keep other values unchanged
+          if (v instanceof Date) out[k] = v;
+          else out[k] = v;
+        }
+      }
+    }
+    return out;
+  }
 
+  private formatDateForFirestore(d: Date): string {
+    const months = [
+      'January','February','March','April','May','June','July','August','September','October','November','December'
+    ];
+    const month = months[d.getUTCMonth()];
+    const day = d.getUTCDate();
+    const year = d.getUTCFullYear();
+
+    // compute time in local offset (so it matches user's zone display like UTC+8)
+    const tzOffsetMin = -d.getTimezoneOffset(); // minutes east of UTC
+    const tzSign = tzOffsetMin >= 0 ? '+' : '-';
+    const tzHours = Math.floor(Math.abs(tzOffsetMin) / 60);
+
+    // time components in local time
+    const hours = d.getHours();
+    const minutes = d.getMinutes();
+    const seconds = d.getSeconds();
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    const hour12 = ((hours + 11) % 12) + 1;
+
+    const two = (n: number) => (n < 10 ? '0' + n : String(n));
+    const timePart = `${hour12}:${two(minutes)}:${two(seconds)} ${ampm}`;
+    const tzPart = `UTC${tzSign}${tzHours}`;
+    const epoch = String(d.getTime());
+    return `${month} ${day}, ${year} at ${timePart} ${tzPart} (${epoch})`;
+  }
   /**
    * MASTER TRANSACTION: Add a new inventory batch
    * FIFO stock calculation + LIFO price calculation + automatic product summary update
@@ -218,18 +276,31 @@ export class InventoryTransactionService {
         // Calculate new quantities
         const newQuantity = batchData.quantity - allocation.allocatedQuantity;
         const newTotalDeducted = (batchData.totalDeducted || 0) + allocation.allocatedQuantity;
-
+  const deductedDate = new Date();
+      const createDate = new Date();
         // Create deduction record and persist it to `inventoryDeductions`
+        const now = new Date();
         const deductionRecord = {
           orderId,
           orderDetailId: `${orderId}_${item.productId}`,
           quantity: allocation.allocatedQuantity,
-          deductedAt: new Date(),
+          deductedAt: deductedDate,
+          createdAt: createDate,
           deductedBy: currentUser.uid,
           isOffline: false,
           syncStatus: 'SYNCED' as const,
           productId: item.productId,
-          batchId: allocation.batchId
+          batchId: allocation.batchId,
+          // Additional fields for inventory tracking
+          storeId: batchData.storeId || permission.storeId || '',
+          companyId: batchData.companyId || permission.companyId || '',
+          productName: item.name || '',
+          productCode: '',
+          sku: item.productId,
+          costPrice: batchData.unitPrice || 0,
+          batchNumber: batchData.batchNumber?.toString() || '',
+          invoiceNumber: orderId,
+          refId: ''
         };
 
         // Update batch
@@ -242,9 +313,11 @@ export class InventoryTransactionService {
           status: newStatus
         });
 
-        // Persist the deduction record for auditing
+        // Persist the deduction record for auditing (sanitize entire object to format dates)
         const dedRef = doc(collection(this.firestore, 'inventoryDeductions'));
-        batch.set(dedRef, deductionRecord);
+        deductionRecord.refId = dedRef.id;
+        const sanitizedDeduction = this.sanitizeForFirestore(deductionRecord);
+        batch.set(dedRef, sanitizedDeduction);
 
         // Track deduction
         itemDeductions.push({

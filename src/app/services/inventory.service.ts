@@ -107,12 +107,23 @@ export class InventoryService {
     updatedAtRange?: { start?: Date | null; end?: Date | null }
   ): Promise<InventoryRow[]> {
     console.log('🟡 fetchRowsFromCollection:', { collectionName, filterCount: baseFilters.length, fetchLimit });
+    console.log('🟡 Filters:', baseFilters.map((f: any) => {
+      if (f._query?.filters) {
+        return { type: 'where', field: f._query.filters[0]?.field?.segments?.join('.'), op: f._query.filters[0]?.op, value: f._query.filters[0]?.value?.value };
+      }
+      return f;
+    }));
     const col = collection(this.firestore, collectionName);
     const out: InventoryRow[] = [];
     try {
-      const q = query(col, ...baseFilters, orderBy('createdAt', 'desc'), limit(fetchLimit));
+      // Use 'deductedAt' for inventoryDeductions, 'createdAt' for others
+      const dateField = collectionName === 'inventoryDeductions' ? 'deductedAt' : 'createdAt';
+      const q = query(col, ...baseFilters, orderBy(dateField, 'desc'), limit(fetchLimit));
       const snaps = await getDocs(q as any);
       console.log('🟡 fetchRowsFromCollection got', snaps.docs.length, 'docs from', collectionName);
+      if (snaps.docs.length > 0) {
+        console.log('🟡 Sample doc:', snaps.docs[0].id, snaps.docs[0].data());
+      }
       for (const s of snaps.docs) {
         const data: any = s.data() || {};
       const productId: string = data.productId;
@@ -396,19 +407,26 @@ export class InventoryService {
 /**
  * Load rows for a given period and page (fetches from both inventoryDeductions and ordersSellingTracking).
  */
-async loadRowsForPeriod(period: string, page: number = 1): Promise<void> {
-  console.log('🟢 InventoryService.loadRowsForPeriod - Started', { period, page });
+async loadRowsForPeriod(period: string, page: number = 1, storeId?: string, companyId?: string): Promise<void> {
+  console.log('🟢 InventoryService.loadRowsForPeriod - Started', { period, page, storeId, companyId });
   this.isLoading.set(true);
   this.currentPage.set(page);
 
   try {
-    const filters: any[] = [];
-
+    const baseFilters: any[] = [];
+    
+    // Add store/company filters if provided
+    if (storeId) {
+      baseFilters.push(where('storeId', '==', storeId));
+    }
+    if (companyId) {
+      baseFilters.push(where('companyId', '==', companyId));
+    }
     const now = new Date();
     let updatedAtRange: { start?: Date | null; end?: Date | null } | undefined;
 
+    // Handle month-based periods by calculating date range
     if (period === 'this_month' || period === 'previous_month') {
-      // compute month range start/end and filter by updatedAt so we don't rely on a yearMonth field
       let targetMonth: Date;
       if (period === 'this_month') {
         targetMonth = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -419,12 +437,61 @@ async loadRowsForPeriod(period: string, page: number = 1): Promise<void> {
       const month = targetMonth.getMonth();
       const start = new Date(year, month, 1, 0, 0, 0, 0);
       const end = new Date(year, month + 1, 0, 23, 59, 59, 999);
-      filters.push(where('createdAt', '>=', start));
-      filters.push(where('createdAt', '<=', end));
       updatedAtRange = { start, end };
+      period = `${year}-${String(month + 1).padStart(2, '0')}`; // Convert to YYYY-MM format for processing below
       console.log('🟢 Date range for', period, { start, end });
-    } else if (period === 'today' || period === 'yesterday') {
-      // keep using exact date range for daily queries
+    }
+    
+    // Note: we intentionally do not rely on a `yearMonth` field here because historical
+    // tracking documents may lack it. Instead we filter by date ranges below.
+
+    const pageSize = this.pageSize;
+    const fetchLimit = Math.max(page * pageSize, pageSize);
+    
+    console.log('🟢 Fetching from both collections...');
+    
+    // DEBUG: Check if there's ANY data in inventoryDeductions for this store/company
+    try {
+      const debugCol = collection(this.firestore, 'inventoryDeductions');
+      const debugFilters: any[] = [];
+      if (baseFilters.length > 0) {
+        // Copy store/company filters only (first filters before date filters)
+        for (const filter of baseFilters) {
+          debugFilters.push(filter);
+          if (debugFilters.length >= 2) break; // Only take first 2 (storeId, companyId)
+        }
+      }
+      const debugQuery = query(debugCol, ...debugFilters, limit(5));
+      const debugSnap = await getDocs(debugQuery);
+      console.log('🔍 DEBUG: Total docs in inventoryDeductions for this store/company:', debugSnap.docs.length);
+      if (debugSnap.docs.length > 0) {
+        debugSnap.docs.forEach((doc, idx) => {
+          const data = doc.data();
+          console.log(`🔍 DEBUG Doc ${idx + 1}:`, {
+            id: doc.id,
+            storeId: data['storeId'],
+            companyId: data['companyId'],
+            productId: data['productId'],
+            deductedAt: data['deductedAt'],
+            createdAt: data['createdAt'],
+            quantity: data['quantity']
+          });
+        });
+      }
+    } catch (debugErr) {
+      console.error('🔍 DEBUG query failed:', debugErr);
+    }
+    
+    // Create separate filters for each collection since they use different date fields
+    // inventoryDeductions uses 'deductedAt', ordersSellingTracking uses 'createdAt'
+    const deductionFilters = [...baseFilters];
+    const salesFilters = [...baseFilters];
+    
+    // TEMPORARY: Skip date filters to test if documents are being created correctly
+    const SKIP_DATE_FILTERS = true;
+    
+    // Add date range filters with appropriate field names
+    if (!SKIP_DATE_FILTERS && (period === 'today' || period === 'yesterday')) {
       let start: Date | null = null;
       let end: Date | null = null;
       if (period === 'today') {
@@ -436,23 +503,42 @@ async loadRowsForPeriod(period: string, page: number = 1): Promise<void> {
         end = new Date(y.getFullYear(), y.getMonth(), y.getDate(), 23, 59, 59, 999);
       }
       if (start && end) {
-        filters.push(where('createdAt', '>=', start));
-        filters.push(where('createdAt', '<=', end));
+        // inventoryDeductions uses 'deductedAt'
+        deductionFilters.push(where('deductedAt', '>=', start));
+        deductionFilters.push(where('deductedAt', '<=', end));
+        // ordersSellingTracking uses 'createdAt'
+        salesFilters.push(where('createdAt', '>=', start));
+        salesFilters.push(where('createdAt', '<=', end));
         updatedAtRange = { start, end };
         console.log('🟢 Date range for', period, { start, end });
       }
+    } else if (!SKIP_DATE_FILTERS && period) {
+      // For month/year periods, create date range
+      let start: Date | null = null;
+      let end: Date | null = null;
+      
+      if (period.includes('-')) {
+        // Format: YYYY-MM or YYYY-MM-DD
+        const [year, month] = period.split('-').map(Number);
+        if (month) {
+          start = new Date(year, month - 1, 1, 0, 0, 0, 0);
+          end = new Date(year, month, 0, 23, 59, 59, 999);
+        }
+      }
+      
+      if (start && end) {
+        deductionFilters.push(where('deductedAt', '>=', start));
+        deductionFilters.push(where('deductedAt', '<=', end));
+        salesFilters.push(where('createdAt', '>=', start));
+        salesFilters.push(where('createdAt', '<=', end));
+        updatedAtRange = { start, end };
+      }
     }
-    // Note: we intentionally do not rely on a `yearMonth` field here because historical
-    // tracking documents may lack it. Instead we filter by `createdAt` ranges above.
-
-    const pageSize = this.pageSize;
-    const fetchLimit = Math.max(page * pageSize, pageSize);
     
-    console.log('🟢 Fetching from both collections...');
-    // Fetch from both collections
+    // Fetch from both collections with their respective filters
     const [deductionRows, salesRows] = await Promise.all([
-      this.fetchRowsFromCollection('inventoryDeductions', filters, fetchLimit, updatedAtRange),
-      this.fetchRowsFromOrdersSellingTracking(filters, fetchLimit, updatedAtRange)
+      this.fetchRowsFromCollection('inventoryDeductions', deductionFilters, fetchLimit, updatedAtRange),
+      this.fetchRowsFromOrdersSellingTracking(salesFilters, fetchLimit, updatedAtRange)
     ]);
 
     console.log('🟢 Fetch results:', { 

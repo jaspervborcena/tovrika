@@ -15,6 +15,66 @@ export class FIFOInventoryService {
   private productService = inject(ProductService);
   private productSummaryService = inject(ProductSummaryService);
 
+  private sanitizeForFirestore(obj: any): any {
+    const out: any = {};
+    for (const k of Object.keys(obj || {})) {
+      const v = obj[k];
+      if (v !== undefined) {
+        // For *At fields (createdAt/updatedAt/deductedAt) store BOTH:
+        // 1. Original field as Date (Firestore converts to Timestamp for querying)
+        // 2. *Formatted field as human-readable string for display
+        if (k && typeof k === 'string' && /At$/.test(k)) {
+          let d: Date | null = null;
+          if (v instanceof Date) d = v;
+          else if (v && typeof v.toDate === 'function') {
+            try { d = v.toDate(); } catch (e) { d = null; }
+          } else if (typeof v === 'number' || typeof v === 'string') {
+            const parsed = new Date(v as any);
+            d = isNaN(parsed.getTime()) ? null : parsed;
+          }
+          if (d) {
+            out[k] = d; // Keep as Date for Firestore querying
+            out[k + 'Formatted'] = this.formatDateForFirestore(d); // Add formatted version
+          } else {
+            out[k] = v;
+          }
+        } else {
+          // Keep other values unchanged
+          if (v instanceof Date) out[k] = v;
+          else out[k] = v;
+        }
+      }
+    }
+    return out;
+  }
+
+  private formatDateForFirestore(d: Date): string {
+    const months = [
+      'January','February','March','April','May','June','July','August','September','October','November','December'
+    ];
+    const month = months[d.getUTCMonth()];
+    const day = d.getUTCDate();
+    const year = d.getUTCFullYear();
+
+    // compute time in local offset (so it matches user's zone display like UTC+8)
+    const tzOffsetMin = -d.getTimezoneOffset(); // minutes east of UTC
+    const tzSign = tzOffsetMin >= 0 ? '+' : '-';
+    const tzHours = Math.floor(Math.abs(tzOffsetMin) / 60);
+
+    // time components in local time
+    const hours = d.getHours();
+    const minutes = d.getMinutes();
+    const seconds = d.getSeconds();
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    const hour12 = ((hours + 11) % 12) + 1;
+
+    const two = (n: number) => (n < 10 ? '0' + n : String(n));
+    const timePart = `${hour12}:${two(minutes)}:${two(seconds)} ${ampm}`;
+    const tzPart = `UTC${tzSign}${tzHours}`;
+    const epoch = String(d.getTime());
+    return `${month} ${day}, ${year} at ${timePart} ${tzPart} (${epoch})`;
+  }
+
   /**
    * Validates if requested quantity can be fulfilled using FIFO logic
    */
@@ -154,17 +214,7 @@ export class FIFOInventoryService {
       const newTotalDeducted = (batchData.totalDeducted || 0) + allocation.allocatedQuantity;
 
       // Create deduction record in a dedicated collection
-      const deductionRecord: BatchDeduction & { productId: string; batchId: string } = {
-        orderId,
-        orderDetailId,
-        quantity: allocation.allocatedQuantity,
-        deductedAt: new Date(),
-        deductedBy: currentUser.uid,
-        isOffline: false,
-        syncStatus: 'SYNCED',
-        productId,
-        batchId: allocation.batchId
-      };
+      const now = new Date();
 
       // Update batch with new status logic
       const newStatus = newQuantity === 0 ? 'removed' : batchData.status;
@@ -179,7 +229,37 @@ export class FIFOInventoryService {
 
       // Persist the deduction record to the `inventoryDeductions` collection
       const deductionRef = doc(collection(this.firestore, 'inventoryDeductions'));
-      batch.set(deductionRef, deductionRecord);
+      
+      // Get product details
+      const product = this.productService.getProduct(productId);
+      const deductedDate = new Date();
+      const createDate = new Date();
+      // Build deduction data with all fields
+      const deductionData = {
+        orderId,
+        orderDetailId,
+        productId,
+        batchId: allocation.batchId,
+        quantity: allocation.allocatedQuantity,
+        deductedAt: deductedDate,
+        createdAt: createDate,
+        deductedBy: currentUser.uid,
+        isOffline: false,
+        syncStatus: 'SYNCED',
+        storeId: batchData.storeId || '',
+        companyId: batchData.companyId || '',
+        productName: product?.productName || '',
+        productCode: product?.productCode || '',
+        sku: product?.skuId || productId,
+        costPrice: batchData.unitPrice || 0,
+        batchNumber: batchData.batchNumber?.toString() || '',
+        invoiceNumber: orderId, // Use orderId as invoice reference
+        refId: deductionRef.id
+      };
+      
+      // Sanitize the entire object (converts Date fields to formatted strings)
+      const sanitizedDeduction = this.sanitizeForFirestore(deductionData);
+      batch.set(deductionRef, sanitizedDeduction);
 
       // Add to deduction details
       deductions.push({
@@ -213,6 +293,33 @@ export class FIFOInventoryService {
 
     console.log(`🎉 FIFO deduction completed! Product ${productId} deducted ${quantityToDeduct} units across ${deductions.length} batches`);
     return deductions;
+  }
+
+  // --- Helpers to normalize Firestore Timestamp | number | string | Date to Date/input value ---
+  private asDate(value: any): Date | null {
+    try {
+      if (!value) return null;
+      // Firestore Timestamp: has toDate()
+      if (typeof value === 'object' && value !== null && typeof value.toDate === 'function') {
+        return value.toDate();
+      }
+      // If value is seconds/nanoseconds
+      if (typeof value === 'object' && 'seconds' in value && typeof value.seconds === 'number') {
+        return new Date((value.seconds as number) * 1000);
+      }
+      // If it's already a Date
+      if (value instanceof Date) return value;
+      // If it's a number (ms)
+      if (typeof value === 'number') return new Date(value);
+      // If it's a string
+      if (typeof value === 'string') {
+        const d = new Date(value);
+        return isNaN(d.getTime()) ? null : d;
+      }
+      return null;
+    } catch {
+      return null;
+    }
   }
 
   /**
@@ -389,8 +496,10 @@ export class FIFOInventoryService {
     const snapshot = await getDocs(q);
     const allDeductions: BatchDeduction[] = snapshot.docs.map(d => d.data() as BatchDeduction);
 
-    return allDeductions.sort((a, b) => 
-      new Date(b.deductedAt).getTime() - new Date(a.deductedAt).getTime()
-    );
+    return allDeductions.sort((a, b) => {
+      const timeA = a.deductedAt instanceof Date ? a.deductedAt.getTime() : (a.deductedAt as any).toMillis();
+      const timeB = b.deductedAt instanceof Date ? b.deductedAt.getTime() : (b.deductedAt as any).toMillis();
+      return timeB - timeA;
+    });
   }
 }
