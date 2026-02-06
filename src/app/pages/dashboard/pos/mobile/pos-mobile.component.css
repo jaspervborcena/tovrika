@@ -640,11 +640,11 @@ input, textarea {
 }
 
 .stock-badge-mobile {
-  font-size: 10px;
+  font-size: 9px;
   color: #059669;
   background: #d1fae5;
-  padding: 1px 4px;
-  border-radius: 3px;
+  padding: 1px 3px;
+  border-radius: 2px;
   white-space: nowrap;
   font-weight: 500;
 }

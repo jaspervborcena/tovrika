@@ -1675,7 +1675,7 @@
     }
 
     .product-category-row .stock-badge {
-      font-size: 0.8rem;
+      font-size: 0.65rem;
       white-space: nowrap;
       flex-shrink: 0;
     }
@@ -1738,10 +1738,10 @@
     }
 
     .stock-badge {
-      font-size: 0.75rem; /* Consistent badge font */
+      font-size: 0.65rem; /* Consistent badge font */
       color: #059669;
       background: #d1fae5;
-      padding: 2px 6px;
+      padding: 1px 4px;
       border-radius: 3px;
       white-space: nowrap;
       font-weight: 500;

@@ -3246,7 +3246,9 @@ export class ProductManagementComponent implements OnInit {
         // Handle inventory batch updates based on current batches
         const currentBatches = await this.inventoryDataService.listBatches(this.selectedProduct.id!);
         
-        if (currentBatches.length === 0 && Number(formValue.totalStock || 0) > 0) {
+        // Only create/update batches if stock tracking is enabled
+        if (formValue.isStockTracked) {
+          if (currentBatches.length === 0 && Number(formValue.totalStock || 0) > 0) {
           // No inventory exists and user provided totalStock - create an inventory entry
           console.log('📦 No inventory exists for product, creating initial batch...');
           try {
@@ -3326,8 +3328,8 @@ export class ProductManagementComponent implements OnInit {
             }
           }
         }
-        
-        } else {
+        }
+      } else {
         // Create new product (no embedded inventory)
         const hasInitial = !!(formValue.initialQuantity && formValue.initialQuantity > 0);
         const initialBatch = hasInitial ? {
@@ -3398,8 +3400,8 @@ export class ProductManagementComponent implements OnInit {
         productId = await this.productService.createProduct(newProduct);
         console.log('✅ Product created successfully with ID:', productId);
         
-        // If initial batch exists, create it in separate collection and recompute summary
-        if (hasInitial && productId) {
+        // If initial batch exists AND stock tracking is enabled, create it in separate collection and recompute summary
+        if (hasInitial && productId && formValue.isStockTracked) {
           console.log('🎯 Creating initial inventory batch for new product:', productId);
           console.log('📦 Initial batch data:', initialBatch);
           console.log('🔍 Form values for initial batch:', {
@@ -3443,7 +3445,6 @@ export class ProductManagementComponent implements OnInit {
             throw batchError; // Re-throw to show error to user
           }
         } else {
-          console.log('⚠️ Initial batch not created');
           if (hasInitial && !productId) {
             console.warn('⚠️ Initial inventory requested but no productId returned');
           }
@@ -3726,6 +3727,13 @@ export class ProductManagementComponent implements OnInit {
 
   async saveBatch(): Promise<void> {
     if (this.inventoryForm.invalid || !this.selectedProduct) return;
+    
+    // Double-check stock tracking is enabled (safety check)
+    if (!this.selectedProduct.isStockTracked && !this.isEditingBatch) {
+      this.toastService.error('Stock tracking must be enabled to add new batches.');
+      this.loading = false;
+      return;
+    }
     
     this.loading = true;
     
@@ -4788,6 +4796,12 @@ export class ProductManagementComponent implements OnInit {
   openInventoryManagement(): void {
     if (!this.selectedProduct?.id) {
       this.toastService.error('Please save the product first before managing inventory.');
+      return;
+    }
+    
+    // Check if stock tracking is enabled
+    if (!this.selectedProduct.isStockTracked) {
+      this.toastService.error('Please enable "Keep track of product quantities and inventory" checkbox before managing inventory batches.');
       return;
     }
     

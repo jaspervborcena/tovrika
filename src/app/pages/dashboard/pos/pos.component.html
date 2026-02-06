@@ -366,8 +366,8 @@
                     </svg>
                   </div>
                 </div>
-                <div class="product-barcode" *ngIf="product.barcodeId">
-                  <img [src]="generateBarcodeImage(product.barcodeId)" alt="Barcode" class="barcode-image">
+                <div class="product-barcode">
+                  <img *ngIf="product.barcodeId" [src]="generateBarcodeImage(product.barcodeId)" alt="Barcode" class="barcode-image">
                 </div>
                 <div class="product-details" (click)="addToCart(product)">
                   <h4 class="product-name">{{ product.productName }}</h4>
@@ -417,8 +417,8 @@
                     </svg>
                   </div>
                 </div>
-                <div class="product-barcode" *ngIf="product.barcodeId">
-                  <img [src]="generateBarcodeImage(product.barcodeId)" alt="Barcode" class="barcode-image">
+                <div class="product-barcode">
+                  <img *ngIf="product.barcodeId" [src]="generateBarcodeImage(product.barcodeId)" alt="Barcode" class="barcode-image">
                 </div>
                 <div class="product-details" (click)="addToCart(product)">
                   <h4 class="product-name">{{ product.productName }}</h4>
@@ -466,8 +466,8 @@
                         </svg>
                       </div>
                     </div>
-                    <div class="product-barcode" *ngIf="product.barcodeId">
-                      <img [src]="generateBarcodeImage(product.barcodeId)" alt="Barcode" class="barcode-image">
+                    <div class="product-barcode">
+                      <img *ngIf="product.barcodeId" [src]="generateBarcodeImage(product.barcodeId)" alt="Barcode" class="barcode-image">
                     </div>
                     <div class="product-details" (click)="addToCart(product)">
                       <h4 class="product-name">{{ product.productName }}</h4>
