@@ -33,6 +33,9 @@ export interface OrdersSellingTrackingDoc {
   vat?: number; // VAT amount for this line
   total: number; // line total after discounts and tax
   isVatExempt?: boolean;
+  
+  // Product stock tracking
+  runningBalanceTotalStock?: number; // Product's totalStock at transaction time
 
   // Legacy / optional cashier fields
   cashierId?: string;

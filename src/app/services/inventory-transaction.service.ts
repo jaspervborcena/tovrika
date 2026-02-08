@@ -233,6 +233,15 @@ export class InventoryTransactionService {
 
     // Process each cart item
     for (const item of cartItems) {
+      // Fetch product to get totalStock
+      const productRef = doc(this.firestore, 'products', item.productId);
+      const productDoc = await getDoc(productRef);
+      if (!productDoc.exists()) {
+        throw new Error(`Product ${item.productId} not found`);
+      }
+      const productData = productDoc.data();
+      const productTotalStock = Number(productData?.['totalStock'] || 0);
+
       // Get FIFO plan for this item
       const plan = await this.fifoService.createFIFODeductionPlan(item.productId, item.quantity);
       if (!plan.canFulfill) {
@@ -269,6 +278,7 @@ export class InventoryTransactionService {
           orderId,
           orderDetailId: `${orderId}_${item.productId}`,
           quantity: allocation.allocatedQuantity,
+          totalStock: productTotalStock,  // Capture product's totalStock at deduction time
           deductedAt: deductedDate,
           createdAt: createDate,
           deductedBy: currentUser.uid,

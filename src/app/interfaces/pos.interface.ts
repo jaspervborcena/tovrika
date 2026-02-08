@@ -91,8 +91,6 @@ export interface OrderAccountingLedger {
   // Running balances immediately after this event is applied
   runningBalanceAmount: number;
   runningBalanceQty: number;
-  // Running balance for 'order' events only (cumulative across orders)
-  runningBalanceOrderQty?: number;
 
   // Audit fields
   createdAt: Date;

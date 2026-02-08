@@ -231,6 +231,7 @@ export class FIFOInventoryService {
         productId,
         batchId: allocation.batchId,
         quantity: allocation.allocatedQuantity,
+        totalStock: product?.totalStock || 0,  // Capture product's totalStock at deduction time
         deductedAt: deductedDate,
         createdAt: createDate,
         deductedBy: currentUser.uid,

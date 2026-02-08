@@ -12,17 +12,38 @@ import { MatTableDataSource } from '@angular/material/table';
 import { InventoryService as AppInventoryService } from '../../services/inventory.service';
 import { StoreService, Store } from '../../services/store.service';
 import { AuthService } from '../../services/auth.service';
+import { OrderService } from '../../services/order.service';
 
 export interface InventoryRow {
   orderId?: string;
   batchId: string;
   date?: Date | string;
   performedBy?: string;
+  productName?: string;
   productCode: string;
   sku: string;
   costPrice: number;
   sellingPrice: number;
   quantity: number;
+  runningBalanceTotalStock?: number;  // Beginning stock (product stock at transaction time)
+  remainingStock?: number;  // Remaining stock after transaction (beginning - quantity)
+  productId?: string;  // Product ID for querying max stock
+}
+
+export interface AggregatedInventoryRow {
+  date: Date | string;  // Latest date
+  productName?: string;
+  sku: string;
+  productCode: string;
+  costPrice: number;  // Average or latest
+  sellingPrice: number;  // Average or latest
+  quantity: number;  // Sum of all quantities
+  runningBalanceTotalStock?: number;  // Beginning stock (highest stock)
+  remainingStock?: number;  // Remaining stock (beginning - total quantity)
+  profitPerUnit: number;
+  totalGross: number;  // Sum
+  totalProfit: number;  // Sum
+  transactions: InventoryRow[];  // All transactions for this SKU
 }
 
 @Component({
@@ -158,18 +179,19 @@ export interface InventoryRow {
       }
 
       /* Column-specific widths */
-      .mat-column-orderId { min-width: 150px; }
-      .mat-column-batchId { min-width: 120px; }
-      .mat-column-date { min-width: 160px; }
-      .mat-column-performedBy { min-width: 150px; }
+      .mat-column-date { min-width: 100px; }
+      .mat-column-productName { min-width: 180px; }
       .mat-column-productCode { min-width: 120px; }
       .mat-column-sku { min-width: 150px; }
       .mat-column-costPrice { min-width: 100px; text-align: right; }
       .mat-column-sellingPrice { min-width: 100px; text-align: right; }
       .mat-column-quantity { min-width: 80px; text-align: center; }
       .mat-column-profitPerUnit { min-width: 100px; text-align: right; }
+      .mat-column-runningBalanceTotalStock { min-width: 130px; text-align: center; }
+      .mat-column-remainingStock { min-width: 130px; text-align: center; }
       .mat-column-totalGross { min-width: 120px; text-align: right; }
       .mat-column-totalProfit { min-width: 120px; text-align: right; }
+      .mat-column-actions { min-width: 120px; text-align: center; }
 
       @media (max-width: 768px) {
         .header {
@@ -238,18 +260,19 @@ export interface InventoryRow {
 })
 export class InventoryComponent implements OnInit {
   displayedColumns: string[] = [
-    'orderId',
-    'batchId',
     'date',
-    'performedBy',
+    'productName',
     'productCode',
     'sku',
     'costPrice',
     'sellingPrice',
     'quantity',
     'profitPerUnit',
+    'runningBalanceTotalStock',
+    'remainingStock',
     'totalGross',
-    'totalProfit'
+    'totalProfit',
+    'actions'
   ];
 
   inventoryData: InventoryRow[] = [
@@ -259,34 +282,105 @@ export class InventoryComponent implements OnInit {
     { orderId: 'INV-1004', batchId: 'BATCH-004', productCode: 'PROD-004', sku: 'PROD-004', costPrice: 200, sellingPrice: 250, quantity: 2 },
   ];
 
-  dataSource = new MatTableDataSource<InventoryRow>(this.inventoryData);
+  dataSource = new MatTableDataSource<AggregatedInventoryRow>([]);
 
   // Store management
   stores = signal<Store[]>([]);
   selectedStoreId = signal<string>('');
   hasMultipleStores = computed(() => this.stores().length > 1);
 
+  // Details modal
+  showDetails = signal<boolean>(false);
+  selectedRow = signal<AggregatedInventoryRow | null>(null);
+
   constructor(
     public inventoryService: AppInventoryService,
     private storeService: StoreService,
-    private authService: AuthService
+    private authService: AuthService,
+    private orderService: OrderService
   ) {
     // reactively update datasource when service rows change
     effect(() => {
       const rows = this.inventoryService.rows();
-      // map service row shape to local InventoryRow if necessary
-      const mapped = (rows || []).map(r => ({
+      console.log('📥 Raw inventory service rows:', rows);
+      
+      // Check what runningBalanceTotalStock values we have
+      rows.forEach((r, idx) => {
+        console.log(`Row ${idx}:`, {
+          sku: r.sku,
+          productId: r.productId,
+          runningBalanceTotalStock: r.runningBalanceTotalStock,
+          hasStock: r.runningBalanceTotalStock !== undefined && r.runningBalanceTotalStock !== null,
+          invoiceNo: r.invoiceNo
+        });
+      });
+      
+      // Compute max stock from the already loaded rows
+      const mapped = this.computeMaxStockForRows(rows);
+      console.log('Mapped rows with computed stock:', mapped);
+      
+      // Aggregate by SKU
+      const aggregated = this.aggregateBySku(mapped);
+      console.log('Aggregated rows:', aggregated);
+      this.dataSource.data = aggregated;
+    });
+  }
+
+  /**
+   * Compute max runningBalanceTotalStock for each row from already loaded data
+   */
+  computeMaxStockForRows(rows: any[]): InventoryRow[] {
+    return rows.map(r => {
+      let maxStock = r.runningBalanceTotalStock || 0;
+      
+      // Find max stock from all rows with same productId or SKU on the same date
+      // Only look at rows that have runningBalanceTotalStock defined (from ordersSellingTracking)
+      const rowDate = r.date instanceof Date ? r.date : new Date(r.date || new Date());
+      const rowDateStr = rowDate.toISOString().split('T')[0]; // YYYY-MM-DD
+      
+      rows.forEach(otherRow => {
+        // Skip rows without runningBalanceTotalStock (from inventoryDeductions)
+        if (!otherRow.runningBalanceTotalStock && otherRow.runningBalanceTotalStock !== 0) {
+          return;
+        }
+        
+        const otherDate = otherRow.date instanceof Date ? otherRow.date : new Date(otherRow.date || new Date());
+        const otherDateStr = otherDate.toISOString().split('T')[0];
+        
+        // Check if same product and same date
+        const sameProduct = (r.productId && otherRow.productId === r.productId) || 
+                           (r.sku && otherRow.sku === r.sku);
+        const sameDate = rowDateStr === otherDateStr;
+        
+        if (sameProduct && sameDate) {
+          const stock = Number(otherRow.runningBalanceTotalStock);
+          console.log('Comparing stocks:', { current: maxStock, other: stock, sku: r.sku });
+          if (stock > maxStock) {
+            maxStock = stock;
+          }
+        }
+      });
+      
+      console.log('Final max stock for', r.sku, ':', maxStock);
+      
+      const beginningStock = maxStock;
+      const remainingStock = beginningStock - (r.quantity || 0);
+      
+      return {
         orderId: r.invoiceNo,
         batchId: r.batchId || '',
         date: r.date,
         performedBy: r.performedBy,
+        productName: r.productName || '',
         productCode: r.productCode || '',
         sku: r.sku || '',
         costPrice: r.costPrice || 0,
         sellingPrice: r.sellingPrice || 0,
-        quantity: r.quantity || 0
-      } as InventoryRow));
-      this.dataSource.data = mapped;
+        quantity: r.quantity || 0,
+        runningBalanceTotalStock: beginningStock,
+        remainingStock: remainingStock,
+        productId: r.productId || ''
+      } as InventoryRow;
     });
   }
 
@@ -340,7 +434,7 @@ export class InventoryComponent implements OnInit {
     return store?.storeName.toUpperCase() || 'BREW ORGANICS INC';
   }
 
-  // UI controls (simple, mock-driven for now)
+  // UI controls - Daily summary optimized (Today/Yesterday recommended)
   periodOptions = [
     { key: 'today', label: 'Today' },
     { key: 'yesterday', label: 'Yesterday' },
@@ -434,42 +528,80 @@ export class InventoryComponent implements OnInit {
     return uniq;
   }
 
-  profitPerUnit(row: InventoryRow): number {
-    return row.sellingPrice - row.costPrice;
-  }
-
-  totalProfit(row: InventoryRow): number {
-    return this.profitPerUnit(row) * row.quantity;
-  }
-
-  totalGross(row: InventoryRow): number {
-    return row.sellingPrice * (row.quantity || 0);
-  }
-
-  isDuplicateRow(row: InventoryRow): boolean {
-    // Check if there's another row with same Invoice No, Performed By, Product Code, and SKU
-    const matches = this.dataSource.data.filter(r => {
-      if (r === row) return false; // Don't compare with itself
+  // Aggregate rows by SKU
+  aggregateBySku(rows: InventoryRow[]): AggregatedInventoryRow[] {
+    const groups = new Map<string, AggregatedInventoryRow & { productId?: string }>();
+    
+    rows.forEach(row => {
+      const key = row.sku;
       
-      const sameInvoice = r.orderId === row.orderId;
-      const samePerformedBy = r.performedBy === row.performedBy;
-      const sameProductCode = r.productCode === row.productCode;
-      const sameSku = r.sku === row.sku;
-      
-      // Debug log
-      if (sameInvoice && sameProductCode && sameSku) {
-        console.log('Found potential duplicate:', {
-          invoice: row.orderId,
-          product: row.productCode,
+      if (!groups.has(key)) {
+        // First transaction for this SKU
+        const profitPerUnit = row.sellingPrice - row.costPrice;
+        const totalGross = row.sellingPrice * row.quantity;
+        const totalProfit = profitPerUnit * row.quantity;
+        const beginningStock = row.runningBalanceTotalStock || 0;
+        const remainingStock = beginningStock - row.quantity;
+        
+        groups.set(key, {
+          date: row.date || new Date(),
+          productName: row.productName || '',
           sku: row.sku,
-          performedBy: row.performedBy,
-          match: { performedBy: r.performedBy }
+          productCode: row.productCode,
+          costPrice: row.costPrice,
+          sellingPrice: row.sellingPrice,
+          quantity: row.quantity,
+          runningBalanceTotalStock: beginningStock,
+          remainingStock: remainingStock,
+          profitPerUnit,
+          totalGross,
+          totalProfit,
+          transactions: [row],
+          productId: row.productId
         });
+      } else {
+        // Add to existing group
+        const existing = groups.get(key)!;
+        existing.quantity += row.quantity;
+        existing.totalGross += (row.sellingPrice * row.quantity);
+        existing.totalProfit += ((row.sellingPrice - row.costPrice) * row.quantity);
+        
+        // Get the max stock from all transactions for this SKU
+        if ((row.runningBalanceTotalStock || 0) > (existing.runningBalanceTotalStock || 0)) {
+          existing.runningBalanceTotalStock = row.runningBalanceTotalStock;
+        }
+        
+        // Recalculate remaining stock (beginning stock - total quantity sold)
+        existing.remainingStock = (existing.runningBalanceTotalStock || 0) - existing.quantity;
+        
+        // Update to latest date
+        const existingDate = existing.date instanceof Date ? existing.date : new Date(existing.date);
+        const rowDate = row.date instanceof Date ? row.date : new Date(row.date || new Date());
+        if (rowDate > existingDate) {
+          existing.date = row.date || new Date();
+        }
+        
+        existing.transactions.push(row);
+        
+        // Recalculate profit per unit (weighted average)
+        existing.profitPerUnit = existing.totalProfit / existing.quantity;
       }
-      
-      return sameInvoice && samePerformedBy && sameProductCode && sameSku;
     });
     
-    return matches.length > 0;
+    const aggregatedArray = Array.from(groups.values());
+    console.log('🎯 Aggregated data with max stock from transactions:', aggregatedArray);
+    return aggregatedArray;
+  }
+
+  // Open details modal
+  openDetails(row: AggregatedInventoryRow): void {
+    this.selectedRow.set(row);
+    this.showDetails.set(true);
+  }
+
+  // Close details modal
+  closeDetails(): void {
+    this.showDetails.set(false);
+    this.selectedRow.set(null);
   }
 }

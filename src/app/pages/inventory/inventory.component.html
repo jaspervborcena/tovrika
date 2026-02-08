@@ -47,28 +47,16 @@
   <div class="table-wrap mat-elevation">
     <table mat-table [dataSource]="dataSource" class="mat-elevation-z8">
 
-      <!-- Invoice No. -->
-      <ng-container matColumnDef="orderId">
-        <th mat-header-cell *matHeaderCellDef> Invoice No. </th>
-        <td mat-cell *matCellDef="let row" style="word-break: keep-all; white-space: nowrap;"> {{row.orderId}} </td>
-      </ng-container>
-
-      <!-- Batch ID -->
-      <ng-container matColumnDef="batchId">
-        <th mat-header-cell *matHeaderCellDef> Batch ID </th>
-        <td mat-cell *matCellDef="let row"> {{row.batchId}} </td>
-      </ng-container>
-
-      <!-- Date -->
+      <!-- Date (without time) -->
       <ng-container matColumnDef="date">
         <th mat-header-cell *matHeaderCellDef> Date </th>
-        <td mat-cell *matCellDef="let row"> {{row.date | date:'short'}} </td>
+        <td mat-cell *matCellDef="let row"> {{row.date | date:'M/d/yy'}} </td>
       </ng-container>
 
-      <!-- Performed By -->
-      <ng-container matColumnDef="performedBy">
-        <th mat-header-cell *matHeaderCellDef> Performed By </th>
-        <td mat-cell *matCellDef="let row"> {{row.performedBy}} </td>
+      <!-- Product Name -->
+      <ng-container matColumnDef="productName">
+        <th mat-header-cell *matHeaderCellDef> Product Name </th>
+        <td mat-cell *matCellDef="let row"> {{row.productName || '-'}} </td>
       </ng-container>
 
       <!-- Product Code -->
@@ -104,24 +92,50 @@
       <!-- Profit Per Unit -->
       <ng-container matColumnDef="profitPerUnit">
         <th mat-header-cell *matHeaderCellDef> Profit/Unit </th>
-        <td mat-cell *matCellDef="let row"> {{profitPerUnit(row) | number:'1.2-2'}} </td>
+        <td mat-cell *matCellDef="let row"> {{row.profitPerUnit | number:'1.2-2'}} </td>
+      </ng-container>
+
+      <!-- Beginning Stock -->
+      <ng-container matColumnDef="runningBalanceTotalStock">
+        <th mat-header-cell *matHeaderCellDef> Beginning Stock </th>
+        <td mat-cell *matCellDef="let row"> {{row.runningBalanceTotalStock || 0}} </td>
+      </ng-container>
+
+      <!-- Remaining Stock -->
+      <ng-container matColumnDef="remainingStock">
+        <th mat-header-cell *matHeaderCellDef> Remaining Stock </th>
+        <td mat-cell *matCellDef="let row"> {{row.remainingStock || 0}} </td>
       </ng-container>
 
       <!-- Total Gross -->
       <ng-container matColumnDef="totalGross">
         <th mat-header-cell *matHeaderCellDef> Total Gross </th>
-        <td mat-cell *matCellDef="let row"> ₱{{totalGross(row) | number:'1.2-2'}} </td>
+        <td mat-cell *matCellDef="let row"> ₱{{row.totalGross | number:'1.2-2'}} </td>
       </ng-container>
 
       <!-- Total Profit -->
       <ng-container matColumnDef="totalProfit">
         <th mat-header-cell *matHeaderCellDef> Total Profit </th>
-        <td mat-cell *matCellDef="let row"> ₱{{totalProfit(row) | number:'1.2-2'}} </td>
+        <td mat-cell *matCellDef="let row"> ₱{{row.totalProfit | number:'1.2-2'}} </td>
+      </ng-container>
+
+      <!-- Actions: View Details -->
+      <ng-container matColumnDef="actions">
+        <th mat-header-cell *matHeaderCellDef> Actions </th>
+        <td mat-cell *matCellDef="let row">
+          <button 
+            mat-button 
+            color="primary" 
+            (click)="openDetails(row)"
+            style="font-size: 0.875rem;">
+            View Details
+          </button>
+        </td>
       </ng-container>
 
       <!-- Render rows -->
       <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
-      <tr mat-row *matRowDef="let row; columns: displayedColumns;" [class.duplicate-row]="isDuplicateRow(row)"></tr>
+      <tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>
     </table>
   </div>
   <!-- Empty state when no rows for selected period -->
@@ -145,6 +159,93 @@
 
     <div style="margin-left:auto; color:#6b7280; font-size:0.9rem;">
       Showing page {{ inventoryService.currentPage() }} of {{ inventoryService.totalPages() }} — total {{ inventoryService.totalCount() }} rows
+    </div>
+  </div>
+
+  <!-- Details Modal -->
+  <div *ngIf="showDetails()" 
+       class="modal-overlay" 
+       (click)="closeDetails()"
+       style="position: fixed !important; z-index: 9999 !important; background: rgba(0, 0, 0, 0.8) !important; top: 0; left: 0; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;">
+    <div class="modal" (click)="$event.stopPropagation()" style="background: white; border-radius: 12px; max-width: 900px; width: 90%; max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);">
+      <div class="modal-header" style="padding: 1.5rem; border-bottom: 1px solid #e5e7eb; display: flex; justify-content: space-between; align-items: center;">
+        <h3 style="margin: 0; font-size: 1.5rem; font-weight: 600; color: #111827;">📦 Inventory Details</h3>
+        <button class="close-btn" (click)="closeDetails()" style="background: none; border: none; font-size: 2rem; cursor: pointer; color: #6b7280; line-height: 1;">×</button>
+      </div>
+      <div class="modal-body" style="padding: 1.5rem;">
+        <div *ngIf="selectedRow()" class="order-details">
+          <div class="form-section" style="margin-bottom: 1.5rem;">
+            <h4 class="section-title" style="font-size: 1.125rem; font-weight: 600; color: #374151; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem;">
+              <span>📝</span>
+              <span>Summary Information</span>
+            </h4>
+            <div class="order-info" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem;">
+              <div class="info-row" style="display: flex; flex-direction: column; gap: 0.25rem;">
+                <span class="info-label" style="font-size: 0.875rem; color: #6b7280; font-weight: 500;">SKU:</span>
+                <span class="info-value" style="font-size: 1rem; color: #111827; font-weight: 600;">{{ selectedRow()!.sku }}</span>
+              </div>
+              <div class="info-row" style="display: flex; flex-direction: column; gap: 0.25rem;">
+                <span class="info-label" style="font-size: 0.875rem; color: #6b7280; font-weight: 500;">Product Code:</span>
+                <span class="info-value" style="font-size: 1rem; color: #111827;">{{ selectedRow()!.productCode }}</span>
+              </div>
+              <div class="info-row" style="display: flex; flex-direction: column; gap: 0.25rem;">
+                <span class="info-label" style="font-size: 0.875rem; color: #6b7280; font-weight: 500;">Total Quantity:</span>
+                <span class="info-value" style="font-size: 1rem; color: #111827;">{{ selectedRow()!.quantity }}</span>
+              </div>
+              <div class="info-row" style="display: flex; flex-direction: column; gap: 0.25rem;">
+                <span class="info-label" style="font-size: 0.875rem; color: #6b7280; font-weight: 500;">Total Stock:</span>
+                <span class="info-value" style="font-size: 1rem; color: #111827;">{{ selectedRow()!.runningBalanceTotalStock }}</span>
+              </div>
+              <div class="info-row" style="display: flex; flex-direction: column; gap: 0.25rem;">
+                <span class="info-label" style="font-size: 0.875rem; color: #6b7280; font-weight: 500;">Total Gross:</span>
+                <span class="info-value" style="font-size: 1rem; color: #10b981; font-weight: 600;">₱{{ selectedRow()!.totalGross | number:'1.2-2' }}</span>
+              </div>
+              <div class="info-row" style="display: flex; flex-direction: column; gap: 0.25rem;">
+                <span class="info-label" style="font-size: 0.875rem; color: #6b7280; font-weight: 500;">Total Profit:</span>
+                <span class="info-value" style="font-size: 1rem; color: #10b981; font-weight: 600;">₱{{ selectedRow()!.totalProfit | number:'1.2-2' }}</span>
+              </div>
+            </div>
+          </div>
+          
+          <div class="form-section">
+            <h4 class="section-title" style="font-size: 1.125rem; font-weight: 600; color: #374151; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem;">
+              <span>📋</span>
+              <span>Individual Transactions ({{ selectedRow()!.transactions.length }})</span>
+            </h4>
+            <div class="order-items-table-wrapper" style="overflow-x: auto;">
+              <table class="order-items-table" style="width: 100%; border-collapse: collapse;">
+                <thead>
+                  <tr style="background: #f9fafb; border-bottom: 2px solid #e5e7eb;">
+                    <th style="padding: 0.75rem; text-align: left; font-size: 0.875rem; font-weight: 600; color: #374151;">Invoice No.</th>
+                    <th style="padding: 0.75rem; text-align: left; font-size: 0.875rem; font-weight: 600; color: #374151;">Date</th>
+                    <th style="padding: 0.75rem; text-align: left; font-size: 0.875rem; font-weight: 600; color: #374151;">Performed By</th>
+                    <th style="padding: 0.75rem; text-align: right; font-size: 0.875rem; font-weight: 600; color: #374151;">Cost Price</th>
+                    <th style="padding: 0.75rem; text-align: right; font-size: 0.875rem; font-weight: 600; color: #374151;">Selling Price</th>
+                    <th style="padding: 0.75rem; text-align: center; font-size: 0.875rem; font-weight: 600; color: #374151;">Qty</th>
+                    <th style="padding: 0.75rem; text-align: right; font-size: 0.875rem; font-weight: 600; color: #374151;">Stock</th>
+                    <th style="padding: 0.75rem; text-align: right; font-size: 0.875rem; font-weight: 600; color: #374151;">Gross</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr *ngFor="let txn of selectedRow()!.transactions" style="border-bottom: 1px solid #f3f4f6;">
+                    <td style="padding: 0.75rem; font-size: 0.875rem; color: #1f2937;">{{ txn.orderId || 'N/A' }}</td>
+                    <td style="padding: 0.75rem; font-size: 0.875rem; color: #1f2937;">{{ txn.date | date:'M/d/yy h:mm a' }}</td>
+                    <td style="padding: 0.75rem; font-size: 0.875rem; color: #1f2937;">{{ txn.performedBy || '-' }}</td>
+                    <td style="padding: 0.75rem; text-align: right; font-size: 0.875rem; color: #1f2937;">₱{{ txn.costPrice | number:'1.2-2' }}</td>
+                    <td style="padding: 0.75rem; text-align: right; font-size: 0.875rem; color: #1f2937;">₱{{ txn.sellingPrice | number:'1.2-2' }}</td>
+                    <td style="padding: 0.75rem; text-align: center; font-size: 0.875rem; color: #1f2937;">{{ txn.quantity }}</td>
+                    <td style="padding: 0.75rem; text-align: right; font-size: 0.875rem; color: #1f2937;">{{ txn.runningBalanceTotalStock || 0 }}</td>
+                    <td style="padding: 0.75rem; text-align: right; font-size: 0.875rem; color: #10b981; font-weight: 500;">₱{{ (txn.sellingPrice * txn.quantity) | number:'1.2-2' }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer" style="padding: 1.5rem; border-top: 1px solid #e5e7eb; display: flex; justify-content: flex-end;">
+        <button class="btn btn-secondary" (click)="closeDetails()" style="padding: 0.5rem 1rem; background: #f3f4f6; color: #374151; border: none; border-radius: 6px; cursor: pointer; font-weight: 500;">Close</button>
+      </div>
     </div>
   </div>
 </div>
