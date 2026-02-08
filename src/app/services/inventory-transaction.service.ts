@@ -272,7 +272,7 @@ export class InventoryTransactionService {
         const newTotalDeducted = (batchData.totalDeducted || 0) + allocation.allocatedQuantity;
   const deductedDate = new Date();
       const createDate = new Date();
-        // Create deduction record and persist it to `inventoryDeductions`
+        // Create deduction record and persist it to `inventoryTracking`
         const now = new Date();
         const deductionRecord = {
           orderId,
@@ -309,7 +309,7 @@ export class InventoryTransactionService {
         });
 
         // Persist the deduction record for auditing (sanitize entire object to format dates)
-        const dedRef = doc(collection(this.firestore, 'inventoryDeductions'));
+        const dedRef = doc(collection(this.firestore, 'inventoryTracking'));
         deductionRecord.refId = dedRef.id;
         const sanitizedDeduction = this.sanitizeForFirestore(deductionRecord);
         batch.set(dedRef, sanitizedDeduction);

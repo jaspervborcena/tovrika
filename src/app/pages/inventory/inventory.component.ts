@@ -121,15 +121,14 @@ export interface AggregatedInventoryRow {
         display: inline-block;
       }
 
-      /* Table / wrapper */
+      /* Table Container - matched to Sales Summary */
       .table-wrap { 
-        width: 100%; 
-        overflow-x: auto; 
-        overflow-y: auto;
-        max-height: calc(100vh - 300px);
+        max-width: 1400px;
+        margin: 0 auto 2rem auto;
         background: white;
-        border-radius: 8px;
-        box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+        border-radius: 12px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+        overflow: hidden;
       }
       
       table { 
@@ -140,33 +139,125 @@ export interface AggregatedInventoryRow {
       
       .mat-elevation { 
         padding: 0;
-        border-radius: 8px;
+        border-radius: 12px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
       }
 
-      /* Table cell styles */
+      .table-wrapper {
+        overflow-x: auto;
+      }
+
+      /* Table cell styles - matched to Sales Summary */
       th.mat-header-cell, td.mat-cell {
         white-space: nowrap;
-        padding: 12px 16px !important;
+        padding: 16px 12px !important;
         font-size: 0.875rem;
       }
 
       th.mat-header-cell {
-        background: #f9fafb;
+        background: #f7fafc;
         font-weight: 600;
-        color: #374151;
-        border-bottom: 2px solid #e5e7eb;
+        color: #4a5568;
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.025em;
+        border-bottom: 1px solid #e2e8f0;
         position: sticky;
         top: 0;
         z-index: 10;
       }
 
       td.mat-cell {
-        border-bottom: 1px solid #f3f4f6;
-        color: #1f2937;
+        border-bottom: 1px solid #f1f5f9;
+        color: #2d3748;
+      }
+
+      tr.mat-row {
+        transition: background-color 0.2s;
       }
 
       tr.mat-row:hover {
-        background-color: #f9fafb;
+        background-color: #f7fafc;
+      }
+
+      /* Empty State */
+      .empty-state-container {
+        padding: 3rem 1.5rem;
+        text-align: center;
+      }
+
+      .empty-message {
+        max-width: 400px;
+        margin: 0 auto;
+      }
+
+      .empty-icon {
+        font-size: 4rem;
+        margin-bottom: 1rem;
+      }
+
+      .empty-message p {
+        color: #718096;
+        font-size: 1.125rem;
+        margin-bottom: 1.5rem;
+      }
+
+      .refresh-btn {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border: none;
+        padding: 0.75rem 1.5rem;
+        border-radius: 8px;
+        font-size: 0.9rem;
+        font-weight: 600;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        transition: all 0.3s ease;
+      }
+
+      .refresh-btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+      }
+
+      .refresh-btn svg {
+        width: 16px;
+        height: 16px;
+      }
+
+      /* Button styling for View Details */
+      .view-details-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+        color: white;
+        border: none;
+        padding: 8px 16px;
+        border-radius: 8px;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        box-shadow: 0 2px 4px rgba(79, 70, 229, 0.2);
+      }
+
+      .view-details-btn:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);
+        background: linear-gradient(135deg, #4338ca 0%, #6d28d9 100%);
+      }
+
+      .view-details-btn:active {
+        transform: translateY(0);
+        box-shadow: 0 2px 4px rgba(79, 70, 229, 0.2);
+      }
+
+      .view-details-btn svg {
+        width: 16px;
+        height: 16px;
       }
 
       /* Duplicate row highlighting */
@@ -255,6 +346,191 @@ export interface AggregatedInventoryRow {
           font-size: 0.8125rem;
         }
       }
+
+      /* Modal Styles */
+      .modal-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.8);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 9999;
+      }
+
+      .modal {
+        background: white;
+        border-radius: 16px;
+        max-width: 900px;
+        width: 90%;
+        max-height: 90vh;
+        overflow: hidden;
+        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+        display: flex;
+        flex-direction: column;
+      }
+
+      .modal-header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        padding: 1.5rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      .modal-header h3 {
+        margin: 0;
+        font-size: 1.25rem;
+        font-weight: 600;
+        color: white;
+      }
+
+      .close-btn {
+        background: rgba(255, 255, 255, 0.2);
+        border: none;
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        font-size: 1.5rem;
+        color: white;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.2s ease;
+        line-height: 1;
+      }
+
+      .close-btn:hover {
+        background: rgba(255, 255, 255, 0.3);
+        transform: scale(1.1);
+      }
+
+      .modal-body {
+        padding: 1.5rem;
+        overflow-y: auto;
+        flex: 1;
+      }
+
+      .modal-footer {
+        padding: 1.5rem;
+        border-top: 1px solid #e5e7eb;
+        display: flex;
+        justify-content: flex-end;
+        gap: 0.75rem;
+      }
+
+      .form-section {
+        margin-bottom: 2rem;
+      }
+
+      .form-section:last-child {
+        margin-bottom: 0;
+      }
+
+      .section-title {
+        font-size: 1rem;
+        font-weight: 600;
+        color: #374151;
+        margin-bottom: 1rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding-bottom: 0.5rem;
+        border-bottom: 2px solid #e5e7eb;
+      }
+
+      .order-info {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 1.25rem;
+      }
+
+      .info-row {
+        display: flex;
+        flex-direction: column;
+        gap: 0.25rem;
+      }
+
+      .info-label {
+        font-size: 0.8125rem;
+        color: #6b7280;
+        font-weight: 500;
+        text-transform: uppercase;
+        letter-spacing: 0.025em;
+      }
+
+      .info-value {
+        font-size: 1rem;
+        color: #111827;
+        font-weight: 500;
+      }
+
+      .order-items-table-wrapper {
+        overflow-x: auto;
+        border-radius: 8px;
+        border: 1px solid #e5e7eb;
+      }
+
+      .order-items-table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+
+      .order-items-table thead {
+        background: #f9fafb;
+      }
+
+      .order-items-table th {
+        padding: 0.875rem 1rem;
+        text-align: left;
+        font-size: 0.8125rem;
+        font-weight: 600;
+        color: #374151;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+
+      .order-items-table td {
+        padding: 0.875rem 1rem;
+        font-size: 0.875rem;
+        color: #1f2937;
+        border-bottom: 1px solid #f3f4f6;
+      }
+
+      .order-items-table tbody tr:last-child td {
+        border-bottom: none;
+      }
+
+      .order-items-table tbody tr:hover {
+        background: #f9fafb;
+      }
+
+      .order-items-table .mono {
+        font-family: 'Courier New', monospace;
+      }
+
+      .btn {
+        padding: 0.625rem 1.25rem;
+        border-radius: 8px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        border: none;
+        font-size: 0.875rem;
+      }
+
+      .btn-secondary {
+        background: #e5e7eb;
+        color: #374151;
+      }
+
+      .btn-secondary:hover {
+        background: #d1d5db;
+      }
     `
   ]
 })
@@ -339,7 +615,7 @@ export class InventoryComponent implements OnInit {
       const rowDateStr = rowDate.toISOString().split('T')[0]; // YYYY-MM-DD
       
       rows.forEach(otherRow => {
-        // Skip rows without runningBalanceTotalStock (from inventoryDeductions)
+        // Skip rows without runningBalanceTotalStock (from inventoryTracking)
         if (!otherRow.runningBalanceTotalStock && otherRow.runningBalanceTotalStock !== 0) {
           return;
         }

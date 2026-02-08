@@ -630,7 +630,7 @@ async createPartialTrackingFromDoc(trackingId: string, newStatus: string, qty: n
                   deductedBy: createdBy || null,
                   orderId: data.orderId
                 };
-                const dedRef = doc(collection(this.firestore, 'inventoryDeductions'));
+                const dedRef = doc(collection(this.firestore, 'inventoryTracking'));
                 const sanitizedDedRecord = this.sanitizeForFirestore(dedRecord);
                 transaction.set(dedRef, sanitizedDedRecord as any);
               } else {
@@ -645,7 +645,7 @@ async createPartialTrackingFromDoc(trackingId: string, newStatus: string, qty: n
                   deductedBy: createdBy || null,
                   orderId: data.orderId
                 };
-                const dedRef = doc(collection(this.firestore, 'inventoryDeductions'));
+                const dedRef = doc(collection(this.firestore, 'inventoryTracking'));
                 const sanitizedDedRecord = this.sanitizeForFirestore(dedRecord);
                 transaction.set(dedRef, sanitizedDedRecord as any);
               }
@@ -863,11 +863,11 @@ async markOrderTrackingDamaged(orderId: string, damagedBy?: string, reason?: str
                     deductedBy: damagedBy || null,
                     orderId: orderId
                   };
-                  const dedRef = doc(collection(this.firestore, 'inventoryDeductions'));
+                  const dedRef = doc(collection(this.firestore, 'inventoryTracking'));
                   const sanitizedDedRecord = this.sanitizeForFirestore(dedRecord);
                   transaction.set(dedRef, sanitizedDedRecord as any);
                 } else {
-                  // No batch found — still record product deduction and an inventoryDeductions record without batch
+                  // No batch found — still record product deduction and an inventoryTracking record without batch
                   const dedRecord = {
                     productId,
                     batchId: null,
@@ -879,7 +879,7 @@ async markOrderTrackingDamaged(orderId: string, damagedBy?: string, reason?: str
                     deductedBy: damagedBy || null,
                     orderId: orderId
                   };
-                  const dedRef = doc(collection(this.firestore, 'inventoryDeductions'));
+                  const dedRef = doc(collection(this.firestore, 'inventoryTracking'));
                   const sanitizedDedRecord = this.sanitizeForFirestore(dedRecord);
                   transaction.set(dedRef, sanitizedDedRecord as any);
                 }
@@ -1488,7 +1488,7 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
           console.log(`✅ Deducted ${deductQty} from batch ${batch.batchId}, remaining in batch: ${newQty}`);
         }
 
-        // Step 3: Create inventoryDeductions records (one per batch used, sorted by batchId asc)
+        // Step 3: Create inventoryTracking records (one per batch used, sorted by batchId asc)
         // If no batches found, create a generic deduction record for non-batch products
         if (batchDeductions.length === 0) {
           console.log(`📦 No batches found for product ${it.productId} - creating non-batch deduction`);
@@ -1540,7 +1540,7 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
           };
 
           try {
-            const deductionsRef = collection(this.firestore, 'inventoryDeductions');
+            const deductionsRef = collection(this.firestore, 'inventoryTracking');
             const sanitizedNonBatch = this.sanitizeForFirestore(nonBatchDeduction);
             const cleanedDoc = this.removeUndefinedFields(sanitizedNonBatch);
             await addDoc(deductionsRef, cleanedDoc);
@@ -1597,7 +1597,7 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
 
           // Use Firestore directly for automatic offline sync
           try {
-            const deductionsRef = collection(this.firestore, 'inventoryDeductions');
+            const deductionsRef = collection(this.firestore, 'inventoryTracking');
             const sanitizedDeduction = this.sanitizeForFirestore(deductionDoc);
             const cleanedDoc = this.removeUndefinedFields(sanitizedDeduction);
             await addDoc(deductionsRef, cleanedDoc);
@@ -1677,7 +1677,7 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
           ...(this.networkService.isOnline() ? {} : { _offlineCreated: true })
         } as OrdersSellingTrackingDoc;
 
-        // Use Firestore directly for automatic offline sync (same as inventoryDeductions)
+        // Use Firestore directly for automatic offline sync (same as inventoryTracking)
         try {
           const trackingRef = collection(this.firestore, colName);
           const cleanedDoc = this.removeUndefinedFields(docData as any);

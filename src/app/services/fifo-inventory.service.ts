@@ -217,8 +217,8 @@ export class FIFOInventoryService {
         status: newStatus
       });
 
-      // Persist the deduction record to the `inventoryDeductions` collection
-      const deductionRef = doc(collection(this.firestore, 'inventoryDeductions'));
+      // Persist the deduction record to the `inventoryTracking` collection
+      const deductionRef = doc(collection(this.firestore, 'inventoryTracking'));
       
       // Get product details
       const product = this.productService.getProduct(productId);
@@ -449,7 +449,7 @@ export class FIFOInventoryService {
    */
   /**
    * Gets deduction history for a specific product or batch from the
-   * `inventoryDeductions` collection. This replaces the old pattern of
+   * `inventoryTracking` collection. This replaces the old pattern of
    * reading a `deductionHistory` array on the batch document.
    */
   async getDeductionHistory(productId?: string, batchId?: string): Promise<BatchDeduction[]> {
@@ -464,8 +464,8 @@ export class FIFOInventoryService {
       throw new Error('No company permission found');
     }
 
-    // Query the new `inventoryDeductions` collection
-    const deductionsRef = collection(this.firestore, 'inventoryDeductions');
+    // Query the new `inventoryTracking` collection
+    const deductionsRef = collection(this.firestore, 'inventoryTracking');
     let q;
 
     if (batchId) {

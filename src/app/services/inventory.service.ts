@@ -170,8 +170,8 @@ export class InventoryService {
     const col = collection(this.firestore, collectionName);
     const out: InventoryRow[] = [];
     try {
-      // Use 'deductedAt' for inventoryDeductions, 'createdAt' for others
-      const dateField = collectionName === 'inventoryDeductions' ? 'deductedAt' : 'createdAt';
+      // Use 'deductedAt' for inventoryTracking, 'createdAt' for others
+      const dateField = collectionName === 'inventoryTracking' ? 'deductedAt' : 'createdAt';
       const q = query(col, ...baseFilters, orderBy(dateField, 'desc'), limit(fetchLimit));
       const snaps = await getDocs(q as any);
       for (const s of snaps.docs) {
@@ -214,7 +214,7 @@ export class InventoryService {
 
       // Read runningBalanceTotalStock from Firestore (may also be stored as 'totalStock' in old documents)
       const stockValue = data.runningBalanceTotalStock ?? data.totalStock ?? 0;
-      console.log('📦 From inventoryDeductions:', { sku: outSku, batchId, stockValue, hasRunningBalance: 'runningBalanceTotalStock' in data, hasTotalStock: 'totalStock' in data });
+      console.log('📦 From inventoryTracking:', { sku: outSku, batchId, stockValue, hasRunningBalance: 'runningBalanceTotalStock' in data, hasTotalStock: 'totalStock' in data });
       
       out.push({
         invoiceNo: data.invoiceNumber || data.orderId || '',
@@ -264,7 +264,7 @@ export class InventoryService {
         const productCode = (product && product.productCode) ? product.productCode : (data.productCode || '');
         const sku = (product && product.skuId) ? product.skuId : (data.sku || '');
 
-        // Use costPrice directly from inventoryDeductions (per-batch cost)
+        // Use costPrice directly from inventoryTracking (per-batch cost)
         const costPrice = Number(data.costPrice || 0) || 0;
         
         const batchId: string | null = data.batchId ? String(data.batchId) : null;
@@ -278,7 +278,7 @@ export class InventoryService {
         const outSku = (sku && sku.trim().length > 0) ? sku : '';
         const finalProductCode = outProductCode || outSku ? outProductCode : productId;
 
-        // Extract date and performedBy from inventoryDeductions data
+        // Extract date and performedBy from inventoryTracking data
         let deductionDate: Date | string | undefined = undefined;
         if (data.deductedAt) {
           if (typeof data.deductedAt === 'string') {
@@ -295,7 +295,7 @@ export class InventoryService {
 
         // Read runningBalanceTotalStock from Firestore (may also be stored as 'totalStock' in old documents)
         const stockValue = data.runningBalanceTotalStock ?? data.totalStock ?? 0;
-        console.log('📦 From inventoryDeductions (fallback):', { sku: outSku, batchId, stockValue, hasRunningBalance: 'runningBalanceTotalStock' in data, hasTotalStock: 'totalStock' in data });
+        console.log('📦 From inventoryTracking (fallback):', { sku: outSku, batchId, stockValue, hasRunningBalance: 'runningBalanceTotalStock' in data, hasTotalStock: 'totalStock' in data });
         
         out.push({
           invoiceNo: data.invoiceNumber || data.orderId || '',
@@ -503,7 +503,7 @@ export class InventoryService {
   }
 
 /**
- * Load rows for a given period and page (fetches from both inventoryDeductions and ordersSellingTracking).
+ * Load rows for a given period and page (fetches from both inventoryTracking and ordersSellingTracking).
  */
 async loadRowsForPeriod(period: string, page: number = 1, storeId?: string, companyId?: string): Promise<void> {
   this.isLoading.set(true);
@@ -545,7 +545,7 @@ async loadRowsForPeriod(period: string, page: number = 1, storeId?: string, comp
     const fetchLimit = Math.max(page * pageSize, pageSize);
     
     // Create separate filters for each collection since they use different date fields
-    // inventoryDeductions uses 'deductedAt', ordersSellingTracking uses 'createdAt'
+    // inventoryTracking uses 'deductedAt', ordersSellingTracking uses 'createdAt'
     const deductionFilters = [...baseFilters];
     const salesFilters = [...baseFilters];
     
@@ -570,7 +570,7 @@ async loadRowsForPeriod(period: string, page: number = 1, storeId?: string, comp
         endLocal: end?.toString()
       });
       if (start && end) {
-        // inventoryDeductions uses 'deductedAt'
+        // inventoryTracking uses 'deductedAt'
         deductionFilters.push(where('deductedAt', '>=', start));
         deductionFilters.push(where('deductedAt', '<=', end));
         // ordersSellingTracking uses 'createdAt'
@@ -611,7 +611,7 @@ async loadRowsForPeriod(period: string, page: number = 1, storeId?: string, comp
     
     // Fetch from both collections with their respective filters
     const [deductionRows, salesRows] = await Promise.all([
-      this.fetchRowsFromCollection('inventoryDeductions', deductionFilters, fetchLimit, updatedAtRange),
+      this.fetchRowsFromCollection('inventoryTracking', deductionFilters, fetchLimit, updatedAtRange),
       this.fetchRowsFromOrdersSellingTracking(salesFilters, fetchLimit, updatedAtRange)
     ]);
 
