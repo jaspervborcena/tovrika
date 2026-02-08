@@ -44,31 +44,22 @@
     </div>
   </div>
 
-  <div class="table-wrap mat-elevation">
-    <table mat-table [dataSource]="dataSource" class="mat-elevation-z8">
+  <!-- Main content wrapper -->
+  <div class="inventory-content">
+    <div class="table-wrap">
+      <div class="table-wrapper">
+        <table mat-table [dataSource]="dataSource" class="mat-elevation-z8">
 
-      <!-- Invoice No. -->
-      <ng-container matColumnDef="orderId">
-        <th mat-header-cell *matHeaderCellDef> Invoice No. </th>
-        <td mat-cell *matCellDef="let row" style="word-break: keep-all; white-space: nowrap;"> {{row.orderId}} </td>
-      </ng-container>
-
-      <!-- Batch ID -->
-      <ng-container matColumnDef="batchId">
-        <th mat-header-cell *matHeaderCellDef> Batch ID </th>
-        <td mat-cell *matCellDef="let row"> {{row.batchId}} </td>
-      </ng-container>
-
-      <!-- Date -->
+      <!-- Date (without time) -->
       <ng-container matColumnDef="date">
         <th mat-header-cell *matHeaderCellDef> Date </th>
-        <td mat-cell *matCellDef="let row"> {{row.date | date:'short'}} </td>
+        <td mat-cell *matCellDef="let row"> {{row.date | date:'M/d/yy'}} </td>
       </ng-container>
 
-      <!-- Performed By -->
-      <ng-container matColumnDef="performedBy">
-        <th mat-header-cell *matHeaderCellDef> Performed By </th>
-        <td mat-cell *matCellDef="let row"> {{row.performedBy}} </td>
+      <!-- Product Name -->
+      <ng-container matColumnDef="productName">
+        <th mat-header-cell *matHeaderCellDef> Product Name </th>
+        <td mat-cell *matCellDef="let row"> {{row.productName || '-'}} </td>
       </ng-container>
 
       <!-- Product Code -->
@@ -104,30 +95,68 @@
       <!-- Profit Per Unit -->
       <ng-container matColumnDef="profitPerUnit">
         <th mat-header-cell *matHeaderCellDef> Profit/Unit </th>
-        <td mat-cell *matCellDef="let row"> {{profitPerUnit(row) | number:'1.2-2'}} </td>
+        <td mat-cell *matCellDef="let row"> {{row.profitPerUnit | number:'1.2-2'}} </td>
+      </ng-container>
+
+      <!-- Beginning Stock -->
+      <ng-container matColumnDef="runningBalanceTotalStock">
+        <th mat-header-cell *matHeaderCellDef> Beginning Stock </th>
+        <td mat-cell *matCellDef="let row"> {{row.runningBalanceTotalStock || 0}} </td>
+      </ng-container>
+
+      <!-- Remaining Stock -->
+      <ng-container matColumnDef="remainingStock">
+        <th mat-header-cell *matHeaderCellDef> Remaining Stock </th>
+        <td mat-cell *matCellDef="let row"> {{row.remainingStock || 0}} </td>
       </ng-container>
 
       <!-- Total Gross -->
       <ng-container matColumnDef="totalGross">
         <th mat-header-cell *matHeaderCellDef> Total Gross </th>
-        <td mat-cell *matCellDef="let row"> ₱{{totalGross(row) | number:'1.2-2'}} </td>
+        <td mat-cell *matCellDef="let row"> ₱{{row.totalGross | number:'1.2-2'}} </td>
       </ng-container>
 
       <!-- Total Profit -->
       <ng-container matColumnDef="totalProfit">
         <th mat-header-cell *matHeaderCellDef> Total Profit </th>
-        <td mat-cell *matCellDef="let row"> ₱{{totalProfit(row) | number:'1.2-2'}} </td>
+        <td mat-cell *matCellDef="let row"> ₱{{row.totalProfit | number:'1.2-2'}} </td>
+      </ng-container>
+
+      <!-- Actions: View Details -->
+      <ng-container matColumnDef="actions">
+        <th mat-header-cell *matHeaderCellDef> Actions </th>
+        <td mat-cell *matCellDef="let row">
+          <button 
+            class="view-details-btn"
+            (click)="openDetails(row)">
+            <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/>
+            </svg>
+            View Details
+          </button>
+        </td>
       </ng-container>
 
       <!-- Render rows -->
       <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
-      <tr mat-row *matRowDef="let row; columns: displayedColumns;" [class.duplicate-row]="isDuplicateRow(row)"></tr>
-    </table>
-  </div>
-  <!-- Empty state when no rows for selected period -->
-  <div *ngIf="!inventoryService.isLoading() && dataSource.data.length === 0" style="padding:24px; text-align:center; color:#718096;">
-    <div style="font-size:1.25rem; margin-bottom:8px;">No data for the selected period</div>
-    <div style="margin-bottom:12px;">Try a different period or refresh.</div>
+      <tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>
+        </table>
+      </div>
+      
+      <!-- Empty state when no rows for selected period -->
+      <div *ngIf="!inventoryService.isLoading() && dataSource.data.length === 0" class="empty-state-container">
+        <div class="empty-message">
+          <div class="empty-icon">📦</div>
+          <p>No inventory data for the selected period</p>
+          <button (click)="onPeriodChange($event)" class="refresh-btn">
+            <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M4 12a8 8 0 0 1 8-8V2.5L16 6l-4 3.5V8a6 6 0 1 0 6 6h1.5A7.5 7.5 0 1 1 4 12Z"/>
+            </svg>
+            Refresh Data
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- Pagination controls -->
@@ -145,6 +174,101 @@
 
     <div style="margin-left:auto; color:#6b7280; font-size:0.9rem;">
       Showing page {{ inventoryService.currentPage() }} of {{ inventoryService.totalPages() }} — total {{ inventoryService.totalCount() }} rows
+    </div>
+  </div>
+
+  <!-- Details Modal -->
+  <div *ngIf="showDetails()" 
+       class="modal-overlay" 
+       (click)="closeDetails()"
+       style="position: fixed !important; z-index: 9999 !important; background: rgba(0, 0, 0, 0.8) !important;">
+    <div class="modal" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h3>📦 Inventory Details</h3>
+        <button class="close-btn" (click)="closeDetails()">×</button>
+      </div>
+      <div class="modal-body">
+        <div *ngIf="selectedRow()" class="order-details">
+          <div class="form-section">
+            <h4 class="section-title">
+              <span>📝</span>
+              <span>Summary Information</span>
+            </h4>
+            <div class="order-info">
+              <div class="info-row">
+                <span class="info-label">Product Name:</span>
+                <span class="info-value">{{ selectedRow()!.productName || '-' }}</span>
+              </div>
+              <div class="info-row">
+                <span class="info-label">SKU:</span>
+                <span class="info-value">{{ selectedRow()!.sku }}</span>
+              </div>
+              <div class="info-row">
+                <span class="info-label">Product Code:</span>
+                <span class="info-value">{{ selectedRow()!.productCode }}</span>
+              </div>
+              <div class="info-row">
+                <span class="info-label">Total Quantity:</span>
+                <span class="info-value">{{ selectedRow()!.quantity }}</span>
+              </div>
+              <div class="info-row">
+                <span class="info-label">Beginning Stock:</span>
+                <span class="info-value">{{ selectedRow()!.runningBalanceTotalStock || 0 }}</span>
+              </div>
+              <div class="info-row">
+                <span class="info-label">Remaining Stock:</span>
+                <span class="info-value">{{ selectedRow()!.remainingStock || 0 }}</span>
+              </div>
+              <div class="info-row">
+                <span class="info-label">Total Gross:</span>
+                <span class="info-value">₱{{ selectedRow()!.totalGross | number:'1.2-2' }}</span>
+              </div>
+              <div class="info-row">
+                <span class="info-label">Total Profit:</span>
+                <span class="info-value">₱{{ selectedRow()!.totalProfit | number:'1.2-2' }}</span>
+              </div>
+            </div>
+          </div>
+          
+          <div class="form-section">
+            <h4 class="section-title">
+              <span>📋</span>
+              <span>Individual Transactions ({{ selectedRow()!.transactions.length }})</span>
+            </h4>
+            <div class="order-items-table-wrapper">
+              <table class="order-items-table">
+                <thead>
+                  <tr>
+                    <th>Invoice No.</th>
+                    <th>Date</th>
+                    <th>Performed By</th>
+                    <th>Cost Price</th>
+                    <th>Selling Price</th>
+                    <th>Qty</th>
+                    <th>Stock</th>
+                    <th>Gross</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr *ngFor="let txn of selectedRow()!.transactions">
+                    <td class="mono">{{ txn.orderId || 'N/A' }}</td>
+                    <td>{{ txn.date | date:'M/d/yy h:mm a' }}</td>
+                    <td>{{ txn.performedBy || '-' }}</td>
+                    <td>₱{{ txn.costPrice | number:'1.2-2' }}</td>
+                    <td>₱{{ txn.sellingPrice | number:'1.2-2' }}</td>
+                    <td>{{ txn.quantity }}</td>
+                    <td>{{ txn.runningBalanceTotalStock || 0 }}</td>
+                    <td class="mono">₱{{ (txn.sellingPrice * txn.quantity) | number:'1.2-2' }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" (click)="closeDetails()">Close</button>
+      </div>
     </div>
   </div>
 </div>

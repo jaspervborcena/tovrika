@@ -1521,7 +1521,7 @@ export class PosService {
       note: 'POS FIFO deduction',
       deductedBy: currentUser?.uid || null
     };
-    const dedRef = doc(collection(this.firestore, 'inventoryDeductions'));
+    const dedRef = doc(collection(this.firestore, 'inventoryTracking'));
     batch.set(dedRef, dedRecord);
   }
   

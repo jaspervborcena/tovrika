@@ -17,6 +17,7 @@ export interface InventoryRow {
   batchId?: string | null;
   date?: Date | string;
   performedBy?: string;
+  productName?: string;
   productCode?: string;
   sku?: string;
   costPrice: number;
@@ -25,6 +26,9 @@ export interface InventoryRow {
   profitPerUnit: number;
   totalGross: number;
   totalProfit: number;
+  runningBalanceTotalStock: number;  // Product stock at transaction time
+  productId?: string;  // Product ID for querying max stock
+  source?: 'deduction' | 'orderTracking';  // Source collection identifier
 }
 
 export interface InventoryItem {
@@ -64,6 +68,63 @@ export class InventoryService {
   private userDisplayNameCache = new Map<string, string>();
 
   constructor() {}
+
+  /**
+   * Get maximum runningBalanceTotalStock for a product on a specific date
+   * Can query by productId or SKU
+   */
+  async getMaxStockForProductOnDate(
+    productIdOrSku: string, 
+    date: Date, 
+    storeId?: string, 
+    companyId?: string,
+    useSkuQuery: boolean = false
+  ): Promise<number> {
+    try {
+      const startOfDay = new Date(date);
+      startOfDay.setHours(0, 0, 0, 0);
+      const endOfDay = new Date(date);
+      endOfDay.setHours(23, 59, 59, 999);
+
+      const col = collection(this.firestore, 'ordersSellingTracking');
+      const filters: any[] = [
+        useSkuQuery ? where('sku', '==', productIdOrSku) : where('productId', '==', productIdOrSku),
+        where('createdAt', '>=', startOfDay),
+        where('createdAt', '<=', endOfDay)
+      ];
+
+      if (storeId) {
+        filters.push(where('storeId', '==', storeId));
+      }
+      if (companyId) {
+        filters.push(where('companyId', '==', companyId));
+      }
+
+      const q = query(col, ...filters, orderBy('createdAt', 'desc'));
+      const snaps = await getDocs(q as any);
+
+      let maxStock = 0;
+      snaps.docs.forEach(doc => {
+        const data = doc.data() as any;
+        const stock = Number(data.runningBalanceTotalStock || 0);
+        if (stock > maxStock) {
+          maxStock = stock;
+        }
+      });
+
+      console.log('📊 Max stock query result:', { 
+        query: useSkuQuery ? 'SKU' : 'productId',
+        value: productIdOrSku, 
+        date: date.toISOString(), 
+        maxStock, 
+        docsFound: snaps.docs.length 
+      });
+      return maxStock;
+    } catch (error) {
+      console.error('Error fetching max stock:', error);
+      return 0;
+    }
+  }
 
   /**
    * Get user display name from Firestore users collection by UID
@@ -109,8 +170,8 @@ export class InventoryService {
     const col = collection(this.firestore, collectionName);
     const out: InventoryRow[] = [];
     try {
-      // Use 'deductedAt' for inventoryDeductions, 'createdAt' for others
-      const dateField = collectionName === 'inventoryDeductions' ? 'deductedAt' : 'createdAt';
+      // Use 'deductedAt' for inventoryTracking, 'createdAt' for others
+      const dateField = collectionName === 'inventoryTracking' ? 'deductedAt' : 'createdAt';
       const q = query(col, ...baseFilters, orderBy(dateField, 'desc'), limit(fetchLimit));
       const snaps = await getDocs(q as any);
       for (const s of snaps.docs) {
@@ -151,11 +212,16 @@ export class InventoryService {
       // Get user displayName from deductedBy (uid)
       const performedBy = await this.getUserDisplayName(data.deductedBy) || data.deductedBy || '';
 
+      // Read runningBalanceTotalStock from Firestore (may also be stored as 'totalStock' in old documents)
+      const stockValue = data.runningBalanceTotalStock ?? data.totalStock ?? 0;
+      console.log('📦 From inventoryTracking:', { sku: outSku, batchId, stockValue, hasRunningBalance: 'runningBalanceTotalStock' in data, hasTotalStock: 'totalStock' in data });
+      
       out.push({
         invoiceNo: data.invoiceNumber || data.orderId || '',
         batchId,
         date: deductionDate,
         performedBy,
+        productName: data.productName || '',
         productCode: finalProductCode,
         sku: outSku,
         costPrice,
@@ -163,7 +229,10 @@ export class InventoryService {
         quantity,
         profitPerUnit,
         totalGross,
-        totalProfit
+        totalProfit,
+        runningBalanceTotalStock: stockValue,  // Read from Firestore
+        productId: productId || '',
+        source: 'deduction' as any  // Identify source
       });
       }
       return out;
@@ -195,7 +264,7 @@ export class InventoryService {
         const productCode = (product && product.productCode) ? product.productCode : (data.productCode || '');
         const sku = (product && product.skuId) ? product.skuId : (data.sku || '');
 
-        // Use costPrice directly from inventoryDeductions (per-batch cost)
+        // Use costPrice directly from inventoryTracking (per-batch cost)
         const costPrice = Number(data.costPrice || 0) || 0;
         
         const batchId: string | null = data.batchId ? String(data.batchId) : null;
@@ -209,7 +278,7 @@ export class InventoryService {
         const outSku = (sku && sku.trim().length > 0) ? sku : '';
         const finalProductCode = outProductCode || outSku ? outProductCode : productId;
 
-        // Extract date and performedBy from inventoryDeductions data
+        // Extract date and performedBy from inventoryTracking data
         let deductionDate: Date | string | undefined = undefined;
         if (data.deductedAt) {
           if (typeof data.deductedAt === 'string') {
@@ -224,11 +293,16 @@ export class InventoryService {
         // Get user displayName from deductedBy (uid)
         const performedBy = await this.getUserDisplayName(data.deductedBy) || data.deductedBy || '';
 
+        // Read runningBalanceTotalStock from Firestore (may also be stored as 'totalStock' in old documents)
+        const stockValue = data.runningBalanceTotalStock ?? data.totalStock ?? 0;
+        console.log('📦 From inventoryTracking (fallback):', { sku: outSku, batchId, stockValue, hasRunningBalance: 'runningBalanceTotalStock' in data, hasTotalStock: 'totalStock' in data });
+        
         out.push({
           invoiceNo: data.invoiceNumber || data.orderId || '',
           batchId,
           date: deductionDate,
           performedBy,
+          productName: data.productName || '',
           productCode: finalProductCode,
           sku: outSku,
           costPrice,
@@ -236,7 +310,10 @@ export class InventoryService {
           quantity,
           profitPerUnit,
           totalGross,
-          totalProfit
+          totalProfit,
+          runningBalanceTotalStock: stockValue,  // Read from Firestore
+          productId: productId || '',
+          source: 'deduction' as any  // Identify source
         });
       }
       return out;
@@ -266,14 +343,31 @@ export class InventoryService {
         const quantity: number = Number(data.quantity || 0);
         const product = this.productService.getProduct(productId);
 
+        console.log('📦 Processing tracking doc:', {
+          docId: s.id,
+          dataProductId: data.productId,
+          productName: data.productName,
+          runningBalanceTotalStock: data.runningBalanceTotalStock,
+          hasProduct: !!product,
+          sku: data.sku
+        });
+
         const productCode = (product && product.productCode) ? product.productCode : (data.productCode || '');
         const sku = (product && product.skuId) ? product.skuId : (data.sku || '');
 
-        // Use costPrice from the tracking document
-        const costPrice = Number(data.costPrice || 0) || 0;
+        console.log('📦 After product lookup:', {
+          productId: productId,
+          productCode: productCode,
+          sku: sku,
+          outSku: sku
+        });
+
+        // Use cost from the tracking document (field name is 'cost', not 'costPrice')
+        const costPrice = Number(data.cost || data.costPrice || 0) || 0;
         const batchId: string | null = data.batchId ? String(data.batchId) : null;
 
-        const sellingPrice = Number(data.sellingPrice || product?.sellingPrice || 0) || 0;
+        // Use price from tracking document (field name is 'price', not 'sellingPrice')
+        const sellingPrice = Number(data.price || data.sellingPrice || product?.sellingPrice || 0) || 0;
         const profitPerUnit = +(sellingPrice - costPrice);
         const totalGross = +(sellingPrice * quantity);
         const totalProfit = +(profitPerUnit * quantity);
@@ -297,11 +391,28 @@ export class InventoryService {
         // Get user displayName from createdBy (uid)
         const performedBy = await this.getUserDisplayName(data.createdBy) || data.createdBy || '';
 
+        const stockValue = data.runningBalanceTotalStock;
+        console.log('🔍 OrdersSellingTracking doc data:', {
+          orderId: data.orderId,
+          productId: data.productId,
+          productName: data.productName,
+          runningBalanceTotalStock: stockValue,
+          stockType: typeof stockValue,
+          stockIsUndefined: stockValue === undefined,
+          stockIsNull: stockValue === null,
+          hasStockField: 'runningBalanceTotalStock' in data,
+          allKeys: Object.keys(data)
+        });
+
+        const finalStock = stockValue || 0;
+        console.log('💾 Pushing to out array with stock:', finalStock, 'for sku:', outSku);
+
         out.push({
           invoiceNo: data.orderId || '',
           batchId,
           date: saleDate,
           performedBy,
+          productName: data.productName || '',
           productCode: finalProductCode,
           sku: outSku,
           costPrice,
@@ -309,7 +420,10 @@ export class InventoryService {
           quantity,
           profitPerUnit,
           totalGross,
-          totalProfit
+          totalProfit,
+          runningBalanceTotalStock: finalStock, 
+          productId: productId,  // Include productId for max stock query
+          source: 'orderTracking' as any  // Identify source
         });
       }
       return out;
@@ -380,7 +494,8 @@ export class InventoryService {
           quantity,
           profitPerUnit,
           totalGross,
-          totalProfit
+          totalProfit,
+          runningBalanceTotalStock: data.runningBalanceTotalStock || 0
         });
       }
       return out;
@@ -388,7 +503,7 @@ export class InventoryService {
   }
 
 /**
- * Load rows for a given period and page (fetches from both inventoryDeductions and ordersSellingTracking).
+ * Load rows for a given period and page (fetches from both inventoryTracking and ordersSellingTracking).
  */
 async loadRowsForPeriod(period: string, page: number = 1, storeId?: string, companyId?: string): Promise<void> {
   this.isLoading.set(true);
@@ -430,7 +545,7 @@ async loadRowsForPeriod(period: string, page: number = 1, storeId?: string, comp
     const fetchLimit = Math.max(page * pageSize, pageSize);
     
     // Create separate filters for each collection since they use different date fields
-    // inventoryDeductions uses 'deductedAt', ordersSellingTracking uses 'createdAt'
+    // inventoryTracking uses 'deductedAt', ordersSellingTracking uses 'createdAt'
     const deductionFilters = [...baseFilters];
     const salesFilters = [...baseFilters];
     
@@ -455,7 +570,7 @@ async loadRowsForPeriod(period: string, page: number = 1, storeId?: string, comp
         endLocal: end?.toString()
       });
       if (start && end) {
-        // inventoryDeductions uses 'deductedAt'
+        // inventoryTracking uses 'deductedAt'
         deductionFilters.push(where('deductedAt', '>=', start));
         deductionFilters.push(where('deductedAt', '<=', end));
         // ordersSellingTracking uses 'createdAt'
@@ -496,7 +611,7 @@ async loadRowsForPeriod(period: string, page: number = 1, storeId?: string, comp
     
     // Fetch from both collections with their respective filters
     const [deductionRows, salesRows] = await Promise.all([
-      this.fetchRowsFromCollection('inventoryDeductions', deductionFilters, fetchLimit, updatedAtRange),
+      this.fetchRowsFromCollection('inventoryTracking', deductionFilters, fetchLimit, updatedAtRange),
       this.fetchRowsFromOrdersSellingTracking(salesFilters, fetchLimit, updatedAtRange)
     ]);
 
@@ -506,6 +621,31 @@ async loadRowsForPeriod(period: string, page: number = 1, storeId?: string, comp
       salesRows: salesRows.length,
       storeId,
       companyId
+    });
+
+    // Build a map of productId/SKU to max stock from ordersSellingTracking
+    const stockMap = new Map<string, number>();
+    salesRows.forEach(row => {
+      if (row.runningBalanceTotalStock && row.runningBalanceTotalStock > 0) {
+        const key = row.productId || row.sku || '';
+        if (key) {
+          const currentMax = stockMap.get(key) || 0;
+          if (row.runningBalanceTotalStock > currentMax) {
+            stockMap.set(key, row.runningBalanceTotalStock);
+          }
+        }
+      }
+    });
+
+    console.log('📦 Stock map from ordersSellingTracking:', Object.fromEntries(stockMap));
+
+    // Populate runningBalanceTotalStock for deduction rows from the stock map
+    deductionRows.forEach(row => {
+      const key = row.productId || row.sku || '';
+      if (key && stockMap.has(key)) {
+        row.runningBalanceTotalStock = stockMap.get(key)!;
+        console.log(`✅ Updated deduction row ${row.sku} stock from 0 to ${row.runningBalanceTotalStock}`);
+      }
     });
 
     // Combine both arrays
