@@ -1234,11 +1234,11 @@ import { AppConstants } from '../../../shared/enums/app-constants.enum';
   template: `
     <div class="products-management">
       <!-- Header -->
-      <div class="header">
+      <div class="header" style="padding: 1rem 0;">
         <div class="header-content">
           <div class="header-text">
-            <h1 class="page-title">Product Management</h1>
-            <p class="page-subtitle">Manage your product catalog and inventory</p>
+            <h1 class="page-title" style="font-size: 1.75rem; margin: 0 0 0.25rem 0;">Product Management</h1>
+            <p class="page-subtitle" style="font-size: 0.875rem; margin: 0;">Manage your product catalog and inventory</p>
           </div>
           <div class="header-actions">
             <button class="btn btn-primary" (click)="openAddModal()">📦 Add New Product</button>
@@ -1297,6 +1297,7 @@ import { AppConstants } from '../../../shared/enums/app-constants.enum';
                 <th>Tags</th>
                 <th>Stock</th>
                 <th>Price</th>
+                <th>Tracked</th>
                 <th>Status</th>
                 <th>Actions</th>
               </tr>
@@ -1323,6 +1324,11 @@ import { AppConstants } from '../../../shared/enums/app-constants.enum';
                 </td>
                 <td class="product-stock-cell">{{ product.totalStock }}</td>
                 <td class="product-price-cell">{{ displayPrice(product).toFixed(2) }}</td>
+                <td class="product-tracked-cell" style="text-align: center;">
+                  <span [style.color]="isProductTracked(product) ? '#10b981' : '#ef4444'" [style.font-weight]="'600'">
+                    {{ isProductTracked(product) ? '✓' : '✗' }}
+                  </span>
+                </td>
                 <td class="product-status-cell">
                   <span [class]="getStatusBadgeClass(product.status || ProductStatus.Inactive)">
                     {{ (product.status || ProductStatus.Inactive) | titlecase }}
@@ -2632,6 +2638,8 @@ export class ProductManagementComponent implements OnInit {
           await this.productService.initializeProducts(currentPermission.storeId);
           // Load tags for the current store
           await this.loadTags(currentPermission.storeId);
+          // Sync isStockTracked status with actual inventory
+          await this.syncProductTrackingStatus();
         } else {
           console.warn('No storeId available - cannot load products');
         }
@@ -2659,6 +2667,45 @@ export class ProductManagementComponent implements OnInit {
       this.tagGroups.set(groups);
     } catch (error) {
       console.error('Error loading tags:', error);
+    }
+  }
+
+  /**
+   * Sync isStockTracked status with actual inventory existence
+   * Updates products that have inventory but isStockTracked is not set to true
+   */
+  private async syncProductTrackingStatus(): Promise<void> {
+    try {
+      const products = this.products();
+      const updatePromises: Promise<void>[] = [];
+
+      for (const product of products) {
+        // Skip if already marked as tracked
+        if (product.isStockTracked === true) continue;
+        
+        // Check if product has inventory
+        if (product.id) {
+          const checkPromise = this.inventoryDataService.listBatches(product.id)
+            .then(batches => {
+              if (batches && batches.length > 0) {
+                // Product has inventory but isStockTracked is not true, update it
+                console.log(`✅ Syncing tracked status for product: ${product.productName}`);
+                return this.productService.updateProduct(product.id!, { isStockTracked: true });
+              }
+              return Promise.resolve();
+            })
+            .catch(err => {
+              console.error(`Error checking inventory for product ${product.id}:`, err);
+            });
+          
+          updatePromises.push(checkPromise);
+        }
+      }
+
+      await Promise.all(updatePromises);
+      console.log('✅ Product tracking status sync completed');
+    } catch (error) {
+      console.error('Error syncing product tracking status:', error);
     }
   }
 
@@ -2890,8 +2937,24 @@ export class ProductManagementComponent implements OnInit {
   async openEditModal(product: Product): Promise<void> {
     this.isEditMode = true;
     this.selectedProduct = product;
+    
+    // Debug: Log product category
+    console.log('🔍 Opening edit modal for product:', product.productName);
+    console.log('🔍 Product category:', product.category);
+    
     // Load product tags into signal
     this.selectedTagIds.set(product.tags || []);
+    
+    // Load categories for the product's store
+    if (product.storeId) {
+      console.log('📋 Loading categories for product store:', product.storeId);
+      try {
+        await this.categoryService.loadCategoriesByStore(product.storeId);
+        console.log('✅ Categories loaded. Count:', this.categories().length);
+      } catch (error) {
+        console.error('❌ Error loading categories:', error);
+      }
+    }
     
     // Load tags for the product's store to ensure only relevant tags are shown
     if (product.storeId) {
@@ -2901,6 +2964,10 @@ export class ProductManagementComponent implements OnInit {
     
     // Patch the form silently to avoid triggering valueChange subscriptions
     this.productForm.patchValue(product, { emitEvent: false });
+    
+    // Debug: Log category after patching
+    console.log('🔍 Category after patchValue:', this.productForm.get('category')?.value);
+    
     // Set costPrice to 0 initially (will be loaded from latest batch if available)
     this.productForm.get('costPrice')?.setValue(0, { emitEvent: false });
     // Ensure vatRate defaults to 12 if the product doesn't include it
@@ -3198,7 +3265,8 @@ export class ProductManagementComponent implements OnInit {
           barcodeId: formValue.barcodeId,
           imageUrl: formValue.imageUrl,
           isFavorite: !!formValue.isFavorite,
-          isStockTracked: !!formValue.isStockTracked,
+          // isStockTracked: Once true (has inventory), cannot be set back to false
+          isStockTracked: this.selectedProduct.isStockTracked === true ? true : !!formValue.isStockTracked,
           costPrice: Number(formValue.costPrice ?? this.selectedProduct.costPrice ?? 0),
           // Tax and Discount Fields
           isVatApplicable: formValue.isVatApplicable || false,
@@ -3246,7 +3314,9 @@ export class ProductManagementComponent implements OnInit {
         // Handle inventory batch updates based on current batches
         const currentBatches = await this.inventoryDataService.listBatches(this.selectedProduct.id!);
         
-        if (currentBatches.length === 0 && Number(formValue.totalStock || 0) > 0) {
+        // Only create/update batches if stock tracking is enabled
+        if (formValue.isStockTracked) {
+          if (currentBatches.length === 0 && Number(formValue.totalStock || 0) > 0) {
           // No inventory exists and user provided totalStock - create an inventory entry
           console.log('📦 No inventory exists for product, creating initial batch...');
           try {
@@ -3277,6 +3347,11 @@ export class ProductManagementComponent implements OnInit {
             };
             await this.inventoryDataService.addBatch(this.selectedProduct.id!, batchData);
             console.log('✅ Initial inventory batch created for edited product');
+            
+            // Update product to set isStockTracked to true since inventory now exists
+            await this.productService.updateProduct(this.selectedProduct.id!, { isStockTracked: true });
+            console.log('✅ Product marked as stock tracked');
+            
             // Refresh products to update cache
             await this.productService.refreshProducts(productStoreId);
           } catch (batchError) {
@@ -3326,8 +3401,8 @@ export class ProductManagementComponent implements OnInit {
             }
           }
         }
-        
-        } else {
+        }
+      } else {
         // Create new product (no embedded inventory)
         const hasInitial = !!(formValue.initialQuantity && formValue.initialQuantity > 0);
         const initialBatch = hasInitial ? {
@@ -3398,8 +3473,8 @@ export class ProductManagementComponent implements OnInit {
         productId = await this.productService.createProduct(newProduct);
         console.log('✅ Product created successfully with ID:', productId);
         
-        // If initial batch exists, create it in separate collection and recompute summary
-        if (hasInitial && productId) {
+        // If initial batch exists AND stock tracking is enabled, create it in separate collection and recompute summary
+        if (hasInitial && productId && formValue.isStockTracked) {
           console.log('🎯 Creating initial inventory batch for new product:', productId);
           console.log('📦 Initial batch data:', initialBatch);
           console.log('🔍 Form values for initial batch:', {
@@ -3433,6 +3508,10 @@ export class ProductManagementComponent implements OnInit {
             
             await this.inventoryDataService.addBatch(productId, batchData);
             console.log('✅ Initial inventory batch created successfully');
+            
+            // Update product to set isStockTracked to true since inventory now exists
+            await this.productService.updateProduct(productId, { isStockTracked: true });
+            console.log('✅ Product marked as stock tracked');
           } catch (batchError) {
             console.error('❌ Failed to create initial inventory batch:', batchError);
             console.error('❌ Error details:', {
@@ -3443,7 +3522,6 @@ export class ProductManagementComponent implements OnInit {
             throw batchError; // Re-throw to show error to user
           }
         } else {
-          console.log('⚠️ Initial batch not created');
           if (hasInitial && !productId) {
             console.warn('⚠️ Initial inventory requested but no productId returned');
           }
@@ -3500,6 +3578,18 @@ export class ProductManagementComponent implements OnInit {
 
   // Delete a specific category from the manage dialog
   async deleteCategoryFromDialog(categoryId: string, categoryLabel: string): Promise<void> {
+    // Check if the category is being used by any products
+    const productsUsingCategory = this.products().filter(
+      product => product.category?.toLowerCase() === categoryLabel?.toLowerCase()
+    );
+    
+    if (productsUsingCategory.length > 0) {
+      this.toastService.error(
+        `Cannot delete category "${categoryLabel}". It is currently used by ${productsUsingCategory.length} product${productsUsingCategory.length > 1 ? 's' : ''}.`
+      );
+      return;
+    }
+    
     this.categoryToDeleteId = categoryId;
     this.categoryToDeleteLabel = categoryLabel;
     this.deleteConfirmationData.set({
@@ -3726,6 +3816,13 @@ export class ProductManagementComponent implements OnInit {
 
   async saveBatch(): Promise<void> {
     if (this.inventoryForm.invalid || !this.selectedProduct) return;
+    
+    // Double-check stock tracking is enabled (safety check)
+    if (!this.selectedProduct.isStockTracked && !this.isEditingBatch) {
+      this.toastService.error('Stock tracking must be enabled to add new batches.');
+      this.loading = false;
+      return;
+    }
     
     this.loading = true;
     
@@ -4368,6 +4465,15 @@ export class ProductManagementComponent implements OnInit {
     return product.sellingPrice;
   }
 
+  // Check if product is tracked
+  // A product is considered tracked if:
+  // 1. isStockTracked is explicitly true, OR
+  // 2. Product has inventory batches (checked via productInventory collection)
+  // Once tracked (has inventory), it should remain true and never revert to false
+  isProductTracked(product: Product): boolean {
+    return product.isStockTracked === true;
+  }
+
   // Category Autocomplete Properties and Methods
   filteredCategories: string[] = [];
   showCategorySuggestions = false;
@@ -4510,6 +4616,16 @@ export class ProductManagementComponent implements OnInit {
       const formValue = this.categoryForm.value;
       
       console.log('🔍 Form value:', formValue);
+      
+      // Check for duplicate category name (case-insensitive)
+      const newCategoryName = formValue.categoryLabel?.trim().toLowerCase();
+      const existingCategories = this.categories().map(cat => cat.toLowerCase());
+      
+      if (existingCategories.includes(newCategoryName)) {
+        this.toastService.error('A category with this name already exists. Please choose a different name.');
+        this.loading = false;
+        return;
+      }
       
       // Create category object matching ProductCategory interface
       const currentUser = this.authService.currentUser();
@@ -4788,6 +4904,12 @@ export class ProductManagementComponent implements OnInit {
   openInventoryManagement(): void {
     if (!this.selectedProduct?.id) {
       this.toastService.error('Please save the product first before managing inventory.');
+      return;
+    }
+    
+    // Check if stock tracking is enabled
+    if (!this.selectedProduct.isStockTracked) {
+      this.toastService.error('Please enable "Keep track of product quantities and inventory" checkbox before managing inventory batches.');
       return;
     }
     

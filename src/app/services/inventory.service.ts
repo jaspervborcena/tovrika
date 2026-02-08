@@ -109,7 +109,9 @@ export class InventoryService {
     const col = collection(this.firestore, collectionName);
     const out: InventoryRow[] = [];
     try {
-      const q = query(col, ...baseFilters, orderBy('createdAt', 'desc'), limit(fetchLimit));
+      // Use 'deductedAt' for inventoryDeductions, 'createdAt' for others
+      const dateField = collectionName === 'inventoryDeductions' ? 'deductedAt' : 'createdAt';
+      const q = query(col, ...baseFilters, orderBy(dateField, 'desc'), limit(fetchLimit));
       const snaps = await getDocs(q as any);
       for (const s of snaps.docs) {
         const data: any = s.data() || {};
@@ -240,22 +242,173 @@ export class InventoryService {
       return out;
     }
   }
+
+  /**
+   * Fetch rows from ordersSellingTracking collection (sales data)
+   */
+  async fetchRowsFromOrdersSellingTracking(
+    baseFilters: any[] = [],
+    fetchLimit: number = 1000,
+    updatedAtRange?: { start?: Date | null; end?: Date | null }
+  ): Promise<InventoryRow[]> {
+    console.log('🟡 fetchRowsFromOrdersSellingTracking:', { filterCount: baseFilters.length, fetchLimit });
+    const col = collection(this.firestore, 'ordersSellingTracking');
+    const out: InventoryRow[] = [];
+    try {
+      // Only include completed status for sales
+      const statusFilter = where('status', '==', 'completed');
+      const q = query(col, statusFilter, ...baseFilters, orderBy('createdAt', 'desc'), limit(fetchLimit));
+      const snaps = await getDocs(q as any);
+      
+      for (const s of snaps.docs) {
+        const data: any = s.data() || {};
+        const productId: string = data.productId;
+        const quantity: number = Number(data.quantity || 0);
+        const product = this.productService.getProduct(productId);
+
+        const productCode = (product && product.productCode) ? product.productCode : (data.productCode || '');
+        const sku = (product && product.skuId) ? product.skuId : (data.sku || '');
+
+        // Use costPrice from the tracking document
+        const costPrice = Number(data.costPrice || 0) || 0;
+        const batchId: string | null = data.batchId ? String(data.batchId) : null;
+
+        const sellingPrice = Number(data.sellingPrice || product?.sellingPrice || 0) || 0;
+        const profitPerUnit = +(sellingPrice - costPrice);
+        const totalGross = +(sellingPrice * quantity);
+        const totalProfit = +(profitPerUnit * quantity);
+
+        const outProductCode = (productCode && productCode.trim().length > 0) ? productCode : '';
+        const outSku = (sku && sku.trim().length > 0) ? sku : '';
+        const finalProductCode = outProductCode || outSku ? outProductCode : productId;
+
+        // Extract date from createdAt
+        let saleDate: Date | string | undefined = undefined;
+        if (data.createdAt) {
+          if (typeof data.createdAt === 'string') {
+            saleDate = data.createdAt;
+          } else if (data.createdAt instanceof Date) {
+            saleDate = data.createdAt;
+          } else if (typeof data.createdAt.toDate === 'function') {
+            saleDate = data.createdAt.toDate();
+          }
+        }
+
+        // Get user displayName from createdBy (uid)
+        const performedBy = await this.getUserDisplayName(data.createdBy) || data.createdBy || '';
+
+        out.push({
+          invoiceNo: data.orderId || '',
+          batchId,
+          date: saleDate,
+          performedBy,
+          productCode: finalProductCode,
+          sku: outSku,
+          costPrice,
+          sellingPrice,
+          quantity,
+          profitPerUnit,
+          totalGross,
+          totalProfit
+        });
+      }
+      return out;
+    } catch (err) {
+      console.warn('fetchRowsFromOrdersSellingTracking query failed, trying fallback:', err);
+      // Fallback with simplified query
+      const statusFilter = where('status', '==', 'completed');
+      const fallbackQ = query(col, statusFilter, orderBy('createdAt', 'desc'), limit(fetchLimit));
+      const snapsFallback = await getDocs(fallbackQ as any);
+      
+      for (const s of snapsFallback.docs) {
+        const data: any = s.data() || {};
+        
+        // if updatedAtRange provided, enforce it client-side
+        if (updatedAtRange && (updatedAtRange.start || updatedAtRange.end)) {
+          const ca = data.createdAt;
+          let createdAtDate: Date | null = null;
+          if (!ca) continue;
+          if (typeof ca.toDate === 'function') createdAtDate = ca.toDate();
+          else if (ca instanceof Date) createdAtDate = ca as Date;
+          else createdAtDate = new Date(ca);
+          if (!createdAtDate) continue;
+          if (updatedAtRange.start && createdAtDate < updatedAtRange.start) continue;
+          if (updatedAtRange.end && createdAtDate > updatedAtRange.end) continue;
+        }
+        
+        const productId: string = data.productId;
+        const quantity: number = Number(data.quantity || 0);
+        const product = this.productService.getProduct(productId);
+
+        const productCode = (product && product.productCode) ? product.productCode : (data.productCode || '');
+        const sku = (product && product.skuId) ? product.skuId : (data.sku || '');
+
+        const costPrice = Number(data.costPrice || 0) || 0;
+        const batchId: string | null = data.batchId ? String(data.batchId) : null;
+
+        const sellingPrice = Number(data.sellingPrice || product?.sellingPrice || 0) || 0;
+        const profitPerUnit = +(sellingPrice - costPrice);
+        const totalGross = +(sellingPrice * quantity);
+        const totalProfit = +(profitPerUnit * quantity);
+
+        const outProductCode = (productCode && productCode.trim().length > 0) ? productCode : '';
+        const outSku = (sku && sku.trim().length > 0) ? sku : '';
+        const finalProductCode = outProductCode || outSku ? outProductCode : productId;
+
+        let saleDate: Date | string | undefined = undefined;
+        if (data.createdAt) {
+          if (typeof data.createdAt === 'string') {
+            saleDate = data.createdAt;
+          } else if (data.createdAt instanceof Date) {
+            saleDate = data.createdAt;
+          } else if (typeof data.createdAt.toDate === 'function') {
+            saleDate = data.createdAt.toDate();
+          }
+        }
+
+        const performedBy = await this.getUserDisplayName(data.createdBy) || data.createdBy || '';
+
+        out.push({
+          invoiceNo: data.orderId || '',
+          batchId,
+          date: saleDate,
+          performedBy,
+          productCode: finalProductCode,
+          sku: outSku,
+          costPrice,
+          sellingPrice,
+          quantity,
+          profitPerUnit,
+          totalGross,
+          totalProfit
+        });
+      }
+      return out;
+    }
+  }
+
 /**
- * Load rows for a given period and page (uses fetchRowsFromCollection internally).
+ * Load rows for a given period and page (fetches from both inventoryDeductions and ordersSellingTracking).
  */
-async loadRowsForPeriod(period: string, page: number = 1): Promise<void> {
+async loadRowsForPeriod(period: string, page: number = 1, storeId?: string, companyId?: string): Promise<void> {
   this.isLoading.set(true);
   this.currentPage.set(page);
 
   try {
-    const trackingColName = 'inventoryDeductions';
-    const filters: any[] = [];
-
+    const baseFilters: any[] = [];
+    
+    // Add store/company filters if provided
+    if (storeId) {
+      baseFilters.push(where('storeId', '==', storeId));
+    }
+    if (companyId) {
+      baseFilters.push(where('companyId', '==', companyId));
+    }
     const now = new Date();
     let updatedAtRange: { start?: Date | null; end?: Date | null } | undefined;
 
+    // Handle month-based periods by calculating date range
     if (period === 'this_month' || period === 'previous_month') {
-      // compute month range start/end and filter by updatedAt so we don't rely on a yearMonth field
       let targetMonth: Date;
       if (period === 'this_month') {
         targetMonth = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -266,33 +419,104 @@ async loadRowsForPeriod(period: string, page: number = 1): Promise<void> {
       const month = targetMonth.getMonth();
       const start = new Date(year, month, 1, 0, 0, 0, 0);
       const end = new Date(year, month + 1, 0, 23, 59, 59, 999);
-      filters.push(where('createdAt', '>=', start));
-      filters.push(where('createdAt', '<=', end));
       updatedAtRange = { start, end };
-    } else if (period === 'today' || period === 'yesterday') {
-      // keep using exact date range for daily queries
+      // Don't convert period - we'll handle it in the filter section below
+    }
+    
+    // Note: we intentionally do not rely on a `yearMonth` field here because historical
+    // tracking documents may lack it. Instead we filter by date ranges below.
+
+    const pageSize = this.pageSize;
+    const fetchLimit = Math.max(page * pageSize, pageSize);
+    
+    // Create separate filters for each collection since they use different date fields
+    // inventoryDeductions uses 'deductedAt', ordersSellingTracking uses 'createdAt'
+    const deductionFilters = [...baseFilters];
+    const salesFilters = [...baseFilters];
+    
+    // Add date range filters with appropriate field names
+    if (period === 'today' || period === 'yesterday') {
       let start: Date | null = null;
       let end: Date | null = null;
       if (period === 'today') {
         start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
         end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
       } else {
-        const y = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
-        start = new Date(y.getFullYear(), y.getMonth(), y.getDate(), 0, 0, 0, 0);
-        end = new Date(y.getFullYear(), y.getMonth(), y.getDate(), 23, 59, 59, 999);
+        const yesterday = new Date(now);
+        yesterday.setDate(now.getDate() - 1);
+        start = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate(), 0, 0, 0, 0);
+        end = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate(), 23, 59, 59, 999);
       }
+      console.log(`📅 Filtering by ${period}:`, {
+        period,
+        start: start?.toISOString(),
+        end: end?.toISOString(),
+        startLocal: start?.toString(),
+        endLocal: end?.toString()
+      });
       if (start && end) {
-        filters.push(where('createdAt', '>=', start));
-        filters.push(where('createdAt', '<=', end));
+        // inventoryDeductions uses 'deductedAt'
+        deductionFilters.push(where('deductedAt', '>=', start));
+        deductionFilters.push(where('deductedAt', '<=', end));
+        // ordersSellingTracking uses 'createdAt'
+        salesFilters.push(where('createdAt', '>=', start));
+        salesFilters.push(where('createdAt', '<=', end));
+        updatedAtRange = { start, end };
+      }
+    } else if (period === 'this_month' || period === 'previous_month') {
+      // Use the date range calculated above
+      if (updatedAtRange?.start && updatedAtRange?.end) {
+        deductionFilters.push(where('deductedAt', '>=', updatedAtRange.start));
+        deductionFilters.push(where('deductedAt', '<=', updatedAtRange.end));
+        salesFilters.push(where('createdAt', '>=', updatedAtRange.start));
+        salesFilters.push(where('createdAt', '<=', updatedAtRange.end));
+      }
+    } else if (period) {
+      // For month/year periods, create date range
+      let start: Date | null = null;
+      let end: Date | null = null;
+      
+      if (period.includes('-')) {
+        // Format: YYYY-MM or YYYY-MM-DD
+        const [year, month] = period.split('-').map(Number);
+        if (month) {
+          start = new Date(year, month - 1, 1, 0, 0, 0, 0);
+          end = new Date(year, month, 0, 23, 59, 59, 999);
+        }
+      }
+      
+      if (start && end) {
+        deductionFilters.push(where('deductedAt', '>=', start));
+        deductionFilters.push(where('deductedAt', '<=', end));
+        salesFilters.push(where('createdAt', '>=', start));
+        salesFilters.push(where('createdAt', '<=', end));
         updatedAtRange = { start, end };
       }
     }
-    // Note: we intentionally do not rely on a `yearMonth` field here because historical
-    // tracking documents may lack it. Instead we filter by `createdAt` ranges above.
+    
+    // Fetch from both collections with their respective filters
+    const [deductionRows, salesRows] = await Promise.all([
+      this.fetchRowsFromCollection('inventoryDeductions', deductionFilters, fetchLimit, updatedAtRange),
+      this.fetchRowsFromOrdersSellingTracking(salesFilters, fetchLimit, updatedAtRange)
+    ]);
 
-    const pageSize = this.pageSize;
-    const fetchLimit = Math.max(page * pageSize, pageSize);
-    const allRows = await this.fetchRowsFromCollection(trackingColName, filters, fetchLimit, updatedAtRange);
+    console.log(`📊 Query results for ${period}:`, {
+      period,
+      deductionRows: deductionRows.length,
+      salesRows: salesRows.length,
+      storeId,
+      companyId
+    });
+
+    // Combine both arrays
+    const allRows = [...deductionRows, ...salesRows];
+    
+    // Sort by date descending
+    allRows.sort((a, b) => {
+      const dateA = a.date ? (a.date instanceof Date ? a.date : new Date(a.date)) : new Date(0);
+      const dateB = b.date ? (b.date instanceof Date ? b.date : new Date(b.date)) : new Date(0);
+      return dateB.getTime() - dateA.getTime();
+    });
 
     this.totalCount.set(allRows.length);
 
@@ -300,7 +524,7 @@ async loadRowsForPeriod(period: string, page: number = 1): Promise<void> {
     const pageItems = allRows.slice(startIndex, startIndex + pageSize);
     this.rows.set(pageItems);
   } catch (e) {
-    console.error('InventoryService.loadRowsForPeriod failed', e);
+    console.error('InventoryService.loadRowsForPeriod failed:', e);
     this.rows.set([]);
     this.totalCount.set(0);
   } finally {

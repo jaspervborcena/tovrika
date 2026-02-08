@@ -366,11 +366,12 @@
                     </svg>
                   </div>
                 </div>
-                <div class="product-barcode" *ngIf="product.barcodeId">
-                  <img [src]="generateBarcodeImage(product.barcodeId)" alt="Barcode" class="barcode-image">
+                <div class="product-barcode">
+                  <img *ngIf="product.barcodeId" [src]="generateBarcodeImage(product.barcodeId)" alt="Barcode" class="barcode-image">
                 </div>
                 <div class="product-details" (click)="addToCart(product)">
                   <h4 class="product-name">{{ product.productName }}</h4>
+                  <p class="product-sku" style="font-size: 0.75rem; color: #6b7280; margin: 0.1rem 0 0.2rem 0;">{{ product.skuId }}</p>
                   <div class="product-category-row">
                     <span class="stock-badge">Stock: {{ product.totalStock || 0 }}</span>
                     <span class="price">₱{{ (product.sellingPrice || 0).toFixed(2) }}</span>
@@ -417,11 +418,12 @@
                     </svg>
                   </div>
                 </div>
-                <div class="product-barcode" *ngIf="product.barcodeId">
-                  <img [src]="generateBarcodeImage(product.barcodeId)" alt="Barcode" class="barcode-image">
+                <div class="product-barcode">
+                  <img *ngIf="product.barcodeId" [src]="generateBarcodeImage(product.barcodeId)" alt="Barcode" class="barcode-image">
                 </div>
                 <div class="product-details" (click)="addToCart(product)">
                   <h4 class="product-name">{{ product.productName }}</h4>
+                  <p class="product-sku" style="font-size: 0.75rem; color: #6b7280; margin: 0.1rem 0 0.2rem 0;">{{ product.skuId }}</p>
                   <div class="product-category-row">
                     <span class="stock-badge">Stock: {{ product.totalStock || 0 }}</span>
                     <span class="price">₱{{ (product.sellingPrice || 0).toFixed(2) }}</span>
@@ -466,8 +468,8 @@
                         </svg>
                       </div>
                     </div>
-                    <div class="product-barcode" *ngIf="product.barcodeId">
-                      <img [src]="generateBarcodeImage(product.barcodeId)" alt="Barcode" class="barcode-image">
+                    <div class="product-barcode">
+                      <img *ngIf="product.barcodeId" [src]="generateBarcodeImage(product.barcodeId)" alt="Barcode" class="barcode-image">
                     </div>
                     <div class="product-details" (click)="addToCart(product)">
                       <h4 class="product-name">{{ product.productName }}</h4>
