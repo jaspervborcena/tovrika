@@ -20,28 +20,18 @@ export class FIFOInventoryService {
     for (const k of Object.keys(obj || {})) {
       const v = obj[k];
       if (v !== undefined) {
-        // For *At fields (createdAt/updatedAt/deductedAt) store BOTH:
-        // 1. Original field as Date (Firestore converts to Timestamp for querying)
-        // 2. *Formatted field as human-readable string for display
-        if (k && typeof k === 'string' && /At$/.test(k)) {
-          let d: Date | null = null;
-          if (v instanceof Date) d = v;
-          else if (v && typeof v.toDate === 'function') {
-            try { d = v.toDate(); } catch (e) { d = null; }
-          } else if (typeof v === 'number' || typeof v === 'string') {
-            const parsed = new Date(v as any);
-            d = isNaN(parsed.getTime()) ? null : parsed;
-          }
-          if (d) {
-            out[k] = d; // Keep as Date for Firestore querying
-            out[k + 'Formatted'] = this.formatDateForFirestore(d); // Add formatted version
-          } else {
+        // For Date objects, keep them as-is so Firestore converts to Timestamp
+        if (v instanceof Date) {
+          out[k] = v;
+        } else if (v && typeof v.toDate === 'function') {
+          // Convert Firestore Timestamp to Date
+          try { 
+            out[k] = v.toDate(); 
+          } catch (e) { 
             out[k] = v;
           }
         } else {
-          // Keep other values unchanged
-          if (v instanceof Date) out[k] = v;
-          else out[k] = v;
+          out[k] = v;
         }
       }
     }
@@ -285,13 +275,10 @@ export class FIFOInventoryService {
 
     // Commit batch writes
     await batch.commit();
-    console.log('✅ FIFO deduction batch write completed');
     
     // Update product summary separately
-    console.log('📊 Updating product summary after deduction...');
     await this.productSummaryService.recomputeProductSummary(productId);
 
-    console.log(`🎉 FIFO deduction completed! Product ${productId} deducted ${quantityToDeduct} units across ${deductions.length} batches`);
     return deductions;
   }
 
@@ -411,7 +398,6 @@ export class FIFOInventoryService {
     }
 
     const batch = writeBatch(this.firestore);
-    console.log('📦 Starting FIFO reversal batch write...');
 
     for (const deduction of deductions) {
       const batchRef = doc(this.firestore, 'productInventory', deduction.batchId);
@@ -452,13 +438,9 @@ export class FIFOInventoryService {
 
     // Commit batch writes
     await batch.commit();
-    console.log('✅ FIFO reversal batch write completed');
     
     // Update product summary separately
-    console.log('📊 Updating product summary after reversal...');
     await this.productSummaryService.recomputeProductSummary(productId);
-
-    console.log(`🎉 FIFO reversal completed! Order ${orderId} reversed successfully`);
   }
 
   /**
