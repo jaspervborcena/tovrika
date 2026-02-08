@@ -12,17 +12,38 @@ import { MatTableDataSource } from '@angular/material/table';
 import { InventoryService as AppInventoryService } from '../../services/inventory.service';
 import { StoreService, Store } from '../../services/store.service';
 import { AuthService } from '../../services/auth.service';
+import { OrderService } from '../../services/order.service';
 
 export interface InventoryRow {
   orderId?: string;
   batchId: string;
   date?: Date | string;
   performedBy?: string;
+  productName?: string;
   productCode: string;
   sku: string;
   costPrice: number;
   sellingPrice: number;
   quantity: number;
+  runningBalanceTotalStock?: number;  // Beginning stock (product stock at transaction time)
+  remainingStock?: number;  // Remaining stock after transaction (beginning - quantity)
+  productId?: string;  // Product ID for querying max stock
+}
+
+export interface AggregatedInventoryRow {
+  date: Date | string;  // Latest date
+  productName?: string;
+  sku: string;
+  productCode: string;
+  costPrice: number;  // Average or latest
+  sellingPrice: number;  // Average or latest
+  quantity: number;  // Sum of all quantities
+  runningBalanceTotalStock?: number;  // Beginning stock (highest stock)
+  remainingStock?: number;  // Remaining stock (beginning - total quantity)
+  profitPerUnit: number;
+  totalGross: number;  // Sum
+  totalProfit: number;  // Sum
+  transactions: InventoryRow[];  // All transactions for this SKU
 }
 
 @Component({
@@ -100,15 +121,14 @@ export interface InventoryRow {
         display: inline-block;
       }
 
-      /* Table / wrapper */
+      /* Table Container - matched to Sales Summary */
       .table-wrap { 
-        width: 100%; 
-        overflow-x: auto; 
-        overflow-y: auto;
-        max-height: calc(100vh - 300px);
+        max-width: 1400px;
+        margin: 0 auto 2rem auto;
         background: white;
-        border-radius: 8px;
-        box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+        border-radius: 12px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+        overflow: hidden;
       }
       
       table { 
@@ -119,33 +139,125 @@ export interface InventoryRow {
       
       .mat-elevation { 
         padding: 0;
-        border-radius: 8px;
+        border-radius: 12px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
       }
 
-      /* Table cell styles */
+      .table-wrapper {
+        overflow-x: auto;
+      }
+
+      /* Table cell styles - matched to Sales Summary */
       th.mat-header-cell, td.mat-cell {
         white-space: nowrap;
-        padding: 12px 16px !important;
+        padding: 16px 12px !important;
         font-size: 0.875rem;
       }
 
       th.mat-header-cell {
-        background: #f9fafb;
+        background: #f7fafc;
         font-weight: 600;
-        color: #374151;
-        border-bottom: 2px solid #e5e7eb;
+        color: #4a5568;
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.025em;
+        border-bottom: 1px solid #e2e8f0;
         position: sticky;
         top: 0;
         z-index: 10;
       }
 
       td.mat-cell {
-        border-bottom: 1px solid #f3f4f6;
-        color: #1f2937;
+        border-bottom: 1px solid #f1f5f9;
+        color: #2d3748;
+      }
+
+      tr.mat-row {
+        transition: background-color 0.2s;
       }
 
       tr.mat-row:hover {
-        background-color: #f9fafb;
+        background-color: #f7fafc;
+      }
+
+      /* Empty State */
+      .empty-state-container {
+        padding: 3rem 1.5rem;
+        text-align: center;
+      }
+
+      .empty-message {
+        max-width: 400px;
+        margin: 0 auto;
+      }
+
+      .empty-icon {
+        font-size: 4rem;
+        margin-bottom: 1rem;
+      }
+
+      .empty-message p {
+        color: #718096;
+        font-size: 1.125rem;
+        margin-bottom: 1.5rem;
+      }
+
+      .refresh-btn {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border: none;
+        padding: 0.75rem 1.5rem;
+        border-radius: 8px;
+        font-size: 0.9rem;
+        font-weight: 600;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        transition: all 0.3s ease;
+      }
+
+      .refresh-btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+      }
+
+      .refresh-btn svg {
+        width: 16px;
+        height: 16px;
+      }
+
+      /* Button styling for View Details */
+      .view-details-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+        color: white;
+        border: none;
+        padding: 8px 16px;
+        border-radius: 8px;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        box-shadow: 0 2px 4px rgba(79, 70, 229, 0.2);
+      }
+
+      .view-details-btn:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);
+        background: linear-gradient(135deg, #4338ca 0%, #6d28d9 100%);
+      }
+
+      .view-details-btn:active {
+        transform: translateY(0);
+        box-shadow: 0 2px 4px rgba(79, 70, 229, 0.2);
+      }
+
+      .view-details-btn svg {
+        width: 16px;
+        height: 16px;
       }
 
       /* Duplicate row highlighting */
@@ -158,18 +270,19 @@ export interface InventoryRow {
       }
 
       /* Column-specific widths */
-      .mat-column-orderId { min-width: 150px; }
-      .mat-column-batchId { min-width: 120px; }
-      .mat-column-date { min-width: 160px; }
-      .mat-column-performedBy { min-width: 150px; }
+      .mat-column-date { min-width: 100px; }
+      .mat-column-productName { min-width: 180px; }
       .mat-column-productCode { min-width: 120px; }
       .mat-column-sku { min-width: 150px; }
       .mat-column-costPrice { min-width: 100px; text-align: right; }
       .mat-column-sellingPrice { min-width: 100px; text-align: right; }
       .mat-column-quantity { min-width: 80px; text-align: center; }
       .mat-column-profitPerUnit { min-width: 100px; text-align: right; }
+      .mat-column-runningBalanceTotalStock { min-width: 130px; text-align: center; }
+      .mat-column-remainingStock { min-width: 130px; text-align: center; }
       .mat-column-totalGross { min-width: 120px; text-align: right; }
       .mat-column-totalProfit { min-width: 120px; text-align: right; }
+      .mat-column-actions { min-width: 120px; text-align: center; }
 
       @media (max-width: 768px) {
         .header {
@@ -233,23 +346,209 @@ export interface InventoryRow {
           font-size: 0.8125rem;
         }
       }
+
+      /* Modal Styles */
+      .modal-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.8);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 9999;
+      }
+
+      .modal {
+        background: white;
+        border-radius: 16px;
+        max-width: 900px;
+        width: 90%;
+        max-height: 90vh;
+        overflow: hidden;
+        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+        display: flex;
+        flex-direction: column;
+      }
+
+      .modal-header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        padding: 1.5rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      .modal-header h3 {
+        margin: 0;
+        font-size: 1.25rem;
+        font-weight: 600;
+        color: white;
+      }
+
+      .close-btn {
+        background: rgba(255, 255, 255, 0.2);
+        border: none;
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        font-size: 1.5rem;
+        color: white;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.2s ease;
+        line-height: 1;
+      }
+
+      .close-btn:hover {
+        background: rgba(255, 255, 255, 0.3);
+        transform: scale(1.1);
+      }
+
+      .modal-body {
+        padding: 1.5rem;
+        overflow-y: auto;
+        flex: 1;
+      }
+
+      .modal-footer {
+        padding: 1.5rem;
+        border-top: 1px solid #e5e7eb;
+        display: flex;
+        justify-content: flex-end;
+        gap: 0.75rem;
+      }
+
+      .form-section {
+        margin-bottom: 2rem;
+      }
+
+      .form-section:last-child {
+        margin-bottom: 0;
+      }
+
+      .section-title {
+        font-size: 1rem;
+        font-weight: 600;
+        color: #374151;
+        margin-bottom: 1rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding-bottom: 0.5rem;
+        border-bottom: 2px solid #e5e7eb;
+      }
+
+      .order-info {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 1.25rem;
+      }
+
+      .info-row {
+        display: flex;
+        flex-direction: column;
+        gap: 0.25rem;
+      }
+
+      .info-label {
+        font-size: 0.8125rem;
+        color: #6b7280;
+        font-weight: 500;
+        text-transform: uppercase;
+        letter-spacing: 0.025em;
+      }
+
+      .info-value {
+        font-size: 1rem;
+        color: #111827;
+        font-weight: 500;
+      }
+
+      .order-items-table-wrapper {
+        overflow-x: auto;
+        border-radius: 8px;
+        border: 1px solid #e5e7eb;
+      }
+
+      .order-items-table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+
+      .order-items-table thead {
+        background: #f9fafb;
+      }
+
+      .order-items-table th {
+        padding: 0.875rem 1rem;
+        text-align: left;
+        font-size: 0.8125rem;
+        font-weight: 600;
+        color: #374151;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+
+      .order-items-table td {
+        padding: 0.875rem 1rem;
+        font-size: 0.875rem;
+        color: #1f2937;
+        border-bottom: 1px solid #f3f4f6;
+      }
+
+      .order-items-table tbody tr:last-child td {
+        border-bottom: none;
+      }
+
+      .order-items-table tbody tr:hover {
+        background: #f9fafb;
+      }
+
+      .order-items-table .mono {
+        font-family: 'Courier New', monospace;
+      }
+
+      .btn {
+        padding: 0.625rem 1.25rem;
+        border-radius: 8px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        border: none;
+        font-size: 0.875rem;
+      }
+
+      .btn-secondary {
+        background: #e5e7eb;
+        color: #374151;
+      }
+
+      .btn-secondary:hover {
+        background: #d1d5db;
+      }
     `
   ]
 })
 export class InventoryComponent implements OnInit {
   displayedColumns: string[] = [
-    'orderId',
-    'batchId',
     'date',
-    'performedBy',
+    'productName',
     'productCode',
     'sku',
     'costPrice',
     'sellingPrice',
     'quantity',
     'profitPerUnit',
+    'runningBalanceTotalStock',
+    'remainingStock',
     'totalGross',
-    'totalProfit'
+    'totalProfit',
+    'actions'
   ];
 
   inventoryData: InventoryRow[] = [
@@ -259,34 +558,105 @@ export class InventoryComponent implements OnInit {
     { orderId: 'INV-1004', batchId: 'BATCH-004', productCode: 'PROD-004', sku: 'PROD-004', costPrice: 200, sellingPrice: 250, quantity: 2 },
   ];
 
-  dataSource = new MatTableDataSource<InventoryRow>(this.inventoryData);
+  dataSource = new MatTableDataSource<AggregatedInventoryRow>([]);
 
   // Store management
   stores = signal<Store[]>([]);
   selectedStoreId = signal<string>('');
   hasMultipleStores = computed(() => this.stores().length > 1);
 
+  // Details modal
+  showDetails = signal<boolean>(false);
+  selectedRow = signal<AggregatedInventoryRow | null>(null);
+
   constructor(
     public inventoryService: AppInventoryService,
     private storeService: StoreService,
-    private authService: AuthService
+    private authService: AuthService,
+    private orderService: OrderService
   ) {
     // reactively update datasource when service rows change
     effect(() => {
       const rows = this.inventoryService.rows();
-      // map service row shape to local InventoryRow if necessary
-      const mapped = (rows || []).map(r => ({
+      console.log('📥 Raw inventory service rows:', rows);
+      
+      // Check what runningBalanceTotalStock values we have
+      rows.forEach((r, idx) => {
+        console.log(`Row ${idx}:`, {
+          sku: r.sku,
+          productId: r.productId,
+          runningBalanceTotalStock: r.runningBalanceTotalStock,
+          hasStock: r.runningBalanceTotalStock !== undefined && r.runningBalanceTotalStock !== null,
+          invoiceNo: r.invoiceNo
+        });
+      });
+      
+      // Compute max stock from the already loaded rows
+      const mapped = this.computeMaxStockForRows(rows);
+      console.log('Mapped rows with computed stock:', mapped);
+      
+      // Aggregate by SKU
+      const aggregated = this.aggregateBySku(mapped);
+      console.log('Aggregated rows:', aggregated);
+      this.dataSource.data = aggregated;
+    });
+  }
+
+  /**
+   * Compute max runningBalanceTotalStock for each row from already loaded data
+   */
+  computeMaxStockForRows(rows: any[]): InventoryRow[] {
+    return rows.map(r => {
+      let maxStock = r.runningBalanceTotalStock || 0;
+      
+      // Find max stock from all rows with same productId or SKU on the same date
+      // Only look at rows that have runningBalanceTotalStock defined (from ordersSellingTracking)
+      const rowDate = r.date instanceof Date ? r.date : new Date(r.date || new Date());
+      const rowDateStr = rowDate.toISOString().split('T')[0]; // YYYY-MM-DD
+      
+      rows.forEach(otherRow => {
+        // Skip rows without runningBalanceTotalStock (from inventoryTracking)
+        if (!otherRow.runningBalanceTotalStock && otherRow.runningBalanceTotalStock !== 0) {
+          return;
+        }
+        
+        const otherDate = otherRow.date instanceof Date ? otherRow.date : new Date(otherRow.date || new Date());
+        const otherDateStr = otherDate.toISOString().split('T')[0];
+        
+        // Check if same product and same date
+        const sameProduct = (r.productId && otherRow.productId === r.productId) || 
+                           (r.sku && otherRow.sku === r.sku);
+        const sameDate = rowDateStr === otherDateStr;
+        
+        if (sameProduct && sameDate) {
+          const stock = Number(otherRow.runningBalanceTotalStock);
+          console.log('Comparing stocks:', { current: maxStock, other: stock, sku: r.sku });
+          if (stock > maxStock) {
+            maxStock = stock;
+          }
+        }
+      });
+      
+      console.log('Final max stock for', r.sku, ':', maxStock);
+      
+      const beginningStock = maxStock;
+      const remainingStock = beginningStock - (r.quantity || 0);
+      
+      return {
         orderId: r.invoiceNo,
         batchId: r.batchId || '',
         date: r.date,
         performedBy: r.performedBy,
+        productName: r.productName || '',
         productCode: r.productCode || '',
         sku: r.sku || '',
         costPrice: r.costPrice || 0,
         sellingPrice: r.sellingPrice || 0,
-        quantity: r.quantity || 0
-      } as InventoryRow));
-      this.dataSource.data = mapped;
+        quantity: r.quantity || 0,
+        runningBalanceTotalStock: beginningStock,
+        remainingStock: remainingStock,
+        productId: r.productId || ''
+      } as InventoryRow;
     });
   }
 
@@ -340,7 +710,7 @@ export class InventoryComponent implements OnInit {
     return store?.storeName.toUpperCase() || 'BREW ORGANICS INC';
   }
 
-  // UI controls (simple, mock-driven for now)
+  // UI controls - Daily summary optimized (Today/Yesterday recommended)
   periodOptions = [
     { key: 'today', label: 'Today' },
     { key: 'yesterday', label: 'Yesterday' },
@@ -434,42 +804,80 @@ export class InventoryComponent implements OnInit {
     return uniq;
   }
 
-  profitPerUnit(row: InventoryRow): number {
-    return row.sellingPrice - row.costPrice;
-  }
-
-  totalProfit(row: InventoryRow): number {
-    return this.profitPerUnit(row) * row.quantity;
-  }
-
-  totalGross(row: InventoryRow): number {
-    return row.sellingPrice * (row.quantity || 0);
-  }
-
-  isDuplicateRow(row: InventoryRow): boolean {
-    // Check if there's another row with same Invoice No, Performed By, Product Code, and SKU
-    const matches = this.dataSource.data.filter(r => {
-      if (r === row) return false; // Don't compare with itself
+  // Aggregate rows by SKU
+  aggregateBySku(rows: InventoryRow[]): AggregatedInventoryRow[] {
+    const groups = new Map<string, AggregatedInventoryRow & { productId?: string }>();
+    
+    rows.forEach(row => {
+      const key = row.sku;
       
-      const sameInvoice = r.orderId === row.orderId;
-      const samePerformedBy = r.performedBy === row.performedBy;
-      const sameProductCode = r.productCode === row.productCode;
-      const sameSku = r.sku === row.sku;
-      
-      // Debug log
-      if (sameInvoice && sameProductCode && sameSku) {
-        console.log('Found potential duplicate:', {
-          invoice: row.orderId,
-          product: row.productCode,
+      if (!groups.has(key)) {
+        // First transaction for this SKU
+        const profitPerUnit = row.sellingPrice - row.costPrice;
+        const totalGross = row.sellingPrice * row.quantity;
+        const totalProfit = profitPerUnit * row.quantity;
+        const beginningStock = row.runningBalanceTotalStock || 0;
+        const remainingStock = beginningStock - row.quantity;
+        
+        groups.set(key, {
+          date: row.date || new Date(),
+          productName: row.productName || '',
           sku: row.sku,
-          performedBy: row.performedBy,
-          match: { performedBy: r.performedBy }
+          productCode: row.productCode,
+          costPrice: row.costPrice,
+          sellingPrice: row.sellingPrice,
+          quantity: row.quantity,
+          runningBalanceTotalStock: beginningStock,
+          remainingStock: remainingStock,
+          profitPerUnit,
+          totalGross,
+          totalProfit,
+          transactions: [row],
+          productId: row.productId
         });
+      } else {
+        // Add to existing group
+        const existing = groups.get(key)!;
+        existing.quantity += row.quantity;
+        existing.totalGross += (row.sellingPrice * row.quantity);
+        existing.totalProfit += ((row.sellingPrice - row.costPrice) * row.quantity);
+        
+        // Get the max stock from all transactions for this SKU
+        if ((row.runningBalanceTotalStock || 0) > (existing.runningBalanceTotalStock || 0)) {
+          existing.runningBalanceTotalStock = row.runningBalanceTotalStock;
+        }
+        
+        // Recalculate remaining stock (beginning stock - total quantity sold)
+        existing.remainingStock = (existing.runningBalanceTotalStock || 0) - existing.quantity;
+        
+        // Update to latest date
+        const existingDate = existing.date instanceof Date ? existing.date : new Date(existing.date);
+        const rowDate = row.date instanceof Date ? row.date : new Date(row.date || new Date());
+        if (rowDate > existingDate) {
+          existing.date = row.date || new Date();
+        }
+        
+        existing.transactions.push(row);
+        
+        // Recalculate profit per unit (weighted average)
+        existing.profitPerUnit = existing.totalProfit / existing.quantity;
       }
-      
-      return sameInvoice && samePerformedBy && sameProductCode && sameSku;
     });
     
-    return matches.length > 0;
+    const aggregatedArray = Array.from(groups.values());
+    console.log('🎯 Aggregated data with max stock from transactions:', aggregatedArray);
+    return aggregatedArray;
+  }
+
+  // Open details modal
+  openDetails(row: AggregatedInventoryRow): void {
+    this.selectedRow.set(row);
+    this.showDetails.set(true);
+  }
+
+  // Close details modal
+  closeDetails(): void {
+    this.showDetails.set(false);
+    this.selectedRow.set(null);
   }
 }

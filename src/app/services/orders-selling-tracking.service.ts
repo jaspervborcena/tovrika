@@ -623,13 +623,14 @@ async createPartialTrackingFromDoc(trackingId: string, newStatus: string, qty: n
                   productId,
                   batchId: batchData.batchId || null,
                   quantity: dedQty,
+                  totalStock: prodData?.totalStock || 0,  // Capture product's totalStock at deduction time
                   deductedAt: new Date(),
                   createdAt: new Date(),
                   note: 'DAMAGED - client',
                   deductedBy: createdBy || null,
                   orderId: data.orderId
                 };
-                const dedRef = doc(collection(this.firestore, 'inventoryDeductions'));
+                const dedRef = doc(collection(this.firestore, 'inventoryTracking'));
                 const sanitizedDedRecord = this.sanitizeForFirestore(dedRecord);
                 transaction.set(dedRef, sanitizedDedRecord as any);
               } else {
@@ -637,13 +638,14 @@ async createPartialTrackingFromDoc(trackingId: string, newStatus: string, qty: n
                   productId,
                   batchId: null,
                   quantity: dedQty,
+                  totalStock: prodData?.totalStock || 0,  // Capture product's totalStock at deduction time
                   deductedAt: new Date(),
                   createdAt: new Date(),
                   note: 'DAMAGED - no-batch',
                   deductedBy: createdBy || null,
                   orderId: data.orderId
                 };
-                const dedRef = doc(collection(this.firestore, 'inventoryDeductions'));
+                const dedRef = doc(collection(this.firestore, 'inventoryTracking'));
                 const sanitizedDedRecord = this.sanitizeForFirestore(dedRecord);
                 transaction.set(dedRef, sanitizedDedRecord as any);
               }
@@ -854,28 +856,30 @@ async markOrderTrackingDamaged(orderId: string, damagedBy?: string, reason?: str
                     productId,
                     batchId: batchData.batchId || null,
                     quantity: qty,
+                    totalStock: prodData?.totalStock || 0,  // Capture product's totalStock at deduction time
                     deductedAt: new Date(),
                     createdAt: new Date(),
                     note: 'DAMAGED - client',
                     deductedBy: damagedBy || null,
                     orderId: orderId
                   };
-                  const dedRef = doc(collection(this.firestore, 'inventoryDeductions'));
+                  const dedRef = doc(collection(this.firestore, 'inventoryTracking'));
                   const sanitizedDedRecord = this.sanitizeForFirestore(dedRecord);
                   transaction.set(dedRef, sanitizedDedRecord as any);
                 } else {
-                  // No batch found — still record product deduction and an inventoryDeductions record without batch
+                  // No batch found — still record product deduction and an inventoryTracking record without batch
                   const dedRecord = {
                     productId,
                     batchId: null,
                     quantity: qty,
+                    totalStock: prodData?.totalStock || 0,  // Capture product's totalStock at deduction time
                     deductedAt: new Date(),
                     createdAt: new Date(),
                     note: 'DAMAGED - no-batch',
                     deductedBy: damagedBy || null,
                     orderId: orderId
                   };
-                  const dedRef = doc(collection(this.firestore, 'inventoryDeductions'));
+                  const dedRef = doc(collection(this.firestore, 'inventoryTracking'));
                   const sanitizedDedRecord = this.sanitizeForFirestore(dedRecord);
                   transaction.set(dedRef, sanitizedDedRecord as any);
                 }
@@ -1349,6 +1353,18 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
             console.log('📱 Offline: No batches available in Firestore cache, creating tracking only');
             
             // Create tracking document without batch deductions
+            // Fetch product totalStock for tracking
+            let offlineProductTotalStock = 0;
+            try {
+              const productRef = doc(this.firestore, 'products', it.productId);
+              const productSnap = await getDoc(productRef);
+              if (productSnap.exists()) {
+                offlineProductTotalStock = Number(productSnap.data()?.['totalStock'] || 0);
+              }
+            } catch (productError) {
+              console.warn(`⚠️ Failed to fetch product totalStock for offline tracking:`, productError);
+            }
+            
             const docData: OrdersSellingTrackingDoc = {
               companyId: ctx.companyId,
               storeId: ctx.storeId,
@@ -1372,6 +1388,7 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
               vat: (it as any).vat ?? 0,
               total: it.lineTotal,
               isVatExempt: !!((it as any).isVatExempt),
+              runningBalanceTotalStock: offlineProductTotalStock,  // Capture product's totalStock at transaction time
               cashierId: ctx.cashierId,
               cashierEmail: ctx.cashierEmail,
               cashierName: ctx.cashierName,
@@ -1471,20 +1488,22 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
           console.log(`✅ Deducted ${deductQty} from batch ${batch.batchId}, remaining in batch: ${newQty}`);
         }
 
-        // Step 3: Create inventoryDeductions records (one per batch used, sorted by batchId asc)
+        // Step 3: Create inventoryTracking records (one per batch used, sorted by batchId asc)
         // If no batches found, create a generic deduction record for non-batch products
         if (batchDeductions.length === 0) {
           console.log(`📦 No batches found for product ${it.productId} - creating non-batch deduction`);
           
           // Get product's costPrice from products collection
           let productCostPrice = 0;
+          let productTotalStock = 0;
           try {
             const productRef = doc(this.firestore, 'products', it.productId);
             const productSnap = await getDoc(productRef);
             if (productSnap.exists()) {
               const productData = productSnap.data();
               productCostPrice = Number(productData?.['costPrice'] || 0);
-              console.log(`💰 Using product costPrice: ₱${productCostPrice}`);
+              productTotalStock = Number(productData?.['totalStock'] || 0);
+              console.log(`💰 Using product costPrice: ₱${productCostPrice}, totalStock: ${productTotalStock}`);
             }
           } catch (productError) {
             console.warn(`⚠️ Failed to fetch product costPrice for ${it.productId}:`, productError);
@@ -1507,6 +1526,7 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
             
             // Deduction details
             quantity: it.quantity,
+            runningBalanceTotalStock: productTotalStock,  // Capture product's totalStock at deduction time
             deductedAt: new Date(),
             
             // Audit
@@ -1520,7 +1540,7 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
           };
 
           try {
-            const deductionsRef = collection(this.firestore, 'inventoryDeductions');
+            const deductionsRef = collection(this.firestore, 'inventoryTracking');
             const sanitizedNonBatch = this.sanitizeForFirestore(nonBatchDeduction);
             const cleanedDoc = this.removeUndefinedFields(sanitizedNonBatch);
             await addDoc(deductionsRef, cleanedDoc);
@@ -1532,6 +1552,19 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
         
         // Sort by batchId ascending before creating records
         batchDeductions.sort((a, b) => a.batchId.localeCompare(b.batchId));
+
+        // Fetch product totalStock once before creating deduction records
+        let productTotalStock = 0;
+        try {
+          const productRef = doc(this.firestore, 'products', it.productId);
+          const productSnap = await getDoc(productRef);
+          if (productSnap.exists()) {
+            const productData = productSnap.data();
+            productTotalStock = Number(productData?.['totalStock'] || 0);
+          }
+        } catch (productError) {
+          console.warn(`⚠️ Failed to fetch product totalStock for ${it.productId}:`, productError);
+        }
 
         for (const deduction of batchDeductions) {
           const deductionDoc = {
@@ -1551,6 +1584,7 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
             
             // Deduction details
             quantity: deduction.deductedQty,
+            runningBalanceTotalStock: productTotalStock,  // Capture product's totalStock at deduction time
             deductedAt: new Date(),
             
             // Audit
@@ -1563,7 +1597,7 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
 
           // Use Firestore directly for automatic offline sync
           try {
-            const deductionsRef = collection(this.firestore, 'inventoryDeductions');
+            const deductionsRef = collection(this.firestore, 'inventoryTracking');
             const sanitizedDeduction = this.sanitizeForFirestore(deductionDoc);
             const cleanedDoc = this.removeUndefinedFields(sanitizedDeduction);
             await addDoc(deductionsRef, cleanedDoc);
@@ -1632,6 +1666,7 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
           vat: (it as any).vat ?? 0,
           total: it.lineTotal,
           isVatExempt: !!((it as any).isVatExempt),
+          runningBalanceTotalStock: productTotalStock,  // Capture product's totalStock at transaction time
 
           cashierId: ctx.cashierId,
           cashierEmail: ctx.cashierEmail,
@@ -1642,7 +1677,7 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
           ...(this.networkService.isOnline() ? {} : { _offlineCreated: true })
         } as OrdersSellingTrackingDoc;
 
-        // Use Firestore directly for automatic offline sync (same as inventoryDeductions)
+        // Use Firestore directly for automatic offline sync (same as inventoryTracking)
         try {
           const trackingRef = collection(this.firestore, colName);
           const cleanedDoc = this.removeUndefinedFields(docData as any);

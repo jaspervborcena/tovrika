@@ -72,8 +72,6 @@ export class LedgerService {
       // Add new values to existing balances
       const newBalanceAmount = Number(existing.runningBalanceAmount || 0) + amount;
       const newBalanceQty = Number(existing.runningBalanceQty || 0) + qty;
-      const newOrderBalanceQty = Number(existing.runningBalanceOrderQty || 0) + 
-        (eventType === 'completed' ? qty : 0);
       
       const updateData = {
         orderId, // Update to latest order ID
@@ -81,7 +79,6 @@ export class LedgerService {
         quantity: Number(existing.quantity || 0) + qty,
         runningBalanceAmount: newBalanceAmount,
         runningBalanceQty: newBalanceQty,
-        runningBalanceOrderQty: newOrderBalanceQty,
         updatedAt: new Date(),
         updatedBy: performedBy
       };
@@ -99,7 +96,6 @@ export class LedgerService {
         id: existingDoc.id,
         runningBalanceAmount: newBalanceAmount,
         runningBalanceQty: newBalanceQty,
-        runningBalanceOrderQty: newOrderBalanceQty,
         updated: true
       };
     }
@@ -107,7 +103,6 @@ export class LedgerService {
     // No document exists for today - CREATE new one
     const newBalanceAmount = amount;
     const newBalanceQty = qty;
-    const newOrderBalanceQty = eventType === 'completed' ? qty : 0;
 
     const newDoc = {
       companyId,
@@ -118,7 +113,6 @@ export class LedgerService {
       quantity: qty,
       runningBalanceAmount: newBalanceAmount,
       runningBalanceQty: newBalanceQty,
-      runningBalanceOrderQty: newOrderBalanceQty,
       createdAt: new Date(),
       createdBy: performedBy,
       updatedAt: new Date(),
@@ -140,7 +134,6 @@ export class LedgerService {
       id: ref.id,
       runningBalanceAmount: newBalanceAmount,
       runningBalanceQty: newBalanceQty,
-      runningBalanceOrderQty: newOrderBalanceQty,
       created: true
     };
   } catch (err) {
@@ -158,7 +151,7 @@ export class LedgerService {
     storeId: string,
     date: Date = new Date(),
     eventType: 'completed' | 'returned' | 'refunded' | 'cancelled' | 'damaged' | 'unpaid' | 'recovered' = 'completed'
-  ): Promise<{ runningBalanceAmount: number; runningBalanceQty: number; runningBalanceOrderQty: number }> {
+  ): Promise<{ runningBalanceAmount: number; runningBalanceQty: number }> {
     try {
       const startOfDay = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0, 0);
       const endOfDay = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59, 999);
@@ -199,7 +192,7 @@ export class LedgerService {
       // If no entries found for today, return zeros
       if (snaps.empty) {
         console.log(`📊 No ${eventType} entries found for today - returning zeros`);
-        return { runningBalanceAmount: 0, runningBalanceQty: 0, runningBalanceOrderQty: 0 };
+        return { runningBalanceAmount: 0, runningBalanceQty: 0 };
       }
       
       // Get the LATEST entry and use its running balance fields (cumulative totals)
@@ -208,29 +201,26 @@ export class LedgerService {
       
       const runningBalanceAmount = Number(d.runningBalanceAmount || 0);
       const runningBalanceQty = Number(d.runningBalanceQty || 0);
-      const runningBalanceOrderQty = Number(d.runningBalanceOrderQty || 0);
       
       const docCreatedAt = d.createdAt?.toDate ? d.createdAt.toDate() : new Date(d.createdAt);
-      console.log(`📊 Latest entry: createdAt=${docCreatedAt.toISOString()}, runningBalanceAmount=${runningBalanceAmount}, runningBalanceOrderQty=${runningBalanceOrderQty}`);
+      console.log(`📊 Latest entry: createdAt=${docCreatedAt.toISOString()}, runningBalanceAmount=${runningBalanceAmount}`);
       
       const result = {
         runningBalanceAmount,
-        runningBalanceQty,
-        runningBalanceOrderQty
+        runningBalanceQty
       };
-      console.log(`📊 Returning cumulative totals for ${eventType}: amount=${runningBalanceAmount} (₱${runningBalanceAmount/100}), orderQty=${runningBalanceOrderQty}`);
+      console.log(`📊 Returning cumulative totals for ${eventType}: amount=${runningBalanceAmount} (₱${runningBalanceAmount/100})`);
       return result;
     } catch (err) {
       console.warn('LedgerService.getLatestOrderBalances fallback', err);
-      return { runningBalanceAmount: 0, runningBalanceQty: 0, runningBalanceOrderQty: 0 };
+      return { runningBalanceAmount: 0, runningBalanceQty: 0 };
     }
   }
 
   /**
    * Get totals for a date RANGE by summing all entries.
-   * Sums amount, qty, and orderQty from all entries in the range.
+   * Sums amount, qty from all entries in the range.
    * - runningBalanceAmount = sum of amounts (revenue for completed)
-   * - runningBalanceOrderQty = sum of orderQty (total orders)
    * - runningBalanceQty = sum of qty (total items)
    */
   async getOrderBalancesForRange(
@@ -239,7 +229,7 @@ export class LedgerService {
     startDate: Date,
     endDate: Date,
     eventType: 'completed' | 'returned' | 'refunded' | 'cancelled' | 'damaged' | 'unpaid' | 'recovered' = 'completed'
-  ): Promise<{ runningBalanceAmount: number; runningBalanceQty: number; runningBalanceOrderQty: number }> {
+  ): Promise<{ runningBalanceAmount: number; runningBalanceQty: number }> {
     try {
       console.log(`📅 getOrderBalancesForRange: ${startDate.toISOString()} to ${endDate.toISOString()}`);
       console.log(`📅 Query params: companyId=${companyId}, storeId=${storeId}, eventType=${eventType}`);
@@ -261,40 +251,36 @@ export class LedgerService {
       
       if (snaps.empty) {
         console.log(`📊 No ${eventType} entries found for range - returning zeros`);
-        return { runningBalanceAmount: 0, runningBalanceQty: 0, runningBalanceOrderQty: 0 };
+        return { runningBalanceAmount: 0, runningBalanceQty: 0 };
       }
       
-      // Sum up all entries in the range
+      // Sum up all entries in the range, get beginning balance from first entry
       let totalAmount = 0;
       let totalQty = 0;
-      let totalOrderQty = 0;
       
       snaps.docs.forEach((doc, idx) => {
         const d: any = doc.data();
         const amount = Number(d.amount || 0);
         const qty = Number(d.qty || d.quantity || 1);
-        const orderQty = Number(d.orderQty || 1);
         
         totalAmount += amount;
         totalQty += qty;
-        totalOrderQty += orderQty;
         
         if (idx < 5) {
           const docCreatedAt = d.createdAt?.toDate ? d.createdAt.toDate() : new Date(d.createdAt);
-          console.log(`📊 Entry ${idx + 1}: date=${docCreatedAt.toLocaleDateString()}, amount=${amount}, orderQty=${orderQty}, qty=${qty}`);
+          console.log(`📊 Entry ${idx + 1}: date=${docCreatedAt.toLocaleDateString()}, amount=${amount}, qty=${qty}`);
         }
       });
       
       const result = {
         runningBalanceAmount: totalAmount,
-        runningBalanceQty: totalQty,
-        runningBalanceOrderQty: totalOrderQty
+        runningBalanceQty: totalQty
       };
-      console.log(`📊 Range totals for ${eventType}: revenue=₱${totalAmount/100}, orders=${totalOrderQty}, items=${totalQty}`);
+      console.log(`📊 Range totals for ${eventType}: revenue=₱${totalAmount/100}, items=${totalQty}`);
       return result;
     } catch (err) {
       console.warn('LedgerService.getOrderBalancesForRange error', err);
-      return { runningBalanceAmount: 0, runningBalanceQty: 0, runningBalanceOrderQty: 0 };
+      return { runningBalanceAmount: 0, runningBalanceQty: 0 };
     }
   }
 

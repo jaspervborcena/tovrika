@@ -1872,7 +1872,7 @@ export class OverviewComponent implements OnInit {
       
       if (ledger) {
         this.yesterdayRevenue.set(Number(ledger.runningBalanceAmount || 0));
-        this.yesterdayOrders.set(Number(ledger.runningBalanceOrderQty || ledger.runningBalanceQty || 0));
+        this.yesterdayOrders.set(Number(ledger.runningBalanceQty || 0));
       } else {
         this.yesterdayRevenue.set(0);
         this.yesterdayOrders.set(0);
@@ -1882,8 +1882,8 @@ export class OverviewComponent implements OnInit {
       // We only fetch yesterday's revenue and order count here for comparison purposes
       
       // Set completed and order quantities
-      this.ledgerCompletedQty.set(Number(ledger?.runningBalanceOrderQty || ledger?.runningBalanceQty || 0));
-      this.ledgerOrderQty.set(Number(ledger?.runningBalanceOrderQty || ledger?.runningBalanceQty || 0));
+      this.ledgerCompletedQty.set(Number(ledger?.runningBalanceQty || 0));
+      this.ledgerOrderQty.set(Number(ledger?.runningBalanceQty || 0));
     } catch (error) {
       console.error('Error fetching yesterday revenue:', error);
       this.yesterdayRevenue.set(0);
@@ -1909,9 +1909,9 @@ export class OverviewComponent implements OnInit {
       const ledger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, today, 'completed');
       if (ledger) {
         this.ledgerTotalRevenue.set(Math.max(0, Number(ledger.runningBalanceAmount || 0)));
-        this.ledgerTotalOrders.set(Math.max(0, Number(ledger.runningBalanceOrderQty || ledger.runningBalanceQty || 0)));
-        this.ledgerCompletedQty.set(Math.max(0, Number(ledger.runningBalanceOrderQty || ledger.runningBalanceQty || 0)));
-        this.ledgerOrderQty.set(Math.max(0, Number(ledger.runningBalanceOrderQty || ledger.runningBalanceQty || 0)));
+        this.ledgerTotalOrders.set(Math.max(0, Number(ledger.runningBalanceQty || 0)));
+        this.ledgerCompletedQty.set(Math.max(0, Number(ledger.runningBalanceQty || 0)));
+        this.ledgerOrderQty.set(Math.max(0, Number(ledger.runningBalanceQty || 0)));
       }
 
       // Fetch returns for today
@@ -1945,9 +1945,9 @@ export class OverviewComponent implements OnInit {
 
       // Fetch damage for today
       const damageLedger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, today, 'damaged');
-      if (damageLedger && (damageLedger.runningBalanceAmount || damageLedger.runningBalanceQty || damageLedger.runningBalanceOrderQty)) {
+      if (damageLedger && (damageLedger.runningBalanceAmount || damageLedger.runningBalanceQty)) {
         this.ledgerDamageAmount.set(Number(damageLedger.runningBalanceAmount || 0));
-        this.ledgerDamageQty.set(Number(damageLedger.runningBalanceQty || damageLedger.runningBalanceOrderQty || 0));
+        this.ledgerDamageQty.set(Number(damageLedger.runningBalanceQty || 0));
       } else if (!damageLedger) {
         this.ledgerDamageAmount.set(0);
         this.ledgerDamageQty.set(0);
@@ -1956,9 +1956,9 @@ export class OverviewComponent implements OnInit {
       // Fetch unpaid for today
       const unpaidLedger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, today, 'unpaid');
       console.log('🔍 Unpaid Ledger Query - companyId:', companyId, 'storeId:', storeId, 'result:', unpaidLedger);
-      if (unpaidLedger && (unpaidLedger.runningBalanceAmount || unpaidLedger.runningBalanceQty || unpaidLedger.runningBalanceOrderQty)) {
+      if (unpaidLedger && (unpaidLedger.runningBalanceAmount || unpaidLedger.runningBalanceQty)) {
         this.ledgerUnpaidAmount.set(Number(unpaidLedger.runningBalanceAmount || 0));
-        this.ledgerUnpaidQty.set(Number(unpaidLedger.runningBalanceQty || unpaidLedger.runningBalanceOrderQty || 0));
+        this.ledgerUnpaidQty.set(Number(unpaidLedger.runningBalanceQty || 0));
       } else {
         this.ledgerUnpaidAmount.set(0);
         this.ledgerUnpaidQty.set(0);
@@ -1967,9 +1967,9 @@ export class OverviewComponent implements OnInit {
       // Fetch recovered for today
       const recoveredLedger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, today, 'recovered');
       console.log('🔍 Recovered Ledger Query - companyId:', companyId, 'storeId:', storeId, 'result:', recoveredLedger);
-      if (recoveredLedger && (recoveredLedger.runningBalanceAmount || recoveredLedger.runningBalanceQty || recoveredLedger.runningBalanceOrderQty)) {
+      if (recoveredLedger && (recoveredLedger.runningBalanceAmount || recoveredLedger.runningBalanceQty)) {
         this.ledgerRecoveredAmount.set(Number(recoveredLedger.runningBalanceAmount || 0));
-        this.ledgerRecoveredQty.set(Number(recoveredLedger.runningBalanceQty || recoveredLedger.runningBalanceOrderQty || 0));
+        this.ledgerRecoveredQty.set(Number(recoveredLedger.runningBalanceQty || 0));
       } else {
         this.ledgerRecoveredAmount.set(0);
         this.ledgerRecoveredQty.set(0);
@@ -2030,8 +2030,8 @@ export class OverviewComponent implements OnInit {
         const ledger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, date, 'completed');
         if (ledger) {
           currentMonthRevenueTotal += Number(ledger.runningBalanceAmount || 0);
-          currentMonthOrdersTotal += Number(ledger.runningBalanceOrderQty || ledger.runningBalanceQty || 0);
-          currentMonthCompletedQty += Number(ledger.runningBalanceOrderQty || ledger.runningBalanceQty || 0);
+          currentMonthOrdersTotal += Number(ledger.runningBalanceQty || 0);
+          currentMonthCompletedQty += Number(ledger.runningBalanceQty || 0);
         }
 
         // Returns
@@ -2052,7 +2052,7 @@ export class OverviewComponent implements OnInit {
         const damageLedger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, date, 'damaged');
         if (damageLedger) {
           currentMonthDamageAmount += Number(damageLedger.runningBalanceAmount || 0);
-          currentMonthDamageQty += Number(damageLedger.runningBalanceQty || damageLedger.runningBalanceOrderQty || 0);
+          currentMonthDamageQty += Number(damageLedger.runningBalanceQty || 0);
         }
 
         // Cancels
@@ -2071,7 +2071,7 @@ export class OverviewComponent implements OnInit {
         const ledger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, date, 'completed');
         if (ledger) {
           previousMonthRevenueTotal += Number(ledger.runningBalanceAmount || 0);
-          previousMonthOrdersTotal += Number(ledger.runningBalanceOrderQty || ledger.runningBalanceQty || 0);
+          previousMonthOrdersTotal += Number(ledger.runningBalanceQty || 0);
         }
       }
 
@@ -2135,8 +2135,8 @@ export class OverviewComponent implements OnInit {
         const ledger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, refDate, 'completed');
         if (ledger) {
           currentRangeRevenueTotal += Math.max(0, Number(ledger.runningBalanceAmount || 0));
-          currentRangeOrdersTotal += Math.max(0, Number(ledger.runningBalanceOrderQty || ledger.runningBalanceQty || 0));
-          currentRangeCompletedQty += Math.max(0, Number(ledger.runningBalanceOrderQty || ledger.runningBalanceQty || 0));
+          currentRangeOrdersTotal += Math.max(0, Number(ledger.runningBalanceQty || 0));
+          currentRangeCompletedQty += Math.max(0, Number(ledger.runningBalanceQty || 0));
         }
 
         const returnsLedger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, refDate, 'returned');
@@ -2154,7 +2154,7 @@ export class OverviewComponent implements OnInit {
         const damageLedger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, refDate, 'damaged');
         if (damageLedger) {
           currentRangeDamageAmount += Number(damageLedger.runningBalanceAmount || 0);
-          currentRangeDamageQty += Number(damageLedger.runningBalanceQty || damageLedger.runningBalanceOrderQty || 0);
+          currentRangeDamageQty += Number(damageLedger.runningBalanceQty || 0);
         }
 
         const cancelLedger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, refDate, 'cancelled');
@@ -2176,7 +2176,7 @@ export class OverviewComponent implements OnInit {
         const ledger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, new Date(d), 'completed');
         if (ledger) {
           previousRangeRevenueTotal += Math.max(0, Number(ledger.runningBalanceAmount || 0));
-          previousRangeOrdersTotal += Math.max(0, Number(ledger.runningBalanceOrderQty || ledger.runningBalanceQty || 0));
+          previousRangeOrdersTotal += Math.max(0, Number(ledger.runningBalanceQty || 0));
         }
       }
 
@@ -2858,7 +2858,7 @@ export class OverviewComponent implements OnInit {
       // Check if it's a single day query (today/yesterday) vs a range (this_month, etc.)
       const isSingleDay = startDate.toDateString() === endDate.toDateString();
       
-      let ledger: { runningBalanceAmount: number; runningBalanceQty: number; runningBalanceOrderQty: number } | null = null;
+      let ledger: { runningBalanceAmount: number; runningBalanceQty: number } | null = null;
       
       if (isSingleDay) {
         // Single day: use getLatestOrderBalances with the date
