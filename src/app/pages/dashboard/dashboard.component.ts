@@ -14,6 +14,7 @@ import { AppConstants } from '../../shared/enums';
 import { NetworkService } from '../../core/services/network.service';
 import { TranslationService, Language } from '../../services/translation.service';
 import { TranslateModule } from '@ngx-translate/core';
+import { environment } from '../../../environments/environment';
 
 @Component({
   selector: 'app-dashboard',
@@ -61,6 +62,7 @@ export class DashboardComponent implements OnInit {
   protected appName = computed(() => 
     this.isOnline() ? AppConstants.APP_NAME : AppConstants.APP_NAME_OFFLINE
   );
+  protected appVersion = environment.version;
   protected headerClass = computed(() => 
     this.isOnline() ? 'dashboard-header' : 'dashboard-header offline'
   );

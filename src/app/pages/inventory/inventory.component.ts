@@ -291,9 +291,7 @@ export class InventoryComponent implements OnInit {
   }
 
   async ngOnInit(): Promise<void> {
-    console.log('🔵 Inventory Component - ngOnInit started');
     await this.loadStores();
-    console.log('🔵 Inventory Component - Loading rows for period:', this.selectedPeriod);
     const currentPermission = this.authService.getCurrentPermission();
     await this.inventoryService.loadRowsForPeriod(
       this.selectedPeriod, 
@@ -301,7 +299,6 @@ export class InventoryComponent implements OnInit {
       this.selectedStoreId(),
       currentPermission?.companyId
     );
-    console.log('🔵 Inventory Component - Rows loaded:', this.inventoryService.rows().length);
   }
 
   async loadStores(): Promise<void> {
@@ -328,7 +325,6 @@ export class InventoryComponent implements OnInit {
   }
 
   onStoreChange(): void {
-    console.log('Store changed to:', this.selectedStoreId());
     const currentPermission = this.authService.getCurrentPermission();
     // Reload inventory data for selected store
     this.inventoryService.loadRowsForPeriod(

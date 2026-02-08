@@ -63,28 +63,18 @@ export class InventoryTransactionService {
     for (const k of Object.keys(obj || {})) {
       const v = obj[k];
       if (v !== undefined) {
-        // For *At fields (createdAt/updatedAt/deductedAt) store BOTH:
-        // 1. Original field as Date (Firestore converts to Timestamp for querying)
-        // 2. *Formatted field as human-readable string for display
-        if (k && typeof k === 'string' && /At$/.test(k)) {
-          let d: Date | null = null;
-          if (v instanceof Date) d = v;
-          else if (v && typeof v.toDate === 'function') {
-            try { d = v.toDate(); } catch (e) { d = null; }
-          } else if (typeof v === 'number' || typeof v === 'string') {
-            const parsed = new Date(v as any);
-            d = isNaN(parsed.getTime()) ? null : parsed;
-          }
-          if (d) {
-            out[k] = d; // Keep as Date for Firestore querying
-            out[k + 'Formatted'] = this.formatDateForFirestore(d); // Add formatted version
-          } else {
+        // For Date objects, keep them as-is so Firestore converts to Timestamp
+        if (v instanceof Date) {
+          out[k] = v;
+        } else if (v && typeof v.toDate === 'function') {
+          // Convert Firestore Timestamp to Date
+          try { 
+            out[k] = v.toDate(); 
+          } catch (e) { 
             out[k] = v;
           }
         } else {
-          // Keep other values unchanged
-          if (v instanceof Date) out[k] = v;
-          else out[k] = v;
+          out[k] = v;
         }
       }
     }
@@ -131,8 +121,6 @@ export class InventoryTransactionService {
     if (!currentUser?.uid || !permission) {
       throw new Error('User not authenticated or no company permission found');
     }
-
-    console.log('🚀 Starting batch write: Add Inventory Batch');
 
     const batch = writeBatch(this.firestore);
     
@@ -204,13 +192,12 @@ export class InventoryTransactionService {
     
     try {
       await batch.commit();
-      console.log(`🎉 Batch write committed: Batch ${batchRef.id} added successfully!`);
       return {
         batchId: batchRef.id,
         productSummary: { totalStock, sellingPrice }
       };
     } catch (error) {
-      console.error('❌ Batch write failed:', error);
+      console.error('Batch write failed:', error);
       throw new Error(`Failed to add inventory batch: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
@@ -243,8 +230,6 @@ export class InventoryTransactionService {
     const batch = writeBatch(this.firestore);
     const batchDeductions: { productId: string; deductions: BatchDeductionDetail[] }[] = [];
     const productSummaries: { productId: string; totalStock: number; sellingPrice: number }[] = [];
-
-    console.log('📦 Processing deductions for all cart items...');
 
     // Process each cart item
     for (const item of cartItems) {
@@ -382,10 +367,7 @@ export class InventoryTransactionService {
       throw new Error('User not authenticated');
     }
 
-    console.log('🚀 Starting batch write: Reverse Sale');
-
     const batch = writeBatch(this.firestore);
-    console.log('📦 Reversing deductions for all products...');
 
     for (const productBatch of batchDeductions) {
       const updatedBatchesForProduct: ProductInventoryEntry[] = [];
@@ -438,14 +420,11 @@ export class InventoryTransactionService {
     
     // Commit batch writes
     await batch.commit();
-    console.log('✅ Sale reversal batch write completed');
     
     // Update product summaries separately
     for (const productBatch of batchDeductions) {
       await this.productSummaryService.recomputeProductSummary(productBatch.productId);
     }
-
-    console.log(`🎉 Sale reversal completed: Order ${orderId} reversed successfully!`);
   }
 
   /**
@@ -460,77 +439,73 @@ export class InventoryTransactionService {
       throw new Error('User not authenticated or no company permission found');
     }
 
-    console.log('🚀 Starting MASTER TRANSACTION: Add Multiple Batches');
+    try {
+      return await runTransaction(this.firestore, async (transaction) => {
+        const results: AddBatchResult[] = [];
+        const processedProductIds = new Set<string>();
 
-    return runTransaction(this.firestore, async (transaction) => {
-      const results: AddBatchResult[] = [];
-      const processedProductIds = new Set<string>();
+        for (const request of requests) {
+          const { productId, batchData } = request;
 
-      for (const request of requests) {
-        const { productId, batchData } = request;
+          // Create batch document
+          const batchRef = doc(collection(this.firestore, 'productInventory'));
+          const batchEntry: Omit<ProductInventoryEntry, 'id'> = {
+            ...batchData,
+            productId,
+            uid: currentUser.uid,
+            companyId: permission.companyId,
+            storeId: permission.storeId || '',
+            status: 'active',
+            createdBy: currentUser.uid,
+            updatedBy: currentUser.uid,
+            receivedAt: batchData.receivedAt instanceof Date ? batchData.receivedAt : new Date(batchData.receivedAt),
+            expiryDate: batchData.expiryDate ? (batchData.expiryDate instanceof Date ? batchData.expiryDate : new Date(batchData.expiryDate)) : undefined,
+            // VAT / Discount metadata
+            isVatApplicable: !!batchData.isVatApplicable,
+            vatRate: Number(batchData.vatRate ?? 0),
+            hasDiscount: !!batchData.hasDiscount,
+            discountType: batchData.discountType ?? 'percentage',
+            discountValue: Number(batchData.discountValue ?? 0),
+            syncStatus: 'SYNCED',
+            isOffline: false,
+            initialQuantity: batchData.quantity,
+            totalDeducted: 0
+          };
 
-        // Create batch document
-        const batchRef = doc(collection(this.firestore, 'productInventory'));
-        const batchEntry: Omit<ProductInventoryEntry, 'id'> = {
-          ...batchData,
-          productId,
-          uid: currentUser.uid,
-          companyId: permission.companyId,
-          storeId: permission.storeId || '',
-          status: 'active',
-          createdBy: currentUser.uid,
-          updatedBy: currentUser.uid,
-          receivedAt: batchData.receivedAt instanceof Date ? batchData.receivedAt : new Date(batchData.receivedAt),
-          expiryDate: batchData.expiryDate ? (batchData.expiryDate instanceof Date ? batchData.expiryDate : new Date(batchData.expiryDate)) : undefined,
-          // VAT / Discount metadata
-          isVatApplicable: !!batchData.isVatApplicable,
-          vatRate: Number(batchData.vatRate ?? 0),
-          hasDiscount: !!batchData.hasDiscount,
-          discountType: batchData.discountType ?? 'percentage',
-          discountValue: Number(batchData.discountValue ?? 0),
-          syncStatus: 'SYNCED',
-          isOffline: false,
-          initialQuantity: batchData.quantity,
-          totalDeducted: 0
-        };
-
-        transaction.set(batchRef, {
-          ...batchEntry,
-          createdAt: new Date(),
-          updatedAt: new Date()
-        });
-        
-        results.push({
-          batchId: batchRef.id,
-          productSummary: { totalStock: 0, sellingPrice: 0 } // Will be computed below
-        });
-
-        processedProductIds.add(productId);
-      }
-
-      // Recompute summaries for all affected products
-      let resultIndex = 0;
-      for (const request of requests) {
-        if (processedProductIds.has(request.productId)) {
-          const summary = await this.productSummaryService.recomputeProductSummaryInTransaction(
-            transaction,
-            request.productId
-          );
+          transaction.set(batchRef, {
+            ...batchEntry,
+            createdAt: new Date(),
+            updatedAt: new Date()
+          });
           
-          results[resultIndex].productSummary = summary;
-          processedProductIds.delete(request.productId); // Only compute once per product
-        }
-        resultIndex++;
-      }
+          results.push({
+            batchId: batchRef.id,
+            productSummary: { totalStock: 0, sellingPrice: 0 } // Will be computed below
+          });
 
-      console.log('✅ MASTER MULTIPLE BATCHES TRANSACTION prepared successfully');
-      return results;
-    }).then((results) => {
-      console.log(`🎉 MASTER MULTIPLE BATCHES TRANSACTION COMMITTED: ${results.length} batches added!`);
-      return results;
-    }).catch((error) => {
-      console.error('❌ MASTER MULTIPLE BATCHES TRANSACTION FAILED: No changes made:', error);
+          processedProductIds.add(productId);
+        }
+
+        // Recompute summaries for all affected products
+        let resultIndex = 0;
+        for (const request of requests) {
+          if (processedProductIds.has(request.productId)) {
+            const summary = await this.productSummaryService.recomputeProductSummaryInTransaction(
+              transaction,
+              request.productId
+            );
+            
+            results[resultIndex].productSummary = summary;
+            processedProductIds.delete(request.productId); // Only compute once per product
+          }
+          resultIndex++;
+        }
+
+        return results;
+      });
+    } catch (error: any) {
+      console.error('Multiple batches transaction failed:', error);
       throw new Error(`Failed to add multiple batches: ${error.message}`);
-    });
+    }
   }
 }

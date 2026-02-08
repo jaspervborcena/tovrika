@@ -18,28 +18,18 @@ export class OrdersSellingTrackingService {
     for (const k of Object.keys(obj || {})) {
       const v = obj[k];
       if (v !== undefined) {
-        // For *At fields (createdAt/updatedAt/deductedAt) store BOTH:
-        // 1. Original field as Date (Firestore converts to Timestamp for querying)
-        // 2. *Formatted field as human-readable string for display
-        if (k && typeof k === 'string' && /At$/.test(k)) {
-          let d: Date | null = null;
-          if (v instanceof Date) d = v;
-          else if (v && typeof v.toDate === 'function') {
-            try { d = v.toDate(); } catch (e) { d = null; }
-          } else if (typeof v === 'number' || typeof v === 'string') {
-            const parsed = new Date(v as any);
-            d = isNaN(parsed.getTime()) ? null : parsed;
-          }
-          if (d) {
-            out[k] = d; // Keep as Date for Firestore querying
-            out[k + 'Formatted'] = this.formatDateForFirestore(d); // Add formatted version
-          } else {
+        // For Date objects, keep them as-is so Firestore converts to Timestamp
+        if (v instanceof Date) {
+          out[k] = v;
+        } else if (v && typeof v.toDate === 'function') {
+          // Convert Firestore Timestamp to Date
+          try { 
+            out[k] = v.toDate(); 
+          } catch (e) { 
             out[k] = v;
           }
         } else {
-          // Keep other values unchanged
-          if (v instanceof Date) out[k] = v;
-          else out[k] = v;
+          out[k] = v;
         }
       }
     }

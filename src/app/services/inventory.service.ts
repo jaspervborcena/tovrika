@@ -106,13 +106,6 @@ export class InventoryService {
     fetchLimit: number = 1000,
     updatedAtRange?: { start?: Date | null; end?: Date | null }
   ): Promise<InventoryRow[]> {
-    console.log('🟡 fetchRowsFromCollection:', { collectionName, filterCount: baseFilters.length, fetchLimit });
-    console.log('🟡 Filters:', baseFilters.map((f: any) => {
-      if (f._query?.filters) {
-        return { type: 'where', field: f._query.filters[0]?.field?.segments?.join('.'), op: f._query.filters[0]?.op, value: f._query.filters[0]?.value?.value };
-      }
-      return f;
-    }));
     const col = collection(this.firestore, collectionName);
     const out: InventoryRow[] = [];
     try {
@@ -120,10 +113,6 @@ export class InventoryService {
       const dateField = collectionName === 'inventoryDeductions' ? 'deductedAt' : 'createdAt';
       const q = query(col, ...baseFilters, orderBy(dateField, 'desc'), limit(fetchLimit));
       const snaps = await getDocs(q as any);
-      console.log('🟡 fetchRowsFromCollection got', snaps.docs.length, 'docs from', collectionName);
-      if (snaps.docs.length > 0) {
-        console.log('🟡 Sample doc:', snaps.docs[0].id, snaps.docs[0].data());
-      }
       for (const s of snaps.docs) {
         const data: any = s.data() || {};
       const productId: string = data.productId;
@@ -180,14 +169,11 @@ export class InventoryService {
       return out;
     } catch (err) {
       // Likely index required or other query error — fall back to a simpler query and client-side filter
-      console.warn('🟡 fetchRowsFromCollection primary query failed, falling back:', err);
-      console.warn('🟡 Error details:', { collectionName, error: err });
+      console.warn('fetchRowsFromCollection primary query failed, falling back:', err);
       // Attempt to use the first filter (commonly status equality) and order by createdAt
       const fallbackFilters = baseFilters && baseFilters.length > 0 ? [baseFilters[0]] : [];
-      console.log('🟡 Trying fallback query with filters:', fallbackFilters.length);
       const fallbackQ = query(col, ...fallbackFilters, orderBy('createdAt', 'desc'), limit(fetchLimit));
       const snapsFallback = await getDocs(fallbackQ as any);
-      console.log('🟡 Fallback query got', snapsFallback.docs.length, 'docs from', collectionName);
       for (const s of snapsFallback.docs) {
         const data: any = s.data() || {};
           // if updatedAtRange provided, enforce it client-side
@@ -273,7 +259,6 @@ export class InventoryService {
       const statusFilter = where('status', '==', 'completed');
       const q = query(col, statusFilter, ...baseFilters, orderBy('createdAt', 'desc'), limit(fetchLimit));
       const snaps = await getDocs(q as any);
-      console.log('🟡 fetchRowsFromOrdersSellingTracking got', snaps.docs.length, 'docs');
       
       for (const s of snaps.docs) {
         const data: any = s.data() || {};
@@ -329,13 +314,11 @@ export class InventoryService {
       }
       return out;
     } catch (err) {
-      console.warn('🟡 fetchRowsFromOrdersSellingTracking query failed, trying fallback:', err);
-      console.warn('🟡 Error details:', err);
+      console.warn('fetchRowsFromOrdersSellingTracking query failed, trying fallback:', err);
       // Fallback with simplified query
       const statusFilter = where('status', '==', 'completed');
       const fallbackQ = query(col, statusFilter, orderBy('createdAt', 'desc'), limit(fetchLimit));
       const snapsFallback = await getDocs(fallbackQ as any);
-      console.log('🟡 Fallback query got', snapsFallback.docs.length, 'docs from ordersSellingTracking');
       
       for (const s of snapsFallback.docs) {
         const data: any = s.data() || {};
@@ -408,7 +391,6 @@ export class InventoryService {
  * Load rows for a given period and page (fetches from both inventoryDeductions and ordersSellingTracking).
  */
 async loadRowsForPeriod(period: string, page: number = 1, storeId?: string, companyId?: string): Promise<void> {
-  console.log('🟢 InventoryService.loadRowsForPeriod - Started', { period, page, storeId, companyId });
   this.isLoading.set(true);
   this.currentPage.set(page);
 
@@ -438,8 +420,7 @@ async loadRowsForPeriod(period: string, page: number = 1, storeId?: string, comp
       const start = new Date(year, month, 1, 0, 0, 0, 0);
       const end = new Date(year, month + 1, 0, 23, 59, 59, 999);
       updatedAtRange = { start, end };
-      period = `${year}-${String(month + 1).padStart(2, '0')}`; // Convert to YYYY-MM format for processing below
-      console.log('🟢 Date range for', period, { start, end });
+      // Don't convert period - we'll handle it in the filter section below
     }
     
     // Note: we intentionally do not rely on a `yearMonth` field here because historical
@@ -448,60 +429,31 @@ async loadRowsForPeriod(period: string, page: number = 1, storeId?: string, comp
     const pageSize = this.pageSize;
     const fetchLimit = Math.max(page * pageSize, pageSize);
     
-    console.log('🟢 Fetching from both collections...');
-    
-    // DEBUG: Check if there's ANY data in inventoryDeductions for this store/company
-    try {
-      const debugCol = collection(this.firestore, 'inventoryDeductions');
-      const debugFilters: any[] = [];
-      if (baseFilters.length > 0) {
-        // Copy store/company filters only (first filters before date filters)
-        for (const filter of baseFilters) {
-          debugFilters.push(filter);
-          if (debugFilters.length >= 2) break; // Only take first 2 (storeId, companyId)
-        }
-      }
-      const debugQuery = query(debugCol, ...debugFilters, limit(5));
-      const debugSnap = await getDocs(debugQuery);
-      console.log('🔍 DEBUG: Total docs in inventoryDeductions for this store/company:', debugSnap.docs.length);
-      if (debugSnap.docs.length > 0) {
-        debugSnap.docs.forEach((doc, idx) => {
-          const data = doc.data();
-          console.log(`🔍 DEBUG Doc ${idx + 1}:`, {
-            id: doc.id,
-            storeId: data['storeId'],
-            companyId: data['companyId'],
-            productId: data['productId'],
-            deductedAt: data['deductedAt'],
-            createdAt: data['createdAt'],
-            quantity: data['quantity']
-          });
-        });
-      }
-    } catch (debugErr) {
-      console.error('🔍 DEBUG query failed:', debugErr);
-    }
-    
     // Create separate filters for each collection since they use different date fields
     // inventoryDeductions uses 'deductedAt', ordersSellingTracking uses 'createdAt'
     const deductionFilters = [...baseFilters];
     const salesFilters = [...baseFilters];
     
-    // TEMPORARY: Skip date filters to test if documents are being created correctly
-    const SKIP_DATE_FILTERS = true;
-    
     // Add date range filters with appropriate field names
-    if (!SKIP_DATE_FILTERS && (period === 'today' || period === 'yesterday')) {
+    if (period === 'today' || period === 'yesterday') {
       let start: Date | null = null;
       let end: Date | null = null;
       if (period === 'today') {
         start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
         end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
       } else {
-        const y = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
-        start = new Date(y.getFullYear(), y.getMonth(), y.getDate(), 0, 0, 0, 0);
-        end = new Date(y.getFullYear(), y.getMonth(), y.getDate(), 23, 59, 59, 999);
+        const yesterday = new Date(now);
+        yesterday.setDate(now.getDate() - 1);
+        start = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate(), 0, 0, 0, 0);
+        end = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate(), 23, 59, 59, 999);
       }
+      console.log(`📅 Filtering by ${period}:`, {
+        period,
+        start: start?.toISOString(),
+        end: end?.toISOString(),
+        startLocal: start?.toString(),
+        endLocal: end?.toString()
+      });
       if (start && end) {
         // inventoryDeductions uses 'deductedAt'
         deductionFilters.push(where('deductedAt', '>=', start));
@@ -510,9 +462,16 @@ async loadRowsForPeriod(period: string, page: number = 1, storeId?: string, comp
         salesFilters.push(where('createdAt', '>=', start));
         salesFilters.push(where('createdAt', '<=', end));
         updatedAtRange = { start, end };
-        console.log('🟢 Date range for', period, { start, end });
       }
-    } else if (!SKIP_DATE_FILTERS && period) {
+    } else if (period === 'this_month' || period === 'previous_month') {
+      // Use the date range calculated above
+      if (updatedAtRange?.start && updatedAtRange?.end) {
+        deductionFilters.push(where('deductedAt', '>=', updatedAtRange.start));
+        deductionFilters.push(where('deductedAt', '<=', updatedAtRange.end));
+        salesFilters.push(where('createdAt', '>=', updatedAtRange.start));
+        salesFilters.push(where('createdAt', '<=', updatedAtRange.end));
+      }
+    } else if (period) {
       // For month/year periods, create date range
       let start: Date | null = null;
       let end: Date | null = null;
@@ -541,9 +500,12 @@ async loadRowsForPeriod(period: string, page: number = 1, storeId?: string, comp
       this.fetchRowsFromOrdersSellingTracking(salesFilters, fetchLimit, updatedAtRange)
     ]);
 
-    console.log('🟢 Fetch results:', { 
-      deductionRows: deductionRows.length, 
-      salesRows: salesRows.length 
+    console.log(`📊 Query results for ${period}:`, {
+      period,
+      deductionRows: deductionRows.length,
+      salesRows: salesRows.length,
+      storeId,
+      companyId
     });
 
     // Combine both arrays
@@ -561,14 +523,8 @@ async loadRowsForPeriod(period: string, page: number = 1, storeId?: string, comp
     const startIndex = Math.max(0, (page - 1) * pageSize);
     const pageItems = allRows.slice(startIndex, startIndex + pageSize);
     this.rows.set(pageItems);
-    console.log('🟢 Final results:', { 
-      totalRows: allRows.length, 
-      pageItems: pageItems.length,
-      totalCount: this.totalCount(),
-      currentPage: this.currentPage()
-    });
   } catch (e) {
-    console.error('❌ InventoryService.loadRowsForPeriod failed', e);
+    console.error('InventoryService.loadRowsForPeriod failed:', e);
     this.rows.set([]);
     this.totalCount.set(0);
   } finally {
