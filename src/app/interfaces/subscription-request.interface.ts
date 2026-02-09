@@ -9,7 +9,7 @@ export interface SubscriptionRequest {
   ownerEmail: string;
   contactPhone: string;
   requestedAt: Date;
-  requestedTier: 'freemium' | 'standard' | 'premium' | 'enterprise';
+  requestedTier: 'freemium' | 'basic' | 'standard' | 'premium';
   notes: string;
   status: 'pending' | 'approved' | 'rejected' | 'active' | 'closed';
   reviewedAt?: Date;

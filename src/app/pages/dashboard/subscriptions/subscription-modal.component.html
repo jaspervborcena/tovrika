@@ -53,20 +53,20 @@
             <div 
               [class.selected]="selectedTier() === plan.tier"
               [class.popular]="plan.popular"
-              [class.enterprise-card]="plan.tier === 'enterprise'"
+              [class.premium-card]="plan.tier === 'premium'"
               (click)="selectTier(plan.tier)"
               class="plan-card"
             >
               @if (plan.popular) {
                 <div class="popular-badge">Most Popular</div>
               }
-              @if (plan.tier === 'enterprise') {
-                <div class="enterprise-badge">Custom Solution</div>
+              @if (plan.tier === 'premium') {
+                <div class="premium-badge">Custom Solution</div>
               }
 
               <div class="plan-header">
                 <h3 class="plan-name">{{ plan.name }}</h3>
-                @if (plan.tier !== 'enterprise') {
+                @if (plan.tier !== 'premium') {
                   <div class="plan-price">
                     <span class="currency">₱</span>
                     <span class="amount">{{ plan.price }}</span>
@@ -79,9 +79,10 @@
                   }
                 } @else {
                   <div class="plan-price">
-                    <span class="custom-pricing">Contact us for pricing</span>
+                    <span class="amount">{{ plan.price }}</span>
+                    <span class="period">/month</span>
                   </div>
-                  <p class="billing-note">Custom requirements</p>
+                  <p class="billing-note">Billed quarterly</p>
                 }
               </div>
 
@@ -98,11 +99,11 @@
 
               <button 
                 [class.btn-selected]="selectedTier() === plan.tier"
-                [class.btn-request]="plan.tier === 'enterprise'"
+                [class.btn-request]="plan.tier === 'premium'"
                 class="btn-select-plan"
               >
-                @if (plan.tier === 'enterprise') {
-                  {{ selectedTier() === plan.tier ? 'Selected - Request ✓' : 'Request Enterprise' }}
+                @if (plan.tier === 'premium') {
+                  {{ selectedTier() === plan.tier ? 'Selected - Contact Sales ✓' : 'Contact Sales' }}
                 } @else {
                   {{ selectedTier() === plan.tier ? 'Selected ✓' : 'Select Plan' }}
                 }
@@ -264,8 +265,8 @@
           <button (click)="proceedToPayment()" class="btn-proceed">
             @if (selectedTier() === 'freemium') {
               Activate Free Plan
-            } @else if (selectedTier() === 'enterprise') {
-              Request Enterprise
+            } @else if (selectedTier() === 'premium') {
+              Contact Sales
             } @else {
               Proceed to Payment
             }

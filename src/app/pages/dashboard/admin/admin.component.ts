@@ -8,6 +8,7 @@ import { StoreService } from '../../../services/store.service';
 import { ToastService } from '../../../shared/services/toast.service';
 import { SubscriptionRequest } from '../../../interfaces/subscription-request.interface';
 import { Router } from '@angular/router';
+import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../shared/components/confirmation-dialog/confirmation-dialog.component';
 
 interface SubscriptionRequestWithStore extends SubscriptionRequest {
   storeName?: string;
@@ -16,7 +17,7 @@ interface SubscriptionRequestWithStore extends SubscriptionRequest {
 @Component({
   selector: 'app-admin',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, ConfirmationDialogComponent],
   templateUrl: './admin.component.html',
   styleUrls: ['./admin.component.css']
 })
@@ -34,6 +35,11 @@ export class AdminComponent implements OnInit {
   searchTerm = signal('');
   filterStatus = signal<'all' | 'pending' | 'active' | 'closed'>('all');
   filterTier = signal<'all' | 'freemium' | 'standard' | 'premium' | 'enterprise'>('all');
+  
+  // Confirmation dialog
+  confirmationDialogData = signal<ConfirmationDialogData | null>(null);
+  pendingApprovalRequest = signal<SubscriptionRequestWithStore | null>(null);
+  pendingRejectionRequest = signal<SubscriptionRequestWithStore | null>(null);
 
   // Computed
   filteredRequests = computed(() => {
@@ -98,16 +104,16 @@ export class AdminComponent implements OnInit {
           const data = docSnap.data();
           const toDate = (v: any) => v?.toDate?.() || (v instanceof Date ? v : null);
 
-          // Get store name if storeId exists in companyId field (or fetch from stores)
-          let storeName = 'N/A';
-          if (data['companyId']) {
+          // Get store name from request or fetch by storeId
+          let storeName = data['storeName'] || 'N/A';
+          if (!data['storeName'] && data['storeId']) {
             try {
-              const stores = await this.storeService.getStoresByCompany(data['companyId']);
-              if (stores.length > 0) {
-                storeName = stores[0].storeName; // Get first store or match by subscriptionId
+              const store = await this.storeService.getStore(data['storeId']);
+              if (store) {
+                storeName = store.storeName;
               }
             } catch (error) {
-              console.warn('Could not fetch store name:', error);
+              console.warn('Could not fetch store by storeId:', error);
             }
           }
 
@@ -115,6 +121,7 @@ export class AdminComponent implements OnInit {
             id: docSnap.id,
             companyId: data['companyId'] || '',
             companyName: data['companyName'] || '',
+            storeId: data['storeId'] || '',
             ownerEmail: data['ownerEmail'] || '',
             contactPhone: data['contactPhone'] || '',
             requestedAt: toDate(data['requestedAt']),
@@ -146,51 +153,105 @@ export class AdminComponent implements OnInit {
   }
 
   async approveRequest(request: SubscriptionRequestWithStore) {
-    if (!request.id || !request.subscriptionId) {
-      this.toast.error('Invalid request data');
+    console.log('🔍 Approve request called with:', request);
+    
+    if (!request.id) {
+      console.error('❌ Request ID is missing:', request);
+      this.toast.error('Invalid request data - missing request ID');
       return;
     }
 
-    const confirmed = confirm(
-      `Approve subscription request?\n\n` +
-      `Company: ${request.companyName}\n` +
-      `Tier: ${request.requestedTier.toUpperCase()}\n` +
-      `Amount: ₱${request.amountPaid || 0}`
-    );
-    if (!confirmed) return;
+    if (!request.storeId) {
+      console.error('❌ Store ID is missing:', request);
+      this.toast.error('Invalid request data - missing store ID');
+      return;
+    }
+
+    if (!request.companyId) {
+      console.error('❌ Company ID is missing:', request);
+      this.toast.error('Invalid request data - missing company ID');
+      return;
+    }
+
+    this.pendingApprovalRequest.set(request);
+    this.confirmationDialogData.set({
+      title: 'Approve Subscription Request',
+      message: `<strong>Company:</strong> ${request.companyName}<br>
+<strong>Store:</strong> ${request.storeName || 'N/A'}<br>
+<strong>Tier:</strong> ${request.requestedTier.toUpperCase()}<br>
+<strong>Duration:</strong> ${request.durationMonths || 1} month(s)<br>
+<strong>Amount:</strong> ₱${request.amountPaid || 0}`,
+      confirmText: 'Approve',
+      cancelText: 'Cancel',
+      type: 'info',
+      isHtml: true
+    });
+  }
+
+  async onApprovalConfirmed() {
+    const request = this.pendingApprovalRequest();
+    if (!request) return;
 
     this.loading.set(true);
+    this.confirmationDialogData.set(null);
+    this.pendingApprovalRequest.set(null);
+    
     try {
       const user = this.authService.getCurrentUser();
       if (!user) throw new Error('User not authenticated');
 
-      // 1. Update subscription status to active
-      await this.subscriptionService.updateSubscription(request.subscriptionId, {
-        status: 'active'
-      } as any);
+      // 1. Create or update subscription
+      let subscriptionId = request.subscriptionId;
+      
+      if (!subscriptionId && request.storeId && request.companyId) {
+        // Create new subscription since it doesn't exist yet
+        const planTier = request.requestedTier as 'basic' | 'standard' | 'premium';
+        const startDate = request.proposedStartDate || new Date();
+        const durationMonths = request.durationMonths || 1;
+        
+        subscriptionId = await this.subscriptionService.createPaid(
+          request.companyId,
+          request.storeId,
+          request.uid || user.uid,
+          planTier,
+          startDate,
+          durationMonths,
+          request.amountPaid || 0,
+          {
+            paymentMethod: request.paymentMethod || 'gcash',
+            paymentReference: request.paymentReference || ''
+          }
+        );
+        
+        console.log('✅ Created new subscription:', subscriptionId);
+      } else if (subscriptionId) {
+        // Update existing subscription status to active
+        await this.subscriptionService.updateSubscription(subscriptionId, {
+          status: 'active'
+        } as any);
+      }
 
       // 2. Update subscription request status
+      if (!request.id) throw new Error('Request ID is missing');
       const requestRef = doc(this.firestore, 'subscriptionRequests', request.id);
       await updateDoc(requestRef, {
         status: 'active',
         reviewedAt: Timestamp.now(),
-        reviewedBy: user.uid
+        reviewedBy: user.uid,
+        subscriptionId: subscriptionId
       });
 
-      // 3. Update store subscription end date if we can find the store
-      if (request.companyId) {
+      // 3. Update store subscription end date
+      if (request.storeId && subscriptionId) {
         try {
-          const stores = await this.storeService.getStoresByCompany(request.companyId);
-          if (stores.length > 0) {
-            const subscription = await this.subscriptionService.getSubscriptionForStore(
-              request.companyId,
-              stores[0].id!
-            );
-            if (subscription?.data.endDate) {
-              await this.storeService.updateStore(stores[0].id!, {
-                subscriptionEndDate: subscription.data.endDate as any
-              });
-            }
+          const subscription = await this.subscriptionService.getSubscriptionForStore(
+            request.companyId,
+            request.storeId
+          );
+          if (subscription?.data.endDate) {
+            await this.storeService.updateStore(request.storeId, {
+              subscriptionEndDate: subscription.data.endDate as any
+            });
           }
         } catch (error) {
           console.warn('Could not update store subscription end date:', error);
@@ -207,24 +268,45 @@ export class AdminComponent implements OnInit {
     }
   }
 
+  onApprovalCancelled() {
+    this.confirmationDialogData.set(null);
+    this.pendingApprovalRequest.set(null);
+  }
+
   async rejectRequest(request: SubscriptionRequestWithStore) {
     if (!request.id) {
       this.toast.error('Invalid request data');
       return;
     }
 
-    const reason = prompt(
-      `Close subscription request for ${request.companyName}?\n\n` +
-      `Please provide a reason (optional):`
-    );
-    if (reason === null) return; // User clicked cancel
+    this.pendingRejectionRequest.set(request);
+    this.confirmationDialogData.set({
+      title: 'Close Subscription Request',
+      message: `Close subscription request for <strong>${request.companyName}</strong>?`,
+      confirmText: 'Close Request',
+      cancelText: 'Cancel',
+      type: 'warning',
+      isHtml: true,
+      showReason: true,
+      reasonLabel: 'Reason (optional)',
+      reasonPlaceholder: 'Enter reason for closing this request...'
+    });
+  }
+
+  async onRejectionConfirmed(reason?: string) {
+    const request = this.pendingRejectionRequest();
+    if (!request) return;
 
     this.loading.set(true);
+    this.confirmationDialogData.set(null);
+    this.pendingRejectionRequest.set(null);
+
     try {
       const user = this.authService.getCurrentUser();
       if (!user) throw new Error('User not authenticated');
 
       // Update subscription request status to closed
+      if (!request.id) throw new Error('Request ID is missing');
       const requestRef = doc(this.firestore, 'subscriptionRequests', request.id);
       const updateData: any = {
         status: 'closed',
@@ -246,6 +328,11 @@ export class AdminComponent implements OnInit {
     } finally {
       this.loading.set(false);
     }
+  }
+
+  onRejectionCancelled() {
+    this.confirmationDialogData.set(null);
+    this.pendingRejectionRequest.set(null);
   }
 
   viewReceipt(receiptUrl?: string) {

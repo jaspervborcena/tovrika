@@ -106,7 +106,7 @@ export class SubscriptionService {
   }
 
   /** Helper: Create a paid subscription starting at a given date for duration in months */
-  async createPaid(companyId: string, storeId: string, uid: string, planType: 'standard' | 'premium' | 'enterprise', startDate: Date, durationMonths: number, amountPaid: number, extras?: Partial<SubDoc>): Promise<string> {
+  async createPaid(companyId: string, storeId: string, uid: string, planType: 'basic' | 'standard' | 'premium', startDate: Date, durationMonths: number, amountPaid: number, extras?: Partial<SubDoc>): Promise<string> {
     const endDate = new Date(startDate);
     endDate.setMonth(endDate.getMonth() + durationMonths);
     return this.createSubscription({
