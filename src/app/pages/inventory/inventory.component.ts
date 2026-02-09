@@ -694,15 +694,19 @@ export class InventoryComponent implements OnInit {
     }
   }
 
-  onStoreChange(): void {
-    const currentPermission = this.authService.getCurrentPermission();
-    // Reload inventory data for selected store
-    this.inventoryService.loadRowsForPeriod(
-      this.selectedPeriod, 
-      1, 
-      this.selectedStoreId(),
-      currentPermission?.companyId
-    );
+  onStoreChange(event: Event): void {
+    const target = event.target as HTMLSelectElement;
+    if (target && target.value) {
+      this.selectedStoreId.set(target.value);
+      const currentPermission = this.authService.getCurrentPermission();
+      // Reload inventory data for selected store
+      this.inventoryService.loadRowsForPeriod(
+        this.selectedPeriod, 
+        1, 
+        this.selectedStoreId(),
+        currentPermission?.companyId
+      );
+    }
   }
 
   getSelectedStoreName(): string {

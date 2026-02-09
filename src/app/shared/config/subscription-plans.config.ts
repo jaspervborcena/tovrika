@@ -15,7 +15,7 @@ export interface SubscriptionPlanFeature {
 }
 
 export interface SubscriptionPlan {
-  tier: 'freemium' | 'standard' | 'premium' | 'enterprise';
+  tier: 'freemium' | 'basic' | 'standard' | 'premium';
   name: string;
   price: number | null;
   billingCycle: 'monthly';
@@ -37,95 +37,95 @@ export interface SubscriptionPlan {
 
 export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
   {
-    tier: 'standard',
+    tier: 'basic',
     name: 'Basic Plan',
     price: 599,
     billingCycle: 'monthly',
     currency: '₱',
-    description: 'Perfect for small businesses',
-    cta: 'Start 14-Day Trial',
+    description: 'Flexible billing: monthly, quarterly, or annually',
+    cta: 'Get Started',
     features: [
       '14-day free trial',
+      'Flexible billing: monthly, quarterly, or annually',
       '1 Store Location',
-      'Any Laptop, Computer, or Android device',
-      '4 Users (Owner + Store Manager + 2 Cashiers)',
+      '1 POS Store for any device',
+      'Works on any laptop, computer, or Android device',
+      '4 Users (Owner + Manager + 2 Cashiers)',
       '50 Products Maximum',
       '10,000 Transactions',
       '3-Month Data History',
-      'Cash + GCash/Maya',
-      'Thermal Receipt Printing',
-      'Expansion: +₱500 per additional store',
-      '+50 Products & +10,000 Transactions per added store',
-      '+4 Users (Owner + Manager + 2 Cashiers) per added store'
+      'Payment Methods: Cash, GCash, Maya',
+      'Expansion: Add more stores for ₱500/store'
     ],
     limits: {
       stores: 1,
-      users: '4 (Owner + Store Manager + 2 Cashiers)',
-      devices: 'unlimited',
+      users: '4 (Owner + Manager + 2 Cashiers)',
+      devices: 1,
       transactions: 10000,
       products: 50,
       dataRetention: '3 months'
     }
   },
   {
-    tier: 'premium',
+    tier: 'standard',
     name: 'Standard Plan',
     price: 1099,
     billingCycle: 'monthly',
     currency: '₱',
     popular: true,
     badge: 'Most Popular',
-    description: 'Built for growing teams',
-    cta: 'Start 14-Day Trial',
+    description: 'Flexible billing: monthly, quarterly, or annually',
+    cta: 'Get Started',
     features: [
       '14-day free trial',
+      'Flexible billing: monthly, quarterly, or annually',
       '1 Store Location',
-      'Any Laptop, Computer, or Android device',
-      '10 Users (Owner + Store Managers + Cashiers)',
+      '2 POS Store for any device',
+      'Works on any laptop, computer, or Android device',
+      '10 Users (2 Owners + 4 Managers + 4 Cashiers)',
       '150 Products Maximum',
       '25,000 Transactions',
       '1-Year Data History',
-      'Cash + GCash/Maya',
-      'Thermal Receipt Printing',
-      'Additional features available',
-      'Priority email support'
+      'Payment Methods: Cash, GCash, Maya',
+      'Additional Features Available',
+      'Expansion: Add more stores for ₱500/store'
     ],
     limits: {
       stores: 1,
-      users: '10 (Owner + Store Managers + Cashiers)',
-      devices: 'unlimited',
+      users: '10 (2 Owners + 4 Managers + 4 Cashiers)',
+      devices: 2,
       transactions: 25000,
       products: 150,
       dataRetention: '1 year'
     }
   },
   {
-    tier: 'enterprise',
+    tier: 'premium',
     name: 'Premium Plan',
     price: 3999,
     billingCycle: 'monthly',
     currency: '₱',
-    description: 'Designed for large businesses (Billed quarterly)',
-    cta: 'Contact Us',
+    description: 'Billed quarterly • Supports up to 10 branches',
+    cta: 'Contact Sales',
     features: [
-      'Up to 10 Branches included',
-      'Any Laptop, Computer, or Android device',
-      '50 Users (Full Staffing for all branches)',
-      '1,500 Products Maximum',
+      'Billed quarterly',
+      'Supports up to 10 branches',
+      'Dedicated Pipeline',
+      'Integration with Company or Store Domain',
+      'Up to 10 Branches',
+      '50 Users',
+      'Any Device (Laptop, Computer, or Android)',
+      '1,500 Products',
       '150,000 Transactions',
-      '3+ Years Data History',
-      'Cash, GCash, Maya, & Credit Card',
-      'Dedicated Pipeline (Private & Secure)',
-      'Domain Integration (yourbrand.com)',
-      'New Requests & Custom Features (Prioritized)',
-      'Thermal Receipt Printing',
-      'Early access to Integrated Payment APIs',
-      'Priority Support (Direct Line to Developer)',
-      'Billed quarterly with annual options'
+      'More than 3 Years Data History',
+      'Payment Methods: Cash, GCash, Maya',
+      'Additional Features Available',
+      'Custom Feature Requests (Discuss with Tovrika Product Owner)',
+      'Priority Support'
     ],
     limits: {
       stores: 10,
-      users: '50 (Full Staffing for all branches)',
+      users: '50',
       devices: 'unlimited',
       transactions: 150000,
       products: 1500,
@@ -344,7 +344,7 @@ export const PROMO_CODES = {
   WELCOME10: { discount: 10, description: 'Welcome Discount - 10% off' }
 };
 
-export function getPlanByTier(tier: 'freemium' | 'standard' | 'premium' | 'enterprise'): SubscriptionPlan | undefined {
+export function getPlanByTier(tier: 'freemium' | 'basic' | 'standard' | 'premium'): SubscriptionPlan | undefined {
   return SUBSCRIPTION_PLANS.find(plan => plan.tier === tier);
 }
 

@@ -234,3 +234,11 @@
     </div>
   }
 </div>
+
+<!-- Confirmation Dialog -->
+<app-confirmation-dialog
+  *ngIf="confirmationDialogData()"
+  [dialogData]="confirmationDialogData()!"
+  (confirmed)="pendingApprovalRequest() ? onApprovalConfirmed() : onRejectionConfirmed($event.reason)"
+  (cancelled)="pendingApprovalRequest() ? onApprovalCancelled() : onRejectionCancelled()">
+</app-confirmation-dialog>

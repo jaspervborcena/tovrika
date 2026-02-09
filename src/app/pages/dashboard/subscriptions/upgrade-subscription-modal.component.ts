@@ -12,7 +12,7 @@ import { ToastService } from '../../../shared/services/toast.service';
 import { SubscriptionRequest } from '../../../interfaces/subscription-request.interface';
 import { OfflineDocumentService } from '../../../core/services/offline-document.service';
 
-type Tier = 'standard' | 'premium';
+type Tier = 'basic' | 'standard' | 'premium';
 type PaymentMethod = 'gcash' | 'paymaya' | 'paypal';
 
 @Component({
@@ -39,7 +39,7 @@ export class UpgradeSubscriptionModalComponent implements OnChanges {
   @Input() storeCode?: string;
   @Input() companyName?: string;
   // Optional initial values when opened from another modal (e.g., plan chooser)
-  @Input() initialTier?: 'standard' | 'premium';
+  @Input() initialTier?: 'basic' | 'standard' | 'premium';
   @Input() initialDurationMonths?: number;
   @Input() initialPromoCode?: string;
   @Input() initialReferralCode?: string;
@@ -49,8 +49,8 @@ export class UpgradeSubscriptionModalComponent implements OnChanges {
 
   // UI State
   activeTab: PaymentMethod = 'gcash';
-  selectedTier: Tier = 'standard';
-  durationMonths = 1;
+  selectedTier: Tier = 'basic';
+  durationMonths = signal(1);
   promoCode = '';
   referralCode = '';
   paymentReference = '';
@@ -110,7 +110,7 @@ export class UpgradeSubscriptionModalComponent implements OnChanges {
   finalAmount = computed(() => {
     const base = this.planPrice() || 0;
     const discount = 0; // expand later with promo
-    return calculateFinalAmount(base, discount, this.durationMonths);
+    return calculateFinalAmount(base, discount, this.durationMonths());
   });
 
   onTabChange(tab: PaymentMethod) {
@@ -247,23 +247,23 @@ export class UpgradeSubscriptionModalComponent implements OnChanges {
       
       // Calculate dates for reference (admin will use these when creating subscription)
       const startDate = new Date();
-      const endDate = calculateExpiryDate(this.durationMonths, startDate);
+      const endDate = calculateExpiryDate(this.durationMonths(), startDate);
       
       const requestData: Omit<SubscriptionRequest, 'id'> = {
         companyId: this.companyId,
         companyName: company,
         storeId: this.storeId,
-        storeName: this.storeName || store?.storeName || '',
-        storeCode: this.storeCode || store?.storeCode || '',
+        storeName: store?.storeName || this.storeName || '',
+        storeCode: store?.storeCode || this.storeCode || '',
         uid: user.uid,
         ownerEmail: user.email || '',
         contactPhone: store?.phoneNumber || this.payerMobile || '',
         requestedAt: new Date(),
         requestedTier: this.selectedTier,
-        notes: `Upgrade to ${this.selectedTier.toUpperCase()} plan for ${this.durationMonths} month(s). Payment: ${this.activeTab.toUpperCase()}`,
+        notes: `Upgrade to ${this.selectedTier.toUpperCase()} plan for ${this.durationMonths()} month(s). Payment: ${this.activeTab.toUpperCase()}`,
         status: 'pending',
         // Subscription details (will be used when creating subscription on approval)
-        durationMonths: this.durationMonths,
+        durationMonths: this.durationMonths(),
         proposedStartDate: startDate,
         proposedEndDate: endDate,
         // Payment details
@@ -358,8 +358,8 @@ export class UpgradeSubscriptionModalComponent implements OnChanges {
 
   private reset() {
     this.activeTab = 'gcash';
-    this.selectedTier = 'standard';
-    this.durationMonths = 1;
+    this.selectedTier = 'basic';
+    this.durationMonths.set(1);
     this.promoCode = '';
     this.referralCode = '';
     this.paymentReference = '';
@@ -402,7 +402,7 @@ export class UpgradeSubscriptionModalComponent implements OnChanges {
       }
       // Apply initial values if provided
       if (this.initialTier) this.selectedTier = this.initialTier;
-      if (this.initialDurationMonths && this.initialDurationMonths > 0) this.durationMonths = this.initialDurationMonths;
+      if (this.initialDurationMonths && this.initialDurationMonths > 0) this.durationMonths.set(this.initialDurationMonths);
       if (this.initialPromoCode !== undefined) this.promoCode = this.initialPromoCode || '';
       if (this.initialReferralCode !== undefined) this.referralCode = this.initialReferralCode || '';
       // Prefill amount with current total if empty or invalid

@@ -26,7 +26,7 @@ export class SubscriptionModalComponent implements OnInit {
   @Input() isOpen = false;
   @Output() closeModal = new EventEmitter<void>();
   @Output() subscriptionSubmitted = new EventEmitter<{
-    tier: 'freemium' | 'standard' | 'premium' | 'enterprise';
+    tier: 'freemium' | 'basic' | 'standard' | 'premium';
     billingCycle: 'monthly' | 'quarterly' | 'yearly';
     promoCode?: string;
     referralCode?: string;
@@ -38,7 +38,7 @@ export class SubscriptionModalComponent implements OnInit {
 
   // Notify parent to open centralized upgrade modal (passes selected plan & billing info)
   @Output() openUpgrade = new EventEmitter<{
-    tier: 'freemium' | 'standard' | 'premium' | 'enterprise';
+    tier: 'freemium' | 'basic' | 'standard' | 'premium';
     billingCycle: 'monthly' | 'quarterly' | 'yearly';
     promoCode?: string;
     referralCode?: string;
@@ -49,7 +49,7 @@ export class SubscriptionModalComponent implements OnInit {
   plans = SUBSCRIPTION_PLANS;
   features = SUBSCRIPTION_FEATURES;
 
-  selectedTier = signal<'freemium' | 'standard' | 'premium' | 'enterprise'>('standard');
+  selectedTier = signal<'freemium' | 'basic' | 'standard' | 'premium'>('basic');
   billingCycle = signal<'monthly' | 'quarterly' | 'yearly'>('monthly');
   promoCode = signal('');
   referralCode = signal('');
@@ -130,11 +130,11 @@ export class SubscriptionModalComponent implements OnInit {
     }
   }
 
-  selectTier(tier: 'freemium' | 'standard' | 'premium' | 'enterprise') {
+  selectTier(tier: 'freemium' | 'basic' | 'standard' | 'premium') {
     this.selectedTier.set(tier);
     
-    // If enterprise selected, show request form instead of payment
-    if (tier === 'enterprise') {
+    // If premium selected, show request form instead of payment
+    if (tier === 'premium') {
       this.showEnterpriseRequest.set(true);
       this.showPaymentForm.set(false);
     } else {
@@ -165,8 +165,8 @@ export class SubscriptionModalComponent implements OnInit {
   }
 
   proceedToPayment() {
-    // Enterprise tier shows request form instead
-    if (this.selectedTier() === 'enterprise') {
+    // Premium tier shows request form instead
+    if (this.selectedTier() === 'premium') {
       this.showEnterpriseRequest.set(true);
       this.showPaymentForm.set(false);
     } else {
@@ -211,7 +211,7 @@ export class SubscriptionModalComponent implements OnInit {
         ownerEmail: user.email || '',
         contactPhone: this.store?.phoneNumber || '',
         requestedAt: new Date(),
-        requestedTier: 'enterprise',
+        requestedTier: 'premium',
         notes: notes,
         status: 'pending'
       };

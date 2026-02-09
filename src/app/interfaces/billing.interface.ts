@@ -2,7 +2,7 @@ export interface CompanyBillingHistory {
   id?: string;
   companyId: string;
   storeId: string;
-  tier: 'freemium' | 'standard' | 'premium' | 'enterprise';
+  tier: 'freemium' | 'basic' | 'standard' | 'premium';
   cycle: 'monthly' | 'quarterly' | 'yearly';
   durationMonths: number;
   amount: number;
