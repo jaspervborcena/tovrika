@@ -5,7 +5,7 @@
     <div class="modal-header">
       <div>
         <h3>🚀 Upgrade Subscription</h3>
-        <p class="subtitle" *ngIf="(resolvedCompanyName() || storeName)">Unlock more features for {{ resolvedCompanyName() || storeName }}</p>
+        <p class="subtitle" *ngIf="storeName">Unlock more features for {{ storeName }}</p>
       </div>
       <button class="close-btn" (click)="close()">✖</button>
     </div>
@@ -21,13 +21,14 @@
         <div class="section">
           <label>Plan</label>
           <select [(ngModel)]="selectedTier">
-            <option value="standard">Standard (₱{{ planPrice() || 0 }}/mo)</option>
-            <option value="premium">Premium (₱{{ planPrice() || 0 }}/mo)</option>
+            <option value="basic">Basic Plan (₱599/mo)</option>
+            <option value="standard">Standard Plan (₱1,099/mo)</option>
+            <option value="premium">Premium Plan (₱3,999/mo)</option>
           </select>
         </div>
         <div class="section">
           <label>Duration (months)</label>
-          <input type="number" min="1" [(ngModel)]="durationMonths" />
+          <input type="number" min="1" [ngModel]="durationMonths()" (ngModelChange)="durationMonths.set($event)" />
         </div>
       </div>
 
@@ -44,21 +45,17 @@
 
       <div class="summary-box">
         <div>Plan Price: <strong>₱{{ planPrice() || 0 }}</strong> / mo</div>
-        <div>Duration: <strong>{{ durationMonths }} month(s)</strong></div>
+        <div>Duration: <strong>{{ durationMonths() }} month(s)</strong></div>
         <div>Total Due: <strong>₱{{ finalAmount() }}</strong></div>
       </div>
 
       <h4 class="section-heading">Payment Details</h4>
       <div class="tabs">
         <button [class.active]="activeTab === 'gcash'" (click)="onTabChange('gcash')">GCash</button>
-        <button [class.active]="activeTab === 'paymaya'" (click)="onTabChange('paymaya')">PayMaya</button>
-  <button [class.active]="activeTab === 'paypal'" (click)="onTabChange('paypal')">Card (PayPal)</button>
       </div>
 
       <div class="tab-content">
         <p class="help" *ngIf="activeTab === 'gcash'">Scan the GCash QR or send to the official account, then upload your payment screenshot.</p>
-        <p class="help" *ngIf="activeTab === 'paymaya'">Pay via PayMaya and upload your payment confirmation screenshot.</p>
-  <p class="help" *ngIf="activeTab === 'paypal'">Pay securely by credit or debit card through PayPal.</p>
         
 
         <!-- QR image / placeholder -->
@@ -68,34 +65,9 @@
           </button>
           <div *ngIf="!accountInfo[activeTab].qrUrl" class="qr-placeholder">QR not set for {{ activeTab | titlecase }}</div>
         </div>
-  <p class="hint" *ngIf="accountInfo[activeTab].qrUrl && activeTab !== 'paypal'">Tip: Click the QR to view a larger version</p>
+  <p class="hint" *ngIf="accountInfo[activeTab].qrUrl">Tip: Click the QR to view a larger version</p>
 
-        <!-- PayPal Card Details (UI only; will be wired with Hosted Fields using your config) -->
-  <div class="section" *ngIf="activeTab === 'paypal'">
-          <div class="grid-2">
-            <div class="section">
-              <label>Cardholder Name</label>
-              <input type="text" [(ngModel)]="cardName" placeholder="Name on card" autocomplete="cc-name" />
-            </div>
-            <div class="section">
-              <label>Card Number</label>
-              <input type="text" [(ngModel)]="cardNumber" placeholder="•••• •••• •••• ••••" autocomplete="cc-number" inputmode="numeric" />
-            </div>
-          </div>
-          <div class="grid-2">
-            <div class="section">
-              <label>Expiry (MMYY)</label>
-              <input type="text" [(ngModel)]="cardExpiry" placeholder="MMYY" maxlength="4" inputmode="numeric" autocomplete="cc-exp" (input)="onCardExpiryInput($event)" />
-            </div>
-            <div class="section">
-              <label>CVV</label>
-              <input type="password" [(ngModel)]="cardCvv" placeholder="CVV" maxlength="4" inputmode="numeric" autocomplete="cc-csc" />
-            </div>
-          </div>
-          <!-- Pay action will be enabled once Hosted Fields is wired -->
-        </div>
-
-        <div class="payment-details" *ngIf="activeTab !== 'paypal'">
+        <div class="payment-details">
           <div class="detail">
             <div class="label">{{ accountInfo[activeTab].numberLabel || 'Account Number / Mobile Number' }}</div>
             <div class="value">{{ accountInfo[activeTab].numberValue || '09XX XXX XXXX' }}</div>
@@ -108,9 +80,9 @@
 
         <!-- Payer-provided details -->
         <div class="grid-2 mt-2">
-          <div class="section" *ngIf="activeTab !== 'paypal'">
+          <div class="section">
             <label>Reference ID</label>
-            <input type="text" [(ngModel)]="paymentReference" placeholder="e.g., GCash Ref / Maya Txn" required />
+            <input type="text" [(ngModel)]="paymentReference" placeholder="e.g., GCash Ref" required />
             <div class="error" *ngIf="showErrors && (!paymentReference || !paymentReference.trim())">Reference ID is required.</div>
           </div>
           <div class="section" *ngIf="activeTab !== 'paypal'">
@@ -133,20 +105,20 @@
           </div>
         </div>
 
-        <div class="section" *ngIf="activeTab !== 'paypal'">
+        <div class="section">
           <label>Description</label>
           <textarea rows="2" [(ngModel)]="paymentDescription" placeholder="Optional note about this payment"></textarea>
         </div>
       </div>
 
       <!-- Amount to pay summary -->
-      <div class="pay-summary" *ngIf="activeTab !== 'paypal'">
+      <div class="pay-summary">
         <div class="title">Amount to Pay</div>
         <div class="value">₱{{ finalAmount() }}</div>
-        <div class="note">You will be charged ₱{{ finalAmount() }} for {{ durationMonths }} month(s) of {{ selectedTier | titlecase }} plan.</div>
+        <div class="note">You will be charged ₱{{ finalAmount() }} for {{ durationMonths() }} month(s) of {{ selectedTier | titlecase }} plan.</div>
       </div>
 
-      <div class="section" *ngIf="activeTab !== 'paypal'">
+      <div class="section">
         <label>Payment Receipt Screenshot</label>
         <input type="file" accept="image/*" (change)="onFileSelected($event)" />
         <p class="hint">.jpg or .png up to ~5MB</p>
