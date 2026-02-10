@@ -9,7 +9,8 @@ import {
   deleteDoc, 
   query, 
   where, 
-  getDocs 
+  getDocs,
+  addDoc
 } from '@angular/fire/firestore';
 import { DocumentSnapshot, DocumentData } from 'firebase/firestore';
 import { AuthService } from './auth.service';
@@ -156,8 +157,28 @@ export class CompanySetupService {
         
         await this.authService.updateUserData({ 
           permissions: updatedPermissions,
-          currentCompanyId: docRef.id // Set as current company
+          currentCompanyId: docRef.id, // Set as current company
+          roleId: 'creator'
         });
+
+        // Create userRoles entry for creator role
+        if (currentUser?.uid) {
+          try {
+            const userRolesRef = collection(this.firestore, 'userRoles');
+            await addDoc(userRolesRef, {
+              companyId: docRef.id,
+              userId: currentUser.uid,
+              roleId: 'creator',
+              storeId: '', // Empty for company-level creator
+              createdAt: new Date(),
+              updatedAt: new Date()
+            });
+            console.log('✅ Created userRoles entry for creator');
+          } catch (roleError) {
+            console.error('Error creating userRoles entry:', roleError);
+          }
+        }
+
         console.log('User permissions updated successfully');
       } catch (userUpdateError) {
         console.error('Error updating user permissions:', userUpdateError);

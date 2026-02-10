@@ -226,6 +226,7 @@ export class FIFOInventoryService {
       const createDate = new Date();
       // Build deduction data with all fields
       const deductionData = {
+        eventType: 'completed' as const,
         orderId,
         orderDetailId,
         productId,
@@ -241,7 +242,7 @@ export class FIFOInventoryService {
         companyId: batchData.companyId || '',
         productName: product?.productName || '',
         productCode: product?.productCode || '',
-        sku: product?.skuId || productId,
+        skuId: product?.skuId || productId,
         costPrice: batchData.unitPrice || 0,
         batchNumber: batchData.batchNumber?.toString() || '',
         invoiceNumber: orderId, // Use orderId as invoice reference

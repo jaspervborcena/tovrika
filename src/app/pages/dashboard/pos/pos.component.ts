@@ -2474,12 +2474,11 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
         const res = await this.ordersSellingTrackingService.markOrderTrackingDamaged(orderId, creds.userCode || undefined, reason || undefined);
         const created = res?.created ?? 0;
         const errors = res?.errors ?? [];
-        const msg = `Created ${created} damaged record(s). ${errors.length ? 'Errors: ' + errors.length : ''}`;
         
         // Update order status to "damaged" - this will also record to ledger automatically
         await this.orderService.updateOrderStatus(orderId, 'damaged', reason || undefined);
         
-        await this.showConfirmationDialog({ title: 'Success', message: 'Successfully marked damage. ' + msg, confirmText: 'OK', cancelText: '', type: 'info' });
+        await this.showConfirmationDialog({ title: 'Success', message: 'Successfully marked as damaged.', confirmText: 'OK', cancelText: '', type: 'info' });
 
         // Mark that damage has been applied so UI will hide/lock actions as required
         this.damageAppliedSignal.set(true);
@@ -2551,9 +2550,9 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     const map: any = { returned: 'returned', refunded: 'refunded', damaged: 'damaged', cancelled: 'cancelled' };
     const eventType = map[status] || status;
     const statusSuccessMap: any = {
-      return: 'Successfully marked items as returned.',
-      refund: 'Successfully refunded the order.',
-      damage: 'Successfully marked items as damaged.',
+      return: 'Successfully marked for return.',
+      refund: 'Successfully marked for refund.',
+      damage: 'Successfully marked as damaged.',
       cancel: 'Order successfully cancelled.'
     };
     const successMessage = statusSuccessMap[eventType] || 'Action completed successfully.';
@@ -4328,6 +4327,10 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       // Mark order as completed and store the receipt data for reprinting
       this.isOrderCompleted.set(true);
       console.log('✅ Order marked as completed');
+      
+      // Reset new order state so tiles are disabled and user must click "New Order" again
+      this.isNewOrderActive.set(false);
+      console.log('🔒 New order state reset - tiles disabled, user must start new order');
       
       // orderDetails.status is set at creation time by the invoice service
       this.completedOrderData.set(updatedReceiptData);

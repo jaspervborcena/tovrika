@@ -264,7 +264,7 @@ export class OrdersSellingTrackingService {
         productId: data.productId,
         productName: data.productName,
         productCode: data.productCode || product?.productCode,
-        sku: data.sku || product?.skuId,
+        skuId: data.skuId || product?.skuId,
         price: data.price,
         quantity: data.quantity,
         total: data.total,
@@ -356,7 +356,7 @@ async markOrderTrackingRefunded(orderId: string, refundedBy?: string, reason?: s
         productId: data.productId,
         productName: data.productName,
         productCode: data.productCode || product?.productCode,
-        sku: data.sku || product?.skuId,
+        skuId: data.skuId || product?.skuId,
         price: data.price,
         quantity: data.quantity,
         total: data.total,
@@ -422,7 +422,7 @@ async markOrderTrackingRefunded(orderId: string, refundedBy?: string, reason?: s
             productId: pd.data.productId,
             productName: pd.data.productName,
             productCode: pd.data.productCode || (this.productService.getProduct(pd.data.productId)?.productCode),
-            sku: pd.data.sku || (this.productService.getProduct(pd.data.productId)?.skuId),
+            skuId: pd.data.skuId || (this.productService.getProduct(pd.data.productId)?.skuId),
             price: pd.data.price,
             quantity: pd.data.quantity,
             total: pd.data.total,
@@ -635,6 +635,7 @@ async createPartialTrackingFromDoc(trackingId: string, newStatus: string, qty: n
                 transaction.set(dedRef, sanitizedDedRecord as any);
               } else {
                 const dedRecord = {
+                  eventType: 'damage' as const,
                   productId,
                   batchId: null,
                   quantity: dedQty,
@@ -853,6 +854,7 @@ async markOrderTrackingDamaged(orderId: string, damagedBy?: string, reason?: str
 
                   // record deduction referencing batch
                   const dedRecord = {
+                    eventType: 'damage' as const,
                     productId,
                     batchId: batchData.batchId || null,
                     quantity: qty,
@@ -869,6 +871,7 @@ async markOrderTrackingDamaged(orderId: string, damagedBy?: string, reason?: str
                 } else {
                   // No batch found — still record product deduction and an inventoryTracking record without batch
                   const dedRecord = {
+                    eventType: 'damage' as const,
                     productId,
                     batchId: null,
                     quantity: qty,
@@ -999,7 +1002,7 @@ async createUnpaidTrackingFromOrder(
     productId: string;
     productName?: string;
     productCode?: string;
-    sku?: string;
+    skuId?: string;
     quantity: number;
     price: number;
     total: number;
@@ -1031,7 +1034,7 @@ async createUnpaidTrackingFromOrder(
         productId: item.productId,
         productName: item.productName,
         productCode: item.productCode,
-        sku: item.sku,
+        skuId: item.skuId,
         price: item.price,
         quantity: item.quantity,
         total: item.total,
@@ -1126,7 +1129,7 @@ async markOrderTrackingUnpaid(orderId: string, unpaidBy?: string, reason?: strin
         productId: data.productId,
         productName: data.productName,
         productCode: data.productCode,
-        sku: data.sku,
+        skuId: data.skuId,
         price: data.price,
         quantity: data.quantity,
         total: data.total,
@@ -1224,7 +1227,7 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
         productId: data.productId,
         productName: data.productName,
         productCode: data.productCode,
-        sku: data.sku,
+        skuId: data.sku,
         price: data.price,
         quantity: data.quantity,
         total: data.total,
@@ -1379,7 +1382,7 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
               productId: it.productId,
               productName: it.productName,
               productCode: (it as any).productCode || undefined,
-              sku: (it as any).sku || undefined,
+              skuId: (it as any).skuId || (it as any).sku || undefined,
               cost: 0, // Will be calculated when synced
               price: it.unitPrice,
               quantity: it.quantity,
@@ -1395,6 +1398,8 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
               number: (it as any).number || undefined,
               ...(this.networkService.isOnline() ? {} : { _offlineCreated: true })
             } as OrdersSellingTrackingDoc;
+
+            
 
             const trackingRef = collection(this.firestore, 'ordersSellingTracking');
             const cleanedDoc = this.removeUndefinedFields(docData as any);
@@ -1510,14 +1515,15 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
           }
           
           const nonBatchDeduction = {
+            eventType: 'completed' as const,
             companyId: ctx.companyId,
             storeId: ctx.storeId,
             orderId: ctx.orderId,
             invoiceNumber: ctx.invoiceNumber || '',
             productId: it.productId,
-            productCode: (it as any).productCode || '',
-            sku: (it as any).sku || it.productId,
             productName: it.productName || '',
+            productCode: (it as any).productCode || '',
+            skuId: (it as any).skuId || (it as any).sku || '',
             
             // No batch tracking - set batchId to null
             batchId: null,
@@ -1568,14 +1574,15 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
 
         for (const deduction of batchDeductions) {
           const deductionDoc = {
+            eventType: 'completed' as const,
             companyId: ctx.companyId,
             storeId: ctx.storeId,
             orderId: ctx.orderId,
             invoiceNumber: ctx.invoiceNumber || '',
             productId: it.productId,
-            productCode: (it as any).productCode || '',
-            sku: (it as any).sku || it.productId,
             productName: it.productName || '',
+            productCode: (it as any).productCode || '',
+            skuId: (it as any).skuId || (it as any).sku || '',
             
             // Batch info
             batchId: deduction.batchId,
@@ -1657,7 +1664,7 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
           productId: it.productId,
           productName: it.productName,
           productCode: (it as any).productCode || undefined,
-          sku: (it as any).sku || undefined,
+          skuId: (it as any).skuId || (it as any).sku || undefined,
           cost: actualCost, // Actual weighted average cost from batches
           price: it.unitPrice,
           quantity: it.quantity,
@@ -1733,7 +1740,7 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
           id: s.id,
           productId: data.productId,
           productName: data.productName || product?.productName || '',
-          sku: product?.skuId || undefined,
+          skuId: product?.skuId || undefined,
           quantity: data.quantity,
           price: data.price,
           total: data.total,
@@ -1788,7 +1795,7 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
         const pdata: any = p.data() || {};
         const productId = p.id;
         const productName = pdata.productName || pdata.name || '';
-        const skuId = pdata.skuId || pdata.sku || '';
+        const skuId = pdata.skuId || pdata.skuId || '';
 
         // Step 2: aggregate completed count for this product
         // Build orders query, include storeId filter only when provided
@@ -1837,43 +1844,86 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
     }
   }
 
-  async getTopProductsCounts(companyId: string, storeId: string, limit: number, date: Date = new Date()): Promise<any[]> {
+  async getTopProductsCounts(companyId: string, storeId: string, maxResults: number, date: Date = new Date()): Promise<any[]> {
     try {
-      // Calculate start and end of the specified date
-      const startOfDay = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0, 0);
+      // For more lenient date filtering, use a 30-day window ending on the specified date
+      // This ensures we show products even if orders are a few days old
       const endOfDay = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59, 999);
+      const startOfRange = new Date(endOfDay);
+      startOfRange.setDate(startOfRange.getDate() - 30); // Last 30 days
       
-      console.log(`getTopProductsCounts: querying for date ${startOfDay.toISOString()} to ${endOfDay.toISOString()}`);
+      console.log(`getTopProductsCounts: companyId=${companyId}, storeId=${storeId}, maxResults=${maxResults}`);
+      console.log(`getTopProductsCounts: querying for last 30 days ending ${endOfDay.toISOString()}`);
       
-      // Query ordersSellingTracking filtered by company, store, status=completed, and date
+      // Query ordersSellingTracking filtered by company, store, and status=processing
+      // Note: We fetch all processing records and filter by date in memory to avoid complex index requirements
       let q: any;
       if (storeId && storeId !== 'all') {
         q = query(
           collection(this.firestore, 'ordersSellingTracking'),
           where('companyId', '==', companyId),
           where('storeId', '==', storeId),
-          where('status', '==', 'completed'),
-          where('createdAt', '>=', startOfDay),
-          where('createdAt', '<=', endOfDay)
+          where('status', '==', 'processing')
         );
       } else {
         q = query(
           collection(this.firestore, 'ordersSellingTracking'),
           where('companyId', '==', companyId),
-          where('status', '==', 'completed'),
-          where('createdAt', '>=', startOfDay),
-          where('createdAt', '<=', endOfDay)
+          where('status', '==', 'processing')
         );
       }
       
       const snaps = await getDocs(q);
-      console.log(`getTopProductsCounts: found ${snaps.docs.length} tracking records`);
+      console.log(`getTopProductsCounts: found ${snaps.docs.length} processing tracking records`);
       
-      // Group by productId and sum quantities
+      // If no records found, log sample data to debug
+      if (snaps.docs.length === 0) {
+        console.warn('⚠️ No processing tracking records found. Checking all records to debug...');
+        const debugQuery = query(
+          collection(this.firestore, 'ordersSellingTracking'),
+          where('companyId', '==', companyId),
+          limit(5)
+        );
+        const debugSnaps = await getDocs(debugQuery);
+        console.log(`Debug: Found ${debugSnaps.docs.length} total records for company`);
+        debugSnaps.docs.forEach((doc, idx) => {
+          const data = doc.data();
+          console.log(`Sample record ${idx + 1}:`, {
+            id: doc.id,
+            status: data['status'],
+             skuId: data['skuId'],
+            productId: data['productId'],
+            productName: data['productName'],
+            storeId: data['storeId'],
+            createdAt: data['createdAt']?.toDate?.() || data['createdAt']
+          });
+        });
+      }
+      
+      // Group by productId and sum quantities, with lenient date filtering
       const productMap = new Map<string, { productId: string; productName: string; skuId: string; totalQty: number }>();
+      let recordsWithoutDate = 0;
+      let recordsFilteredOut = 0;
+      let recordsIncluded = 0;
+      let recordsWithoutProductId = 0;
       
       snaps.docs.forEach(doc => {
         const data: any = doc.data();
+        
+        // Lenient date filtering - include records without dates or within the 30-day window
+        const createdAt = data.createdAt?.toDate ? data.createdAt.toDate() : (data.createdAt instanceof Date ? data.createdAt : null);
+        
+        if (!createdAt) {
+          // Include records without a createdAt date
+          recordsWithoutDate++;
+        } else if (createdAt < startOfRange || createdAt > endOfDay) {
+          // Skip records outside the 30-day range
+          recordsFilteredOut++;
+          return;
+        }
+        
+        recordsIncluded++;
+        
         const productId = data.productId || '';
         const productName = data.productName || data.name || '';
         const skuId = data.skuId || data.sku || '';
@@ -1889,14 +1939,30 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
           } else {
             productMap.set(productId, { productId, productName, skuId, totalQty: quantity });
           }
+        } else {
+          recordsWithoutProductId++;
         }
       });
+      
+      console.log(`getTopProductsCounts: ${recordsIncluded} included, ${recordsFilteredOut} filtered out, ${recordsWithoutDate} without date, ${recordsWithoutProductId} without productId`);
+      console.log(`getTopProductsCounts: productMap has ${productMap.size} unique products`);
+      
+      // Fallback: If skuId is missing, fetch from products collection
+      for (const [productId, productData] of productMap.entries()) {
+        if (!productData.skuId && productId) {
+          const product = this.productService.getProduct(productId);
+          if (product?.skuId) {
+            productData.skuId = product.skuId;
+            console.log(`✅ Fetched missing SKU for ${productData.productName}: ${product.skuId}`);
+          }
+        }
+      }
       
       // Convert to array, filter out 0 qty, sort by totalQty desc, and limit
       const results = Array.from(productMap.values())
         .filter(p => p.totalQty > 0)
         .sort((a, b) => b.totalQty - a.totalQty)
-        .slice(0, limit)
+        .slice(0, maxResults)
         .map(p => ({
           productId: p.productId,
           productName: p.productName,
@@ -1904,7 +1970,7 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
           count: p.totalQty
         }));
       
-      console.log(`getTopProductsCounts: returning ${results.length} products`);
+      console.log(`getTopProductsCounts: returning ${results.length} products:`, results.map(r => `${r.productName}(${r.count})`).join(', '));
       return results;
     } catch (err) {
       console.warn('getTopProductsCounts error', err);

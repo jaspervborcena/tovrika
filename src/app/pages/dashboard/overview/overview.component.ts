@@ -358,7 +358,7 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
                     <div class="product-avatar">{{ product.avatar }}</div>
                     <div class="product-details">
                       <span class="product-name">{{ product.name }}</span>
-                      <span class="product-sku" *ngIf="product.code">{{ product.code }}</span>
+                      <span class="product-sku" *ngIf="product.skuId">{{ product.skuId }}</span>
                     </div>
                   </div>
                   <span class="product-sales">{{ product.sales || 0 }}</span>
@@ -2727,16 +2727,16 @@ export class OverviewComponent implements OnInit {
     if (topList && topList.length > 0) {
       return topList.map(p => ({
         name: p.name || 'Product',
-        code: p.code || '',
+        skuId: p.skuId || '',
         avatar: p.avatar || 'P',
         sales: Number(p.sales || 0)
       })).filter(item => item.sales > 0).sort((a, b) => b.sales - a.sales).slice(0, 10);
     }
 
-    const productSales = new Map<string, { product: any; sales: number; code: string }>();
+    const productSales = new Map<string, { product: any; sales: number; skuId: string }>();
     this.products().forEach(product => {
       if (product.id) {
-        productSales.set(product.id, { product, sales: 0, code: product.skuId || '' });
+        productSales.set(product.id, { product, sales: 0, skuId: product.skuId || '' });
       }
     });
 
@@ -2754,7 +2754,7 @@ export class OverviewComponent implements OnInit {
       .slice(0, 10)
       .map(item => ({
         name: item.product.productName || 'Product',
-        code: item.code,
+        skuId: item.skuId,
         avatar: item.product.productName?.charAt(0).toUpperCase() || 'P',
         sales: item.sales
       }));
@@ -2773,17 +2773,25 @@ export class OverviewComponent implements OnInit {
       if (period === 'yesterday') {
         queryDate = new Date();
         queryDate.setDate(queryDate.getDate() - 1);
+      } else if (period === 'this_month') {
+        // Use first day of current month for broader range
+        queryDate = new Date(queryDate.getFullYear(), queryDate.getMonth(), 1);
+      } else if (period === 'previous_month') {
+        // Use first day of previous month
+        queryDate = new Date(queryDate.getFullYear(), queryDate.getMonth() - 1, 1);
       }
       
       console.log(`fetchTopProducts: period=${period}, date=${queryDate.toLocaleDateString()}`);
 
       const top = await this.ordersSellingTrackingService.getTopProductsCounts(companyId, resolvedStoreId, 10, queryDate);
+      console.log('fetchTopProducts raw data:', top);
       const mapped = (top || []).slice(0, 10).map((p: any) => ({
         avatar: (p.productName || '').split(' ').map((s: string) => s.charAt(0)).slice(0, 2).join('').toUpperCase() || 'P',
         name: p.productName || 'Product',
-        code: p.skuId || '',
+        skuId: p.skuId || '',
         sales: Number(p.count || 0)
       }));
+      console.log('fetchTopProducts mapped data:', mapped);
       this.topProductsList.set(mapped);
     } catch (err) {
       console.warn('fetchTopProducts error', err);

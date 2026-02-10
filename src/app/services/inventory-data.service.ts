@@ -275,6 +275,44 @@ export class InventoryDataService {
       return batchRef.id;
     }).then(async (batchId) => {
       console.log('🎉 Transaction committed successfully! Batch created:', batchId);
+      
+      // Create inventoryTracking record for restock event
+      try {
+        const user = this.auth.getCurrentUser();
+        const permission = this.auth.getCurrentPermission();
+        const product = this.productService.getProduct(productId);
+        
+        const restockTrackingData = {
+          eventType: 'restock' as const,
+          productId: productId,
+          productName: product?.productName || '',
+          productCode: product?.productCode || '',
+          skuId: product?.skuId || productId,
+          batchId: batchId,
+          refId: batchId, // Reference to the productInventory document
+          companyId: permission?.companyId || '',
+          storeId: productStoreId,
+          quantity: Number(entry.quantity) || 0,
+          costPrice: Number(entry.unitPrice) || 0,
+          batchNumber: entry.batchNumber?.toString() || '',
+          runningBalanceTotalStock: (product?.totalStock || 0) + (Number(entry.quantity) || 0),
+          deductedAt: new Date(), // Using deductedAt for consistency, though it's a restock
+          createdAt: new Date(),
+          deductedBy: user?.uid || '',
+          createdBy: user?.uid || '',
+          note: 'Inventory restock - batch added',
+          isOffline: false,
+          syncStatus: 'SYNCED' as const
+        };
+        
+        const trackingRef = collection(this.firestore, 'inventoryTracking');
+        await addDoc(trackingRef, restockTrackingData);
+        console.log('📝 Created restock tracking record for batch:', batchId);
+      } catch (trackingError) {
+        console.warn('⚠️ Failed to create restock tracking record (non-blocking):', trackingError);
+        // Don't throw - restock tracking is for audit purposes, batch was already created successfully
+      }
+      
       try {
         // Ensure product summary is fully recomputed from committed batches
         // so UI and other services see the authoritative values.
@@ -308,8 +346,31 @@ export class InventoryDataService {
    */
   async updateBatch(productId: string, batchDocId: string, updates: Partial<ProductInventoryEntry>): Promise<void> {
     const user = this.auth.getCurrentUser();
+    const permission = this.auth.getCurrentPermission();
     if (!user?.uid) {
       throw new Error('User not authenticated or missing UID');
+    }
+
+    // Capture old data before transaction for tracking
+    let oldBatchData: ProductInventoryEntry | null = null;
+    let oldProductData: any = null;
+    
+    try {
+      // Read current batch data
+      const batchRef = doc(this.firestore, this.collectionName, batchDocId);
+      const batchSnap = await getDoc(batchRef);
+      if (batchSnap.exists()) {
+        oldBatchData = batchSnap.data() as ProductInventoryEntry;
+      }
+      
+      // Read current product data
+      const productRef = doc(this.firestore, 'products', productId);
+      const productSnap = await getDoc(productRef);
+      if (productSnap.exists()) {
+        oldProductData = productSnap.data();
+      }
+    } catch (readError) {
+      console.warn('⚠️ Failed to capture old data for tracking:', readError);
     }
 
     // Use Firestore transaction for all-or-nothing operation
@@ -366,11 +427,61 @@ export class InventoryDataService {
 
       // Then refresh product cache so UI shows updated summary immediately
       const prod = this.productService.getProduct(productId);
-      const permission = this.auth.getCurrentPermission();
       const storeId = prod?.storeId || permission?.storeId;
       if (storeId) {
         await this.productService.refreshProducts(storeId);
         console.log('🔁 Refreshed products for store after batch update:', storeId);
+      }
+      
+      // Create inventoryTracking record for update event
+      if (oldBatchData && oldProductData) {
+        try {
+          // Get updated product data after recompute
+          const updatedProduct = this.productService.getProduct(productId);
+          
+          const updateTrackingData = {
+            eventType: 'update' as const,
+            productId: productId,
+            productName: updatedProduct?.productName || oldProductData.productName || '',
+            productCode: updatedProduct?.productCode || oldProductData.productCode || '',
+            skuId: updatedProduct?.skuId || oldProductData.skuId || productId,
+            batchId: batchDocId,
+            refId: batchDocId,
+            companyId: oldBatchData.companyId || permission?.companyId || '',
+            storeId: oldBatchData.storeId || '',
+            
+            // Old values before update
+            oldData: {
+              quantity: Number(oldBatchData.quantity) || 0,
+              costPrice: Number(oldBatchData.unitPrice) || 0,
+              sellingPrice: Number(oldProductData.sellingPrice) || 0,
+              originalPrice: Number(oldProductData.originalPrice) || 0
+            },
+            
+            // New values after update
+            quantity: Number(updates.quantity !== undefined ? updates.quantity : oldBatchData.quantity) || 0,
+            costPrice: Number(updates.unitPrice !== undefined ? updates.unitPrice : oldBatchData.unitPrice) || 0,
+            sellingPrice: Number(updatedProduct?.sellingPrice) || 0,
+            originalPrice: Number(updatedProduct?.originalPrice) || 0,
+            
+            batchNumber: (updates.batchNumber?.toString() || oldBatchData.batchNumber?.toString()) || '',
+            runningBalanceTotalStock: Number(updatedProduct?.totalStock) || 0,
+            deductedAt: new Date(),
+            createdAt: new Date(),
+            deductedBy: user?.uid || '',
+            createdBy: user?.uid || '',
+            note: 'Inventory batch updated',
+            isOffline: false,
+            syncStatus: 'SYNCED' as const
+          };
+          
+          const trackingRef = collection(this.firestore, 'inventoryTracking');
+          await addDoc(trackingRef, updateTrackingData);
+          console.log('📝 Created update tracking record for batch:', batchDocId);
+        } catch (trackingError) {
+          console.warn('⚠️ Failed to create update tracking record (non-blocking):', trackingError);
+          // Don't throw - update tracking is for audit purposes, batch was already updated successfully
+        }
       }
     } catch (err) {
       console.warn('⚠️ Failed to refresh products after batch update:', err);
