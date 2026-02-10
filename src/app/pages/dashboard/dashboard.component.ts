@@ -348,6 +348,8 @@ export class DashboardComponent implements OnInit {
       this.currentActivePage.set('sales-summary');
     } else if (url.includes('/dashboard/inventory')) {
       this.currentActivePage.set('inventory');
+    } else if (url.includes('/dashboard/offline-order-reconciliation')) {
+      this.currentActivePage.set('offline-order-reconciliation');
     } else if (url.includes('/dashboard/reconciliation')) {
       this.currentActivePage.set('reconciliation');
     } else {
