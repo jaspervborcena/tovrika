@@ -88,7 +88,6 @@ export class NotificationsComponent implements OnInit {
       } else {
         // Handle internal navigation here
         // You can inject Router and navigate programmatically
-        console.log('Navigate to:', notification.actionData.url);
       }
     }
   }

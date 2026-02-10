@@ -1013,7 +1013,6 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
 
   async loadRecentOrders(): Promise<void> {
     try {
-      console.log('🔄 Starting loadRecentOrders...');
       this.isLoadingOrdersSignal.set(true);
       const storeInfo = this.currentStoreInfo();
       const companyId = storeInfo?.companyId;
@@ -1025,9 +1024,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
         return;
       }
       
-      console.log('📡 Calling orderService.getRecentOrders...');
       const results = await this.orderService.getRecentOrders(companyId, storeId || undefined, 20);
-      console.log('✅ Received results:', results.length, 'orders');
       
       this.ordersSignal.set(results);
     } catch (error) {
@@ -1041,22 +1038,16 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   // Refresh orders - manually triggered by user
   async refreshOrders(): Promise<void> {
     try {
-      console.log('🔄 Manual refresh triggered...');
-      
       // Clear current orders first to show loading state
       this.ordersSignal.set([]);
       
       // If there's a search query, search again, otherwise load recent orders
       const searchQuery = this.orderSearchQuery().trim();
       if (searchQuery) {
-        console.log('🔍 Refreshing search results for query:', searchQuery);
         await this.searchOrders();
       } else {
-        console.log('📋 Refreshing recent orders...');
         await this.loadRecentOrders();
       }
-      
-      console.log('✅ Manual refresh completed');
     } catch (error) {
       console.error('❌ Error during manual refresh:', error);
     }
@@ -4381,7 +4372,6 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     // Only reinitialize if we don't have products or user context has changed
     const user = this.authService.getCurrentUser();
     if (currentProductCount > 0 && user?.uid) {
-      console.log('🔄 Products already loaded and user authenticated - skipping full reinit');
       // Just update the time and invoice preview
       this.updateCurrentDateTime();
       await this.loadNextInvoicePreview();
@@ -5038,7 +5028,6 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       await this.preloadProductInventory();
       
       // Refresh orders for the selected store
-      console.log('🔄 Refreshing orders for selected store:', storeId);
       await this.refreshOrders();
       
   // Reset grid pagination when store changes
@@ -6537,7 +6526,6 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
    */
   async loadAvailableTags(): Promise<void> {
     const storeId = this.selectedStoreId();
-    console.log('🏷️ Loading tags for store:', storeId);
     if (!storeId) {
       this.availableTagsByGroup.set([]);
       return;
@@ -6545,30 +6533,13 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
 
     try {
       const tags = await this.posService.getTagsForStore(storeId);
-      console.log('🏷️ Retrieved tags from service:', tags.length, 'tags');
-      console.log('🏷️ RAW TAGS DATA:', JSON.stringify(tags, null, 2));
       
-      // Log each tag's structure
-      tags.forEach((tag, index) => {
-        console.log(`🏷️ Tag ${index + 1}:`, {
-          id: tag.id,
-          tagId: tag.tagId,
-          label: tag.label,
-          group: tag.group,
-          storeId: tag.storeId,
-          isActive: tag.isActive,
-          createdAt: tag.createdAt,
-          allFields: Object.keys(tag)
-        });
-      });
-
       // Group tags by their group field and track first createdAt per group
       const groupMap = new Map<string, { id: string; label: string; createdAt?: any }[]>();
       const groupFirstCreatedAt = new Map<string, any>();
       
       tags.forEach(tag => {
         const group = tag.group || 'Other';
-        console.log(`🏷️ Processing tag "${tag.label}" with group: "${group}"`);
         if (!groupMap.has(group)) {
           groupMap.set(group, []);
           // Track the first createdAt for this group
@@ -6580,12 +6551,6 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
           createdAt: tag.createdAt
         });
       });
-
-      console.log('🏷️ Group Map entries:', Array.from(groupMap.entries()).map(([group, tags]) => ({
-        group,
-        tagCount: tags.length,
-        tags: tags.map(t => t.label)
-      })));
 
       // Convert to array and sort groups by their first createdAt (ascending)
       const tagsByGroup = Array.from(groupMap.entries())
@@ -6601,9 +6566,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
           return timeA - timeB;
         });
 
-      console.log('🏷️ FINAL Grouped tags (to be set):', JSON.stringify(tagsByGroup, null, 2));
       this.availableTagsByGroup.set(tagsByGroup);
-      console.log('🏷️ availableTagsByGroup signal updated. Current value:', this.availableTagsByGroup());
     } catch (error) {
       console.error('❌ Failed to load tags:', error);
       this.availableTagsByGroup.set([]);
@@ -6666,7 +6629,6 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       }))
       .sort((a, b) => a.group.localeCompare(b.group));
     
-    console.log('🏷️ Returning tag groups:', result);
     return result;
   }
 

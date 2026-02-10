@@ -73,7 +73,6 @@ export const roleGuard: CanActivateFn = async (route, state) => {
 
   // Admin has access to everything
   if (roleId === 'admin') {
-    console.log('✅ RoleGuard: Admin access granted to all routes');
     return true;
   }
 

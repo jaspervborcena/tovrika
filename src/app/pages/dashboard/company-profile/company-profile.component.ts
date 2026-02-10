@@ -1207,25 +1207,17 @@ export class CompanyProfileComponent {
     // TEMPORARILY DISABLED: This was conflicting with dashboard permission setting
     /*
     effect(() => {
-      console.log('🔍 [CompanyProfile] Effect running...');
       const user = this.authService.getCurrentUser();
       if (user?.uid) {
-        console.log('CompanyProfile: user?.uid', user?.uid);
         const userRole = this.userRoleService.getUserRoleByUserId(user.uid) as UserRole | undefined;
-        console.log('CompanyProfile: userRole', userRole);
         const roleId = userRole?.roleId;
         if (roleId) {
-           console.log('CompanyProfile: roleId', roleId);
           const roleDef = this.roleDefinitionService.getRoleDefinitionByRoleId(roleId) as RoleDefinition | undefined;
-          console.log('CompanyProfile: roleDefinition', roleDef);
           const permissions = roleDef?.permissions;
-          console.log('CompanyProfile: permissions', permissions);
           if (permissions) {
-            console.log('🔍 [CompanyProfile] Setting permissions from role definition for roleId:', roleId);
             this.accessService.setPermissions(permissions, roleId);
           } else {
             // If no role definition found, set permissions based on role alone
-            console.log('🔍 [CompanyProfile] No role definition found, setting permissions for roleId:', roleId);
             this.accessService.setPermissions({}, roleId);
           }
         }

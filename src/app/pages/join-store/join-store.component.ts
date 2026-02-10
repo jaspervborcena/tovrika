@@ -60,11 +60,9 @@ export class JoinStoreComponent {
                      currentPermission.roleId === 'visitor';
     
     if (isVisitor) {
-      console.log('🔍 JoinStore: User is visitor, cannot navigate to dashboard');
       return;
     }
     
-    console.log('🔍 JoinStore: Navigating based on role:', role);
     this.router.navigate(['/dashboard']);
   }
 
@@ -79,10 +77,8 @@ export class JoinStoreComponent {
                      currentPermission.roleId === 'visitor';
     
     if (isVisitor) {
-      console.log('🏠 JoinStore: Visitor canceling - going to onboarding');
       await this.router.navigate(['/onboarding']);
     } else {
-      console.log('🏠 JoinStore: User with company access canceling - going to home');
       await this.router.navigate(['/']);
     }
   }
@@ -98,10 +94,8 @@ export class JoinStoreComponent {
                      currentPermission.roleId === 'visitor';
     
     if (isVisitor) {
-      console.log('🏠 JoinStore: Visitor clicking logo - going to onboarding');
       await this.router.navigate(['/onboarding']);
     } else {
-      console.log('🏠 JoinStore: User with company access clicking logo - going to home');
       await this.router.navigate(['/']);
     }
   }
@@ -145,7 +139,6 @@ export class JoinStoreComponent {
       } else if (errorMessage.includes('network') || errorMessage.includes('timeout') || !navigator.onLine) {
         this.error = 'Network connection issue. Your request has been saved offline and will be submitted when connection is restored.';
         // In this case, the offline document service should have saved it offline
-        console.log('📱 Access request saved offline for later sync');
       } else if (errorMessage.includes('quota') || errorMessage.includes('storage')) {
         this.error = 'Storage limit reached. Please clear some data and try again.';
       } else {

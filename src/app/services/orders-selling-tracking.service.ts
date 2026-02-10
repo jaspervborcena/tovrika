@@ -1852,9 +1852,6 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
       const startOfRange = new Date(endOfDay);
       startOfRange.setDate(startOfRange.getDate() - 30); // Last 30 days
       
-      console.log(`getTopProductsCounts: companyId=${companyId}, storeId=${storeId}, maxResults=${maxResults}`);
-      console.log(`getTopProductsCounts: querying for last 30 days ending ${endOfDay.toISOString()}`);
-      
       // Query ordersSellingTracking filtered by company, store, and status=processing
       // Note: We fetch all processing records and filter by date in memory to avoid complex index requirements
       let q: any;
@@ -1874,31 +1871,6 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
       }
       
       const snaps = await getDocs(q);
-      console.log(`getTopProductsCounts: found ${snaps.docs.length} processing tracking records`);
-      
-      // If no records found, log sample data to debug
-      if (snaps.docs.length === 0) {
-        console.warn('⚠️ No processing tracking records found. Checking all records to debug...');
-        const debugQuery = query(
-          collection(this.firestore, 'ordersSellingTracking'),
-          where('companyId', '==', companyId),
-          limit(5)
-        );
-        const debugSnaps = await getDocs(debugQuery);
-        console.log(`Debug: Found ${debugSnaps.docs.length} total records for company`);
-        debugSnaps.docs.forEach((doc, idx) => {
-          const data = doc.data();
-          console.log(`Sample record ${idx + 1}:`, {
-            id: doc.id,
-            status: data['status'],
-             skuId: data['skuId'],
-            productId: data['productId'],
-            productName: data['productName'],
-            storeId: data['storeId'],
-            createdAt: data['createdAt']?.toDate?.() || data['createdAt']
-          });
-        });
-      }
       
       // Group by productId and sum quantities, with lenient date filtering
       const productMap = new Map<string, { productId: string; productName: string; skuId: string; totalQty: number }>();
@@ -1944,16 +1916,12 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
         }
       });
       
-      console.log(`getTopProductsCounts: ${recordsIncluded} included, ${recordsFilteredOut} filtered out, ${recordsWithoutDate} without date, ${recordsWithoutProductId} without productId`);
-      console.log(`getTopProductsCounts: productMap has ${productMap.size} unique products`);
-      
       // Fallback: If skuId is missing, fetch from products collection
       for (const [productId, productData] of productMap.entries()) {
         if (!productData.skuId && productId) {
           const product = this.productService.getProduct(productId);
           if (product?.skuId) {
             productData.skuId = product.skuId;
-            console.log(`✅ Fetched missing SKU for ${productData.productName}: ${product.skuId}`);
           }
         }
       }
@@ -1970,7 +1938,6 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
           count: p.totalQty
         }));
       
-      console.log(`getTopProductsCounts: returning ${results.length} products:`, results.map(r => `${r.productName}(${r.count})`).join(', '));
       return results;
     } catch (err) {
       console.warn('getTopProductsCounts error', err);

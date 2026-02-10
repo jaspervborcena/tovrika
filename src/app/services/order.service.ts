@@ -869,7 +869,6 @@ public async restockOrderAndInventoryTransactional(orderId: string, performedBy 
    */
   async countCompletedOrders(storeId: string, startDate: Date, endDate: Date): Promise<number> {
     try {
-      console.log(`📊 countCompletedOrders: storeId=${storeId}, start=${startDate.toISOString()}, end=${endDate.toISOString()}`);
       
       const ordersRef = collection(this.firestore, 'orders');
       const q = query(
@@ -883,16 +882,6 @@ public async restockOrderAndInventoryTransactional(orderId: string, performedBy 
       const snapshot = await getDocs(q);
       const count = snapshot.docs.length;
       
-      // Log first few docs for debugging
-      if (snapshot.docs.length > 0) {
-        snapshot.docs.slice(0, 3).forEach((doc, i) => {
-          const data = doc.data();
-          const createdAt = data['createdAt']?.toDate ? data['createdAt'].toDate() : data['createdAt'];
-          console.log(`📊 Order ${i + 1}: id=${doc.id}, status=${data['status']}, createdAt=${createdAt}`);
-        });
-      }
-      
-      console.log(`📊 Completed orders count for ${storeId}: ${count} (${startDate.toLocaleDateString()} - ${endDate.toLocaleDateString()})`);
       return count;
     } catch (err) {
       console.error('Error counting completed orders:', err);

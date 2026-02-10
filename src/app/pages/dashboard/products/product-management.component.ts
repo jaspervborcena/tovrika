@@ -2689,7 +2689,6 @@ export class ProductManagementComponent implements OnInit {
             .then(batches => {
               if (batches && batches.length > 0) {
                 // Product has inventory but isStockTracked is not true, update it
-                console.log(`✅ Syncing tracked status for product: ${product.productName}`);
                 return this.productService.updateProduct(product.id!, { isStockTracked: true });
               }
               return Promise.resolve();
@@ -2703,7 +2702,6 @@ export class ProductManagementComponent implements OnInit {
       }
 
       await Promise.all(updatePromises);
-      console.log('✅ Product tracking status sync completed');
     } catch (error) {
       console.error('Error syncing product tracking status:', error);
     }
@@ -2848,12 +2846,9 @@ export class ProductManagementComponent implements OnInit {
     
     // Set the barcode value
     this.productForm.patchValue({ barcodeId: barcode });
-    
-    console.log('🔢 Generated UPC-A barcode:', barcode, '(check digit:', checkDigit + ')');
   }
 
   async openAddModal(): Promise<void> {
-    console.log('openAddModal called');
     this.isEditMode = false;
     this.selectedProduct = null;
     this.selectedTagIds.set([]); // Reset tags for new product
@@ -2887,34 +2882,14 @@ export class ProductManagementComponent implements OnInit {
     
     // Load categories and tags for the default store if available
     if (defaultStoreId) {
-      console.log('📋 Loading categories for default store:', defaultStoreId);
       try {
         await this.categoryService.loadCategoriesByStore(defaultStoreId);
-        console.log('✅ Categories loaded for store. Count:', this.categories().length);
-        
-        // Debug: Log actual category values
-        if (this.categories().length > 0) {
-          console.log('📋 Available categories:', this.categories());
-        } else {
-          console.log('⚠️ No categories found for store:', defaultStoreId);
-          console.log('🔍 This might indicate:');
-          console.log('  - No categories exist in Firestore for this store');
-          console.log('  - Categories collection structure mismatch');
-          console.log('  - Firestore permissions issue');
-        }
-        
-        // Load tags for the default store
-        console.log('🏷️ Loading tags for default store:', defaultStoreId);
-        await this.loadTags(defaultStoreId);
-        console.log('✅ Tags loaded for store. Count:', this.availableTags().length);
         
         // Force change detection to update dropdown
         this.cdr.detectChanges();
       } catch (error) {
         console.error('❌ Error loading categories/tags for default store:', error);
       }
-    } else {
-      console.log('⚠️ No default store ID available for category/tag loading');
     }
     // Ensure required defaults after reset
     this.productForm.patchValue({
@@ -2930,7 +2905,6 @@ export class ProductManagementComponent implements OnInit {
     // apply control enabling/disabling based on isMultipleInventory
     this.toggleControlsForInventory(this.productForm.get('isMultipleInventory')?.value);
     this.showModal = true;
-    console.log('showModal set to:', this.showModal);
     this.cdr.detectChanges();
   }
 
@@ -2938,19 +2912,13 @@ export class ProductManagementComponent implements OnInit {
     this.isEditMode = true;
     this.selectedProduct = product;
     
-    // Debug: Log product category
-    console.log('🔍 Opening edit modal for product:', product.productName);
-    console.log('🔍 Product category:', product.category);
-    
     // Load product tags into signal
     this.selectedTagIds.set(product.tags || []);
     
     // Load categories for the product's store
     if (product.storeId) {
-      console.log('📋 Loading categories for product store:', product.storeId);
       try {
         await this.categoryService.loadCategoriesByStore(product.storeId);
-        console.log('✅ Categories loaded. Count:', this.categories().length);
       } catch (error) {
         console.error('❌ Error loading categories:', error);
       }
@@ -2958,15 +2926,11 @@ export class ProductManagementComponent implements OnInit {
     
     // Load tags for the product's store to ensure only relevant tags are shown
     if (product.storeId) {
-      console.log('🏷️ Loading tags for product store:', product.storeId);
       await this.loadTags(product.storeId);
     }
     
     // Patch the form silently to avoid triggering valueChange subscriptions
     this.productForm.patchValue(product, { emitEvent: false });
-    
-    // Debug: Log category after patching
-    console.log('🔍 Category after patchValue:', this.productForm.get('category')?.value);
     
     // Set costPrice to 0 initially (will be loaded from latest batch if available)
     this.productForm.get('costPrice')?.setValue(0, { emitEvent: false });
@@ -3144,20 +3108,10 @@ export class ProductManagementComponent implements OnInit {
     this.loading = true;
     let productId: string | undefined; // Declare at function scope for access in refresh logic
     try {
-      console.log('🚀 submitProduct called - isEditMode:', this.isEditMode);
       const rawFormValue = this.productForm.getRawValue(); // Use getRawValue() to include disabled fields
       
       // Clean undefined values before processing
       const formValue = this.cleanFormData(rawFormValue);
-      console.log('🔍 Raw form value:', rawFormValue);
-      console.log('🔍 Cleaned form value:', formValue);
-      console.log('🔍 Category from form:', formValue.category);
-      console.log('💰 Price fields from form:', {
-        totalStock: formValue.totalStock,
-        costPrice: formValue.costPrice,
-        originalPrice: formValue.originalPrice,
-        sellingPrice: formValue.sellingPrice
-      });
       
       // Get storeId and companyId from current permission since Store section was removed
       const currentUser = this.authService.currentUser();
@@ -3169,9 +3123,6 @@ export class ProductManagementComponent implements OnInit {
       const storeId = formValue.storeId || 
                      currentPermission?.storeId || 
                      currentUser?.permissions?.[0]?.storeId || '';
-      
-      console.log('🔍 Company ID:', companyId);
-      console.log('🔍 Store ID:', storeId);
       
       // Validate SKU uniqueness for the current store
       const skuId = formValue.skuId;
@@ -3198,29 +3149,13 @@ export class ProductManagementComponent implements OnInit {
         throw new Error('Store ID is required but not found in user permissions');
       }
       
-      console.log('🔍 Will save category?', !!(formValue.category && storeId));
-      
       if (formValue.category && storeId) {
-        console.log('🚀 Attempting to save category:', formValue.category, 'for store:', storeId);
-        console.log('🔍 CategoryService debug before save:');
-        this.categoryService.debugCategoryStatus();
         await this.categoryService.ensureCategoryExists(formValue.category, storeId);
-        console.log('✅ Category save completed');
-        console.log('🔍 CategoryService debug after save:');
-        this.categoryService.debugCategoryStatus();
       }
       
       // Get the values directly from the form (which already has VAT computed via valueChanges)
       const computedSellingPrice = Number(formValue.sellingPrice || 0);
       let computedOriginalPrice = Number(formValue.originalPrice || 0);
-      
-      console.log('💵 Price calculation debug:', {
-        formOriginalPrice: formValue.originalPrice,
-        formSellingPrice: formValue.sellingPrice,
-        computedSellingPrice: computedSellingPrice,
-        computedOriginalPrice: computedOriginalPrice,
-        isEditMode: this.isEditMode
-      });
       
       // If originalPrice is not set but sellingPrice is, calculate originalPrice (price before VAT)
       if (computedOriginalPrice === 0 && computedSellingPrice > 0) {
@@ -3236,14 +3171,6 @@ export class ProductManagementComponent implements OnInit {
           // No VAT, so selling price = original price
           computedOriginalPrice = computedSellingPrice;
         }
-        
-        console.log('💰 Derived originalPrice from sellingPrice:', {
-          sellingPrice: computedSellingPrice,
-          originalPrice: computedOriginalPrice,
-          vatRate: vatRate,
-          isVatApplicable: isVatApplicable,
-          calculation: `${computedSellingPrice} / (1 + ${vatRate}/100) = ${computedOriginalPrice}`
-        });
       }
 
       if (this.isEditMode && this.selectedProduct) {
@@ -3279,37 +3206,7 @@ export class ProductManagementComponent implements OnInit {
           tagLabels: this.getSelectedTagLabels()
         };
 
-        console.log('📝 Updating product with data:', {
-          updates,
-          hasExistingInventory: this.hasExistingInventory(),
-          selectedProduct: {
-            totalStock: this.selectedProduct.totalStock,
-            costPrice: this.selectedProduct.costPrice,
-            originalPrice: this.selectedProduct.originalPrice,
-            sellingPrice: this.selectedProduct.sellingPrice
-          },
-          formValue: {
-            totalStock: formValue.totalStock,
-            costPrice: formValue.costPrice,
-            originalPrice: formValue.originalPrice,
-            sellingPrice: formValue.sellingPrice
-          }
-        });
-
-        console.log('� CRITICAL: Price fields IN updates object:', {
-          totalStock: updates.totalStock,
-          costPrice: updates.costPrice,
-          originalPrice: updates.originalPrice,
-          sellingPrice: updates.sellingPrice,
-          'updates has totalStock': 'totalStock' in updates,
-          'updates has costPrice': 'costPrice' in updates,
-          'updates has originalPrice': 'originalPrice' in updates,
-          'updates has sellingPrice': 'sellingPrice' in updates
-        });
-
-        console.log('�🔧 Calling productService.updateProduct with id:', this.selectedProduct.id);
         await this.productService.updateProduct(this.selectedProduct.id!, updates);
-        console.log('✅ Product update completed successfully');
 
         // Handle inventory batch updates based on current batches
         const currentBatches = await this.inventoryDataService.listBatches(this.selectedProduct.id!);
@@ -3318,7 +3215,6 @@ export class ProductManagementComponent implements OnInit {
         if (formValue.isStockTracked) {
           if (currentBatches.length === 0 && Number(formValue.totalStock || 0) > 0) {
           // No inventory exists and user provided totalStock - create an inventory entry
-          console.log('📦 No inventory exists for product, creating initial batch...');
           try {
             const currentPermission = this.authService.getCurrentPermission();
             if (!currentPermission) {
@@ -3326,7 +3222,6 @@ export class ProductManagementComponent implements OnInit {
             }
             // Use the product's storeId, not the current permission's storeId
             const productStoreId = this.selectedProduct.storeId || storeId || currentPermission.storeId || '';
-            console.log('📦 Using storeId from product:', productStoreId);
             
             const batchData = {
               batchId: this.generateBatchId(),
@@ -3346,11 +3241,9 @@ export class ProductManagementComponent implements OnInit {
               discountValue: Number(formValue.discountValue || 0),
             };
             await this.inventoryDataService.addBatch(this.selectedProduct.id!, batchData);
-            console.log('✅ Initial inventory batch created for edited product');
             
             // Update product to set isStockTracked to true since inventory now exists
             await this.productService.updateProduct(this.selectedProduct.id!, { isStockTracked: true });
-            console.log('✅ Product marked as stock tracked');
             
             // Refresh products to update cache
             await this.productService.refreshProducts(productStoreId);
@@ -3371,16 +3264,6 @@ export class ProductManagementComponent implements OnInit {
                                 (existingBatch.sellingPrice !== newSellingPrice);
           
           if (quantityChanged || pricesChanged) {
-            console.log('📦 Single batch exists, updating:', {
-              quantityChanged,
-              pricesChanged,
-              oldQuantity: existingBatch.quantity,
-              newQuantity,
-              oldUnitPrice: existingBatch.unitPrice,
-              newUnitPrice: newOriginalPrice,
-              oldSellingPrice: existingBatch.sellingPrice,
-              newSellingPrice
-            });
             try {
               await this.inventoryDataService.updateBatch(this.selectedProduct.id!, existingBatch.id!, {
                 quantity: newQuantity,
@@ -3394,7 +3277,6 @@ export class ProductManagementComponent implements OnInit {
                 discountType: formValue.discountType || 'percentage',
                 discountValue: Number(formValue.discountValue || 0)
               });
-              console.log('✅ Single batch updated with new quantity/prices');
             } catch (batchError) {
               console.error('❌ Failed to update batch:', batchError);
               this.toastService.error('Product updated but failed to update inventory batch');
@@ -3423,12 +3305,6 @@ export class ProductManagementComponent implements OnInit {
         }
         
         const currentPermission = this.authService.getCurrentPermission();
-
-        console.log('📋 Form values before creating product:', {
-          category: formValue.category,
-          productName: formValue.productName,
-          allFormValues: formValue
-        });
 
         const newProduct: Omit<Product, 'id' | 'createdAt' | 'updatedAt'> = {
           uid: currentUser.uid,  // Required by Product interface
@@ -3463,28 +3339,10 @@ export class ProductManagementComponent implements OnInit {
           status: ProductStatus.Active
         };
 
-        console.log('🚀 About to create product with data:', newProduct);
-        console.log('📦 Category being saved:', newProduct.category);
-        console.log('📝 Creating product with tags:', {
-          tags: this.selectedTagIds(),
-          tagLabels: this.getSelectedTagLabels(),
-          availableTags: this.availableTags().length
-        });
         productId = await this.productService.createProduct(newProduct);
-        console.log('✅ Product created successfully with ID:', productId);
         
         // If initial batch exists AND stock tracking is enabled, create it in separate collection and recompute summary
         if (hasInitial && productId && formValue.isStockTracked) {
-          console.log('🎯 Creating initial inventory batch for new product:', productId);
-          console.log('📦 Initial batch data:', initialBatch);
-          console.log('🔍 Form values for initial batch:', {
-            initialQuantity: formValue.initialQuantity,
-            originalPrice: formValue.originalPrice,
-            initialCostPrice: formValue.initialCostPrice,
-            hasInitial,
-            productId
-          });
-          
           try {
             const batchData = {
               batchId: initialBatch!.batchId,
@@ -3504,14 +3362,11 @@ export class ProductManagementComponent implements OnInit {
               storeId: storeId,
               productId: productId
             };
-            console.log('📦 Final batch data being sent to addBatch:', batchData);
             
             await this.inventoryDataService.addBatch(productId, batchData);
-            console.log('✅ Initial inventory batch created successfully');
             
             // Update product to set isStockTracked to true since inventory now exists
             await this.productService.updateProduct(productId, { isStockTracked: true });
-            console.log('✅ Product marked as stock tracked');
           } catch (batchError) {
             console.error('❌ Failed to create initial inventory batch:', batchError);
             console.error('❌ Error details:', {
@@ -3521,29 +3376,12 @@ export class ProductManagementComponent implements OnInit {
             });
             throw batchError; // Re-throw to show error to user
           }
-        } else {
-          if (hasInitial && !productId) {
-            console.warn('⚠️ Initial inventory requested but no productId returned');
-          }
         }
       }
 
       // Refresh products to show the newly created/updated product with correct data
       if (storeId) {
-        console.log('🔄 Refreshing products for store:', storeId);
         await this.productService.refreshProducts(storeId);
-        console.log('✅ Products refreshed. Current products count:', this.products().length);
-        console.log('📋 Current categories:', this.categories());
-        const newlyCreatedProduct = this.products().find(p => p.id === productId);
-        if (newlyCreatedProduct) {
-          console.log('✅ Newly created product found:', {
-            id: newlyCreatedProduct.id,
-            name: newlyCreatedProduct.productName,
-            category: newlyCreatedProduct.category
-          });
-        } else {
-          console.warn('⚠️ Newly created product not found in refreshed list');
-        }
       }
 
       this.closeModal();
@@ -3610,8 +3448,6 @@ export class ProductManagementComponent implements OnInit {
   async removeInventoryBatch(batchId: string, batchDocId: string): Promise<void> {
     if (!this.selectedProduct) return;
 
-    console.log('removeInventoryBatch called for batch:', batchId, batchDocId);
-
     // Reset everything first
     this.showDeleteConfirmation.set(false);
     this.deleteConfirmationData.set(null);
@@ -3634,13 +3470,6 @@ export class ProductManagementComponent implements OnInit {
     
     // Show the dialog immediately
     this.showDeleteConfirmation.set(true);
-    
-    console.log('Dialog state:', {
-      showDeleteConfirmation: this.showDeleteConfirmation(),
-      deleteConfirmationData: this.deleteConfirmationData(),
-      pendingBatchId: this.pendingBatchId,
-      pendingBatchDocId: this.pendingBatchDocId
-    });
   }
 
   async performBatchRemoval(): Promise<void> {
@@ -3783,13 +3612,6 @@ export class ProductManagementComponent implements OnInit {
       const storedUnitPrice = Number(batch.unitPrice ?? 0);
       const storedSellingPrice = Number(batch.sellingPrice ?? batch.unitPrice ?? 0);
       
-      console.log('📦 Loading inventory batch for edit:', {
-        batchId: batch.batchId,
-        storedUnitPrice,
-        storedSellingPrice,
-        fromFirestore: true
-      });
-
       // Set both prices exactly as stored in Firestore, without any computation
       this.inventoryForm.get('unitPrice')?.setValue(Number(storedUnitPrice.toFixed(2)), { emitEvent: false });
       this.inventoryForm.get('sellingPrice')?.setValue(Number(storedSellingPrice.toFixed(2)), { emitEvent: false });
@@ -3960,11 +3782,6 @@ export class ProductManagementComponent implements OnInit {
     if (!input.files || input.files.length === 0) return;
     
     const file = input.files[0];
-    console.log('📸 Starting image upload process:', {
-      fileName: file.name,
-      fileSize: file.size,
-      fileType: file.type
-    });
     
     try {
       // Show loading state
@@ -3972,29 +3789,15 @@ export class ProductManagementComponent implements OnInit {
       this.toastService.info('Compressing and uploading image...');
       
       // Compress the image
-      console.log('🔄 Compressing image...');
       const compressed = await this.compressImage(file, 1024 * 1024); // 1MB max
-      console.log('✅ Image compressed:', {
-        originalSize: file.size,
-        compressedSize: compressed.size,
-        compression: Math.round((1 - compressed.size / file.size) * 100) + '%'
-      });
       
       // Upload to Firebase Storage
-      console.log('☁️ Uploading to Firebase Storage...');
       const url = await this.uploadFileToStorage(compressed);
-      console.log('✅ Image uploaded successfully:', url);
       
       // Log image upload
       const currentPermission = this.authService.getCurrentPermission();
       const storeId = currentPermission?.storeId || '';
       const productId = this.selectedProduct?.id || 'new-product';
-      console.log('Image uploaded:', {
-        productId,
-        url,
-        storeId,
-        size: compressed.size
-      });
       
       // Set the URL in the form
       this.productForm.get('imageUrl')?.setValue(url);
@@ -4023,17 +3826,7 @@ export class ProductManagementComponent implements OnInit {
   }
 
   async compressImage(file: File, maxBytes: number): Promise<File> {
-    console.log('🔄 Starting image compression:', {
-      inputType: file.type,
-      inputSize: file.size,
-      maxBytes
-    });
-    
     const img = await this.loadImage(URL.createObjectURL(file));
-    console.log('📐 Original image dimensions:', {
-      width: img.width,
-      height: img.height
-    });
     
     // Calculate target size (2 inches at 96 DPI = 192px)
     const targetInches = 2;
@@ -4065,16 +3858,11 @@ export class ProductManagementComponent implements OnInit {
         const compressedFile = new File([blob], file.name.replace(/\.(png|webp|gif)$/i, '.jpg'), { 
           type: 'image/jpeg' 
         });
-        console.log('✅ Compression successful:', {
-          finalSize: compressedFile.size,
-          quality: q
-        });
         return compressedFile;
       }
     }
 
     // If still too large, reduce dimensions further
-    console.log('⚠️ Still too large, reducing dimensions...');
     canvas.width = Math.round(targetPx / 1.5);
     canvas.height = Math.round(targetPx / 1.5);
     ctx.fillStyle = '#FFFFFF';
@@ -4090,9 +3878,6 @@ export class ProductManagementComponent implements OnInit {
     const finalFile = new File([blob], file.name.replace(/\.(png|webp|gif)$/i, '.jpg'), { 
       type: 'image/jpeg' 
     });
-    console.log('✅ Final compression:', {
-      finalSize: finalFile.size
-    });
     return finalFile;
   }
 
@@ -4107,8 +3892,6 @@ export class ProductManagementComponent implements OnInit {
 
   async uploadFileToStorage(file: File): Promise<string> {
     try {
-      console.log('☁️ Starting structured image upload...');
-      
       // Get current store ID from permission
       const currentPermission = this.authService.getCurrentPermission();
       const storeId = currentPermission?.storeId || 'default-store';
@@ -4121,15 +3904,6 @@ export class ProductManagementComponent implements OnInit {
       
       // Create structured path: storeId/products/productId.extension
       const fileName = `${storeId}/products/${productId}.${extension}`;
-      
-      console.log('📤 Uploading file with structure:', {
-        storeId,
-        productId,
-        fileName: file.name,
-        fileSize: file.size,
-        fileType: file.type,
-        storagePath: fileName
-      });
       
       // Dynamic import to avoid top-level SDK usage
       const { getStorage, ref, uploadBytes, getDownloadURL } = await import('firebase/storage');
@@ -4150,14 +3924,7 @@ export class ProductManagementComponent implements OnInit {
         }
       });
       
-      console.log('✅ Upload complete, getting download URL...');
       const downloadURL = await getDownloadURL(snapshot.ref);
-      
-      console.log('✅ Upload complete with structured path:', {
-        downloadURL,
-        fullPath: fileName,
-        size: snapshot.metadata.size || 0
-      });
       
       return downloadURL;
     } catch (error: any) {
@@ -4205,12 +3972,6 @@ export class ProductManagementComponent implements OnInit {
         // Log upload
         const currentPermission = this.authService.getCurrentPermission();
         const storeId = currentPermission?.storeId || '';
-        console.log('Product photo updated:', {
-          productId: this.pendingPhotoProduct.id!,
-          url,
-          storeId,
-          size: compressed.size
-        });
 
         this.toastService.success('Product photo updated.');
       } catch (err: any) {
@@ -4225,7 +3986,6 @@ export class ProductManagementComponent implements OnInit {
     }
 
   duplicateProduct(product: Product): void {
-    console.log('Duplicating product:', product.productName);
     this.isEditMode = false;
     this.selectedProduct = null;
     
@@ -4298,11 +4058,6 @@ export class ProductManagementComponent implements OnInit {
         // Log product deletion
         const currentPermission = this.authService.getCurrentPermission();
         const storeId = currentPermission?.storeId || '';
-        console.log('Product deleted:', {
-          productId: productToDelete.id!,
-          productName: productToDelete.productName,
-          storeId
-        });
         
         // No need to manually filter - computed signal handles this automatically
         this.toastService.success(`Product "${this.productToDelete.productName}" deleted successfully`);
@@ -4373,7 +4128,6 @@ export class ProductManagementComponent implements OnInit {
   }
 
   onSelectedStoreChange(storeId: string): void {
-    console.log('Store filter changed to:', storeId);
     // Update the global store selection service instead of local property
     this.storeSelectionService.setSelectedStore(storeId);
     // Try to initialize products for the selected store to ensure list is in sync
@@ -4484,16 +4238,12 @@ export class ProductManagementComponent implements OnInit {
     setTimeout(async () => {
       const selectedStoreId = this.productForm.get('storeId')?.value;
       if (selectedStoreId) {
-        console.log('🔄 Store changed in product form to:', selectedStoreId);
-        
         // Clear current category selection since categories are store-specific
         this.productForm.patchValue({ category: '' });
         
         // Load tags for the selected store
-        console.log('🏷️ Loading tags for selected store:', selectedStoreId);
         await this.loadTags(selectedStoreId);
       } else {
-        console.log('⚠️ No store selected, clearing categories and tags');
         // Clear category selection when no store is selected
         this.productForm.patchValue({ category: '' });
         // Clear tags as well
@@ -4509,10 +4259,8 @@ export class ProductManagementComponent implements OnInit {
       
       // If no unit types found in database, seed them
       if (this.unitTypes.length === 0) {
-        console.log('🌱 No unit types found, seeding default unit types...');
         await this.predefinedTypesService.seedUnitTypes();
         this.unitTypes = await this.predefinedTypesService.getUnitTypes();
-        console.log('✅ Unit types seeded and loaded:', this.unitTypes.length);
       }
     } catch (error) {
       console.error('❌ Error loading unit types:', error);
@@ -4529,10 +4277,8 @@ export class ProductManagementComponent implements OnInit {
   // Utility method to seed comprehensive unit types (can be called from browser console)
   async seedComprehensiveUnitTypes(): Promise<void> {
     try {
-      console.log('🌱 Seeding comprehensive unit types...');
       await this.predefinedTypesService.seedComprehensiveUnitTypes();
       await this.loadUnitTypes();
-      console.log('✅ Comprehensive unit types seeded successfully!');
     } catch (error) {
       console.error('❌ Error seeding comprehensive unit types:', error);
     }
@@ -4542,15 +4288,11 @@ export class ProductManagementComponent implements OnInit {
     const input = event.target as HTMLInputElement;
     const value = input.value.toLowerCase();
     
-    console.log('🔍 Category input value:', value);
-    
     if (value.length > 0) {
       const categoriesArray = this.categories(); // Get current value from computed signal
-      console.log('🔍 Available categories:', categoriesArray);
       this.filteredCategories = categoriesArray.filter((category: string) => 
         category.toLowerCase().includes(value)
       );
-      console.log('🔍 Filtered categories:', this.filteredCategories);
       this.showCategorySuggestions = this.filteredCategories.length > 0;
     } else {
       this.showCategorySuggestions = false;
@@ -4597,13 +4339,7 @@ export class ProductManagementComponent implements OnInit {
   }
 
   async saveCategory(): Promise<void> {
-    console.log('🔍 saveCategory called');
-    console.log('🔍 Category form valid?', this.categoryForm.valid);
-    console.log('🔍 Category form value:', this.categoryForm.value);
-    console.log('🔍 Category form errors:', this.categoryForm.errors);
-    
     if (this.categoryForm.invalid) {
-      console.log('❌ Category form is invalid, returning early');
       // Mark all fields as touched to show validation errors
       Object.keys(this.categoryForm.controls).forEach(key => {
         this.categoryForm.get(key)?.markAsTouched();
@@ -4614,8 +4350,6 @@ export class ProductManagementComponent implements OnInit {
     try {
       this.loading = true;
       const formValue = this.categoryForm.value;
-      
-      console.log('🔍 Form value:', formValue);
       
       // Check for duplicate category name (case-insensitive)
       const newCategoryName = formValue.categoryLabel?.trim().toLowerCase();
@@ -4630,14 +4364,10 @@ export class ProductManagementComponent implements OnInit {
       // Create category object matching ProductCategory interface
       const currentUser = this.authService.currentUser();
       const currentPermission = this.authService.getCurrentPermission();
-      console.log('🔍 Current user data:', currentUser);
-      console.log('🔍 Current permission data:', currentPermission);
       
       const companyId = currentPermission?.companyId || 
                        currentUser?.currentCompanyId || 
                        currentUser?.permissions?.[0]?.companyId || '';
-      
-      console.log('🔍 Extracted company ID:', companyId);
       
       if (!companyId) {
         throw new Error('No company ID found. User must be associated with a company to create categories.');
@@ -4645,7 +4375,6 @@ export class ProductManagementComponent implements OnInit {
       
       // Get storeId from the product form if available, otherwise fallback to current permission
       const storeId = this.productForm.value.storeId || currentPermission?.storeId;
-      console.log('🔍 Store ID from product form:', storeId);
       
       const categoryData: Omit<ProductCategory, 'id' | 'createdAt' | 'updatedAt'> = {
         categoryId: `cat_${Date.now()}`,
@@ -4658,7 +4387,6 @@ export class ProductManagementComponent implements OnInit {
         storeId: storeId
       };
       
-      console.log('🔍 Creating category with data:', categoryData);
       await this.categoryService.createCategory(categoryData);
       // Categories will automatically update via computed signal from products
       
@@ -4895,13 +4623,6 @@ export class ProductManagementComponent implements OnInit {
    */
   canCreateInitialInventory(): boolean {
     const userRole = this.authService.userRole();
-    const currentPermission = this.authService.getCurrentPermission();
-    console.log('🔍 canCreateInitialInventory check:', { 
-      userRole, 
-      currentPermission,
-      hasCreatorRole: userRole === 'creator',
-      hasManagerRole: userRole === 'store_manager'
-    });
     return userRole === 'creator' || userRole === 'store_manager';
   }
 
@@ -4940,8 +4661,6 @@ export class ProductManagementComponent implements OnInit {
     // Load inventory entries for this product using the existing method
     const inventoryEntries = await this.inventoryDataService.listBatches(productId);
     this.setCurrentBatches(inventoryEntries || []);
-      
-      console.log(`Loaded ${this.currentBatches.length} inventory batches for product ${productId}`);
     } catch (error) {
       console.error('Error loading product inventory:', error);
       this.toastService.error('Failed to load product inventory');

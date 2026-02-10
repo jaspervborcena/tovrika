@@ -42,7 +42,6 @@ export class HomeComponent {
     
     // If user is a visitor, they don't have access to dashboard
     if (currentUser?.roleId === 'visitor') {
-      console.log('🏠 Home: Visitor user cannot access dashboard');
       // Could show a message or upgrade prompt here
       return;
     }
@@ -71,14 +70,13 @@ export class HomeComponent {
   // Debug method to test offline mode
   toggleOfflineMode() {
     const currentStatus = this.networkService.getCurrentStatus();
-    console.log('🔄 Home: Toggling offline mode. Current status:', currentStatus ? 'ONLINE' : 'OFFLINE');
     this.networkService.setOfflineMode(currentStatus);
     
     // Force change detection after a short delay
     setTimeout(() => {
-      console.log('🔄 Home: After toggle - isOnline():', this.isOnline());
-      console.log('🔄 Home: After toggle - headerClass():', this.headerClass());
-      console.log('🔄 Home: After toggle - appName():', this.appName());
+      void this.isOnline();
+      void this.headerClass();
+      void this.appName();
     }, 200);
   }
 }
