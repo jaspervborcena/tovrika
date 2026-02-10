@@ -1411,18 +1411,12 @@ export class UserRolesComponent implements OnInit {
   async confirmDeleteUserRole() {
     if (!this.userRoleToDelete) return;
     
-    console.log('🔍 [UserRoles] Attempting to delete user role:', this.userRoleToDelete);
-    console.log('🔍 [UserRoles] User role ID:', this.userRoleToDelete.id);
-    console.log('🔍 [UserRoles] User role email:', this.userRoleToDelete.email);
-    console.log('🔍 [UserRoles] User role roleId:', this.userRoleToDelete.roleId);
-    
     this.isLoading = true;
     try {
       await this.userRoleService.deleteUserRole(this.userRoleToDelete.id!);
-      console.log('🔍 [UserRoles] Successfully deleted user role');
       await this.loadData();
     } catch (error) {
-      console.error('🔍 [UserRoles] Error deleting user role:', error);
+      console.error('Error deleting user role:', error);
       this.toastService.error(`Failed to delete user role: ${error}`);
     } finally {
       this.isLoading = false;

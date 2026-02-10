@@ -101,10 +101,8 @@ export const routes: Routes = [
                            currentPermission.roleId === 'visitor';
           
           if (isVisitor) {
-            console.log('🔐 Login Guard: Redirecting authenticated visitor to onboarding');
             router.navigate(['/onboarding']);
           } else {
-            console.log('🔐 Login Guard: Redirecting authenticated user to dashboard');
             router.navigate(['/dashboard']);
           }
           return false;

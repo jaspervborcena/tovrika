@@ -24,7 +24,7 @@ export interface OrdersSellingTrackingDoc {
   productId: string;
   productName?: string;
   productCode: string;
-  sku: string;
+  skuId: string;
   cost:number;
   price: number; // unit price
   quantity: number;

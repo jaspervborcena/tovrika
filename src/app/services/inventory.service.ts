@@ -19,7 +19,7 @@ export interface InventoryRow {
   performedBy?: string;
   productName?: string;
   productCode?: string;
-  sku?: string;
+  skuId?: string;
   costPrice: number;
   sellingPrice: number;
   quantity: number;
@@ -88,7 +88,7 @@ export class InventoryService {
 
       const col = collection(this.firestore, 'ordersSellingTracking');
       const filters: any[] = [
-        useSkuQuery ? where('sku', '==', productIdOrSku) : where('productId', '==', productIdOrSku),
+        useSkuQuery ? where('skuId', '==', productIdOrSku) : where('productId', '==', productIdOrSku),
         where('createdAt', '>=', startOfDay),
         where('createdAt', '<=', endOfDay)
       ];
@@ -181,7 +181,7 @@ export class InventoryService {
       const product = this.productService.getProduct(productId);
 
       const productCode = (product && product.productCode) ? product.productCode : (data.productCode || '');
-      const sku = (product && product.skuId) ? product.skuId : (data.sku || '');
+      const skuId = (product && product.skuId) ? product.skuId : (data.skuId || data.sku || '');
 
       // Use costPrice directly from inventoryDeductions (per-batch cost)
       const costPrice = Number(data.costPrice || 0) || 0;
@@ -194,8 +194,8 @@ export class InventoryService {
       const totalProfit = +(profitPerUnit * quantity);
 
       const outProductCode = (productCode && productCode.trim().length > 0) ? productCode : '';
-      const outSku = (sku && sku.trim().length > 0) ? sku : '';
-      const finalProductCode = outProductCode || outSku ? outProductCode : productId;
+      const outSkuId = (skuId && skuId.trim().length > 0) ? skuId : '';
+      const finalProductCode = outProductCode || outSkuId ? outProductCode : productId;
 
       // Extract date and performedBy from inventoryDeductions data
       let deductionDate: Date | string | undefined = undefined;
@@ -214,7 +214,7 @@ export class InventoryService {
 
       // Read runningBalanceTotalStock from Firestore (may also be stored as 'totalStock' in old documents)
       const stockValue = data.runningBalanceTotalStock ?? data.totalStock ?? 0;
-      console.log('📦 From inventoryTracking:', { sku: outSku, batchId, stockValue, hasRunningBalance: 'runningBalanceTotalStock' in data, hasTotalStock: 'totalStock' in data });
+      console.log('📦 From inventoryTracking:', { skuId: outSkuId, batchId, stockValue, hasRunningBalance: 'runningBalanceTotalStock' in data, hasTotalStock: 'totalStock' in data });
       
       out.push({
         invoiceNo: data.invoiceNumber || data.orderId || '',
@@ -223,7 +223,7 @@ export class InventoryService {
         performedBy,
         productName: data.productName || '',
         productCode: finalProductCode,
-        sku: outSku,
+        skuId: outSkuId,
         costPrice,
         sellingPrice,
         quantity,
@@ -262,7 +262,7 @@ export class InventoryService {
         const product = this.productService.getProduct(productId);
 
         const productCode = (product && product.productCode) ? product.productCode : (data.productCode || '');
-        const sku = (product && product.skuId) ? product.skuId : (data.sku || '');
+        const skuId = (product && product.skuId) ? product.skuId : (data.skuId || data.sku || '');
 
         // Use costPrice directly from inventoryTracking (per-batch cost)
         const costPrice = Number(data.costPrice || 0) || 0;
@@ -275,8 +275,8 @@ export class InventoryService {
         const totalProfit = +(profitPerUnit * quantity);
 
         const outProductCode = (productCode && productCode.trim().length > 0) ? productCode : '';
-        const outSku = (sku && sku.trim().length > 0) ? sku : '';
-        const finalProductCode = outProductCode || outSku ? outProductCode : productId;
+        const outSkuId = (skuId && skuId.trim().length > 0) ? skuId : '';
+        const finalProductCode = outProductCode || outSkuId ? outProductCode : productId;
 
         // Extract date and performedBy from inventoryTracking data
         let deductionDate: Date | string | undefined = undefined;
@@ -295,7 +295,7 @@ export class InventoryService {
 
         // Read runningBalanceTotalStock from Firestore (may also be stored as 'totalStock' in old documents)
         const stockValue = data.runningBalanceTotalStock ?? data.totalStock ?? 0;
-        console.log('📦 From inventoryTracking (fallback):', { sku: outSku, batchId, stockValue, hasRunningBalance: 'runningBalanceTotalStock' in data, hasTotalStock: 'totalStock' in data });
+        console.log('📦 From inventoryTracking (fallback):', { skuId: outSkuId, batchId, stockValue, hasRunningBalance: 'runningBalanceTotalStock' in data, hasTotalStock: 'totalStock' in data });
         
         out.push({
           invoiceNo: data.invoiceNumber || data.orderId || '',
@@ -304,7 +304,7 @@ export class InventoryService {
           performedBy,
           productName: data.productName || '',
           productCode: finalProductCode,
-          sku: outSku,
+          skuId: outSkuId,
           costPrice,
           sellingPrice,
           quantity,
@@ -349,17 +349,17 @@ export class InventoryService {
           productName: data.productName,
           runningBalanceTotalStock: data.runningBalanceTotalStock,
           hasProduct: !!product,
-          sku: data.sku
+          skuId: data.skuId || data.sku
         });
 
         const productCode = (product && product.productCode) ? product.productCode : (data.productCode || '');
-        const sku = (product && product.skuId) ? product.skuId : (data.sku || '');
+        const skuId = (product && product.skuId) ? product.skuId : (data.skuId || data.sku || '');
 
         console.log('📦 After product lookup:', {
           productId: productId,
           productCode: productCode,
-          sku: sku,
-          outSku: sku
+          skuId: skuId,
+          outSkuId: skuId
         });
 
         // Use cost from the tracking document (field name is 'cost', not 'costPrice')
@@ -373,8 +373,8 @@ export class InventoryService {
         const totalProfit = +(profitPerUnit * quantity);
 
         const outProductCode = (productCode && productCode.trim().length > 0) ? productCode : '';
-        const outSku = (sku && sku.trim().length > 0) ? sku : '';
-        const finalProductCode = outProductCode || outSku ? outProductCode : productId;
+        const outSkuId = (skuId && skuId.trim().length > 0) ? skuId : '';
+        const finalProductCode = outProductCode || outSkuId ? outProductCode : productId;
 
         // Extract date from createdAt
         let saleDate: Date | string | undefined = undefined;
@@ -405,7 +405,7 @@ export class InventoryService {
         });
 
         const finalStock = stockValue || 0;
-        console.log('💾 Pushing to out array with stock:', finalStock, 'for sku:', outSku);
+        console.log('💾 Pushing to out array with stock:', finalStock, 'for skuId:', outSkuId);
 
         out.push({
           invoiceNo: data.orderId || '',
@@ -414,7 +414,7 @@ export class InventoryService {
           performedBy,
           productName: data.productName || '',
           productCode: finalProductCode,
-          sku: outSku,
+          skuId: outSkuId,
           costPrice,
           sellingPrice,
           quantity,
@@ -455,7 +455,7 @@ export class InventoryService {
         const product = this.productService.getProduct(productId);
 
         const productCode = (product && product.productCode) ? product.productCode : (data.productCode || '');
-        const sku = (product && product.skuId) ? product.skuId : (data.sku || '');
+        const skuId = (product && product.skuId) ? product.skuId : (data.skuId || data.sku || '');
 
         const costPrice = Number(data.costPrice || 0) || 0;
         const batchId: string | null = data.batchId ? String(data.batchId) : null;
@@ -466,8 +466,8 @@ export class InventoryService {
         const totalProfit = +(profitPerUnit * quantity);
 
         const outProductCode = (productCode && productCode.trim().length > 0) ? productCode : '';
-        const outSku = (sku && sku.trim().length > 0) ? sku : '';
-        const finalProductCode = outProductCode || outSku ? outProductCode : productId;
+        const outSkuId = (skuId && skuId.trim().length > 0) ? skuId : '';
+        const finalProductCode = outProductCode || outSkuId ? outProductCode : productId;
 
         let saleDate: Date | string | undefined = undefined;
         if (data.createdAt) {
@@ -488,7 +488,7 @@ export class InventoryService {
           date: saleDate,
           performedBy,
           productCode: finalProductCode,
-          sku: outSku,
+          skuId: outSkuId,
           costPrice,
           sellingPrice,
           quantity,
@@ -627,7 +627,7 @@ async loadRowsForPeriod(period: string, page: number = 1, storeId?: string, comp
     const stockMap = new Map<string, number>();
     salesRows.forEach(row => {
       if (row.runningBalanceTotalStock && row.runningBalanceTotalStock > 0) {
-        const key = row.productId || row.sku || '';
+        const key = row.productId || row.skuId || '';
         if (key) {
           const currentMax = stockMap.get(key) || 0;
           if (row.runningBalanceTotalStock > currentMax) {
@@ -641,10 +641,10 @@ async loadRowsForPeriod(period: string, page: number = 1, storeId?: string, comp
 
     // Populate runningBalanceTotalStock for deduction rows from the stock map
     deductionRows.forEach(row => {
-      const key = row.productId || row.sku || '';
+      const key = row.productId || row.skuId || '';
       if (key && stockMap.has(key)) {
         row.runningBalanceTotalStock = stockMap.get(key)!;
-        console.log(`✅ Updated deduction row ${row.sku} stock from 0 to ${row.runningBalanceTotalStock}`);
+        console.log(`✅ Updated deduction row ${row.skuId} stock from 0 to ${row.runningBalanceTotalStock}`);
       }
     });
 

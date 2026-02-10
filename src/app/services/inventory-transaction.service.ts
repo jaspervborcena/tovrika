@@ -275,6 +275,7 @@ export class InventoryTransactionService {
         // Create deduction record and persist it to `inventoryTracking`
         const now = new Date();
         const deductionRecord = {
+          eventType: 'completed' as const,
           orderId,
           orderDetailId: `${orderId}_${item.productId}`,
           quantity: allocation.allocatedQuantity,
@@ -291,7 +292,7 @@ export class InventoryTransactionService {
           companyId: batchData.companyId || permission.companyId || '',
           productName: item.name || '',
           productCode: '',
-          sku: item.productId,
+          skuId: item.productId,
           costPrice: batchData.unitPrice || 0,
           batchNumber: batchData.batchNumber?.toString() || '',
           invoiceNumber: orderId,

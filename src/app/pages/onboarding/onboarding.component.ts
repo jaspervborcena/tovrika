@@ -44,16 +44,12 @@ export class OnboardingComponent {
                      currentPermission.roleId === 'visitor';
     
     if (isVisitor) {
-      console.log('🔍 Onboarding: User is visitor, cannot navigate to dashboard');
       return;
     }
     
-    console.log('🔍 Onboarding: Navigating based on role:', role);
     if (role === 'cashier') {
-      console.log('🔍 Onboarding: Redirecting cashier to POS');
       this.router.navigate(['/pos']);
     } else {
-      console.log('🔍 Onboarding: Redirecting to dashboard');
       this.router.navigate(['/dashboard']);
     }
   }
@@ -94,7 +90,6 @@ export class OnboardingComponent {
       return;
     }
 
-    console.log('🏪 Onboarding: Navigating to create store (company profile)...');
     await this.router.navigate(['/dashboard/company-profile']);
   } catch (error) {
     console.error('🏪 Onboarding: Error navigating to company profile:', error);

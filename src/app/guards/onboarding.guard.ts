@@ -13,7 +13,6 @@ export const onboardingGuard: CanActivateFn = async (route, state) => {
 
   // TEMPORARY: Complete bypass for POS routes to test functionality
   if (state.url.includes('/pos')) {
-    console.log('🛡️ OnboardingGuard: COMPLETE POS BYPASS ENABLED - Skipping all onboarding checks');
     console.warn('⚠️ POS is running in bypass mode - this is for testing the invoice functionality only');
     return true;
   }
@@ -36,18 +35,14 @@ export const onboardingGuard: CanActivateFn = async (route, state) => {
     return true;
   }
   
-  console.log('🛡️ OnboardingGuard: Checking access for:', state.url);
-  
   // TEMPORARY: Allow POS access for testing (bypass company check for POS routes)
   if (state.url.includes('/pos') && !currentPermission?.companyId) {
-    console.log('🛡️ OnboardingGuard: TEMPORARY BYPASS - Allowing POS access without company setup');
     console.warn('⚠️ POS is running without proper company setup - this is for testing only');
     return true;
   }
   
   // Step 1: Check company profile
   if (!currentPermission?.companyId) {
-    console.log('🛡️ OnboardingGuard: No company ID, redirecting to company-profile');
     router.navigate(['/dashboard/company-profile']);
     return false;
   }
@@ -57,24 +52,20 @@ export const onboardingGuard: CanActivateFn = async (route, state) => {
   
   // TEMPORARY: Allow POS access for testing (bypass company check for POS routes)
   if (state.url.includes('/pos') && !company) {
-    console.log('🛡️ OnboardingGuard: TEMPORARY BYPASS - Allowing POS access without active company');
     console.warn('⚠️ POS is running without active company - this is for testing only');
     return true;
   }
   
   if (!company) {
-    console.log('🛡️ OnboardingGuard: No active company found, redirecting to company-profile');
     router.navigate(['/dashboard/company-profile']);
     return false;
   }
   
-  console.log('🛡️ OnboardingGuard: Company found:', company.name);
 
   // Step 2: Check stores
   await storeService.loadStoresByCompany(currentPermission.companyId);
   const stores = storeService.getStoresByCompany(currentPermission.companyId);
   
-  console.log('🛡️ OnboardingGuard: Stores found:', stores?.length || 0);
 
   // NOTE: Role checks are handled by roleGuard now. Keep onboarding-focused logic only.
 

@@ -358,7 +358,7 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
                     <div class="product-avatar">{{ product.avatar }}</div>
                     <div class="product-details">
                       <span class="product-name">{{ product.name }}</span>
-                      <span class="product-sku" *ngIf="product.code">{{ product.code }}</span>
+                      <span class="product-sku" *ngIf="product.skuId">{{ product.skuId }}</span>
                     </div>
                   </div>
                   <span class="product-sales">{{ product.sales || 0 }}</span>
@@ -1955,7 +1955,6 @@ export class OverviewComponent implements OnInit {
 
       // Fetch unpaid for today
       const unpaidLedger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, today, 'unpaid');
-      console.log('🔍 Unpaid Ledger Query - companyId:', companyId, 'storeId:', storeId, 'result:', unpaidLedger);
       if (unpaidLedger && (unpaidLedger.runningBalanceAmount || unpaidLedger.runningBalanceQty)) {
         this.ledgerUnpaidAmount.set(Number(unpaidLedger.runningBalanceAmount || 0));
         this.ledgerUnpaidQty.set(Number(unpaidLedger.runningBalanceQty || 0));
@@ -1966,7 +1965,6 @@ export class OverviewComponent implements OnInit {
 
       // Fetch recovered for today
       const recoveredLedger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, today, 'recovered');
-      console.log('🔍 Recovered Ledger Query - companyId:', companyId, 'storeId:', storeId, 'result:', recoveredLedger);
       if (recoveredLedger && (recoveredLedger.runningBalanceAmount || recoveredLedger.runningBalanceQty)) {
         this.ledgerRecoveredAmount.set(Number(recoveredLedger.runningBalanceAmount || 0));
         this.ledgerRecoveredQty.set(Number(recoveredLedger.runningBalanceQty || 0));
@@ -2084,19 +2082,12 @@ export class OverviewComponent implements OnInit {
       this.ledgerCompletedQty.set(currentMonthCompletedQty);
       this.ledgerOrderQty.set(currentMonthOrdersTotal);
       this.ledgerCancelQty.set(currentMonthCancelQty);
-      console.log('🔵 fetchMonthlyComparison setting returns:', currentMonthReturnsAmount, currentMonthReturnsQty);
       this.ledgerReturnAmount.set(currentMonthReturnsAmount);
       this.ledgerReturnQty.set(currentMonthReturnsQty);
       this.ledgerRefundAmount.set(currentMonthRefundsAmount);
       this.ledgerRefundQty.set(currentMonthRefundsQty);
       this.ledgerDamageAmount.set(currentMonthDamageAmount);
       this.ledgerDamageQty.set(currentMonthDamageQty);
-
-      console.log('Monthly comparison:', {
-        currentMonth: { revenue: currentMonthRevenueTotal, orders: currentMonthOrdersTotal },
-        previousMonth: { revenue: previousMonthRevenueTotal, orders: previousMonthOrdersTotal },
-        analytics: { returns: currentMonthReturnsQty, refunds: currentMonthRefundsQty, damage: currentMonthDamageQty, cancel: currentMonthCancelQty }
-      });
     } catch (error) {
       console.error('Error fetching monthly comparison:', error);
       this.currentMonthRevenue.set(0);
@@ -2269,7 +2260,6 @@ export class OverviewComponent implements OnInit {
     const target = event.target as HTMLSelectElement;
     if (!target) return;
     const v = target.value as 'today' | 'yesterday' | 'this_month' | 'previous_month' | 'date_range';
-    console.log('🔄 Period changed to:', v);
     
     // Reset all ledger signals to 0 when period changes to prevent stale data
     this.ledgerReturnAmount.set(0);
@@ -2288,10 +2278,8 @@ export class OverviewComponent implements OnInit {
     this.ledgerItemsQty.set(0);
     this.ledgerTotalRevenue.set(0);
     this.ledgerTotalOrders.set(0);
-    console.log('🔄 Reset all ledger signals to 0');
     
     this.selectedPeriod.set(v);
-    console.log('✅ selectedPeriod() is now:', this.selectedPeriod());
     if (v === 'date_range') {
       // default dateTo = today, dateFrom = today - 30 days
       const now = new Date();
@@ -2423,11 +2411,6 @@ export class OverviewComponent implements OnInit {
   private async loadData() {
     try {
       this.isLoading.set(true);
-      console.log('🚀 Dashboard: Starting data load...');
-      
-      // Check if we're offline - Firestore will still work with cached data
-      const isOnline = navigator.onLine;
-      console.log('🌐 Dashboard: Network status:', isOnline ? 'ONLINE' : 'OFFLINE');
       
       // ALWAYS reload stores from Firestore to get latest changes (including newly created stores)
       await this.loadStores();
@@ -2457,24 +2440,19 @@ export class OverviewComponent implements OnInit {
         return;
       }
 
-      console.log('🔄 Overview: Loading stores for company:', currentPermission.companyId);
-
       // Load stores into StoreService
       await this.storeService.loadStoresByCompany(currentPermission.companyId);
       
       // Get stores with userRoles filtering
       const stores = await this.storeService.getActiveStoresForDropdown(currentPermission.companyId);
-      console.log('✅ Overview: Stores loaded:', stores.length, stores.map(s => ({ id: s.id, name: s.storeName, status: s.status })));
       
       this.stores.set(stores);
 
       // Set selected store after stores are loaded
       if (currentPermission?.storeId) {
         this.selectedStoreId.set(currentPermission.storeId);
-        console.log('🎯 Overview: Selected store from permission:', currentPermission.storeId);
       } else if (stores.length > 0 && stores[0].id) {
         this.selectedStoreId.set(stores[0].id);
-        console.log('🎯 Overview: Using first store ID:', stores[0].id, stores[0].storeName);
       } else {
         console.warn('⚠️ Overview: No stores available to select');
       }
@@ -2490,19 +2468,10 @@ export class OverviewComponent implements OnInit {
   }
 
   async loadCurrentDateData(): Promise<void> {
-    console.log('🔄 Dashboard: Loading current date data from Firebase');
-    
     try {
       // Use selected store ID or get from permission - EXACT same logic
       const storeId = this.selectedStoreId() || this.authService.getCurrentPermission()?.storeId;
       const companyId = this.authService.getCurrentPermission()?.companyId || '';
-      
-      console.log('🏪 Dashboard Store ID resolution:', {
-        selectedStoreId: this.selectedStoreId(),
-        permissionStoreId: this.authService.getCurrentPermission()?.storeId,
-        finalStoreId: storeId,
-        allStores: this.stores().map(s => ({ id: s.id, name: s.storeName }))
-      });
       
       if (!storeId) {
         console.warn('❌ Dashboard: No storeId found - cannot load data');
@@ -2515,8 +2484,6 @@ export class OverviewComponent implements OnInit {
       const startDate = new Date(today.toISOString().split('T')[0]); // Start of today
       const endDate = new Date(today.toISOString().split('T')[0]); // End of today
       endDate.setHours(23, 59, 59, 999);
-
-      console.log('📅 Dashboard loading sales data for store:', storeId, 'from:', startDate, 'to:', endDate);
 
       // Load today's orders from Firestore
       const todayOrders = await this.orderService.getOrdersByDateRange(storeId, startDate, endDate);
@@ -2541,7 +2508,6 @@ export class OverviewComponent implements OnInit {
           // Revenue = runningBalanceAmount (no division, already in PHP)
           const grossRevenue = Number(ledger.runningBalanceAmount || 0);
           totalItemsCount = Number(ledger.runningBalanceQty || 0);
-          console.log('📊 Ledger running balances:', { amount: ledger.runningBalanceAmount, itemsQty: ledger.runningBalanceQty, refunded: refundedAmount });
           
           // Get today's expenses
           const todayExpenses = await this.expenseService.getExpensesByStore(storeId, startDate, endDate);
@@ -2549,7 +2515,6 @@ export class OverviewComponent implements OnInit {
           
           // Revenue = runningBalanceAmount - (expense + refunded)
           totalRevenue = grossRevenue - (expenseTotal + refundedAmount);
-          console.log('📊 Revenue calculation:', { grossRevenue, expenseTotal, refundedAmount, netRevenue: totalRevenue });
         }
       } catch (ledgerErr) {
         console.warn('Failed to fetch ledger balances, falling back to order count:', ledgerErr);
@@ -2568,8 +2533,6 @@ export class OverviewComponent implements OnInit {
       this.ledgerOrderQty.set(totalOrderCount);
       this.ledgerItemsQty.set(totalItemsCount);
       this.ledgerCompletedQty.set(totalOrderCount);
-
-      console.log('📊 Today\'s totals - Revenue:', totalRevenue, 'Orders:', totalOrderCount);
 
       // Load today's expenses for the same date range
       const expenses = await this.expenseService.getExpensesByStore(storeId, startDate, endDate);
@@ -2593,7 +2556,6 @@ export class OverviewComponent implements OnInit {
         }
 
         const monthTotal = (monthExpenses || []).reduce((s, e) => s + (Number((e as any).amount || 0) / 100), 0);
-        console.log('Overview: monthExpenses loaded');
         // Start with expense service total (PHP units)
         this.monthExpensesTotal.set(monthTotal);
       } catch (monthErr) {
@@ -2727,16 +2689,16 @@ export class OverviewComponent implements OnInit {
     if (topList && topList.length > 0) {
       return topList.map(p => ({
         name: p.name || 'Product',
-        code: p.code || '',
+        skuId: p.skuId || '',
         avatar: p.avatar || 'P',
         sales: Number(p.sales || 0)
       })).filter(item => item.sales > 0).sort((a, b) => b.sales - a.sales).slice(0, 10);
     }
 
-    const productSales = new Map<string, { product: any; sales: number; code: string }>();
+    const productSales = new Map<string, { product: any; sales: number; skuId: string }>();
     this.products().forEach(product => {
       if (product.id) {
-        productSales.set(product.id, { product, sales: 0, code: product.skuId || '' });
+        productSales.set(product.id, { product, sales: 0, skuId: product.skuId || '' });
       }
     });
 
@@ -2754,7 +2716,7 @@ export class OverviewComponent implements OnInit {
       .slice(0, 10)
       .map(item => ({
         name: item.product.productName || 'Product',
-        code: item.code,
+        skuId: item.skuId,
         avatar: item.product.productName?.charAt(0).toUpperCase() || 'P',
         sales: item.sales
       }));
@@ -2773,15 +2735,19 @@ export class OverviewComponent implements OnInit {
       if (period === 'yesterday') {
         queryDate = new Date();
         queryDate.setDate(queryDate.getDate() - 1);
+      } else if (period === 'this_month') {
+        // Use first day of current month for broader range
+        queryDate = new Date(queryDate.getFullYear(), queryDate.getMonth(), 1);
+      } else if (period === 'previous_month') {
+        // Use first day of previous month
+        queryDate = new Date(queryDate.getFullYear(), queryDate.getMonth() - 1, 1);
       }
       
-      console.log(`fetchTopProducts: period=${period}, date=${queryDate.toLocaleDateString()}`);
-
       const top = await this.ordersSellingTrackingService.getTopProductsCounts(companyId, resolvedStoreId, 10, queryDate);
       const mapped = (top || []).slice(0, 10).map((p: any) => ({
         avatar: (p.productName || '').split(' ').map((s: string) => s.charAt(0)).slice(0, 2).join('').toUpperCase() || 'P',
         name: p.productName || 'Product',
-        code: p.skuId || '',
+        skuId: p.skuId || '',
         sales: Number(p.count || 0)
       }));
       this.topProductsList.set(mapped);
@@ -2839,13 +2805,6 @@ export class OverviewComponent implements OnInit {
       const companyId = this.authService.getCurrentPermission()?.companyId || '';
       const storeId = this.selectedStoreId() || this.authService.getCurrentPermission()?.storeId || '';
       
-      console.log('📅 fetchLedgerTotalsForPeriod: Fetching for range', {
-        startDate: startDate.toISOString(),
-        endDate: endDate.toISOString(),
-        companyId,
-        storeId
-      });
-      
       if (!companyId || !storeId) {
         this.ledgerTotalRevenue.set(0);
         this.ledgerTotalOrders.set(0);
@@ -2862,11 +2821,9 @@ export class OverviewComponent implements OnInit {
       
       if (isSingleDay) {
         // Single day: use getLatestOrderBalances with the date
-        console.log('📅 Single day query - using getLatestOrderBalances');
         ledger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, startDate, 'completed');
       } else {
         // Date range: use getOrderBalancesForRange
-        console.log('📅 Date range query - using getOrderBalancesForRange');
         ledger = await this.ledgerService.getOrderBalancesForRange(companyId, storeId, startDate, endDate, 'completed');
       }
       
@@ -2899,8 +2856,6 @@ export class OverviewComponent implements OnInit {
         this.ledgerOrderQty.set(totalOrders);
         this.ledgerItemsQty.set(totalItems);
         this.ledgerCompletedQty.set(totalOrders);
-
-        console.log('📊 Ledger totals for period:', { grossRevenue, expenseTotal, refundedAmount, netRevenue: totalRevenue, orders: totalOrders, items: totalItems });
       } else {
         this.ledgerTotalRevenue.set(0);
         this.ledgerTotalOrders.set(0);

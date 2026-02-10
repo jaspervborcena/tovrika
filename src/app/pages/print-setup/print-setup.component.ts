@@ -60,7 +60,6 @@ export class PrintSetupComponent implements OnInit {
       if (savedPrinters && Array.isArray(savedPrinters)) {
         this.printers.set(savedPrinters);
       }
-      console.log('🖨️ Loaded printers from IndexedDB:', this.printers());
     } catch (error) {
       console.error('Failed to load printers from IndexedDB:', error);
       // Try to continue with empty printers array instead of failing completely
@@ -78,7 +77,6 @@ export class PrintSetupComponent implements OnInit {
       await this.indexedDBService.saveSetting('printerConfigs', this.printers());
       // Refresh the print service with the new config
       await this.printService.refreshPrinterConfig();
-      console.log('💾 Printers saved to IndexedDB and print service updated');
       
       this.showNotification('Printer settings saved successfully!', 'success');
     } catch (error) {
@@ -185,7 +183,6 @@ export class PrintSetupComponent implements OnInit {
       await this.savePrinters();
       
       this.cancelForm();
-      console.log('✅ Printer saved successfully');
     } catch (error) {
       console.error('Failed to save printer:', error);
     } finally {
@@ -202,7 +199,6 @@ export class PrintSetupComponent implements OnInit {
       const currentPrinters = this.printers().filter(p => p.id !== printerId);
       this.printers.set(currentPrinters);
       await this.savePrinters();
-      console.log('🗑️ Printer deleted');
     } catch (error) {
       console.error('Failed to delete printer:', error);
     }

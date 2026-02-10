@@ -2316,8 +2316,6 @@ export class StoresManagementComponent implements OnInit {
       this.toastService.error('Cannot open expense log for unknown store');
       return;
     }
-    // Debug: ensure click handler is firing
-    console.log('openExpenseLog called for store', store && store.id);
     try { this.toastService.info('Opening Expense Log...'); } catch {}
 
     // Open modal in-place (patterned like inventory modal)
@@ -2402,7 +2400,6 @@ export class StoresManagementComponent implements OnInit {
   }
 
   openAddStoreModal() {
-    console.log('openAddStoreModal called');
     this.editingStore = null;
     this.storeForm.reset({
       invoiceNo: 'INV-0000-000000',
@@ -2426,14 +2423,12 @@ export class StoresManagementComponent implements OnInit {
         console.error('Failed to prepare store types for Add Store modal', err);
       } finally {
         this.showStoreModal = true;
-        console.log('showStoreModal set to:', this.showStoreModal);
         this.cdr.detectChanges();
       }
     })();
   }
 
   editStore(store: Store) {
-    console.log('📝 editStore called with store:', store);
     
     this.editingStore = store;
     
@@ -2466,8 +2461,6 @@ export class StoresManagementComponent implements OnInit {
       subscriptionPopupShown: store.subscriptionPopupShown || false
     };
     
-    console.log('📝 Form values being patched:', formValues);
-    
     this.storeForm.patchValue(formValues);
     
     // Disable status field for non-admin users
@@ -2476,8 +2469,6 @@ export class StoresManagementComponent implements OnInit {
     } else {
       this.storeForm.get('status')?.enable();
     }
-    
-    console.log('📝 Form value after patch:', this.storeForm.value);
     
     this.showStoreModal = true;
   }
@@ -2566,33 +2557,20 @@ export class StoresManagementComponent implements OnInit {
         subscriptionPopupShown: formData.subscriptionPopupShown || false
       };
 
-      console.log('💾 Saving store data:', {
-        storeName: storeData.storeName,
-        status: storeData.status,
-        companyId: storeData.companyId,
-        editingStore: this.editingStore?.id
-      });
-
       if (this.editingStore) {
         // Update existing store
-        console.log('📝 Updating store:', this.editingStore.id, 'with data:', storeData);
         await this.storeService.updateStore(this.editingStore.id!, storeData);
-        console.log('✅ Store updated successfully');
         this.toastService.success('Store updated successfully');
       } else {
         // Create new store
-        console.log('➕ Creating new store with data:', storeData);
         const newStoreId = await this.storeService.createStore(storeData);
-        console.log('✅ Store created successfully with ID:', newStoreId);
         
         // If there's a logo URL from temp upload, move it to final location
         if (storeData.logoUrl && storeData.logoUrl.includes('/temp/logo/')) {
-          console.log('🔄 Moving logo from temp to final location...');
           try {
             const finalLogoUrl = await this.moveLogoToFinalLocation(storeData.logoUrl, newStoreId);
             // Update the store with the final logo URL
             await this.storeService.updateStore(newStoreId, { logoUrl: finalLogoUrl });
-            console.log('✅ Logo moved and store updated with final URL');
           } catch (logoError) {
             console.warn('⚠️ Failed to move logo, but store was created successfully:', logoError);
             this.toastService.warning('Store created, but logo upload needs to be redone');
@@ -2757,7 +2735,6 @@ export class StoresManagementComponent implements OnInit {
 
   // Devices Modal Methods
   async openDevicesModal(store: Store) {
-    console.log('🔵 Opening devices modal for store:', store.id, store.storeName);
     this.selectedStore = store;
     this.showDevicesModal = true;
     this.showDeviceForm = false;
@@ -2766,9 +2743,7 @@ export class StoresManagementComponent implements OnInit {
     
     try {
       // Load devices for this store
-      console.log('🔵 Calling getDevicesByStore for storeId:', store.id);
       this.storeDevices = await this.deviceService.getDevicesByStore(store.id!);
-      console.log('🔵 Loaded devices:', this.storeDevices.length, this.storeDevices);
     } catch (error: any) {
       console.error('❌ Error loading devices:', error);
       
@@ -2783,7 +2758,6 @@ export class StoresManagementComponent implements OnInit {
       this.storeDevices = [];
     } finally {
       this.isLoadingDevices = false;
-      console.log('🔵 Final storeDevices state:', this.storeDevices);
     }
   }
 
@@ -3029,11 +3003,6 @@ export class StoresManagementComponent implements OnInit {
     if (!input.files || input.files.length === 0) return;
     
     const file = input.files[0];
-    console.log('📷 Starting store logo upload:', {
-      fileName: file.name,
-      fileSize: file.size,
-      fileType: file.type
-    });
     
     try {
       // Show loading state
@@ -3041,18 +3010,10 @@ export class StoresManagementComponent implements OnInit {
       this.toastService.info('Compressing and uploading logo...');
       
       // Compress the image
-      console.log('🔄 Compressing logo...');
       const compressed = await this.compressImage(file, 800 * 800); // 800x800 max for logos
-      console.log('✅ Logo compressed:', {
-        originalSize: file.size,
-        compressedSize: compressed.size,
-        compression: Math.round((1 - compressed.size / file.size) * 100) + '%'
-      });
       
       // Upload to Firebase Storage with structured path
-      console.log('☁️ Uploading logo to Firebase Storage...');
       const url = await this.uploadLogoToStorage(compressed);
-      console.log('✅ Logo uploaded successfully:', url);
       
       // Set the URL in the form
       this.storeForm.get('logoUrl')?.setValue(url);
@@ -3082,8 +3043,6 @@ export class StoresManagementComponent implements OnInit {
    */
   async uploadLogoToStorage(file: File): Promise<string> {
     try {
-      console.log('☁️ Starting structured logo upload...');
-      
       // For new stores, use a temporary path that will be updated after store creation
       // For existing stores, use the actual store ID
       const storeId = this.editingStore?.id || `temp_${Date.now()}`;
@@ -3096,15 +3055,6 @@ export class StoresManagementComponent implements OnInit {
       const fileName = isNewStore 
         ? `temp/logo/logo_${storeId}.${extension}`
         : `${storeId}/logo/logo_${storeId}.${extension}`;
-      
-      console.log('📤 Uploading logo with structure:', {
-        storeId,
-        isNewStore,
-        fileName: file.name,
-        fileSize: file.size,
-        fileType: file.type,
-        storagePath: fileName
-      });
       
       // Dynamic import to avoid top-level SDK usage
       const { getStorage, ref, uploadBytes, getDownloadURL } = await import('firebase/storage');
@@ -3124,14 +3074,7 @@ export class StoresManagementComponent implements OnInit {
         }
       });
       
-      console.log('✅ Upload complete, getting download URL...');
       const downloadURL = await getDownloadURL(snapshot.ref);
-      
-      console.log('✅ Logo upload complete with structured path:', {
-        downloadURL,
-        fullPath: fileName,
-        size: snapshot.metadata.size || 0
-      });
       
       return downloadURL;
     } catch (error: any) {
@@ -3145,8 +3088,6 @@ export class StoresManagementComponent implements OnInit {
    */
   async moveLogoToFinalLocation(tempUrl: string, finalStoreId: string): Promise<string> {
     try {
-      console.log('🔄 Moving logo from temp to final location...');
-      
       // Dynamic import Firebase Storage
       const { getStorage, ref, getDownloadURL, uploadBytes, deleteObject } = await import('firebase/storage');
       const { app } = await import('../../../firebase.config');
@@ -3185,16 +3126,9 @@ export class StoresManagementComponent implements OnInit {
       // Delete temp file
       try {
         await deleteObject(tempRef);
-        console.log('🗑️ Temp logo file deleted');
       } catch (deleteError) {
         console.warn('⚠️ Could not delete temp logo file:', deleteError);
       }
-      
-      console.log('✅ Logo moved successfully:', {
-        from: tempUrl,
-        to: finalUrl,
-        finalPath
-      });
       
       return finalUrl;
     } catch (error: any) {

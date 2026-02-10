@@ -816,23 +816,6 @@ export class ProductService implements OnDestroy {
           normalizedUpdates.updatedAt = this.safeToDate(normalizedUpdates.updatedAt);
         }
         const updatedProduct = { ...product, ...normalizedUpdates };
-        console.log('🔄 Cache updated for product:', {
-          productId,
-          oldValues: {
-            totalStock: product.totalStock,
-            costPrice: product.costPrice,
-            originalPrice: product.originalPrice,
-            sellingPrice: product.sellingPrice,
-            updatedAt: product.updatedAt
-          },
-          newValues: {
-            totalStock: updatedProduct.totalStock,
-            costPrice: updatedProduct.costPrice,
-            originalPrice: updatedProduct.originalPrice,
-            sellingPrice: updatedProduct.sellingPrice,
-            updatedAt: updatedProduct.updatedAt
-          }
-        });
         return updatedProduct;
       }
       return product;
@@ -1223,27 +1206,8 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
 
   async updateProduct(productId: string, updates: Partial<Product>): Promise<void> {
     try {
-      console.log('🔧 ProductService.updateProduct called:', {
-        productId,
-        updates: {
-          totalStock: updates.totalStock,
-          costPrice: updates.costPrice,
-          originalPrice: updates.originalPrice,
-          sellingPrice: updates.sellingPrice,
-          ...updates
-        }
-      });
-      
-      // Get current user ID
-      const currentUser = this.authService.getCurrentUser();
-      if (!currentUser) {
-        throw new Error('User not authenticated');
-      }
-
       // Prepare update data with proper Timestamp conversion
       const updateData: any = { ...updates };
-      
-      console.log('🔍 updateProduct - Original updates object:', JSON.stringify(updates, null, 2));
       
       // Normalize VAT fields when present
       if ('vatRate' in updates) {
@@ -1282,33 +1246,17 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
         }
       }
       
-      console.log('🔍 updateProduct - After normalization:', JSON.stringify(updateData, null, 2));
-
       // Add updatedAt timestamp to track when product was last modified
       updateData.updatedAt = Timestamp.now();
 
       // Clean undefined values to prevent Firestore errors
       const cleanedUpdateData = this.cleanUndefinedValues(updateData);
       
-      console.log('💾 About to save to Firestore:', {
-        productId,
-        cleanedUpdateData: {
-          totalStock: cleanedUpdateData.totalStock,
-          costPrice: cleanedUpdateData.costPrice,
-          originalPrice: cleanedUpdateData.originalPrice,
-          sellingPrice: cleanedUpdateData.sellingPrice,
-          updatedAt: cleanedUpdateData.updatedAt,
-          ...cleanedUpdateData
-        }
-      });
-      
       // Use Firestore updateDoc directly for automatic offline persistence
       // Firestore will queue this update if offline and update its cache automatically
       const productRef = doc(this.firestore, 'products', productId);
       await updateDoc(productRef, cleanedUpdateData);
       
-      console.log('✅ Firestore update completed successfully');
-
       // Update the local cache optimistically with the cleaned/normalized data
       this.updateProductInCache(productId, cleanedUpdateData as Partial<Product>);
 
@@ -1765,17 +1713,17 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
 
   // Legacy no-op implementations to avoid breaking callers; will be removed after UI refactor.
   async addInventoryBatch(productId: string, _batch: ProductInventory): Promise<void> {
-  this.logger.warn('addInventoryBatch is deprecated. Use InventoryDataService.addBatch instead.', { area: 'products' });
+    this.logger.warn('addInventoryBatch is deprecated. Use InventoryDataService.addBatch instead.', { area: 'products' });
     // No-op
   }
 
   async updateInventoryBatch(productId: string, _batchId: string, _updatedBatch: ProductInventory): Promise<void> {
-  this.logger.warn('updateInventoryBatch is deprecated. Use InventoryDataService.updateBatch instead.', { area: 'products' });
+    this.logger.warn('updateInventoryBatch is deprecated. Use InventoryDataService.updateBatch instead.', { area: 'products' });
     // No-op
   }
 
   async removeInventoryBatch(productId: string, _batchId: string): Promise<void> {
-  this.logger.warn('removeInventoryBatch is deprecated. Use InventoryDataService.removeBatch instead.', { area: 'products' });
+    this.logger.warn('removeInventoryBatch is deprecated. Use InventoryDataService.removeBatch instead.', { area: 'products' });
     // No-op
   }
 }

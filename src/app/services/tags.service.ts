@@ -86,8 +86,6 @@ export class TagsService {
 
   async getTagsByStore(storeId: string, includeInactive: boolean = false): Promise<ProductTag[]> {
     try {
-      console.log('🏷️ TagsService.getTagsByStore called with:', { storeId, includeInactive });
-      
       let q;
       
       if (includeInactive) {
@@ -109,9 +107,7 @@ export class TagsService {
         );
       }
 
-      console.log('🏷️ Executing Firestore query for productTags...');
       const snapshot = await getDocs(q);
-      console.log('🏷️ Firestore snapshot received. Docs count:', snapshot.docs.length);
       
       if (snapshot.empty) {
         console.log('⚠️ No productTags found for storeId:', storeId);
@@ -149,7 +145,6 @@ export class TagsService {
         updatedAt: doc.data()['updatedAt']?.toDate?.() || doc.data()['updatedAt']
       })) as ProductTag[];
       
-      console.log('🏷️ Returning', results.length, 'tags');
       return results;
     } catch (error) {
       console.error('❌ Error in getTagsByStore:', error);

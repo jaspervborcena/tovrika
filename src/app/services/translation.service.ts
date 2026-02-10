@@ -77,8 +77,6 @@ export class TranslationService {
         this.translateService.setTranslation('zh-cn', zhTranslations, true); // true = merge with existing
       }
       
-      console.log('✅ Translation files loaded successfully');
-      
       // Refresh current language to apply new translations
       const currentLang = this.getCurrentLanguage();
       this.translateService.use(currentLang);
