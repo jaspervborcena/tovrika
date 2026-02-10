@@ -156,24 +156,7 @@ export class LedgerService {
       const startOfDay = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0, 0);
       const endOfDay = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59, 999);
       
-      console.log(`📅 getLatestOrderBalances: eventType=${eventType}, companyId=${companyId}, storeId=${storeId}`);
-      console.log(`📅 Date range: ${startOfDay.toISOString()} to ${endOfDay.toISOString()}`);
-      
-      // First, try a simpler query without date range to debug
-      if (eventType === 'unpaid' || eventType === 'recovered') {
-        const debugQ = query(
-          collection(this.firestore, 'orderAccountingLedger'),
-          where('eventType', '==', eventType),
-          limit(5)
-        );
-        const debugSnaps = await getDocs(debugQ);
-        console.log(`🔍 DEBUG: Found ${debugSnaps.docs.length} ${eventType} entries (no company/store/date filter)`);
-        debugSnaps.docs.forEach((doc, i) => {
-          const data = doc.data();
-          console.log(`🔍 DEBUG entry ${i}: companyId=${data['companyId']}, storeId=${data['storeId']}, amount=${data['runningBalanceAmount']}, createdAt=${data['createdAt']}`);
-        });
-      }
-      
+
       // Query for the LATEST ledger entry within the specified day (ordered by createdAt desc, limit 1)
       const q = query(
         collection(this.firestore, 'orderAccountingLedger'),
@@ -187,11 +170,9 @@ export class LedgerService {
       );
       
       const snaps = await getDocs(q);
-      console.log(`📊 Found ${snaps.docs.length} ledger entries for ${eventType} on ${date.toLocaleDateString()}`);
       
       // If no entries found for today, return zeros
       if (snaps.empty) {
-        console.log(`📊 No ${eventType} entries found for today - returning zeros`);
         return { runningBalanceAmount: 0, runningBalanceQty: 0 };
       }
       
@@ -203,13 +184,11 @@ export class LedgerService {
       const runningBalanceQty = Number(d.runningBalanceQty || 0);
       
       const docCreatedAt = d.createdAt?.toDate ? d.createdAt.toDate() : new Date(d.createdAt);
-      console.log(`📊 Latest entry: createdAt=${docCreatedAt.toISOString()}, runningBalanceAmount=${runningBalanceAmount}`);
       
       const result = {
         runningBalanceAmount,
         runningBalanceQty
       };
-      console.log(`📊 Returning cumulative totals for ${eventType}: amount=${runningBalanceAmount} (₱${runningBalanceAmount/100})`);
       return result;
     } catch (err) {
       console.warn('LedgerService.getLatestOrderBalances fallback', err);

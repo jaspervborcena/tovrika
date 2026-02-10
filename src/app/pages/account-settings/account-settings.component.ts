@@ -7,6 +7,7 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../share
 import { AuthService, User } from '../../services/auth.service';
 import { IndexedDBService } from '../../core/services/indexeddb.service';
 import { CompanyService } from '../../services/company.service';
+import { environment } from '../../../environments/environment';
 
 interface PermissionDisplay {
   companyId: string;
@@ -27,6 +28,9 @@ export class AccountSettingsComponent implements OnInit {
   private authService = inject(AuthService);
   private indexedDBService = inject(IndexedDBService);
   private companyService = inject(CompanyService);
+  
+  // App version from environment
+  readonly appVersion = environment.version;
   
   currentUser = this.authService.currentUser;
   isSaving = false;

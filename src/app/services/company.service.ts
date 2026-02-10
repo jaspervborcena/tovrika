@@ -342,6 +342,23 @@ export class CompanyService {
           currentCompanyId: documentId, // Set this as the current company
           roleId: 'creator'
         });
+
+        // Create userRoles entry for creator role
+        try {
+          const userRolesRef = collection(this.firestore, 'userRoles');
+          await addDoc(userRolesRef, {
+            companyId: documentId,
+            userId: user.uid,
+            roleId: 'creator',
+            storeId: '', // Empty for company-level creator
+            createdAt: new Date(),
+            updatedAt: new Date()
+          });
+          console.log('✅ Created userRoles entry for creator');
+        } catch (roleError) {
+          console.error('Error creating userRoles entry:', roleError);
+          // Not critical, permissions array is already updated
+        }
       }
 
   await this.loadCompanies(); // Reload to get fresh data

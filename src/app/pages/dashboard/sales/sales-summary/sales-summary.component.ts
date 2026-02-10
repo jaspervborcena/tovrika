@@ -1761,15 +1761,6 @@ export class SalesSummaryComponent implements OnInit {
     // If date range is current date (today), use Firestore
     const isCurrentDate = startStr === todayStr && endStr === todayStr;
     
-    console.log('📅 Date range check:', {
-      today: todayStr,
-      startDate: startStr,
-      endDate: endStr,
-      isCurrentDate,
-      willUseFirestore: isCurrentDate,
-      willUseAPI: !isCurrentDate
-    });
-    
     // Use API for all dates except current date
     return !isCurrentDate;
   }
@@ -1878,11 +1869,6 @@ export class SalesSummaryComponent implements OnInit {
               const oDate = o.createdAt;
               return oDate >= startDate && oDate <= endDate;
             });
-
-            console.log('📊 After client-side date filtering:', orders.length, 'orders');
-            if (orders.length > 0) {
-              console.log('📊 Sample filtered order:', orders[0]);
-            }
           }
         } catch (debugErr) {
           console.warn('Failed to fetch orders via getSampleOrdersForDebug', debugErr);
@@ -1896,7 +1882,6 @@ export class SalesSummaryComponent implements OnInit {
       try {
         if (orders && orders.length > 0) {
           await this.indexedDb.saveSetting(`orders_snapshot_${storeId}`, orders);
-          console.log(`📦 Saved ${orders.length} orders to IndexedDB snapshot for store ${storeId}`);
         }
       } catch (saveErr) {
         console.warn('Failed to save orders snapshot to IndexedDB', saveErr);
@@ -2088,7 +2073,6 @@ export class SalesSummaryComponent implements OnInit {
         this.toDate = oldFrom;
         // Reset pagination when swapping to avoid confusing page numbers
         this.currentPage.set(1);
-        console.log('🔁 Date range swapped to maintain From <= To:', { from: this.fromDate, to: this.toDate });
       }
     } catch (err) {
       // If parsing fails, do nothing - validation will catch missing/invalid dates later

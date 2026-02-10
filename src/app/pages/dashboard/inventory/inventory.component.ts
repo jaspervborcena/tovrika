@@ -242,7 +242,6 @@ export class InventoryComponent implements OnInit {
   hasMultipleStores = computed(() => {
     const storeCount = this.stores().length;
     const hasMultiple = storeCount > 1;
-    console.log('🔢 hasMultipleStores computed:', { storeCount, hasMultiple, stores: this.stores().map(s => s.storeName) });
     return hasMultiple;
   });
 
@@ -262,11 +261,6 @@ export class InventoryComponent implements OnInit {
       const activeStores = await this.storeService.getActiveStoresForDropdown(currentPermission.companyId);
       
       this.stores.set(activeStores);
-      console.log('🏪 Inventory: After setting stores signal', {
-        storesLength: this.stores().length,
-        hasMultiple: this.hasMultipleStores(),
-        stores: this.stores().map(s => s.storeName)
-      });
 
       // Set selected store - if user has storeId, use it, otherwise use first store
       if (currentPermission?.storeId) {
@@ -274,8 +268,6 @@ export class InventoryComponent implements OnInit {
       } else if (activeStores.length > 0 && activeStores[0].id) {
         this.selectedStoreId.set(activeStores[0].id);
       }
-      
-      console.log('🏪 Inventory: Selected store ID:', this.selectedStoreId());
     } catch (error) {
       console.error('Error loading stores:', error);
       this.stores.set([]);
@@ -283,7 +275,6 @@ export class InventoryComponent implements OnInit {
   }
 
   onStoreChange(): void {
-    console.log('Store changed to:', this.selectedStoreId());
     // TODO: Reload inventory data for selected store
   }
 

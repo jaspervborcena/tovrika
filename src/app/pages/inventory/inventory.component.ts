@@ -583,7 +583,7 @@ export class InventoryComponent implements OnInit {
       // Check what runningBalanceTotalStock values we have
       rows.forEach((r, idx) => {
         console.log(`Row ${idx}:`, {
-          sku: r.sku,
+          skuId: r.skuId,
           productId: r.productId,
           runningBalanceTotalStock: r.runningBalanceTotalStock,
           hasStock: r.runningBalanceTotalStock !== undefined && r.runningBalanceTotalStock !== null,

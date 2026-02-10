@@ -1514,6 +1514,7 @@ export class PosService {
     
     // Persist a deduction record for audit/querying
     const dedRecord = {
+      eventType: 'completed' as const,
       productId,
       batchId: p.batchId,
       quantity: p.deduct,

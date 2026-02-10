@@ -214,7 +214,6 @@ export class DashboardComponent implements OnInit {
 
     if (roleId === 'admin') {
       this.userRole.set('admin');
-      console.log('✅ Dashboard: Admin role set, userRole signal:', this.userRole());
       this.accessService.setPermissions({}, 'admin');
     } else if (roleId === 'cashier') {
       this.userRole.set('cashier');
