@@ -55,6 +55,49 @@ export class OfflineReconciliationService {
       const trackingSnap = await getDocs(trackingQuery);
       console.log(`📦 Found ${trackingSnap.docs.length} tracking entries in date range`);
 
+      const getDateKey = (dateVal: any): string => {
+        const d = dateVal?.toDate ? dateVal.toDate() : new Date(dateVal);
+        return d.toISOString().split('T')[0];
+      };
+
+      // Daily totals for comparison (completed status only)
+      const trackingTotalsByDate = new Map<string, { amount: number; quantity: number }>();
+
+      // Build daily tracking totals first (processing/completed status for offline)
+      for (const trackingDoc of trackingSnap.docs) {
+        const trackingData = trackingDoc.data() as any;
+        const status = String(trackingData.status || '').toLowerCase();
+        if (status !== 'completed' && status !== 'processing') continue;
+
+        const dateKey = getDateKey(trackingData.createdAt || trackingData.updatedAt || new Date());
+        const prev = trackingTotalsByDate.get(dateKey) || { amount: 0, quantity: 0 };
+        trackingTotalsByDate.set(dateKey, {
+          amount: prev.amount + Number(trackingData.total || 0),
+          quantity: prev.quantity + Number(trackingData.quantity || 0)
+        });
+      }
+
+      // Daily ledger totals for comparison (completed eventType)
+      const ledgerTotalsByDate = new Map<string, { amount: number; quantity: number }>();
+      const ledgerQuery = query(
+        collection(this.firestore, 'orderAccountingLedger'),
+        where('storeId', '==', storeId),
+        where('eventType', '==', 'completed')
+      );
+
+      const ledgerSnap = await getDocs(ledgerQuery);
+      for (const ledgerDoc of ledgerSnap.docs) {
+        const ledgerData = ledgerDoc.data() as any;
+        const createdAt = ledgerData.createdAt?.toDate ? ledgerData.createdAt.toDate() : new Date(ledgerData.createdAt || new Date());
+        if (createdAt < startDate || createdAt > endDate) continue;
+        const dateKey = getDateKey(createdAt);
+        const prev = ledgerTotalsByDate.get(dateKey) || { amount: 0, quantity: 0 };
+        ledgerTotalsByDate.set(dateKey, {
+          amount: prev.amount + Number(ledgerData.amount || 0),
+          quantity: prev.quantity + Number(ledgerData.quantity || 0)
+        });
+      }
+
       // Group by orderId and invoiceNumber
       const orderMap = new Map<string, {
         orderId: string;
@@ -143,6 +186,10 @@ export class OfflineReconciliationService {
 
       for (const [orderId, orderData] of orderMap.entries()) {
         const invoiceNumber = orderData.invoiceNumber;
+        const orderDateKey = getDateKey(orderData.orderDate);
+        const dailyTracking = trackingTotalsByDate.get(orderDateKey) || { amount: 0, quantity: 0 };
+        const dailyLedger = ledgerTotalsByDate.get(orderDateKey) || { amount: 0, quantity: 0 };
+        const ledgerExists = ledgerTotalsByDate.has(orderDateKey);
 
         // Check if inventoryTracking entries exist (FIFO processed)
         // inventoryTracking records the actual deductions made during FIFO processing
@@ -170,28 +217,12 @@ export class OfflineReconciliationService {
           }
         }
 
-        const trackingAmount = orderData.trackingAmount;
-        const trackingQuantity = orderData.trackingQuantity;
+        const trackingAmount = dailyTracking.amount;
+        const trackingQuantity = dailyTracking.quantity;
         const trackingExists = true; // We already have tracking data
 
-        // Check if orderAccountingLedger entry exists
-        const ledgerQuery = query(
-          collection(this.firestore, 'orderAccountingLedger'),
-          where('orderId', '==', orderId),
-          where('eventType', '==', 'completed'),
-          limit(1)
-        );
-
-        const ledgerSnap = await getDocs(ledgerQuery);
-        let ledgerAmount: number | undefined;
-        let ledgerQuantity: number | undefined;
-        const ledgerExists = !ledgerSnap.empty;
-
-        if (ledgerExists) {
-          const ledgerData = ledgerSnap.docs[0].data() as any;
-          ledgerAmount = Number(ledgerData.amount || 0);
-          ledgerQuantity = Number(ledgerData.quantity || 0);
-        }
+        const ledgerAmount: number | undefined = ledgerExists ? dailyLedger.amount : undefined;
+        const ledgerQuantity: number | undefined = ledgerExists ? dailyLedger.quantity : undefined;
 
         // Calculate discrepancies
         const amountDiscrepancy = trackingAmount - (ledgerAmount || 0);

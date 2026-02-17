@@ -1426,8 +1426,8 @@ import { AppConstants } from '../../../shared/enums/app-constants.enum';
                   <span>Basic Information</span>
                 </h4>
 
-                <!-- Store Selection (Add mode only, when multiple stores exist) -->
-                <div class="form-group" *ngIf="!isEditMode && stores().length > 1">
+                <!-- Store Selection -->
+                <div class="form-group" *ngIf="stores().length > 0">
                   <label for="storeId">🏪 Store *</label>
                   <select 
                     id="storeId"
@@ -2709,7 +2709,7 @@ export class ProductManagementComponent implements OnInit {
 
   private createProductForm(): FormGroup {
     return this.fb.group({
-      storeId: [''], // Will be populated from permission or user selection
+      storeId: ['', Validators.required], // Will be populated from permission or user selection
       productName: ['', Validators.required],
       description: [''],
       skuId: ['', Validators.required],
@@ -2911,6 +2911,7 @@ export class ProductManagementComponent implements OnInit {
   async openEditModal(product: Product): Promise<void> {
     this.isEditMode = true;
     this.selectedProduct = product;
+    const permission = this.authService.getCurrentPermission();
     
     // Load product tags into signal
     this.selectedTagIds.set(product.tags || []);
@@ -2931,6 +2932,9 @@ export class ProductManagementComponent implements OnInit {
     
     // Patch the form silently to avoid triggering valueChange subscriptions
     this.productForm.patchValue(product, { emitEvent: false });
+    if (!this.productForm.get('storeId')?.value && permission?.storeId) {
+      this.productForm.patchValue({ storeId: permission.storeId }, { emitEvent: false });
+    }
     
     // Set costPrice to 0 initially (will be loaded from latest batch if available)
     this.productForm.get('costPrice')?.setValue(0, { emitEvent: false });
@@ -4240,6 +4244,9 @@ export class ProductManagementComponent implements OnInit {
       if (selectedStoreId) {
         // Clear current category selection since categories are store-specific
         this.productForm.patchValue({ category: '' });
+
+        // Load categories for the selected store
+        await this.categoryService.loadCategoriesByStore(selectedStoreId);
         
         // Load tags for the selected store
         await this.loadTags(selectedStoreId);
