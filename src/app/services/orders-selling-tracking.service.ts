@@ -1331,86 +1331,32 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
     let idx = 0;
     for (const it of items) {
       try {
+        const isOffline = !this.networkService.isOnline();
         // Step 1: Find batches for this product using FIFO (oldest first, active only)
         // Query Firestore - it will automatically use its cache when offline
         let batches: any[] = [];
         
-        const batchesQuery = query(
-          collection(this.firestore, 'productInventory'),
-          where('productId', '==', it.productId),
-          where('storeId', '==', ctx.storeId),
-          limit(100) // Get more batches since we're filtering/sorting client-side
-        );
+        if (!isOffline) {
+          const batchesQuery = query(
+            collection(this.firestore, 'productInventory'),
+            where('productId', '==', it.productId),
+            where('storeId', '==', ctx.storeId),
+            limit(100) // Get more batches since we're filtering/sorting client-side
+          );
 
-        let batchesSnapshot;
-        try {
-          batchesSnapshot = await getDocs(batchesQuery);
-          batches = batchesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-          
-          const isFromCache = batchesSnapshot.metadata.fromCache;
-          console.log(`🔥 Firestore returned ${batches.length} batches for product ${it.productId} (source: ${isFromCache ? 'CACHE' : 'SERVER'})`);
-        } catch (queryError) {
-          console.warn(`⚠️ Failed to query Firestore for product ${it.productId}:`, queryError);
-          // If offline and Firestore cache failed, create tracking without batches
-          if (!this.networkService.isOnline()) {
-            console.log('📱 Offline: No batches available in Firestore cache, creating tracking only');
+          let batchesSnapshot;
+          try {
+            batchesSnapshot = await getDocs(batchesQuery);
+            batches = batchesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
             
-            // Create tracking document without batch deductions
-            // Fetch product totalStock for tracking
-            let offlineProductTotalStock = 0;
-            try {
-              const productRef = doc(this.firestore, 'products', it.productId);
-              const productSnap = await getDoc(productRef);
-              if (productSnap.exists()) {
-                offlineProductTotalStock = Number(productSnap.data()?.['totalStock'] || 0);
-              }
-            } catch (productError) {
-              console.warn(`⚠️ Failed to fetch product totalStock for offline tracking:`, productError);
-            }
-            
-            const docData: OrdersSellingTrackingDoc = {
-              companyId: ctx.companyId,
-              storeId: ctx.storeId,
-              orderId: ctx.orderId,
-              batchNumber: (it as any).batchNumber || 1,
-              createdAt: new Date(),
-              createdBy: ctx.cashierId,
-              uid: ctx.cashierId,
-              status: 'processing',
-              itemIndex: idx,
-              orderDetailsId: (it as any).orderDetailsId || undefined,
-              productId: it.productId,
-              productName: it.productName,
-              productCode: (it as any).productCode || undefined,
-              skuId: (it as any).skuId || (it as any).sku || undefined,
-              cost: 0, // Will be calculated when synced
-              price: it.unitPrice,
-              quantity: it.quantity,
-              discount: (it as any).discount ?? 0,
-              discountType: (it as any).discountType ?? 'none',
-              vat: (it as any).vat ?? 0,
-              total: it.lineTotal,
-              isVatExempt: !!((it as any).isVatExempt),
-              runningBalanceTotalStock: offlineProductTotalStock,  // Capture product's totalStock at transaction time
-              cashierId: ctx.cashierId,
-              cashierEmail: ctx.cashierEmail,
-              cashierName: ctx.cashierName,
-              number: (it as any).number || undefined,
-              ...(this.networkService.isOnline() ? {} : { _offlineCreated: true })
-            } as OrdersSellingTrackingDoc;
-
-            
-
-            const trackingRef = collection(this.firestore, 'ordersSellingTracking');
-            const cleanedDoc = this.removeUndefinedFields(docData as any);
-            await addDoc(trackingRef, cleanedDoc);
-            tracked++;
-            console.log(`📝 Created offline tracking (no batches) for product ${it.productId}`);
-            
-            idx++;
-            continue; // Skip to next item
+            const isFromCache = batchesSnapshot.metadata.fromCache;
+            console.log(`🔥 Firestore returned ${batches.length} batches for product ${it.productId} (source: ${isFromCache ? 'CACHE' : 'SERVER'})`);
+          } catch (queryError) {
+            console.warn(`⚠️ Failed to query Firestore for product ${it.productId}:`, queryError);
+            throw queryError; // Re-throw if online
           }
-          throw queryError; // Re-throw if online
+        } else {
+          console.log('📱 Offline: Skipping productInventory FIFO deduction (will reconcile later)');
         }
 
         // batches array now contains data from Firestore (with cache)
@@ -1463,19 +1409,21 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
           const newTotalDeducted = (batch.totalDeducted || 0) + deductQty;
           const newStatus = newQty === 0 ? 'depleted' : 'active';
 
-          // Update Firestore (queues for sync when online)
-          try {
-            await updateDoc(batchRef, {
-              quantity: newQty,
-              totalDeducted: newTotalDeducted,
-              status: newStatus,
-              updatedAt: new Date(),
-              updatedBy: ctx.cashierId
-            });
-            console.log(`✅ Updated batch ${batch.batchId} in Firestore`);
-          } catch (updateError) {
-            console.warn(`⚠️ Failed to update batch ${batch.batchId} in Firestore (will retry via persistence):`, updateError);
-            // Firestore offline persistence will queue this update and update its cache automatically
+          // Update Firestore only when online (skip FIFO updates offline)
+          if (!isOffline) {
+            try {
+              await updateDoc(batchRef, {
+                quantity: newQty,
+                totalDeducted: newTotalDeducted,
+                status: newStatus,
+                updatedAt: new Date(),
+                updatedBy: ctx.cashierId
+              });
+              console.log(`✅ Updated batch ${batch.batchId} in Firestore`);
+            } catch (updateError) {
+              console.warn(`⚠️ Failed to update batch ${batch.batchId} in Firestore (will retry via persistence):`, updateError);
+              // Firestore offline persistence will queue this update and update its cache automatically
+            }
           }
 
           // Only record deductions for batches where we actually deducted (qty > 0)
@@ -1498,9 +1446,10 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
         if (batchDeductions.length === 0) {
           console.log(`📦 No batches found for product ${it.productId} - creating non-batch deduction`);
           
-          // Get product's costPrice from products collection
+          // Get product's costPrice and isStockTracked from products collection
           let productCostPrice = 0;
           let productTotalStock = 0;
+          let productIsStockTracked = false;
           try {
             const productRef = doc(this.firestore, 'products', it.productId);
             const productSnap = await getDoc(productRef);
@@ -1508,42 +1457,43 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
               const productData = productSnap.data();
               productCostPrice = Number(productData?.['costPrice'] || 0);
               productTotalStock = Number(productData?.['totalStock'] || 0);
-              console.log(`💰 Using product costPrice: ₱${productCostPrice}, totalStock: ${productTotalStock}`);
+              productIsStockTracked = productData?.['isStockTracked'] ?? false;
+              console.log(`💰 Using product costPrice: ₱${productCostPrice}, totalStock: ${productTotalStock}, isStockTracked: ${productIsStockTracked}`);
             }
           } catch (productError) {
-            console.warn(`⚠️ Failed to fetch product costPrice for ${it.productId}:`, productError);
+            console.warn(`⚠️ Failed to fetch product data for ${it.productId}:`, productError);
           }
           
           const nonBatchDeduction = {
-            eventType: 'completed' as const,
-            companyId: ctx.companyId,
-            storeId: ctx.storeId,
-            orderId: ctx.orderId,
-            invoiceNumber: ctx.invoiceNumber || '',
-            productId: it.productId,
-            productName: it.productName || '',
-            productCode: (it as any).productCode || '',
-            skuId: (it as any).skuId || (it as any).sku || '',
-            
-            // No batch tracking - set batchId to null
-            batchId: null,
-            refId: null,
-            costPrice: productCostPrice,
-            
-            // Deduction details
-            quantity: it.quantity,
-            runningBalanceTotalStock: productTotalStock,  // Capture product's totalStock at deduction time
-            deductedAt: new Date(),
-            
-            // Audit
-            deductedBy: ctx.cashierId,
-            createdBy: ctx.cashierId,
-            createdAt: new Date(),
-            
-            // Mark as non-batch product sale
-            note: 'Non-batch product sale',
-            ...(this.networkService.isOnline() ? {} : { _offlineCreated: true })
-          };
+              eventType: 'completed' as const,
+              companyId: ctx.companyId,
+              storeId: ctx.storeId,
+              orderId: ctx.orderId,
+              invoiceNumber: ctx.invoiceNumber || '',
+              productId: it.productId,
+              productName: it.productName || '',
+              productCode: (it as any).productCode || '',
+              skuId: (it as any).skuId || (it as any).sku || '',
+              
+              // No batch tracking - set batchId to null
+              batchId: null,
+              refId: null,
+              costPrice: productCostPrice,
+              
+              // Deduction details
+              quantity: it.quantity,
+              runningBalanceTotalStock: productTotalStock,  // Capture product's totalStock at deduction time
+              deductedAt: new Date(),
+              
+              // Audit
+              deductedBy: ctx.cashierId,
+              createdBy: ctx.cashierId,
+              createdAt: new Date(),
+              
+              // Mark as non-batch product sale
+              note: isOffline ? 'Offline capture - pending FIFO' : 'Non-batch product sale',
+              ...(isOffline ? { _offlineCreated: true, _offlinePendingFifo: true } : {})
+            };
 
           try {
             const deductionsRef = collection(this.firestore, 'inventoryTracking');
@@ -1559,60 +1509,62 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
         // Sort by batchId ascending before creating records
         batchDeductions.sort((a, b) => a.batchId.localeCompare(b.batchId));
 
-        // Fetch product totalStock once before creating deduction records
+        // Fetch product totalStock and isStockTracked once before creating deduction records
         let productTotalStock = 0;
+        let productIsStockTracked = false;
         try {
           const productRef = doc(this.firestore, 'products', it.productId);
           const productSnap = await getDoc(productRef);
           if (productSnap.exists()) {
             const productData = productSnap.data();
             productTotalStock = Number(productData?.['totalStock'] || 0);
+            productIsStockTracked = productData?.['isStockTracked'] ?? false;
           }
         } catch (productError) {
-          console.warn(`⚠️ Failed to fetch product totalStock for ${it.productId}:`, productError);
+          console.warn(`⚠️ Failed to fetch product data for ${it.productId}:`, productError);
         }
 
         for (const deduction of batchDeductions) {
-          const deductionDoc = {
-            eventType: 'completed' as const,
-            companyId: ctx.companyId,
-            storeId: ctx.storeId,
-            orderId: ctx.orderId,
-            invoiceNumber: ctx.invoiceNumber || '',
-            productId: it.productId,
-            productName: it.productName || '',
-            productCode: (it as any).productCode || '',
-            skuId: (it as any).skuId || (it as any).sku || '',
-            
-            // Batch info
-            batchId: deduction.batchId,
-            refId: deduction.refId, // productInventory document ID
-            costPrice: deduction.costPrice,
-            
-            // Deduction details
-            quantity: deduction.deductedQty,
-            runningBalanceTotalStock: productTotalStock,  // Capture product's totalStock at deduction time
-            deductedAt: new Date(),
-            
-            // Audit
-            deductedBy: ctx.cashierId,
-            createdAt: new Date(),
-            
-            // Mark as offline-created if offline
-            ...(this.networkService.isOnline() ? {} : { _offlineCreated: true })
-          };
+            const deductionDoc = {
+              eventType: 'completed' as const,
+              companyId: ctx.companyId,
+              storeId: ctx.storeId,
+              orderId: ctx.orderId,
+              invoiceNumber: ctx.invoiceNumber || '',
+              productId: it.productId,
+              productName: it.productName || '',
+              productCode: (it as any).productCode || '',
+              skuId: (it as any).skuId || (it as any).sku || '',
+              
+              // Batch info
+              batchId: deduction.batchId,
+              refId: deduction.refId, // productInventory document ID
+              costPrice: deduction.costPrice,
+              
+              // Deduction details
+              quantity: deduction.deductedQty,
+              runningBalanceTotalStock: productTotalStock,  // Capture product's totalStock at deduction time
+              deductedAt: new Date(),
+              
+              // Audit
+              deductedBy: ctx.cashierId,
+              createdAt: new Date(),
+              
+              // Mark as offline-created if offline
+              ...(isOffline ? { _offlineCreated: true, _offlinePendingFifo: true } : {})
+            };
 
-          // Use Firestore directly for automatic offline sync
-          try {
-            const deductionsRef = collection(this.firestore, 'inventoryTracking');
-            const sanitizedDeduction = this.sanitizeForFirestore(deductionDoc);
-            const cleanedDoc = this.removeUndefinedFields(sanitizedDeduction);
-            await addDoc(deductionsRef, cleanedDoc);
-            console.log(`📝 Created deduction log: batch=${deduction.batchId}, qty=${deduction.deductedQty}, cost=₱${deduction.costPrice}`);
-          } catch (error) {
-            console.warn(`⚠️ Failed to create deduction log (will retry via Firestore persistence):`, error);
-            // Firestore offline persistence will queue this automatically
-          }
+            // Use Firestore directly for automatic offline sync
+            try {
+              const deductionsRef = collection(this.firestore, 'inventoryTracking');
+              const sanitizedDeduction = this.sanitizeForFirestore(deductionDoc);
+              const cleanedDoc = this.removeUndefinedFields(sanitizedDeduction);
+              await addDoc(deductionsRef, cleanedDoc);
+              console.log(`📝 Created deduction log: batch=${deduction.batchId}, qty=${deduction.deductedQty}, cost=₱${deduction.costPrice}`);
+            } catch (error) {
+              console.warn(`⚠️ Failed to create deduction log (will retry via Firestore persistence):`, error);
+              // Firestore offline persistence will queue this automatically
+            }
         }
 
         if (remainingQty > 0) {
@@ -1674,6 +1626,7 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
           total: it.lineTotal,
           isVatExempt: !!((it as any).isVatExempt),
           runningBalanceTotalStock: productTotalStock,  // Capture product's totalStock at transaction time
+          isStockTracked: productIsStockTracked,  // Track if product stock is tracked
 
           cashierId: ctx.cashierId,
           cashierEmail: ctx.cashierEmail,
@@ -1681,7 +1634,7 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
           number: (it as any).number || undefined,
           
           // Mark as offline-created if offline
-          ...(this.networkService.isOnline() ? {} : { _offlineCreated: true })
+          ...(isOffline ? { _offlineCreated: true, _offlineId: ctx.orderId } : {})
         } as OrdersSellingTrackingDoc;
 
         // Use Firestore directly for automatic offline sync (same as inventoryTracking)
