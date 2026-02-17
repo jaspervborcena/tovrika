@@ -36,6 +36,11 @@ export interface OrdersSellingTrackingDoc {
   
   // Product stock tracking
   runningBalanceTotalStock?: number; // Product's totalStock at transaction time
+  isStockTracked?: boolean; // Whether product stock is tracked (from products.isStockTracked)
+
+  // Offline metadata (added when captured offline)
+  _offlineCreated?: boolean;
+  _offlineId?: string;
 
   // Legacy / optional cashier fields
   cashierId?: string;

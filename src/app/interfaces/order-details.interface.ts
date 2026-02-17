@@ -55,6 +55,22 @@ export interface OrderDetails {
   onlineProcessedAt?: Date;
   syncAttempts?: number;
   syncErrors?: string[];
+  
+  // Reconciliation tracking
+  isOfflineProcessed?: boolean;  // Order was created while offline
+  inventoryProcessed?: boolean;  // FIFO inventory deduction completed
+  ledgerProcessed?: boolean;     // Accounting ledger entry created
+  needsReconciliation?: boolean; // Flagged for manual reconciliation review
+  reconciliationNote?: string;   // Reason for reconciliation need
+  reconciledAt?: Date;           // When reconciliation was completed
+  reconciledBy?: string;         // User who performed reconciliation
+  offlineMetadata?: {
+    capturedAt: Date;
+    syncedAt?: Date;
+    fifoSkipped: boolean;
+    ledgerSkipped: boolean;
+    networkStatus: 'offline' | 'online';
+  };
 }
 
 export interface OrderDetailItem {

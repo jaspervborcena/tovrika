@@ -63,7 +63,7 @@ import { SubscriptionService } from '../../../services/subscription.service';
           <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
-          Company profile updated successfully!
+          {{ successMessage() }}
         </div>
       </div>
 
@@ -97,6 +97,9 @@ import { SubscriptionService } from '../../../services/subscription.service';
           <div class="form-header">
             <h2 class="form-title">{{ isCreatingCompany() ? 'Create Company Profile' : 'Company Information' }}</h2>
             <p class="form-subtitle">{{ isCreatingCompany() ? 'Set up your company profile to get started' : 'Update your company details and business information' }}</p>
+            <p class="form-note" *ngIf="isCreatingCompany()">
+              <strong>Note:</strong> Once the company is created, you will be logged out so your new role can be applied.
+            </p>
           </div>
 
           <form [formGroup]="profileForm" (ngSubmit)="onSubmit()" class="company-form">
@@ -142,6 +145,9 @@ import { SubscriptionService } from '../../../services/subscription.service';
                 class="form-input"
                 placeholder="Enter phone number"
                 [disabled]="loading()">
+              <p class="form-note" *ngIf="isCreatingCompany()">
+                <strong>Note:</strong> Once the company is created, you will be logged out so your new role can be applied.
+              </p>
             </div>
 
             <!-- UI helper: Show when user has no companyId in permission (explicit requirement) -->
@@ -1133,6 +1139,7 @@ export class CompanyProfileComponent {
   protected loading = signal(false);
   protected error = signal<string | null>(null);
   protected showSuccessMessage = signal(false);
+  protected successMessage = signal('');
   // UI-only: Default checkbox to reuse company info for initial store setup
   protected useSameInfoForStore = signal(true);
   
@@ -1451,23 +1458,14 @@ export class CompanyProfileComponent {
           } catch (userRoleErr) {
             console.warn('⚠️ Failed to ensure default userRoles entry:', userRoleErr);
           }
+          this.successMessage.set('Company created. You will be logged out so your new role can be applied.');
           this.showSuccessMessage.set(true);
           
-          // Show success message and redirect based on user setup status
+          // Show success message, then force logout to apply new role
           setTimeout(async () => {
             this.showSuccessMessage.set(false);
-            
-            // Check if user needs to create a store next
-            const currentPermission = this.authService.getCurrentPermission();
-            const hasStore = currentPermission && 
-                           currentPermission.storeId && 
-                           currentPermission.storeId.trim() !== '';
-            
-            if (!hasStore) {
-              await this.router.navigate(['/dashboard/stores'], { state: { useSameInfoForStore: this.useSameInfoForStore() } });
-            } else {
-              await this.router.navigate(['/dashboard/overview']);
-            }
+            this.successMessage.set('');
+            await this.authService.logout();
           }, 2000);
           
         } else {
@@ -1482,11 +1480,13 @@ export class CompanyProfileComponent {
             };
 
             await this.companyService.updateCompany(company.id!, updateData);
+            this.successMessage.set('Company profile updated successfully!');
             this.showSuccessMessage.set(true);
             
             // Hide success message after 3 seconds
             setTimeout(() => {
               this.showSuccessMessage.set(false);
+              this.successMessage.set('');
             }, 3000);
             
             // Reload companies to refresh the view
