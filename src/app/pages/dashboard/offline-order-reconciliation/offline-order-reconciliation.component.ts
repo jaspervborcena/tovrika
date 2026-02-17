@@ -84,7 +84,7 @@ export class OfflineOrderReconciliationComponent implements OnInit {
       return;
     }
 
-    if (!this.networkService.isOnline()) {
+    if (!this.networkService.isOnline) {
       alert('⚠️ Cannot search for discrepancies while offline. Please connect to the internet.');
       return;
     }
@@ -108,7 +108,9 @@ export class OfflineOrderReconciliationComponent implements OnInit {
       );
     } catch (error) {
       console.error('Error searching discrepancies:', error);
-      alert('Error searching discrepancies. Please try again.');
+      // Show no data found instead of error
+      this.discrepancies = [];
+      this.summary = null;
     } finally {
       this.loading = false;
     }
@@ -140,7 +142,7 @@ export class OfflineOrderReconciliationComponent implements OnInit {
 
   async reprocessInventory(discrepancy: ReconciliationDiscrepancy) {
     // Check online status first
-    if (!this.networkService.isOnline()) {
+    if (!this.networkService.isOnline) {
       this.confirmDialogData.set({
         title: 'Offline Mode',
         message: 'Cannot reprocess inventory while offline. Please connect to the network to continue.',
@@ -154,7 +156,7 @@ export class OfflineOrderReconciliationComponent implements OnInit {
     // Show confirmation dialog
     this.confirmDialogData.set({
       title: 'Reprocess Inventory',
-      message: `Reprocess inventory for invoice ${discrepancy.invoiceNumber}?\n\nThis will deduct stock using FIFO logic. This action cannot be undone.`,
+      message: `Reprocess inventory for invoice ${discrepancy.invoiceNumber}?\n\nThis will:\n• Deduct stock quantities from inventory using FIFO logic\n• Create inventory tracking records\n• Update product stock levels\n\nThis action cannot be undone.`,
       confirmText: 'Reprocess',
       cancelText: 'Cancel',
       type: 'warning'
@@ -209,7 +211,7 @@ export class OfflineOrderReconciliationComponent implements OnInit {
 
   async createLedgerEntry(discrepancy: ReconciliationDiscrepancy) {
     // Check online status first
-    if (!this.networkService.isOnline()) {
+    if (!this.networkService.isOnline) {
       this.confirmDialogData.set({
         title: 'Offline Mode',
         message: 'Cannot create ledger entry while offline. Please connect to the network to continue.',
@@ -278,7 +280,7 @@ export class OfflineOrderReconciliationComponent implements OnInit {
 
   async markReconciled(discrepancy: ReconciliationDiscrepancy) {
     // Check online status first
-    if (!this.networkService.isOnline()) {
+    if (!this.networkService.isOnline) {
       this.confirmDialogData.set({
         title: 'Offline Mode',
         message: 'Cannot mark as reconciled while offline. Please connect to the network to continue.',

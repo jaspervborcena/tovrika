@@ -12,6 +12,7 @@ import { AuthService } from './auth.service';
 import { StoreService } from './store.service';
 import { LedgerService } from './ledger.service';
 import { NetworkService } from './network.service';
+import { OrdersSellingTrackingService } from './orders-selling-tracking.service';
 import { CartItem } from '../interfaces/cart.interface';
 
 @Injectable({
@@ -23,6 +24,7 @@ export class OfflineReconciliationService {
   private storeService = inject(StoreService);
   private ledgerService = inject(LedgerService);
   private networkService = inject(NetworkService);
+  private ordersSellingTrackingService = inject(OrdersSellingTrackingService);
 
   /**
    * Find all orders with discrepancies between ordersSellingTracking and orderAccountingLedger
@@ -40,6 +42,8 @@ export class OfflineReconciliationService {
       const storeName = store?.storeName || 'Unknown Store';
 
       // Query ordersSellingTracking as primary source (has invoiceNumber and product details)
+      // Note: Can't filter by isStockTracked in query yet (new field, needs composite index)
+      // Will filter by checking products individually
       const trackingQuery = query(
         collection(this.firestore, 'ordersSellingTracking'),
         where('storeId', '==', storeId),
@@ -69,14 +73,29 @@ export class OfflineReconciliationService {
         const orderId = trackingData.orderId;
         const productId = trackingData.productId;
 
-        // Check if product should be tracked (isStockTracked=true)
-        const productRef = doc(this.firestore, 'products', productId);
-        const productSnap = await getDoc(productRef);
+        // Only include orders captured offline
+        const isOfflineCapture = trackingData._offlineCreated ?? trackingData.isOffline ?? false;
+        if (!isOfflineCapture) continue;
+
+        // Check if product should be tracked
+        // First try using the denormalized isStockTracked field (for new entries)
+        let isStockTracked = trackingData.isStockTracked;
         
-        if (!productSnap.exists()) continue;
-        
-        const productData = productSnap.data() as any;
-        const isStockTracked = productData.isStockTracked ?? false;
+        // If field doesn't exist (old entries), check the product document
+        if (isStockTracked === undefined) {
+          try {
+            const productRef = doc(this.firestore, 'products', productId);
+            const productSnap = await getDoc(productRef);
+            
+            if (!productSnap.exists()) continue;
+            
+            const productData = productSnap.data() as any;
+            isStockTracked = productData.isStockTracked ?? false;
+          } catch (err) {
+            console.warn(`Could not fetch product ${productId}:`, err);
+            continue;
+          }
+        }
         
         // Only process products that are stock tracked
         if (!isStockTracked) continue;
@@ -109,7 +128,7 @@ export class OfflineReconciliationService {
             trackingQuantity: 0,
             trackingItemCount: 0,
             products: new Set(),
-            isOffline: trackingData.isOffline ?? false
+            isOffline: isOfflineCapture
           });
         }
 
@@ -125,20 +144,26 @@ export class OfflineReconciliationService {
       for (const [orderId, orderData] of orderMap.entries()) {
         const invoiceNumber = orderData.invoiceNumber;
 
-        // Check if products have productInventory entries (FIFO processed)
+        // Check if inventoryTracking entries exist (FIFO processed)
+        // inventoryTracking records the actual deductions made during FIFO processing
         let inventoryProcessed = true;
         let fifoSkipped = false;
         
         for (const productId of orderData.products) {
-          const inventoryQuery = query(
-            collection(this.firestore, 'productInventory'),
+          const inventoryTrackingQuery = query(
+            collection(this.firestore, 'inventoryTracking'),
             where('productId', '==', productId),
             where('orderId', '==', orderId),
-            limit(1)
+            limit(5)
           );
-          const inventorySnap = await getDocs(inventoryQuery);
-          
-          if (inventorySnap.empty) {
+          const inventoryTrackingSnap = await getDocs(inventoryTrackingQuery);
+
+          const hasProcessedTracking = !inventoryTrackingSnap.empty && inventoryTrackingSnap.docs.some(docSnap => {
+            const data = docSnap.data() as any;
+            return !data._offlinePendingFifo;
+          });
+
+          if (!hasProcessedTracking) {
             inventoryProcessed = false;
             fifoSkipped = true;
             break;
@@ -415,7 +440,7 @@ export class OfflineReconciliationService {
 
       // Check network status AFTER checking for actual issues
       // This way users can see the real problems even if offline
-      if (!this.networkService.isOnline()) {
+      if (!this.networkService.isOnline) {
         errors.push('Network is offline - connect to network to proceed');
       }
 
@@ -471,40 +496,133 @@ export class OfflineReconciliationService {
       const orderSnap = await getDoc(orderRef);
       const invoiceNumber = orderSnap.exists() ? (orderSnap.data() as any).invoiceNumber || orderId : orderId;
 
-      // Convert order items to cart items format
+      // Convert order items to cart items format (only valid CartItem properties)
       const cartItems: CartItem[] = orderDetails.items.map(item => ({
         productId: item.productId,
         name: item.productName,
-        productName: item.productName,
         price: item.price,
-        sellingPrice: item.price,
         quantity: item.quantity,
         subtotal: item.total,
-        total: item.total,
-        discount: item.discount,
+        discount: item.discount || 0,
+        discountType: 'fixed' as const,
         isVatExempt: item.isVatExempt,
-        vatAmount: item.vat,
-        isFavorite: false,
-        tags: [],
-        skuId: item.productSku || '',
-        barcodeId: '',
-        category: '',
-        unitType: 'piece'
+        vatAmount: item.vat
       }));
 
-      // Dynamically import POS service to avoid circular dependency
-      const { PosService } = await import('./pos.service');
-      const posService = (window as any).injector?.get(PosService);
-
-      if (!posService) {
-        throw new Error('POS service not available');
+      // Process FIFO inventory deductions for each item
+      console.log('🔄 Processing FIFO deductions for', orderDetails.items.length, 'items');
+      
+      for (const item of orderDetails.items) {
+        // Only process stock-tracked products
+        const productRef = doc(this.firestore, 'products', item.productId);
+        const productSnap = await getDoc(productRef);
+        
+        if (!productSnap.exists()) {
+          console.warn(`⚠️ Product ${item.productId} not found, skipping`);
+          continue;
+        }
+        
+        const productData = productSnap.data() as any;
+        const isStockTracked = productData.isStockTracked ?? false;
+        
+        if (!isStockTracked) {
+          console.log(`⏭️ Product ${item.productName} is not stock tracked, skipping FIFO`);
+          continue;
+        }
+        
+        console.log(`📦 Processing FIFO for ${item.productName} (qty: ${item.quantity})`);
+        
+        // Get active batches for this product using FIFO (oldest first)
+        const batchesQuery = query(
+          collection(this.firestore, 'productInventory'),
+          where('productId', '==', item.productId),
+          where('storeId', '==', orderDetails.storeId),
+          where('companyId', '==', orderDetails.companyId),
+          where('status', '==', 'active')
+        );
+        
+        const batchesSnap = await getDocs(batchesQuery);
+        const batches = batchesSnap.docs
+          .map(doc => ({ id: doc.id, ...doc.data() as any }))
+          .filter(b => (b.quantity || 0) > 0)
+          .sort((a, b) => {
+            // Sort by batchId (contains timestamp) for FIFO
+            const aBatchId = String(a.batchId || '');
+            const bBatchId = String(b.batchId || '');
+            if (aBatchId && bBatchId) return aBatchId.localeCompare(bBatchId);
+            // Fallback to receivedAt
+            const aTime = a.receivedAt?.toDate?.()?.getTime() || 0;
+            const bTime = b.receivedAt?.toDate?.()?.getTime() || 0;
+            return aTime - bTime;
+          });
+        
+        console.log(`📊 Found ${batches.length} active batches with stock`);
+        
+        if (batches.length === 0) {
+          console.warn(`⚠️ No batches available for ${item.productName}`);
+          continue;
+        }
+        
+        // Deduct from batches using FIFO
+        let remainingQty = item.quantity;
+        const deductions: Array<{ batchId: string; refId: string; costPrice: number; deductedQty: number }> = [];
+        
+        for (const batch of batches) {
+          if (remainingQty <= 0) break;
+          
+          const availableQty = batch.quantity || 0;
+          const deductQty = Math.min(remainingQty, availableQty);
+          const newQty = availableQty - deductQty;
+          const newTotalDeducted = (batch.totalDeducted || 0) + deductQty;
+          const newStatus = newQty === 0 ? 'depleted' : 'active';
+          
+          // Update batch in productInventory
+          const batchRef = doc(this.firestore, 'productInventory', batch.id);
+          await updateDoc(batchRef, {
+            quantity: newQty,
+            totalDeducted: newTotalDeducted,
+            status: newStatus,
+            updatedAt: Timestamp.now(),
+            updatedBy: this.authService.getCurrentUser()?.uid || 'system'
+          });
+          
+          deductions.push({
+            batchId: batch.batchId || batch.id,
+            refId: batch.id,
+            costPrice: batch.costPrice || 0,
+            deductedQty: deductQty
+          });
+          
+          remainingQty -= deductQty;
+          console.log(`✅ Deducted ${deductQty} from batch ${batch.batchId}, remaining: ${newQty}`);
+        }
+        
+        // Create inventoryTracking records for each deduction
+        for (const deduction of deductions) {
+          await addDoc(collection(this.firestore, 'inventoryTracking'), {
+            eventType: 'completed',
+            companyId: orderDetails.companyId,
+            storeId: orderDetails.storeId,
+            orderId: orderId,
+            invoiceNumber: invoiceNumber,
+            productId: item.productId,
+            productName: item.productName,
+            productCode: '',
+            skuId: item.productSku || '',
+            batchId: deduction.batchId,
+            refId: deduction.refId,
+            costPrice: deduction.costPrice,
+            quantity: deduction.deductedQty,
+            deductedAt: Timestamp.now(),
+            deductedBy: this.authService.getCurrentUser()?.uid || 'system',
+            createdBy: this.authService.getCurrentUser()?.uid || 'system',
+            createdAt: Timestamp.now(),
+            note: 'Reconciliation - FIFO reprocessed'
+          });
+        }
+        
+        console.log(`✅ Created ${deductions.length} inventoryTracking entries for ${item.productName}`);
       }
-
-      // Call the existing updateProductInventory method
-      await (posService as any).updateProductInventory(cartItems, {
-        orderId,
-        invoiceNumber
-      });
 
       // Update flags in orderDetails
       const orderDetailsRef = doc(this.firestore, 'orderDetails', orderDetailsDocId);

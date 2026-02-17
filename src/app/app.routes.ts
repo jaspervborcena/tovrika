@@ -280,12 +280,6 @@ export const routes: Routes = [
       }
       ,
       {
-        path: 'reconciliation',
-        loadComponent: () => import('./pages/dashboard/reconciliation/reconciliation.component').then(m => m.ReconciliationComponent),
-        canActivate: [onboardingGuard, roleGuard],
-        data: { roles: ['creator', 'store_manager', 'admin'] }
-      },
-      {
         path: 'offline-order-reconciliation',
         loadComponent: () => import('./pages/dashboard/offline-order-reconciliation/offline-order-reconciliation.component').then(m => m.OfflineOrderReconciliationComponent),
         canActivate: [onboardingGuard, roleGuard],
