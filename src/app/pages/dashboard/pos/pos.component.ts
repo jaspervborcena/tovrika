@@ -4919,8 +4919,9 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
         // Load stores into StoreService first
         await this.storeService.loadStoresByCompany(currentPermission.companyId);
         
-        // Get stores with userRoles filtering
-        const stores = await this.storeService.getActiveStoresForDropdown(currentPermission.companyId);
+        // Use full company store list (no userRoles filtering)
+        const stores = this.storeService.getStoresByCompany(currentPermission.companyId)
+          .filter(store => store.status === 'active');
         this.storesSignal.set(stores);
       } else {
         console.warn('⚠️ loadStoresForPOS: No companyId available for loading stores');

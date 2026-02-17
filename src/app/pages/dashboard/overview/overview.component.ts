@@ -2443,8 +2443,9 @@ export class OverviewComponent implements OnInit {
       // Load stores into StoreService
       await this.storeService.loadStoresByCompany(currentPermission.companyId);
       
-      // Get stores with userRoles filtering
-      const stores = await this.storeService.getActiveStoresForDropdown(currentPermission.companyId);
+      // Use full company store list (no userRoles filtering)
+      const stores = this.storeService.getStoresByCompany(currentPermission.companyId)
+        .filter(store => store.status === 'active');
       
       this.stores.set(stores);
 
