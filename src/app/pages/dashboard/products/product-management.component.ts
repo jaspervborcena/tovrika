@@ -2638,6 +2638,8 @@ export class ProductManagementComponent implements OnInit {
           await this.productService.initializeProducts(currentPermission.storeId);
           // Load tags for the current store
           await this.loadTags(currentPermission.storeId);
+          // Load categories for the current store
+          await this.categoryService.loadCategoriesByStore(currentPermission.storeId);
           // Sync isStockTracked status with actual inventory
           await this.syncProductTrackingStatus();
         } else {
@@ -2856,8 +2858,13 @@ export class ProductManagementComponent implements OnInit {
     
     // Set default storeId based on available stores
     const currentPermission = this.authService.getCurrentPermission();
-    const availableStores = this.stores();
+    let availableStores = this.stores();
     let defaultStoreId = '';
+
+    if (!availableStores.length && currentPermission?.companyId) {
+      await this.storeService.loadStoresByCompany(currentPermission.companyId);
+      availableStores = this.stores();
+    }
     
     if (availableStores.length === 1) {
       // Single store: auto-select it
@@ -2865,6 +2872,9 @@ export class ProductManagementComponent implements OnInit {
     } else if (currentPermission?.storeId) {
       // Multiple stores: default to current permission's store
       defaultStoreId = currentPermission.storeId;
+    } else if (availableStores.length > 0) {
+      // Fallback: use first active store
+      defaultStoreId = availableStores[0].id || '';
     }
     
     this.productForm.reset({
@@ -2884,6 +2894,7 @@ export class ProductManagementComponent implements OnInit {
     if (defaultStoreId) {
       try {
         await this.categoryService.loadCategoriesByStore(defaultStoreId);
+        await this.loadTags(defaultStoreId);
         
         // Force change detection to update dropdown
         this.cdr.detectChanges();
@@ -2936,8 +2947,8 @@ export class ProductManagementComponent implements OnInit {
       this.productForm.patchValue({ storeId: permission.storeId }, { emitEvent: false });
     }
     
-    // Set costPrice to 0 initially (will be loaded from latest batch if available)
-    this.productForm.get('costPrice')?.setValue(0, { emitEvent: false });
+    // Set costPrice from product initially (will be overridden by latest batch if available)
+    this.productForm.get('costPrice')?.setValue(Number(product.costPrice || 0), { emitEvent: false });
     // Ensure vatRate defaults to 12 if the product doesn't include it
     const currentVat = this.productForm.get('vatRate')?.value;
     if (currentVat === null || currentVat === undefined || currentVat === '') {
@@ -2985,6 +2996,8 @@ export class ProductManagementComponent implements OnInit {
         if (batches.length > 0) {
           const latestBatch = batches[0]; // Batches are sorted by receivedAt desc
           this.productForm.get('costPrice')?.setValue(Number(latestBatch.costPrice || 0), { emitEvent: false });
+        } else {
+          this.productForm.get('costPrice')?.setValue(Number(product.costPrice || 0), { emitEvent: false });
         }
       }).catch(err => {
         console.error('Failed to load batches for costPrice:', err);
@@ -3158,8 +3171,15 @@ export class ProductManagementComponent implements OnInit {
       }
       
       // Get the values directly from the form (which already has VAT computed via valueChanges)
-      const computedSellingPrice = Number(formValue.sellingPrice || 0);
+      let computedSellingPrice = Number(formValue.sellingPrice || 0);
       let computedOriginalPrice = Number(formValue.originalPrice || 0);
+      if (computedSellingPrice === 0 && computedOriginalPrice > 0) {
+        const isVatApplicable = formValue.isVatApplicable ?? true;
+        const vatRate = formValue.vatRate ?? AppConstants.DEFAULT_VAT_RATE;
+        computedSellingPrice = isVatApplicable && vatRate > 0
+          ? computedOriginalPrice * (1 + vatRate / 100)
+          : computedOriginalPrice;
+      }
       
       // If originalPrice is not set but sellingPrice is, calculate originalPrice (price before VAT)
       if (computedOriginalPrice === 0 && computedSellingPrice > 0) {
@@ -3290,12 +3310,16 @@ export class ProductManagementComponent implements OnInit {
         }
       } else {
         // Create new product (no embedded inventory)
-        const hasInitial = !!(formValue.initialQuantity && formValue.initialQuantity > 0);
+        const initialQty = Number(formValue.initialQuantity || 0);
+        const fallbackQty = Number(formValue.totalStock || 0);
+        const resolvedInitialQty = initialQty > 0 ? initialQty : fallbackQty;
+        const hasInitial = resolvedInitialQty > 0;
+        const resolvedInitialCost = Number(formValue.initialCostPrice || formValue.costPrice || 0);
         const initialBatch = hasInitial ? {
           batchId: formValue.initialBatchId || this.generateBatchId(), // Use proper batch ID generator
-          quantity: Number(formValue.initialQuantity || 0),
+          quantity: resolvedInitialQty,
           unitPrice: computedOriginalPrice,
-          costPrice: Number(formValue.initialCostPrice || 0),
+          costPrice: resolvedInitialCost,
           receivedAt: formValue.initialReceivedAt ? new Date(formValue.initialReceivedAt) : new Date(), // Default to now if not specified
           expiryDate: formValue.initialExpiryDate ? new Date(formValue.initialExpiryDate) : undefined,
           supplier: formValue.initialSupplier || undefined,
@@ -3326,8 +3350,8 @@ export class ProductManagementComponent implements OnInit {
           imageUrl: formValue.imageUrl,
           isFavorite: !!formValue.isFavorite,
           isStockTracked: !!formValue.isStockTracked,
-          costPrice: hasInitial ? Number(formValue.initialCostPrice || 0) : Number(formValue.costPrice || 0),
-          totalStock: hasInitial ? Number(formValue.initialQuantity || 0) : Number(formValue.totalStock || 0),
+          costPrice: hasInitial ? resolvedInitialCost : Number(formValue.costPrice || 0),
+          totalStock: hasInitial ? resolvedInitialQty : Number(formValue.totalStock || 0),
           
           // Tax and Discount Fields from form
           isVatApplicable: formValue.isVatApplicable || false,
@@ -4010,14 +4034,18 @@ export class ProductManagementComponent implements OnInit {
       updatedAt: undefined, // Let system set new update date
     };
     
-    // Reset form and patch with duplicate data
+    // Reset form and patch with duplicate data (avoid triggering recompute subscriptions)
     this.productForm.reset();
     // Remove only tags and system fields from duplicateData, keep everything else including SKU and prices
     const { tags, tagLabels, id, createdAt, updatedAt, ...dataWithoutExcludedFields } = duplicateData;
-    this.productForm.patchValue(dataWithoutExcludedFields);
+    this.productForm.patchValue(dataWithoutExcludedFields, { emitEvent: false });
     
     // Ensure defaults are set
     this.productForm.patchValue({
+      initialQuantity: Number(duplicateData.totalStock || 0),
+      initialCostPrice: Number(duplicateData.costPrice || 0),
+      sellingPrice: Number(duplicateData.sellingPrice || 0),
+      originalPrice: Number(duplicateData.originalPrice || 0),
       unitType: duplicateData.unitType || 'pieces',
       category: duplicateData.category || 'General',
       status: ProductStatus.Active,
@@ -4026,7 +4054,24 @@ export class ProductManagementComponent implements OnInit {
       hasDiscount: duplicateData.hasDiscount ?? true,
       discountType: duplicateData.discountType || 'percentage',
       discountValue: duplicateData.discountValue ?? 0
-    });
+    }, { emitEvent: false });
+
+    // Keep totalStock in sync for inventory value display
+    const dupTotalStock = Number(duplicateData.totalStock || 0);
+    this.productForm.get('totalStock')?.setValue(dupTotalStock, { emitEvent: false });
+
+    // If selling price is missing but original exists, recompute selling price
+    const currentOriginal = Number(this.productForm.get('originalPrice')?.value || 0);
+    const currentSelling = Number(this.productForm.get('sellingPrice')?.value || 0);
+    if (currentSelling === 0 && currentOriginal > 0) {
+      const isVat = !!this.productForm.get('isVatApplicable')?.value;
+      const vatRate = Number(this.productForm.get('vatRate')?.value || 0);
+      const hasDisc = !!this.productForm.get('hasDiscount')?.value;
+      const discType = this.productForm.get('discountType')?.value || 'percentage';
+      const discValue = Number(this.productForm.get('discountValue')?.value || 0);
+      const computedSelling = this.computeSellingFromOriginal(currentOriginal, isVat, vatRate, hasDisc, discType, discValue);
+      this.productForm.get('sellingPrice')?.setValue(Number(computedSelling.toFixed(2)), { emitEvent: false });
+    }
     
     // Apply control enabling/disabling based on isMultipleInventory
     this.toggleControlsForInventory(this.productForm.get('isMultipleInventory')?.value);
