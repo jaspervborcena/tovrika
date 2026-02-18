@@ -1088,7 +1088,7 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
         lastUpdated: new Date()
       };
 
-      // 3. Calculate initial totals from batches
+      // 3. Calculate initial totals from batches (fallback to provided values if no batches)
       let totalStock = 0;
       let sellingPrice = 0;
       let originalPrice = 0;
@@ -1105,12 +1105,17 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
         });
         sellingPrice = Number((sortedBatches[0]?.sellingPrice ?? sortedBatches[0]?.unitPrice) || 0);
         originalPrice = Number(sortedBatches[0]?.unitPrice || 0);
+      } else {
+        totalStock = Number(baseData?.totalStock || 0);
+        sellingPrice = Number(baseData?.sellingPrice || 0);
+        originalPrice = Number(baseData?.originalPrice || baseData?.unitPrice || baseData?.sellingPrice || 0);
       }
 
       // Add calculated fields to product
       productPayload.totalStock = totalStock;
       productPayload.sellingPrice = sellingPrice;
       productPayload.originalPrice = originalPrice || Number(baseData?.originalPrice || 0);
+      productPayload.costPrice = Number(baseData?.costPrice || 0);
       productPayload.vatRate = Number(baseData?.vatRate || 0);
       productPayload.isVatApplicable = !!baseData?.isVatApplicable;
       productPayload.hasDiscount = !!baseData?.hasDiscount;
@@ -1184,6 +1189,7 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
         totalStock,
         sellingPrice,
         originalPrice: originalPrice || Number((productData as any)?.originalPrice || 0),
+        costPrice: Number((productData as any)?.costPrice || 0),
         createdAt: new Date(),
         updatedAt: new Date(),
         vatRate: Number((productData as any)?.vatRate || 0),
