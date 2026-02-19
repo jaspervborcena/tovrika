@@ -1106,9 +1106,24 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
         sellingPrice = Number((sortedBatches[0]?.sellingPrice ?? sortedBatches[0]?.unitPrice) || 0);
         originalPrice = Number(sortedBatches[0]?.unitPrice || 0);
       } else {
-        totalStock = Number(baseData?.totalStock || 0);
+        totalStock = Number(baseData?.totalStock ?? baseData?.initialQuantity ?? 0);
         sellingPrice = Number(baseData?.sellingPrice || 0);
         originalPrice = Number(baseData?.originalPrice || baseData?.unitPrice || baseData?.sellingPrice || 0);
+        if (sellingPrice === 0 && originalPrice > 0) {
+          const isVatApplicable = !!baseData?.isVatApplicable;
+          const vatRate = Number(baseData?.vatRate || 0);
+          const hasDiscount = !!baseData?.hasDiscount;
+          const discountType = baseData?.discountType || 'percentage';
+          const discountValue = Number(baseData?.discountValue || 0);
+          const withVat = originalPrice * (1 + vatRate / 100);
+          let discountAmount = 0;
+          if (hasDiscount && discountValue) {
+            discountAmount = discountType === 'percentage'
+              ? withVat * (discountValue / 100)
+              : discountValue;
+          }
+          sellingPrice = Number(withVat - discountAmount) || 0;
+        }
       }
 
       // Add calculated fields to product
