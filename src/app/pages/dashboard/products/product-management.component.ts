@@ -3315,10 +3315,14 @@ export class ProductManagementComponent implements OnInit {
         const resolvedInitialQty = initialQty > 0 ? initialQty : fallbackQty;
         const hasInitial = resolvedInitialQty > 0;
         const resolvedInitialCost = Number(formValue.initialCostPrice || formValue.costPrice || 0);
+        const formSellingPrice = Number(formValue.sellingPrice || 0);
+        const formOriginalPrice = Number(formValue.originalPrice || 0);
+        const finalSellingPrice = formSellingPrice > 0 ? formSellingPrice : computedSellingPrice;
+        const finalOriginalPrice = formOriginalPrice > 0 ? formOriginalPrice : computedOriginalPrice;
         const initialBatch = hasInitial ? {
           batchId: formValue.initialBatchId || this.generateBatchId(), // Use proper batch ID generator
           quantity: resolvedInitialQty,
-          unitPrice: computedOriginalPrice,
+          unitPrice: finalOriginalPrice,
           costPrice: resolvedInitialCost,
           receivedAt: formValue.initialReceivedAt ? new Date(formValue.initialReceivedAt) : new Date(), // Default to now if not specified
           expiryDate: formValue.initialExpiryDate ? new Date(formValue.initialExpiryDate) : undefined,
@@ -3342,8 +3346,8 @@ export class ProductManagementComponent implements OnInit {
           productCode: formValue.productCode,
           unitType: formValue.unitType,
           category: formValue.category,
-          sellingPrice: computedSellingPrice,
-          originalPrice: computedOriginalPrice,
+          sellingPrice: finalSellingPrice,
+          originalPrice: finalOriginalPrice,
           companyId: '', // Will be set by service
           storeId: storeId,  // Use storeId from permission
           barcodeId: formValue.barcodeId,
