@@ -1088,7 +1088,7 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
         lastUpdated: new Date()
       };
 
-      // 3. Calculate initial totals from batches
+      // 3. Calculate initial totals from batches (fallback to provided values if no batches)
       let totalStock = 0;
       let sellingPrice = 0;
       let originalPrice = 0;
@@ -1105,12 +1105,32 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
         });
         sellingPrice = Number((sortedBatches[0]?.sellingPrice ?? sortedBatches[0]?.unitPrice) || 0);
         originalPrice = Number(sortedBatches[0]?.unitPrice || 0);
+      } else {
+        totalStock = Number(baseData?.totalStock ?? baseData?.initialQuantity ?? 0);
+        sellingPrice = Number(baseData?.sellingPrice || 0);
+        originalPrice = Number(baseData?.originalPrice || baseData?.unitPrice || baseData?.sellingPrice || 0);
+        if (sellingPrice === 0 && originalPrice > 0) {
+          const isVatApplicable = !!baseData?.isVatApplicable;
+          const vatRate = Number(baseData?.vatRate || 0);
+          const hasDiscount = !!baseData?.hasDiscount;
+          const discountType = baseData?.discountType || 'percentage';
+          const discountValue = Number(baseData?.discountValue || 0);
+          const withVat = originalPrice * (1 + vatRate / 100);
+          let discountAmount = 0;
+          if (hasDiscount && discountValue) {
+            discountAmount = discountType === 'percentage'
+              ? withVat * (discountValue / 100)
+              : discountValue;
+          }
+          sellingPrice = Number(withVat - discountAmount) || 0;
+        }
       }
 
       // Add calculated fields to product
       productPayload.totalStock = totalStock;
       productPayload.sellingPrice = sellingPrice;
       productPayload.originalPrice = originalPrice || Number(baseData?.originalPrice || 0);
+      productPayload.costPrice = Number(baseData?.costPrice || 0);
       productPayload.vatRate = Number(baseData?.vatRate || 0);
       productPayload.isVatApplicable = !!baseData?.isVatApplicable;
       productPayload.hasDiscount = !!baseData?.hasDiscount;
@@ -1184,6 +1204,7 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
         totalStock,
         sellingPrice,
         originalPrice: originalPrice || Number((productData as any)?.originalPrice || 0),
+        costPrice: Number((productData as any)?.costPrice || 0),
         createdAt: new Date(),
         updatedAt: new Date(),
         vatRate: Number((productData as any)?.vatRate || 0),

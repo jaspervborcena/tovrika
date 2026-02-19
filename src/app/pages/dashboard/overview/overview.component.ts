@@ -2417,7 +2417,7 @@ export class OverviewComponent implements OnInit {
       
       // After stores load, use the selected period/store to load analytics
       // This ensures the new store/period controls drive the initial load
-      await this.loadCurrentDateData();
+      this.applyPeriodAndLoad();
       await this.fetchTopProducts();
       this.isLoading.set(false);
 
