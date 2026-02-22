@@ -366,10 +366,10 @@
                     </svg>
                   </div>
                 </div>
-                <div class="product-barcode">
-                  <img *ngIf="product.barcodeId" [src]="generateBarcodeImage(product.barcodeId)" alt="Barcode" class="barcode-image">
-                </div>
                 <div class="product-details" (click)="addToCart(product)">
+                  <div class="product-barcode" *ngIf="product.barcodeId">
+                    <img [src]="generateBarcodeImage(product.barcodeId)" alt="Barcode" class="barcode-image">
+                  </div>
                   <h4 class="product-name">{{ product.productName }}</h4>
                   <p class="product-sku" style="font-size: 0.75rem; color: #6b7280; margin: 0.1rem 0 0.2rem 0;">{{ product.skuId }}</p>
                   <div class="product-category-row">
@@ -418,10 +418,10 @@
                     </svg>
                   </div>
                 </div>
-                <div class="product-barcode">
-                  <img *ngIf="product.barcodeId" [src]="generateBarcodeImage(product.barcodeId)" alt="Barcode" class="barcode-image">
-                </div>
                 <div class="product-details" (click)="addToCart(product)">
+                  <div class="product-barcode" *ngIf="product.barcodeId">
+                    <img [src]="generateBarcodeImage(product.barcodeId)" alt="Barcode" class="barcode-image">
+                  </div>
                   <h4 class="product-name">{{ product.productName }}</h4>
                   <p class="product-sku" style="font-size: 0.75rem; color: #6b7280; margin: 0.1rem 0 0.2rem 0;">{{ product.skuId }}</p>
                   <div class="product-category-row">
@@ -468,10 +468,10 @@
                         </svg>
                       </div>
                     </div>
-                    <div class="product-barcode">
-                      <img *ngIf="product.barcodeId" [src]="generateBarcodeImage(product.barcodeId)" alt="Barcode" class="barcode-image">
-                    </div>
                     <div class="product-details" (click)="addToCart(product)">
+                      <div class="product-barcode" *ngIf="product.barcodeId">
+                        <img [src]="generateBarcodeImage(product.barcodeId)" alt="Barcode" class="barcode-image">
+                      </div>
                       <h4 class="product-name">{{ product.productName }}</h4>
                       <div class="product-category-row">
                         <span class="stock-badge">Stock: {{ product.totalStock || 0 }}</span>
@@ -1416,14 +1416,13 @@
           <div class="cart-items-section">
             <label>{{ 'pos.itemsInCart' | translate }}:</label>
             <div class="cart-items-list-dialog">
-              <div class="cart-item-header-extended" style="display: grid; grid-template-columns: 2.5fr 0.6fr 0.9fr 0.9fr 0.5fr 0.6fr 0.6fr 0.5fr 0.5fr 0.7fr 0.9fr 1.2fr 1.1fr 1.4fr 1.1fr; gap: 0.5rem; align-items: center;">
+              <div class="cart-item-header-extended" style="display: grid; grid-template-columns: 2.5fr 0.7fr 1fr 0.9fr 0.85fr 0.85fr 0.8fr 0.9fr 0.9fr 1fr 1fr 1.3fr 1.1fr 1.4fr 1.2fr; gap: 0.5rem; align-items: center;">
                 <span>{{ 'pos.product' | translate }}</span>
                 <span>{{ 'pos.quantity' | translate }}</span>
                 <span>Original Price</span>
                 <span>{{ 'pos.price' | translate }}</span>
-               
-                <span>{{ 'pos.vatApplicable' | translate }}</span>
                 <span>{{ 'pos.vatRate' | translate }}</span>
+                 <span>{{ 'pos.vatApplicable' | translate }}</span>
                 <span>VAT Amount</span>
                 <span>{{ 'pos.hasDiscount' | translate }}</span>
                 <span>{{ 'pos.discountType' | translate }}</span>
@@ -1432,8 +1431,9 @@
                  <span>Identification No.</span>
                  <span>ID Type</span>
                  <span>Name</span>
+                  <span>Customer Discount</span>
               </div>
-              <div class="cart-item-row-extended" *ngFor="let item of cartItems(); let i = index; trackBy: trackByCartItem" style="display: grid; grid-template-columns: 2.5fr 0.6fr 0.9fr 0.9fr 0.5fr 0.6fr 0.6fr 0.5fr 0.5fr 0.7fr 0.9fr 1.2fr 1.1fr 1.4fr 1.1fr; gap: 0.5rem; align-items: center;">
+              <div class="cart-item-row-extended" *ngFor="let item of cartItems(); let i = index; trackBy: trackByCartItem" style="display: grid; grid-template-columns: 2.5fr 0.7fr 1fr 0.9fr 0.85fr 0.85fr 0.8fr 0.9fr 0.9fr 1fr 1fr 1.3fr 1.1fr 1.4fr 1.2fr; gap: 0.5rem; align-items: center;">
                 <!-- Product Info -->
                 <div class="item-details-dialog">
                   <span class="item-name">{{ item.productName }}</span>

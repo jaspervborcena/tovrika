@@ -314,7 +314,7 @@ export class ProductService implements OnDestroy {
           where('companyId', '==', companyId),
           where('storeId', '==', storeId),
           where('status', '==', 'active'),
-          limit(100)
+          limit(500)
         );
       } catch (queryError) {
         console.log('🔄 Fallback to minimal query');
@@ -323,7 +323,7 @@ export class ProductService implements OnDestroy {
           where('companyId', '==', companyId),
           where('storeId', '==', storeId),
           where('status', '==', 'active'),
-          limit(100)
+          limit(500)
         );
       }
       
@@ -619,7 +619,7 @@ export class ProductService implements OnDestroy {
           where('companyId', '==', companyId),
           where('storeId', '==', storeId),
           where('status', '==', 'active'),
-          limit(100)
+          limit(500)
         );
       } catch (queryError) {
         console.error('❌ Error creating Firestore query:', queryError);
@@ -628,7 +628,7 @@ export class ProductService implements OnDestroy {
           productsRef,
           where('companyId', '==', companyId),
           where('storeId', '==', storeId),
-          limit(100)
+          limit(500)
         );
         console.log('🔄 Using minimal fallback query');
       }

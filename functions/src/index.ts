@@ -110,6 +110,3 @@ app.post('/capture-order', async (req, res) => {
 });
 
 export const paypal = functions.region('asia-east1').https.onRequest(app);
-
-// Reconciliation exports (stubs)
-export { reconcileDaily, reconcileOnDemand } from './reconciliation';
