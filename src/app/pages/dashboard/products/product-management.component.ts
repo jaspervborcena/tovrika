@@ -1253,6 +1253,7 @@ import { AppConstants } from '../../../shared/enums/app-constants.enum';
           <input 
             type="text" 
             [(ngModel)]="searchTerm"
+            (ngModelChange)="onFilterChange()"
             placeholder="Search products by name, SKU, or category..."
             class="search-input">
           <select 
@@ -1264,6 +1265,7 @@ import { AppConstants } from '../../../shared/enums/app-constants.enum';
           </select>
           <select 
             [(ngModel)]="selectedCategory" 
+            (ngModelChange)="onFilterChange()"
             class="filter-select">
             <option value="">All Categories</option>
             <option *ngFor="let category of categories()" [value]="category">{{ category }}</option>
@@ -1275,7 +1277,7 @@ import { AppConstants } from '../../../shared/enums/app-constants.enum';
       <!-- Products Table -->
       <div class="table-container">
         <div class="table-header">
-          <h3>Products ({{ filteredProducts().length }})</h3>
+          <h3>Products ({{ getDisplayProductCount() }})</h3>
           <button 
             class="btn-icon-action" 
             (click)="refreshProducts()" 
@@ -1303,7 +1305,7 @@ import { AppConstants } from '../../../shared/enums/app-constants.enum';
               </tr>
             </thead>
             <tbody>
-              <tr *ngFor="let product of filteredProducts()">
+              <tr *ngFor="let product of getPaginatedProducts()">
                 <td class="product-img-cell">
                   <img 
                     class="product-thumb"
@@ -1378,16 +1380,23 @@ import { AppConstants } from '../../../shared/enums/app-constants.enum';
           </table>
         </div>
 
-        <!-- Show more pagination -->
-        <div style="text-align:center; margin-top:12px;" *ngIf="hasMore">
-          <button class="btn btn-primary" (click)="loadMoreProducts()" [disabled]="loadingMore">
-            <span *ngIf="loadingMore" class="loading-spinner" style="width:1rem; height:1rem; border-top-color: #fff; margin-right:8px;"></span>
-            {{ loadingMore ? 'Loading...' : 'Show more' }}
+        <!-- Numeric pagination -->
+        <div style="text-align:center; margin-top:12px; color:#4b5563;" *ngIf="getDisplayProductCount() > 0">
+          Showing {{ getStartItemNumber() }} to {{ getEndItemNumber() }}
+        </div>
+        <div style="display:flex; justify-content:center; gap:0.35rem; flex-wrap:wrap; margin-top:8px;" *ngIf="getTotalPages() > 1">
+          <button
+            *ngFor="let page of getPageNumbers()"
+            class="btn btn-sm"
+            [class.btn-primary]="page === getCurrentPage()"
+            [class.btn-secondary]="page !== getCurrentPage()"
+            (click)="setPage(page)">
+            {{ page }}
           </button>
         </div>
 
         <!-- Empty State -->
-        <div class="empty-state" *ngIf="filteredProducts().length === 0 && !loading">
+        <div class="empty-state" *ngIf="getDisplayProductCount() === 0 && !loading">
           <div class="empty-content">
             <h3>No products found</h3>
             <p *ngIf="searchTerm">No products match your search criteria.</p>
@@ -2365,8 +2374,9 @@ export class ProductManagementComponent implements OnInit {
   // Use global store selection instead of local selectedStore
   selectedStore = computed(() => this.storeSelectionService.selectedStoreId());
   activeTagFilters: string[] = []; // Active tag filter IDs for product list filtering
-  // Pagination state for BigQuery products API
-  pageSize = 50;
+  // Pagination state for product management table
+  maxProducts = 500;
+  pageSize = 20;
   currentPage = 1;
   hasMore = false;
   loadingMore = false;
@@ -4176,13 +4186,19 @@ export class ProductManagementComponent implements OnInit {
   clearSearch(): void {
     this.searchTerm = '';
     this.selectedCategory = '';
+    this.currentPage = 1;
     this.storeSelectionService.clearSelection();
     // No need to manually filter - computed signal handles this automatically
+  }
+
+  onFilterChange(): void {
+    this.currentPage = 1;
   }
 
   onSelectedStoreChange(storeId: string): void {
     // Update the global store selection service instead of local property
     this.storeSelectionService.setSelectedStore(storeId);
+    this.currentPage = 1;
     // Try to initialize products for the selected store to ensure list is in sync
     if (storeId) {
       this.productService.initializeProducts(storeId).catch(err => {
@@ -4203,9 +4219,6 @@ export class ProductManagementComponent implements OnInit {
         // Force reload products from Firestore (real-time listener) so UI reflects latest product docs
         this.currentPage = 1;
         await this.productService.refreshProducts(currentPermission.storeId);
-        // Update pagination state based on loaded products
-        const count = this.productService.getProducts().length;
-        this.hasMore = (count >= this.pageSize);
         // Ensure change detection updates the UI
         try { this.cdr.detectChanges(); } catch {}
       } else {
@@ -4239,6 +4252,54 @@ export class ProductManagementComponent implements OnInit {
   getStoreName(storeId: string): string {
     const store = this.stores().find(s => s.id === storeId);
     return store?.storeName || 'Unknown Store';
+  }
+
+  getDisplayProductCount(): number {
+    return Math.min(this.filteredProducts().length, this.maxProducts);
+  }
+
+  getTotalPages(): number {
+    const count = this.getDisplayProductCount();
+    return count > 0 ? Math.ceil(count / this.pageSize) : 1;
+  }
+
+  getCurrentPage(): number {
+    return Math.min(Math.max(this.currentPage, 1), this.getTotalPages());
+  }
+
+  getPageNumbers(): number[] {
+    const totalPages = this.getTotalPages();
+    return Array.from({ length: totalPages }, (_, index) => index + 1);
+  }
+
+  setPage(page: number): void {
+    if (page < 1 || page > this.getTotalPages()) {
+      return;
+    }
+    this.currentPage = page;
+  }
+
+  getPaginatedProducts(): Product[] {
+    const displayProducts = this.filteredProducts().slice(0, this.maxProducts);
+    const currentPage = this.getCurrentPage();
+    const startIndex = (currentPage - 1) * this.pageSize;
+    return displayProducts.slice(startIndex, startIndex + this.pageSize);
+  }
+
+  getStartItemNumber(): number {
+    const count = this.getDisplayProductCount();
+    if (count === 0) {
+      return 0;
+    }
+    return (this.getCurrentPage() - 1) * this.pageSize + 1;
+  }
+
+  getEndItemNumber(): number {
+    const count = this.getDisplayProductCount();
+    if (count === 0) {
+      return 0;
+    }
+    return Math.min(this.getCurrentPage() * this.pageSize, count);
   }
 
   getComputedTotalStock(): number {
