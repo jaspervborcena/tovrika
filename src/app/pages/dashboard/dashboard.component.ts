@@ -8,7 +8,7 @@ import { AuthService } from '../../services/auth.service';
 import { StoreSelectionService } from '../../services/store-selection.service';
 
 import { AccessService } from '../../core/services/access.service';
-import { Firestore, collection, query, where, getDocs } from '@angular/fire/firestore';
+import { Firestore, collection, query, where, getDocs, limit } from '@angular/fire/firestore';
 import { LogoComponent } from '../../shared/components/logo/logo.component';
 import { AppConstants } from '../../shared/enums';
 import { NetworkService } from '../../core/services/network.service';
@@ -114,6 +114,36 @@ export class DashboardComponent implements OnInit {
     this.isMobile = this.screenWidth < 1024;
   }
 
+  private async isInAdminCollection(user: { uid?: string; email?: string | null }): Promise<boolean> {
+    try {
+      const collectionNames = ['admin', 'admins'];
+
+      for (const collectionName of collectionNames) {
+        const adminRef = collection(this.firestore, collectionName);
+
+        if (user.uid) {
+          const byUidQuery = query(adminRef, where('uid', '==', user.uid), limit(1));
+          const byUidSnap = await getDocs(byUidQuery);
+          if (!byUidSnap.empty) {
+            return true;
+          }
+        }
+
+        if (user.email) {
+          const byEmailQuery = query(adminRef, where('email', '==', user.email), limit(1));
+          const byEmailSnap = await getDocs(byEmailQuery);
+          if (!byEmailSnap.empty) {
+            return true;
+          }
+        }
+      }
+    } catch (error) {
+      console.warn('⚠️ Dashboard: Failed admin collection lookup', error);
+    }
+
+    return false;
+  }
+
   async ngOnInit() {
     // Initialize header collapsed state from localStorage
     const savedHeaderState = localStorage.getItem('headerCollapsed');
@@ -134,8 +164,20 @@ export class DashboardComponent implements OnInit {
     window.addEventListener('resize', () => {
       this.updateScreenWidth();
     });
-        const user = this.currentUser();
-    if (!user) return;
+    const user = (await this.authService.waitForAuth()) || this.currentUser();
+    if (!user) {
+      console.warn('⚠️ Dashboard: No authenticated user after waitForAuth; using creator fallback');
+      this.userRole.set('creator');
+      this.accessService.setPermissions({}, 'creator');
+      return;
+    }
+
+    const isAdminCollectionUser = await this.isInAdminCollection({ uid: user.uid, email: user.email });
+    if (isAdminCollectionUser) {
+      this.userRole.set('admin');
+      this.accessService.setPermissions({}, 'admin');
+      return;
+    }
 
     const currentPermission = this.authService.getCurrentPermission();
     
@@ -206,6 +248,13 @@ export class DashboardComponent implements OnInit {
     }
 
     if (!roleId) {
+      const isAdminFromCollection = await this.isInAdminCollection({ uid: user.uid, email: user.email });
+      if (isAdminFromCollection) {
+        this.userRole.set('admin');
+        this.accessService.setPermissions({}, 'admin');
+        return;
+      }
+
       // If no roleId found, treat as creator
       console.log('⚠️ Dashboard: No roleId found, defaulting to creator');
       this.accessService.setPermissions({}, 'creator');
