@@ -875,30 +875,52 @@ export class IndexedDBService {
 
   // Settings Methods
   async saveSetting(key: string, value: any): Promise<void> {
+    if (this.isPermanentlyBroken) {
+      return;
+    }
+
     if (!this.db) await this.initDB();
+    if (!this.db) {
+      return;
+    }
 
     return new Promise((resolve, reject) => {
-      const transaction = this.db!.transaction(['settings'], 'readwrite');
-      const store = transaction.objectStore('settings');
-      const request = store.put({ key, value });
+      try {
+        const transaction = this.db!.transaction(['settings'], 'readwrite');
+        const store = transaction.objectStore('settings');
+        const request = store.put({ key, value });
 
-      request.onsuccess = () => resolve();
-      request.onerror = () => reject(request.error);
+        request.onsuccess = () => resolve();
+        request.onerror = () => reject(request.error);
+      } catch (error) {
+        reject(error);
+      }
     });
   }
 
   async getSetting(key: string): Promise<any> {
+    if (this.isPermanentlyBroken) {
+      return null;
+    }
+
     if (!this.db) await this.initDB();
+    if (!this.db) {
+      return null;
+    }
 
     return new Promise((resolve, reject) => {
-      const transaction = this.db!.transaction(['settings'], 'readonly');
-      const store = transaction.objectStore('settings');
-      const request = store.get(key);
+      try {
+        const transaction = this.db!.transaction(['settings'], 'readonly');
+        const store = transaction.objectStore('settings');
+        const request = store.get(key);
 
-      request.onsuccess = () => {
-        resolve(request.result?.value || null);
-      };
-      request.onerror = () => reject(request.error);
+        request.onsuccess = () => {
+          resolve(request.result?.value || null);
+        };
+        request.onerror = () => reject(request.error);
+      } catch (error) {
+        reject(error);
+      }
     });
   }
 

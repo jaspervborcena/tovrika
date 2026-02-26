@@ -1,6 +1,7 @@
 import { inject } from '@angular/core';
 import { CanActivateFn, Router } from '@angular/router';
 import { AuthService } from '../services/auth.service';
+import { Firestore, collection, query, where, getDocs, limit } from '@angular/fire/firestore';
 
 /**
  * RoleGuard enforces route.data.roles against the user's current permission role.
@@ -14,6 +15,7 @@ import { AuthService } from '../services/auth.service';
 export const roleGuard: CanActivateFn = async (route, state) => {
   const router = inject(Router);
   const authService = inject(AuthService);
+  const firestore = inject(Firestore);
 
   const requiredRoles = (route.data?.['roles'] as string[] | undefined) || [];
   if (requiredRoles.length === 0) {
@@ -69,10 +71,44 @@ export const roleGuard: CanActivateFn = async (route, state) => {
   const roleId = normalizeRole(roleIdRaw);
   const normalizedRequired = requiredRoles.map(normalizeRole);
 
+  const isAdminCollectionUser = async (): Promise<boolean> => {
+    try {
+      const collectionNames = ['admin', 'admins'];
+
+      for (const collectionName of collectionNames) {
+        const adminRef = collection(firestore, collectionName);
+
+        if (user.uid) {
+          const byUidQuery = query(adminRef, where('uid', '==', user.uid), limit(1));
+          const byUidSnap = await getDocs(byUidQuery);
+          if (!byUidSnap.empty) {
+            return true;
+          }
+        }
+
+        if (user.email) {
+          const byEmailQuery = query(adminRef, where('email', '==', user.email), limit(1));
+          const byEmailSnap = await getDocs(byEmailQuery);
+          if (!byEmailSnap.empty) {
+            return true;
+          }
+        }
+      }
+    } catch {
+      return false;
+    }
+
+    return false;
+  };
+
 
 
   // Admin has access to everything
   if (roleId === 'admin') {
+    return true;
+  }
+
+  if (normalizedRequired.includes('admin') && (await isAdminCollectionUser())) {
     return true;
   }
 
