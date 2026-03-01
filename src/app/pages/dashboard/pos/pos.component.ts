@@ -1341,7 +1341,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       this.closeOrder();
 
       // Pre-fill payment dialog with order amount and table number
-      this.paymentAmountTendered = order.totalAmount || 0;
+      this.paymentAmountTendered = Math.round((order.totalAmount || 0) * 100) / 100;
       this.tableNumber = order.tableNumber || '';
       
       // Set default payment method based on order type, default to cash
@@ -1621,7 +1621,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       this.closeOrder();
 
       // Pre-fill payment dialog with order amount
-      this.paymentAmountTendered = order.totalAmount || 0;
+      this.paymentAmountTendered = Math.round((order.totalAmount || 0) * 100) / 100;
       this.tableNumber = order.tableNumber || '';
       
       // Default to cash payment
@@ -1657,10 +1657,11 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       
       console.log(`💳 Processing payment for existing ${isRecovery ? 'UNPAID' : 'OPEN'} order:`, orderData.id);
 
-      const totalAmount = orderData.totalAmount || 0;
+      const rawTotal = orderData.totalAmount || 0;
+      const totalAmount = Math.round(rawTotal * 100) / 100;
       const tendered = this.paymentAmountTendered || 0;
 
-      // Validate payment amount
+      // Validate payment amount (use rounded total)
       if (tendered < totalAmount) {
         console.warn('⚠️ Insufficient amount tendered');
         await this.showConfirmationDialog({
@@ -1675,6 +1676,9 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       }
 
       const change = tendered - totalAmount;
+      // Round tendered and change to 2 decimals before storing
+      const roundedTendered = Math.round((tendered) * 100) / 100;
+      const roundedChange = Math.round(Math.max(0, change) * 100) / 100;
 
       // Capture payment info and table number BEFORE closing dialog
       const tableNumber = this.tableNumber;
@@ -1682,8 +1686,8 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       const paymentDescription = this.paymentDescription;
       
       const paymentsData = {
-        amountTendered: tendered,
-        changeAmount: Math.max(0, change),
+        amountTendered: roundedTendered,
+        changeAmount: roundedChange,
         paymentDescription: paymentDescription || (isRecovery ? 'Payment for UNPAID order (recovered)' : 'Payment for OPEN order'),
         paymentType: paymentType
       };
@@ -3648,7 +3652,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     console.log('💳 Opening payment dialog');
     // Only reset if the modal was previously closed, don't reset on reopens
     if (!this.paymentModalVisible()) {
-      this.paymentAmountTendered = this.cartSummary().netAmount; // Auto-fill with total amount
+      this.paymentAmountTendered = Math.round((this.cartSummary().netAmount) * 100) / 100; // Auto-fill with total amount (rounded)
       this.paymentDescription = '';
     }
     this.paymentModalVisible.set(true);
@@ -3675,7 +3679,8 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   onAmountTenderedChange(value: any): void {
     console.log('💳 Amount tendered changed to:', value);
     const numValue = parseFloat(value) || 0;
-    this.paymentAmountTendered = numValue;
+    // Keep user input normalized to 2 decimal places
+    this.paymentAmountTendered = Number(numValue.toFixed(2));
     console.log('💳 Updated paymentAmountTendered to:', this.paymentAmountTendered);
   }
 
@@ -3683,7 +3688,8 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     const totalAmount = this.cartSummary().netAmount;
     const tendered = this.paymentAmountTendered || 0;
     const change = tendered - totalAmount;
-    return Math.max(0, change); // Don't allow negative change
+    // Return change rounded to 2 decimals and never negative
+    return Math.round(Math.max(0, change) * 100) / 100;
   }
 
   // Cart Information Dialog Methods
@@ -3789,9 +3795,18 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
             // When VAT is enabled, set default rate from enum if not already set
             updatedItem.vatRate = updatedItem.vatRate || AppConstants.DEFAULT_VAT_RATE;
           } else {
-            // When VAT is disabled, set rate to 0
+            // When VAT is disabled, set rate to 0 and clear VAT amount
             updatedItem.vatRate = 0;
+            updatedItem.vatAmount = 0; // Clear VAT amount when disabling VAT
           }
+          
+          // Recalculate VAT amount whenever VAT applicability changes
+          this.recalculateItemVAT(updatedItem);
+        }
+        
+        // Also recalculate VAT if vatRate changes
+        if (field === 'vatRate') {
+          this.recalculateItemVAT(updatedItem);
         }
         
         // Handle discount logic
@@ -3970,10 +3985,11 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     
     try {
       console.log('💳 Processing payment and completing order...');
-      const totalAmount = this.cartSummary().netAmount;
+      const rawTotal = this.cartSummary().netAmount;
+      const totalAmount = Math.round(rawTotal * 100) / 100;
       const tendered = this.paymentAmountTendered || 0;
       
-      // Validate payment amount
+      // Validate payment amount (compare against rounded total)
       if (tendered < totalAmount) {
         console.warn('⚠️ Insufficient amount tendered');
         // You can add a notification here later
@@ -3981,11 +3997,14 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       }
       
       const change = this.calculateChange();
+      // Round values to 2 decimals before including in payment info
+      const roundedTendered = Math.round(tendered * 100) / 100;
+      const roundedChange = Math.round(change * 100) / 100;
       
       // IMPORTANT: Capture payment info and table number BEFORE closing dialog (dialog close resets these values)
       const paymentInfo = {
-        amountTendered: tendered,
-        changeAmount: change,
+        amountTendered: roundedTendered,
+        changeAmount: roundedChange,
         paymentDescription: this.paymentDescription,
         paymentType: this.paymentType
       };
@@ -5545,6 +5564,33 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     this.cartItemDetails.finalTotal = afterDiscount + vatAmount;
   }
 
+  /**
+   * Recalculate VAT amount for a cart item based on its VAT settings
+   * Used when isVatApplicable or vatRate changes
+   */
+  private recalculateItemVAT(item: CartItem): void {
+    if (!item) return;
+
+    // If VAT is not applicable, VAT amount should be 0
+    if (!item.isVatApplicable) {
+      item.vatAmount = 0;
+      return;
+    }
+
+    // Calculate VAT: (sellingPrice * quantity - discountAmount) * vatRate / 100
+    const subtotal = (item.sellingPrice * item.quantity) - (item.discountAmount || 0);
+    const vatRate = item.vatRate || 0;
+    
+    if (vatRate > 0 && item.isVatApplicable) {
+      item.vatAmount = (subtotal * vatRate) / 100;
+    } else {
+      item.vatAmount = 0;
+    }
+
+    // Ensure VAT amount is not negative and round to 2 decimals
+    item.vatAmount = Math.max(0, Math.round(item.vatAmount * 100) / 100);
+  }
+
   saveCartItemChanges(): void {
     if (!this.selectedCartItem) return;
 
@@ -6073,7 +6119,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       tax: cartSummary.vatAmount || receiptData.vatAmount,
       total: cartSummary.netAmount || receiptData.totalAmount,
       paymentMethod: receiptData.paymentMethod?.toLowerCase() || 'cash', // Use actual payment method from receipt
-      amountTendered: cartSummary.netAmount || receiptData.totalAmount, // Assume exact payment for now
+      amountTendered: Math.round((cartSummary.netAmount || receiptData.totalAmount) * 100) / 100, // Assume exact payment for now (rounded)
       change: 0, // No change for exact payment
       status: 'completed' as const
     };

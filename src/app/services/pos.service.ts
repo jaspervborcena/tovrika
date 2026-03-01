@@ -61,24 +61,45 @@ export class PosService {
     const productDiscountAmount = items.reduce((sum, item) => sum + item.discountAmount, 0);
     const subtotalAfterProductDiscounts = grossAmount - productDiscountAmount;
     
-    // Calculate VAT amounts
-    const vatableItems = items.filter(item => item.isVatApplicable && !item.isVatExempt);
-    const vatExemptItems = items.filter(item => item.vatRate === 0 || item.isVatExempt || !item.isVatApplicable);
+    // Calculate VAT amounts (derive applicability and rate from latest product data when available)
+    const zeroRatedSales = 0; // Placeholder for future use
 
-    // Vatable sales should represent the base amount BEFORE VAT (i.e., original price after product-level discounts)
-    // Use originalPrice * quantity minus the item's total discountAmount to avoid including VAT in the vatableSales sum.
-    const vatableSales = vatableItems.reduce((sum, item) => {
-      const baseTotal = (Number(item.originalPrice || 0) * Number(item.quantity || 0)) - Number(item.discountAmount || 0);
+    // Helper to get effective VAT flags from product cache when possible
+    const effectiveForItem = (item: CartItem) => {
+      try {
+        const prod = this.productService.getProduct(item.productId);
+        const isVatApplicable = prod?.isVatApplicable ?? item.isVatApplicable;
+        const vatRate = Number(prod?.vatRate ?? item.vatRate ?? 0);
+        const originalPrice = Number(prod?.originalPrice ?? prod?.sellingPrice ?? item.originalPrice ?? item.sellingPrice ?? 0);
+        return { isVatApplicable, vatRate, originalPrice };
+      } catch (e) {
+        return { isVatApplicable: item.isVatApplicable, vatRate: Number(item.vatRate || 0), originalPrice: Number(item.originalPrice ?? item.sellingPrice ?? 0) };
+      }
+    };
+
+    const vatableSales = items.reduce((sum, item) => {
+      const eff = effectiveForItem(item);
+      if (!eff.isVatApplicable) return sum;
+      const baseTotal = (eff.originalPrice * Number(item.quantity || 0)) - Number(item.discountAmount || 0);
       return sum + Math.max(0, baseTotal);
     }, 0);
 
-    const vatExemptSales = vatExemptItems.reduce((sum, item) => {
-      const baseTotal = (Number(item.originalPrice || 0) * Number(item.quantity || 0)) - Number(item.discountAmount || 0);
+    const vatExemptSales = items.reduce((sum, item) => {
+      const eff = effectiveForItem(item);
+      if (eff.isVatApplicable) return sum;
+      const baseTotal = (eff.originalPrice * Number(item.quantity || 0)) - Number(item.discountAmount || 0);
       return sum + Math.max(0, baseTotal);
     }, 0);
-    const zeroRatedSales = 0; // Can be added later for specific business needs
-    
-    const vatAmount = vatableItems.reduce((sum, item) => sum + item.vatAmount, 0);
+
+    // Compute VAT amount per item at runtime (do not rely on stored item.vatAmount which can be stale)
+    const vatAmount = items.reduce((sum, item) => {
+      const eff = effectiveForItem(item);
+      if (!eff.isVatApplicable || eff.vatRate <= 0) return sum;
+      const qty = Number(item.quantity || 0);
+      const subtotal = Math.max(0, (eff.originalPrice * qty) - Number(item.discountAmount || 0));
+      const itemVat = (subtotal * eff.vatRate) / 100;
+      return sum + itemVat;
+    }, 0);
     
     // Calculate order-level discount
     let orderDiscountAmount = 0;
