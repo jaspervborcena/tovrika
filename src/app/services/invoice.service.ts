@@ -246,8 +246,8 @@ export class InvoiceService {
           tin: ''
         },
         payments: paymentsData ? {
-          amountTendered: paymentsData.amountTendered || 0,
-          changeAmount: paymentsData.changeAmount || 0,
+          amountTendered: Math.round((paymentsData.amountTendered || 0) * 100) / 100,
+          changeAmount: Math.round((paymentsData.changeAmount || 0) * 100) / 100,
           paymentDescription: paymentsData.paymentDescription !== undefined && paymentsData.paymentDescription !== null ? paymentsData.paymentDescription : 'Cash Payment',
           paymentType: paymentsData.paymentType || 'Cash'
         } : {
@@ -513,8 +513,8 @@ export class InvoiceService {
           tin: ''
         },
         payments: paymentsData ? {
-          amountTendered: paymentsData.amountTendered || 0,
-          changeAmount: paymentsData.changeAmount || 0,
+          amountTendered: Math.round((paymentsData.amountTendered || 0) * 100) / 100,
+          changeAmount: Math.round((paymentsData.changeAmount || 0) * 100) / 100,
           paymentDescription: paymentsData.paymentDescription || 'Cash Payment',
           paymentType: paymentsData.paymentType || 'Cash'
         } : {

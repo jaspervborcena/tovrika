@@ -2127,7 +2127,7 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
       tax: cartSummary.vatAmount || receiptData.vatAmount,
       total: cartSummary.netAmount || receiptData.totalAmount,
       paymentMethod: 'cash', // Default to cash, could be configurable
-      amountTendered: cartSummary.netAmount || receiptData.totalAmount, // Assume exact payment for now
+      amountTendered: Math.round((cartSummary.netAmount || receiptData.totalAmount) * 100) / 100, // Assume exact payment for now (rounded)
       change: 0, // No change for exact payment
       status: 'completed' as const
     };
