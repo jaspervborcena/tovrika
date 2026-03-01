@@ -1921,6 +1921,13 @@ import { AppConstants } from '../../../shared/enums/app-constants.enum';
                     <span>🏷️</span>
                     <span>New Category</span>
                   </h4>
+                  <div class="form-group" *ngIf="stores().length > 0">
+                    <label for="categoryStoreId">🏪 Store</label>
+                    <select id="categoryStoreId" class="form-input" formControlName="storeId">
+                      <option value="">Select Store</option>
+                      <option *ngFor="let store of stores()" [value]="store.id">{{ store.storeName }}</option>
+                    </select>
+                  </div>
                   <div class="form-group">
                     <label for="categoryLabel">Category Name</label>
                     <input id="categoryLabel" class="form-input" formControlName="categoryLabel" placeholder="e.g., Beverages" />
@@ -2820,7 +2827,8 @@ export class ProductManagementComponent implements OnInit {
     return this.fb.group({
       categoryLabel: ['', Validators.required],
       categoryDescription: [''],
-      categoryGroup: ['General'] // Default to 'General'
+      categoryGroup: ['General'], // Default to 'General'
+      storeId: [''] // Store ID for category
     });
   }
 
@@ -4438,16 +4446,20 @@ export class ProductManagementComponent implements OnInit {
     this.categoryForm.reset({
       categoryLabel: '',
       categoryDescription: '',
-      categoryGroup: ''
+      categoryGroup: '',
+      storeId: ''
     });
   }
 
   switchToCategoryMode(): void {
     this.modalMode = 'category';
+    // Set default storeId from product form or current permission
+    const defaultStoreId = this.productForm.value.storeId || this.authService.getCurrentPermission()?.storeId || '';
     this.categoryForm.reset({
       categoryLabel: '',
       categoryDescription: '',
-      categoryGroup: 'General'
+      categoryGroup: 'General',
+      storeId: defaultStoreId
     });
   }
 
@@ -4490,8 +4502,8 @@ export class ProductManagementComponent implements OnInit {
         throw new Error('No company ID found. User must be associated with a company to create categories.');
       }
       
-      // Get storeId from the product form if available, otherwise fallback to current permission
-      const storeId = this.productForm.value.storeId || currentPermission?.storeId;
+      // Get storeId from the category form (user selection), fallback to product form, then current permission
+      const storeId = formValue.storeId || this.productForm.value.storeId || currentPermission?.storeId;
       
       const categoryData: Omit<ProductCategory, 'id' | 'createdAt' | 'updatedAt'> = {
         categoryId: `cat_${Date.now()}`,
@@ -4530,7 +4542,8 @@ export class ProductManagementComponent implements OnInit {
   }
 
   async onTagSaved(tag: any): Promise<void> {
-    this.showCreateTagModal.set(false);
+    // Don't close the modal - let user close it with X button after creating
+    // this.showCreateTagModal.set(false);
     const storeId = this.authService.getCurrentPermission()?.storeId;
     if (storeId) {
       await this.loadTags(storeId);

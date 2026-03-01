@@ -1554,7 +1554,16 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
     Object.keys(obj).forEach((k) => {
       const v = (obj as any)[k];
       if (v === undefined) return;
-      if (v && typeof v === 'object' && !(v instanceof Date)) {
+
+      const isFirestoreTimestamp = v instanceof Timestamp || (v && typeof v.toDate === 'function');
+      const isFirestoreFieldValue = !!(v && typeof v === 'object' && typeof v._methodName === 'string');
+
+      if (isFirestoreTimestamp || isFirestoreFieldValue || v instanceof Date) {
+        out[k] = v;
+        return;
+      }
+
+      if (v && typeof v === 'object') {
         out[k] = this.cleanUndefinedValues(v);
       } else {
         out[k] = v;

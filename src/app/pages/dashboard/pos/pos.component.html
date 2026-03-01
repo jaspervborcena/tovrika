@@ -1102,15 +1102,16 @@
 
             <!-- Receipt Summary -->
             <div class="receipt-summary">
-              <div class="summary-line">
+              <!-- Only show VAT sections if there are vatable products and VAT total is non-zero -->
+              <div class="summary-line" *ngIf="cartSummary().vatableSales > 0 && cartSummary().vatAmount > 0">
                 <span>{{ 'pos.vatableSales' | translate }}:</span>
                 <span>₱{{ cartSummary().vatableSales.toFixed(2) }}</span>
               </div>
-              <div class="summary-line">
+              <div class="summary-line" *ngIf="cartSummary().vatExemptSales > 0 && cartSummary().vatAmount > 0">
                 <span>{{ 'pos.vatExemptSales' | translate }}:</span>
                 <span>₱{{ cartSummary().vatExemptSales.toFixed(2) }}</span>
               </div>
-              <div class="summary-line">
+              <div class="summary-line" *ngIf="cartSummary().vatAmount > 0">
                 <span>{{ 'pos.vatAmount' | translate }}:</span>
                 <span>₱{{ cartSummary().vatAmount.toFixed(2) }}</span>
               </div>
@@ -1317,6 +1318,7 @@
                 type="number" 
                 id="amount-tendered"
                 [(ngModel)]="paymentAmountTendered"
+                (ngModelChange)="onAmountTenderedChange($event)"
                 placeholder="0.00"
                 step="0.01"
                 class="amount-input"
@@ -1739,7 +1741,7 @@
                   <span class="detail-label">Gross Amount:</span>
                   <span class="detail-value">₱{{ cartSummary().grossAmount.toFixed(2) }}</span>
                 </div>
-                <div class="detail-row">
+                <div class="detail-row" *ngIf="cartSummary().vatAmount > 0">
                   <span class="detail-label">VAT Amount:</span>
                   <span class="detail-value">₱{{ cartSummary().vatAmount.toFixed(2) }}</span>
                 </div>

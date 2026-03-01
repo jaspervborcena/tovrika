@@ -55,11 +55,20 @@ export class TransactionService {
       // Generate transaction number
       const transactionNumber = await this.generateTransactionNumber(currentPermission.companyId);
 
+      const now = new Date();
+      // Normalize numeric fields to 2 decimals before saving
+      const normalize = (n: any) => Math.round((Number(n || 0)) * 100) / 100;
+
       const newTransaction: Transaction = {
         ...transaction,
         transactionNumber,
-        createdAt: new Date(),
-        updatedAt: new Date()
+        createdAt: now,
+        updatedAt: now,
+        subtotal: normalize(transaction.subtotal),
+        tax: normalize(transaction.tax),
+        total: normalize(transaction.total),
+        amountTendered: normalize(transaction.amountTendered),
+        change: normalize(transaction.change)
       };
 
       // 🔥 ATOMIC: Use batch write for transaction + inventory updates

@@ -132,15 +132,15 @@
       <!-- Totals Section (VAT breakdown) -->
       <div class="totals-section">
         <div class="totals-grid">
-          <div class="total-line">
+          <div class="total-line" *ngIf="(receiptData?.vatAmount || 0) > 0">
             <span>Vatable Sales:</span>
             <span>₱{{ ((receiptData?.subtotal || 0) - (receiptData?.vatAmount || 0)) | number:'1.2-2' }}</span>
           </div>
-          <div class="total-line">
+          <div class="total-line" *ngIf="(receiptData?.vatAmount || 0) > 0">
             <span>VAT Exempt Sales:</span>
             <span>₱{{ (receiptData?.vatExempt || 0) | number:'1.2-2' }}</span>
           </div>
-          <div class="total-line">
+          <div class="total-line" *ngIf="(receiptData?.vatAmount || 0) > 0">
             <span>VAT Amount:</span>
             <span>₱{{ (receiptData?.vatAmount || 0) | number:'1.2-2' }}</span>
           </div>
