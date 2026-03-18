@@ -687,17 +687,22 @@ export class PrintService {
     commands += '\x1B\x4D\x00'; // Font A (clearer than Font B)
     commands += '\x1B\x7B\x32'; // Increase print density for darker text
     
-    // Store header - CENTERED and LARGER (same as Sales Invoice)
+    // Store header - CENTERED, BOLD, DOUBLE HEIGHT
     commands += '\x1B\x61\x01'; // Center alignment
     commands += '\x1B\x45\x01'; // Bold on
+    commands += '\x1D\x21\x01'; // Double height
     commands += (receiptData?.storeInfo?.storeName || 'Store Name') + '\n';
+    commands += '\x1D\x21\x00'; // Back to normal size
     commands += '\x1B\x45\x00'; // Bold off
-    
-    // Store details - CENTERED with normal font
+
+    // Store details - CENTERED, SMALL FONT
+    commands += '\x1B\x61\x01'; // Center alignment
+    commands += '\x1B\x4D\x01'; // Font B (smaller)
     commands += (receiptData?.storeInfo?.address || 'Store Address') + '\n';
     commands += `Tel: ${receiptData?.storeInfo?.phone || 'N/A'}\n`;
     commands += `Email: ${receiptData?.storeInfo?.email || 'N/A'}\n`;
     commands += `TIN: ${receiptData?.storeInfo?.tin || 'N/A'}\n`;
+    commands += '\x1B\x4D\x00'; // Back to Font A
     
     // BIR Information
     if (receiptData?.storeInfo?.birPermitNo) {
@@ -815,20 +820,22 @@ export class PrintService {
     commands += '\x1B\x45\x00'; // Bold off
     
     // VAT (12%) - always show (BOLD)
-    commands += '\x1B\x45\x01'; // Bold on
-    const vatAmt = (receiptData?.vatAmount || 0).toFixed(2);
-    const vatLine = `VAT (12%): ${vatAmt}`;
-    const vatSpaces = ' '.repeat(receiptWidth - vatLine.length);
-    commands += `${vatSpaces}${vatLine}\n`;
-    commands += '\x1B\x45\x00'; // Bold off
-    
-    // VAT Exempt - always show (BOLD)
-    commands += '\x1B\x45\x01'; // Bold on
-    const vatExemptAmt = (receiptData?.vatExempt || 0).toFixed(2);
-    const vatExemptLine = `VAT Exempt: ${vatExemptAmt}`;
-    const vatExemptSpaces = ' '.repeat(Math.max(0, receiptWidth - vatExemptLine.length));
-    commands += `${vatExemptSpaces}${vatExemptLine}\n`;
-    commands += '\x1B\x45\x00'; // Bold off
+      if (receiptData?.isvatable) {
+        // VAT (12%)
+        commands += '\x1B\x45\x01'; // Bold on
+        const vatAmt = (receiptData?.vatAmount || 0).toFixed(2);
+        const vatLine = `VAT (12%): ${vatAmt}`;
+        const vatSpaces = ' '.repeat(receiptWidth - vatLine.length);
+        commands += `${vatSpaces}${vatLine}\n`;
+        commands += '\x1B\x45\x00'; // Bold off
+        // VAT Exempt
+        commands += '\x1B\x45\x01'; // Bold on
+        const vatExemptAmt = (receiptData?.vatExempt || 0).toFixed(2);
+        const vatExemptLine = `VAT Exempt: ${vatExemptAmt}`;
+        const vatExemptSpaces = ' '.repeat(Math.max(0, receiptWidth - vatExemptLine.length));
+        commands += `${vatExemptSpaces}${vatExemptLine}\n`;
+        commands += '\x1B\x45\x00'; // Bold off
+      }
     
     // Discount - always show (BOLD)
     commands += '\x1B\x45\x01'; // Bold on
