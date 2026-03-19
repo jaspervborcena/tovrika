@@ -1087,7 +1087,7 @@
                 </div>
                 <div class="item-price">{{ item.sellingPrice.toFixed(2) }}</div>
                 <div class="item-total">
-                  {{ item.total.toFixed(2) }}
+                  {{ (item.isVatApplicable ? item.total : (item.sellingPrice * item.quantity - (item.discountAmount || 0))).toFixed(2) }}
                 </div>
                 <div class="item-actions">
                   <button 
@@ -1475,7 +1475,8 @@
                 </div>
                 <!-- VAT Amount Display -->
                 <div class="cart-item-field">
-                  <span class="vat-amount">₱{{ (item.vatAmount || 0).toFixed(2) }}</span>
+                  <span class="vat-amount" *ngIf="item.isVatApplicable">₱{{ (item.vatAmount || 0).toFixed(2) }}</span>
+                  <span class="vat-amount" *ngIf="!item.isVatApplicable">₱0.00</span>
                 </div>
 
                 <!-- Has Discount Checkbox (compact) -->
@@ -1716,6 +1717,10 @@
                   <span class="breakdown-label">VAT ({{ cartItemDetails.vatRate || 12 }}%):</span>
                   <span class="breakdown-value">₱{{ (cartItemDetails.vatAmount || 0).toFixed(2) }}</span>
                 </div>
+                <div class="breakdown-row" *ngIf="!cartItemDetails.isVatApplicable">
+                  <span class="breakdown-label">VAT:</span>
+                  <span class="breakdown-value">₱0.00</span>
+                </div>
                 <div class="breakdown-row total-row">
                   <span class="breakdown-label">Final Total:</span>
                   <span class="breakdown-value">₱{{ (cartItemDetails.finalTotal || 0).toFixed(2) }}</span>
@@ -1744,6 +1749,10 @@
                 <div class="detail-row" *ngIf="cartSummary().vatAmount > 0">
                   <span class="detail-label">VAT Amount:</span>
                   <span class="detail-value">₱{{ cartSummary().vatAmount.toFixed(2) }}</span>
+                </div>
+                <div class="detail-row" *ngIf="cartSummary().vatAmount === 0">
+                  <span class="detail-label">VAT Amount:</span>
+                  <span class="detail-value">₱0.00</span>
                 </div>
                 <div class="detail-row">
                   <span class="detail-label">Net Amount:</span>

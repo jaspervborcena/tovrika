@@ -755,7 +755,7 @@ export class PrintService {
     
     // Date and Cashier - BOLD
     commands += '\x1B\x45\x01'; // Bold on
-    commands += `Cashier: ${receiptData?.cashier || 'N/A'}\n`;
+    commands += `Cashier: ${receiptData?.cashier || receiptData?.cashierName || receiptData?.user?.displayName || receiptData?.user?.email || 'N/A'}\n`;
     const date = new Date(receiptData?.receiptDate || new Date());
     commands += `${date.toLocaleDateString()} ${date.toLocaleTimeString()}\n`;
     commands += '\x1B\x45\x00'; // Bold off
@@ -1439,7 +1439,7 @@ export class PrintService {
     // Cashier and Date (matching preview)
     html += `
       <div class="line"></div>
-      <div><strong>Cashier:</strong> ${receiptData?.cashier || 'N/A'}</div>
+      <div><strong>Cashier:</strong> ${receiptData?.cashier || receiptData?.cashierName || receiptData?.user?.displayName || receiptData?.user?.email || 'N/A'}</div>
       <div><strong>Date:</strong> ${new Date(receiptData?.receiptDate || new Date()).toLocaleString()}</div>
       <div class="line"></div>
       

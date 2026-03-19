@@ -322,7 +322,7 @@ export class ThermalPrinterService {
     
     // Cashier
     if (receiptData.cashier || receiptData.user) {
-      const cash = `Cashier: ${receiptData.cashier || receiptData.user}`;
+      const cash = `Cashier: ${receiptData.cashier || receiptData.cashierName || receiptData.user?.displayName || receiptData.user?.email || 'N/A'}`;
       for (let i = 0; i < cash.length; i++) {
         commands.push(cash.charCodeAt(i));
       }
