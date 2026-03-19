@@ -413,7 +413,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   // Cart VAT and Discount Settings
   public cartVatSettings = {
     isVatApplicable: true,
-    vatRate: 12,
+    vatRate: 0,
     hasDiscount: false,
     discountType: 'percentage' as 'percentage' | 'fixed',
     discountValue: 0
@@ -1257,7 +1257,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
           if (cartItem) {
             const updatedCartItem = {
               ...cartItem,
-              sellingPrice: item.unitPrice || item.sellingPrice || cartItem.sellingPrice,
+              sellingPrice: item.sellingPrice || cartItem.sellingPrice,
               discount: item.discount || 0,
               discountType: item.discountType || 'fixed',
               isVatExempt: item.isVatExempt || false,
@@ -1513,7 +1513,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
           productCode: item.productCode || item.code,
           sku: item.sku || item.skuId,
           quantity: item.quantity || item.qty || 1,
-          price: item.price || item.sellingPrice || item.unitPrice || 0,
+          price: item.sellingPrice || item.unitPrice || 0,
           total: item.total || item.lineTotal || ((item.price || item.sellingPrice || 0) * (item.quantity || 1))
         }));
 
@@ -1983,16 +1983,17 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     const unitPrice = Number(item.unitPrice || item.price || 0);
     const quantity = Number(item.quantity || 0);
     const discount = Number(item.discount || 0);
-    const vat = Number(item.vat || 0);
-    
     // Calculate subtotal
     const subtotal = unitPrice * quantity;
-    
-    // Apply discount first, then VAT
+    // Apply discount
     const afterDiscount = subtotal - discount;
-    const total = afterDiscount - vat;
-    
-    return Math.max(0, total); // Ensure total is never negative
+    // If VAT is not applicable, do not add or deduct VAT
+    if (item.isVatApplicable) {
+      const vat = Number(item.vat || 0);
+      return Math.max(0, afterDiscount - vat);
+    } else {
+      return Math.max(0, afterDiscount);
+    }
   }
 
   /**
@@ -2897,7 +2898,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       vatExempt: order.vatExemptAmount || 0,
       discount: order.discountAmount || 0,
       totalAmount: order.totalAmount || order.netAmount,
-      vatRate: 12,
+      vatRate: 0,
       // Validity notice based on store BIR accreditation
       validityNotice: (storeInfo as any)?.isBirAccredited 
         ? ReceiptValidityNotice.BIR_ACCREDITED 
@@ -5477,7 +5478,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   getDefaultCartItemDetails(): CartItemTaxDiscount {
     return {
       isVatApplicable: true,
-      vatRate: 12,
+      vatRate: 0,
       hasDiscount: false,
       discountType: 'percentage',
       discountValue: 0,
@@ -5493,7 +5494,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     this.selectedCartItem = item;
     this.cartItemDetails = {
       isVatApplicable: item.isVatApplicable ?? true,
-      vatRate: item.vatRate ?? 12,
+      vatRate: item.vatRate ?? 0,
       hasDiscount: item.hasDiscount ?? false,
       discountType: item.discountType || 'percentage',
       discountValue: item.discountValue ?? 0,
@@ -5556,12 +5557,16 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     // Calculate VAT
     let vatAmount = 0;
     if (this.cartItemDetails.isVatApplicable) {
-      vatAmount = (afterDiscount * (this.cartItemDetails.vatRate || 12)) / 100;
+      vatAmount = (afterDiscount * (this.cartItemDetails.vatRate || 0)) / 100;
     }
     this.cartItemDetails.vatAmount = vatAmount;
 
-    // Final total
-    this.cartItemDetails.finalTotal = afterDiscount + vatAmount;
+    // Final total: If VAT is not applicable, do not add VAT
+    if (this.cartItemDetails.isVatApplicable) {
+      this.cartItemDetails.finalTotal = afterDiscount + vatAmount;
+    } else {
+      this.cartItemDetails.finalTotal = afterDiscount;
+    }
   }
 
   /**
@@ -5598,7 +5603,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     const updatedItem: CartItem = {
       ...this.selectedCartItem,
       isVatApplicable: this.cartItemDetails.isVatApplicable,
-      vatRate: this.cartItemDetails.vatRate || 12,
+      vatRate: this.cartItemDetails.vatRate || 0,
       hasDiscount: this.cartItemDetails.hasDiscount,
       discountType: this.cartItemDetails.discountType,
       discountValue: this.cartItemDetails.discountValue,

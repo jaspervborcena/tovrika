@@ -1242,20 +1242,20 @@ export class PosService {
 
   private recalculateCartItem(item: CartItem): CartItem {
     // Recalculate sellingPrice, discountAmount, vatAmount and total based on originalPrice
-    const original = (item.originalPrice ?? item.sellingPrice) as number;
+    const sellingPrice = (item.sellingPrice) as number;
     const vatRate = Number(item.vatRate ?? 0);
 
     // Per-unit discount
     let discountPerUnit = 0;
     if (item.hasDiscount) {
       if (item.discountType === 'percentage') {
-        discountPerUnit = (original * (item.discountValue || 0)) / 100;
+        discountPerUnit = (sellingPrice * (item.discountValue || 0)) / 100;
       } else {
         discountPerUnit = item.discountValue || 0;
       }
     }
 
-    const netBasePerUnit = Math.max(0, original - discountPerUnit);
+    const netBasePerUnit = Math.max(0, sellingPrice - discountPerUnit);
     const vatAmountPerUnit = (item.isVatApplicable && !item.isVatExempt) ? (netBasePerUnit * vatRate) / 100 : 0;
     // Round per-unit VAT and selling price to 2 decimals for consistent totals
     const vatAmountPerUnitRounded = Number(vatAmountPerUnit.toFixed(2));
