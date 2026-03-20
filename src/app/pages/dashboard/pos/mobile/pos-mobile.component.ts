@@ -831,6 +831,7 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
       receiptDate: order.date || order.createdAt,
       storeInfo: {
         storeName: (storeInfo as any)?.storeName || company?.name || 'Unknown Store',
+        branchName: (storeInfo as any)?.branchName || '',
         address: (storeInfo as any)?.address || 'Store Address',
         phone: (storeInfo as any)?.phoneNumber || (storeInfo as any)?.phone || 'N/A',
         email: company?.email || storeInfo?.email || 'N/A', // Use company email

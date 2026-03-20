@@ -1809,12 +1809,14 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
         discountAmount: it.discount || 0
       }));
 
+      const branchName = orderData.branchName || storeInfo.branchName || this.currentStoreInfo()?.branchName || '';
       const normalizedReceipt: any = {
         orderId: orderData.id || orderData.orderId || null,
         invoiceNumber: orderData.invoiceNumber || orderData.invoice || this.nextInvoiceNumber(),
         receiptDate: orderData.completedAt || orderData.updatedAt || new Date(),
         storeInfo: {
           storeName: storeInfo.storeName || storeInfo.name || 'Store Name',
+          branchName: branchName,
           address: storeInfo.address || '',
           phone: storeInfo.phoneNumber || storeInfo.phone || '',
           email: storeInfo.email || '',
@@ -2856,6 +2858,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       receiptDate: order.date || order.createdAt,
       storeInfo: {
         storeName: (storeInfo as any)?.storeName || company?.name || 'Unknown Store',
+        branchName: (storeInfo as any)?.branchName || '',
         address: (storeInfo as any)?.address || 'Store Address',
         phone: (storeInfo as any)?.phoneNumber || (storeInfo as any)?.phone || 'N/A',
         email: company?.email || storeInfo?.email || 'N/A', // Use company email
@@ -5945,6 +5948,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       receiptDate: receiptDate, // Date from shared service
       storeInfo: {
         storeName: (storeInfo as any)?.storeName || company?.name || 'Unknown Store',
+        branchName: (storeInfo as any)?.branchName || '',
         address: (storeInfo as any)?.address || 'Store Address',
         phone: (storeInfo as any)?.phoneNumber || (storeInfo as any)?.phone || 'N/A',
         email: company?.email || storeInfo?.email || 'N/A', // Use company email
