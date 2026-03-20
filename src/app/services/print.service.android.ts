@@ -404,6 +404,10 @@ export class PrintServiceAndroid {
     commands += '\x1B\x61\x01'; // Center alignment
     commands += '\x1B\x45\x01'; // Bold on
     commands += (receiptData?.storeInfo?.storeName || 'Store Name') + '\n';
+    // Add branch name if it exists and is not empty
+    if (receiptData?.storeInfo?.branchName && receiptData.storeInfo.branchName.trim() !== '') {
+      commands += `Branch: ${receiptData.storeInfo.branchName}\n`;
+    }
     commands += '\x1B\x45\x00'; // Bold off
     
     // Store details - CENTERED with normal font

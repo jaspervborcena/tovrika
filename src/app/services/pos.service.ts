@@ -450,25 +450,26 @@ export class PosService {
         assignedCashierEmail: user.email || 'Unknown Cashier',
         assignedCashierName: user.displayName || user.email || 'Unknown Cashier',
         status: 'paid',
-        
+
         // Customer Information
         cashSale: this.salesTypeCashSignal(),
         chargeSale: this.salesTypeChargeSignal(),
         soldTo: customerInfo?.soldTo || 'Walk-in Customer',
         tin: customerInfo?.tin || '',
         businessAddress: customerInfo?.businessAddress || '',
-        
+
         // Invoice Information (invoiceNumber will be set by transaction)
         date: customerInfo?.date || new Date(),
         logoUrl: company.logoUrl || '',
-        
+
         // Company Information (using STORE data)
         companyName: company.name || '',
         companyAddress: store.address || '',
         companyPhone: store.phoneNumber || '',
         companyTaxId: store.tinNumber || '',
         companyEmail: company.email || '',
-        
+        branchName: store.branchName || '',
+
         // Financial Calculations
         vatableSales: summary.vatableSales,
         vatAmount: Number(((summary.vatAmount || 0)).toFixed(2)),
@@ -478,18 +479,18 @@ export class PosService {
         grossAmount: summary.grossAmount,
         netAmount: summary.netAmount,
         totalAmount: summary.netAmount,
-        
+
         // Order Items
         items: orderItems,
-        
+
         // BIR Required Fields - from store BIR details
         atpOrOcn: store.birDetails?.atpOrOcn || '',
         birPermitNo: store.birDetails?.birPermitNo || '',
         inclusiveSerialNumber: store.birDetails?.inclusiveSerialNumber || '',
-        
+
         // System Fields
         message: 'Thank you! See you again!',
-        
+
         // Store reference for BIR device lookup
         isBirAccredited: store.isBirAccredited
       };
@@ -658,6 +659,8 @@ export class PosService {
         companyPhone: store.phoneNumber || '',
         companyTaxId: store.tinNumber || '',
         companyEmail: company.email || '',
+
+         branchName: store.branchName || '',
         
         // Financial Information
         grossAmount: cartSummary.grossAmount,
