@@ -639,9 +639,74 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   // Orders state
   private ordersSignal = signal<any[]>([]);
   readonly orders = computed(() => this.ordersSignal());
-  
+
+  // Orders pagination state
+  readonly ordersCurrentPage = signal<number>(1);
+  readonly ordersPageSize = computed(() => {
+    // You can adjust page size as needed or make it responsive
+    if (this.isMobileView()) return 10;
+    if (this.isTabletView()) return 15;
+    return 20;
+  });
+  readonly ordersTotalPages = computed(() => {
+    const total = this.filteredOrders().length;
+    return Math.ceil(total / this.ordersPageSize());
+  });
+  readonly ordersHasNextPage = computed(() => this.ordersCurrentPage() < this.ordersTotalPages());
+  readonly ordersHasPreviousPage = computed(() => this.ordersCurrentPage() > 1);
+  readonly displayedOrders = computed(() => {
+    const all = this.filteredOrders();
+    const startIndex = (this.ordersCurrentPage() - 1) * this.ordersPageSize();
+    const endIndex = startIndex + this.ordersPageSize();
+    return all.slice(startIndex, endIndex);
+  });
+
+  goToOrdersPage(page: number): void {
+    if (page >= 1 && page <= this.ordersTotalPages()) {
+      this.ordersCurrentPage.set(page);
+    }
+  }
+  nextOrdersPage(): void {
+    if (this.ordersHasNextPage()) {
+      this.ordersCurrentPage.set(this.ordersCurrentPage() + 1);
+    }
+  }
+  previousOrdersPage(): void {
+    if (this.ordersHasPreviousPage()) {
+      this.ordersCurrentPage.set(this.ordersCurrentPage() - 1);
+    }
+  }
+  getOrdersPageNumbers(): number[] {
+    const total = this.ordersTotalPages();
+    const current = this.ordersCurrentPage();
+    const pages: number[] = [];
+    if (total <= 7) {
+      for (let i = 1; i <= total; i++) pages.push(i);
+    } else {
+      if (current <= 4) {
+        pages.push(1, 2, 3, 4, 5, -1, total);
+      } else if (current >= total - 3) {
+        pages.push(1, -1, total - 4, total - 3, total - 2, total - 1, total);
+      } else {
+        pages.push(1, -1, current - 1, current, current + 1, -1, total);
+      }
+    }
+    return pages;
+  }
+
+  // Reset orders pagination when tab or search changes
+  resetOrdersPagination(): void {
+    this.ordersCurrentPage.set(1);
+  }
+
   // Filtered orders based on active tab
   readonly filteredOrders = computed(() => {
+    // Reset pagination if current page is out of range after filtering
+    setTimeout(() => {
+      if (this.ordersCurrentPage() > this.ordersTotalPages()) {
+        this.ordersCurrentPage.set(1);
+      }
+    }, 0);
     const allOrders = this.ordersSignal();
     const tab = this.accessTab();
     
@@ -1000,9 +1065,35 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       const storeId = this.selectedStoreId();
       const q = this.orderSearchQuery().trim();
       if (!companyId) return;
-      
-      const results = await this.orderService.searchOrders(companyId, storeId || undefined, q);
-      this.ordersSignal.set(results);
+
+      // 1. Try to find by invoice number (alphanumeric supported) in the 500 loaded orders
+      let foundOrder = null;
+      if (q) {
+        const qNorm = q.trim().toLowerCase();
+        const localMatch = this.ordersSignal().find(order => (order.invoiceNumber || '').toString().trim().toLowerCase() === qNorm);
+        if (localMatch) {
+          foundOrder = localMatch;
+        }
+      }
+
+      if (foundOrder) {
+        this.ordersSignal.set([foundOrder]);
+      } else {
+        // 2. Fallback: search Firestore for the invoice number (alphanumeric supported)
+        const results = await this.orderService.searchOrders(companyId, storeId || undefined, q);
+        // If searching by invoice number, only show exact match if found
+        if (q && results && results.length > 0) {
+          const qNorm = q.trim().toLowerCase();
+          const exact = results.find(order => (order.invoiceNumber || '').toString().trim().toLowerCase() === qNorm);
+          if (exact) {
+            this.ordersSignal.set([exact]);
+          } else {
+            this.ordersSignal.set([]);
+          }
+        } else {
+          this.ordersSignal.set(results);
+        }
+      }
     } catch (error) {
       console.error('Error searching orders:', error);
       this.ordersSignal.set([]);
@@ -1024,7 +1115,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
         return;
       }
       
-      const results = await this.orderService.getRecentOrders(companyId, storeId || undefined, 20);
+      const results = await this.orderService.getRecentOrders(companyId, storeId || undefined, 500);
       
       this.ordersSignal.set(results);
     } catch (error) {
