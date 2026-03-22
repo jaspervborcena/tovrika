@@ -262,8 +262,31 @@ export class ThermalPrinterService {
     for (let i = 0; i < storeName.length; i++) {
       commands.push(storeName.charCodeAt(i));
     }
-    commands.push(0x0A, 0x0A); // LF LF
-    
+    commands.push(0x0A);
+
+    // Branch name (centered, bold, slightly larger, labeled)
+    // Center align
+    commands.push(0x1B, 0x61, 0x01);
+    // Bold on
+    commands.push(0x1B, 0x45, 0x01);
+    // Double height
+    commands.push(0x1D, 0x21, 0x01);
+    // Branch name from receipt data
+    const branchName = receiptData?.storeInfo?.branchName || receiptData?.order?.branchName || receiptData?.branchName;
+    let branchLabel = '';
+    if (branchName && branchName.trim() !== '') {
+      branchLabel = `Branch: ${branchName}`;
+    }
+    for (let i = 0; i < branchLabel.length; i++) {
+      commands.push(branchLabel.charCodeAt(i));
+    }
+    commands.push(0x0A);
+    // Back to normal size and bold off
+    commands.push(0x1D, 0x21, 0x00);
+    commands.push(0x1B, 0x45, 0x00);
+    // Extra LF for spacing
+    commands.push(0x0A);
+
     // Normal size - GS ! 0
     commands.push(0x1D, 0x21, 0x00);
     
@@ -464,7 +487,7 @@ export class ThermalPrinterService {
     commands.push(0x1B, 0x61, 0x01);
     
     // Thank you
-    const thanks = 'Thank you for your purchase!';
+    const thanks = 'Thank you for your purchase!\nPlease come again.';
     for (let i = 0; i < thanks.length; i++) {
       commands.push(thanks.charCodeAt(i));
     }

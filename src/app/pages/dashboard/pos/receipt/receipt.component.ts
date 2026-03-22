@@ -14,6 +14,21 @@ export class ReceiptComponent implements OnInit {
   private hasFocusedPrint = false;
   @Input() isVisible: boolean = false;
   @Input() receiptData: any = null;
+
+  // Returns the branch name, preferring storeInfo.branchName, then order.branchName
+  getBranchName(): string {
+    // Try storeInfo.branchName first
+    const storeBranch = this.receiptData?.storeInfo?.branchName;
+    if (storeBranch && storeBranch.trim() !== '') {
+      return storeBranch;
+    }
+    // Fallback to order.branchName if available
+    const orderBranch = this.receiptData?.order?.branchName || this.receiptData?.branchName;
+    if (orderBranch && orderBranch.trim() !== '') {
+      return orderBranch;
+    }
+    return '';
+  }
   @Output() closeModal = new EventEmitter<void>();
   @Output() printReceipt = new EventEmitter<void>(); // Simplified - no printer type needed
 
