@@ -607,7 +607,7 @@
               </ng-container>
             </div>
             
-            <!-- Enhanced Order List Display -->
+            <!-- Enhanced Order List Display with Pagination -->
             <div class="orders-list" *ngIf="!isLoadingOrders() && filteredOrders().length > 0">
               <div class="orders-header" style="display: grid; grid-template-columns: 2fr 1fr 2fr 1fr 1fr; gap: 1rem; padding: 0.75rem; background: #f8fafc; border-radius: 6px; font-weight: 600; color: #374151; margin-bottom: 0.5rem;">
                 <div>Invoice Number</div>
@@ -616,14 +616,13 @@
                 <div>Customer Name</div>
                 <div style="text-align: right;">Amount</div>
               </div>
-              
-              <div *ngFor="let order of filteredOrders()" 
+
+              <div *ngFor="let order of displayedOrders()" 
                    class="order-list-item" 
                    (dblclick)="openOrder(order)" 
                    style="display: grid; grid-template-columns: 2fr 1fr 2fr 1fr 1fr; gap: 1rem; padding: 0.75rem; border-bottom: 1px solid #f1f5f9; cursor: pointer; transition: background-color 0.2s;"
                    onmouseover="this.style.backgroundColor='#f8fafc'"
                    onmouseout="this.style.backgroundColor='transparent'">
-                
                 <!-- Invoice Number -->
                 <div class="order-invoice" style="font-weight: 600; color: #1f2937;">
                   {{ order.invoiceNumber || order.id || 'N/A' }}
@@ -631,12 +630,10 @@
                     📍 {{ order.businessAddress }}
                   </div>
                 </div>
-                
                 <!-- Table Number -->
                 <div class="order-table" style="color: #374151; font-weight: 500;">
                   {{ order.tableNumber || '-' }}
                 </div>
-                
                 <!-- Date -->
                 <div class="order-date" style="color: #6b7280; font-size: 0.9rem;">
                   {{ order.date ? (order.date | date:'MMM d, y') : (order.createdAt | date:'MMM d, y') }}
@@ -644,7 +641,6 @@
                     {{ order.date ? (order.date | date:'shortTime') : (order.createdAt | date:'shortTime') }}
                   </div>
                 </div>
-                
                 <!-- Customer Name -->
                 <div class="order-customer" style="color: #374151;">
                   <div style="font-weight: 500;">
@@ -655,7 +651,6 @@
                     <span [style.color]="getOrderStatusColor(order.status)">{{ order.status | titlecase }}</span>
                   </div>
                 </div>
-                
                 <!-- Amount -->
                 <div class="order-amount" style="text-align: right;">
                   <div style="font-weight: 700; color: #059669; font-size: 1.1rem;">
@@ -666,11 +661,49 @@
                   </div>
                 </div>
               </div>
+
+              <!-- Pagination Controls for Orders -->
+              <div class="pagination-controls" *ngIf="filteredOrders().length > ordersPageSize()" style="margin-top: 1rem;">
+                <div class="pagination-info">
+                  Showing {{ ((ordersCurrentPage() - 1) * ordersPageSize()) + 1 }} - {{ Math.min(ordersCurrentPage() * ordersPageSize(), filteredOrders().length) }} of {{ filteredOrders().length }} orders
+                </div>
+                <div class="pagination-buttons">
+                  <button 
+                    class="btn btn-secondary pagination-btn" 
+                    (click)="previousOrdersPage()" 
+                    [disabled]="!ordersHasPreviousPage()">
+                    ←
+                  </button>
+                  <!-- Page number buttons -->
+                  <div class="page-numbers">
+                    <button 
+                      *ngFor="let page of getOrdersPageNumbers()"
+                      class="page-number-btn"
+                      [class.active]="page === ordersCurrentPage()"
+                      [class.ellipsis]="page === -1"
+                      (click)="page !== -1 && goToOrdersPage(page)"
+                      [disabled]="page === -1">
+                      {{ page === -1 ? '...' : page }}
+                    </button>
+                  </div>
+                  <button 
+                    class="btn btn-secondary pagination-btn" 
+                    (click)="nextOrdersPage()" 
+                    [disabled]="!ordersHasNextPage()">
+                    →
+                  </button>
+                </div>
+              </div>
             </div>
             
-            <!-- Search Results Summary -->
-            <div *ngIf="!isLoadingOrders() && orders().length > 0" class="search-summary" style="margin-top: 1rem; padding: 0.5rem; background: #ecfdf5; border-left: 4px solid #10b981; color: #065f46; font-size: 0.9rem;">
-              {{ orderSearchQuery() ? 'Found ' + orders().length + ' order(s) for "' + orderSearchQuery() + '"' : 'Showing ' + orders().length + ' recent order(s)' }}
+            <!-- Search Results Summary (Paginated) -->
+            <div *ngIf="!isLoadingOrders() && filteredOrders().length > 0" class="search-summary" style="margin-top: 1rem; padding: 0.5rem; background: #ecfdf5; border-left: 4px solid #10b981; color: #065f46; font-size: 0.9rem;">
+              <ng-container *ngIf="orderSearchQuery(); else pagedOrdersSummary">
+                Showing {{ ((ordersCurrentPage() - 1) * ordersPageSize()) + 1 }} - {{ Math.min(ordersCurrentPage() * ordersPageSize(), filteredOrders().length) }} of {{ filteredOrders().length }} order(s) for "{{ orderSearchQuery() }}"
+              </ng-container>
+              <ng-template #pagedOrdersSummary>
+                Showing {{ ((ordersCurrentPage() - 1) * ordersPageSize()) + 1 }} - {{ Math.min(ordersCurrentPage() * ordersPageSize(), filteredOrders().length) }} of {{ filteredOrders().length }} order(s)
+              </ng-template>
             </div>
           </div>
         </div>
