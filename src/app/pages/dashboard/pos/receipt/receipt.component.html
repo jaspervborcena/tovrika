@@ -26,7 +26,7 @@
       <div class="store-header">
         <div class="company-info">
           <h1 class="company-name">{{ receiptData?.storeInfo?.storeName || 'Store Name' }}</h1>
-          <p *ngIf="receiptData?.storeInfo?.branchName && receiptData.storeInfo.branchName.trim() !== ''" class="company-branch" style="font-size: 1.2em; font-weight: bold; margin: 0;">Branch: {{ receiptData.storeInfo.branchName }}</p>
+          <p *ngIf="getBranchName()" class="company-branch" style="font-size: 1.2em; font-weight: bold; margin: 0;">Branch: {{ getBranchName() }}</p>
           <p *ngIf="receiptData?.storeInfo?.address && receiptData?.storeInfo?.address !== 'N/A'" class="company-address" style="font-size: 1em; margin: 0;">{{ receiptData.storeInfo.address }}</p>
           
           <!-- Contact Information - Only show if values exist -->

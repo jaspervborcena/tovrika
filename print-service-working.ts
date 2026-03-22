@@ -687,6 +687,7 @@ export class PrintService {
     commands += '\x1B\x4D\x00'; // Font A (clearer than Font B)
     commands += '\x1B\x7B\x32'; // Increase print density for darker text
     
+
     // Store header - CENTERED, BOLD, DOUBLE HEIGHT
     commands += '\x1B\x61\x01'; // Center alignment
     commands += '\x1B\x45\x01'; // Bold on
@@ -694,6 +695,18 @@ export class PrintService {
     commands += (receiptData?.storeInfo?.storeName || 'Store Name') + '\n';
     commands += '\x1D\x21\x00'; // Back to normal size
     commands += '\x1B\x45\x00'; // Bold off
+
+    // Branch Name - CENTERED, BOLD, SLIGHTLY LARGER THAN ADDRESS (HARDCODED)
+    // Branch Name - CENTERED, BOLD, SLIGHTLY LARGER THAN ADDRESS (from data)
+    const branchName = receiptData?.storeInfo?.branchName || receiptData?.order?.branchName || receiptData?.branchName;
+    if (branchName && branchName.trim() !== '') {
+      commands += '\x1B\x61\x01'; // Center alignment
+      commands += '\x1B\x45\x01'; // Bold on
+      commands += '\x1D\x21\x01'; // Double height (same as store name)
+      commands += `Branch: ${branchName}\n`;
+      commands += '\x1D\x21\x00'; // Back to normal size
+      commands += '\x1B\x45\x00'; // Bold off
+    }
 
     // Store details - CENTERED, SMALL FONT
     commands += '\x1B\x61\x01'; // Center alignment
@@ -904,8 +917,8 @@ export class PrintService {
     
     // Thank you message - CENTERED for Xprinter
     commands += '\x1B\x61\x01'; // Center alignment
-    commands += 'Thank you for visiting us!\n';
-    commands += 'Please come again\n';
+    commands += 'Thank you for your purchase!\n';
+    commands += 'Please come again.\n';
     commands += '\x1B\x61\x00'; // Reset alignment
     commands += '\n\n\n\n'; // Extra feed for complete printing
     commands += '\x1D\x56\x41'; // Cut paper
@@ -1545,8 +1558,8 @@ export class PrintService {
 
     html += `
       <div class="footer-section no-break">
-        <div>Thank you for visiting us!</div>
-        <div>Please come again</div>
+        <div>Thank you for your purchase!</div>
+        <div>Please come again.</div>
         <br>
         <div style="margin-top: 10px;">&nbsp;</div>
       </div>

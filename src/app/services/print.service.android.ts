@@ -404,9 +404,17 @@ export class PrintServiceAndroid {
     commands += '\x1B\x61\x01'; // Center alignment
     commands += '\x1B\x45\x01'; // Bold on
     commands += (receiptData?.storeInfo?.storeName || 'Store Name') + '\n';
-    // Add branch name if it exists and is not empty
+    // Add branch name if it exists in storeInfo, else fallback to order.branchName or receiptData.branchName
+    let branchName = '';
     if (receiptData?.storeInfo?.branchName && receiptData.storeInfo.branchName.trim() !== '') {
-      commands += `Branch: ${receiptData.storeInfo.branchName}\n`;
+      branchName = receiptData.storeInfo.branchName;
+    } else if (receiptData?.order?.branchName && receiptData.order.branchName.trim() !== '') {
+      branchName = receiptData.order.branchName;
+    } else if (receiptData?.branchName && receiptData.branchName.trim() !== '') {
+      branchName = receiptData.branchName;
+    }
+    if (branchName) {
+      commands += `Branch: ${branchName}\n`;
     }
     commands += '\x1B\x45\x00'; // Bold off
     
@@ -614,8 +622,8 @@ export class PrintServiceAndroid {
     
     // Thank you message - CENTERED for Xprinter
     commands += '\x1B\x61\x01'; // Center alignment
-    commands += 'Thank you for visiting us!\n';
-    commands += 'Please come again\n';
+    commands += 'Thank you for your purchase!\n';
+    commands += 'Please come again.\n';
     commands += '\x1B\x61\x00'; // Reset alignment
     commands += '\n\n\n\n'; // Extra feed for complete printing
     commands += '\x1D\x56\x41'; // Cut paper
@@ -997,6 +1005,17 @@ export class PrintServiceAndroid {
    */
   printMobileThermal(receiptData: any): void {
     console.log('≡ƒû¿∩╕Å Starting mobile thermal print...');
+    // Debug: Log branchName and receiptData
+    let branchName = '';
+    if (receiptData?.storeInfo?.branchName && receiptData.storeInfo.branchName.trim() !== '') {
+      branchName = receiptData.storeInfo.branchName;
+    } else if (receiptData?.order?.branchName && receiptData.order.branchName.trim() !== '') {
+      branchName = receiptData.order.branchName;
+    } else if (receiptData?.branchName && receiptData.branchName.trim() !== '') {
+      branchName = receiptData.branchName;
+    }
+    console.log('[DEBUG] Branch Name for printMobileThermal:', branchName);
+    console.log('[DEBUG] Receipt Data for printMobileThermal:', JSON.stringify(receiptData));
     
     // Get paper size configuration
     const paperSize = receiptData?._paperSize || this.currentPrinterConfig?.paperSize || '58mm';
@@ -1085,6 +1104,20 @@ export class PrintServiceAndroid {
     let html = `
       <div class="header-section">
         <div class="bold" style="font-size: 18px; font-weight: 900;">${receiptData?.storeInfo?.storeName || 'Store Name'}</div>
+`;
+    // Add branch name if it exists in storeInfo, else fallback to order.branchName or receiptData.branchName
+    let branchName = '';
+    if (receiptData?.storeInfo?.branchName && receiptData.storeInfo.branchName.trim() !== '') {
+      branchName = receiptData.storeInfo.branchName;
+    } else if (receiptData?.order?.branchName && receiptData.order.branchName.trim() !== '') {
+      branchName = receiptData.order.branchName;
+    } else if (receiptData?.branchName && receiptData.branchName.trim() !== '') {
+      branchName = receiptData.branchName;
+    }
+    if (branchName) {
+      html += `<div><strong>Branch:</strong> ${branchName}</div>`;
+    }
+    html += `
         <div>${receiptData?.storeInfo?.address || 'Store Address'}</div>
         <div>Tel: ${receiptData?.storeInfo?.phone || 'N/A'}</div>
         <div>Email: ${receiptData?.storeInfo?.email || 'N/A'}</div>
@@ -1253,8 +1286,8 @@ export class PrintServiceAndroid {
 
     html += `
       <div class="footer-section no-break">
-        <div>Thank you for visiting us!</div>
-        <div>Please come again</div>
+        <div>Thank you for your purchase!</div>
+        <div>Please come again.</div>
         <br>
         <div style="margin-top: 10px;">&nbsp;</div>
       </div>
