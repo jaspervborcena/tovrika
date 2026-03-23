@@ -76,13 +76,20 @@ type Order = OrderDisplay;
                 class="date-input"
                 title="Select end date">
             </div>
-            <div class="go-button-group">
+            <div class="go-button-group" style="display: flex; gap: 0.5rem; align-items: center;">
               <button 
                 (click)="loadSalesDataManual()"
                 [disabled]="isLoading()"
                 class="go-button">
                 <span *ngIf="!isLoading()">{{ getDataSourceButtonText() }}</span>
                 <span *ngIf="isLoading()" class="loading-text">Loading...</span>
+              </button>
+              <button 
+                (click)="exportSalesSummaryToExcel()"
+                [disabled]="isLoading()"
+                class="export-button"
+                title="Export sales summary and details to Excel">
+                Export to Excel
               </button>
             </div>
           </div>
@@ -512,7 +519,45 @@ type Order = OrderDisplay;
       transform: none;
     }
 
+
+    .export-button-group {
+      display: flex;
+      align-items: flex-end;
+      gap: 10px;
+    }
+
+    .export-button {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      min-width: 140px;
+      height: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .export-button:hover:not(:disabled) {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+    }
+
+    .export-button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      transform: none;
+    }
+
     
+
+
+
 
     .loading-text {
       display: flex;
@@ -1155,7 +1200,6 @@ type Order = OrderDisplay;
       }
 
       .date-input {
-        width: 100%;
         font-size: 0.875rem;
         padding: 0.625rem 0.75rem;
       }
@@ -1253,9 +1297,31 @@ type Order = OrderDisplay;
       }
 
       .export-button {
-        width: 100%;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 8px;
+        font-size: 0.9rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        min-width: 140px;
+        height: 40px;
+        display: flex;
+        align-items: center;
         justify-content: center;
-        font-size: 0.8125rem;
+      }
+
+      .export-button:hover:not(:disabled) {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+      }
+
+      .export-button:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+        transform: none;
       }
 
       .pagination-container {
@@ -1499,6 +1565,78 @@ type Order = OrderDisplay;
   `]
 })
 export class SalesSummaryComponent implements OnInit {
+    /**
+    * Export sales summary and details to Excel (max 31 days, only available data)
+     */
+    async exportSalesSummaryToExcel(): Promise<void> {
+      // Validate date range (max 31 days)
+      const from = new Date(this.fromDate);
+      const to = new Date(this.toDate);
+      const diffDays = Math.ceil((to.getTime() - from.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+      if (diffDays > 31) {
+        alert('Please select a date range of 31 days or less.');
+        return;
+      }
+      // Get orders in range (filteredOrders is already sorted and filtered)
+      const orders = this.filteredOrders();
+      if (!orders.length) {
+        alert('No sales data to export for the selected range.');
+        return;
+      }
+      // Prepare sales details sheet (orders)
+      const salesSheet = orders.map(order => ({
+        Invoice: order.invoiceNumber || '',
+        Date: order.createdAt ? new Date(order.createdAt).toLocaleString() : '',
+        Customer: order.customerName || order.soldTo || 'Walk-in Customer',
+        Status: order.status,
+        Payment: order.paymentMethod || 'Cash',
+        Total: order.totalAmount,
+        Discount: order.discountAmount,
+        VAT: order.vatAmount,
+        Net: order.netAmount,
+        Gross: order.grossAmount
+      }));
+
+      // Prepare Details sheet (flattened)
+      let trackingRows: any[] = [];
+      for (const order of orders) {
+        const orderId = (order as any).orderId || order.id;
+        if (!orderId) continue;
+        try {
+          // eslint-disable-next-line no-await-in-loop
+          const tracking = await this.orderService.getOrderSellingTracking(orderId);
+          if (Array.isArray(tracking) && tracking.length > 0) {
+            tracking.forEach(t => {
+              trackingRows.push({
+                Invoice: order.invoiceNumber || '',
+                Date: order.createdAt ? new Date(order.createdAt).toLocaleString() : '',
+                Product: t.productName || t.product || '',
+                SKU: t.SKU || t.sku || t.skuCode || '',
+                Quantity: t.quantity || t.qty || '',
+                Price: t.price || t.unitPrice || '',
+                Discount: t.discount || '',
+                VAT: t.vat || '',
+                VATExempt: t.isVatExempt || t.isVatExempted || '',
+                Total: t.total || t.totalAmount || '',
+                Status: t.status || '',
+                Updated: t.updatedAt ? new Date(t.updatedAt).toLocaleString() : ''
+              });
+            });
+          }
+        } catch (e) {
+          // Ignore errors for missing tracking
+        }
+      }
+      if (!trackingRows.length) {
+        trackingRows.push({ Info: 'No details data found for selected orders.' });
+      }
+
+      // Use utility to export
+      // Dynamically import to avoid circular deps
+      const { exportToExcel } = await import('../../../../utils/excel-export.util');
+      const fileName = `SalesSummary_${this.fromDate}_to_${this.toDate}.xlsx`;
+      exportToExcel({ 'Sales Details': salesSheet, 'Details': trackingRows }, fileName);
+    }
   // Services
   private orderService = inject(OrderService);
   private authService = inject(AuthService);
