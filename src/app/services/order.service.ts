@@ -87,7 +87,7 @@ export class OrderService {
       
       // System Fields
       createdAt: toDateValue(data.createdAt) ?? new Date(),
-      message: data.message || 'Thank you! See you again!'
+      message: data.message || 'Thank you for your purchase!'
     } as Order;
   }
 

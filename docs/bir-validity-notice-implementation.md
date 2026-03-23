@@ -203,7 +203,7 @@ updateData.isBirAccredited = true;
 **Receipt Display:**
 ```
 ═══════════════════════════════════
-Thank you for your business!
+Thank you for your purchase!
 
 This receipt serves as a sales 
 acknowledgment and is not valid 
@@ -218,7 +218,7 @@ Printed on: Oct 14, 2025 10:30 AM
 **Receipt Display:**
 ```
 ═══════════════════════════════════
-Thank you for your business!
+Thank you for your purchase!
 
 This serves as your official receipt.
 
@@ -264,7 +264,7 @@ Please come again
 ### 📄 Browser Print (Accredited):
 ```html
 <div class="receipt-footer">
-  <p class="thank-you">Thank you for your business!</p>
+  <p class="thank-you">Thank you for your purchase!</p>
   <p class="footer-note">This serves as your official receipt.</p>
   <p class="date-printed">Printed on: Oct 14, 2025 10:30 AM</p>
 </div>
