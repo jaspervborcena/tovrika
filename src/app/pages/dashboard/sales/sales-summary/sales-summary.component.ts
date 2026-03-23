@@ -1611,15 +1611,12 @@ export class SalesSummaryComponent implements OnInit {
                 Invoice: order.invoiceNumber || '',
                 Date: order.createdAt ? new Date(order.createdAt).toLocaleString() : '',
                 Product: t.productName || t.product || '',
-                SKU: t.SKU || t.sku || t.skuCode || '',
                 Quantity: t.quantity || t.qty || '',
                 Price: t.price || t.unitPrice || '',
                 Discount: t.discount || '',
                 VAT: t.vat || '',
                 VATExempt: t.isVatExempt || t.isVatExempted || '',
-                Total: t.total || t.totalAmount || '',
-                Status: t.status || '',
-                Updated: t.updatedAt ? new Date(t.updatedAt).toLocaleString() : ''
+                Total: t.total || t.totalAmount || ''
               });
             });
           }
