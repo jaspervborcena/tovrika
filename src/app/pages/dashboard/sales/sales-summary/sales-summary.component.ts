@@ -1578,6 +1578,21 @@ type Order = OrderDisplay;
   `]
 })
 export class SalesSummaryComponent implements OnInit {
+
+        /**
+         * Given yyyy-mm-dd strings, returns UTC midnight range for Firestore queries (treats input as UTC date, not local)
+         */
+        private getUTCMidnightRangeForLocalDate(fromDateStr: string, toDateStr: string): { start: Date, end: Date } {
+          // Parse as UTC date (not local)
+          const fromParts = fromDateStr.split('-').map(Number);
+          const toParts = toDateStr.split('-').map(Number);
+          // JS Date.UTC: year, monthIndex, day, hour, min, sec, ms
+          // const start = new Date(Date.UTC(fromParts[0], fromParts[1] - 1, fromParts[2], 0, 0, 0, 0));
+          // const end = new Date(Date.UTC(toParts[0], toParts[1] - 1, toParts[2], 23, 59, 59, 999));
+         const start = new Date(this.fromDate + 'T00:00:00');
+      const end = new Date(this.toDate + 'T23:59:59.999');
+          return { start, end };
+        }
       exportHover = false;
       exporting = signal(false);
 
@@ -1963,9 +1978,9 @@ export class SalesSummaryComponent implements OnInit {
         return;
       }
 
-      // Parse dates as local time (appending T00:00:00 avoids UTC-midnight parse which misses local early-morning orders)
-      const startDate = new Date(this.fromDate + 'T00:00:00');
-      const endDate = new Date(this.toDate + 'T23:59:59.999');
+      // Use UTC midnight range for local day to avoid timezone issues
+      
+      const { start: startDate, end: endDate } = this.getUTCMidnightRangeForLocalDate(this.fromDate, this.toDate);
 
       // --- ORDERS LOADING (existing logic) ---
       let orders: any[] = [];
