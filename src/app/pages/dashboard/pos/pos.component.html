@@ -903,6 +903,9 @@
                 <div class="tracking-item-header">
                   <span class="col-product">Product</span>
                   <span class="col-sku">SKU</span>
+                  <span class="col-category">Category</span>
+                  <span class="col-taglabels">Tag Labels</span>
+                  <span class="col-tags">Tags</span>
                   <span class="col-qty">Qty</span>
                   <span class="col-price">Price</span>
                   <span class="col-vat">VAT</span>
@@ -927,6 +930,21 @@
                   <!-- SKU -->
                   <div class="col-sku">
                     <span class="sku-value">{{ item.sku || '-' }}</span>
+                  </div>
+
+                  <!-- Category -->
+                  <div class="col-category">
+                    <span class="category-value">{{ item.category || '-' }}</span>
+                  </div>
+
+                  <!-- Tag Labels -->
+                  <div class="col-taglabels">
+                    <span class="taglabels-value">{{ item.tagLabels ? (item.tagLabels | json) : '-' }}</span>
+                  </div>
+
+                  <!-- Tags -->
+                  <div class="col-tags">
+                    <span class="tags-value">{{ item.tags ? (item.tags | json) : '-' }}</span>
                   </div>
                   
                   <!-- Quantity (Read-only) -->
