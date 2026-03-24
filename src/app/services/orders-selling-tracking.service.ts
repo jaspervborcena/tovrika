@@ -1,5 +1,5 @@
 import { Injectable, inject } from '@angular/core';
-import { Firestore, collection, query, where } from '@angular/fire/firestore';
+import { Firestore, collection, query, where, Timestamp } from '@angular/fire/firestore';
 import { getDocs, getDoc, doc, setDoc, updateDoc, runTransaction, orderBy, limit, getAggregateFromServer, count, addDoc } from 'firebase/firestore';
 import { toDateValue } from '../core/utils/date-utils';
 import { OfflineDocumentService } from '../core/services/offline-document.service';
@@ -1903,4 +1903,101 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
       return [];
     }
   }
+
+  startOfDayUTC(date: Date): Timestamp {
+  return Timestamp.fromDate(
+    new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), 0, 0, 0, 0))
+  );
+}
+
+ endOfDayUTC(date: Date): Timestamp {
+  return Timestamp.fromDate(
+    new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), 23, 59, 59, 999))
+  );
+}
+  /**
+   * Fetch all completed tracking records for a store and date range.
+   * Returns an array of OrdersSellingTrackingDoc.
+   */
+  async getTrackedItemsForStoreAndDateRange(
+    companyId: string,
+    storeId: string,
+    startDate: Date,
+    endDate: Date
+  ): Promise<OrdersSellingTrackingDoc[]> {
+    try {
+console.log('getTrackedItemsForStoreAndDateRange: querying with startDate=', this.startOfDayUTC(startDate).toDate(), 'endDate=', this.endOfDayUTC(endDate).toDate());
+      const q = query(
+        collection(this.firestore, 'ordersSellingTracking'),
+        where('companyId', '==', companyId),
+        where('storeId', '==', storeId),
+        where('status', 'in', ['completed', 'processing']),
+        where('createdAt', '>=', this.startOfDayUTC(startDate)),
+        where('createdAt', '<=', this.endOfDayUTC(endDate))
+      );
+//  const q = query(
+//         collection(this.firestore, 'ordersSellingTracking'),
+//         where('companyId', '==', companyId),
+//         where('storeId', '==', storeId),
+//         where('status', 'in', ['completed', 'processing']),
+//         where('createdAt', '>=', Timestamp.fromDate(this.startOfDay(startDate))),
+//         where('createdAt', '<=', Timestamp.fromDate(this.endOfDay(endDate)))
+//       );
+
+
+      const snaps = await getDocs(q as any);
+      const results: OrdersSellingTrackingDoc[] = [];
+      for (const docSnap of snaps.docs) {
+        const data: any = docSnap.data();
+        // Filter by date range (createdAt)
+        let createdAt: Date | null = null;
+        if (data.createdAt?.toDate) createdAt = data.createdAt.toDate();
+        else if (data.createdAt instanceof Date) createdAt = data.createdAt;
+        else if (typeof data.createdAt === 'string' || typeof data.createdAt === 'number') createdAt = new Date(data.createdAt);
+        if (createdAt && (createdAt < startDate || createdAt > endDate)) continue;
+        results.push({ ...data, id: docSnap.id } as OrdersSellingTrackingDoc);
+      }
+      return results;
+    } catch (err) {
+      console.warn('getTrackedItemsForStoreAndDateRange error', err);
+      return [];
+    }
+  }
+
+  /**
+   * Bulk backfill category, skuId, tagLabels, tags in ordersSellingTracking by matching productId to products docId.
+   * Can be called from admin or any component for a one-time data migration.
+   */
+  public async bulkBackfillOrderSellingTrackingProductFields(): Promise<void> {
+    const trackingCol = collection(this.firestore, 'ordersSellingTracking');
+    const trackingSnaps = await getDocs(trackingCol);
+    const updates: Promise<any>[] = [];
+    let updatedCount = 0;
+
+    const productsCol = collection(this.firestore, 'products');
+    const productsSnaps = await getDocs(productsCol);
+    const productMap = new Map<string, any>();
+    productsSnaps.forEach(docSnap => {
+      productMap.set(docSnap.id, docSnap.data());
+    });
+
+    trackingSnaps.forEach(docSnap => {
+      const data = docSnap.data();
+      const product = productMap.get(data['productId']);
+      if (product) {
+        const updateFields: any = {};
+        if (product.category !== undefined) updateFields.category = product.category;
+        if (product.skuId !== undefined) updateFields.skuId = product.skuId;
+        if (product.tagLabels !== undefined) updateFields.tagLabels = product.tagLabels;
+        if (product.tags !== undefined) updateFields.tags = product.tags;
+        if (Object.keys(updateFields).length > 0) {
+          const ref = doc(this.firestore, 'ordersSellingTracking', docSnap.id);
+          updates.push(updateDoc(ref, updateFields).then(() => { updatedCount++; }));
+        }
+      }
+    });
+
+    await Promise.all(updates);
+  }
+
 }

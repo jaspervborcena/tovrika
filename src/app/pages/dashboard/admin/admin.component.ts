@@ -13,6 +13,7 @@ import { ToastService } from '../../../shared/services/toast.service';
 import { SubscriptionRequest } from '../../../interfaces/subscription-request.interface';
 import { Router } from '@angular/router';
 import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../shared/components/confirmation-dialog/confirmation-dialog.component';
+import { OrdersSellingTrackingService } from '../../../services/orders-selling-tracking.service';
 
 interface SubscriptionRequestWithStore extends SubscriptionRequest {
   storeName?: string;
@@ -27,51 +28,8 @@ interface SubscriptionRequestWithStore extends SubscriptionRequest {
 })
 export class AdminComponent implements OnInit {
 
-  /**
-   * Backfill category, skuId, tagLabels, tags in ordersSellingTracking by matching productId to products docId
-   */
-  async backfillOrderSellingTrackingProductFields() {
-    this.loading.set(true);
-    try {
-      const trackingCol = collection(this.firestore, 'ordersSellingTracking');
-      const trackingSnaps = await getDocs(trackingCol);
-      const updates: Promise<any>[] = [];
-      let updatedCount = 0;
-
-      // Build a map of all products for fast lookup
-      const productsCol = collection(this.firestore, 'products');
-      const productsSnaps = await getDocs(productsCol);
-      const productMap = new Map<string, any>();
-      productsSnaps.forEach(docSnap => {
-        productMap.set(docSnap.id, docSnap.data());
-      });
-
-      trackingSnaps.forEach(docSnap => {
-        const data = docSnap.data();
-        const product = productMap.get(data['productId']);
-        if (product) {
-          const updateFields: any = {};
-          if (product.category !== undefined) updateFields.category = product.category;
-          if (product.skuId !== undefined) updateFields.skuId = product.skuId;
-          if (product.tagLabels !== undefined) updateFields.tagLabels = product.tagLabels;
-          if (product.tags !== undefined) updateFields.tags = product.tags;
-          if (Object.keys(updateFields).length > 0) {
-            const ref = doc(this.firestore, 'ordersSellingTracking', docSnap.id);
-            updates.push(updateDoc(ref, updateFields).then(() => { updatedCount++; }));
-          }
-        }
-      });
-
-      await Promise.all(updates);
-      this.toast.success(`Backfill complete: ${updatedCount} tracking records updated.`);
-    } catch (error: any) {
-      console.error('Backfill error:', error);
-      this.toast.error('Backfill failed: ' + (error && error.message ? error.message : error));
-    } finally {
-      this.loading.set(false);
-    }
-  }
   private readonly firestore = inject(Firestore);
+  private readonly ordersSellingTrackingService = inject(OrdersSellingTrackingService);
   private readonly authService = inject(AuthService);
   private readonly subscriptionService = inject(SubscriptionService);
   private readonly storeService = inject(StoreService);
@@ -414,47 +372,46 @@ export class AdminComponent implements OnInit {
 
   getStatusBadgeClass(status: string): string {
     switch (status) {
-      case 'pending':
-        return 'badge-warning';
-      case 'active':
-        return 'badge-success';
-      case 'closed':
-        return 'badge-danger';
-      default:
-        return 'badge-secondary';
+      case 'pending': return 'badge-warning';
+      case 'active': return 'badge-success';
+      case 'closed': return 'badge-secondary';
+      default: return 'badge-default';
     }
   }
 
   getTierBadgeClass(tier: string): string {
     switch (tier) {
-      case 'freemium':
-        return 'badge-info';
-      case 'standard':
-        return 'badge-primary';
-      case 'premium':
-        return 'badge-premium';
-      case 'enterprise':
-        return 'badge-enterprise';
-      default:
-        return 'badge-secondary';
+      case 'premium': return 'badge-premium';
+      case 'standard': return 'badge-standard';
+      case 'enterprise': return 'badge-enterprise';
+      default: return 'badge-freemium';
     }
   }
 
-  formatDate(date: Date | null): string {
+  formatDate(date: Date | null | undefined): string {
     if (!date) return 'N/A';
-    return new Date(date).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
+    return new Date(date).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
   }
 
-  formatCurrency(amount: number | undefined): string {
-    return new Intl.NumberFormat('en-PH', {
-      style: 'currency',
-      currency: 'PHP'
-    }).format(amount || 0);
+  formatCurrency(amount: number | null | undefined): string {
+    if (amount == null) return '–';
+    return '₱' + Number(amount).toLocaleString('en-US', { minimumFractionDigits: 2 });
+  }
+
+  /**
+   * Backfill category, skuId, tagLabels, tags in ordersSellingTracking by matching productId to products docId.
+   * Uses OrdersSellingTrackingService for shared logic.
+   */
+  async backfillOrderSellingTrackingProductFields() {
+    this.loading.set(true);
+    try {
+      await this.ordersSellingTrackingService.bulkBackfillOrderSellingTrackingProductFields();
+      this.toast.success('Backfill complete.');
+    } catch (error: any) {
+      console.error('Backfill error:', error);
+      this.toast.error('Backfill failed: ' + (error && error.message ? error.message : error));
+    } finally {
+      this.loading.set(false);
+    }
   }
 }

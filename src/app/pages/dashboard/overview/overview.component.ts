@@ -2383,6 +2383,10 @@ export class OverviewComponent implements OnInit {
     const storeId = this.selectedStoreId() || this.authService.getCurrentPermission()?.storeId;
     if (storeId && start && end) {
       this.loadAnalyticsData(start, end);
+      // Monthly periods need day-by-day ledger summation for revenue + comparison
+      if (period === 'this_month' || period === 'previous_month') {
+        this.fetchMonthlyComparison().catch(err => console.error('fetchMonthlyComparison error:', err));
+      }
     }
   }
 
