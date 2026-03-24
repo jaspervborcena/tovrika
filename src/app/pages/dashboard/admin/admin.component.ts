@@ -1,3 +1,7 @@
+
+
+
+
 import { Component, OnInit, signal, computed, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -22,6 +26,51 @@ interface SubscriptionRequestWithStore extends SubscriptionRequest {
   styleUrls: ['./admin.component.css']
 })
 export class AdminComponent implements OnInit {
+
+  /**
+   * Backfill category, skuId, tagLabels, tags in ordersSellingTracking by matching productId to products docId
+   */
+  async backfillOrderSellingTrackingProductFields() {
+    this.loading.set(true);
+    try {
+      const trackingCol = collection(this.firestore, 'ordersSellingTracking');
+      const trackingSnaps = await getDocs(trackingCol);
+      const updates: Promise<any>[] = [];
+      let updatedCount = 0;
+
+      // Build a map of all products for fast lookup
+      const productsCol = collection(this.firestore, 'products');
+      const productsSnaps = await getDocs(productsCol);
+      const productMap = new Map<string, any>();
+      productsSnaps.forEach(docSnap => {
+        productMap.set(docSnap.id, docSnap.data());
+      });
+
+      trackingSnaps.forEach(docSnap => {
+        const data = docSnap.data();
+        const product = productMap.get(data['productId']);
+        if (product) {
+          const updateFields: any = {};
+          if (product.category !== undefined) updateFields.category = product.category;
+          if (product.skuId !== undefined) updateFields.skuId = product.skuId;
+          if (product.tagLabels !== undefined) updateFields.tagLabels = product.tagLabels;
+          if (product.tags !== undefined) updateFields.tags = product.tags;
+          if (Object.keys(updateFields).length > 0) {
+            const ref = doc(this.firestore, 'ordersSellingTracking', docSnap.id);
+            updates.push(updateDoc(ref, updateFields).then(() => { updatedCount++; }));
+          }
+        }
+      });
+
+      await Promise.all(updates);
+      this.toast.success(`Backfill complete: ${updatedCount} tracking records updated.`);
+    } catch (error: any) {
+      console.error('Backfill error:', error);
+      this.toast.error('Backfill failed: ' + (error && error.message ? error.message : error));
+    } finally {
+      this.loading.set(false);
+    }
+  }
   private readonly firestore = inject(Firestore);
   private readonly authService = inject(AuthService);
   private readonly subscriptionService = inject(SubscriptionService);

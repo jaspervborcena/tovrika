@@ -84,13 +84,21 @@ type Order = OrderDisplay;
                 <span *ngIf="!isLoading()">{{ getDataSourceButtonText() }}</span>
                 <span *ngIf="isLoading()" class="loading-text">Loading...</span>
               </button>
-              <button 
-                (click)="exportSalesSummaryToExcel()"
-                [disabled]="isLoading()"
-                class="export-button"
-                title="Export sales summary and details to Excel">
-                Export to Excel
-              </button>
+              <div style="position: relative; display: inline-block;">
+                <button 
+                  (click)="exportSalesSummaryToExcel()"
+                  [disabled]="isLoading() || isExporting()"
+                  class="export-button"
+                  title="Export sales summary and details to Excel"
+                  (mouseenter)="onExportHover(true)"
+                  (mouseleave)="onExportHover(false)">
+                  <span *ngIf="!isExporting()">Export to Excel</span>
+                  <span *ngIf="isExporting()" class="loading-text">Processing...</span>
+                </button>
+                <div *ngIf="isExporting() && exportHover" class="export-hover-overlay">
+                 
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -1565,11 +1573,23 @@ type Order = OrderDisplay;
   `]
 })
 export class SalesSummaryComponent implements OnInit {
+      exportHover = false;
+      exporting = signal(false);
+
+      onExportHover(val: boolean) {
+        this.exportHover = val;
+      }
+
+      isExporting() {
+        return this.exporting();
+      }
     /**
     * Export sales summary and details to Excel (max 31 days, only available data)
      */
     async exportSalesSummaryToExcel(): Promise<void> {
-      // Validate date range (max 31 days)
+      this.exporting.set(true);
+      try {
+        // Validate date range (max 31 days)
       const from = new Date(this.fromDate);
       const to = new Date(this.toDate);
       const diffDays = Math.ceil((to.getTime() - from.getTime()) / (1000 * 60 * 60 * 24)) + 1;
@@ -1611,12 +1631,15 @@ export class SalesSummaryComponent implements OnInit {
                 Invoice: order.invoiceNumber || '',
                 Date: order.createdAt ? new Date(order.createdAt).toLocaleString() : '',
                 Product: t.productName || t.product || '',
+                SKU_ID: t.skuId || t.SKU || t.sku || '',
                 Quantity: t.quantity || t.qty || '',
                 Price: t.price || t.unitPrice || '',
                 Discount: t.discount || '',
                 VAT: t.vat || '',
                 VATExempt: t.isVatExempt || t.isVatExempted || '',
-                Total: t.total || t.totalAmount || ''
+                Total: t.total || t.totalAmount || '',
+                Category: t.category || '',
+                TagLabels: Array.isArray(t.tagLabels) ? t.tagLabels.join(', ') : (t.tagLabels || '')
               });
             });
           }
@@ -1633,6 +1656,9 @@ export class SalesSummaryComponent implements OnInit {
       const { exportToExcel } = await import('../../../../utils/excel-export.util');
       const fileName = `SalesSummary_${this.fromDate}_to_${this.toDate}.xlsx`;
       exportToExcel({ 'Sales Details': salesSheet, 'Details': trackingRows }, fileName);
+      } finally {
+        this.exporting.set(false);
+      }
     }
   // Services
   private orderService = inject(OrderService);

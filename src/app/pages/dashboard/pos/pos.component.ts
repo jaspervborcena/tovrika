@@ -1987,9 +1987,13 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
           id: e.id || `${e.productName}-${e.SKU}`,
           updatedAt: e.updatedAt ? (e.updatedAt instanceof Date ? e.updatedAt : new Date(e.updatedAt)) : null,
           productName: e.productName || '-',
-          sku: e.SKU || e.skuId || e.sku || '-', // Cloud Function returns SKU field
-          unitPrice: price, // Store as unitPrice for clarity
-          price, // Keep both for backward compatibility
+          sku: e.SKU || e.skuId || e.sku || '-',
+          category: e.category || '-',
+          skuId: e.skuId || '-',
+          tagLabels: e.tagLabels || null,
+          tags: e.tags || null,
+          unitPrice: price,
+          price,
           quantity,
           vat,
           discount,
@@ -1998,7 +2002,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
           isVatExempt: e.isVatExempt || false,
           total,
           status: e.status || 'unknown',
-          isModified: false, // Track if user has modified this entry
+          isModified: false,
           ...e
         };
       });

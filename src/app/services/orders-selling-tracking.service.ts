@@ -1577,6 +1577,7 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
 
         // Calculate weighted average cost from all batches used
         // If no batches, use product's costPrice
+        const product = this.productService.getProduct(it.productId);
         let totalCost = 0;
         let actualCost = 0;
         
@@ -1628,6 +1629,11 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
           runningBalanceTotalStock: productTotalStock,  // Capture product's totalStock at transaction time
           isStockTracked: productIsStockTracked,  // Track if product stock is tracked
 
+          // New fields from product
+          category: product?.category,
+          tagLabels: product?.tagLabels,
+          tags: product?.tags,
+
           cashierId: ctx.cashierId,
           cashierEmail: ctx.cashierEmail,
           cashierName: ctx.cashierName,
@@ -1650,9 +1656,9 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
         }
 
         // Step 5: Update product totalStock
-        const product = this.productService.getProduct(it.productId);
-        if (product) {
-          const current = product.totalStock ?? 0;
+        const productForStockUpdate = this.productService.getProduct(it.productId);
+        if (productForStockUpdate) {
+          const current = productForStockUpdate.totalStock ?? 0;
           const newTotal = Math.max(0, current - it.quantity);
           
           await this.productService.updateProduct(it.productId, {
