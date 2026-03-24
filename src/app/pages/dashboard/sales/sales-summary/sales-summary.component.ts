@@ -7,6 +7,7 @@ import { StoreService, Store } from '../../../../services/store.service';
 import { LedgerService } from '../../../../services/ledger.service';
 import { Order as PosOrder, OrderItem } from '../../../../interfaces/pos.interface';
 import { IndexedDBService } from '../../../../core/services/indexeddb.service';
+import { OrdersSellingTrackingService } from '../../../../services/orders-selling-tracking.service';
 
 // Extended interface for display purposes
 interface OrderDisplay extends PosOrder {
@@ -111,6 +112,10 @@ type Order = OrderDisplay;
           <div class="total-card">
             <div class="total-label">Total Orders</div>
             <div class="total-count">{{ totalOrders() }}</div>
+          </div>
+          <div class="total-card">
+            <div class="total-label">Total Items</div>
+            <div class="total-count">{{ totalTrackedItems() }}</div>
           </div>
         </div>
       </div>
@@ -1589,10 +1594,18 @@ export class SalesSummaryComponent implements OnInit {
     async exportSalesSummaryToExcel(): Promise<void> {
       this.exporting.set(true);
       try {
+        // Silent bulk backfill before export
+        if (this.ordersSellingTrackingService.bulkBackfillOrderSellingTrackingProductFields) {
+          try {
+            await this.ordersSellingTrackingService.bulkBackfillOrderSellingTrackingProductFields();
+          } catch (e) {
+            // Ignore backfill errors for now
+          }
+        }
         // Validate date range (max 31 days)
-      const from = new Date(this.fromDate);
-      const to = new Date(this.toDate);
-      const diffDays = Math.ceil((to.getTime() - from.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+        const from = new Date(this.fromDate);
+        const to = new Date(this.toDate);
+        const diffDays = Math.ceil((to.getTime() - from.getTime()) / (1000 * 60 * 60 * 24)) + 1;
       if (diffDays > 31) {
         alert('Please select a date range of 31 days or less.');
         return;
@@ -1666,6 +1679,7 @@ export class SalesSummaryComponent implements OnInit {
   private storeService = inject(StoreService);
   private indexedDb = inject(IndexedDBService);
   private ledgerService = inject(LedgerService);
+  private ordersSellingTrackingService = inject(OrdersSellingTrackingService);
 
   // Signals for reactive state management
   orders = signal<Order[]>([]);
@@ -1782,39 +1796,31 @@ export class SalesSummaryComponent implements OnInit {
   ledgerTotalRevenue = signal<number>(0);
   ledgerTotalOrders = signal<number>(0);
 
-  totalSales = computed(() => {
-    const l = this.ledgerTotalRevenue();
-    if (l && Number(l) !== 0) return l;
-    return this.orders().reduce((total, order) => total + order.totalAmount, 0);
-  });
+  totalSales = computed(() =>
+    this.orders().reduce((total, order) => total + order.totalAmount, 0)
+  );
 
-  totalOrders = computed(() => {
-    const l = this.ledgerTotalOrders();
-    if (l && Number(l) !== 0) return l;
-    return this.orders().length;
-  });
+  totalOrders = computed(() =>
+    this.orders().filter(o => o.status === 'completed').length
+  );
+
+  totalTrackedItems = signal<number>(0);
 
   constructor() {
-    // Initialize default range to the current month (From = first day of month, To = today)
+    // Initialize default range to today
     const today = new Date();
-    const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-    this.fromDate = this.formatDateForInput(startOfMonth);
+    this.fromDate = this.formatDateForInput(today);
     this.toDate = this.formatDateForInput(today);
   }
 
   async ngOnInit(): Promise<void> {
     // Ensure default date range is ordered correctly and stay as last-7-days set in constructor
     this.ensureDateOrder();
-    const today = new Date(this.toDate);
-    
     await this.loadStores();
-    
-    // Wait a bit for stores to be set, then load today's data automatically from Firebase
-    setTimeout(() => {
-      this.loadCurrentDateData();
-      // Also load ledger totals for the selected store
-      this.loadLedgerTotalsForStore();
-    }, 100);
+    // Load sales data and tracked items immediately after stores are loaded
+    await this.loadCurrentDateData();
+    // Also load ledger totals for the selected store
+    this.loadLedgerTotalsForStore();
   }
 
   // Load ledger totals when loading current date data
@@ -1944,25 +1950,24 @@ export class SalesSummaryComponent implements OnInit {
    */
   async loadSalesData(): Promise<void> {
     this.isLoading.set(true);
-    
+
     try {
       // Use selected store ID or get from permission
       const storeId = this.selectedStoreId() || this.authService.getCurrentPermission()?.storeId;
-      
-      if (!storeId) {
-        console.warn('❌ No storeId found - cannot load data');
+      const companyId = this.authService.getCurrentPermission()?.companyId;
+      if (!storeId || !companyId) {
+        console.warn('❌ No storeId or companyId found - cannot load data');
         this.orders.set([]);
         this.dataSource.set(null);
+        this.totalTrackedItems.set(0);
         return;
       }
 
-      // Convert date strings to Date objects
-      const startDate = new Date(this.fromDate);
-      const endDate = new Date(this.toDate);
-      // Set end date to end of day
-      endDate.setHours(23, 59, 59, 999);
+      // Parse dates as local time (appending T00:00:00 avoids UTC-midnight parse which misses local early-morning orders)
+      const startDate = new Date(this.fromDate + 'T00:00:00');
+      const endDate = new Date(this.toDate + 'T23:59:59.999');
 
-      // Use Firestore-only flow: query `orders` collection by `storeId` and `updatedAt` (fallback to createdAt)
+      // --- ORDERS LOADING (existing logic) ---
       let orders: any[] = [];
       try {
         const results = await this.orderService.getOrdersFromFirestoreByRange(storeId, startDate, endDate);
@@ -1971,29 +1976,18 @@ export class SalesSummaryComponent implements OnInit {
         console.warn('Firestore sales query failed, setting orders to empty', e);
         orders = [];
       }
-
-      // If no results from date-range query (likely missing composite index), fetch store orders and filter client-side
       if (!orders || orders.length === 0) {
         try {
           const rawDocs = await this.orderService.getSampleOrdersForDebug(storeId, 500);
           if (rawDocs && rawDocs.length > 0) {
-            // Transform raw docs to Order objects and filter by date range
             const allOrders = rawDocs.map((doc: any) => {
               const data = doc.data;
-              // Parse timestamps from various field names
               let orderDate: Date | null = null;
-              if (data.updatedAt) {
-                orderDate = data.updatedAt.toDate ? data.updatedAt.toDate() : new Date(data.updatedAt);
-              } else if (data.updated_at) {
-                orderDate = data.updated_at.toDate ? data.updated_at.toDate() : new Date(data.updated_at);
-              } else if (data.createdAt) {
-                orderDate = data.createdAt.toDate ? data.createdAt.toDate() : new Date(data.createdAt);
-              } else if (data.created_at) {
-                orderDate = data.created_at.toDate ? data.created_at.toDate() : new Date(data.created_at);
-              } else if (data.date) {
-                orderDate = data.date.toDate ? data.date.toDate() : new Date(data.date);
-              }
-
+              if (data.updatedAt) orderDate = data.updatedAt.toDate ? data.updatedAt.toDate() : new Date(data.updatedAt);
+              else if (data.updated_at) orderDate = data.updated_at.toDate ? data.updated_at.toDate() : new Date(data.updated_at);
+              else if (data.createdAt) orderDate = data.createdAt.toDate ? data.createdAt.toDate() : new Date(data.createdAt);
+              else if (data.created_at) orderDate = data.created_at.toDate ? data.created_at.toDate() : new Date(data.created_at);
+              else if (data.date) orderDate = data.date.toDate ? data.date.toDate() : new Date(data.date);
               return {
                 id: doc.id,
                 companyId: data.companyId || '',
@@ -2026,8 +2020,6 @@ export class SalesSummaryComponent implements OnInit {
                 paymentMethod: data.paymentMethod || data.payment || 'cash'
               };
             });
-
-            // Filter by date range client-side
             orders = allOrders.filter((o: any) => {
               const oDate = o.createdAt;
               return oDate >= startDate && oDate <= endDate;
@@ -2037,11 +2029,7 @@ export class SalesSummaryComponent implements OnInit {
           console.warn('Failed to fetch orders via getSampleOrdersForDebug', debugErr);
         }
       }
-
-      // No API pagination when using Firestore for this view
       this.apiHasMore.set(false);
-
-      // Persist snapshot to IndexedDB for offline fallback
       try {
         if (orders && orders.length > 0) {
           await this.indexedDb.saveSetting(`orders_snapshot_${storeId}`, orders);
@@ -2049,40 +2037,29 @@ export class SalesSummaryComponent implements OnInit {
       } catch (saveErr) {
         console.warn('Failed to save orders snapshot to IndexedDB', saveErr);
       }
-
-      // If service returned no orders, attempt IndexedDB snapshot fallback
       if (!orders || orders.length === 0) {
         try {
           const saved: any[] = await this.indexedDb.getSetting(`orders_snapshot_${storeId}`);
           if (saved && Array.isArray(saved) && saved.length > 0) {
             orders = saved;
-            // mark data source as offline fallback
             this.dataSource.set('api');
           }
         } catch (dbErr) {
           console.warn('📦 Failed to read orders snapshot from IndexedDB:', dbErr);
         }
-        // If still no orders, fetch a few sample docs for debugging (helps identify field names/storeId)
         try {
           const samples = await this.orderService.getSampleOrdersForDebug(storeId, 5);
         } catch (dbgErr) {
           console.warn('Failed to fetch sample orders for debug', dbgErr);
         }
       }
-
-      // No need to filter on client side - the service handles it when possible
-  const filteredOrders = orders || [];
-
-      // Transform to match our interface - spread all existing properties and add display properties
+      const filteredOrders = orders || [];
       const transformedOrders: Order[] = filteredOrders.map((order: any) => ({
-        ...order, // Spread all existing order properties
-        id: order.id || '', // Ensure id is not undefined
+        ...order,
+        id: order.id || '',
         customerName: order.soldTo || 'Walk-in Customer',
         paymentMethod: order.paymentMethod || 'cash'
       }));
-
-      // Deduplicate results by a stable key (prefer `invoiceNumber`, then `id`, then fallback).
-      // If duplicates exist, keep the most recent entry by `createdAt`.
       const dedupMap = new Map<string, Order>();
       for (const o of transformedOrders) {
         const key = this.makeOrderKey(o);
@@ -2095,17 +2072,26 @@ export class SalesSummaryComponent implements OnInit {
             const newTime = new Date(o.createdAt as any).getTime() || 0;
             if (newTime > existingTime) dedupMap.set(key, o);
           } catch {
-            // If parsing fails, prefer the new one by default
             dedupMap.set(key, o);
           }
         }
       }
-
       const deduped = Array.from(dedupMap.values());
       this.orders.set(deduped);
+
+      // --- TOTAL ITEMS LOADING (date range) ---
+      // Always use ledger range query so it reflects the selected date range
+      try {
+        const ledgerItems = await this.ledgerService.getOrderBalancesForRange(companyId, storeId, startDate, endDate, 'completed');
+        this.totalTrackedItems.set(Number(ledgerItems.runningBalanceQty || 0));
+      } catch (err) {
+        console.warn('Failed to fetch ledger items for summary', err);
+        this.totalTrackedItems.set(0);
+      }
     } catch (error) {
       console.error('Error loading sales data:', error);
       this.orders.set([]);
+      this.totalTrackedItems.set(0);
     } finally {
       this.isLoading.set(false);
     }
@@ -2215,7 +2201,10 @@ export class SalesSummaryComponent implements OnInit {
   }
 
   private formatDateForInput(date: Date): string {
-    return date.toISOString().split('T')[0];
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
   }
 
   /**
