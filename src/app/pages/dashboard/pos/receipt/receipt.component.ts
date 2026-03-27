@@ -15,6 +15,34 @@ export class ReceiptComponent implements OnInit {
   @Input() isVisible: boolean = false;
   @Input() receiptData: any = null;
 
+  // Converts receiptDate (any format) to a local-time Date for display
+  get localReceiptDate(): Date {
+  const val = this.receiptData?.receiptDate;
+  if (!val) return new Date();
+
+  if (val instanceof Date) return val;
+  if (val.toDate) return val.toDate(); // Firestore Timestamp
+
+  if (typeof val === 'string') {
+    const hasTimezone = /Z$|[+-]\d{2}:\d{2}$/.test(val);
+
+    if (!hasTimezone && val.includes('T')) {
+      // Parse manually to force local time
+      const [datePart, rawTime] = val.split('T');
+      const [y, mo, d] = datePart.split('-').map(Number);
+      const [h = 0, m = 0, sFull = '0'] = rawTime.split(':');
+      const s = Math.floor(parseFloat(sFull));
+      return new Date(y, mo - 1, d, Number(h), Number(m), s);
+    }
+
+    // If it has timezone info, let JS handle it
+    return new Date(val);
+  }
+
+  return new Date(val);
+}
+
+
   // Returns the branch name, preferring storeInfo.branchName, then order.branchName
   getBranchName(): string {
     // Try storeInfo.branchName first

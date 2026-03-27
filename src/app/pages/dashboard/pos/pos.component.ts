@@ -592,7 +592,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
 
   // Order-level information (moved from customerInfo)
   invoiceNumber: string = 'INV-0000-000000';
-  datetime: string = new Date().toISOString().slice(0, 16); // Format for datetime-local input
+  datetime: string = this.getLocalDateTimeString(); // Format for datetime-local input
 
   // UI State for collapsible customer panel
   private isSoldToCollapsedSignal = signal<boolean>(true);
@@ -1904,7 +1904,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       const normalizedReceipt: any = {
         orderId: orderData.id || orderData.orderId || null,
         invoiceNumber: orderData.invoiceNumber || orderData.invoice || this.nextInvoiceNumber(),
-        receiptDate: orderData.completedAt || orderData.updatedAt || new Date(),
+        receiptDate: toLocalDate(orderData.completedAt || orderData.updatedAt || new Date()),
         storeInfo: {
           storeName: storeInfo.storeName || storeInfo.name || 'Store Name',
           branchName: branchName,
@@ -2950,7 +2950,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     return {
       orderId: order.id,
       invoiceNumber: order.invoiceNumber,
-      receiptDate: order.date || order.createdAt,
+      receiptDate: toLocalDate(order.date || order.createdAt),
       storeInfo: {
         storeName: (storeInfo as any)?.storeName || company?.name || 'Unknown Store',
         branchName: (storeInfo as any)?.branchName || this.currentStoreInfo()?.branchName || '',
@@ -3616,7 +3616,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     };
     
     this.invoiceNumber = nextInvoice === 'Loading...' ? 'INV-0000-000000' : nextInvoice;
-    this.datetime = new Date().toISOString().slice(0, 16);
+    this.datetime = this.getLocalDateTimeString();
     
     // Auto-focus search input after new order
     setTimeout(() => {
@@ -5445,8 +5445,19 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   updateCurrentDateTime(): void {
-    this.datetime = new Date().toISOString().slice(0, 16);
+    this.datetime = this.getLocalDateTimeString();
   }
+
+// Returns device local time in 'YYYY-MM-DDTHH:mm' for datetime-local input
+ getLocalDateTimeString(): string {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  const hour = String(now.getHours()).padStart(2, '0');
+  const minute = String(now.getMinutes()).padStart(2, '0');
+  return `${year}-${month}-${day}T${hour}:${minute}`;
+}
 
   generateNewInvoiceNumber(): void {
     this.invoiceNumber = 'INV-0000-000000';
@@ -5977,8 +5988,8 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     // Use cached company data for faster receipt preparation (no async fetch needed)
     const company = this.cachedCompanySignal();
     
-    // Get date and invoice number from shared service (receipt panel data)
-    const receiptDate = this.posSharedService.orderDate();
+    // Get date and invoice number — use this.datetime (local time) directly
+    const receiptDate = this.datetime; // already a local YYYY-MM-DDTHH:mm string
     const invoiceNumber = this.posSharedService.invoiceNumber();
 
     // Determine customer name - if soldTo is empty or default, treat as N/A
@@ -6808,4 +6819,12 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     const isAtEnd = container.scrollLeft + container.clientWidth >= container.scrollWidth - 10;
     return isAtEnd;
   }
+}
+
+// Module-level helper: Converts any date value to a JS Date object (preserves local time)
+function toLocalDate(val: any): Date {
+  if (!val) return new Date();
+  if (val instanceof Date) return val;
+  if (val.toDate) return val.toDate(); // Firestore Timestamp
+  return new Date(val);
 }
