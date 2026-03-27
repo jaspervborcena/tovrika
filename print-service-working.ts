@@ -769,8 +769,13 @@ export class PrintService {
     // Date and Cashier - BOLD
     commands += '\x1B\x45\x01'; // Bold on
     commands += `Cashier: ${receiptData?.cashier || receiptData?.cashierName || receiptData?.user?.displayName || receiptData?.user?.email || 'N/A'}\n`;
+    // Always display date/time in Asia/Manila timezone
     const date = new Date(receiptData?.receiptDate || new Date());
-    commands += `${date.toLocaleDateString()} ${date.toLocaleTimeString()}\n`;
+    const options = { timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit' };
+    const timeOptions = { timeZone: 'Asia/Manila', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true };
+    const dateStr = date.toLocaleDateString('en-PH', options);
+    const timeStr = date.toLocaleTimeString('en-PH', timeOptions);
+    commands += `${dateStr} ${timeStr}\n`;
     commands += '\x1B\x45\x00'; // Bold off
     
     commands += separatorLine;

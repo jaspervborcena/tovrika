@@ -99,7 +99,7 @@
       <div class="cashier-date-section">
         <div class="cashier-date-layout">
           <p class="cashier-info"><strong>Cashier:</strong> {{ receiptData?.cashier || 'N/A' }}</p>
-          <p class="date-info"><strong>Date:</strong> {{ receiptData?.receiptDate | date:'medium' }}</p>
+          <p class="date-info"><strong>Date:</strong> {{ localReceiptDate | date:'medium' }}</p>
         </div>
       </div>
 
@@ -228,7 +228,7 @@
       <div class="receipt-footer">
         <p class="thank-you">Thank you for your business!</p>
         <p class="footer-note">{{ receiptData?.validityNotice || 'This serves as your official receipt.' }}</p>
-        <p class="date-printed">Printed on: {{ receiptData?.receiptDate | date:'medium' }}</p>
+        <p class="date-printed">Printed on: {{ localReceiptDate | date:'medium' }}</p>
       </div>
 
     </div>
