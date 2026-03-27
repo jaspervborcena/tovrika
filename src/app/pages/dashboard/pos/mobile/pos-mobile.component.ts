@@ -2009,8 +2009,8 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
     const customerInfo = this.customerInfo;
     const currentUser = this.authService.currentUser();
     
-    // Get date and invoice number from shared service (receipt panel data)
-    const receiptDate = this.posSharedService.orderDate();
+    // Get date and invoice number - use this.datetime (local time) directly
+    const receiptDate = this.datetime; // already a local YYYY-MM-DDTHH:mm string
     const invoiceNumber = this.posSharedService.invoiceNumber();
 
     // Determine customer name - if soldTo is empty or default, treat as N/A
