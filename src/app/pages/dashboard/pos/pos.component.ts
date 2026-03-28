@@ -3050,7 +3050,18 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   async ngOnInit(): Promise<void> {
-    
+
+    // Always reset to a clean state on every navigation to /pos.
+    // Cart, order flags and active state are stored in the singleton service so they
+    // survive component destruction — wipe them here so products start disabled
+    // and the cart is empty until the user explicitly starts a new order.
+    this.posService.clearCart();
+    this.posService.setOrderCompleted(false);
+    this.posService.setOrderActive(false);
+    this.isNewOrderActive.set(false);
+    this.isOrderCompleted.set(false);
+    this.completedOrderData.set(null);
+
     // Set default payment method to cash
     this.posService.setPaymentMethod('cash');
     
@@ -3101,11 +3112,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       
       await this.checkHardwarePrinterStatus();
       
-      // Sync local order state with service (for switching between desktop/mobile)
-      const serviceOrderActive = this.posService.isOrderActive();
-      if (serviceOrderActive && !this.isNewOrderActive()) {
-        this.isNewOrderActive.set(true);
-      }
+      // isNewOrderActive intentionally stays false until the user taps "New Order"
     } catch (error) {
       console.error('❌ Error initializing POS:', error);
       console.error('❌ Error details:', error);
@@ -4484,6 +4491,12 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
 
   // Method to reinitialize the component when navigating back to POS
   private async reinitializeComponent(): Promise<void> {
+    // If a completed order is still showing, auto-clear it so the POS is ready for a new order
+    if (this.isOrderCompleted()) {
+      await this.startNewOrderDirect();
+      return;
+    }
+
     // Check if products are already loaded to prevent unnecessary reloading
     const currentProductCount = this.products().length;
     
