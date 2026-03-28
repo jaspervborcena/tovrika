@@ -115,7 +115,7 @@ type Order = OrderDisplay;
           </div>
           <div class="total-card">
             <div class="total-label">Total Items</div>
-            <div class="total-count">{{ totalTrackedItems() }}</div>
+            <div class="total-count">{{ netTrackedItems() }}</div>
           </div>
         </div>
       </div>
@@ -1820,6 +1820,8 @@ export class SalesSummaryComponent implements OnInit {
   );
 
   totalTrackedItems = signal<number>(0);
+  cancelledTrackedItems = signal<number>(0);
+  netTrackedItems = computed(() => Math.max(0, this.totalTrackedItems() - this.cancelledTrackedItems()));
 
   constructor() {
     // Initialize default range to today
@@ -2102,6 +2104,13 @@ export class SalesSummaryComponent implements OnInit {
       } catch (err) {
         console.warn('Failed to fetch ledger items for summary', err);
         this.totalTrackedItems.set(0);
+      }
+      // Fetch cancelled items qty so netTrackedItems excludes them
+      try {
+        const cancelledLedger = await this.ledgerService.getOrderBalancesForRange(companyId, storeId, startDate, endDate, 'cancelled');
+        this.cancelledTrackedItems.set(Number(cancelledLedger?.runningBalanceQty || 0));
+      } catch (err) {
+        this.cancelledTrackedItems.set(0);
       }
     } catch (error) {
       console.error('Error loading sales data:', error);
