@@ -1321,6 +1321,8 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
       vat?: number;
       isVatExempt?: boolean;
       batchNumber?: number;
+      /** When false, skip FIFO/stock deduction but still create the tracking record */
+      isStockTracked?: boolean;
     }>
   ): Promise<{ success: boolean; tracked: number; adjusted: number; errors: Array<{ productId: string; error: any }> }> {
     const colName = 'ordersSellingTracking';
@@ -1332,11 +1334,15 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
     for (const it of items) {
       try {
         const isOffline = !this.networkService.isOnline();
+        // isStockTracked defaults to true — only skip deduction when explicitly false
+        const isStockTracked = (it as any).isStockTracked !== false;
+
         // Step 1: Find batches for this product using FIFO (oldest first, active only)
         // Query Firestore - it will automatically use its cache when offline
+        // Skip entirely for non-tracked products
         let batches: any[] = [];
         
-        if (!isOffline) {
+        if (!isOffline && isStockTracked) {
           const batchesQuery = query(
             collection(this.firestore, 'productInventory'),
             where('productId', '==', it.productId),
@@ -1442,8 +1448,9 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
         }
 
         // Step 3: Create inventoryTracking records (one per batch used, sorted by batchId asc)
-        // If no batches found, create a generic deduction record for non-batch products
-        if (batchDeductions.length === 0) {
+        // If no batches found, create a generic deduction record for non-batch products.
+        // Skip entirely for non-tracked products — we only want the ordersSellingTracking record.
+        if (batchDeductions.length === 0 && isStockTracked) {
           console.log(`📦 No batches found for product ${it.productId} - creating non-batch deduction`);
           
           // Get product's costPrice and isStockTracked from products collection
@@ -1656,19 +1663,24 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
         }
 
         // Step 5: Update product totalStock
-        const productForStockUpdate = this.productService.getProduct(it.productId);
-        if (productForStockUpdate) {
-          const current = productForStockUpdate.totalStock ?? 0;
-          const newTotal = Math.max(0, current - it.quantity);
-          
-          await this.productService.updateProduct(it.productId, {
-            totalStock: newTotal,
-            lastUpdated: new Date(),
-            updatedBy: ctx.cashierId
-          } as any);
+        // Step 5: Update product totalStock — only for stock-tracked products
+        if (isStockTracked) {
+          const productForStockUpdate = this.productService.getProduct(it.productId);
+          if (productForStockUpdate) {
+            const current = productForStockUpdate.totalStock ?? 0;
+            const newTotal = Math.max(0, current - it.quantity);
+            
+            await this.productService.updateProduct(it.productId, {
+              totalStock: newTotal,
+              lastUpdated: new Date(),
+              updatedBy: ctx.cashierId
+            } as any);
 
-          console.log(`✅ Adjusted product ${it.productId} stock: ${current} -> ${newTotal}`);
-          adjusted++;
+            console.log(`✅ Adjusted product ${it.productId} stock: ${current} -> ${newTotal}`);
+            adjusted++;
+          }
+        } else {
+          console.log(`⏭️ Skipping stock deduction for non-tracked product ${it.productId}`);
         }
 
       } catch (e) {

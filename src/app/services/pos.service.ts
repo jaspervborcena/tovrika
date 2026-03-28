@@ -696,16 +696,16 @@ export class PosService {
       // 🧾 Execute invoice transaction with NEW structure
       // Only apply timeout when online - offline mode should work without timeout
       let invoiceResult;
+      // Hoist the promise so the timeout-catch block can attach a .then() for delayed background ops
+      const invoicePromise = this.invoiceService.processInvoiceTransaction({
+        storeId: storeId,
+        orderData: orderData,
+        customerInfo: customerInfo, // Pass as separate parameter
+        paymentsData: payments,     // Pass as separate parameter
+        saveAsOpen: saveAsOpen,     // Pass OPEN flag
+        tableNumber: tableNumber    // Pass table number separately
+      });
       try {
-        const invoicePromise = this.invoiceService.processInvoiceTransaction({
-          storeId: storeId,
-          orderData: orderData,
-          customerInfo: customerInfo, // Pass as separate parameter
-          paymentsData: payments,     // Pass as separate parameter
-          saveAsOpen: saveAsOpen,     // Pass OPEN flag
-          tableNumber: tableNumber    // Pass table number separately
-        });
-        
         // Apply very short timeout to quickly detect offline mode
         if (this.networkService.isOnline()) {
           console.log('🌐 Online mode: applying 2-second timeout for invoice transaction');
@@ -721,9 +721,27 @@ export class PosService {
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
         
-        // If timeout or network error, the invoice service should have already switched to offline mode
-        if (errorMessage.includes('timeout') || errorMessage.includes('network') || !this.networkService.isOnline()) {
-          console.log('⚠️ Network timeout detected, invoice service should handle offline mode automatically');
+        if (errorMessage.includes('timeout') && !saveAsOpen) {
+          // The batch write may still complete shortly after the timeout.
+          // Attach background ops to the still-running invoicePromise so tracking/inventory/ledger
+          // are recorded even when the 2-second race is lost.
+          console.log('⚠️ Invoice timeout — scheduling background ops on promise resolution...');
+          invoicePromise.then(result => {
+            if (result?.success && result?.orderId) {
+              console.log('⏰ Timeout-delayed background ops triggered for orderId:', result.orderId);
+              this.executeBackgroundOrderOperations(
+                company.id!,
+                storeId,
+                result.orderId,
+                result.invoiceNumber!,
+                cartSummary,
+                cartItems,
+                user.uid
+              ).catch(err => console.warn('⚠️ Background operations error (non-critical):', err));
+            }
+          }).catch(() => {}); // If invoice also fails, no background ops needed
+        } else if (errorMessage.includes('network') || !this.networkService.isOnline()) {
+          console.log('⚠️ Network error detected, invoice service should handle offline mode automatically');
         }
         
         throw error; // Let the invoice service handle offline processing
@@ -871,15 +889,13 @@ export class PosService {
       console.warn('⚠️ Ledger recording failed (non-critical):', err);
     });
 
-    // 2. Update product inventory (non-blocking)
-    this.updateProductInventory(cartItems, { orderId, invoiceNumber }).catch(err => {
-      console.warn('⚠️ Inventory update failed (non-critical):', err);
-    });
-
-    // 3. Mark tracking completed (non-blocking)
-    this.markTrackingCompleted(orderId, userId).catch(err => {
-      console.warn('⚠️ Tracking update failed (non-critical):', err);
-    });
+    // 2. Update product inventory first (creates ordersSellingTracking docs),
+    //    then mark them completed — must be sequential to avoid race condition.
+    this.updateProductInventory(cartItems, { orderId, invoiceNumber })
+      .then(() => this.markTrackingCompleted(orderId, userId))
+      .catch(err => {
+        console.warn('⚠️ Inventory update / tracking failed (non-critical):', err);
+      });
 
     console.log('✅ Background operations initiated for order:', orderId);
   }
@@ -1281,7 +1297,63 @@ export class PosService {
     cartItems: CartItem[],
     context?: { orderId?: string; invoiceNumber?: string }
   ): Promise<void> {
-    // Filter out items that don't have stock tracking enabled
+    const mode = environment.inventory?.reconciliationMode || 'legacy';
+
+    if (mode === 'recon') {
+      // Recon mode: pass ALL items to logSaleAndAdjustStock so an ordersSellingTracking
+      // record is always created regardless of isStockTracked. The service will skip
+      // FIFO batch deduction and totalStock update for non-tracked items.
+      console.log('📊 Tracking sale for reconciliation mode. Total items:', cartItems.length);
+      const user = this.authService.getCurrentUser();
+      const company = await this.companyService.getActiveCompany();
+      const storeId = this.selectedStoreId();
+
+      if (!user || !company || !storeId) {
+        throw new Error('Missing user/company/store for tracking');
+      }
+
+      // Resolve isStockTracked for every item in one pass
+      const items = await Promise.all(cartItems.map(async ci => {
+        let isStockTracked = true; // default: assume tracked
+        try {
+          const productDoc = await getDoc(doc(this.firestore, 'products', ci.productId) as any);
+          if (productDoc.exists()) {
+            const data = productDoc.data() as any;
+            isStockTracked = data.isStockTracked !== false;
+          }
+        } catch {
+          // If lookup fails, default to tracked so we don't silently skip
+        }
+        if (!isStockTracked) {
+          console.log(`⏭️ ${ci.productName} is not stock-tracked — tracking record will be created but no deduction`);
+        }
+        return {
+          productId: ci.productId,
+          productName: ci.productName,
+          quantity: ci.quantity,
+          unitPrice: ci.sellingPrice,
+          lineTotal: ci.total,
+          isStockTracked
+        };
+      }));
+
+      const res = await this.ordersSellingTrackingService.logSaleAndAdjustStock({
+        companyId: company.id!,
+        storeId,
+        orderId: context?.orderId || 'unknown-order',
+        invoiceNumber: context?.invoiceNumber,
+        cashierId: user.uid,
+        cashierEmail: user.email || undefined,
+        cashierName: user.displayName || user.email || 'Unknown Cashier'
+      }, items);
+
+      if (!res.success) {
+        console.warn('⚠️ Some items failed to track/adjust:', res.errors);
+      }
+      return;
+    }
+
+    // Legacy: client-side FIFO deduction — only process tracked items
     const trackedItems = [];
     for (const item of cartItems) {
       try {
@@ -1304,41 +1376,6 @@ export class PosService {
 
     if (trackedItems.length === 0) {
       console.log('⏭️ No tracked items to process inventory for');
-      return;
-    }
-
-    const mode = environment.inventory?.reconciliationMode || 'legacy';
-    if (mode === 'recon') {
-      console.log('📊 Tracking sale for reconciliation mode (no client-side FIFO). Items:', trackedItems.length);
-      const user = this.authService.getCurrentUser();
-      const company = await this.companyService.getActiveCompany();
-      const storeId = this.selectedStoreId();
-
-      if (!user || !company || !storeId) {
-        throw new Error('Missing user/company/store for tracking');
-      }
-
-      const items = trackedItems.map(ci => ({
-        productId: ci.productId,
-        productName: ci.productName,
-        quantity: ci.quantity,
-        unitPrice: ci.sellingPrice,
-        lineTotal: ci.total
-      }));
-
-      const res = await this.ordersSellingTrackingService.logSaleAndAdjustStock({
-        companyId: company.id!,
-        storeId,
-        orderId: context?.orderId || 'unknown-order',
-        invoiceNumber: context?.invoiceNumber,
-        cashierId: user.uid,
-        cashierEmail: user.email || undefined,
-        cashierName: user.displayName || user.email || 'Unknown Cashier'
-      }, items);
-
-      if (!res.success) {
-        console.warn('⚠️ Some items failed to track/adjust:', res.errors);
-      }
       return;
     }
 

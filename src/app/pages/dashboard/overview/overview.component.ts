@@ -102,7 +102,7 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
               </div>
               <div class="card-content">
                 <div class="card-value">Orders: ({{ ledgerOrderQty() }})</div>
-                <div class="card-label">Items: ({{ ledgerItemsQty() }})</div>
+                <div class="card-label">Items: ({{ netItemsQty() }})</div>
                 <div class="card-change">
                   <span class="change-icon">{{ ordersChange().symbol }}</span>
                   <span class="change-text">{{ ordersChange().percent | number:'1.1-1' }}% {{ comparisonLabel() }}</span>
@@ -1595,6 +1595,7 @@ export class OverviewComponent implements OnInit {
   protected ledgerOrderQty = signal<number>(0);
   protected ledgerItemsQty = signal<number>(0);
   protected ledgerCancelQty = signal<number>(0);
+  protected netItemsQty = computed(() => Math.max(0, this.ledgerItemsQty() - this.ledgerCancelQty()));
   protected ledgerCompletedQty = signal<number>(0);
   protected topProductsList = signal<any[]>([]);
   protected selectedStoreId = signal<string>('all');
@@ -2855,17 +2856,29 @@ export class OverviewComponent implements OnInit {
         const totalRevenue = grossRevenue - (expenseTotal + refundedAmount);
         const totalItems = Number(ledger.runningBalanceQty || 0);
 
+        // Fetch cancelled items qty for the period so netItemsQty is accurate
+        let cancelledItemsQty = 0;
+        if (isSingleDay) {
+          const cancelledLedger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, startDate, 'cancelled');
+          cancelledItemsQty = Number(cancelledLedger?.runningBalanceQty || 0);
+        } else {
+          const cancelledLedger = await this.ledgerService.getOrderBalancesForRange(companyId, storeId, startDate, endDate, 'cancelled');
+          cancelledItemsQty = Number(cancelledLedger?.runningBalanceQty || 0);
+        }
+
         // Set ledger signals
         this.ledgerTotalRevenue.set(totalRevenue);
         this.ledgerTotalOrders.set(totalOrders);
         this.ledgerOrderQty.set(totalOrders);
         this.ledgerItemsQty.set(totalItems);
+        this.ledgerCancelQty.set(cancelledItemsQty);
         this.ledgerCompletedQty.set(totalOrders);
       } else {
         this.ledgerTotalRevenue.set(0);
         this.ledgerTotalOrders.set(0);
         this.ledgerOrderQty.set(0);
         this.ledgerItemsQty.set(0);
+        this.ledgerCancelQty.set(0);
         this.ledgerCompletedQty.set(0);
       }
     } catch (err) {
