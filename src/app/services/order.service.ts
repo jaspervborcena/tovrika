@@ -1037,8 +1037,8 @@ public async restockOrderAndInventoryTransactional(orderId: string, performedBy 
       const startTs = Timestamp.fromDate(startDate);
       const endTs = Timestamp.fromDate(endDate);
 
-      // Try multiple candidate timestamp fields to be resilient to differing schemas
-      const candidateFields = ['updatedAt', 'updated_at', 'createdAt', 'created_at', 'date'];
+      // Try createdAt first (canonical sale date), then fallback fields for resilience
+      const candidateFields = ['createdAt', 'created_at', 'updatedAt', 'updated_at', 'date'];
 
       for (const field of candidateFields) {
         try {

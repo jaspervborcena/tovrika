@@ -2012,4 +2012,176 @@ console.log('getTrackedItemsForStoreAndDateRange: querying with startDate=', thi
     await Promise.all(updates);
   }
 
+  /**
+   * Backfill ordersSellingTracking documents for orders that have NO tracking entries at all.
+   * Scoped to a specific store so it never contaminates other stores.
+   *
+   * Rules:
+   *  - 'cancelled' orders  → 1 'completed' doc + 1 'cancelled' doc per item
+   *  - all other statuses  → 1 doc per item with the mapped tracking status
+   *
+   * Returns counts of created / skipped docs and any errors encountered.
+   */
+  public async backfillMissingOrderTracking(
+    storeId: string,
+    companyId: string,
+    orders: any[]
+  ): Promise<{ created: number; skipped: number; errors: any[] }> {
+    let created = 0;
+    let skipped = 0;
+    const errors: any[] = [];
+
+    if (!storeId || !companyId || !orders.length) return { created, skipped, errors };
+
+    // Step 1: Collect all orderIds that already have tracking docs for this store
+    const trackedOrderIds = new Set<string>();
+    try {
+      const q = query(
+        collection(this.firestore, 'ordersSellingTracking'),
+        where('storeId', '==', storeId)
+      );
+      const snap = await getDocs(q as any);
+      snap.docs.forEach(d => {
+        const data = d.data() as any;
+        if (data.orderId) trackedOrderIds.add(data.orderId);
+      });
+    } catch (e) {
+      errors.push({ id: 'query-tracked', error: String(e) });
+      return { created, skipped, errors };
+    }
+
+    // Step 2: For each order missing from the tracking set, recreate docs from orderDetails
+    for (const order of orders) {
+      const orderId = (order as any).orderId || order.id || '';
+      if (!orderId) { skipped++; continue; }
+      if (trackedOrderIds.has(orderId)) { skipped++; continue; }
+
+      // Fetch line items from orderDetails
+      let items: any[] = [];
+      try {
+        const detailsQ = query(
+          collection(this.firestore, 'orderDetails'),
+          where('orderId', '==', orderId)
+        );
+        const detailsSnap = await getDocs(detailsQ as any);
+        items = detailsSnap.docs.flatMap(d => {
+          const data: any = d.data();
+          return data.items || [];
+        });
+      } catch (e) {
+        errors.push({ id: `fetch-items-${orderId}`, error: String(e) });
+        skipped++;
+        continue;
+      }
+
+      if (!items.length) { skipped++; continue; }
+
+      const orderStatus: string = ((order.status || 'completed') as string).toLowerCase();
+      const cashierId = order.assignedCashierId || order.cashierId || order.createdBy || 'system';
+      const orderDate =
+        order.createdAt instanceof Date
+          ? order.createdAt
+          : order.createdAt
+          ? new Date(order.createdAt)
+          : new Date();
+      const invoiceNumber: string = order.invoiceNumber || '';
+
+      let itemIdx = 0;
+      for (const item of items) {
+        const productId: string = item.productId || '';
+        if (!productId) { itemIdx++; continue; }
+
+        const quantity = Number(item.quantity || item.qty || 0);
+        const price = Number(item.price || item.unitPrice || 0);
+        const total = Number(item.total || item.lineTotal || item.totalAmount || price * quantity);
+        const discount = Number(item.discount || 0);
+        const discountType: string = item.discountType || 'none';
+        const vat = Number(item.vat || item.vatAmount || 0);
+        const isVatExempt = !!(item.isVatExempt || item.isVatExempted);
+        const productName: string = item.productName || item.name || '';
+        const productCode: string = item.productCode || item.code || '';
+        const skuId: string = item.skuId || item.sku || item.SKU || '';
+
+        // Cost: prefer item-level value, otherwise fall back to products.costPrice
+        let cost = Number(item.cost || item.costPrice || 0);
+        if (!cost) {
+          try {
+            const productSnap = await getDoc(doc(this.firestore, 'products', productId) as any);
+            if (productSnap.exists()) {
+              cost = Number((productSnap.data() as any)?.costPrice || 0);
+            }
+          } catch (_) { /* non-fatal — cost stays 0 */ }
+        }
+
+        const baseDoc: any = {
+          companyId,
+          storeId,
+          orderId,
+          invoiceNumber,
+          batchNumber: 1,
+          itemIndex: itemIdx,
+          productId,
+          productName,
+          productCode,
+          skuId,
+          price,
+          quantity,
+          total,
+          discount,
+          discountType,
+          vat,
+          isVatExempt,
+          cost,
+          cashierId,
+          uid: cashierId,
+          createdBy: cashierId,
+          updatedBy: cashierId,
+          createdAt: orderDate,
+          updatedAt: orderDate,
+          _backfilled: true
+        };
+
+        try {
+          const colRef = collection(this.firestore, 'ordersSellingTracking');
+
+          if (orderStatus === 'cancelled') {
+            // For cancelled orders: create one 'completed' doc (the original sale)
+            // and one 'cancelled' doc (the cancellation event)
+            const completedRef = doc(colRef as any);
+            await setDoc(completedRef as any, this.sanitizeForFirestore({ ...baseDoc, status: 'completed' }) as any);
+            created++;
+
+            const cancelledRef = doc(colRef as any);
+            await setDoc(cancelledRef as any, this.sanitizeForFirestore({ ...baseDoc, status: 'cancelled' }) as any);
+            created++;
+          } else {
+            const trackingStatus = this.mapOrderStatusToTracking(orderStatus);
+            const trackingRef = doc(colRef as any);
+            await setDoc(trackingRef as any, this.sanitizeForFirestore({ ...baseDoc, status: trackingStatus }) as any);
+            created++;
+          }
+        } catch (e) {
+          errors.push({ id: `create-${orderId}-${itemIdx}`, error: String(e) });
+        }
+
+        itemIdx++;
+      }
+    }
+
+    return { created, skipped, errors };
+  }
+
+  /** Map an order status string to its corresponding tracking status */
+  private mapOrderStatusToTracking(orderStatus: string): string {
+    switch (orderStatus) {
+      case 'paid':
+      case 'completed': return 'completed';
+      case 'cancelled':  return 'cancelled';
+      case 'returned':   return 'returned';
+      case 'refunded':   return 'refunded';
+      case 'unpaid':     return 'unpaid';
+      default:           return 'completed';
+    }
+  }
+
 }
