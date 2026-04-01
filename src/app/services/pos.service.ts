@@ -433,6 +433,7 @@ export class PosService {
         productName: item.productName,
         quantity: item.quantity,
         price: item.sellingPrice,
+        costPrice: item.costPrice ?? 0,
         total: item.total,
         vat: Number(((item.vatAmount || 0)).toFixed(2)),
         discount: item.discountAmount,
@@ -1210,6 +1211,7 @@ export class PosService {
       // Store final selling price after discounts
       sellingPrice: finalPricePerUnitRounded,
       originalPrice: originalPrice,
+      costPrice: product.costPrice ?? 0,
       total,
       isVatApplicable: product.isVatApplicable,
       vatRate: vatRate,
