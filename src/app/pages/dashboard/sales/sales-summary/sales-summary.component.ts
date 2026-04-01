@@ -8,6 +8,9 @@ import { LedgerService } from '../../../../services/ledger.service';
 import { Order as PosOrder, OrderItem } from '../../../../interfaces/pos.interface';
 import { IndexedDBService } from '../../../../core/services/indexeddb.service';
 import { OrdersSellingTrackingService } from '../../../../services/orders-selling-tracking.service';
+import { ProductService } from '../../../../services/product.service';
+import { CategoryService } from '../../../../services/category.service';
+import { ToastService } from '../../../../shared/services/toast.service';
 
 // Extended interface for display purposes
 interface OrderDisplay extends PosOrder {
@@ -100,6 +103,7 @@ type Order = OrderDisplay;
                  
                 </div>
               </div>
+
             </div>
           </div>
         </div>
@@ -1609,14 +1613,17 @@ export class SalesSummaryComponent implements OnInit {
     async exportSalesSummaryToExcel(): Promise<void> {
       this.exporting.set(true);
       try {
-        // Silent bulk backfill before export
-        if (this.ordersSellingTrackingService.bulkBackfillOrderSellingTrackingProductFields) {
-          try {
-            await this.ordersSellingTrackingService.bulkBackfillOrderSellingTrackingProductFields();
-          } catch (e) {
-            // Ignore backfill errors for now
+        // Silent backfill: recreate missing tracking docs, then fill product fields
+        try {
+          const storeId = this.selectedStoreId() || this.authService.getCurrentPermission()?.storeId || '';
+          const companyId = this.authService.getCurrentPermission()?.companyId || '';
+          if (storeId && companyId) {
+            await this.ordersSellingTrackingService.backfillMissingOrderTracking(storeId, companyId, this.filteredOrders());
           }
-        }
+        } catch (e) { /* non-fatal */ }
+        try {
+          await this.ordersSellingTrackingService.bulkBackfillOrderSellingTrackingProductFields();
+        } catch (e) { /* non-fatal */ }
         // Validate date range (max 31 days)
         const from = new Date(this.fromDate);
         const to = new Date(this.toDate);
@@ -1628,7 +1635,7 @@ export class SalesSummaryComponent implements OnInit {
       // Get orders in range (filteredOrders is already sorted and filtered)
       const orders = this.filteredOrders();
       if (!orders.length) {
-        alert('No sales data to export for the selected range.');
+        this.toast.warning('No sales data to export for the selected range.');
         return;
       }
       // Prepare sales details sheet (orders)
@@ -1646,6 +1653,13 @@ export class SalesSummaryComponent implements OnInit {
       }));
 
       // Prepare Details sheet (flattened)
+      // Build lookup maps to enrich rows with category label and tag labels from products
+      const allProducts = this.productService.getProducts();
+      const skuToProduct = new Map(allProducts.map(p => [p.skuId, p]));
+      const categoryIdToLabel = new Map(
+        this.categoryService.getCategories().map(c => [c.categoryId, c.categoryLabel])
+      );
+
       let trackingRows: any[] = [];
       for (const order of orders) {
         const orderId = (order as any).orderId || order.id;
@@ -1655,19 +1669,26 @@ export class SalesSummaryComponent implements OnInit {
           const tracking = await this.orderService.getOrderSellingTracking(orderId);
           if (Array.isArray(tracking) && tracking.length > 0) {
             tracking.forEach(t => {
+              const sku = t.skuId || t.SKU || t.sku || '';
+              const product = sku ? skuToProduct.get(sku) : undefined;
+              const categoryLabel = product
+                ? (categoryIdToLabel.get(product.category) || product.category || '')
+                : (t.category || '');
+              const tagLabels = product?.tagLabels?.join(', ')
+                ?? (Array.isArray(t.tagLabels) ? t.tagLabels.join(', ') : (t.tagLabels || ''));
               trackingRows.push({
                 Invoice: order.invoiceNumber || '',
                 Date: order.createdAt ? new Date(order.createdAt).toLocaleString() : '',
                 Product: t.productName || t.product || '',
-                SKU_ID: t.skuId || t.SKU || t.sku || '',
+                SKU_ID: sku,
                 Quantity: t.quantity || t.qty || '',
                 Price: t.price || t.unitPrice || '',
                 Discount: t.discount || '',
                 VAT: t.vat || '',
                 VATExempt: t.isVatExempt || t.isVatExempted || '',
                 Total: t.total || t.totalAmount || '',
-                Category: t.category || '',
-                TagLabels: Array.isArray(t.tagLabels) ? t.tagLabels.join(', ') : (t.tagLabels || '')
+                Category: categoryLabel,
+                TagLabels: tagLabels
               });
             });
           }
@@ -1695,6 +1716,9 @@ export class SalesSummaryComponent implements OnInit {
   private indexedDb = inject(IndexedDBService);
   private ledgerService = inject(LedgerService);
   private ordersSellingTrackingService = inject(OrdersSellingTrackingService);
+  private productService = inject(ProductService);
+  private categoryService = inject(CategoryService);
+  private toast = inject(ToastService);
 
   // Signals for reactive state management
   orders = signal<Order[]>([]);
@@ -1831,13 +1855,10 @@ export class SalesSummaryComponent implements OnInit {
   }
 
   async ngOnInit(): Promise<void> {
-    // Ensure default date range is ordered correctly and stay as last-7-days set in constructor
+    // Ensure default date range is ordered correctly
     this.ensureDateOrder();
     await this.loadStores();
-    // Load sales data and tracked items immediately after stores are loaded
-    await this.loadCurrentDateData();
-    // Also load ledger totals for the selected store
-    this.loadLedgerTotalsForStore();
+    // Do NOT auto-load data — user must click Go to load sales for the selected date range
   }
 
   // Load ledger totals when loading current date data
@@ -1887,10 +1908,10 @@ export class SalesSummaryComponent implements OnInit {
   }
 
   onStoreChange(): void {
-    // Only reload current date data automatically when store changes
-    if (this.isCurrentDate()) {
-      this.loadCurrentDateData();
-    }
+    // Clear displayed data when store changes so stale numbers from the previous store aren't shown
+    this.orders.set([]);
+    this.totalTrackedItems.set(0);
+    this.cancelledTrackedItems.set(0);
   }
 
   /**
@@ -1988,7 +2009,14 @@ export class SalesSummaryComponent implements OnInit {
       let orders: any[] = [];
       try {
         const results = await this.orderService.getOrdersFromFirestoreByRange(storeId, startDate, endDate);
-        orders = results || [];
+        // Client-side guard: only keep orders whose createdAt falls within the range.
+        // Firestore may fall back to querying by updatedAt (when a createdAt index is missing),
+        // which would include orders from previous days that were merely updated today.
+        orders = (results || []).filter((o: any) => {
+          const created = o.createdAt ? new Date(o.createdAt) : null;
+          if (!created || isNaN(created.getTime())) return true; // keep if date unavailable
+          return created >= startDate && created <= endDate;
+        });
       } catch (e) {
         console.warn('Firestore sales query failed, setting orders to empty', e);
         orders = [];
@@ -1999,12 +2027,13 @@ export class SalesSummaryComponent implements OnInit {
           if (rawDocs && rawDocs.length > 0) {
             const allOrders = rawDocs.map((doc: any) => {
               const data = doc.data;
+              // Use createdAt as canonical order date (not updatedAt) so orders appear on the day they were placed
               let orderDate: Date | null = null;
-              if (data.updatedAt) orderDate = data.updatedAt.toDate ? data.updatedAt.toDate() : new Date(data.updatedAt);
-              else if (data.updated_at) orderDate = data.updated_at.toDate ? data.updated_at.toDate() : new Date(data.updated_at);
-              else if (data.createdAt) orderDate = data.createdAt.toDate ? data.createdAt.toDate() : new Date(data.createdAt);
+              if (data.createdAt) orderDate = data.createdAt.toDate ? data.createdAt.toDate() : new Date(data.createdAt);
               else if (data.created_at) orderDate = data.created_at.toDate ? data.created_at.toDate() : new Date(data.created_at);
               else if (data.date) orderDate = data.date.toDate ? data.date.toDate() : new Date(data.date);
+              else if (data.updatedAt) orderDate = data.updatedAt.toDate ? data.updatedAt.toDate() : new Date(data.updatedAt);
+              else if (data.updated_at) orderDate = data.updated_at.toDate ? data.updated_at.toDate() : new Date(data.updated_at);
               return {
                 id: doc.id,
                 companyId: data.companyId || '',
@@ -2058,8 +2087,13 @@ export class SalesSummaryComponent implements OnInit {
         try {
           const saved: any[] = await this.indexedDb.getSetting(`orders_snapshot_${storeId}`);
           if (saved && Array.isArray(saved) && saved.length > 0) {
-            orders = saved;
-            this.dataSource.set('api');
+            // Apply the same date range filter used on Firestore results
+            orders = saved.filter((o: any) => {
+              const created = o.createdAt ? new Date(o.createdAt) : null;
+              if (!created || isNaN(created.getTime())) return false;
+              return created >= startDate && created <= endDate;
+            });
+            if (orders.length > 0) this.dataSource.set('api');
           }
         } catch (dbErr) {
           console.warn('📦 Failed to read orders snapshot from IndexedDB:', dbErr);
@@ -2097,19 +2131,31 @@ export class SalesSummaryComponent implements OnInit {
       this.orders.set(deduped);
 
       // --- TOTAL ITEMS LOADING (date range) ---
-      // Always use ledger range query so it reflects the selected date range
+      // Query ordersSellingTracking directly — more reliable than ledger which may have missing entries.
+      // If tracking returns 0 (docs not yet created), fall back to summing quantities from already-loaded orders.
       try {
-        const ledgerItems = await this.ledgerService.getOrderBalancesForRange(companyId, storeId, startDate, endDate, 'completed');
-        this.totalTrackedItems.set(Number(ledgerItems.runningBalanceQty || 0));
+        const trackingDocs = await this.ordersSellingTrackingService.getTrackedItemsForStoreAndDateRange(companyId, storeId, startDate, endDate);
+        const totalQty = trackingDocs.reduce((sum, t) => sum + Number(t.quantity || 0), 0);
+        if (totalQty > 0) {
+          this.totalTrackedItems.set(totalQty);
+          this.cancelledTrackedItems.set(0);
+        } else {
+          // Fallback: sum item quantities from already-loaded orders (items are populated via fetchOrderItems)
+          const fallbackQty = this.orders().reduce((sum: number, o: any) => {
+            const items: any[] = o.items || [];
+            return sum + items.reduce((s: number, i: any) => s + Number(i.quantity || 0), 0);
+          }, 0);
+          this.totalTrackedItems.set(fallbackQty);
+          this.cancelledTrackedItems.set(0);
+        }
       } catch (err) {
-        console.warn('Failed to fetch ledger items for summary', err);
-        this.totalTrackedItems.set(0);
-      }
-      // Fetch cancelled items qty so netTrackedItems excludes them
-      try {
-        const cancelledLedger = await this.ledgerService.getOrderBalancesForRange(companyId, storeId, startDate, endDate, 'cancelled');
-        this.cancelledTrackedItems.set(Number(cancelledLedger?.runningBalanceQty || 0));
-      } catch (err) {
+        console.warn('Failed to fetch tracking items for summary', err);
+        // Fallback: sum item quantities from already-loaded orders
+        const fallbackQty = this.orders().reduce((sum: number, o: any) => {
+          const items: any[] = o.items || [];
+          return sum + items.reduce((s: number, i: any) => s + Number(i.quantity || 0), 0);
+        }, 0);
+        this.totalTrackedItems.set(fallbackQty);
         this.cancelledTrackedItems.set(0);
       }
     } catch (error) {

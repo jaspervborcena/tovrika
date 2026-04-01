@@ -118,6 +118,7 @@ export interface OrderItem {
   vat: number;
   discount: number;
   isVatExempt: boolean;
+  costPrice?: number;
 }
 
 export interface CartItem {
@@ -128,6 +129,7 @@ export interface CartItem {
   quantity: number;
   sellingPrice: number;
   originalPrice?: number;
+  costPrice?: number;
   total: number;
   isVatApplicable: boolean;
   vatRate: number;
