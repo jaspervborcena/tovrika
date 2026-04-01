@@ -2131,25 +2131,26 @@ export class SalesSummaryComponent implements OnInit {
       this.orders.set(deduped);
 
       // --- TOTAL ITEMS LOADING (date range) ---
-      // Query ordersSellingTracking directly — more reliable than ledger which may have missing entries.
-      // If tracking returns 0 (docs not yet created), fall back to summing quantities from already-loaded orders.
+      // Use orderAccountingLedger (same source as Overview) for reliable item counts.
       try {
-        const trackingDocs = await this.ordersSellingTrackingService.getTrackedItemsForStoreAndDateRange(companyId, storeId, startDate, endDate);
-        const totalQty = trackingDocs.reduce((sum, t) => sum + Number(t.quantity || 0), 0);
-        if (totalQty > 0) {
-          this.totalTrackedItems.set(totalQty);
-          this.cancelledTrackedItems.set(0);
+        const isSingleDay = this.fromDate === this.toDate;
+        let totalQty = 0;
+        let cancelledQty = 0;
+        if (isSingleDay) {
+          const ledger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, startDate, 'completed');
+          totalQty = Number(ledger.runningBalanceQty || 0);
+          const cancelledLedger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, startDate, 'cancelled');
+          cancelledQty = Number(cancelledLedger.runningBalanceQty || 0);
         } else {
-          // Fallback: sum item quantities from already-loaded orders (items are populated via fetchOrderItems)
-          const fallbackQty = this.orders().reduce((sum: number, o: any) => {
-            const items: any[] = o.items || [];
-            return sum + items.reduce((s: number, i: any) => s + Number(i.quantity || 0), 0);
-          }, 0);
-          this.totalTrackedItems.set(fallbackQty);
-          this.cancelledTrackedItems.set(0);
+          const ledger = await this.ledgerService.getOrderBalancesForRange(companyId, storeId, startDate, endDate, 'completed');
+          totalQty = Number(ledger.runningBalanceQty || 0);
+          const cancelledLedger = await this.ledgerService.getOrderBalancesForRange(companyId, storeId, startDate, endDate, 'cancelled');
+          cancelledQty = Number(cancelledLedger.runningBalanceQty || 0);
         }
+        this.totalTrackedItems.set(totalQty);
+        this.cancelledTrackedItems.set(cancelledQty);
       } catch (err) {
-        console.warn('Failed to fetch tracking items for summary', err);
+        console.warn('Failed to fetch ledger items for summary', err);
         // Fallback: sum item quantities from already-loaded orders
         const fallbackQty = this.orders().reduce((sum: number, o: any) => {
           const items: any[] = o.items || [];
