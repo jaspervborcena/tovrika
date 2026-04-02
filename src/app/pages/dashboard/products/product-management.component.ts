@@ -17,6 +17,7 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
 import { CreateTagModalComponent } from '../../../shared/components/create-tag-modal/create-tag-modal.component';
 import { TagsService, ProductTag } from '../../../services/tags.service';
 import { AppConstants } from '../../../shared/enums/app-constants.enum';
+import * as XLSX from 'xlsx';
 
 @Component({
   selector: 'app-product-management',
@@ -1243,6 +1244,7 @@ import { AppConstants } from '../../../shared/enums/app-constants.enum';
           <div class="header-actions">
             <button class="btn btn-primary" (click)="openAddModal()">📦 Add New Product</button>
             <button class="btn btn-primary" (click)="onCreateTag()">🏷️ Create New Tag</button>
+            <button class="btn btn-primary" (click)="openBulkUploadModal()">⬆️ Bulk Upload</button>
           </div>
         </div>
       </div>
@@ -2320,6 +2322,178 @@ import { AppConstants } from '../../../shared/enums/app-constants.enum';
         accept="image/*" 
         (change)="onRowImageFileChange($event)"
         style="display: none;"/>
+
+      <!-- Bulk Upload Modal -->
+      <div class="modal-overlay" *ngIf="showBulkUploadModal" (click)="closeBulkUploadModal()" style="z-index: 100000 !important;">
+        <div class="modal" style="max-width: 780px; max-height: 90vh; overflow-y: auto;" (click)="$event.stopPropagation()">
+          <div class="modal-header">
+            <h3>⬆️ Bulk Upload Products</h3>
+            <button class="close-btn" (click)="closeBulkUploadModal()">×</button>
+          </div>
+
+          <!-- Step 1: Store selection + file picker -->
+          <ng-container *ngIf="bulkFileDataArray.length === 0">
+            <div class="modal-body">
+              <!-- Template download -->
+              <div style="margin-bottom:1.25rem; padding:1rem; background:#eff6ff; border:1px solid #bfdbfe; border-radius:8px;">
+                <strong style="color:#1d4ed8;">📄 CSV / Excel Template</strong>
+                <p style="margin:0.5rem 0 0.75rem; font-size:0.875rem; color:#374151;">
+                  Download the template, fill in your products, then upload the file.
+                  Columns: <strong>Product Name, Description, SKU ID, Product Code, Total Stock, Cost Price, Original Price, Selling Price, Barcode ID, Image URL, Is Favorite, Is VAT Applicable, VAT Rate, Has Discount, Discount Value, Is Stock Tracked</strong>.
+                </p>
+                <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+                  <button class="btn btn-secondary btn-sm" (click)="downloadBulkTemplate()">⬇️ Download CSV Template</button>
+                  <button class="btn btn-secondary btn-sm" (click)="downloadBulkExcelTemplate()">⬇️ Download Excel Template</button>
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label>Store *</label>
+                <select class="form-input" [(ngModel)]="bulkStoreId">
+                  <option value="">Select a store</option>
+                  <option *ngFor="let store of stores()" [value]="store.id">{{ store.storeName }}</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label>CSV or Excel File *</label>
+                <input type="file" class="form-input" accept=".csv,.xlsx,.xls" (change)="onBulkFileChange($event)" #bulkFileInput>
+                <span *ngIf="bulkFileName" style="font-size:0.8rem; color:#374151; margin-top:4px; display:block;">📎 {{ bulkFileName }}</span>
+                <span *ngIf="bulkUploadError" style="font-size:0.8rem; color:#dc2626; margin-top:4px; display:block;">⚠️ {{ bulkUploadError }}</span>
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button class="btn btn-secondary" (click)="closeBulkUploadModal()">Cancel</button>
+            </div>
+          </ng-container>
+
+          <!-- Step 2: Preview + edit -->
+          <ng-container *ngIf="bulkFileDataArray.length > 0">
+            <div class="modal-body">
+              <!-- Summary bar -->
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; padding:0.875rem 1rem; background:#f9fafb; border-radius:8px; border:1px solid #e5e7eb;">
+                <strong>Review Records</strong>
+                <span style="color:#059669; font-weight:600;">{{ bulkFileDataArray.length }} rows</span>
+              </div>
+
+              <!-- Duplicate SKU warning -->
+              <div *ngIf="bulkDuplicateSkus.length > 0" style="margin-bottom:1rem; padding:0.75rem 1rem; background:#fef2f2; border:1px solid #fca5a5; border-radius:8px; color:#b91c1c;">
+                <strong>⚠️ Duplicate SKUs detected — fix before importing:</strong>
+                <ul style="margin:0.5rem 0 0 1rem; padding:0;">
+                  <li *ngFor="let sku of bulkDuplicateSkus">{{ sku }}</li>
+                </ul>
+              </div>
+
+              <div style="overflow-x:auto;">
+                <table class="products-table" style="font-size:0.8125rem;">
+                  <thead>
+                    <tr>
+                      <th>#</th>
+                      <th>Product Name</th>
+                      <th>SKU ID</th>
+                      <th>Product Code</th>
+                      <th>Category</th>
+                      <th>Cost Price</th>
+                      <th>Orig. Price</th>
+                      <th>Sell Price</th>
+                      <th>Stock</th>
+                      <th>VAT?</th>
+                      <th>Tracked?</th>
+                      <th>Tags</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr *ngFor="let row of bulkFileDataArray; let i = index" [style.background]="bulkDuplicateSkus.includes(row.skuId) ? '#fef2f2' : ''">
+                      <td>{{ i + 1 }}</td>
+                      <td>{{ row.productName }}</td>
+                      <td [style.color]="bulkDuplicateSkus.includes(row.skuId) ? '#b91c1c' : ''">{{ row.skuId }}</td>
+                      <td>{{ row.productCode || '-' }}</td>
+                      <td>
+                        <select class="form-input" [(ngModel)]="row.category" style="min-width:110px; font-size:0.8rem; padding:2px 4px;">
+                          <option value="General">General</option>
+                          <option *ngFor="let cat of categories()" [value]="cat">{{ cat }}</option>
+                        </select>
+                      </td>
+                      <td>{{ row.costPrice | number:'1.2-2' }}</td>
+                      <td>{{ row.originalPrice | number:'1.2-2' }}</td>
+                      <td>{{ row.sellingPrice | number:'1.2-2' }}</td>
+                      <td>{{ row.totalStock }}</td>
+                      <td>{{ row.isVatApplicable ? '✓' : '-' }}</td>
+                      <td>{{ row.isStockTracked ? '✓' : '-' }}</td>
+                      <td>
+                        <div class="tags-display" style="min-width:120px;">
+                          <div class="tab-headers-style" style="flex-wrap:wrap; gap:4px;">
+                          <div *ngFor="let lbl of row.tagLabels; let ti = index" class="tag-chip" style="font-size:0.75rem;">
+                              <span>{{ lbl }}</span>
+                              <button type="button" class="remove-tag-btn" (click)="removeBulkTag(i, row.tagIds[ti])" title="Remove">×</button>
+                            </div>
+                            <button type="button" class="add-tag-btn" style="font-size:0.75rem; padding:2px 8px;" (click)="openBulkTagModal(i)"><span>+ Add Tags</span></button>
+                          </div>
+                          <div *ngIf="!row.tagLabels || row.tagLabels.length === 0" class="empty-tags-hint" style="font-size:0.75rem;">No tags selected</div>
+                        </div>
+                      </td>
+                      <td>
+                        <button class="btn btn-danger btn-sm" (click)="removeBulkRow(i)">🗑️</button>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <!-- Bulk Tag Modal -->
+              <div class="modal-overlay" *ngIf="bulkTagRowIndex !== null" (click)="closeBulkTagModal()" style="z-index: 200000 !important;">
+                <div class="modal" (click)="$event.stopPropagation()" style="max-width: 500px;">
+                  <div class="modal-header">
+                    <h3>Select Tags — {{ bulkTagRowIndex !== null ? bulkFileDataArray[bulkTagRowIndex!].productName : '' }}</h3>
+                    <button class="close-btn" (click)="closeBulkTagModal()">×</button>
+                  </div>
+                  <div class="modal-body">
+                    <div class="form-group">
+                      <label>Group</label>
+                      <select class="form-input" [(ngModel)]="bulkSelectedTagGroup" (ngModelChange)="onBulkTagGroupChange($event)">
+                        <option value="">Select a group</option>
+                        <option *ngFor="let group of tagGroups()" [value]="group">{{ group }}</option>
+                      </select>
+                    </div>
+                    <div class="form-group" *ngIf="bulkSelectedTagGroup">
+                      <label>Tags (Select one per group)</label>
+                      <div class="tags-selection-grid">
+                        <label *ngFor="let tag of getBulkFilteredTags()" class="tag-radio-label">
+                          <input type="radio"
+                            [name]="'bulk-tag-' + bulkSelectedTagGroup"
+                            [checked]="isBulkTagSelected(tag.tagId)"
+                            (change)="selectBulkTag(tag.tagId)">
+                          <span>{{ tag.label }}</span>
+                        </label>
+                        <div *ngIf="getBulkFilteredTags().length === 0" style="color:#9ca3af; font-size:0.875rem;">No tags in this group</div>
+                      </div>
+                    </div>
+                    <div *ngIf="bulkTempTagIds.length > 0" style="margin-top:0.5rem;">
+                      <strong style="font-size:0.875rem;">Selected: </strong>
+                      <span *ngFor="let lbl of bulkTagRowLabels()" class="tag-badge" style="margin-right:4px;">{{ lbl }}</span>
+                    </div>
+                  </div>
+                  <div class="modal-footer">
+                    <button class="btn btn-secondary" (click)="closeBulkTagModal()">Cancel</button>
+                    <button class="btn btn-primary" (click)="saveBulkRowTags()">Add Tags</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="modal-footer">
+              <button class="btn btn-secondary" (click)="bulkFileDataArray = []; bulkDuplicateSkus = [];">← Back</button>
+              <button class="btn btn-secondary" (click)="closeBulkUploadModal()">Cancel</button>
+              <button class="btn btn-primary"
+                [disabled]="bulkDuplicateSkus.length > 0 || bulkImporting"
+                (click)="importBulkProducts()">
+                {{ bulkImporting ? '⏳ Importing...' : '✅ Import ' + bulkFileDataArray.length + ' Products' }}
+              </button>
+            </div>
+          </ng-container>
+        </div>
+      </div>
     </div>
   `
 })
@@ -2427,6 +2601,39 @@ export class ProductManagementComponent implements OnInit {
   selectedTagGroup: string = '';
   selectedTagIds = signal<string[]>([]);
   tempSelectedTagIds: string[] = [];
+
+  // Bulk upload state
+  showBulkUploadModal = false;
+  bulkStoreId = '';
+  bulkFileDataArray: Array<{
+    productName: string;
+    description: string;
+    skuId: string;
+    productCode: string;
+    category: string;
+    totalStock: number;
+    costPrice: number;
+    originalPrice: number;
+    sellingPrice: number;
+    barcodeId: string;
+    imageUrl: string;
+    isFavorite: boolean;
+    isVatApplicable: boolean;
+    vatRate: number;
+    hasDiscount: boolean;
+    discountValue: number;
+    isStockTracked: boolean;
+    tagLabels: string[];
+    tagIds: string[];
+  }> = [];
+  bulkDuplicateSkus: string[] = [];
+  bulkImporting = false;
+  bulkTagRowIndex: number | null = null;
+  bulkSelectedTagGroup = '';
+  bulkTempTagIds: string[] = [];
+  bulkFileName = '';
+  bulkUploadError = '';
+  bulkUploadResults: string[] = [];
 
   // Modal mode management
   modalMode: 'product' | 'category' | 'manageCategories' = 'product';
@@ -4784,20 +4991,348 @@ export class ProductManagementComponent implements OnInit {
   /**
    * Load product inventory batches
    */
-  private async loadProductInventory(productId: string): Promise<void> {
+  async loadProductInventory(productId: string | undefined): Promise<void> {
+    if (!productId) return;
     try {
-      this.loading = true;
-      
-    // Load inventory entries for this product using the existing method
-    const inventoryEntries = await this.inventoryDataService.listBatches(productId);
-    this.setCurrentBatches(inventoryEntries || []);
-    } catch (error) {
-      console.error('Error loading product inventory:', error);
-      this.toastService.error('Failed to load product inventory');
-      this.currentBatches = [];
-      this.filteredInventory = [];
-    } finally {
-      this.loading = false;
+      const batches = await this.inventoryDataService.listBatches(productId);
+      this.setCurrentBatches(batches || []);
+    } catch (e) {
+      console.error('Failed to load inventory batches:', e);
+      this.setCurrentBatches([]);
+    }
+  }
+
+  // ===========================
+  // Bulk Upload Methods
+  // ===========================
+
+  openBulkUploadModal(): void {
+    const storeId = this.selectedStore() || this.authService.getCurrentPermission()?.storeId || '';
+    this.bulkStoreId = storeId;
+    this.bulkFileDataArray = [];
+    this.bulkDuplicateSkus = [];
+    this.bulkImporting = false;
+    this.bulkTagRowIndex = null;
+    this.bulkFileName = '';
+    this.bulkUploadError = '';
+    this.bulkUploadResults = [];
+    this.showBulkUploadModal = true;
+    if (storeId) {
+      this.categoryService.loadCategoriesByStore(storeId).catch(() => {});
+      this.loadTags(storeId).catch(() => {});
+    }
+  }
+
+  closeBulkUploadModal(): void {
+    this.showBulkUploadModal = false;
+    this.bulkFileDataArray = [];
+    this.bulkDuplicateSkus = [];
+    this.bulkTagRowIndex = null;
+    this.bulkFileName = '';
+    this.bulkUploadError = '';
+    this.bulkUploadResults = [];
+  }
+
+  downloadBulkTemplate(): void {
+    const headers = [
+      'Product Name', 'Description', 'SKU ID', 'Product Code',
+      'Total Stock', 'Cost Price', 'Original Price', 'Selling Price',
+      'Barcode ID', 'Image URL', 'Is Favorite', 'Is VAT Applicable',
+      'VAT Rate', 'Has Discount', 'Discount Value', 'Is Stock Tracked'
+    ];
+    const example = [
+      'Sample Product', 'Sample description', 'SKU123', 'PCODE123',
+      '100', '50', '60', '70',
+      '1234567890123', '', 'FALSE', 'FALSE',
+      '0', 'FALSE', '0', 'TRUE'
+    ];
+    const csv = [headers.join(','), example.join(',')].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'bulk-upload-template.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  downloadBulkExcelTemplate(): void {
+    const a = document.createElement('a');
+    a.href = 'assets/Tovrika POS Template.xlsx';
+    a.download = 'Tovrika POS Template.xlsx';
+    a.click();
+  }
+
+  onBulkFileChange(event: Event): void {
+    const file = (event.target as HTMLInputElement).files?.[0];
+    if (!file) return;
+    if (!this.bulkStoreId) {
+      this.bulkUploadError = 'Please select a store first.';
+      (event.target as HTMLInputElement).value = '';
+      return;
+    }
+    this.bulkFileName = file.name;
+    this.bulkUploadError = '';
+    this.bulkUploadResults = [];
+    const ext = file.name.split('.').pop()?.toLowerCase();
+    if (ext === 'csv' || ext === 'tsv') {
+      this.parseBulkCsv(file);
+    } else if (ext === 'xlsx' || ext === 'xls') {
+      this.parseBulkExcel(file);
+    } else {
+      this.bulkUploadError = 'Please select a CSV or Excel file (.csv, .xlsx, .xls).';
+    }
+  }
+
+  private parseBulkExcel(file: File): void {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const workbook = XLSX.read(e.target?.result, { type: 'binary' });
+        const sheetName = workbook.SheetNames[0];
+        const sheet = workbook.Sheets[sheetName];
+        const rawRows: any[] = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+        this.applyParsedRows(rawRows);
+      } catch (err: any) {
+        this.bulkUploadError = `Excel parsing error: ${err?.message || err}`;
+      }
+    };
+    reader.readAsBinaryString(file);
+  }
+
+  private applyParsedRows(rawRows: any[]): void {
+    const parseBool = (val: any) => {
+      const s = String(val).toLowerCase().trim();
+      return s === 'true' || s === '1' || s === 'yes';
+    };
+    this.bulkFileDataArray = rawRows
+      .filter(r => (r['Product Name'] || r['productname'] || r['productName'] || '').toString().trim())
+      .map(r => {
+        const get = (keys: string[]) => {
+          for (const k of keys) {
+            const found = Object.keys(r).find(x => x.trim().toLowerCase().replace(/\s+/g,'') === k.toLowerCase().replace(/\s+/g,''));
+            if (found !== undefined) return r[found];
+          }
+          return '';
+        };
+        return {
+          productName: get(['productname','Product Name']) || '',
+          description: get(['description','Description']) || '',
+          skuId: get(['skuid','SKU ID','sku']) || '',
+          productCode: get(['productcode','Product Code']) || '',
+          category: get(['category','Category']) || 'General',
+          totalStock: parseInt(get(['totalstock','Total Stock','stock','quantity']) || '0', 10) || 0,
+          costPrice: parseFloat(get(['costprice','Cost Price']) || '0') || 0,
+          originalPrice: parseFloat(get(['originalprice','Original Price']) || '0') || 0,
+          sellingPrice: parseFloat(get(['sellingprice','Selling Price']) || '0') || 0,
+          barcodeId: get(['barcodeid','Barcode ID','barcode']) || '',
+          imageUrl: get(['imageurl','Image URL']) || '',
+          isFavorite: parseBool(get(['isfavorite','Is Favorite'])),
+          isVatApplicable: parseBool(get(['isvatapplicable','Is VAT Applicable'])),
+          vatRate: parseFloat(get(['vatrate','VAT Rate']) || '0') || 0,
+          hasDiscount: parseBool(get(['hasdiscount','Has Discount'])),
+          discountValue: parseFloat(get(['discountvalue','Discount Value']) || '0') || 0,
+          isStockTracked: parseBool(get(['isstocktracked','Is Stock Tracked'])),
+          tagLabels: [],
+          tagIds: []
+        };
+      });
+    this.detectBulkDuplicates();
+    if (this.bulkFileDataArray.length === 0) {
+      this.bulkUploadError = 'No valid rows found. Ensure the file has a "Product Name" column.';
+    }
+  }
+
+  private parseBulkCsv(file: File): void {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const text = e.target?.result as string;
+      const lines = text.split(/\r?\n/).filter(l => l.trim());
+      if (lines.length < 2) {
+        this.toastService.error('File is empty or has no data rows.');
+        return;
+      }
+
+      // Auto-detect delimiter: tab or comma
+      const firstLine = lines[0];
+      const delimiter = firstLine.includes('\t') ? '\t' : ',';
+
+      const headers = firstLine.split(delimiter).map(h => h.trim().toLowerCase().replace(/"/g, '').replace(/\s+/g, ''));
+
+      const rows = lines.slice(1).map(line => {
+        const values = line.split(delimiter).map(v => v.trim().replace(/"/g, ''));
+        const obj: any = {};
+        headers.forEach((h, i) => { obj[h] = values[i] || ''; });
+        return obj;
+      });
+
+      this.applyParsedRows(rows);
+    };
+    reader.readAsText(file);
+  }
+
+  private detectBulkDuplicates(): void {
+    const skuCounts = new Map<string, number>();
+    this.bulkFileDataArray.forEach(r => {
+      if (r.skuId) skuCounts.set(r.skuId, (skuCounts.get(r.skuId) || 0) + 1);
+    });
+    this.bulkDuplicateSkus = Array.from(skuCounts.entries())
+      .filter(([, count]) => count > 1)
+      .map(([sku]) => sku);
+  }
+
+  removeBulkRow(index: number): void {
+    this.bulkFileDataArray.splice(index, 1);
+    if (this.bulkTagRowIndex !== null && this.bulkTagRowIndex === index) this.bulkTagRowIndex = null;
+    this.detectBulkDuplicates();
+  }
+
+  // Bulk tag editor
+  openBulkTagModal(index: number): void {
+    this.bulkTagRowIndex = index;
+    this.bulkTempTagIds = [...this.bulkFileDataArray[index].tagIds];
+    this.bulkSelectedTagGroup = '';
+  }
+
+  removeBulkTag(rowIndex: number, tagId: string): void {
+    const row = this.bulkFileDataArray[rowIndex];
+    const idx = row.tagIds.indexOf(tagId);
+    if (idx > -1) {
+      row.tagIds.splice(idx, 1);
+      row.tagLabels.splice(idx, 1);
+    }
+  }
+
+  closeBulkTagModal(): void {
+    this.bulkTagRowIndex = null;
+    this.bulkTempTagIds = [];
+    this.bulkSelectedTagGroup = '';
+  }
+
+  onBulkTagGroupChange(group: string): void {
+    this.bulkSelectedTagGroup = group;
+  }
+
+  getBulkFilteredTags(): ProductTag[] {
+    if (!this.bulkSelectedTagGroup) return [];
+    return this.availableTags().filter(t => t.group === this.bulkSelectedTagGroup && t.isActive);
+  }
+
+  isBulkTagSelected(tagId: string): boolean {
+    return this.bulkTempTagIds.includes(tagId);
+  }
+
+  selectBulkTag(tagId: string): void {
+    const tag = this.availableTags().find(t => t.tagId === tagId);
+    if (!tag) return;
+    // Remove any existing tag from same group
+    this.bulkTempTagIds = this.bulkTempTagIds.filter(id => {
+      const t = this.availableTags().find(x => x.tagId === id);
+      return t?.group !== tag.group;
+    });
+    this.bulkTempTagIds.push(tagId);
+  }
+
+  bulkTagRowLabels(): string[] {
+    return this.bulkTempTagIds.map(id => {
+      const t = this.availableTags().find(x => x.tagId === id);
+      return t ? t.label : id;
+    });
+  }
+
+  saveBulkRowTags(): void {
+    if (this.bulkTagRowIndex === null) return;
+    const row = this.bulkFileDataArray[this.bulkTagRowIndex];
+    row.tagIds = [...this.bulkTempTagIds];
+    row.tagLabels = this.bulkTempTagIds.map(id => {
+      const t = this.availableTags().find(x => x.tagId === id);
+      return t ? t.label : id;
+    });
+    this.closeBulkTagModal();
+  }
+
+  async importBulkProducts(): Promise<void> {
+    if (this.bulkDuplicateSkus.length > 0) {
+      this.toastService.error('Fix duplicate SKU IDs before importing.');
+      return;
+    }
+    if (!this.bulkStoreId) {
+      this.toastService.error('Please select a store.');
+      return;
+    }
+    // Check for duplicate SKUs against existing store products
+    const existingProducts = this.productService.products().filter(p => p.storeId === this.bulkStoreId);
+    const existingSkus = new Set(existingProducts.map(p => (p.skuId || '').toLowerCase()));
+    const conflicting = this.bulkFileDataArray.filter(r => r.skuId && existingSkus.has(r.skuId.toLowerCase()));
+    if (conflicting.length > 0) {
+      this.bulkUploadError = `SKU(s) already exist in store: ${conflicting.map(r => r.skuId).join(', ')}. Please remove or change them.`;
+      this.toastService.error(`${conflicting.length} SKU(s) already exist in the store.`);
+      return;
+    }
+    this.bulkImporting = true;
+    this.bulkUploadError = '';
+    this.bulkUploadResults = [];
+    const companyId = this.authService.getCurrentPermission()?.companyId || '';
+    let successCount = 0;
+    let errorCount = 0;
+    for (const row of this.bulkFileDataArray) {
+      try {
+        const tagLabels = row.tagIds.map(id => {
+          const t = this.availableTags().find(x => x.tagId === id);
+          return t ? t.label : '';
+        }).filter(Boolean);
+        await this.productService.createProduct({
+          productName: row.productName,
+          description: row.description || undefined,
+          skuId: row.skuId,
+          productCode: row.productCode || undefined,
+          category: row.category || 'General',
+          totalStock: row.isStockTracked ? row.totalStock : 0,
+          costPrice: row.costPrice,
+          originalPrice: row.originalPrice,
+          sellingPrice: row.sellingPrice,
+          barcodeId: row.barcodeId || undefined,
+          imageUrl: row.imageUrl || undefined,
+          isFavorite: row.isFavorite,
+          isVatApplicable: row.isVatApplicable,
+          vatRate: row.vatRate,
+          hasDiscount: row.hasDiscount,
+          discountValue: row.discountValue,
+          isStockTracked: row.isStockTracked,
+          storeId: this.bulkStoreId,
+          companyId,
+          status: ProductStatus.Active,
+          tags: row.tagIds,
+          tagLabels,
+          // Only include inventory batch when stock tracking is enabled
+          ...(row.isStockTracked && row.totalStock > 0 ? {
+            inventory: [{
+              quantity: row.totalStock,
+              unitPrice: row.costPrice,
+              costPrice: row.costPrice,
+              sellingPrice: row.sellingPrice,
+              receivedAt: new Date(),
+              status: 'active'
+            }]
+          } : {})
+        } as any);
+        this.bulkUploadResults.push(`✅ ${row.productName} (${row.skuId}) imported.`);
+        successCount++;
+      } catch (err: any) {
+        console.error('Bulk import row error:', err, row);
+        this.bulkUploadResults.push(`❌ ${row.productName} (${row.skuId}): ${err?.message || err}`);
+        errorCount++;
+      }
+    }
+    this.bulkImporting = false;
+    if (successCount > 0) {
+      await this.productService.refreshProducts(this.bulkStoreId);
+    }
+    if (errorCount === 0) {
+      this.toastService.success(`✅ Imported ${successCount} products successfully!`);
+      this.closeBulkUploadModal();
+    } else {
+      this.toastService.error(`Imported ${successCount} products. ${errorCount} failed — check console.`);
     }
   }
 

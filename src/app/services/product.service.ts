@@ -1159,7 +1159,7 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
           productName: baseData.productName || '',
           companyId: companyId,
           storeId: baseData.storeId || '',
-          batchNumber: batchItem.batchNumber || undefined,
+          batchNumber: batchItem.batchNumber || null,
           batchId: batchId,
           quantity: Number(batchItem.quantity || 0),
           unitPrice: Number(batchItem.unitPrice || 0),
