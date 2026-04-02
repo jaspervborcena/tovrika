@@ -1,7 +1,7 @@
 {
   "projects": {
     "dev": "jasperpos-dev",
-    "prod": "tovrika-aab21"
+    "prod": "jasperpos-1dfd5"
   },
   "targets": {
     "jasperpos-dev": {
