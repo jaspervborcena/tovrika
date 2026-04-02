@@ -1207,85 +1207,11 @@ public async restockOrderAndInventoryTransactional(orderId: string, performedBy 
   public async getOrderSellingTracking(orderId: string): Promise<any[]> {
     if (!orderId) return [];
     try {
-      const currentUser = this.authService.getCurrentUser();
-      if (!currentUser) {
-        console.warn('No authenticated user for manage_item_status request');
-        return [];
-      }
-
-      // Get the current store ID from auth service permissions
-      const currentPermission = this.authService.getCurrentPermission();
-      const currentStoreId = currentPermission?.storeId;
-      if (!currentStoreId) {
-        console.warn('No current store ID available for manage_item_status request');
-        return [];
-      }
-
-      // Use HttpClient so auth interceptor can automatically add Authorization header
-      const data = await this.http.post<any>(`${environment.api.baseUrl}/manage_item_status`, {
-        storeId: currentStoreId,
-        orderId: orderId
-      }, {
-        headers: {
-          'Content-Type': 'application/json'
-        }
-      }).toPromise();
-      
-      // The Cloud Function returns: { success: true, storeId, orderId, count, rows: [...] }
-      // Each row contains: productName, SKU, quantity, discountType, discount, vat, isVatApplicable, isVatExempt, total, updatedAt, status
-      let results = [];
-      
-      if (Array.isArray(data)) {
-        // Direct array response
-        results = data;
-      } else if (data.rows && Array.isArray(data.rows)) {
-        // Response with rows property (current format)
-        results = data.rows;
-      } else if (data.results && Array.isArray(data.results)) {
-        // Alternative format with results property
-        results = data.results;
-      } else if (data.data && Array.isArray(data.data)) {
-        // Alternative format with data property
-        results = data.data;
-      } else {
-        console.warn('❌ Unexpected Cloud Function response format:', data);
-        results = [];
-      }
-      
-      console.log('✅ Normalized results:', results.length, 'tracking entries');
-      // Deduplicate near-identical entries to avoid UI duplicates
-      const deduped: any[] = [];
-      const seen = new Set<string>();
-
-      for (const r of results) {
-        // Build a stable key from the most likely identifying fields
-        const productName = (r.productName || r.product || '').toString();
-        const sku = (r.SKU || r.sku || r.skuCode || '').toString();
-        const qty = (r.quantity || r.qty || '').toString();
-        const price = (r.price || r.unitPrice || r.total || r.totalAmount || '').toString();
-        const key = `${productName}::${sku}::${qty}::${price}`;
-
-        if (!seen.has(key)) {
-          seen.add(key);
-          deduped.push(r);
-        }
-      }
-
-      console.log('✅ Normalized results:', results.length, 'tracking entries -> deduped:', deduped.length);
-      return deduped;
-
+      const fallback = await this.ordersSellingTrackingService.fetchTrackingEntries(orderId);
+      return fallback;
     } catch (e) {
-      console.error('💥 Error calling manage_item_status Cloud Function:', e);
-      this.logger.warn('Failed to fetch orderSellingTracking via Cloud Function', { area: 'orders', payload: { orderId, error: String(e) } });
-      // Fallback: attempt to read directly from Firestore 'ordersSellingTracking' collection
-      try {
-        const fallback = await this.ordersSellingTrackingService.fetchTrackingEntries(orderId);
-        console.info('Fallback fetched tracking entries from Firestore:', fallback.length);
-        return fallback;
-      } catch (fbErr) {
-        this.logger.warn('Fallback to Firestore ordersSellingTracking failed', { area: 'orders', payload: { orderId, error: String(fbErr) } });
-        return [];
-      }
+      this.logger.warn('Failed to fetch orderSellingTracking from Firestore', { area: 'orders', payload: { orderId, error: String(e) } });
+      return [];
     }
   }
 
