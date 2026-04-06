@@ -1617,7 +1617,7 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
           createdAt: new Date(),
           createdBy: ctx.cashierId,
           uid: ctx.cashierId,
-          status: 'pending',
+          status: 'processing',
 
           itemIndex: idx,
           orderDetailsId: (it as any).orderDetailsId || undefined,
