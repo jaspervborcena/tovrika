@@ -1613,17 +1613,6 @@ export class SalesSummaryComponent implements OnInit {
     async exportSalesSummaryToExcel(): Promise<void> {
       this.exporting.set(true);
       try {
-        // Silent backfill: recreate missing tracking docs, then fill product fields
-        try {
-          const storeId = this.selectedStoreId() || this.authService.getCurrentPermission()?.storeId || '';
-          const companyId = this.authService.getCurrentPermission()?.companyId || '';
-          if (storeId && companyId) {
-            await this.ordersSellingTrackingService.backfillMissingOrderTracking(storeId, companyId, this.filteredOrders());
-          }
-        } catch (e) { /* non-fatal */ }
-        try {
-          await this.ordersSellingTrackingService.bulkBackfillOrderSellingTrackingProductFields();
-        } catch (e) { /* non-fatal */ }
         // Validate date range (max 31 days)
         const from = new Date(this.fromDate);
         const to = new Date(this.toDate);
