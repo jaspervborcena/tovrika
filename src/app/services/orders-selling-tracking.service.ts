@@ -80,7 +80,7 @@ export class OrdersSellingTrackingService {
     const errors: any[] = [];
     let updated = 0;
     try {
-      const q = query(collection(this.firestore, 'ordersSellingTracking'), where('orderId', '==', orderId), where('status', '==', 'processing'));
+      const q = query(collection(this.firestore, 'ordersSellingTracking'), where('orderId', '==', orderId), where('status', 'in', ['pending', 'processing']));
       const snaps = await getDocs(q as any);
       for (const s of snaps.docs) {
         const id = s.id;
@@ -114,7 +114,7 @@ export class OrdersSellingTrackingService {
       const pending = await this.offlineDocService.getPendingDocuments();
       for (const pd of pending) {
         try {
-          if (pd.collectionName === 'ordersSellingTracking' && pd.data && pd.data.orderId === orderId && pd.data.status === 'processing') {
+          if (pd.collectionName === 'ordersSellingTracking' && pd.data && pd.data.orderId === orderId && (pd.data.status === 'pending' || pd.data.status === 'processing')) {
             // Update the pending offline document to completed locally (this uses updateDocument which will update the pending queue)
             await this.offlineDocService.updateDocument('ordersSellingTracking', pd.id, { status: 'completed', updatedBy: completedBy || pd.data.createdBy || 'system' });
             updated++;
