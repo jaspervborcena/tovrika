@@ -1,4 +1,5 @@
 import { Injectable, inject } from '@angular/core';
+import { environment } from '../../environments/environment';
 import { 
   Firestore, 
   doc, 
@@ -256,7 +257,8 @@ export class InvoiceService {
           paymentDescription: 'Cash Payment',
           paymentType: 'Cash'
         },
-        tableNumber: tableNumber || '' // Add table number at root level
+        tableNumber: tableNumber || '', // Add table number at root level
+        version: environment.version
       };
 
       console.log('🔥 Main order structure prepared (pre-transaction) for orderId:', orderDocRef.id);
@@ -524,6 +526,7 @@ export class InvoiceService {
           paymentType: 'Cash'
         },
         tableNumber: tableNumber || '', // Add table number at root level
+        version: environment.version,
         _offlineId: tempOrderId,
         _offlineCreated: true
       };

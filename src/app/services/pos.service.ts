@@ -923,10 +923,10 @@ export class PosService {
       );
       
       if (this.networkService.isOnline()) {
-        // Add short timeout (1s) only when online
+        // Add timeout only when online to prevent indefinite hangs
         const ledgerRes: any = await Promise.race([
           ledgerPromise,
-          new Promise((_, reject) => setTimeout(() => reject(new Error('Ledger recording timeout')), 1000))
+          new Promise((_, reject) => setTimeout(() => reject(new Error('Ledger recording timeout')), 10000))
         ]);
         console.log('✅ Ledger entry created:', ledgerRes?.id);
       } else {
@@ -947,10 +947,10 @@ export class PosService {
       const trackingPromise = this.ordersSellingTrackingService.markOrderTrackingCompleted(orderId, userId);
       
       if (this.networkService.isOnline()) {
-        // Add short timeout (1s) only when online
+        // Add timeout only when online to prevent indefinite hangs
         const markRes = await Promise.race([
           trackingPromise,
-          new Promise((_, reject) => setTimeout(() => reject(new Error('Tracking update timeout')), 1000))
+          new Promise((_, reject) => setTimeout(() => reject(new Error('Tracking update timeout')), 10000))
         ]) as any;
         
         if (markRes?.errors?.length) {
@@ -1332,9 +1332,17 @@ export class PosService {
         return {
           productId: ci.productId,
           productName: ci.productName,
+          skuId: ci.skuId,
           quantity: ci.quantity,
           unitPrice: ci.sellingPrice,
           lineTotal: ci.total,
+          costPrice: ci.costPrice ?? 0,
+          discount: ci.discountAmount,
+          discountType: ci.discountType,
+          vat: ci.vatAmount,
+          isVatExempt: ci.isVatExempt,
+          tags: ci.tags,
+          tagLabels: ci.tagLabels,
           isStockTracked
         };
       }));
