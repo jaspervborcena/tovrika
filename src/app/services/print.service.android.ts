@@ -624,6 +624,7 @@ export class PrintServiceAndroid {
     commands += '\x1B\x61\x01'; // Center alignment
     commands += 'Thank you for your purchase!\n';
     commands += 'Please come again.\n';
+    commands += 'This document is not valid for claim of input tax.\n';
     commands += '\x1B\x61\x00'; // Reset alignment
     commands += '\n\n\n\n'; // Extra feed for complete printing
     commands += '\x1D\x56\x41'; // Cut paper
@@ -1288,6 +1289,7 @@ export class PrintServiceAndroid {
       <div class="footer-section no-break">
         <div>Thank you for your purchase!</div>
         <div>Please come again.</div>
+        <div>This document is not valid for claim of input tax.</div>
         <br>
         <div style="margin-top: 10px;">&nbsp;</div>
       </div>

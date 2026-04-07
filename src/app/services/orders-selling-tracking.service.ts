@@ -1,4 +1,5 @@
 import { Injectable, inject } from '@angular/core';
+import { environment } from '../../environments/environment';
 import { Firestore, collection, query, where, Timestamp } from '@angular/fire/firestore';
 import { getDocs, getDoc, doc, setDoc, updateDoc, runTransaction, orderBy, limit, getAggregateFromServer, count, addDoc } from 'firebase/firestore';
 import { toDateValue } from '../core/utils/date-utils';
@@ -1316,6 +1317,10 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
       unitPrice: number;
       lineTotal: number;
       // Optional fields supported for richer tracking
+      costPrice?: number;
+      skuId?: string;
+      tags?: string[];
+      tagLabels?: string[];
       discount?: number;
       discountType?: 'percentage' | 'fixed' | 'none' | string;
       vat?: number;
@@ -1594,17 +1599,26 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
             totalCost += batchTotal;
           });
           actualCost = totalCost / it.quantity;
+          // If batches had zero cost, fall back to item costPrice
+          if (actualCost <= 0 && (it.costPrice ?? 0) > 0) {
+            actualCost = it.costPrice!;
+          }
         } else {
-          // No batches - get costPrice from product
-          try {
-            const productRef = doc(this.firestore, 'products', it.productId);
-            const productSnap = await getDoc(productRef);
-            if (productSnap.exists()) {
-              const productData = productSnap.data();
-              actualCost = Number(productData?.['costPrice'] || 0);
+          // No batches - prefer costPrice already on the item (from CartItem),
+          // then fall back to a Firestore product read.
+          if ((it.costPrice ?? 0) > 0) {
+            actualCost = it.costPrice!;
+          } else {
+            try {
+              const productRef = doc(this.firestore, 'products', it.productId);
+              const productSnap = await getDoc(productRef);
+              if (productSnap.exists()) {
+                const productData = productSnap.data();
+                actualCost = Number(productData?.['costPrice'] || 0);
+              }
+            } catch (error) {
+              console.warn(`⚠️ Failed to fetch product costPrice for tracking:`, error);
             }
-          } catch (error) {
-            console.warn(`⚠️ Failed to fetch product costPrice for tracking:`, error);
           }
         }
 
@@ -1613,6 +1627,7 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
           companyId: ctx.companyId,
           storeId: ctx.storeId,
           orderId: ctx.orderId,
+          invoiceNumber: ctx.invoiceNumber || '',
           batchNumber: (it as any).batchNumber || 1,
           createdAt: new Date(),
           createdBy: ctx.cashierId,
@@ -1624,26 +1639,27 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
           productId: it.productId,
           productName: it.productName,
           productCode: (it as any).productCode || undefined,
-          skuId: (it as any).skuId || (it as any).sku || undefined,
+          skuId: it.skuId || (it as any).sku || undefined,
           cost: actualCost, // Actual weighted average cost from batches
           price: it.unitPrice,
           quantity: it.quantity,
-          discount: (it as any).discount ?? 0,
-          discountType: (it as any).discountType ?? 'none',
-          vat: (it as any).vat ?? 0,
+          discount: it.discount ?? 0,
+          discountType: it.discountType ?? 'none',
+          vat: it.vat ?? 0,
           total: it.lineTotal,
-          isVatExempt: !!((it as any).isVatExempt),
+          isVatExempt: !!(it.isVatExempt),
           runningBalanceTotalStock: productTotalStock,  // Capture product's totalStock at transaction time
           isStockTracked: productIsStockTracked,  // Track if product stock is tracked
 
-          // New fields from product
+          // Product classification — prefer item values (from CartItem), fall back to product service
           category: product?.category,
-          tagLabels: product?.tagLabels,
-          tags: product?.tags,
+          tagLabels: it.tagLabels ?? product?.tagLabels,
+          tags: it.tags ?? product?.tags,
 
           cashierId: ctx.cashierId,
           cashierEmail: ctx.cashierEmail,
           cashierName: ctx.cashierName,
+          version: environment.version,
           number: (it as any).number || undefined,
           
           // Mark as offline-created if offline

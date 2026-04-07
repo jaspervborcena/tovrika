@@ -1,7 +1,7 @@
 // DEVELOPMENT ENVIRONMENT - Uses jasperpos-dev Firebase project
 export const environment = {
   production: false,
-  version: '1.0.0',
+  version: '1.0.1',
   firebase: {
     apiKey: "AIzaSyABpbnPUjr16LnLU8WSJ1BmVvWy0tTmaI4",
     authDomain: "jasperpos-dev.firebaseapp.com",

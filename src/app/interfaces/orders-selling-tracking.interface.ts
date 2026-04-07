@@ -12,6 +12,7 @@ export interface OrdersSellingTrackingDoc {
   createdAt: Date;
   createdBy: string; // uid of creator
   orderId: string;
+  invoiceNumber?: string;
   status: OrderDetailsStatus | string;
   storeId: string;
   uid?: string; // convenience alias for createdBy (used in security rules)
@@ -46,4 +47,13 @@ export interface OrdersSellingTrackingDoc {
   cashierId?: string;
   cashierEmail?: string;
   cashierName?: string;
+
+  // Product classification fields
+  category?: string;
+  tags?: string[];
+  tagLabels?: string[];
+  number?: number;
+
+  // App version at time of transaction
+  version?: string;
 }
