@@ -461,7 +461,7 @@ export class ThermalPrinterService {
     commands.push(0x1B, 0x61, 0x01);
     
     // Thank you
-    const thanks = 'Thank you for your purchase!\nPlease come again.';
+    const thanks = 'Thank you for your purchase!\nPlease come again.\nThis document is not valid for claim of input tax.';
     for (let i = 0; i < thanks.length; i++) {
       commands.push(thanks.charCodeAt(i));
     }

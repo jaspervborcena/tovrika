@@ -625,19 +625,20 @@ export class InventoryComponent implements OnInit {
         
         // Check if same product and same date
         const sameProduct = (r.productId && otherRow.productId === r.productId) || 
+                           (r.skuId && otherRow.skuId === r.skuId) ||
                            (r.sku && otherRow.sku === r.sku);
         const sameDate = rowDateStr === otherDateStr;
         
         if (sameProduct && sameDate) {
           const stock = Number(otherRow.runningBalanceTotalStock);
-          console.log('Comparing stocks:', { current: maxStock, other: stock, sku: r.sku });
+          console.log('Comparing stocks:', { current: maxStock, other: stock, sku: r.skuId || r.sku });
           if (stock > maxStock) {
             maxStock = stock;
           }
         }
       });
       
-      console.log('Final max stock for', r.sku, ':', maxStock);
+      console.log('Final max stock for', r.skuId || r.sku, ':', maxStock);
       
       const beginningStock = maxStock;
       const remainingStock = beginningStock - (r.quantity || 0);
@@ -649,7 +650,7 @@ export class InventoryComponent implements OnInit {
         performedBy: r.performedBy,
         productName: r.productName || '',
         productCode: r.productCode || '',
-        sku: r.sku || '',
+        sku: r.skuId || r.sku || '',
         costPrice: r.costPrice || 0,
         sellingPrice: r.sellingPrice || 0,
         quantity: r.quantity || 0,
@@ -815,7 +816,7 @@ export class InventoryComponent implements OnInit {
     const groups = new Map<string, AggregatedInventoryRow & { productId?: string }>();
     
     rows.forEach(row => {
-      const key = row.sku;
+      const key = row.sku || row.productId || 'unknown';
       
       if (!groups.has(key)) {
         // First transaction for this SKU

@@ -1,6 +1,6 @@
 // PRODUCTION ENVIRONMENT - Uses jasperpos-1dfd5 Firebase project
 export const environment = {
-  production: true,  version: '1.0.0',  firebase: {
+  production: true,  version: '1.0.1',  firebase: {
     apiKey: "AIzaSyDNIYovvzNKVj40h99kxOHu5yfEUzx7OYA",
     authDomain: "jasperpos-1dfd5.firebaseapp.com",
     projectId: "jasperpos-1dfd5",

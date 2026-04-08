@@ -332,13 +332,15 @@ export class InventoryService {
     const col = collection(this.firestore, 'ordersSellingTracking');
     const out: InventoryRow[] = [];
     try {
-      // Only include completed status for sales
-      const statusFilter = where('status', '==', 'completed');
+      // Include completed and processing status for sales (processing docs are sold items pending completion)
+      const statusFilter = where('status', 'in', ['completed', 'processing']);
       const q = query(col, statusFilter, ...baseFilters, orderBy('createdAt', 'desc'), limit(fetchLimit));
       const snaps = await getDocs(q as any);
       
       for (const s of snaps.docs) {
         const data: any = s.data() || {};
+        // Skip non-stock-tracked items — no inventory deduction was done for these
+        if (data.isStockTracked === false) continue;
         const productId: string = data.productId;
         const quantity: number = Number(data.quantity || 0);
         const product = this.productService.getProduct(productId);
@@ -429,8 +431,8 @@ export class InventoryService {
       return out;
     } catch (err) {
       console.warn('fetchRowsFromOrdersSellingTracking query failed, trying fallback:', err);
-      // Fallback with simplified query
-      const statusFilter = where('status', '==', 'completed');
+      // Fallback with simplified query - also include processing
+      const statusFilter = where('status', 'in', ['completed', 'processing']);
       const fallbackQ = query(col, statusFilter, orderBy('createdAt', 'desc'), limit(fetchLimit));
       const snapsFallback = await getDocs(fallbackQ as any);
       
@@ -449,7 +451,9 @@ export class InventoryService {
           if (updatedAtRange.start && createdAtDate < updatedAtRange.start) continue;
           if (updatedAtRange.end && createdAtDate > updatedAtRange.end) continue;
         }
-        
+        // Skip non-stock-tracked items in fallback too
+        if (data.isStockTracked === false) continue;
+
         const productId: string = data.productId;
         const quantity: number = Number(data.quantity || 0);
         const product = this.productService.getProduct(productId);
