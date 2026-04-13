@@ -275,7 +275,8 @@ export class OrdersSellingTrackingService {
         createdAt: this.networkService.isOnline() ? onlineCreatedAt : offlineCreatedAt,
         createdBy: returnedBy || data.updatedBy || data.createdBy || 'system',
         updatedAt: this.networkService.isOnline() ? onlineCreatedAt : offlineCreatedAt,
-        updatedBy: returnedBy || data.updatedBy || data.createdBy || 'system'
+        updatedBy: returnedBy || data.updatedBy || data.createdBy || 'system',
+        version: environment.version
       };
       if (reason) newDoc.updateReason = reason;
       
@@ -367,7 +368,8 @@ async markOrderTrackingRefunded(orderId: string, refundedBy?: string, reason?: s
         createdAt: this.networkService.isOnline() ? onlineCreatedAt : offlineCreatedAt,
         createdBy: refundedBy || data.updatedBy || data.createdBy || 'system',
         updatedAt: this.networkService.isOnline() ? onlineCreatedAt : offlineCreatedAt,
-        updatedBy: refundedBy || data.updatedBy || data.createdBy || 'system'
+        updatedBy: refundedBy || data.updatedBy || data.createdBy || 'system',
+        version: environment.version
       };
       if (reason) newDoc.updateReason = reason;
       
@@ -520,7 +522,8 @@ async createPartialTrackingFromDoc(trackingId: string, newStatus: string, qty: n
       createdAt: this.networkService.isOnline() ? onlineCreatedAt : offlineCreatedAt,
       createdBy: createdBy || data.updatedBy || data.createdBy || 'system',
       updatedAt: this.networkService.isOnline() ? onlineCreatedAt : offlineCreatedAt,
-      updatedBy: createdBy || data.updatedBy || data.createdBy || 'system'
+      updatedBy: createdBy || data.updatedBy || data.createdBy || 'system',
+      version: environment.version
     };
 
     const newStatusLower = (newStatus || '').toString().toLowerCase();
@@ -739,7 +742,8 @@ async markOrderTrackingDamaged(orderId: string, damagedBy?: string, reason?: str
         createdAt: this.networkService.isOnline() ? onlineCreatedAt : offlineCreatedAt,
         createdBy: damagedBy || data.updatedBy || data.createdBy || 'system',
         updatedAt: this.networkService.isOnline() ? onlineCreatedAt : offlineCreatedAt,
-        updatedBy: damagedBy || data.updatedBy || data.createdBy || 'system'
+        updatedBy: damagedBy || data.updatedBy || data.createdBy || 'system',
+        version: environment.version
       };
       if (reason) newDoc.updateReason = reason;
 
@@ -1045,7 +1049,8 @@ async createUnpaidTrackingFromOrder(
         createdAt: now,
         createdBy: unpaidBy || 'system',
         updatedAt: now,
-        updatedBy: unpaidBy || 'system'
+        updatedBy: unpaidBy || 'system',
+        version: environment.version
       };
       if (reason) newDoc.updateReason = reason;
 
@@ -1140,7 +1145,8 @@ async markOrderTrackingUnpaid(orderId: string, unpaidBy?: string, reason?: strin
         createdAt: now,
         createdBy: unpaidBy || data.updatedBy || data.createdBy || 'system',
         updatedAt: now,
-        updatedBy: unpaidBy || data.updatedBy || data.createdBy || 'system'
+        updatedBy: unpaidBy || data.updatedBy || data.createdBy || 'system',
+        version: environment.version
       };
       if (reason) newDoc.updateReason = reason;
 
@@ -1238,7 +1244,8 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
         createdAt: now,
         createdBy: recoveredBy || data.updatedBy || data.createdBy || 'system',
         updatedAt: now,
-        updatedBy: recoveredBy || data.updatedBy || data.createdBy || 'system'
+        updatedBy: recoveredBy || data.updatedBy || data.createdBy || 'system',
+        version: environment.version
       };
       if (reason) newDoc.updateReason = reason;
 
@@ -2154,7 +2161,8 @@ console.log('getTrackedItemsForStoreAndDateRange: querying with startDate=', thi
           updatedBy: cashierId,
           createdAt: orderDate,
           updatedAt: orderDate,
-          _backfilled: true
+          _backfilled: true,
+          version: environment.version
         };
 
         try {
