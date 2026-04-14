@@ -126,6 +126,55 @@ export class SubscriptionService {
     } as any);
   }
 
+  /** Immediately activate a subscription paid via PayPal and sync the store's subscriptionEndDate */
+  async createPaidPayPal(
+    companyId: string,
+    storeId: string,
+    uid: string,
+    planType: 'basic' | 'standard' | 'premium',
+    durationMonths: number,
+    amountPaid: number,
+    paypalTxId: string,
+    payerName: string,
+    payerEmail: string
+  ): Promise<string> {
+    const startDate = new Date();
+    const endDate = new Date(startDate);
+    endDate.setMonth(endDate.getMonth() + durationMonths);
+
+    // 1. Create active subscription doc
+    const subId = await this.createSubscription({
+      subscriptionId: crypto.randomUUID(),
+      companyId,
+      storeId,
+      uid,
+      planType,
+      status: 'active',
+      startDate,
+      endDate,
+      isTrial: false,
+      paymentMethod: 'credit_card',
+      paymentReference: paypalTxId,
+      amountPaid,
+      currency: 'PHP',
+      features: this.getDefaultFeatures()
+    } as any);
+
+    // 2. Sync subscriptionEndDate on the store doc so access checks pick it up immediately
+    try {
+      const storeRef = doc(this.firestore, 'stores', storeId);
+      await updateDoc(storeRef, {
+        subscriptionEndDate: Timestamp.fromDate(endDate),
+        updatedAt: Timestamp.now()
+      });
+    } catch (e) {
+      // Non-fatal: subscription doc is the source of truth; store field is a convenience cache
+      console.warn('⚠️ Could not sync subscriptionEndDate on store doc:', e);
+    }
+
+    return subId;
+  }
+
   /** Update an existing subscription by document id */
   async updateSubscription(docId: string, updates: Partial<SubDoc>): Promise<void> {
     const now = Timestamp.now();

@@ -7,5 +7,14 @@
     "pathRewrite": {
       "^/api": ""
     }
+  },
+  "/paypal": {
+    "target": "https://asia-east1-jasperpos-1dfd5.cloudfunctions.net",
+    "secure": true,
+    "changeOrigin": true,
+    "logLevel": "info",
+    "pathRewrite": {
+      "^/paypal": ""
+    }
   }
 }

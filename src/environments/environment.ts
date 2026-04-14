@@ -21,5 +21,12 @@ export const environment = {
   inventory: {
     // reconciliationMode: 'legacy' uses client-side FIFO; 'recon' defers to Cloud Function with tracking
     reconciliationMode: 'recon' as 'legacy' | 'recon'
+  },
+  paypal: {
+    // Sandbox client ID – safe to expose in frontend; secret stays in functions/.env
+    clientId: 'ASj0btqJ9ctHcaXO19btNq5AiAPcvMJ-V-xqq9atKiuiJ2uGQ0JoAHlCXWwM_m5_Zdmn9CQkYxQkiQGu',
+    sandbox: true,
+    // Proxied via proxy.conf.json → asia-east1-jasperpos-dev.cloudfunctions.net/paypal
+    apiUrl: '/paypal'
   }
 };

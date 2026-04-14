@@ -639,29 +639,33 @@ async updateOrderStatus(orderId: string, status: string, reason?: string): Promi
       }
       
       try {
-        const trackingRef = collection(this.firestore, 'ordersSellingTracking');
-        
-        // Query ALL tracking entries for this order (don't filter by status)
-        // We'll sum up all original quantities regardless of current status
-        const trackingQ = query(trackingRef, where('orderId', '==', orderId));
-        const trackingSnap = await getDocs(trackingQ as any);
-        
-        console.log(`🔍 OrderService: Querying ALL ordersSellingTracking for orderId=${orderId}`);
-        console.log(`📊 Found ${trackingSnap?.docs?.length || 0} total tracking entries`);
-        
-        if (trackingSnap && !trackingSnap.empty) {
-          for (const d of trackingSnap.docs) {
-            const data: any = d.data() || {};
-            const lineTotal = Number(data.total || data.lineTotal || (Number(data.price || 0) * Number(data.quantity || 0)) || 0);
-            const itemQty = Number(data.quantity || 0);
-            amount += lineTotal;
-            qty += itemQty;
-          }
-          console.log(`✅ Total from tracking: amount=${amount}, qty=${qty}`);
-        } else {
-          console.log(`⚠️ No tracking entries found, using order document for amounts`);
+        // Use orderDetails as the authoritative quantity source.
+        // ordersSellingTracking can have multiple event-copy docs (unpaid, recovered, returned, etc.)
+        // for the same orderId which would double/triple-count the qty if summed together.
+        const orderDetailsQ = query(
+          collection(this.firestore, 'orderDetails'),
+          where('orderId', '==', orderId)
+        );
+        const orderDetailsSnap = await getDocs(orderDetailsQ as any);
 
-          // Fallback to order document if tracking entries are not yet present
+        console.log(`🔍 OrderService: Querying orderDetails for orderId=${orderId}`);
+        console.log(`📊 Found ${orderDetailsSnap?.docs?.length || 0} orderDetails batch(es)`);
+
+        if (orderDetailsSnap && !orderDetailsSnap.empty) {
+          for (const od of orderDetailsSnap.docs) {
+            const data: any = od.data() || {};
+            if (Array.isArray(data.items)) {
+              for (const item of data.items) {
+                qty += Number(item.quantity || 0);
+                amount += Number(item.total || (Number(item.price || 0) * Number(item.quantity || 0)));
+              }
+            }
+          }
+          console.log(`✅ Total from orderDetails: amount=${amount}, qty=${qty}`);
+        } else {
+          console.log(`⚠️ No orderDetails found, falling back to order document amounts`);
+
+          // Fallback to order document financial totals (qty may be 0 but amount still usable)
           const orderRef = clientDoc(this.firestore, 'orders', orderId);
           const orderSnap = await getDoc(orderRef as any);
           if (orderSnap && orderSnap.exists()) {

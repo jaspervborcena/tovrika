@@ -1621,10 +1621,10 @@ export class SalesSummaryComponent implements OnInit {
         alert('Please select a date range of 31 days or less.');
         return;
       }
-      // Get orders in range (filteredOrders is already sorted and filtered)
-      const orders = this.filteredOrders();
+      // Get completed orders only — matches the UI Total Orders card (status === 'completed')
+      const orders = this.filteredOrders().filter(o => o.status === 'completed');
       if (!orders.length) {
-        this.toast.warning('No sales data to export for the selected range.');
+        this.toast.warning('No completed sales data to export for the selected range.');
         return;
       }
       // Prepare sales details sheet (orders)
