@@ -121,3 +121,24 @@ input[type="text"], input[type="number"], select { padding: 8px 10px; border: 1p
   background: #fff;
 }
 .qr-preview-note { color: #4b5563; font-size: 12px; }
+
+/* PayPal / Credit Card tab styles */
+.paypal-btn-wrapper {
+  margin: 12px 0 8px;
+  min-height: 48px;
+}
+.card-amount-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  font-size: 0.95rem;
+  color: #374151;
+}
+.card-amount-value { font-size: 1.2rem; color: #1d4ed8; }
+.paypal-status {
+  margin: 8px 0;
+  font-size: 0.9rem;
+}
+.paypal-status .success { color: #15803d; }
+.paypal-status .error { color: #b91c1c; }

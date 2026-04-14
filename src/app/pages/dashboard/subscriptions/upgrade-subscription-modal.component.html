@@ -20,7 +20,7 @@
       <div class="grid-2">
         <div class="section">
           <label>Plan</label>
-          <select [(ngModel)]="selectedTier">
+          <select [ngModel]="selectedTier()" (ngModelChange)="selectedTier.set($event)">
             <option value="basic">Basic Plan (₱599/mo)</option>
             <option value="standard">Standard Plan (₱1,099/mo)</option>
             <option value="premium">Premium Plan (₱3,999/mo)</option>
@@ -50,88 +50,41 @@
       </div>
 
       <h4 class="section-heading">Payment Details</h4>
-      <div class="tabs">
-        <button [class.active]="activeTab === 'gcash'" (click)="onTabChange('gcash')">GCash</button>
-      </div>
 
       <div class="tab-content">
-        <p class="help" *ngIf="activeTab === 'gcash'">Scan the GCash QR or send to the official account, then upload your payment screenshot.</p>
-        
+        <p class="help">Pay securely with any Visa, Mastercard, or credit/debit card via PayPal. No PayPal account needed.</p>
 
-        <!-- QR image / placeholder -->
-  <div class="qr-wrapper" *ngIf="activeTab !== 'paypal'">
-          <button *ngIf="accountInfo[activeTab].qrUrl" type="button" class="qr-clickable" (click)="openQrPreview()" title="Click to enlarge">
-            <img [src]="accountInfo[activeTab].qrUrl" alt="{{ activeTab | titlecase }} QR" class="qr-image"/>
-          </button>
-          <div *ngIf="!accountInfo[activeTab].qrUrl" class="qr-placeholder">QR not set for {{ activeTab | titlecase }}</div>
-        </div>
-  <p class="hint" *ngIf="accountInfo[activeTab].qrUrl">Tip: Click the QR to view a larger version</p>
+        <!-- Credit / Debit Card via PayPal -->
+        <ng-container>
+          <div class="card-amount-row">
+            <span class="card-amount-label">Amount due:</span>
+            <strong class="card-amount-value">₱{{ finalAmount() }}</strong>
+          </div>
 
-        <div class="payment-details">
-          <div class="detail">
-            <div class="label">{{ accountInfo[activeTab].numberLabel || 'Account Number / Mobile Number' }}</div>
-            <div class="value">{{ accountInfo[activeTab].numberValue || '09XX XXX XXXX' }}</div>
-          </div>
-          <div class="detail">
-            <div class="label">{{ accountInfo[activeTab].nameLabel || 'Account Name' }}</div>
-            <div class="value">{{ accountInfo[activeTab].nameValue || 'Juan Dela Cruz' }}</div>
-          </div>
-        </div>
+          <!-- PayPal SDK renders here -->
+          <div id="paypal-button-container" class="paypal-btn-wrapper"></div>
 
-        <!-- Payer-provided details -->
-        <div class="grid-2 mt-2">
-          <div class="section">
-            <label>Reference ID</label>
-            <input type="text" [(ngModel)]="paymentReference" placeholder="e.g., GCash Ref" required />
-            <div class="error" *ngIf="showErrors && (!paymentReference || !paymentReference.trim())">Reference ID is required.</div>
+          <div class="paypal-status" *ngIf="paypalStatus()">
+            <span [class.success]="paypalStatus() === 'success'" [class.error]="paypalStatus() === 'error'">
+              {{ paypalStatus() === 'success' ? '✅ Payment successful! Submitting your request…' : '❌ Payment failed. Please try again.' }}
+            </span>
           </div>
-          <div class="section" *ngIf="activeTab !== 'paypal'">
-            <label>{{ activeTab === 'gcash' ? 'GCash Number' : 'PayMaya Number' }}</label>
-            <input type="text" [(ngModel)]="payerMobile" placeholder="09XX XXX XXXX or account no." required />
-            <div class="error" *ngIf="showErrors && (!payerMobile || !payerMobile.trim())">{{ activeTab === 'gcash' ? 'GCash Number' : 'PayMaya Number' }} is required.</div>
-          </div>
-        </div>
-
-        <div class="grid-2" *ngIf="activeTab !== 'paypal'">
-          <div class="section">
-            <label>Payer Name</label>
-            <input type="text" [(ngModel)]="payerName" placeholder="Full name" required />
-            <div class="error" *ngIf="showErrors && (!payerName || !payerName.trim())">Payer Name is required.</div>
-          </div>
-          <div class="section">
-            <label>Amount</label>
-            <input type="number" min="0.01" step="0.01" [(ngModel)]="amountPaid" placeholder="Defaults to total" required />
-            <div class="error" *ngIf="showErrors && !isAmountValid()">Enter a valid amount greater than 0.</div>
-          </div>
-        </div>
-
-        <div class="section">
-          <label>Description</label>
-          <textarea rows="2" [(ngModel)]="paymentDescription" placeholder="Optional note about this payment"></textarea>
-        </div>
+          <p class="hint">Powered by PayPal. You can pay with any credit or debit card — no PayPal account required.</p>
+        </ng-container>
       </div>
 
       <!-- Amount to pay summary -->
       <div class="pay-summary">
         <div class="title">Amount to Pay</div>
         <div class="value">₱{{ finalAmount() }}</div>
-        <div class="note">You will be charged ₱{{ finalAmount() }} for {{ durationMonths() }} month(s) of {{ selectedTier | titlecase }} plan.</div>
+        <div class="note">You will be charged ₱{{ finalAmount() }} for {{ durationMonths() }} month(s) of {{ selectedTier() | titlecase }} plan.</div>
       </div>
 
-      <div class="section">
-        <label>Payment Receipt Screenshot</label>
-        <input type="file" accept="image/*" (change)="onFileSelected($event)" />
-        <p class="hint">.jpg or .png up to ~5MB</p>
-        <div class="error" *ngIf="showErrors && !receiptFile">Receipt screenshot is required.</div>
-      </div>
     </div>
 
     <!-- Footer -->
     <div class="modal-footer">
       <button class="btn-cancel" (click)="close()">Cancel</button>
-      <button class="btn-primary" [disabled]="submitting() || !canSubmit()" (click)="submit()">
-        {{ submitting() ? 'Submitting…' : 'Submit Proof & Upgrade' }}
-      </button>
     </div>
   </div>
   
