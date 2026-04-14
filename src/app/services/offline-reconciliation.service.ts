@@ -730,8 +730,15 @@ export class OfflineReconciliationService {
       let totalAmount = 0;
       let totalQuantity = 0;
 
+      // Event-copy statuses must be excluded — docs with these statuses are created as copies
+      // (e.g. unpaid tracking from createUnpaidTrackingFromOrder, recovered from markOrderTrackingRecovered)
+      // and share the same orderId, so summing them would double-count the qty in the completed ledger.
+      const eventCopyStatuses = ['unpaid', 'recovered', 'returned', 'refunded', 'damaged'];
+
       trackingSnap.docs.forEach(doc => {
         const data = doc.data() as any;
+        const docStatus = (data.status || '').toLowerCase();
+        if (eventCopyStatuses.includes(docStatus)) return; // skip event-copy docs
         totalAmount += Number(data.total || 0);
         totalQuantity += Number(data.quantity || 0);
       });

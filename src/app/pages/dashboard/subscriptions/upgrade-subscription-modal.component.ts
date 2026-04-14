@@ -1,19 +1,20 @@
-import { Component, EventEmitter, Input, Output, signal, computed, inject, OnChanges, SimpleChanges } from '@angular/core';
+import { Component, EventEmitter, Input, Output, signal, computed, inject, OnChanges, SimpleChanges, AfterViewChecked } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Firestore, collection, addDoc } from '@angular/fire/firestore';
 import { AuthService } from '../../../services/auth.service';
 import { SubscriptionService } from '../../../services/subscription.service';
-import { BillingService } from '../../../services/billing.service';
 import { StoreService } from '../../../services/store.service';
 import { getPlanByTier, calculateFinalAmount, calculateExpiryDate } from '../../../shared/config/subscription-plans.config';
 import { CompanyService } from '../../../services/company.service';
 import { ToastService } from '../../../shared/services/toast.service';
 import { SubscriptionRequest } from '../../../interfaces/subscription-request.interface';
 import { OfflineDocumentService } from '../../../core/services/offline-document.service';
+import { PaypalService } from '../../../services/paypal.service';
+import { environment } from '../../../../environments/environment';
 
 type Tier = 'basic' | 'standard' | 'premium';
-type PaymentMethod = 'gcash' | 'paymaya' | 'paypal';
+type PaymentMethod = 'credit_card';
 
 @Component({
   selector: 'app-upgrade-subscription-modal',
@@ -22,15 +23,15 @@ type PaymentMethod = 'gcash' | 'paymaya' | 'paypal';
   templateUrl: './upgrade-subscription-modal.component.html',
   styleUrls: ['./upgrade-subscription-modal.component.css']
 })
-export class UpgradeSubscriptionModalComponent implements OnChanges {
+export class UpgradeSubscriptionModalComponent implements OnChanges, AfterViewChecked {
   private readonly auth = inject(AuthService);
   private readonly subs = inject(SubscriptionService);
-  private readonly billing = inject(BillingService);
   private readonly storeService = inject(StoreService);
   private readonly companyService = inject(CompanyService);
   private readonly toast = inject(ToastService);
   private readonly firestore = inject(Firestore);
   private readonly offlineDocService = inject(OfflineDocumentService);
+  private readonly paypalService = inject(PaypalService);
 
   @Input() isOpen = false;
   @Input() companyId = '';
@@ -48,8 +49,15 @@ export class UpgradeSubscriptionModalComponent implements OnChanges {
   @Output() completed = new EventEmitter<void>();
 
   // UI State
-  activeTab: PaymentMethod = 'gcash';
-  selectedTier: Tier = 'basic';
+  activeTab: PaymentMethod = 'credit_card';
+  paypalStatus = signal<'success' | 'error' | ''>('');
+  private paypalSdkLoaded = false;
+  private paypalButtonsInitializing = false;
+  private paypalClientId: string | null = environment.paypal.clientId || null;
+  private paypalSandbox = environment.paypal.sandbox;
+  private readonly paypalCountryCode = 'PH';
+  private readonly paypalLocale = 'en_PH';
+  selectedTier = signal<Tier>('basic');
   durationMonths = signal(1);
   promoCode = '';
   referralCode = '';
@@ -64,36 +72,15 @@ export class UpgradeSubscriptionModalComponent implements OnChanges {
   paymentDescription: string = '';
   // Validation state
   showErrors = false;
-  // PayPal config (replace with your business handle or dynamic config)
-  private paypalMeHandle = 'yourbusiness'; // TODO: set to your PayPal.Me handle
-  // Card (PayPal) placeholders – do NOT store these values to Firestore
-  cardName: string = '';
-  cardNumber: string = '';
-  cardExpiry: string = '';
-  cardCvv: string = '';
   // QR preview state
   qrPreviewOpen = signal(false);
   qrPreviewUrl = signal<string>('');
 
-  // Display account information per payment method (placeholder values)
-  readonly accountInfo: Record<PaymentMethod, { numberLabel: string; numberValue: string; nameLabel: string; nameValue: string; qrUrl?: string }> = {
-    gcash: {
-      numberLabel: 'Account Number / Mobile Number',
-      numberValue: '0917 301 ****',
-      nameLabel: 'Account Name',
-      nameValue: 'JA***R B.',
-      qrUrl: 'assets/gcashQR.jpg'
-    },
-    paymaya: {
-      numberLabel: 'Account Number / Mobile Number',
-      numberValue: '0917 XXX XX59',
-      nameLabel: 'Account Name',
-      nameValue: 'JASPER BORCENA',
-      qrUrl: 'assets/mayaQR.jpg'
-    },
-    paypal: {
-      numberLabel: 'Card via PayPal',
-      numberValue: 'Use the PayPal button below',
+  // Display account information for the active payment method
+  readonly accountInfo = {
+    credit_card: {
+      numberLabel: 'Credit / Debit Card via PayPal',
+      numberValue: 'Use the PayPal button',
       nameLabel: 'Payment Processor',
       nameValue: 'PayPal',
       qrUrl: ''
@@ -103,7 +90,7 @@ export class UpgradeSubscriptionModalComponent implements OnChanges {
   resolvedCompanyName = signal<string>('');
 
   planPrice = computed(() => {
-    const plan = getPlanByTier(this.selectedTier);
+    const plan = getPlanByTier(this.selectedTier());
     return plan?.price ?? 0;
   });
 
@@ -115,16 +102,191 @@ export class UpgradeSubscriptionModalComponent implements OnChanges {
 
   onTabChange(tab: PaymentMethod) {
     this.activeTab = tab;
+    setTimeout(() => this.initPayPalButtons(), 100);
   }
 
-  // Basic guard to enable/disable submit button
+  private async loadPayPalSdk(): Promise<void> {
+    if (this.paypalSdkLoaded || (window as any)['paypal']) {
+      this.paypalSdkLoaded = true;
+      return;
+    }
+
+    try {
+      const config = await this.paypalService.getClientConfig();
+      this.paypalClientId = config.clientId || config.client_id || this.paypalClientId;
+      if (typeof config.sandbox === 'boolean') {
+        this.paypalSandbox = config.sandbox;
+      }
+      if (config.currency) {
+        this.currency = config.currency;
+      }
+    } catch (err) {
+      console.warn('Falling back to environment PayPal config:', err);
+    }
+
+    if (!this.paypalClientId) {
+      throw new Error('Missing PayPal client configuration');
+    }
+
+    return new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      const sandboxFlags = this.paypalSandbox ? `&debug=false&buyer-country=${this.paypalCountryCode}` : '';
+      script.src = `https://www.paypal.com/sdk/js?client-id=${this.paypalClientId}&currency=${this.currency}&intent=capture&locale=${this.paypalLocale}${sandboxFlags}`;
+      script.onload = () => { this.paypalSdkLoaded = true; resolve(); };
+      script.onerror = () => reject(new Error('Failed to load PayPal SDK'));
+      document.head.appendChild(script);
+    });
+  }
+
+  private async initPayPalButtons(): Promise<void> {
+    if (this.paypalButtonsInitializing) return;
+    this.paypalButtonsInitializing = true;
+
+    try {
+      await this.loadPayPalSdk();
+      const container = document.getElementById('paypal-button-container');
+      if (!container) return;
+      if (container.childElementCount > 0) return;
+
+      const paypal = (window as any)['paypal'];
+      if (!paypal?.Buttons) {
+        throw new Error('PayPal SDK did not load correctly');
+      }
+
+      const buttons = paypal.Buttons({
+        style: { layout: 'vertical', color: 'gold', shape: 'rect', label: 'pay' },
+        // Prefer the secured Cloud Function, but fall back to the PayPal SDK if the API is unavailable
+        createOrder: async (_data: any, actions: any) => {
+          const amount = Number((this.amountPaid ?? this.finalAmount()).toFixed(2));
+          const description = `${this.selectedTier().toUpperCase()} plan - ${this.durationMonths()} month(s)`;
+
+          try {
+            const created = await this.paypalService.createOrder(amount, this.currency, description);
+            const orderId = created?.id || created?.orderID || created?.orderId;
+            if (!orderId) {
+              throw new Error('PayPal order ID was not returned by the API');
+            }
+            return orderId;
+          } catch (apiErr) {
+            console.warn('PayPal createOrder API failed, falling back to SDK:', apiErr);
+            return actions.order.create({
+              intent: 'CAPTURE',
+              application_context: {
+                shipping_preference: 'NO_SHIPPING',
+                user_action: 'PAY_NOW',
+                locale: this.paypalLocale.replace('_', '-')
+              },
+              purchase_units: [{
+                amount: { currency_code: this.currency, value: amount.toFixed(2) },
+                description
+              }]
+            });
+          }
+        },
+        // Prefer backend capture, but fall back to SDK capture if needed
+        onApprove: async (data: any, actions: any) => {
+          try {
+            this.submitting.set(true);
+            const orderId = data?.orderID || data?.orderId;
+            if (!orderId) {
+              throw new Error('Missing PayPal order ID');
+            }
+
+            let captured: any;
+            try {
+              captured = await this.paypalService.captureOrder(orderId);
+            } catch (apiErr) {
+              console.warn('PayPal capture API failed, falling back to SDK:', apiErr);
+              captured = await actions.order.capture();
+            }
+            // Extract payer & transaction info from captured result
+            const txId: string = captured?.id || captured?.purchase_units?.[0]?.payments?.captures?.[0]?.id || '';
+            const payer = captured?.payer;
+            this.paymentReference = txId;
+            this.payerName = payer?.name
+              ? `${payer.name.given_name || ''} ${payer.name.surname || ''}`.trim()
+              : 'PayPal Customer';
+            this.payerMobile = payer?.email_address || '';
+            this.amountPaid = this.finalAmount();
+
+            const user = this.auth.getCurrentUser();
+            if (!user?.uid) throw new Error('Not authenticated');
+
+            // Immediately create an active subscription — PayPal already confirmed payment
+            // Also syncs subscriptionEndDate on the store doc inside service
+            const startDate = new Date();
+            const endDate = new Date(startDate);
+            endDate.setMonth(endDate.getMonth() + this.durationMonths());
+
+            await this.subs.createPaidPayPal(
+              this.companyId,
+              this.storeId,
+              user.uid,
+              this.selectedTier(),
+              this.durationMonths(),
+              this.finalAmount(),
+              txId,
+              this.payerName,
+              this.payerMobile
+            );
+
+            // Refresh the in-memory store signal so the UI shows the updated date immediately
+            await this.storeService.updateStore(this.storeId, {
+              subscriptionEndDate: endDate
+            });
+
+            // Also log the request for records (auto-approved)
+            await this.createSubscriptionRequest('', this.finalAmount());
+
+            this.paypalStatus.set('success');
+            this.toast.success('Payment successful! Your subscription is now active.');
+            this.completed.emit();
+            this.close();
+          } catch (err: any) {
+            console.error('PayPal capture / save error:', err);
+            this.paypalStatus.set('error');
+            this.toast.error('Payment captured but failed to activate subscription: ' + (err?.message || 'unknown error'));
+          } finally {
+            this.submitting.set(false);
+          }
+        },
+        onCancel: () => {
+          this.paypalStatus.set('');
+        },
+        onError: (err: any) => {
+          console.error('PayPal SDK error:', err);
+          this.paypalStatus.set('error');
+          this.toast.error('PayPal encountered an error. Please try again.');
+        }
+      });
+
+      await buttons.render(container);
+    } catch (err: any) {
+      console.error('initPayPalButtons error:', err);
+      this.paypalStatus.set('error');
+      this.toast.error('Could not load PayPal: ' + (err?.message || 'check your connection'));
+    } finally {
+      this.paypalButtonsInitializing = false;
+    }
+  }
+
+  ngAfterViewChecked() {
+    if (!this.isOpen || this.activeTab !== 'credit_card') return;
+    const container = document.getElementById('paypal-button-container');
+    if (container && container.childElementCount === 0 && !this.paypalButtonsInitializing) {
+      void this.initPayPalButtons();
+    }
+  }
+
+  // Basic guard to enable/disable submit button (credit_card uses PayPal's own button)
   canSubmit(): boolean {
-    const hasRef = this.activeTab === 'paypal' ? true : (!!this.paymentReference && this.paymentReference.trim().length > 0);
-    const hasPayerNo = this.activeTab === 'paypal' ? true : (!!this.payerMobile && this.payerMobile.trim().length > 0);
-    const hasPayerName = this.activeTab === 'paypal' ? true : (!!this.payerName && this.payerName.trim().length > 0);
+    if (this.activeTab === 'credit_card') return false;
+    const hasRef = !!this.paymentReference && this.paymentReference.trim().length > 0;
+    const hasPayerNo = !!this.payerMobile && this.payerMobile.trim().length > 0;
+    const hasPayerName = !!this.payerName && this.payerName.trim().length > 0;
     const amount = this.amountPaid ?? this.finalAmount();
     const hasValidAmount = typeof amount === 'number' && !isNaN(amount) && amount > 0;
-    const hasReceipt = this.activeTab === 'paypal' ? true : !!this.receiptFile;
+    const hasReceipt = !!this.receiptFile;
     return hasRef && hasPayerNo && hasPayerName && hasValidAmount && hasReceipt && !!this.companyId && !!this.storeId;
   }
 
@@ -150,19 +312,6 @@ export class UpgradeSubscriptionModalComponent implements OnChanges {
     }
   }
 
-  // Open PayPal payment page in a new tab
-  openPayPal() {
-    const amount = this.amountPaid ?? this.finalAmount();
-    const url = this.getPaypalLink(amount || 0);
-    window.open(url, '_blank', 'noopener');
-  }
-
-  private getPaypalLink(amount: number): string {
-    const safeAmount = Math.max(0, Math.round(amount * 100) / 100); // 2 decimals
-    // PayPal.Me format: https://www.paypal.me/<handle>/<amount>
-    return `https://www.paypal.me/${this.paypalMeHandle}/${safeAmount}`;
-  }
-
   openQrPreview() {
     const url = this.accountInfo[this.activeTab].qrUrl;
     if (!url) return;
@@ -182,11 +331,11 @@ export class UpgradeSubscriptionModalComponent implements OnChanges {
       // Validate required fields
       const effectiveAmount = this.amountPaid ?? this.finalAmount();
       const missing: string[] = [];
-  if (this.activeTab !== 'paypal' && (!this.paymentReference || !this.paymentReference.trim())) missing.push('Reference ID');
-  if (this.activeTab !== 'paypal' && (!this.payerMobile || !this.payerMobile.trim())) missing.push(this.activeTab === 'gcash' ? 'GCash Number' : (this.activeTab === 'paymaya' ? 'PayMaya Number' : 'Sender Account / Mobile'));
-  if (this.activeTab !== 'paypal' && (!this.payerName || !this.payerName.trim())) missing.push('Payer Name');
-  if (this.activeTab !== 'paypal' && !(typeof effectiveAmount === 'number' && !isNaN(effectiveAmount) && effectiveAmount > 0)) missing.push('Amount');
-  if (this.activeTab !== 'paypal' && !this.receiptFile) missing.push('Payment Receipt');
+  if (this.activeTab !== 'credit_card' && (!this.paymentReference || !this.paymentReference.trim())) missing.push('Reference ID');
+  if (this.activeTab !== 'credit_card' && (!this.payerMobile || !this.payerMobile.trim())) missing.push(this.activeTab === 'gcash' ? 'GCash Number' : 'Sender Account / Mobile');
+  if (this.activeTab !== 'credit_card' && (!this.payerName || !this.payerName.trim())) missing.push('Payer Name');
+  if (this.activeTab !== 'credit_card' && !(typeof effectiveAmount === 'number' && !isNaN(effectiveAmount) && effectiveAmount > 0)) missing.push('Amount');
+  if (this.activeTab !== 'credit_card' && !this.receiptFile) missing.push('Payment Receipt');
 
       if (missing.length > 0) {
         this.showErrors = true;
@@ -198,9 +347,9 @@ export class UpgradeSubscriptionModalComponent implements OnChanges {
       const user = this.auth.getCurrentUser();
       if (!user?.uid) throw new Error('Not authenticated');
 
-      // Upload receipt first (if not PayPal)
+      // Upload receipt first (if not credit card / PayPal)
       let receiptUrl = '';
-      if (this.activeTab !== 'paypal' && this.receiptFile) {
+      if (this.activeTab !== 'credit_card' && this.receiptFile) {
         // Create temp subscription ID for receipt upload path
         const tempId = `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
         receiptUrl = await this.subs.uploadPaymentReceipt(this.receiptFile!, {
@@ -259,9 +408,10 @@ export class UpgradeSubscriptionModalComponent implements OnChanges {
         ownerEmail: user.email || '',
         contactPhone: store?.phoneNumber || this.payerMobile || '',
         requestedAt: new Date(),
-        requestedTier: this.selectedTier,
-        notes: `Upgrade to ${this.selectedTier.toUpperCase()} plan for ${this.durationMonths()} month(s). Payment: ${this.activeTab.toUpperCase()}`,
-        status: 'pending',
+        requestedTier: this.selectedTier(),
+        notes: `Upgrade to ${this.selectedTier().toUpperCase()} plan for ${this.durationMonths()} month(s). Payment: ${this.activeTab.toUpperCase()}`,
+        // PayPal payments are auto-approved (confirmed by PayPal); others need admin review
+        status: this.activeTab === 'credit_card' ? 'approved' : 'pending',
         // Subscription details (will be used when creating subscription on approval)
         durationMonths: this.durationMonths(),
         proposedStartDate: startDate,
@@ -357,8 +507,8 @@ export class UpgradeSubscriptionModalComponent implements OnChanges {
   }
 
   private reset() {
-    this.activeTab = 'gcash';
-    this.selectedTier = 'basic';
+    this.activeTab = 'credit_card';
+    this.selectedTier.set('basic');
     this.durationMonths.set(1);
     this.promoCode = '';
     this.referralCode = '';
@@ -370,22 +520,10 @@ export class UpgradeSubscriptionModalComponent implements OnChanges {
     this.payerName = '';
     this.paymentDescription = '';
     this.showErrors = false;
-    this.cardName = '';
-    this.cardNumber = '';
-    this.cardExpiry = '';
-    this.cardCvv = '';
-  }
-
-  // Normalize MMYY numeric entry, clamp month between 01-12
-  onCardExpiryInput(event: Event) {
-    const input = event.target as HTMLInputElement;
-    let digits = (input.value || '').replace(/\D/g, '').slice(0, 4);
-    if (digits.length >= 2) {
-      const mm = Math.min(Math.max(parseInt(digits.slice(0, 2) || '0', 10), 1), 12);
-      const mmStr = mm.toString().padStart(2, '0');
-      digits = mmStr + digits.slice(2);
-    }
-    this.cardExpiry = digits;
+    this.paypalStatus.set('');
+    // Clear PayPal button container on reset
+    const container = document.getElementById('paypal-button-container');
+    if (container) container.innerHTML = '';
   }
 
   async ngOnChanges(changes: SimpleChanges) {
@@ -401,7 +539,7 @@ export class UpgradeSubscriptionModalComponent implements OnChanges {
         }
       }
       // Apply initial values if provided
-      if (this.initialTier) this.selectedTier = this.initialTier;
+      if (this.initialTier) this.selectedTier.set(this.initialTier);
       if (this.initialDurationMonths && this.initialDurationMonths > 0) this.durationMonths.set(this.initialDurationMonths);
       if (this.initialPromoCode !== undefined) this.promoCode = this.initialPromoCode || '';
       if (this.initialReferralCode !== undefined) this.referralCode = this.initialReferralCode || '';
@@ -410,6 +548,10 @@ export class UpgradeSubscriptionModalComponent implements OnChanges {
       if (!(typeof amt === 'number' && !isNaN(amt) && amt > 0)) {
         this.amountPaid = this.finalAmount();
       }
+
+      // Card/PayPal is the only available method now; render the button automatically
+      this.activeTab = 'credit_card';
+      setTimeout(() => this.initPayPalButtons(), 100);
     }
   }
 }

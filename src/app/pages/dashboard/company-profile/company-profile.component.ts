@@ -1157,7 +1157,7 @@ export class CompanyProfileComponent {
   protected upgradeStoreName = signal<string>('');
   protected upgradeStoreCode = signal<string>('');
   // Initial values for the upgrade modal (forwarded from plan selection)
-  protected upgradeInitialTier = signal<'standard' | 'premium' | undefined>(undefined);
+  protected upgradeInitialTier = signal<'basic' | 'standard' | 'premium' | undefined>(undefined);
   protected upgradeInitialDurationMonths = signal<number | undefined>(undefined);
   protected upgradeInitialPromoCode = signal<string | undefined>(undefined);
   protected upgradeInitialReferralCode = signal<string | undefined>(undefined);
@@ -1666,8 +1666,10 @@ export class CompanyProfileComponent {
     this.upgradeStoreName.set(store.storeName || '');
   this.upgradeStoreCode.set((store as any).storeCode || '');
     // Prefill initial values for the upgrade modal
-    const tier = payload?.tier === 'premium' ? 'premium' : 'standard';
-    this.upgradeInitialTier.set(tier as 'standard' | 'premium');
+    const tier = payload?.tier === 'basic' || payload?.tier === 'standard' || payload?.tier === 'premium'
+      ? payload.tier
+      : 'basic';
+    this.upgradeInitialTier.set(tier);
     const months = typeof payload?.durationMonths === 'number' && payload.durationMonths > 0 ? payload.durationMonths : 1;
     this.upgradeInitialDurationMonths.set(months);
     this.upgradeInitialPromoCode.set(payload?.promoCode || undefined);
