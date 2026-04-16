@@ -261,7 +261,7 @@ export class UpgradeSubscriptionModalComponent implements OnChanges, AfterViewCh
           } catch (err: any) {
             console.error('PayPal capture / save error:', err);
             this.paypalStatus.set('error');
-            this.toast.error(err?.message || 'Payment failed. Please try again.');
+            this.toast.error('There was an error processing your payment. Please try again later or use a different payment method.');
           } finally {
             this.submitting.set(false);
           }
