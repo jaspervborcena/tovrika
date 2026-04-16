@@ -21,9 +21,9 @@ export const environment = {
     reconciliationMode: 'recon' as 'legacy' | 'recon'
   },
   paypal: {
-    // Fallback only; the UI now loads the actual client config from the Cloud Function
-    clientId: 'ASj0btqJ9ctHcaXO19btNq5AiAPcvMJ-V-xqq9atKiuiJ2uGQ0JoAHlCXWwM_m5_Zdmn9CQkYxQkiQGu',
-    sandbox: true,
+    // Production should load the live client ID from the Cloud Function config endpoint
+    clientId: '',
+    sandbox: false,
     // Production should call the Cloud Functions base URL directly
     apiUrl: 'https://asia-east1-jasperpos-1dfd5.cloudfunctions.net'
   }

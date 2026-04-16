@@ -55,6 +55,7 @@ export class UpgradeSubscriptionModalComponent implements OnChanges, AfterViewCh
   private paypalButtonsInitializing = false;
   private paypalClientId: string | null = environment.paypal.clientId || null;
   private paypalSandbox = environment.paypal.sandbox;
+  private readonly isProduction = environment.production;
   private readonly paypalCountryCode = 'PH';
   private readonly paypalLocale = 'en_PH';
   selectedTier = signal<Tier>('basic');
@@ -121,6 +122,9 @@ export class UpgradeSubscriptionModalComponent implements OnChanges, AfterViewCh
         this.currency = config.currency;
       }
     } catch (err) {
+      if (this.isProduction) {
+        throw new Error('Could not load live PayPal configuration. Check CORS and backend availability.');
+      }
       console.warn('Falling back to environment PayPal config:', err);
     }
 
@@ -168,6 +172,9 @@ export class UpgradeSubscriptionModalComponent implements OnChanges, AfterViewCh
             }
             return orderId;
           } catch (apiErr) {
+            if (this.isProduction) {
+              throw this.buildPayPalApiError('Could not create PayPal order', apiErr);
+            }
             console.warn('PayPal createOrder API failed, falling back to SDK:', apiErr);
             return actions.order.create({
               intent: 'CAPTURE',
@@ -196,9 +203,18 @@ export class UpgradeSubscriptionModalComponent implements OnChanges, AfterViewCh
             try {
               captured = await this.paypalService.captureOrder(orderId);
             } catch (apiErr) {
+              if (this.isProduction) {
+                throw this.buildPayPalApiError('Payment capture failed', apiErr);
+              }
               console.warn('PayPal capture API failed, falling back to SDK:', apiErr);
               captured = await actions.order.capture();
             }
+
+            const captureStatus = this.getPayPalCaptureStatus(captured);
+            if (captureStatus !== 'COMPLETED') {
+              throw new Error(captureStatus ? `Payment failed (${captureStatus})` : 'Payment failed (UNKNOWN)');
+            }
+
             // Extract payer & transaction info from captured result
             const txId: string = captured?.id || captured?.purchase_units?.[0]?.payments?.captures?.[0]?.id || '';
             const payer = captured?.payer;
@@ -245,7 +261,7 @@ export class UpgradeSubscriptionModalComponent implements OnChanges, AfterViewCh
           } catch (err: any) {
             console.error('PayPal capture / save error:', err);
             this.paypalStatus.set('error');
-            this.toast.error('Payment captured but failed to activate subscription: ' + (err?.message || 'unknown error'));
+            this.toast.error(err?.message || 'Payment failed. Please try again.');
           } finally {
             this.submitting.set(false);
           }
@@ -268,6 +284,34 @@ export class UpgradeSubscriptionModalComponent implements OnChanges, AfterViewCh
     } finally {
       this.paypalButtonsInitializing = false;
     }
+  }
+
+  private getPayPalCaptureStatus(captured: any): string {
+    return String(
+      captured?.status ||
+      captured?.purchase_units?.[0]?.payments?.captures?.[0]?.status ||
+      captured?.purchase_units?.[0]?.payments?.authorizations?.[0]?.status ||
+      ''
+    ).toUpperCase();
+  }
+
+  private buildPayPalApiError(prefix: string, error: any): Error {
+    const apiError = error?.error?.error;
+    const apiStatus = error?.error?.status;
+
+    if (apiError === 'capture-not-completed') {
+      return new Error(apiStatus ? `${prefix}: ${apiStatus}` : `${prefix}: payment not completed`);
+    }
+
+    if (apiError) {
+      return new Error(`${prefix}: ${apiError}`);
+    }
+
+    if (error?.message) {
+      return new Error(`${prefix}: ${error.message}`);
+    }
+
+    return new Error(prefix);
   }
 
   ngAfterViewChecked() {
