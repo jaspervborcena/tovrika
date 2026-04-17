@@ -1,6 +1,27 @@
 // DEVELOPMENT ENVIRONMENT - Uses jasperpos-dev Firebase project
+
+// Dynamic environment detection for web
+let isProd = false;
+let paypalConfig = {
+  clientId: 'ASj0btqJ9ctHcaXO19btNq5AiAPcvMJ-V-xqq9atKiuiJ2uGQ0JoAHlCXWwM_m5_Zdmn9CQkYxQkiQGu',
+  sandbox: true,
+  apiUrl: '/paypal'
+};
+
+if (typeof window !== 'undefined' && window.location && window.location.hostname) {
+  const host = window.location.hostname;
+  if (host === 'app.pos.tovrika.com') {
+    isProd = true;
+    paypalConfig = {
+      clientId: '', // Set your live client ID here or load dynamically
+      sandbox: false,
+      apiUrl: 'https://asia-east1-jasperpos-1dfd5.cloudfunctions.net'
+    };
+  }
+}
+
 export const environment = {
-  production: false,
+  production: isProd,
   version: '1.0.1',
   firebase: {
     apiKey: "AIzaSyABpbnPUjr16LnLU8WSJ1BmVvWy0tTmaI4",
@@ -12,21 +33,12 @@ export const environment = {
     measurementId: "G-5BLXC1688Z"
   },
   api: {
-    // Disabled API endpoints for frontend; use Firestore-first flows instead.
     baseUrl: "",
     ordersApi: "",
-    // directOrdersApi intentionally disabled for Firestore-only Sales Summary to avoid accidental external calls
     directOrdersApi: "",
   },
   inventory: {
-    // reconciliationMode: 'legacy' uses client-side FIFO; 'recon' defers to Cloud Function with tracking
     reconciliationMode: 'recon' as 'legacy' | 'recon'
   },
-  paypal: {
-    // Sandbox client ID – safe to expose in frontend; secret stays in functions/.env
-    clientId: 'ASj0btqJ9ctHcaXO19btNq5AiAPcvMJ-V-xqq9atKiuiJ2uGQ0JoAHlCXWwM_m5_Zdmn9CQkYxQkiQGu',
-    sandbox: true,
-    // Proxied via proxy.conf.json → asia-east1-jasperpos-dev.cloudfunctions.net/paypal
-    apiUrl: '/paypal'
-  }
+  paypal: paypalConfig
 };
