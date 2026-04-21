@@ -8,6 +8,8 @@ import { SubscriptionRequest } from '../../../interfaces/subscription-request.in
 import { CompanyService } from '../../../services/company.service';
 import { AuthService } from '../../../services/auth.service';
 import { SubscriptionService } from '../../../services/subscription.service';
+import { CouponService } from '../../../services/coupon.service';
+import { ToastService } from '../../../shared/services/toast.service';
 
 @Component({
   selector: 'app-subscription-modal',
@@ -21,6 +23,8 @@ export class SubscriptionModalComponent implements OnInit {
   private companyService = inject(CompanyService);
   private authService = inject(AuthService);
   private subscriptionService = inject(SubscriptionService);
+  private couponService = inject(CouponService);
+  private toastService = inject(ToastService);
 
   @Input() store?: Store; // If provided, this is an upgrade/renewal
   @Input() isOpen = false;
@@ -57,6 +61,8 @@ export class SubscriptionModalComponent implements OnInit {
   promoValid = signal(false);
   promoDiscount = signal(0);
   promoMessage = signal('');
+  promoChecking = signal(false);
+  couponIsFree = signal(false);
   
   showFeatures = signal(true);
   showPaymentForm = signal(false);
@@ -146,32 +152,85 @@ export class SubscriptionModalComponent implements OnInit {
     this.billingCycle.set(cycle);
   }
 
-  applyPromoCode() {
+  async applyPromoCode() {
     const code = this.promoCode().trim();
     if (!code) {
       this.promoValid.set(false);
       this.promoMessage.set('');
+      this.couponIsFree.set(false);
       return;
     }
 
-    const result = validatePromoCode(code);
-    this.promoValid.set(result.valid);
-    this.promoDiscount.set(result.discount);
-    this.promoMessage.set(result.description);
+    this.promoChecking.set(true);
+    this.promoValid.set(false);
+    this.promoMessage.set('');
+    this.couponIsFree.set(false);
+
+    try {
+      const coupon = await this.couponService.getCoupon(code);
+
+      if (!coupon) {
+        this.promoValid.set(false);
+        this.promoMessage.set('Invalid promo code.');
+        this.toastService.error('Invalid promo code.');
+        return;
+      }
+
+      const company = this.companyService.companies()[0];
+      const region = 'PH';
+      const isNewUser = !company;
+      const error = this.couponService.validateCoupon(coupon, region, isNewUser);
+
+      if (error) {
+        this.promoValid.set(false);
+        this.promoMessage.set(error);
+        this.toastService.error(error);
+        return;
+      }
+
+      // Coupon is valid
+      this.promoValid.set(true);
+      const isFree = coupon.appliesTo?.plan === 'monthly' && coupon.durationDays > 0;
+      this.couponIsFree.set(isFree);
+
+      if (isFree) {
+        this.promoMessage.set(`✓ Coupon valid! ${coupon.description} — ${coupon.durationDays} days free, no payment required.`);
+        this.toastService.success(`Coupon applied! ${coupon.description}`);
+      } else {
+        // Fall back to local discount logic for non-free coupons
+        const result = validatePromoCode(code);
+        this.promoDiscount.set(result.discount);
+        this.promoMessage.set(`✓ ${result.description}`);
+        this.toastService.success(result.description);
+      }
+    } catch (err) {
+      this.promoValid.set(false);
+      this.promoMessage.set('Failed to validate promo code. Please try again.');
+      this.toastService.error('Failed to validate promo code.');
+    } finally {
+      this.promoChecking.set(false);
+    }
   }
 
   toggleShowFeatures() {
     this.showFeatures.update(v => !v);
   }
 
-  proceedToPayment() {
+  isSubmittingCoupon = signal(false);
+
+  async proceedToPayment() {
+    // If a free coupon is applied, bypass payment entirely
+    if (this.couponIsFree() && this.promoValid()) {
+      await this.activateWithFreeCoupon();
+      return;
+    }
+
     // Premium tier shows request form instead
     if (this.selectedTier() === 'premium') {
       this.showEnterpriseRequest.set(true);
       this.showPaymentForm.set(false);
     } else {
       // Emit an event so the parent can open the centralized upgrade modal
-      // This ensures the same payment UI (with receipt upload/payer fields) is used
       this.openUpgrade.emit({
         tier: this.selectedTier(),
         billingCycle: this.billingCycle(),
@@ -180,6 +239,38 @@ export class SubscriptionModalComponent implements OnInit {
         durationMonths: this.durationMonths(),
         basePrice: this.basePrice(),
       });
+    }
+  }
+
+  async activateWithFreeCoupon() {
+    const company = this.companyService.companies()[0];
+    if (!company || !company.id) {
+      this.toastService.error('No company found. Please complete your profile first.');
+      return;
+    }
+
+    const storeId = this.store?.id || '';
+
+    this.isSubmittingCoupon.set(true);
+    try {
+      const result = await this.couponService.applyCouponSubscription(
+        this.promoCode().trim(),
+        company.id,
+        storeId,
+        'PH',
+        true
+      );
+
+      if (result.success) {
+        this.toastService.success(result.message);
+        this.closeModal.emit();
+      } else {
+        this.toastService.error(result.message);
+      }
+    } catch (err: any) {
+      this.toastService.error(err?.message || 'Failed to activate coupon subscription.');
+    } finally {
+      this.isSubmittingCoupon.set(false);
     }
   }
 
