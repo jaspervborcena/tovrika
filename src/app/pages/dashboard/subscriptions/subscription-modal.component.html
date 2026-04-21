@@ -206,12 +206,16 @@
                   placeholder="Enter promo code"
                   class="promo-input"
                 />
-                <button (click)="applyPromoCode()" class="btn-apply">
-                  Apply
+                <button (click)="applyPromoCode()" class="btn-apply" [disabled]="promoChecking()">
+                  {{ promoChecking() ? 'Checking...' : 'Apply' }}
                 </button>
               </div>
               @if (promoMessage()) {
-                <p [class.text-green]="promoValid()" [class.text-red]="!promoValid()" class="promo-message">
+                <p [style.color]="promoValid() ? '#16a34a' : '#dc2626'"
+                   [style.font-weight]="'500'"
+                   [style.font-size]="'0.875rem'"
+                   [style.margin-top]="'0.4rem'"
+                   class="promo-message">
                   {{ promoMessage() }}
                 </p>
               }
@@ -262,8 +266,12 @@
           <button (click)="close()" class="btn-cancel">
             Cancel
           </button>
-          <button (click)="proceedToPayment()" class="btn-proceed">
-            @if (selectedTier() === 'freemium') {
+          <button (click)="proceedToPayment()" class="btn-proceed" [disabled]="isSubmittingCoupon()">
+            @if (isSubmittingCoupon()) {
+              Activating...
+            } @else if (couponIsFree() && promoValid()) {
+              Activate Free Subscription
+            } @else if (selectedTier() === 'freemium') {
               Activate Free Plan
             } @else if (selectedTier() === 'premium') {
               Contact Sales
