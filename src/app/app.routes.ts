@@ -11,6 +11,10 @@ import { AuthService } from './services/auth.service';
 import { roleGuard } from './guards/role.guard';
 
 export const routes: Routes = [
+    {
+      path: 'forgot-password',
+      loadComponent: () => import('./pages/auth/forgot-password/forgot-password.component').then(m => m.ForgotPasswordComponent)
+    },
   // Public Routes - but visitors should go to onboarding
   {
     path: '',
