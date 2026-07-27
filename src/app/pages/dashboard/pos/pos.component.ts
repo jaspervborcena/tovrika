@@ -856,18 +856,16 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     return ['cancelled', 'refunded', 'damaged'].includes(s);
   });
 
-  // Specific disable flags for Refund and Damage buttons. These are false for 'returned'
-  // so that refund/damage can be performed after a return.
+  // Refund and damage should follow a return-first workflow.
+  // Cancel remains a separate whole-order action and should not be used as an adjustment step.
   readonly isRefundDisabled = computed(() => {
     const s = (this.selectedOrder()?.status || '').toString().toLowerCase();
-    // Only cancel should block refund; refunded/damaged states should not block showing refund
-    return ['cancelled'].includes(s);
+    return ['cancelled', 'refunded', 'damaged'].includes(s);
   });
 
   readonly isDamageDisabled = computed(() => {
     const s = (this.selectedOrder()?.status || '').toString().toLowerCase();
-    // Only cancel should block damage action here; allow damage if order was refunded or returned
-    return ['cancelled'].includes(s);
+    return ['cancelled', 'refunded', 'damaged'].includes(s);
   });
 
   // Disable Manage Item Status when order is in final/adjusted states including 'returned'
@@ -892,39 +890,30 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     }
   });
 
-  // Determine whether the Return button should be shown for the selected order
+  // Return should be the first adjustment action and should only appear before any other adjustment state.
   readonly shouldShowReturnButton = computed(() => {
     const order = this.selectedOrder();
     if (!order) return false;
     const s = (order.status || '').toString().toLowerCase();
 
-    // Never show if order already marked returned
-    if (s === 'returned') return false;
-
-
-    // If order is refunded, show Return (user requested both Return and Damage visible/enabled)
-    if (s === 'refunded') {
-      return true;
+    if (['cancelled', 'returned', 'refunded', 'damaged'].includes(s)) {
+      return false;
     }
 
-    // Default: show return when not already returned
-    return !this.isOrderReturned();
+    return true;
   });
 
-  // Determine whether the Damage button should be shown for the selected order
+  // Damage should only appear after a return has been recorded.
   readonly shouldShowDamageButton = computed(() => {
     const order = this.selectedOrder();
     if (!order) return false;
     const s = (order.status || '').toString().toLowerCase();
 
-
-    // If order is refunded, show Damage as well (user requested both Return and Damage enabled)
-    if (s === 'refunded') {
-      return true;
+    if (['cancelled', 'damaged'].includes(s)) {
+      return false;
     }
 
-    // For all other statuses, keep previous behavior (show button)
-    return true;
+    return s === 'returned' || s === 'refunded' || s === 'completed';
   });
 
   // Receipt modal state
@@ -2602,16 +2591,16 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     // TODO: validate creds before proceeding (server-side validation recommended)
     // Ask for confirmation and optional update reason before applying status
     const titleMap: any = {
-      cancelled: 'Cancel Order',
-      returned: 'Return Items',
-      refunded: 'Refund Order',
+      cancelled: 'Mark as Cancelled',
+      returned: 'Mark as Returned',
+      refunded: 'Mark as Refunded',
       damaged: 'Mark as Damaged'
     };
     const messageMap: any = {
-      cancelled: 'Are you sure you want to cancel this order?',
-      returned: 'Are you sure you want to return these items?',
-      refunded: 'Are you sure you want to refund this order?',
-      damaged: 'Are you sure you want to mark these items as damaged?'
+      cancelled: 'Are you sure you want to mark this order as cancelled?',
+      returned: 'Are you sure you want to mark this order as returned?',
+      refunded: 'Are you sure you want to mark this order as refunded?',
+      damaged: 'Are you sure you want to mark this order as damaged?'
     };
 
     const title = titleMap[status] || 'Confirm Action';
@@ -2709,38 +2698,38 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
         switch (action) {
           case 'return':
             console.log('Processing return for item:', item);
-            // TODO: Implement return logic (per-item) if needed
-            // Per requirement: treat Return as equivalent to cancelling the order
             try {
               const reason = this.lastConfirmationReason();
-              await this.updateOrderStatus(orderId, 'cancelled', reason || undefined);
+              await this.updateOrderStatus(orderId, 'returned', reason || undefined);
             } catch (e) {
-              console.error('Failed to set order to cancelled after return action', e);
+              console.error('Failed to mark order as returned after return action', e);
             }
             break;
           case 'damage':
             console.log('Processing damage for item:', item);
-            // TODO: Implement damage reporting logic (per-item) if needed
-            // Per requirement: treat Damage as equivalent to cancelling the order
             try {
               const reason = this.lastConfirmationReason();
-              await this.updateOrderStatus(orderId, 'cancelled', reason || undefined);
+              await this.updateOrderStatus(orderId, 'damaged', reason || undefined);
             } catch (e) {
-              console.error('Failed to set order to cancelled after damage action', e);
+              console.error('Failed to mark order as damaged after damage action', e);
             }
             break;
           case 'refund':
             console.log('Processing refund for item:', item);
-            // TODO: Implement refund logic
+            try {
+              const reason = this.lastConfirmationReason();
+              await this.updateOrderStatus(orderId, 'refunded', reason || undefined);
+            } catch (e) {
+              console.error('Failed to mark order as refunded after refund action', e);
+            }
             break;
           case 'cancel':
             console.log('Processing cancellation for item:', item);
-            // TODO: Implement item cancellation logic
             try {
               const reason = this.lastConfirmationReason();
               await this.updateOrderStatus(orderId, 'cancelled', reason || undefined);
             } catch (e) {
-              console.error('Failed to set order to cancelled after cancel action', e);
+              console.error('Failed to mark order as cancelled after cancel action', e);
             }
             break;
         }
