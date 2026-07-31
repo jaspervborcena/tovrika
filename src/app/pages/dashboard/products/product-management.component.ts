@@ -2642,6 +2642,7 @@ export class ProductManagementComponent implements OnInit {
     skuId: string;
     productCode: string;
     category: string;
+    categoryGroupName: string;
     totalStock: number;
     costPrice: number;
     originalPrice: number;
@@ -2654,6 +2655,8 @@ export class ProductManagementComponent implements OnInit {
     hasDiscount: boolean;
     discountValue: number;
     isStockTracked: boolean;
+    tagGroup: string;
+    tagValue: string;
     tagLabels: string[];
     tagIds: string[];
   }> = [];
@@ -2665,6 +2668,8 @@ export class ProductManagementComponent implements OnInit {
   bulkFileName = '';
   bulkUploadError = '';
   bulkUploadResults: string[] = [];
+  bulkTagMasterRows: Array<Record<string, any>> = [];
+  bulkCategoryMasterRows: Array<Record<string, any>> = [];
 
   // Modal mode management
   modalMode: 'product' | 'category' | 'manageCategories' = 'product';
@@ -5127,13 +5132,15 @@ export class ProductManagementComponent implements OnInit {
       'Product Name', 'Description', 'SKU ID', 'Product Code',
       'Total Stock', 'Cost Price', 'Original Price', 'Selling Price',
       'Barcode ID', 'Image URL', 'Is Favorite', 'Is VAT Applicable',
-      'VAT Rate', 'Has Discount', 'Discount Value', 'Is Stock Tracked'
+      'VAT Rate', 'Has Discount', 'Discount Value', 'Is Stock Tracked',
+      'Tag Value', 'Category Group Name'
     ];
     const example = [
       'Sample Product', 'Sample description', 'SKU123', 'PCODE123',
       '100', '50', '60', '70',
       '1234567890123', '', 'FALSE', 'FALSE',
-      '0', 'FALSE', '0', 'TRUE'
+      '0', 'FALSE', '0', 'TRUE',
+      'small', 'clothing'
     ];
     const csv = [headers.join(','), example.join(',')].join('\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
@@ -5178,9 +5185,17 @@ export class ProductManagementComponent implements OnInit {
     reader.onload = (e) => {
       try {
         const workbook = XLSX.read(e.target?.result, { type: 'binary' });
-        const sheetName = workbook.SheetNames[0];
-        const sheet = workbook.Sheets[sheetName];
-        const rawRows: any[] = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+        const sheetNames = workbook.SheetNames || [];
+
+        const productsSheetName = sheetNames.find(name => /product/i.test(name)) || sheetNames[0];
+        const tagsSheetName = sheetNames.find(name => /tag/i.test(name));
+        const categoriesSheetName = sheetNames.find(name => /category/i.test(name));
+
+        this.bulkTagMasterRows = tagsSheetName ? XLSX.utils.sheet_to_json(workbook.Sheets[tagsSheetName], { defval: '' }) : [];
+        this.bulkCategoryMasterRows = categoriesSheetName ? XLSX.utils.sheet_to_json(workbook.Sheets[categoriesSheetName], { defval: '' }) : [];
+
+        const productsSheet = workbook.Sheets[productsSheetName];
+        const rawRows: any[] = XLSX.utils.sheet_to_json(productsSheet, { defval: '' });
         this.applyParsedRows(rawRows);
       } catch (err: any) {
         this.bulkUploadError = `Excel parsing error: ${err?.message || err}`;
@@ -5209,7 +5224,8 @@ export class ProductManagementComponent implements OnInit {
           description: get(['description','Description']) || '',
           skuId: get(['skuid','SKU ID','sku']) || '',
           productCode: get(['productcode','Product Code']) || '',
-          category: get(['category','Category']) || 'General',
+          category: get(['category','Category']) || '',
+          categoryGroupName: get(['categorygroupname','Category Group Name']) || '',
           totalStock: parseInt(get(['totalstock','Total Stock','stock','quantity']) || '0', 10) || 0,
           costPrice: parseFloat(get(['costprice','Cost Price']) || '0') || 0,
           originalPrice: parseFloat(get(['originalprice','Original Price']) || '0') || 0,
@@ -5222,6 +5238,8 @@ export class ProductManagementComponent implements OnInit {
           hasDiscount: parseBool(get(['hasdiscount','Has Discount'])),
           discountValue: parseFloat(get(['discountvalue','Discount Value']) || '0') || 0,
           isStockTracked: parseBool(get(['isstocktracked','Is Stock Tracked'])),
+          tagGroup: get(['taggroup','Tag Group']) || '',
+          tagValue: get(['tagvalue','Tag Value']) || '',
           tagLabels: [],
           tagIds: []
         };
@@ -5349,6 +5367,9 @@ export class ProductManagementComponent implements OnInit {
       this.toastService.error('Please select a store.');
       return;
     }
+
+    await this.resolveBulkWorkbookMasters();
+
     // Check for duplicate SKUs against existing store products
     const existingProducts = this.productService.products().filter(p => p.storeId === this.bulkStoreId);
     const existingSkus = new Set(existingProducts.map(p => (p.skuId || '').toLowerCase()));
@@ -5366,6 +5387,9 @@ export class ProductManagementComponent implements OnInit {
     let errorCount = 0;
     for (const row of this.bulkFileDataArray) {
       try {
+        await this.resolveBulkCategoryForRow(row);
+        await this.resolveBulkTagForRow(row);
+
         const tagLabels = row.tagIds.map(id => {
           const t = this.availableTags().find(x => x.tagId === id);
           return t ? t.label : '';
@@ -5423,6 +5447,103 @@ export class ProductManagementComponent implements OnInit {
     } else {
       this.toastService.error(`Imported ${successCount} products. ${errorCount} failed — check console.`);
     }
+  }
+
+  private async resolveBulkWorkbookMasters(): Promise<void> {
+    await this.categoryService.loadCategoriesByStore(this.bulkStoreId);
+    await this.loadTags(this.bulkStoreId);
+
+    for (const row of this.bulkCategoryMasterRows) {
+      const categoryName = this.getBulkWorkbookValue(row, ['categoryname', 'category name', 'category', 'name']) || '';
+      const categoryGroup = this.getBulkWorkbookValue(row, ['group', 'categorygroup', 'category group']) || 'General';
+      if (!categoryName) continue;
+      await this.categoryService.ensureCategoryExistsWithGroup(categoryName, categoryGroup, this.bulkStoreId);
+    }
+
+    for (const row of this.bulkTagMasterRows) {
+      const group = this.getBulkWorkbookValue(row, ['group', 'Group']) || '';
+      const label = this.getBulkWorkbookValue(row, ['label', 'Label']) || this.getBulkWorkbookValue(row, ['value', 'Value']) || '';
+      const value = this.getBulkWorkbookValue(row, ['value', 'Value']) || '';
+      if (!group || !value) continue;
+      await this.tagsService.ensureTagExists(group, value, label || value, this.bulkStoreId, this.authService.getCurrentPermission()?.companyId || '');
+    }
+
+    await this.loadTags(this.bulkStoreId);
+    await this.categoryService.loadCategoriesByStore(this.bulkStoreId);
+  }
+
+  private async resolveBulkCategoryForRow(row: any): Promise<void> {
+    const categoryLabel = (row.category || '').toString().trim();
+    const categoryGroup = (row.categoryGroupName || 'General').toString().trim() || 'General';
+
+    if (!categoryLabel) {
+      row.category = '';
+      return;
+    }
+
+    const existing = this.categoryService.findCategoryByStoreNameAndGroup(this.bulkStoreId, categoryLabel, categoryGroup);
+    if (existing) {
+      row.category = existing.categoryLabel;
+      row.categoryGroupName = existing.categoryGroup || categoryGroup;
+      return;
+    }
+
+    const created = await this.categoryService.ensureCategoryExistsWithGroup(categoryLabel, categoryGroup, this.bulkStoreId);
+    if (created) {
+      row.category = created.categoryLabel;
+      row.categoryGroupName = created.categoryGroup || categoryGroup;
+    }
+  }
+
+  private async resolveBulkTagForRow(row: any): Promise<void> {
+    row.tagIds = [];
+    row.tagLabels = [];
+
+    const tagValue = (row.tagValue || '').toString().trim();
+    if (!tagValue) {
+      return;
+    }
+
+    const tagGroup = (row.tagGroup || '').toString().trim();
+    const tagCandidates = this.availableTags().filter(t =>
+      (t.storeId || '').toLowerCase() === this.bulkStoreId.toLowerCase() &&
+      (t.value || '').trim().toLowerCase() === tagValue.toLowerCase() &&
+      (!tagGroup || (t.group || '').trim().toLowerCase() === tagGroup.toLowerCase())
+    );
+
+    const selected = tagCandidates[0];
+    if (!selected) {
+      const tagFromMaster = this.bulkTagMasterRows.find(t => {
+        const masterValue = this.getBulkWorkbookValue(t, ['value', 'Value']) || '';
+        const masterGroup = this.getBulkWorkbookValue(t, ['group', 'Group']) || '';
+        return masterValue.toLowerCase() === tagValue.toLowerCase() &&
+          (!tagGroup || masterGroup.toLowerCase() === tagGroup.toLowerCase());
+      });
+      if (tagFromMaster) {
+        const created = await this.tagsService.ensureTagExists(
+          this.getBulkWorkbookValue(tagFromMaster, ['group', 'Group']) || '',
+          this.getBulkWorkbookValue(tagFromMaster, ['value', 'Value']) || '',
+          this.getBulkWorkbookValue(tagFromMaster, ['label', 'Label']) || this.getBulkWorkbookValue(tagFromMaster, ['value', 'Value']) || '',
+          this.bulkStoreId,
+          this.authService.getCurrentPermission()?.companyId || ''
+        );
+        if (created) {
+          this.availableTags.set([...this.availableTags(), created]);
+          row.tagIds = [created.tagId];
+          row.tagLabels = [created.label || created.value];
+          return;
+        }
+      }
+      return;
+    }
+
+    row.tagIds = [selected.tagId];
+    row.tagLabels = [selected.label || selected.value];
+  }
+
+  private getBulkWorkbookValue(row: Record<string, any>, keys: string[]): string {
+    const match = Object.keys(row).find(key => keys.some(k => key.trim().toLowerCase().replace(/\s+/g, '') === k.toLowerCase().replace(/\s+/g, '')));
+    return (match !== undefined ? row[match] : '').toString().trim();
   }
 
 }
