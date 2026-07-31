@@ -167,4 +167,61 @@ export class TagsService {
   generateTagId(group: string, value: string): string {
     return `${group}_${value}`.toLowerCase().replace(/\s+/g, '_');
   }
+
+  async findTagByStoreGroupAndValue(storeId: string, group: string, value: string): Promise<ProductTag | undefined> {
+    const tags = await this.getTagsByStore(storeId, true);
+    const normalizedGroup = (group || '').trim().toLowerCase();
+    const normalizedValue = (value || '').trim().toLowerCase();
+
+    return tags.find(tag =>
+      (tag.storeId || '').toLowerCase() === (storeId || '').toLowerCase() &&
+      (tag.group || '').trim().toLowerCase() === normalizedGroup &&
+      (tag.value || '').trim().toLowerCase() === normalizedValue
+    );
+  }
+
+  async ensureTagExists(
+    group: string,
+    value: string,
+    label: string,
+    storeId: string,
+    companyId: string = ''
+  ): Promise<ProductTag | undefined> {
+    const normalizedGroup = (group || '').trim();
+    const normalizedValue = (value || '').trim();
+    const normalizedLabel = (label || normalizedValue || '').trim();
+
+    if (!normalizedGroup || !normalizedValue || !storeId) {
+      return undefined;
+    }
+
+    const existing = await this.findTagByStoreGroupAndValue(storeId, normalizedGroup, normalizedValue);
+    if (existing) {
+      return existing;
+    }
+
+    const tagId = this.generateTagId(normalizedGroup, normalizedValue);
+    const createdTagId = await this.createTag({
+      tagId,
+      group: normalizedGroup,
+      label: normalizedLabel,
+      value: normalizedValue,
+      isActive: true,
+      storeId,
+      companyId,
+    } as Omit<ProductTag, 'id' | 'createdAt' | 'createdBy'>);
+
+    return {
+      id: createdTagId,
+      tagId,
+      group: normalizedGroup,
+      label: normalizedLabel,
+      value: normalizedValue,
+      isActive: true,
+      storeId,
+      companyId,
+      createdAt: new Date(),
+      createdBy: this.authService.getCurrentUser()?.uid || ''
+    } as ProductTag;
+  }
 }
