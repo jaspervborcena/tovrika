@@ -295,6 +295,17 @@ export class CategoryService {
     );
   }
 
+  findCategoryByStoreNameAndGroup(storeId: string, categoryLabel: string, categoryGroup: string): ProductCategory | undefined {
+    const normalizedLabel = (categoryLabel || '').trim().toLowerCase();
+    const normalizedGroup = (categoryGroup || 'General').trim().toLowerCase();
+
+    return this.categoriesSignal().find(cat =>
+      (cat.storeId || '').toLowerCase() === (storeId || '').toLowerCase() &&
+      (cat.categoryLabel || '').trim().toLowerCase() === normalizedLabel &&
+      (cat.categoryGroup || 'General').trim().toLowerCase() === normalizedGroup
+    );
+  }
+
   /**
    * Get category by label
    */
@@ -322,43 +333,53 @@ export class CategoryService {
    * Auto-save category if it doesn't exist (for product creation)
    */
   async ensureCategoryExists(categoryLabel: string, storeId: string): Promise<void> {
-    console.log('🔍 ensureCategoryExists called with:', { categoryLabel, storeId });
-    
-    if (!categoryLabel.trim()) {
+    await this.ensureCategoryExistsWithGroup(categoryLabel, 'General', storeId);
+  }
+
+  async ensureCategoryExistsWithGroup(
+    categoryLabel: string,
+    categoryGroup: string,
+    storeId: string
+  ): Promise<ProductCategory | undefined> {
+    console.log('🔍 ensureCategoryExistsWithGroup called with:', { categoryLabel, categoryGroup, storeId });
+
+    const normalizedLabel = (categoryLabel || '').trim();
+    const normalizedGroup = (categoryGroup || 'General').trim() || 'General';
+
+    if (!normalizedLabel) {
       console.log('❌ Category label is empty, returning');
-      return;
+      return undefined;
     }
-    
-    // Load categories first to ensure we have the latest data
+
     await this.loadCategoriesByStore(storeId);
-    
-    // Check if category already exists
-    const exists = this.categoryExists(categoryLabel.trim());
-    
+
+    const exists = this.findCategoryByStoreNameAndGroup(storeId, normalizedLabel, normalizedGroup);
     if (exists) {
       console.log('✅ Category already exists, skipping creation');
-      return;
+      return exists;
     }
 
     try {
       console.log('🚀 Creating new category...');
-      // Create new category automatically
       const categoryData: Omit<ProductCategory, 'id' | 'createdAt' | 'updatedAt'> = {
-        categoryId: this.generateCategoryId(categoryLabel),
-        categoryLabel: categoryLabel.trim(),
-        categoryDescription: `Auto-created from product: ${categoryLabel.trim()}`,
-        categoryGroup: 'General',
+        categoryId: this.generateCategoryId(normalizedLabel),
+        categoryLabel: normalizedLabel,
+        categoryDescription: `Auto-created from product: ${normalizedLabel}`,
+        categoryGroup: normalizedGroup,
         isActive: true,
         sortOrder: 0,
-        companyId: '', // Optional - can be empty
+        companyId: '',
         storeId: storeId
       };
 
-      await this.createCategory(categoryData);
-      console.log('✅ Auto-created category:', categoryLabel);
+      const newCategoryId = await this.createCategory(categoryData);
+      const categories = this.categoriesSignal();
+      const created = categories.find(cat => cat.id === newCategoryId);
+      console.log('✅ Auto-created category:', normalizedLabel, 'group:', normalizedGroup);
+      return created;
     } catch (error) {
       console.error('❌ Error auto-creating category:', error);
-      // Don't throw error to avoid breaking product creation
+      return undefined;
     }
   }
 
