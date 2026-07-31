@@ -351,12 +351,12 @@
       <button (click)="openOrderReceipt(selectedOrder())" class="mobile-btn info-btn">View Receipt</button>
       <button *ngIf="selectedOrder()?.status !== 'cancelled'" 
         (click)="authorizeAndUpdateOrderStatus(selectedOrder()?.id, 'cancelled')" 
-        class="mobile-btn warning-btn">Cancel Order</button>
-      <button *ngIf="selectedOrder()" (click)="authorizeAndUpdateOrderStatus(selectedOrder()?.id, 'cancelled')" class="mobile-btn warning-btn">Return</button>
+        class="mobile-btn warning-btn">Mark as Cancelled</button>
+      <button *ngIf="selectedOrder()" (click)="authorizeAndUpdateOrderStatus(selectedOrder()?.id, 'cancelled')" class="mobile-btn warning-btn">Mark as Returned</button>
       <button *ngIf="selectedOrder()?.status !== 'refunded'" 
         (click)="authorizeAndUpdateOrderStatus(selectedOrder()?.id, 'refunded')" 
-        class="mobile-btn primary-btn">Refund</button>
-      <button *ngIf="selectedOrder()" (click)="openDamageModeAuthorized()" class="mobile-btn danger-btn">Damage</button>
+        class="mobile-btn primary-btn">Mark as Refunded</button>
+      <button *ngIf="selectedOrder()" (click)="openDamageModeAuthorized()" class="mobile-btn danger-btn">Mark as Damaged</button>
           </div>
       <div class="bir-section">
         <h4>BIR Information</h4>
@@ -376,12 +376,12 @@
         <button (click)="openOrderReceipt(selectedOrder())" class="mobile-btn info-btn">View Receipt</button>
         <button *ngIf="selectedOrder()?.status !== 'cancelled'" 
           (click)="authorizeAndUpdateOrderStatus(selectedOrder()?.id, 'cancelled')" 
-          class="mobile-btn warning-btn">Cancel Order</button>
+          class="mobile-btn warning-btn">Mark as Cancelled</button>
         <button *ngIf="selectedOrder()?.status !== 'refunded'" 
           (click)="authorizeAndUpdateOrderStatus(selectedOrder()?.id, 'refunded')" 
-          class="mobile-btn primary-btn">Refund</button>
-        <button *ngIf="selectedOrder()" (click)="authorizeAndUpdateOrderStatus(selectedOrder()?.id, 'cancelled')" class="mobile-btn warning-btn">Return</button>
-        <button *ngIf="selectedOrder()" (click)="authorizeAndUpdateOrderStatus(selectedOrder()?.id, 'cancelled')" class="mobile-btn danger-btn">Damage</button>
+          class="mobile-btn primary-btn">Mark as Refunded</button>
+        <button *ngIf="selectedOrder()" (click)="authorizeAndUpdateOrderStatus(selectedOrder()?.id, 'cancelled')" class="mobile-btn warning-btn">Mark as Returned</button>
+        <button *ngIf="selectedOrder()" (click)="authorizeAndUpdateOrderStatus(selectedOrder()?.id, 'cancelled')" class="mobile-btn danger-btn">Mark as Damaged</button>
       </div>
     </div>
   </div>

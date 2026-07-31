@@ -4,6 +4,23 @@ All notable changes to this project are documented in this file.
 
 ---
 
+## [1.0.3] — 2026-07-27
+
+### Overview
+Version 1.0.3 focuses on the POS adjustment workflow for return and refund handling. The change improves the accuracy of item-level event recording by tying adjustments to the specific order line that was selected in the Manage Item Status flow.
+
+### Changes in this Release
+
+#### POS Adjustment Tracking
+- **Return and refund adjustments now record against the correct item row** in the ordersSellingTracking flow.
+- **Item-level event data is now used as the source of truth** for the adjustment amount and quantity, improving consistency for invoice summaries.
+- **Stock and refund handling stay aligned with the selected line** so mismatches are easier to trace and review later.
+
+### Notes
+- This update targets the current return/refund adjustment path first and keeps the logic aligned with the item-level event model used by the summary layer.
+
+---
+
 ## [1.0.2] — 2026-05-28
 
 ### Overview

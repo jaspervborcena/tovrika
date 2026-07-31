@@ -801,27 +801,27 @@
                 </button>
                 <button *ngIf="selectedOrder()" class="btn cancel-order-btn"
                   [disabled]="!canCancelOrder() || isOrderActionLocked() || postDamageLock()"
-                  [title]="(!canCancelOrder() || isOrderActionLocked() || postDamageLock()) ? 'Cancel disabled for this order' : 'Cancel Order'"
-                  (click)="authorizeAndUpdateOrderStatus(selectedOrder()?.id, 'cancelled')">Cancel Order</button>
+                  [title]="(!canCancelOrder() || isOrderActionLocked() || postDamageLock()) ? 'Action disabled for this order' : 'Mark as Cancelled'"
+                  (click)="authorizeAndUpdateOrderStatus(selectedOrder()?.id, 'cancelled')">Mark as Cancelled</button>
 
                 <!-- Show or hide Return depending on order status and whether a return tracking row already exists -->
                 <button *ngIf="shouldShowReturnButton()" class="btn btn-warning return-btn"
                   [disabled]="isOrderActionLocked() || postDamageLock()"
-                  [title]="(isOrderActionLocked() || postDamageLock()) ? 'Action disabled for this order' : 'Return'"
-                  (click)="authorizeAndUpdateOrderStatus(selectedOrder()?.id, 'returned')">Return</button>
+                  [title]="(isOrderActionLocked() || postDamageLock()) ? 'Action disabled for this order' : 'Mark as Returned'"
+                  (click)="authorizeAndUpdateOrderStatus(selectedOrder()?.id, 'returned')">Mark as Returned</button>
                 
                 <!-- Recovered button: same font-size/appearance as cancel-order-btn but with recovered color -->
                 <button *ngIf="isOrderRecovered()" class="btn btn-recovered" (click)="authorizeAndUpdateOrderStatus(selectedOrder()?.id, 'recovered')" title="Mark as Recovered">Recovered</button>
 
                 <button *ngIf="selectedOrder()?.status !== 'refunded'" class="btn btn-primary"
                   [disabled]="isRefundDisabled() || postDamageLock()"
-                  [title]="(isRefundDisabled() || postDamageLock()) ? 'Action disabled for this order' : 'Refund'"
-                  (click)="authorizeAndUpdateOrderStatus(selectedOrder()?.id, 'refunded')">Refund</button>
+                  [title]="(isRefundDisabled() || postDamageLock()) ? 'Action disabled for this order' : 'Mark as Refunded'"
+                  (click)="authorizeAndUpdateOrderStatus(selectedOrder()?.id, 'refunded')">Mark as Refunded</button>
 
                 <button *ngIf="shouldShowDamageButton()" class="btn btn-danger damage-btn"
                   [disabled]="isDamageDisabled() || postDamageLock()"
-                  [title]="(isDamageDisabled() || postDamageLock()) ? 'Action disabled for this order' : 'Damage'"
-                  (click)="openManageItemStatusAuthorized('damage')">Damage</button>
+                  [title]="(isDamageDisabled() || postDamageLock()) ? 'Action disabled for this order' : 'Mark as Damaged'"
+                  (click)="openManageItemStatusAuthorized('damage')">Mark as Damaged</button>
 
                 <button class="btn btn-secondary manage-status-btn"
                   [disabled]="isManageStatusDisabled() || postDamageLock()"
