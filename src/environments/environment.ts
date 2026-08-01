@@ -22,7 +22,7 @@ if (typeof window !== 'undefined' && window.location && window.location.hostname
 
 export const environment = {
   production: isProd,
-  version: '1.0.2',
+  version: '1.0.3',
   firebase: {
     apiKey: "AIzaSyABpbnPUjr16LnLU8WSJ1BmVvWy0tTmaI4",
     authDomain: "jasperpos-dev.firebaseapp.com",
