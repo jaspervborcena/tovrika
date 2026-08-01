@@ -2584,28 +2584,29 @@ export class OverviewComponent implements OnInit {
       const expenses = await this.expenseService.getExpensesByStore(storeId, queryStart, queryEnd);
       this.expenses.set(expenses || []);
 
-      // Also compute month-to-date and yesterday aggregates for the Overview card
+      // Compute the expense total from the selected period's actual month window.
+      // This keeps today/yesterday/this_week/previous_week summaries aligned to the
+      // month of the reference date instead of leaking older historical expense rows.
       try {
-        const now = new Date();
-        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
-        const monthEnd = now; // month-to-date
-        let monthExpenses = await this.expenseService.getExpensesByStore(storeId, monthStart, monthEnd);
+        const referenceDate = startDate ? new Date(startDate) : new Date();
+        const monthStart = new Date(referenceDate.getFullYear(), referenceDate.getMonth(), 1, 0, 0, 0, 0);
+        const monthEnd = new Date(referenceDate.getFullYear(), referenceDate.getMonth() + 1, 0, 23, 59, 59, 999);
 
-        // Debugging: if no results, try a fallback query without date filters to detect schema mismatches
-        if ((!monthExpenses || monthExpenses.length === 0)) {
-          console.warn('Overview: monthExpenses query returned 0 rows, trying fallback no-date query');
-          const fallback = await this.expenseService.getExpensesByStore(storeId);
-          if (fallback && fallback.length > 0) {
-            console.warn('Overview: fallback expenses returned', fallback.length, 'rows; using these for month total');
-            monthExpenses = fallback;
-          }
-        }
-
+        const monthExpenses = await this.expenseService.getExpensesByStore(storeId, monthStart, monthEnd);
         const monthTotal = (monthExpenses || []).reduce((s, e) => s + (Number((e as any).amount || 0) / 100), 0);
-        // Start with expense service total (PHP units)
         this.monthExpensesTotal.set(monthTotal);
+
+        const yesterdayRef = new Date(referenceDate);
+        yesterdayRef.setDate(referenceDate.getDate() - 1);
+        const yesterdayStart = new Date(yesterdayRef.getFullYear(), yesterdayRef.getMonth(), yesterdayRef.getDate(), 0, 0, 0, 0);
+        const yesterdayEnd = new Date(yesterdayRef.getFullYear(), yesterdayRef.getMonth(), yesterdayRef.getDate(), 23, 59, 59, 999);
+        const yesterdayExpenses = await this.expenseService.getExpensesByStore(storeId, yesterdayStart, yesterdayEnd);
+        const yesterdayTotal = (yesterdayExpenses || []).reduce((s, e) => s + (Number((e as any).amount || 0) / 100), 0);
+        this.yesterdayExpensesTotal.set(yesterdayTotal);
       } catch (monthErr) {
         console.warn('Overview: month expense query failed, will skip month expense calc:', monthErr);
+        this.monthExpensesTotal.set(0);
+        this.yesterdayExpensesTotal.set(0);
       }
 
       // Mark loading complete
