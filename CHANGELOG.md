@@ -4,27 +4,29 @@ All notable changes to this project are documented in this file.
 
 ---
 
-## [1.0.3] — 2026-07-27
+## [1.0.3] — 2026-08-01
 
 ### Overview
-Version 1.0.3 focuses on the POS adjustment workflow for return and refund handling. The change improves the accuracy of item-level event recording by tying adjustments to the specific order line that was selected in the Manage Item Status flow.
+Version 1.0.3 is a release focused on public asset hosting readiness and bulk-product import resilience. This update makes the license public static file correctly available through the hosted root, fixes the Firebase Hosting public directory mapping, and keeps the workbook-based bulk upload flow aligned with optional category/tag master sheets.
 
 ### Changes in this Release
+- **Public license asset** — [public/license.txt](public/license.txt) is now included as a root public file for hosted access at `/license.txt`
+- **Firebase Hosting root fix** — [firebase.json](firebase.json) now points hosting at the real Angular browser output directory so static root files are served correctly
+- **Bulk upload resilience** — product workbook import continues to support optional tags/category master sheets without forcing duplicate links when the values are blank
+- **Overview period scoping** — the overview expense totals now resolve against the selected period’s month window instead of leaking a stale prior-month value into current period cards
 
-#### POS Adjustment Tracking
-- **Return and refund adjustments now record against the correct item row** in the ordersSellingTracking flow.
-- **Item-level event data is now used as the source of truth** for the adjustment amount and quantity, improving consistency for invoice summaries.
-- **Stock and refund handling stay aligned with the selected line** so mismatches are easier to trace and review later.
-
-### Notes
-- This update targets the current return/refund adjustment path first and keeps the logic aligned with the item-level event model used by the summary layer.
+### Version Info
+- **App Version**: 1.0.3
+- **Angular**: 19.1.0
+- **Capacitor**: 6.2.0
+- **Build Date**: August 1, 2026
 
 ---
 
 ## [1.0.2] — 2026-05-28
 
 ### Overview
-Version 1.0.2 is a receipt formatting and build optimization release. Improvements focus on cleaner receipt presentation, removal of currency symbols for flexibility, and a fresh Android APK build with updated dependencies.
+Version 1.0. is a receipt formatting and build optimization release. Improvements focus on cleaner receipt presentation, removal of currency symbols for flexibility, and a fresh Android APK build with updated dependencies.
 
 ### Changes in this Release
 
