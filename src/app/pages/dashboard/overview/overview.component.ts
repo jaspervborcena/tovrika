@@ -1588,6 +1588,8 @@ export class OverviewComponent implements OnInit {
   protected ledgerDamageQty = signal<number>(0);
   protected ledgerUnpaidAmount = signal<number>(0);
   protected ledgerUnpaidQty = signal<number>(0);
+  protected ledgerOutstandingUnpaidAmount = signal<number>(0);
+  protected ledgerOutstandingUnpaidQty = signal<number>(0);
   protected ledgerRecoveredAmount = signal<number>(0);
   protected ledgerRecoveredQty = signal<number>(0);
   protected ledgerCompletedAmount = signal<number>(0);
@@ -2894,59 +2896,121 @@ export class OverviewComponent implements OnInit {
         return;
       }
 
-      // Check if it's a single day query (today/yesterday) vs a range (this_month, etc.)
       const isSingleDay = startDate.toDateString() === endDate.toDateString();
-      
+
       let ledger: { runningBalanceAmount: number; runningBalanceQty: number } | null = null;
-      
+
       if (isSingleDay) {
-        // Single day: use getLatestOrderBalances with the date
         ledger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, startDate, 'completed');
       } else {
-        // Date range: use getOrderBalancesForRange
         ledger = await this.ledgerService.getOrderBalancesForRange(companyId, storeId, startDate, endDate, 'completed');
       }
-      
+
       if (ledger) {
-        // Count completed orders directly from orders collection
         const totalOrders = await this.orderService.countCompletedOrders(storeId, startDate, endDate);
-        
-        // Get refunded amount for the same period
+
         let refundedAmount = 0;
+        let returnedAmount = 0;
+        let damagedAmount = 0;
+        let unpaidAmount = 0;
+        let recoveredAmount = 0;
+        let cancelledItemsQty = 0;
+
+        let returnedQty = 0;
+        let refundedQty = 0;
+        let damagedQty = 0;
+        let unpaidQty = 0;
+        let recoveredQty = 0;
+
         if (isSingleDay) {
           const refundedLedger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, startDate, 'refunded');
+          const returnedLedger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, startDate, 'returned');
+          const damageLedger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, startDate, 'damaged');
+          const unpaidLedger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, startDate, 'unpaid');
+          const recoveredLedger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, startDate, 'recovered');
+          const cancelledLedger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, startDate, 'cancelled');
+
           refundedAmount = Number(refundedLedger?.runningBalanceAmount || 0);
+          returnedAmount = Number(returnedLedger?.runningBalanceAmount || 0);
+          damagedAmount = Number(damageLedger?.runningBalanceAmount || 0);
+          unpaidAmount = Number(unpaidLedger?.runningBalanceAmount || 0);
+          recoveredAmount = Number(recoveredLedger?.runningBalanceAmount || 0);
+          cancelledItemsQty = Number(cancelledLedger?.runningBalanceQty || 0);
+
+          refundedQty = Number(refundedLedger?.runningBalanceQty || 0);
+          returnedQty = Number(returnedLedger?.runningBalanceQty || 0);
+          damagedQty = Number(damageLedger?.runningBalanceQty || 0);
+          unpaidQty = Number(unpaidLedger?.runningBalanceQty || 0);
+          recoveredQty = Number(recoveredLedger?.runningBalanceQty || 0);
         } else {
           const refundedLedger = await this.ledgerService.getOrderBalancesForRange(companyId, storeId, startDate, endDate, 'refunded');
+          const returnedLedger = await this.ledgerService.getOrderBalancesForRange(companyId, storeId, startDate, endDate, 'returned');
+          const damageLedger = await this.ledgerService.getOrderBalancesForRange(companyId, storeId, startDate, endDate, 'damaged');
+          const unpaidLedger = await this.ledgerService.getOrderBalancesForRange(companyId, storeId, startDate, endDate, 'unpaid');
+          const recoveredLedger = await this.ledgerService.getOrderBalancesForRange(companyId, storeId, startDate, endDate, 'recovered');
+          const cancelledLedger = await this.ledgerService.getOrderBalancesForRange(companyId, storeId, startDate, endDate, 'cancelled');
+
           refundedAmount = Number(refundedLedger?.runningBalanceAmount || 0);
+          returnedAmount = Number(returnedLedger?.runningBalanceAmount || 0);
+          damagedAmount = Number(damageLedger?.runningBalanceAmount || 0);
+          unpaidAmount = Number(unpaidLedger?.runningBalanceAmount || 0);
+          recoveredAmount = Number(recoveredLedger?.runningBalanceAmount || 0);
+          cancelledItemsQty = Number(cancelledLedger?.runningBalanceQty || 0);
+
+          refundedQty = Number(refundedLedger?.runningBalanceQty || 0);
+          returnedQty = Number(returnedLedger?.runningBalanceQty || 0);
+          damagedQty = Number(damageLedger?.runningBalanceQty || 0);
+          unpaidQty = Number(unpaidLedger?.runningBalanceQty || 0);
+          recoveredQty = Number(recoveredLedger?.runningBalanceQty || 0);
         }
-        
-        // Get expenses for the period
+
         const expenses = await this.expenseService.getExpensesByStore(storeId, startDate, endDate);
         const expenseTotal = (expenses || []).reduce((s, e) => s + Number((e as any).amount || 0), 0);
-        
-        // Revenue = runningBalanceAmount - (expense + refunded)
-        const grossRevenue = Number(ledger.runningBalanceAmount || 0);
+
+        const grossRevenue = Number(ledger.runningBalanceAmount || 0) + recoveredAmount;
         const totalRevenue = grossRevenue - (expenseTotal + refundedAmount);
-        const totalItems = Number(ledger.runningBalanceQty || 0);
+        const totalItems = Number(ledger.runningBalanceQty || 0) + recoveredQty;
 
-        // Fetch cancelled items qty for the period so netItemsQty is accurate
-        let cancelledItemsQty = 0;
-        if (isSingleDay) {
-          const cancelledLedger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, startDate, 'cancelled');
-          cancelledItemsQty = Number(cancelledLedger?.runningBalanceQty || 0);
-        } else {
-          const cancelledLedger = await this.ledgerService.getOrderBalancesForRange(companyId, storeId, startDate, endDate, 'cancelled');
-          cancelledItemsQty = Number(cancelledLedger?.runningBalanceQty || 0);
-        }
+        // Use ordersSellingTracking as the authoritative source for unpaid/recovered values
+        const trackingStoreId = this.selectedStoreId() === 'all' ? 'all' : storeId;
+        const outstandingSummary = await this.ordersSellingTrackingService.getOutstandingUnpaidSummary(
+          companyId,
+          trackingStoreId,
+          startDate,
+          endDate
+        );
 
-        // Set ledger signals
+        const baseUnpaidAmount = outstandingSummary.amount;
+        const baseUnpaidQty = outstandingSummary.qty;
+
+        // Outstanding is the same as unpaid after recovered order subtraction
+        const netUnpaidAmount = baseUnpaidAmount;
+        const netUnpaidQty = baseUnpaidQty;
+
+        // Use tracking-based recovered values instead of inferred order status
+        const liveRecoveredAmount = outstandingSummary.recoveredAmount;
+        const liveRecoveredQty = outstandingSummary.recoveredQty;
+
         this.ledgerTotalRevenue.set(totalRevenue);
         this.ledgerTotalOrders.set(totalOrders);
         this.ledgerOrderQty.set(totalOrders);
         this.ledgerItemsQty.set(totalItems);
         this.ledgerCancelQty.set(cancelledItemsQty);
         this.ledgerCompletedQty.set(totalOrders);
+
+        this.ledgerReturnAmount.set(returnedAmount);
+        this.ledgerReturnQty.set(returnedQty);
+        this.ledgerRefundAmount.set(refundedAmount);
+        this.ledgerRefundQty.set(refundedQty);
+        this.ledgerDamageAmount.set(damagedAmount);
+        this.ledgerDamageQty.set(damagedQty);
+        this.ledgerUnpaidAmount.set(baseUnpaidAmount);
+        this.ledgerUnpaidQty.set(baseUnpaidQty);
+        this.ledgerOutstandingUnpaidAmount.set(netUnpaidAmount);
+        this.ledgerOutstandingUnpaidQty.set(netUnpaidQty);
+        // Use live recovered amounts from order data instead of ledger
+        this.ledgerRecoveredAmount.set(liveRecoveredAmount);
+        this.ledgerRecoveredQty.set(liveRecoveredQty);
       } else {
         this.ledgerTotalRevenue.set(0);
         this.ledgerTotalOrders.set(0);
@@ -2954,6 +3018,18 @@ export class OverviewComponent implements OnInit {
         this.ledgerItemsQty.set(0);
         this.ledgerCancelQty.set(0);
         this.ledgerCompletedQty.set(0);
+        this.ledgerReturnAmount.set(0);
+        this.ledgerReturnQty.set(0);
+        this.ledgerRefundAmount.set(0);
+        this.ledgerRefundQty.set(0);
+        this.ledgerDamageAmount.set(0);
+        this.ledgerDamageQty.set(0);
+        this.ledgerUnpaidAmount.set(0);
+        this.ledgerUnpaidQty.set(0);
+        this.ledgerOutstandingUnpaidAmount.set(0);
+        this.ledgerOutstandingUnpaidQty.set(0);
+        this.ledgerRecoveredAmount.set(0);
+        this.ledgerRecoveredQty.set(0);
       }
     } catch (err) {
       console.warn('fetchLedgerTotalsForPeriod error:', err);

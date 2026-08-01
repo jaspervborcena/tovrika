@@ -1752,6 +1752,133 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
     }
   }
 
+  async getTrackingSummary(
+    companyId: string,
+    storeId: string,
+    status: string,
+    startDate?: Date,
+    endDate?: Date
+  ): Promise<{ amount: number; qty: number }> {
+    try {
+      const constraints: any[] = [
+        where('companyId', '==', companyId),
+        ...(storeId && storeId !== 'all' ? [where('storeId', '==', storeId)] : []),
+        where('status', '==', status)
+      ];
+
+      let q: any = query(collection(this.firestore, 'ordersSellingTracking'), ...constraints);
+      if (startDate && endDate) {
+        q = query(
+          q,
+          where('createdAt', '>=', startDate),
+          where('createdAt', '<=', endDate),
+          orderBy('createdAt', 'asc')
+        );
+      }
+
+      const snaps = await getDocs(q);
+      if (!snaps || snaps.empty) {
+        return { amount: 0, qty: 0 };
+      }
+
+      let amount = 0;
+      let qty = 0;
+      snaps.docs.forEach(docSnap => {
+        const data: any = docSnap.data();
+        amount += Number(data.total || data.amount || 0);
+        qty += Number(data.quantity || data.qty || 0);
+      });
+
+      return { amount, qty };
+    } catch (e) {
+      console.warn('getTrackingSummary failed', e);
+      return { amount: 0, qty: 0 };
+    }
+  }
+
+  async getOutstandingUnpaidSummary(
+    companyId: string,
+    storeId: string,
+    startDate?: Date,
+    endDate?: Date
+  ): Promise<{ amount: number; qty: number; recoveredAmount: number; recoveredQty: number }> {
+    try {
+      const constraints: any[] = [
+        where('companyId', '==', companyId),
+        ...(storeId && storeId !== 'all' ? [where('storeId', '==', storeId)] : []),
+        where('status', 'in', ['unpaid', 'recovered'])
+      ];
+
+      let q: any = query(collection(this.firestore, 'ordersSellingTracking'), ...constraints);
+      if (startDate && endDate) {
+        q = query(
+          q,
+          where('createdAt', '>=', startDate),
+          where('createdAt', '<=', endDate),
+          orderBy('createdAt', 'asc')
+        );
+      }
+
+      const snaps = await getDocs(q);
+      if (!snaps || snaps.empty) {
+        return { amount: 0, qty: 0, recoveredAmount: 0, recoveredQty: 0 };
+      }
+
+      const orderTotals = new Map<string, { unpaidAmount: number; unpaidQty: number; recoveredAmount: number; recoveredQty: number }>();
+      snaps.docs.forEach(docSnap => {
+        const data: any = docSnap.data();
+        const orderId = String(data.orderId || '').trim();
+        if (!orderId) return;
+
+        const status = String(data.status || '').toLowerCase();
+        const amount = Number(data.total || data.amount || 0);
+        const qty = Number(data.quantity || data.qty || 0);
+        const existing = orderTotals.get(orderId) || { unpaidAmount: 0, unpaidQty: 0, recoveredAmount: 0, recoveredQty: 0 };
+
+        if (status === 'unpaid') {
+          existing.unpaidAmount += amount;
+          existing.unpaidQty += qty;
+        } else if (status === 'recovered') {
+          existing.recoveredAmount += amount;
+          existing.recoveredQty += qty;
+        }
+
+        orderTotals.set(orderId, existing);
+      });
+
+      let outstandingAmount = 0;
+      let outstandingQty = 0;
+      let recoveredAmount = 0;
+      let recoveredQty = 0;
+
+      orderTotals.forEach(totals => {
+        recoveredAmount += totals.recoveredAmount;
+        recoveredQty += totals.recoveredQty;
+        outstandingAmount += Math.max(0, totals.unpaidAmount - totals.recoveredAmount);
+        outstandingQty += Math.max(0, totals.unpaidQty - totals.recoveredQty);
+      });
+
+      return {
+        amount: outstandingAmount,
+        qty: outstandingQty,
+        recoveredAmount,
+        recoveredQty
+      };
+    } catch (e) {
+      console.warn('getOutstandingUnpaidSummary failed', e);
+      return { amount: 0, qty: 0, recoveredAmount: 0, recoveredQty: 0 };
+    }
+  }
+
+  async getUnpaidSummary(
+    companyId: string,
+    storeId: string,
+    startDate?: Date,
+    endDate?: Date
+  ): Promise<{ amount: number; qty: number }> {
+    return this.getTrackingSummary(companyId, storeId, 'unpaid', startDate, endDate);
+  }
+
   /**
    * Get top products ordered by number of completed tracking records.
    * Returns an array of { productId, productName, skuId, completedCount } sorted desc.
@@ -1961,7 +2088,6 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
     endDate: Date
   ): Promise<OrdersSellingTrackingDoc[]> {
     try {
-console.log('getTrackedItemsForStoreAndDateRange: querying with startDate=', this.startOfDayUTC(startDate).toDate(), 'endDate=', this.endOfDayUTC(endDate).toDate());
       const q = query(
         collection(this.firestore, 'ordersSellingTracking'),
         where('companyId', '==', companyId),
