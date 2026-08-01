@@ -155,41 +155,46 @@ export class LedgerService {
     try {
       const startOfDay = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0, 0);
       const endOfDay = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59, 999);
-      
 
-      // Query for the LATEST ledger entry within the specified day (ordered by createdAt desc, limit 1)
-      const q = query(
+      // When the dashboard is scoped to all stores, aggregate the matching
+      // ledger docs across store IDs rather than filtering to a single store.
+      const baseQuery = query(
         collection(this.firestore, 'orderAccountingLedger'),
         where('companyId', '==', companyId),
-        where('storeId', '==', storeId),
         where('eventType', '==', eventType),
         where('createdAt', '>=', startOfDay),
         where('createdAt', '<=', endOfDay),
-        orderBy('createdAt', 'desc'),
-        limit(1)
+        orderBy('createdAt', 'desc')
       );
-      
+
+      const q = storeId && storeId !== 'all'
+        ? query(baseQuery, where('storeId', '==', storeId))
+        : baseQuery;
+
       const snaps = await getDocs(q);
-      
-      // If no entries found for today, return zeros
+
       if (snaps.empty) {
         return { runningBalanceAmount: 0, runningBalanceQty: 0 };
       }
-      
-      // Get the LATEST entry and use its running balance fields (cumulative totals)
-      const latestDoc = snaps.docs[0];
-      const d: any = latestDoc.data();
-      
-      const runningBalanceAmount = Number(d.runningBalanceAmount || 0);
-      const runningBalanceQty = Number(d.runningBalanceQty || 0);
-      
-      const docCreatedAt = d.createdAt?.toDate ? d.createdAt.toDate() : new Date(d.createdAt);
-      
-      const result = {
-        runningBalanceAmount,
-        runningBalanceQty
-      };
-      return result;
+
+      if (storeId && storeId !== 'all') {
+        const latestDoc = snaps.docs[0];
+        const d: any = latestDoc.data();
+        return {
+          runningBalanceAmount: Number(d.runningBalanceAmount || 0),
+          runningBalanceQty: Number(d.runningBalanceQty || 0)
+        };
+      }
+
+      let runningBalanceAmount = 0;
+      let runningBalanceQty = 0;
+      snaps.docs.forEach((docSnap) => {
+        const d: any = docSnap.data();
+        runningBalanceAmount += Number(d.runningBalanceAmount || 0);
+        runningBalanceQty += Number(d.runningBalanceQty || 0);
+      });
+
+      return { runningBalanceAmount, runningBalanceQty };
     } catch (err) {
       console.warn('LedgerService.getLatestOrderBalances fallback', err);
       return { runningBalanceAmount: 0, runningBalanceQty: 0 };
@@ -212,50 +217,51 @@ export class LedgerService {
     try {
       console.log(`📅 getOrderBalancesForRange: ${startDate.toISOString()} to ${endDate.toISOString()}`);
       console.log(`📅 Query params: companyId=${companyId}, storeId=${storeId}, eventType=${eventType}`);
-      
-      // Query for ALL ledger entries in the date range
-      const q = query(
+
+      const baseQuery = query(
         collection(this.firestore, 'orderAccountingLedger'),
         where('companyId', '==', companyId),
-        where('storeId', '==', storeId),
         where('eventType', '==', eventType),
         where('createdAt', '>=', startDate),
         where('createdAt', '<=', endDate),
         orderBy('createdAt', 'desc'),
         limit(2000)
       );
-      
+
+      const q = storeId && storeId !== 'all'
+        ? query(baseQuery, where('storeId', '==', storeId))
+        : baseQuery;
+
       const snaps = await getDocs(q);
       console.log(`📊 Found ${snaps.docs.length} ledger entries for ${eventType} in range`);
-      
+
       if (snaps.empty) {
         console.log(`📊 No ${eventType} entries found for range - returning zeros`);
         return { runningBalanceAmount: 0, runningBalanceQty: 0 };
       }
-      
-      // Sum up all entries in the range, get beginning balance from first entry
+
       let totalAmount = 0;
       let totalQty = 0;
-      
+
       snaps.docs.forEach((doc, idx) => {
         const d: any = doc.data();
         const amount = Number(d.amount || 0);
         const qty = Number(d.qty || d.quantity || 1);
-        
+
         totalAmount += amount;
         totalQty += qty;
-        
+
         if (idx < 5) {
           const docCreatedAt = d.createdAt?.toDate ? d.createdAt.toDate() : new Date(d.createdAt);
           console.log(`📊 Entry ${idx + 1}: date=${docCreatedAt.toLocaleDateString()}, amount=${amount}, qty=${qty}`);
         }
       });
-      
+
       const result = {
         runningBalanceAmount: totalAmount,
         runningBalanceQty: totalQty
       };
-      console.log(`📊 Range totals for ${eventType}: revenue=₱${totalAmount/100}, items=${totalQty}`);
+      console.log(`📊 Range totals for ${eventType}: revenue=₱${totalAmount / 100}, items=${totalQty}`);
       return result;
     } catch (err) {
       console.warn('LedgerService.getOrderBalancesForRange error', err);
@@ -275,15 +281,18 @@ export class LedgerService {
     eventTypes: string[] = ['refunded']
   ): Promise<number> {
     try {
-      const q = query(
+      const baseQuery = query(
         collection(this.firestore, 'orderAccountingLedger'),
         where('companyId', '==', companyId),
-        where('storeId', '==', storeId),
         where('createdAt', '>=', startDate),
         where('createdAt', '<=', endDate),
         orderBy('createdAt', 'asc'),
         limit(2000)
       );
+
+      const q = storeId && storeId !== 'all'
+        ? query(baseQuery, where('storeId', '==', storeId))
+        : baseQuery;
 
       const snaps = await getDocs(q);
       if (!snaps || snaps.empty) return 0;
@@ -312,15 +321,18 @@ export class LedgerService {
     eventTypes: string[] = ['refunded']
   ): Promise<{ amount: number; qty: number }> {
     try {
-      const q = query(
+      const baseQuery = query(
         collection(this.firestore, 'orderAccountingLedger'),
         where('companyId', '==', companyId),
-        where('storeId', '==', storeId),
         where('createdAt', '>=', startDate),
         where('createdAt', '<=', endDate),
         orderBy('createdAt', 'desc'),
         limit(1)
       );
+
+      const q = storeId && storeId !== 'all'
+        ? query(baseQuery, where('storeId', '==', storeId))
+        : baseQuery;
 
       const snaps = await getDocs(q);
       if (!snaps || snaps.empty) return { amount: 0, qty: 0 };
@@ -368,63 +380,93 @@ export class LedgerService {
         recovered: { amount: 0, qty: 0 }
       };
 
-      // For each event type, fetch the latest ledger row (if any) and include it if within range
       for (const et of types) {
         try {
-          const qType = query(
+          const baseQuery = query(
             collection(this.firestore, 'orderAccountingLedger'),
             where('companyId', '==', companyId),
-            where('storeId', '==', storeId),
             where('eventType', '==', et),
             where('createdAt', '>=', startDate),
             where('createdAt', '<=', endDate),
-            orderBy('createdAt', 'desc'),
-            limit(1)
+            orderBy('createdAt', 'desc')
           );
+
+          const qType = storeId && storeId !== 'all'
+            ? query(baseQuery, where('storeId', '==', storeId))
+            : baseQuery;
 
           const snapsType = await getDocs(qType);
           if (!snapsType || snapsType.empty) continue;
 
-          const d: any = snapsType.docs[0].data();
-          if (!d) continue;
-
-          // Normalize createdAt to Date
-          let created: Date | null = null;
-          try {
-            if (d.createdAt && typeof d.createdAt.toDate === 'function') {
-              created = d.createdAt.toDate();
-            } else if (d.createdAt) {
-              created = new Date(d.createdAt);
+          if (storeId && storeId !== 'all') {
+            const d: any = snapsType.docs[0].data();
+            if (!d) continue;
+            let created: Date | null = null;
+            try {
+              if (d.createdAt && typeof d.createdAt.toDate === 'function') {
+                created = d.createdAt.toDate();
+              } else if (d.createdAt) {
+                created = new Date(d.createdAt);
+              }
+            } catch (e) {
+              created = null;
             }
-          } catch (e) {
-            created = null;
+
+            if (!created) continue;
+            if (created.getTime() < startDate.getTime() || created.getTime() > endDate.getTime()) continue;
+
+            const amt = Number(d.runningBalanceAmount ?? d.amount ?? 0);
+            const qty = Number(d.runningBalanceQty ?? d.quantity ?? d.qty ?? 0);
+
+            if (et === 'completed') {
+              result.completed.amount += amt;
+              result.completed.qty += qty;
+            } else if (et === 'returned') {
+              result.returns.amount += amt;
+              result.returns.qty += qty;
+            } else if (et === 'refunded') {
+              result.refunds.amount += amt;
+              result.refunds.qty += qty;
+            } else if (et === 'damaged') {
+              result.damages.amount += amt;
+              result.damages.qty += qty;
+            } else if (et === 'unpaid') {
+              result.unpaid.amount += amt;
+              result.unpaid.qty += qty;
+            } else if (et === 'recovered') {
+              result.recovered.amount += amt;
+              result.recovered.qty += qty;
+            }
+            continue;
           }
 
-          if (!created) continue;
-          if (created.getTime() < startDate.getTime() || created.getTime() > endDate.getTime()) continue;
-
-          // Prefer running balance fields (these reflect cumulative values at this ledger row).
-          const amt = Number(d.runningBalanceAmount ?? d.amount ?? 0);
-          const qty = Number(d.runningBalanceQty ?? d.quantity ?? d.qty ?? 0);
+          let amountSum = 0;
+          let qtySum = 0;
+          snapsType.docs.forEach((entrySnap) => {
+            const d: any = entrySnap.data();
+            if (!d) return;
+            amountSum += Number(d.runningBalanceAmount ?? d.amount ?? 0);
+            qtySum += Number(d.runningBalanceQty ?? d.quantity ?? d.qty ?? 0);
+          });
 
           if (et === 'completed') {
-            result.completed.amount += amt;
-            result.completed.qty += qty;
+            result.completed.amount += amountSum;
+            result.completed.qty += qtySum;
           } else if (et === 'returned') {
-             result.returns.amount += amt;
-            result.returns.qty += qty;
+            result.returns.amount += amountSum;
+            result.returns.qty += qtySum;
           } else if (et === 'refunded') {
-            result.refunds.amount += amt;
-            result.refunds.qty += qty;
+            result.refunds.amount += amountSum;
+            result.refunds.qty += qtySum;
           } else if (et === 'damaged') {
-            result.damages.amount += amt;
-            result.damages.qty += qty;
+            result.damages.amount += amountSum;
+            result.damages.qty += qtySum;
           } else if (et === 'unpaid') {
-            result.unpaid.amount += amt;
-            result.unpaid.qty += qty;
+            result.unpaid.amount += amountSum;
+            result.unpaid.qty += qtySum;
           } else if (et === 'recovered') {
-            result.recovered.amount += amt;
-            result.recovered.qty += qty;
+            result.recovered.amount += amountSum;
+            result.recovered.qty += qtySum;
           }
         } catch (e) {
           console.warn(`LedgerService.getAdjustmentTotals: failed to fetch latest ${et}`, e);
