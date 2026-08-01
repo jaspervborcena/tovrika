@@ -1,0 +1,30 @@
+Tovrika POS System
+Proprietary License Notice
+
+Copyright © 2026 Jasper Borcena. All rights reserved.
+
+This software and its associated documentation (the “System”) are proprietary to the business owner and are licensed, not sold. Use of the System is subject to the following terms:
+
+1. Authorized Use
+   - The System is licensed solely for internal deployment by authorized personnel of the business owner.
+   - No third party may access, copy, or use the System without prior written consent.
+
+2. Restrictions
+   - Redistribution, resale, sublicensing, or public hosting of the System is strictly prohibited.
+   - Reverse engineering, modification, or derivative works are not permitted unless expressly authorized.
+
+3. Ownership
+   - All intellectual property rights in and to the System remain the exclusive property of the business owner.
+   - No rights are transferred other than those explicitly granted in this notice.
+
+4. Confidentiality
+   - The System contains trade secrets and confidential information. Users must maintain strict confidentiality and prevent unauthorized disclosure.
+
+5. Disclaimer
+   - The System is provided “as is” without warranties of any kind, express or implied.
+   - The business owner shall not be liable for any damages arising from use or inability to use the System.
+
+6. Termination
+   - Any violation of this license notice will result in immediate termination of the license and may lead to legal action.
+
+By using the Tovrika POS System, you acknowledge that you have read, understood, and agreed to the terms of this Proprietary License Notice.
