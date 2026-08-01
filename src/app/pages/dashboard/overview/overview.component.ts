@@ -2421,7 +2421,7 @@ export class OverviewComponent implements OnInit {
   }
 
   // Compute start/end dates for selected period and call analytics loader
-  protected applyPeriodAndLoad() {
+  protected async applyPeriodAndLoad() {
     const period = this.selectedPeriod();
     
     // Note: Signal reset moved to loadAnalyticsData to prevent race conditions
@@ -2479,13 +2479,13 @@ export class OverviewComponent implements OnInit {
     // If we have a store selected, trigger analytics load
     const storeId = this.selectedStoreId() || this.authService.getCurrentPermission()?.storeId;
     if (storeId && start && end) {
-      this.loadAnalyticsData(start, end);
+      await this.loadAnalyticsData(start, end);
       // Weekly and monthly periods need extra comparison loads
       if (period === 'this_month' || period === 'previous_month') {
-        this.fetchMonthlyComparison().catch(err => console.error('fetchMonthlyComparison error:', err));
+        await this.fetchMonthlyComparison().catch(err => console.error('fetchMonthlyComparison error:', err));
       }
       if (period === 'this_week' || period === 'previous_week') {
-        this.fetchWeeklyComparison(start, end).catch(err => console.error('fetchWeeklyComparison error:', err));
+        await this.fetchWeeklyComparison(start, end).catch(err => console.error('fetchWeeklyComparison error:', err));
       }
     }
   }
@@ -2495,15 +2495,19 @@ export class OverviewComponent implements OnInit {
     this.loadData();
   }
 
-  private loadAnalyticsData(startDate: Date, endDate: Date): void {
-    // Load analytics data for the given date range
-    // Called when date range is applied
-    this.loadCurrentDateData(startDate, endDate).then(() => {
-      this.fetchLedgerTotalsForPeriod(startDate, endDate);
-    }).catch(err => {
+  private async loadAnalyticsData(startDate: Date, endDate: Date): Promise<void> {
+    // Load analytics data for the given date range and keep the full-page
+    // loading overlay visible until every important fetch has completed.
+    this.isLoading.set(true);
+
+    try {
+      await this.loadCurrentDateData(startDate, endDate);
+      await this.fetchLedgerTotalsForPeriod(startDate, endDate);
+    } catch (err) {
       console.error('Error loading analytics data:', err);
+    } finally {
       this.isLoading.set(false);
-    });
+    }
   }
 
   private async loadSalesFromCloudFunction(storeId: string, startDate: Date, endDate: Date, status: string): Promise<void> {
@@ -2521,7 +2525,7 @@ export class OverviewComponent implements OnInit {
       
       // After stores load, use the selected period/store to load analytics
       // This ensures the new store/period controls drive the initial load
-      this.applyPeriodAndLoad();
+      await this.applyPeriodAndLoad();
       await this.fetchTopProducts();
       this.isLoading.set(false);
 
@@ -2641,15 +2645,10 @@ export class OverviewComponent implements OnInit {
         }
       }
 
-      // Mark loading complete
-      if (requestId === this.overviewLoadSequence && this.isLoading()) {
-        this.isLoading.set(false);
-      }
+      // Loading completion is managed by the outer analytics load wrapper.
+      // This preserves the full-page loader until all dashboard data has finished.
     } catch (error) {
       console.error('❌ Error loading current date data:', error);
-      if (requestId === this.overviewLoadSequence) {
-        this.isLoading.set(false);
-      }
     }
   }
 
