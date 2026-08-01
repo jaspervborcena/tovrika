@@ -1283,13 +1283,54 @@
 
     .products-display {
       flex: 1;
-      padding: 0; /* Remove all padding */
-      margin: 0; /* Remove all margins */
-      width: 100%; /* Full width */
+      padding: 0;
+      margin: 0;
+      width: 100%;
       min-height: 350px;
-      overflow-x: hidden;
+      overflow-x: auto;
       overflow-y: auto;
       background: linear-gradient(135deg, rgba(102, 126, 234, 0.12) 0%, rgba(118, 75, 162, 0.10) 100%);
+    }
+
+    .orders-list {
+      overflow: auto;
+      border-radius: 6px;
+      max-height: 100%;
+    }
+
+    .orders-header,
+    .order-list-item {
+      min-width: 700px;
+      display: grid;
+      grid-template-columns: 1.7fr 0.8fr 1.25fr 1.35fr 1fr;
+      gap: 0.65rem;
+      align-items: start;
+    }
+
+    .orders-header {
+      padding: 0.65rem 0.75rem;
+      background: #f8fafc;
+      border-radius: 6px;
+      font-weight: 600;
+      color: #374151;
+      margin-bottom: 0.5rem;
+    }
+
+    .order-list-item {
+      padding: 0.65rem 0.75rem;
+      border-bottom: 1px solid #f1f5f9;
+      cursor: pointer;
+      transition: background-color 0.2s;
+    }
+
+    .orders-amount-header {
+      text-align: right;
+    }
+
+    .order-date,
+    .order-customer {
+      min-width: 0;
+      white-space: normal;
     }
 
     /* No Products Message Styles */
@@ -1884,9 +1925,8 @@
       height: 100%;
       display: flex;
       flex-direction: column;
-      /* add ~10px more internal padding for breathing room */
-      padding: calc(1rem + 0.1px);
-      min-height: 0; /* allow flex children to shrink so footer stays visible */
+      padding: 0.75rem;
+      min-height: 0;
     }
 
     .receipt-header {
@@ -1917,26 +1957,24 @@
     .cart-items {
       flex: 1 1 auto;
       overflow-y: auto;
-      min-height: 0; /* allow the cart to shrink inside the receipt panel */
-      /* scroll only inside cart; no page-level scroll */
-      padding-bottom: 0; /* remove extra bottom space */
-      margin-bottom: 0; /* ensure no container bottom margin */
-      /* Show only 5 items (rows) then scroll the rest */
-      max-height: calc(5 * (32px + 0.5rem));
+      min-height: 0;
+      padding-bottom: 0;
+      margin-bottom: 0;
+      max-height: calc(5 * (28px + 0.25rem));
     }
 
     .cart-header {
       display: grid;
-      grid-template-columns: 2fr 0.8fr 0.8fr 1fr 0.8fr; /* Added 5th column for actions */
-      gap: 1rem; /* Increased gap from 0.5rem to 1rem for better spacing between columns */
-      padding: 0.5rem;
-      font-size: 0.75rem;
+      grid-template-columns: 2fr 0.8fr 0.8fr 1fr 0.8fr;
+      gap: 0.5rem;
+      padding: 0.35rem 0.25rem;
+      font-size: 0.68rem;
       font-weight: 600;
       color: #6b7280;
       text-transform: uppercase;
       border-bottom: 1px solid #e2e8f0;
-      margin-bottom: 0.5rem;
-       margin-top: 0.5rem;
+      margin-bottom: 0.25rem;
+      margin-top: 0.25rem;
     }
 
     .actions-header {
@@ -1973,14 +2011,12 @@
 
     .cart-item {
       border-bottom: 1px solid #f3f4f6;
-      /* padding: 0.75rem; */
-      /* margin-bottom: 0.5rem; */
       display: grid;
-      grid-template-columns: 2fr 0.8fr 0.8fr 1fr 0.8fr; /* Match cart-header proportions with 5 columns */
-      gap: 1rem; /* Increased gap to match cart-header for consistent spacing */
+      grid-template-columns: 2fr 0.8fr 0.8fr 1fr 0.8fr;
+      gap: 0.5rem;
       align-items: center;
-      min-height: 32px; /* Reduced from 40px for more compact display */
-      padding: 0.25rem 0; /* Add minimal padding for better spacing */
+      min-height: 28px;
+      padding: 0.15rem 0;
     }
 
     .cart-item:last-child {
@@ -1998,7 +2034,8 @@
     .item-name {
       font-weight: 500;
       color: #1f2937;
-      font-size: 0.75rem; /* Reduced from 0.875rem to match summary sections */
+      font-size: 0.72rem;
+      line-height: 1.15;
     }
 
     .item-sku {
@@ -2086,30 +2123,31 @@
     .summary-line {
       display: flex;
       justify-content: space-between;
-      padding: 0.25rem 0;
-      font-size: 0.875rem;
+      padding: 0.15rem 0;
+      font-size: 0.82rem;
+      line-height: 1.2;
     }
 
     .summary-line.gross {
       border-top: 1px solid #e2e8f0;
-      padding-top: 0.5rem;
-      margin-top: 0.5rem;
+      padding-top: 0.35rem;
+      margin-top: 0.35rem;
       font-weight: 600;
     }
 
     .summary-line.total {
       border-top: 2px solid #1f2937;
-      padding-top: 0.5rem;
-      margin-top: 0.5rem;
+      padding-top: 0.4rem;
+      margin-top: 0.35rem;
       font-weight: 700;
-      font-size: 1.125rem;
+      font-size: 1rem;
       color: #1f2937;
     }
 
     .action-buttons {
       display: flex;
-      gap: 0.5rem;
-      margin-top: 0.25rem; /* tighter to reduce gap */
+      gap: 0.4rem;
+      margin-top: 0.15rem;
       flex-shrink: 0;
     }
 
@@ -2175,8 +2213,8 @@
 
     .receipt-footer {
       border-top: 1px solid #e2e8f0;
-      padding-top: 0.5rem;
-      margin-top: 0.25rem; /* tighter to reduce gap */
+      padding-top: 0.35rem;
+      margin-top: 0.15rem;
       text-align: center;
       flex-shrink: 0;
     }

@@ -640,6 +640,11 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   private ordersSignal = signal<any[]>([]);
   readonly orders = computed(() => this.ordersSignal());
 
+  private _posUnpaidAmount = signal<number>(0);
+  readonly posUnpaidAmount = computed(() => this._posUnpaidAmount());
+  private _posUnpaidQty = signal<number>(0);
+  readonly posUnpaidQty = computed(() => this._posUnpaidQty());
+
   // Orders pagination state
   readonly ordersCurrentPage = signal<number>(1);
   readonly ordersPageSize = computed(() => {
@@ -764,7 +769,8 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
           matches = order.status?.toLowerCase() === 'unpaid';
           break;
         case 'Recovered':
-          matches = order.status?.toLowerCase() === 'recovered' || hasStatusInHistory('recovered');
+          // Only show orders with current status 'recovered'
+          matches = order.status?.toLowerCase() === 'recovered';
           break;
         case 'Split Payments':
           // Orders with both cash and charge payments
@@ -1033,6 +1039,10 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       } else {
         console.log('📋 Orders already loaded, just filtering for tab:', tab);
       }
+
+      if (tab === 'Unpaid') {
+        void this.loadPosUnpaidSummary();
+      }
     } else {
       // Clear orders only when switching to non-order tabs (New tab)
       console.log('🧹 Clearing orders for non-order tab:', tab);
@@ -1141,6 +1151,41 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       }
     } catch (error) {
       console.error('❌ Error during manual refresh:', error);
+    } finally {
+      if (this.accessTab() === 'Unpaid') {
+        await this.loadPosUnpaidSummary();
+      }
+    }
+  }
+
+  private async loadPosUnpaidSummary(): Promise<void> {
+    try {
+      const storeInfo = this.currentStoreInfo();
+      const companyId = storeInfo?.companyId || this.authService.getCurrentPermission()?.companyId || '';
+      const storeId = this.selectedStoreId();
+      if (!companyId || !storeId) {
+        this._posUnpaidAmount.set(0);
+        this._posUnpaidQty.set(0);
+        return;
+      }
+
+      const today = new Date();
+      const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0, 0);
+      const endOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999);
+
+      const unpaidSummary = await this.ordersSellingTrackingService.getUnpaidSummary(
+        companyId,
+        storeId,
+        startOfToday,
+        endOfToday
+      );
+
+      this._posUnpaidAmount.set(Number(unpaidSummary.amount || 0));
+      this._posUnpaidQty.set(Number(unpaidSummary.qty || 0));
+    } catch (error) {
+      console.error('❌ Failed to load POS unpaid summary:', error);
+      this._posUnpaidAmount.set(0);
+      this._posUnpaidQty.set(0);
     }
   }
 
@@ -1857,7 +1902,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
         }
       }
 
-      // If this is a recovery from unpaid, create recovered tracking entries
+      // If this is a recovery from unpaid, create recovered tracking entries and ledger event
       if (isRecovery) {
         console.log('🔄 Creating recovered tracking entries for unpaid order...');
         try {
@@ -1867,6 +1912,25 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
             'Recovered from unpaid status - payment received'
           );
           console.log('✅ Recovered tracking entries created:', recoveredResult);
+
+          // Record recovered event in ledger
+          const companyId = orderData.companyId || this.authService.getCurrentPermission()?.companyId || '';
+          const storeId = this.selectedStoreId();
+          const recoveredAmount = totalAmount; // The full order amount that was recovered
+          const recoveredQty = (orderData.items || []).reduce((sum: number, item: any) => sum + (item.quantity || 1), 0);
+          
+          console.log('📊 Recording recovered event to ledger - Amount:', recoveredAmount, 'Qty:', recoveredQty);
+          
+          await this.ledgerService.recordEvent(
+            companyId,
+            storeId,
+            orderData.id,
+            'recovered',
+            recoveredAmount,
+            recoveredQty,
+            currentUser?.uid || 'system'
+          );
+          console.log('✅ Recovered event recorded in ledger');
         } catch (trackingError) {
           console.warn('⚠️ Failed to create recovered tracking entries (non-critical):', trackingError);
         }
@@ -4436,12 +4500,14 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
           cancelText: ''
         });
         
-        // Preserve cart so user can reprint — mark order completed instead
-        this.isOrderCompleted.set(true);
-        
-        // Reset new order state so user must click "New" again
-        this.isNewOrderActive.set(false);
-        
+        // Keep OPEN (Pay Later) orders in an editable state so the user can
+        // continue adding items without losing the current preview order.
+        this.isOrderCompleted.set(false);
+        this.posService.setOrderCompleted(false);
+        this.isNewOrderActive.set(true);
+        this.posService.setOrderActive(true);
+        this.completedOrderData.set(null);
+
         // Refresh orders list to show new OPEN order
         console.log('💼 OPEN order created, refreshing orders list...');
         await new Promise(resolve => setTimeout(resolve, 1000)); // Wait for Firestore to complete

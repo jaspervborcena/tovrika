@@ -552,18 +552,24 @@
           <!-- Orders results use the same display area when Orders tab is active -->
           <div class="products-display" *ngIf="accessTab() === 'Orders' || accessTab() === 'Open' || accessTab() === 'Cancelled' || accessTab() === 'Returns' || accessTab() === 'Refunds' || accessTab() === 'Damage' || accessTab() === 'Unpaid' || accessTab() === 'Recovered' || accessTab() === 'Split Payments' || accessTab() === 'Discounts & Promotions'" style="padding:1rem;">
             <!-- Control buttons for Orders tab -->
-            <div style="margin-bottom: 1rem;">
-              <!-- Refresh button -->
-              <button 
-                (click)="refreshOrders()" 
-                [disabled]="isLoadingOrders()"
-                style="background: #059669; color: white; border: none; padding: 0.5rem 1rem; border-radius: 4px; cursor: pointer; display: flex; align-items: center; gap: 0.5rem;"
-                [style.opacity]="isLoadingOrders() ? '0.6' : '1'"
-                [style.cursor]="isLoadingOrders() ? 'not-allowed' : 'pointer'">
-                <span *ngIf="!isLoadingOrders()">🔄</span>
-                <span *ngIf="isLoadingOrders()">⏳</span>
-                {{ isLoadingOrders() ? 'Refreshing...' : 'Refresh Orders' }}
-              </button>
+            <div style="margin-bottom: 1rem; display: grid; gap: 0.75rem;">
+              <div style="display:flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap;">
+                <button 
+                  (click)="refreshOrders()" 
+                  [disabled]="isLoadingOrders()"
+                  style="background: #059669; color: white; border: none; padding: 0.5rem 1rem; border-radius: 4px; cursor: pointer; display: flex; align-items: center; gap: 0.5rem;"
+                  [style.opacity]="isLoadingOrders() ? '0.6' : '1'"
+                  [style.cursor]="isLoadingOrders() ? 'not-allowed' : 'pointer'">
+                  <span *ngIf="!isLoadingOrders()">🔄</span>
+                  <span *ngIf="isLoadingOrders()">⏳</span>
+                  {{ isLoadingOrders() ? 'Refreshing...' : 'Refresh Orders' }}
+                </button>
+                <div *ngIf="accessTab() === 'Unpaid'" style="display:flex; align-items:center; gap:0.75rem; padding:0.75rem 1rem; background:#f8fafc; border:1px solid #d1d5db; border-radius:8px; color:#1f2937;">
+                  <div style="font-weight:600;">Dashboard unpaid</div>
+                  <div>₱{{ posUnpaidAmount() | currency:'PHP':'symbol':'1.2-2' }}</div>
+                  <div style="color:#4b5563;">({{ posUnpaidQty() }} orders)</div>
+                </div>
+              </div>
             </div>
             
             <div *ngIf="isLoadingOrders()" class="muted" style="text-align: center; padding: 2rem;">
@@ -609,18 +615,17 @@
             
             <!-- Enhanced Order List Display with Pagination -->
             <div class="orders-list" *ngIf="!isLoadingOrders() && filteredOrders().length > 0">
-              <div class="orders-header" style="display: grid; grid-template-columns: 2fr 1fr 2fr 1fr 1fr; gap: 1rem; padding: 0.75rem; background: #f8fafc; border-radius: 6px; font-weight: 600; color: #374151; margin-bottom: 0.5rem;">
+              <div class="orders-header">
                 <div>Invoice Number</div>
                 <div>Table Number</div>
                 <div>Date</div>
                 <div>Customer Name</div>
-                <div style="text-align: right;">Amount</div>
+                <div class="orders-amount-header">Amount</div>
               </div>
 
               <div *ngFor="let order of displayedOrders()" 
                    class="order-list-item" 
-                   (dblclick)="openOrder(order)" 
-                   style="display: grid; grid-template-columns: 2fr 1fr 2fr 1fr 1fr; gap: 1rem; padding: 0.75rem; border-bottom: 1px solid #f1f5f9; cursor: pointer; transition: background-color 0.2s;"
+                   (dblclick)="openOrder(order)"
                    onmouseover="this.style.backgroundColor='#f8fafc'"
                    onmouseout="this.style.backgroundColor='transparent'">
                 <!-- Invoice Number -->
