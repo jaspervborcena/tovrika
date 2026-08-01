@@ -1727,16 +1727,23 @@ export class OverviewComponent implements OnInit {
     // Always use ledger signals for all periods
     return Math.max(0, this.ledgerTotalOrders());
   });
-  // Total expenses shown on the card should reflect month-to-date totals
-  protected totalExpenses = computed(() => this.monthExpensesTotal());
+  // Total expenses shown on the card should reflect the active period.
+  // For date-range mode, use the explicit range total; otherwise keep the
+  // month-scoped aggregate used by the standard period selectors.
+  protected totalExpenses = computed(() => {
+    if (this.selectedPeriod() === 'date_range') {
+      return (this.expenses() || []).reduce((s, e) => s + (Number((e as any).amount || 0) / 100), 0);
+    }
+    return this.monthExpensesTotal();
+  });
 
   // Change vs yesterday: symbol and percent
   protected expenseChange = computed(() => {
-    const month = this.monthExpensesTotal();
+    const current = this.totalExpenses();
     const yesterday = this.yesterdayExpensesTotal();
-    const diff = month - yesterday;
+    const diff = current - yesterday;
     const percent = (() => {
-      if (yesterday === 0) return (month === 0 ? 0 : 100);
+      if (yesterday === 0) return (current === 0 ? 0 : 100);
       const raw = (Math.abs(diff) / yesterday) * 100;
       return Math.round(raw * 10) / 10; // one decimal place
     })();
@@ -2365,9 +2372,14 @@ export class OverviewComponent implements OnInit {
     const from = this.dateFrom();
     const to = this.dateTo();
     if (!from || !to) return;
+
+    const fromIso = from.slice(0, 10);
+    const toIso = to.slice(0, 10);
+    this.dateFrom.set(fromIso);
+    this.dateTo.set(toIso);
     
-    const start = new Date(from + 'T00:00:00');
-    const end = new Date(to + 'T23:59:59.999');
+    const start = new Date(fromIso + 'T00:00:00');
+    const end = new Date(toIso + 'T23:59:59.999');
     
     // Validate date range: max 31 days
     const daysDifference = Math.floor((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
@@ -2393,7 +2405,8 @@ export class OverviewComponent implements OnInit {
       this.showConfirmDialog.set(true);
       return;
     }
-    
+
+    this.selectedPeriod.set('date_range');
     this.loadAnalyticsData(start, end);
     // Fetch date range comparison data
     this.fetchDateRangeComparison().catch(err => console.error('Failed to fetch date range comparison:', err));
