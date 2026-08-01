@@ -21,18 +21,36 @@ export class ExpenseService {
     if (!storeId) return [];
     try {
       const expensesRef = collection(this.firestore, 'expenseLogs');
-      let q;
-      if (startDate && endDate) {
-        const startTs = Timestamp.fromDate(startDate);
-        const endTs = Timestamp.fromDate(endDate);
-        q = query(expensesRef, where('storeId', '==', storeId), where('paymentDate', '>=', startTs), where('paymentDate', '<=', endTs));
-      } else {
-        q = query(expensesRef, where('storeId', '==', storeId));
-      }
-
+      const q = query(expensesRef, where('storeId', '==', storeId));
       const snap = await getDocs(q);
       const results: ExpenseLog[] = snap.docs.map(d => ({ id: d.id, ...(d.data() as any) } as ExpenseLog));
-      return results;
+
+      if (!startDate || !endDate) {
+        return results;
+      }
+
+      const normalizedStart = new Date(startDate);
+      const normalizedEnd = new Date(endDate);
+      normalizedEnd.setHours(23, 59, 59, 999);
+
+      return results.filter((expense) => {
+        const dateCandidate = (expense as any)?.paymentDate ?? (expense as any)?.createdAt;
+        let expenseDate: Date | null = null;
+
+        if (dateCandidate?.toDate) {
+          expenseDate = dateCandidate.toDate();
+        } else if (dateCandidate instanceof Date) {
+          expenseDate = dateCandidate;
+        } else if (dateCandidate) {
+          expenseDate = new Date(dateCandidate);
+        }
+
+        if (!expenseDate || Number.isNaN(expenseDate.getTime())) {
+          return false;
+        }
+
+        return expenseDate >= normalizedStart && expenseDate <= normalizedEnd;
+      });
     } catch (e) {
       console.warn('ExpenseService: failed to load expenses', e);
       return [];
