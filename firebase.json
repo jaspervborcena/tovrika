@@ -6,7 +6,7 @@
   "hosting": [
     {
       "target": "app",
-      "public": "dist/pos-system",
+      "public": "dist/pos-system/browser",
       "ignore": [
         "firebase.json",
         "**/.*",
@@ -53,7 +53,7 @@
     },
     {
       "target": "www",
-      "public": "dist/pos-system",
+      "public": "dist/pos-system/browser",
       "redirects": [
         {
           "source": "/",
