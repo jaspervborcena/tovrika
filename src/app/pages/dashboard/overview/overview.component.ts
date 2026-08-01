@@ -1601,6 +1601,7 @@ export class OverviewComponent implements OnInit {
   protected selectedStoreId = signal<string>('all');
   protected isLoading = signal<boolean>(true);
   private analyticsLoadInProgress = false;
+  private overviewLoadSequence = 0;
 
   // UI controls for overview filtering
   protected periodOptions = [
@@ -2559,6 +2560,10 @@ export class OverviewComponent implements OnInit {
   }
 
   async loadCurrentDateData(startDate?: Date, endDate?: Date): Promise<void> {
+    const requestId = ++this.overviewLoadSequence;
+    this.monthExpensesTotal.set(0);
+    this.yesterdayExpensesTotal.set(0);
+
     try {
       // Use selected store ID or get from permission - EXACT same logic
       const storeId = this.selectedStoreId() || this.authService.getCurrentPermission()?.storeId;
@@ -2578,10 +2583,16 @@ export class OverviewComponent implements OnInit {
 
       // Load orders for the requested date range from Firestore
       const orders = await this.orderService.getOrdersByDateRange(storeId, queryStart, queryEnd);
+      if (requestId !== this.overviewLoadSequence) {
+        return;
+      }
       this.orders.set(orders || []);
 
       // Load expenses for the requested date range
       const expenses = await this.expenseService.getExpensesByStore(storeId, queryStart, queryEnd);
+      if (requestId !== this.overviewLoadSequence) {
+        return;
+      }
       this.expenses.set(expenses || []);
 
       // Compute the expense total from the selected period's actual month window.
@@ -2593,6 +2604,9 @@ export class OverviewComponent implements OnInit {
         const monthEnd = new Date(referenceDate.getFullYear(), referenceDate.getMonth() + 1, 0, 23, 59, 59, 999);
 
         const monthExpenses = await this.expenseService.getExpensesByStore(storeId, monthStart, monthEnd);
+        if (requestId !== this.overviewLoadSequence) {
+          return;
+        }
         const monthTotal = (monthExpenses || []).reduce((s, e) => s + (Number((e as any).amount || 0) / 100), 0);
         this.monthExpensesTotal.set(monthTotal);
 
@@ -2601,21 +2615,28 @@ export class OverviewComponent implements OnInit {
         const yesterdayStart = new Date(yesterdayRef.getFullYear(), yesterdayRef.getMonth(), yesterdayRef.getDate(), 0, 0, 0, 0);
         const yesterdayEnd = new Date(yesterdayRef.getFullYear(), yesterdayRef.getMonth(), yesterdayRef.getDate(), 23, 59, 59, 999);
         const yesterdayExpenses = await this.expenseService.getExpensesByStore(storeId, yesterdayStart, yesterdayEnd);
+        if (requestId !== this.overviewLoadSequence) {
+          return;
+        }
         const yesterdayTotal = (yesterdayExpenses || []).reduce((s, e) => s + (Number((e as any).amount || 0) / 100), 0);
         this.yesterdayExpensesTotal.set(yesterdayTotal);
       } catch (monthErr) {
         console.warn('Overview: month expense query failed, will skip month expense calc:', monthErr);
-        this.monthExpensesTotal.set(0);
-        this.yesterdayExpensesTotal.set(0);
+        if (requestId === this.overviewLoadSequence) {
+          this.monthExpensesTotal.set(0);
+          this.yesterdayExpensesTotal.set(0);
+        }
       }
 
       // Mark loading complete
-      if (this.isLoading()) {
+      if (requestId === this.overviewLoadSequence && this.isLoading()) {
         this.isLoading.set(false);
       }
     } catch (error) {
       console.error('❌ Error loading current date data:', error);
-      this.isLoading.set(false);
+      if (requestId === this.overviewLoadSequence) {
+        this.isLoading.set(false);
+      }
     }
   }
 
