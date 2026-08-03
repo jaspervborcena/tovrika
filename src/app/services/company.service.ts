@@ -96,6 +96,57 @@ export class CompanyService {
     return new Date();
   }
 
+  private normalizeSlug(value: string | undefined): string {
+    if (!value) return '';
+    return String(value)
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9-]/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/(^-|-$)/g, '');
+  }
+
+  private generateRandomSlug(length = 6): string {
+    const characters = 'abcdefghijklmnopqrstuvwxyz0123456789';
+    let result = '';
+    for (let i = 0; i < length; i++) {
+      result += characters.charAt(Math.floor(Math.random() * characters.length));
+    }
+    return result;
+  }
+
+  private async isSlugUnique(slug: string, excludeCompanyId?: string): Promise<boolean> {
+    if (!slug) return false;
+    const companiesRef = collection(this.firestore, 'companies');
+    const slugQuery = query(companiesRef, where('slug', '==', slug));
+    const snap = await getDocs(slugQuery);
+    if (snap.empty) return true;
+    if (excludeCompanyId) {
+      return snap.docs.every(doc => doc.id === excludeCompanyId);
+    }
+    return snap.docs.length === 0;
+  }
+
+  private async normalizeAndEnsureUniqueSlug(slug?: string, excludeCompanyId?: string): Promise<string> {
+    const normalized = this.normalizeSlug(slug || '');
+    if (normalized) {
+      const isUnique = await this.isSlugUnique(normalized, excludeCompanyId);
+      if (!isUnique) {
+        throw new Error('Slug already exists');
+      }
+      return normalized;
+    }
+
+    for (let attempt = 0; attempt < 10; attempt++) {
+      const generated = this.generateRandomSlug();
+      if (await this.isSlugUnique(generated, excludeCompanyId)) {
+        return generated;
+      }
+    }
+
+    throw new Error('Unable to generate a unique slug. Please try again.');
+  }
+
   async getActiveCompany() {
     const user = this.authService.getCurrentUser();
     if (!user) return null;
@@ -284,6 +335,31 @@ export class CompanyService {
     }
   }
 
+  async getCompanyBySlug(slug: string): Promise<Company | null> {
+    try {
+      const normalizedSlug = this.normalizeSlug(slug);
+      if (!normalizedSlug) return null;
+
+      const companiesRef = collection(this.firestore, 'companies');
+      const slugQuery = query(companiesRef, where('slug', '==', normalizedSlug));
+      const snap = await getDocs(slugQuery);
+      if (snap.empty) return null;
+
+      const docSnap = snap.docs[0];
+      const data = docSnap.data() as Omit<Company, 'id'>;
+      const company: Company = {
+        ...data,
+        id: docSnap.id,
+        createdAt: this.toDate(data['createdAt']),
+        updatedAt: data['updatedAt'] ? this.toDate(data['updatedAt']) : undefined,
+        stores: []
+      };
+      return company;
+    } catch (error) {
+      console.error('Error getting company by slug:', error);
+      return null;
+    }
+  }
 
   async createCompany(companyInput: Omit<Company, 'id' | 'createdAt' | 'updatedAt'>) {
     try {
@@ -301,13 +377,15 @@ export class CompanyService {
       const companyData = Object.fromEntries(
         Object.entries(company)
           .filter(([_, value]) => value !== undefined)
-      );
+      ) as Partial<Omit<Company, 'id' | 'createdAt' | 'updatedAt'>>;
+      
+      const slug = await this.normalizeAndEnsureUniqueSlug(companyData['slug'] as string | undefined);
       
       // Create the new company object with required fields
       const newCompany = {
         ...companyData,
         ownerUid: user.uid, // Set the current user as owner
-        slug: companyData['slug'] || (typeof companyData['name'] === 'string' ? companyData['name'].toLowerCase().replace(/[^a-z0-9]/g, '-') : 'company'),
+        slug,
         plan: companyData['plan'] || 'basic',
   // onboardingStatus removed - no longer tracked here
         createdAt: new Date(),
@@ -414,12 +492,21 @@ export class CompanyService {
     updates: Partial<Omit<Company, 'id' | 'createdAt'>>
   ) {
     try {
+      const updateData = { ...updates };
+      if (updateData.slug) {
+        updateData.slug = this.normalizeSlug(updateData.slug);
+        const isUnique = await this.isSlugUnique(updateData.slug, companyId);
+        if (!isUnique) {
+          throw new Error('Slug already exists');
+        }
+      }
+
       const companyRef = doc(this.firestore, `companies/${companyId}`);
-      const updateData = {
-        ...updates,
+      const finalUpdate = {
+        ...updateData,
         updatedAt: new Date()
       };
-      await this.offlineDocService.updateDocument('companies', companyId, updateData);
+      await this.offlineDocService.updateDocument('companies', companyId, finalUpdate);
       await this.loadCompanies(); // Reload to get fresh data
     } catch (error) {
       console.error('Error updating company:', error);
