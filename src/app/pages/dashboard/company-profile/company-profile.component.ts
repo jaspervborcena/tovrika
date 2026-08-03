@@ -225,10 +225,7 @@ import { SubscriptionService } from '../../../services/subscription.service';
             </div>
             <ng-template #noQrBlock>
               <div class="qr-missing">
-                <p class="form-note">No QR code has been generated yet.</p>
-                <button type="button" class="btn btn-primary" (click)="generateCompanyQr()">
-                  Generate QR Code
-                </button>
+                <p class="form-note">A QR code will be generated automatically for this company.</p>
               </div>
             </ng-template>
           </div>
