@@ -12,6 +12,7 @@ export interface Company {
   updatedAt?: Date;
   plan?: PlanType;
   taxId?: string;
+  qrPayload?: string;
   
   // UI state (optional) - for displaying nested data
   stores?: any[]; // Import from store.interface.ts when needed

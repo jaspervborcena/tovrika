@@ -1,0 +1,300 @@
+import { Component, inject, signal } from '@angular/core';
+import { CommonModule } from '@angular/common';
+import { ActivatedRoute } from '@angular/router';
+import { toDataURL } from 'qrcode';
+import { CompanyService } from '../../services/company.service';
+import { Company } from '../../interfaces/company.interface';
+
+@Component({
+  selector: 'app-company-qr',
+  standalone: true,
+  imports: [CommonModule],
+  template: `
+    <div class="company-qr-page">
+      <div class="header">
+        <h1>Company QR Code</h1>
+        <p class="subtitle">Scan this code to open the company profile for loyalty and customer identification.</p>
+      </div>
+
+      <div *ngIf="loading()" class="loading-state">
+        <p>Loading company details...</p>
+      </div>
+
+      <div *ngIf="error()" class="error-alert">
+        <p>{{ error() }}</p>
+      </div>
+
+      <div *ngIf="company() && !loading()" class="content-grid">
+        <div class="profile-card">
+          <h2>{{ company()?.name }}</h2>
+          <p class="company-tagline">Company profile details</p>
+          <div class="profile-row"><span>Company Slug</span><strong>{{ company()?.slug }}</strong></div>
+          <div class="profile-row"><span>Company ID</span><strong>{{ company()?.id }}</strong></div>
+          <div class="profile-row" *ngIf="company()?.email"><span>Email</span><strong>{{ company()?.email }}</strong></div>
+          <div class="profile-row" *ngIf="company()?.phone"><span>Phone</span><strong>{{ company()?.phone }}</strong></div>
+          <div class="profile-row" *ngIf="company()?.website"><span>Website</span><strong>{{ company()?.website }}</strong></div>
+          <div class="profile-row" *ngIf="company()?.address"><span>Address</span><strong>{{ company()?.address }}</strong></div>
+          <div class="profile-row" *ngIf="company()?.plan"><span>Plan</span><strong>{{ company()?.plan }}</strong></div>
+        </div>
+
+        <div class="qr-card">
+          <div class="qr-card-header">
+            <h2>Company QR Code</h2>
+            <p class="form-note">This link is served at <strong>app.tovrika.com/qr/{{ company()?.slug }}</strong>.</p>
+          </div>
+
+          <div *ngIf="qrDataUrl(); else qrMissing" class="qr-content">
+            <img [src]="qrDataUrl()" alt="Company QR Code" class="qr-image" />
+            <div class="qr-actions">
+              <a [href]="qrDataUrl()" download="company-qr.png" class="btn btn-secondary">
+                Download QR Code (Android)
+              </a>
+              <button type="button" class="btn btn-primary" (click)="copyQrPayload()">
+                Copy QR Payload
+              </button>
+            </div>
+            <p class="form-note">Share this QR with customers or staff across branches.</p>
+          </div>
+
+          <ng-template #qrMissing>
+            <div class="qr-missing">
+              <p>No QR code is available for this company yet.</p>
+              <button type="button" class="btn btn-primary" (click)="generateCompanyQr()">
+                Generate Company QR Code
+              </button>
+            </div>
+          </ng-template>
+        </div>
+      </div>
+
+      <div *ngIf="message()" class="success-alert">
+        <p>{{ message() }}</p>
+      </div>
+    </div>
+  `,
+  styles: [`
+    .company-qr-page {
+      max-width: 1040px;
+      margin: 0 auto;
+      padding: 2rem 1rem;
+    }
+    .header {
+      text-align: center;
+      margin-bottom: 2rem;
+    }
+    .header h1 {
+      font-size: 2rem;
+      margin-bottom: 0.5rem;
+    }
+    .subtitle {
+      color: #6b7280;
+      margin: 0;
+    }
+    .loading-state,
+    .error-alert,
+    .success-alert {
+      background: #ffffff;
+      border: 1px solid #e5e7eb;
+      padding: 1rem 1.25rem;
+      border-radius: 12px;
+      margin-bottom: 1rem;
+      text-align: center;
+    }
+    .error-alert {
+      border-color: #fecaca;
+      color: #b91c1c;
+    }
+    .success-alert {
+      border-color: #bbf7d0;
+      color: #166534;
+    }
+    .content-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(320px, 420px);
+      gap: 1.5rem;
+    }
+    .profile-card,
+    .qr-card {
+      background: white;
+      border-radius: 16px;
+      box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+      padding: 1.5rem;
+    }
+    .profile-card h2,
+    .qr-card-header h2 {
+      margin: 0 0 0.5rem;
+      font-size: 1.25rem;
+    }
+    .company-tagline,
+    .form-note {
+      color: #6b7280;
+      margin: 0 0 1rem;
+    }
+    .profile-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 1rem;
+      padding: 0.75rem 0;
+      border-top: 1px solid #f3f4f6;
+    }
+    .profile-row:first-of-type {
+      border-top: none;
+    }
+    .profile-row span {
+      color: #6b7280;
+      font-size: 0.9rem;
+    }
+    .profile-row strong {
+      color: #111827;
+      text-align: right;
+    }
+    .qr-content {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 1rem;
+    }
+    .qr-image {
+      width: 100%;
+      max-width: 280px;
+      border: 1px solid #e5e7eb;
+      border-radius: 1rem;
+      background: white;
+    }
+    .qr-actions {
+      display: flex;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0.85rem 1.25rem;
+      border-radius: 9999px;
+      border: none;
+      cursor: pointer;
+      font-weight: 600;
+      text-decoration: none;
+    }
+    .btn-primary {
+      background: #4338ca;
+      color: white;
+    }
+    .btn-secondary {
+      background: #f8fafc;
+      color: #1f2937;
+      border: 1px solid #e5e7eb;
+    }
+    .qr-missing {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 1rem;
+      text-align: center;
+    }
+    @media (max-width: 900px) {
+      .content-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  `]
+})
+export class CompanyQrComponent {
+  private route = inject(ActivatedRoute);
+  private companyService = inject(CompanyService);
+
+  protected company = signal<Company | undefined>(undefined);
+  protected loading = signal(true);
+  protected error = signal<string | null>(null);
+  protected message = signal<string>('');
+  protected qrDataUrl = signal<string | null>(null);
+  protected generatedQrPayload = signal<string>('');
+
+  constructor() {
+    void this.loadCompany();
+  }
+
+  private async loadCompany() {
+    const companySlug = this.route.snapshot.paramMap.get('companySlug') || '';
+    if (!companySlug) {
+      this.error.set('Invalid QR link. No company identifier was provided.');
+      this.loading.set(false);
+      return;
+    }
+
+    try {
+      const company = await this.companyService.getCompanyBySlug(companySlug);
+      if (!company) {
+        this.error.set('Company not found.');
+        return;
+      }
+
+      this.company.set(company);
+      const payload = company.qrPayload?.startsWith('https://app.tovrika.com/qr/')
+        ? company.qrPayload!
+        : this.buildCompanyQrPayload(company);
+      await this.refreshQrCode(payload);
+      if (!company.qrPayload?.startsWith('https://app.tovrika.com/qr/') && company.id) {
+        await this.companyService.updateCompany(company.id, { qrPayload: payload });
+      }
+    } catch (err) {
+      console.error('Company QR load failed:', err);
+      this.error.set('Unable to load company profile.');
+    } finally {
+      this.loading.set(false);
+    }
+  }
+
+  private buildCompanyQrPayload(company: Company) {
+    const slug = company.slug?.trim() || '';
+    return `https://app.tovrika.com/qr/${slug}`;
+  }
+
+  private async refreshQrCode(payload: string) {
+    if (!payload) {
+      this.qrDataUrl.set(null);
+      this.generatedQrPayload.set('');
+      return;
+    }
+
+    this.generatedQrPayload.set(payload);
+    try {
+      const dataUrl = await toDataURL(payload, { width: 300, margin: 2 });
+      this.qrDataUrl.set(dataUrl);
+    } catch (error) {
+      console.error('QR generation failed:', error);
+      this.qrDataUrl.set(null);
+      this.error.set('Unable to generate QR code.');
+    }
+  }
+
+  protected async copyQrPayload() {
+    const payload = this.generatedQrPayload();
+    if (!payload) {
+      this.message.set('QR payload is not available at the moment.');
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(payload);
+      this.message.set('QR payload copied to clipboard.');
+    } catch (error) {
+      console.error('Copy failed:', error);
+      this.message.set('Could not copy QR payload.');
+    }
+  }
+
+  protected async generateCompanyQr() {
+    const company = this.company();
+    if (!company?.id) {
+      this.error.set('No company loaded to generate QR code.');
+      return;
+    }
+
+    const payload = this.buildCompanyQrPayload(company);
+    await this.refreshQrCode(payload);
+    this.message.set('Company QR code generated successfully.');
+  }
+}

@@ -344,6 +344,10 @@ export const routes: Routes = [
     canActivate: [authGuard, policyGuard, onboardingGuard, roleGuard],
     data: { roles: ['creator', 'store_manager', 'cashier', 'admin'] }
   },
+  {
+    path: 'qr/:companySlug',
+    loadComponent: () => import('./pages/qr/company-qr.component').then(m => m.CompanyQrComponent)
+  },
   
   // Fallback route
   {
