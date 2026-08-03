@@ -2,6 +2,7 @@ import { Component, inject, signal, computed, effect } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
+import { toDataURL } from 'qrcode';
 import { CompanyService } from '../../../services/company.service';
 import { AuthService } from '../../../services/auth.service';
 import { Company } from '../../../interfaces/company.interface';
@@ -150,6 +151,26 @@ import { SubscriptionService } from '../../../services/subscription.service';
               </p>
             </div>
 
+            <!-- Company Slug -->
+            <div class="form-group">
+              <label for="slug" class="form-label">Company Slug *</label>
+              <input
+                id="slug"
+                type="text"
+                formControlName="slug"
+                class="form-input"
+                placeholder="Enter company slug"
+                [disabled]="loading()"
+                [class.error]="profileForm.get('slug')?.invalid && profileForm.get('slug')?.touched"
+              />
+              <div class="error-message" *ngIf="profileForm.get('slug')?.invalid && profileForm.get('slug')?.touched">
+                Slug is required and must contain only letters, numbers, and hyphens.
+              </div>
+              <p class="form-note">
+                Company slug is used for public QR access: <strong>app.tovrika.com/qr/{{ profileForm.get('slug')?.value || currentCompany()?.slug || '' }}</strong>
+              </p>
+            </div>
+
             <!-- UI helper: Show when user has no companyId in permission (explicit requirement) -->
             <div class="form-group" *ngIf="noCompanyId()">
               <label class="form-checkbox">
@@ -183,6 +204,34 @@ import { SubscriptionService } from '../../../services/subscription.service';
               </button>
             </div>
           </form>
+        </div>
+
+        <div class="qr-section" *ngIf="!isCreatingCompany()">
+          <div class="qr-card">
+            <div class="qr-card-header">
+              <h3>Company QR Code</h3>
+              <p class="form-note">Use this QR for loyalty or customer identification across your company branches. Scanning it should take the user to <strong>app.tovrika.com/qr/{{ profileForm.get('slug')?.value || currentCompany()?.slug || '' }}</strong>.</p>
+            </div>
+            <div *ngIf="qrDataUrl(); else noQrBlock" class="qr-content">
+              <img [src]="qrDataUrl()" alt="Company QR Code" class="qr-image" />
+              <div class="qr-actions">
+                <a [href]="qrDataUrl()" download="company-qr.png" class="btn btn-secondary">
+                  Download QR Code
+                </a>
+                <button type="button" class="btn btn-primary" (click)="copyQrPayload()">
+                  Copy QR Payload
+                </button>
+              </div>
+            </div>
+            <ng-template #noQrBlock>
+              <div class="qr-missing">
+                <p class="form-note">No QR code has been generated yet.</p>
+                <button type="button" class="btn btn-primary" (click)="generateCompanyQr()">
+                  Generate QR Code
+                </button>
+              </div>
+            </ng-template>
+          </div>
         </div>
       </div>
 
@@ -608,6 +657,48 @@ import { SubscriptionService } from '../../../services/subscription.service';
       margin-top: 2rem;
       padding-top: 1.5rem;
       border-top: 1px solid #e2e8f0;
+    }
+
+    .qr-section {
+      margin-top: 2rem;
+    }
+
+    .qr-card {
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+      padding: 1.5rem;
+      margin-top: 1.5rem;
+    }
+
+    .qr-card-header {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      margin-bottom: 1rem;
+    }
+
+    .qr-content {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    .qr-image {
+      max-width: 280px;
+      width: 100%;
+      height: auto;
+      border: 1px solid #e5e7eb;
+      border-radius: 1rem;
+      background: white;
+    }
+
+    .qr-actions {
+      display: flex;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+      justify-content: center;
     }
 
     .btn {
@@ -1140,6 +1231,8 @@ export class CompanyProfileComponent {
   protected error = signal<string | null>(null);
   protected showSuccessMessage = signal(false);
   protected successMessage = signal('');
+  protected qrDataUrl = signal<string | null>(null);
+  protected generatedQrPayload = signal<string>('');
   // UI-only: Default checkbox to reuse company info for initial store setup
   protected useSameInfoForStore = signal(true);
   
@@ -1204,7 +1297,8 @@ export class CompanyProfileComponent {
     this.profileForm = this.fb.group({
       name: ['', Validators.required],
       email: ['', [Validators.required, Validators.email]],
-      phone: ['']
+      phone: [''],
+      slug: ['', [Validators.required, Validators.pattern(/^[a-zA-Z0-9-]+$/)]]
     });
 
     // Load companies and set up form subscription
@@ -1242,17 +1336,20 @@ export class CompanyProfileComponent {
         this.profileForm.patchValue({
           name: company.name || '',
           email: company.email || '',
-          phone: company.phone || ''
+          phone: company.phone || '',
+          slug: company.slug || ''
         });
         
         // Load stores when company exists
         this.loadStores();
+        void this.maybeInitializeCompanyQr(company);
       } else if (user && !this.getPrimaryCompanyId()) {
         // New company creation - pre-populate with user email if available
         this.profileForm.patchValue({
           name: '',
           email: user.email || '',
-          phone: ''
+          phone: '',
+          slug: this.generateRandomSlug()
         });
       }
     });
@@ -1347,13 +1444,21 @@ export class CompanyProfileComponent {
           // Create new company
           const companyData: Omit<Company, 'id' | 'createdAt' | 'updatedAt'> = {
             name: formData.name,
-            slug: formData.name.toLowerCase().replace(/[^a-z0-9]/g, '-'),
+            slug: formData.slug?.trim() || this.generateRandomSlug(),
             ownerUid: this.currentUser()?.uid || '',
             email: formData.email,
             phone: formData.phone
           };
 
           const newCompanyId = await this.companyService.createCompany(companyData);
+          const qrPayload = this.buildCompanyQrPayload({
+            slug: companyData.slug,
+            id: newCompanyId,
+            name: companyData.name,
+            email: companyData.email || ''
+          });
+          await this.companyService.updateCompany(newCompanyId, { qrPayload });
+          await this.refreshQrCode(qrPayload);
 
           // Optionally create or update a default store using company info
           if (this.useSameInfoForStore()) {
@@ -1474,6 +1579,7 @@ export class CompanyProfileComponent {
           if (company) {
             const updateData: Partial<Company> = {
               name: formData.name,
+              slug: formData.slug?.trim() || company.slug,
               email: formData.email,
               phone: formData.phone,
               updatedAt: new Date()
@@ -1491,6 +1597,7 @@ export class CompanyProfileComponent {
             
             // Reload companies to refresh the view
             await this.companyService.loadCompanies();
+            void this.maybeInitializeCompanyQr(company);
           }
         }
       } catch (error) {
@@ -1499,6 +1606,100 @@ export class CompanyProfileComponent {
       } finally {
         this.loading.set(false);
       }
+    }
+  }
+
+  private buildCompanyQrPayload(company: { slug?: string; [key: string]: any }) {
+    const slug = company.slug?.trim() || '';
+    return `https://app.tovrika.com/qr/${slug}`;
+  }
+
+  private async refreshQrCode(payload: string) {
+    if (!payload) {
+      this.qrDataUrl.set(null);
+      this.generatedQrPayload.set('');
+      return;
+    }
+
+    this.generatedQrPayload.set(payload);
+    try {
+      const dataUrl = await toDataURL(payload, { margin: 1, width: 280 });
+      this.qrDataUrl.set(dataUrl);
+    } catch (error) {
+      console.error('Failed to generate company QR code:', error);
+      this.qrDataUrl.set(null);
+    }
+  }
+
+  private async maybeInitializeCompanyQr(company: Company | undefined) {
+    if (!company) {
+      this.qrDataUrl.set(null);
+      this.generatedQrPayload.set('');
+      return;
+    }
+
+    const payload = company.qrPayload?.startsWith('https://app.tovrika.com/qr/')
+      ? company.qrPayload!
+      : this.buildCompanyQrPayload({
+          slug: company.slug,
+          id: company.id,
+          name: company.name,
+          email: company.email || ''
+        });
+
+    await this.refreshQrCode(payload);
+
+    if ((!company.qrPayload || !company.qrPayload?.startsWith('https://app.tovrika.com/qr/')) && company.id) {
+      await this.companyService.updateCompany(company.id, { qrPayload: payload });
+    }
+  }
+
+  protected async copyQrPayload() {
+    const payload = this.generatedQrPayload();
+    if (!payload) {
+      this.toastService.error('QR payload is not available yet.');
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(payload);
+      this.toastService.success('QR payload copied to clipboard.');
+    } catch (error) {
+      console.error('Failed to copy QR payload:', error);
+      this.toastService.error('Could not copy QR payload.');
+    }
+  }
+
+  protected generateRandomSlug = (length = 6): string => {
+    const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+    let value = '';
+    for (let i = 0; i < length; i++) {
+      value += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return value;
+  };
+
+  protected async generateCompanyQr() {
+    const company = this.currentCompany();
+    if (!company?.id) {
+      this.toastService.error('No company loaded.');
+      return;
+    }
+
+    const payload = this.buildCompanyQrPayload({
+      slug: company.slug,
+      id: company.id,
+      name: company.name,
+      email: company.email || ''
+    });
+
+    try {
+      await this.companyService.updateCompany(company.id, { qrPayload: payload });
+      await this.refreshQrCode(payload);
+      this.toastService.success('Company QR code generated successfully.');
+    } catch (error) {
+      console.error('Failed to generate company QR code:', error);
+      this.toastService.error('Failed to generate company QR code.');
     }
   }
 
