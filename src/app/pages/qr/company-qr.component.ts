@@ -12,8 +12,8 @@ import { Company } from '../../interfaces/company.interface';
   template: `
     <div class="company-qr-page">
       <div class="header">
-        <h1>Company QR Code</h1>
-        <p class="subtitle">Scan this code to open the company profile for loyalty and customer identification.</p>
+        <h1>Rewards</h1>
+        <p class="subtitle">Download and Install this app to unlock exclusive rewards—earn more points, enjoy special bonuses, and get exciting freebies every time you shop!</p>
       </div>
 
       <div *ngIf="loading()" class="loading-state">
@@ -28,43 +28,21 @@ import { Company } from '../../interfaces/company.interface';
         <div class="profile-card">
           <h2>{{ company()?.name }}</h2>
           <p class="company-tagline">Company profile details</p>
-          <div class="profile-row"><span>Company Slug</span><strong>{{ company()?.slug }}</strong></div>
-          <div class="profile-row"><span>Company ID</span><strong>{{ company()?.id }}</strong></div>
+          <div class="profile-row"><span>Company link</span><strong>app.tovrika.com/qr/{{ company()?.slug }}</strong></div>
           <div class="profile-row" *ngIf="company()?.email"><span>Email</span><strong>{{ company()?.email }}</strong></div>
           <div class="profile-row" *ngIf="company()?.phone"><span>Phone</span><strong>{{ company()?.phone }}</strong></div>
+          <div class="download-button-block">
+            <a
+              [href]="getDownloadUrl()"
+              class="btn download-android-btn"
+            >
+              🤖 Download Android Rewards
+            </a>
+          </div>
           <div class="profile-row" *ngIf="company()?.website"><span>Website</span><strong>{{ company()?.website }}</strong></div>
           <div class="profile-row" *ngIf="company()?.address"><span>Address</span><strong>{{ company()?.address }}</strong></div>
-          <div class="profile-row" *ngIf="company()?.plan"><span>Plan</span><strong>{{ company()?.plan }}</strong></div>
         </div>
 
-        <div class="qr-card">
-          <div class="qr-card-header">
-            <h2>Company QR Code</h2>
-            <p class="form-note">This link is served at <strong>app.tovrika.com/qr/{{ company()?.slug }}</strong>.</p>
-          </div>
-
-          <div *ngIf="qrDataUrl(); else qrMissing" class="qr-content">
-            <img [src]="qrDataUrl()" alt="Company QR Code" class="qr-image" />
-            <div class="qr-actions">
-              <a [href]="qrDataUrl()" download="company-qr.png" class="btn btn-secondary">
-                Download QR Code (Android)
-              </a>
-              <button type="button" class="btn btn-primary" (click)="copyQrPayload()">
-                Copy QR Payload
-              </button>
-            </div>
-            <p class="form-note">Share this QR with customers or staff across branches.</p>
-          </div>
-
-          <ng-template #qrMissing>
-            <div class="qr-missing">
-              <p>No QR code is available for this company yet.</p>
-              <button type="button" class="btn btn-primary" (click)="generateCompanyQr()">
-                Generate Company QR Code
-              </button>
-            </div>
-          </ng-template>
-        </div>
       </div>
 
       <div *ngIf="message()" class="success-alert">
@@ -153,6 +131,23 @@ import { Company } from '../../interfaces/company.interface';
       flex-direction: column;
       align-items: center;
       gap: 1rem;
+    }
+    .download-button-block {
+      margin-top: 1.5rem;
+    }
+    .download-android-btn {
+      background: #16a34a;
+      color: white !important;
+      border: none;
+      padding: 0.95rem 1.4rem;
+      font-size: 1rem;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      box-shadow: 0 10px 25px rgba(22, 163, 74, 0.18);
+    }
+    .download-android-btn:hover {
+      background: #15803d;
     }
     .qr-image {
       width: 100%;
@@ -250,6 +245,12 @@ export class CompanyQrComponent {
   private buildCompanyQrPayload(company: Company) {
     const slug = company.slug?.trim() || '';
     return `https://app.tovrika.com/qr/${slug}`;
+  }
+
+  protected getDownloadUrl(): string {
+    const slug = this.company()?.slug?.trim() || 'default';
+    const objectPath = `android/rewards/Rewards${slug}.apk`;
+    return `https://firebasestorage.googleapis.com/v0/b/jasperpos-1dfd5.firebasestorage.app/o/${encodeURIComponent(objectPath)}?alt=media`;
   }
 
   private async refreshQrCode(payload: string) {
