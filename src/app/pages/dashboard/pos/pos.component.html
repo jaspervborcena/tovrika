@@ -15,6 +15,7 @@
                 <span class="toggle-text">{{ isNavigationCollapsed() ? ('pos.showControls' | translate) : ('pos.hideControls' | translate) }}</span>
                 <span class="controls-hint">{{ 'pos.controlsHint' | translate }}</span>
               </div>
+              <!-- lookup/scanner moved below to avoid being inside button -->
               <span class="toggle-icon" [class.expanded]="!isNavigationCollapsed()">▼</span>
             </button>
           </div>
@@ -41,6 +42,8 @@
               </div>
             </div>
             
+              <!-- lookup/scanner moved to top-level modal area (to avoid nesting/flicker) -->
+
             <!-- Compact Categories & Customer Panel -->
             <div class="categories-panel compact-layout">
             <!-- Left Column: Categories -->
@@ -95,13 +98,23 @@
                 <span class="expand-arrow" [class.expanded]="!isSoldToCollapsed()">▼</span>
               </div>
               
-              <!-- Always visible customer name -->
-              <div class="customer-field-group">
-                <input 
-                  type="text" 
-                  [(ngModel)]="customerInfo.soldTo"
-                  [placeholder]="'pos.customerNamePlaceholder' | translate"
-                  class="customer-name-input">
+              <!-- Always visible customer name: grouped row (input | icons on right) -->
+              <div class="customer-field-group customer-field-row" (click)="$event.stopPropagation()" style="display:flex; align-items:center; gap:0.5rem; flex-wrap:nowrap;">
+                <div style="flex:1 1 0; min-width:0;">
+                  <input
+                    type="text"
+                    [(ngModel)]="customerInfo.soldTo"
+                    [placeholder]="'pos.customerNamePlaceholder' | translate"
+                    class="customer-name-input"
+                    style="width:100%; font-size:0.9rem; padding:0.35rem 0.5rem; min-width:0;"
+                    (click)="$event.stopPropagation()"
+                  />
+                </div>
+                <div style="margin-left:auto; display:flex; gap:0.25rem; align-items:center; white-space:nowrap;">
+                  <button type="button" class="btn" title="Lookup customer" (click)="openCustomerLookup()">🔍</button>
+                  <button type="button" class="btn" title="Scan QR" (click)="openScanner()">📷</button>
+                  <button *ngIf="customerInfo.customerId" type="button" class="btn" title="Remove customer" (click)="clearCustomer()">✖</button>
+                </div>
               </div>
               
               <!-- Expandable customer details -->
@@ -111,8 +124,42 @@
                   <input type="text" [(ngModel)]="customerInfo.tin" [placeholder]="'pos.tinPlaceholder' | translate">
                 </div>
                 <div class="customer-field-group">
+                  <label>Email:</label>
+                  <input type="email" [(ngModel)]="customerInfo.email" placeholder="Email address">
+                </div>
+                <div class="customer-field-group">
+                  <label>Contact Number:</label>
+                  <input type="text" [(ngModel)]="customerInfo.contactNumber" placeholder="Contact number">
+                </div>
+                <div class="customer-field-group">
                   <label>{{ 'pos.businessAddressLabel' | translate }}:</label>
                   <input type="text" [(ngModel)]="customerInfo.businessAddress" [placeholder]="'pos.businessAddressPlaceholder' | translate">
+                </div>
+              </div>
+
+              <div *ngIf="showCustomerEntryPanel()" class="customer-details" style="margin-top:0.5rem; border:1px solid #e5e7eb; border-radius:8px; padding:0.75rem; background:#f9fafb;">
+                <div class="customer-field-group">
+                  <label>Customer Name</label>
+                  <input type="text" [(ngModel)]="customerInfo.soldTo" placeholder="Enter customer name">
+                </div>
+                <div class="customer-field-group">
+                  <label>TIN</label>
+                  <input type="text" [(ngModel)]="customerInfo.tin" placeholder="Enter TIN">
+                </div>
+                <div class="customer-field-group">
+                  <label>Email</label>
+                  <input type="email" [(ngModel)]="customerInfo.email" placeholder="Email address">
+                </div>
+                <div class="customer-field-group">
+                  <label>Contact Number</label>
+                  <input type="text" [(ngModel)]="customerInfo.contactNumber" placeholder="Contact number">
+                </div>
+                <div class="customer-field-group">
+                  <label>Business Address</label>
+                  <input type="text" [(ngModel)]="customerInfo.businessAddress" placeholder="Business address">
+                </div>
+                <div class="customer-field-group" style="display:flex; justify-content:flex-end; margin-top:0.5rem;">
+                  <button type="button" class="btn btn-primary" (click)="saveCustomerFromEntry()">Save</button>
                 </div>
               </div>
             </div>
@@ -1391,6 +1438,8 @@
                 class="amount-input readonly">
             </div>
           </div>
+
+            <!-- lookup/scanner overlays moved to sibling area after payment dialog -->
           
           <div class="payment-table">
             <label for="table-number">Table Number (Optional):</label>
@@ -1457,7 +1506,104 @@
       </div>
     </div>
 
-    <!-- Cart Information Dialog -->
+      <!-- Customer Lookup Dialog (sibling to Payment Dialog) -->
+      <div *ngIf="customerLookupOpen()" class="modal-overlay">
+        <div class="payment-dialog">
+          <div class="dialog-header">
+            <h3>🔎 Find Customer</h3>
+            <p>Search existing customers or add a new one.</p>
+          </div>
+          <div class="dialog-content" style="display:flex; flex-direction:column; gap:0.75rem;">
+            <div style="display:flex; gap:0.5rem; border-bottom:1px solid #e5e7eb; padding-bottom:0.5rem;">
+              <button type="button" class="btn" [class.btn-primary]="customerModalTab() === 'search'" (click)="setCustomerModalTab('search')">Search Customer</button>
+              <button type="button" class="btn" [class.btn-primary]="customerModalTab() === 'add'" (click)="setCustomerModalTab('add')">Add Customer</button>
+            </div>
+
+            <div *ngIf="customerModalTab() === 'search'" style="border:1px solid #e5e7eb; border-radius:8px; padding:0.75rem; background:#f9fafb;">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.5rem;">
+                <strong>Search Customer</strong>
+              </div>
+              <div style="display:flex; gap:0.5rem;">
+                <input type="text" [(ngModel)]="customerLookupQuery" (input)="onCustomerLookupInput($any($event.target).value)" placeholder="Search by name, ID, email or phone" style="flex:1; padding:0.5rem; border:1px solid #e5e7eb; border-radius:6px; min-width:0;">
+              </div>
+              <div style="margin-top:0.5rem;">
+                <div *ngIf="customerLookupResults && customerLookupResults.length === 0" style="color:#6b7280;">No customers found.</div>
+                <ul *ngIf="customerLookupResults && customerLookupResults.length > 0" style="list-style:none; padding:0; margin:0;">
+                  <li *ngFor="let c of customerLookupResults" style="padding:0.5rem; border-bottom:1px solid #f3f4f6; display:flex; justify-content:space-between; align-items:center;">
+                    <div>
+                      <div style="font-weight:600">{{ c.fullName || c.firstName + ' ' + c.lastName }}</div>
+                      <div style="font-size:0.85rem; color:#6b7280">{{ c.customerId || '' }} {{ c.contactNumber ? '· ' + c.contactNumber : '' }}</div>
+                    </div>
+                    <div style="display:flex; gap:0.5rem;">
+                      <button class="btn" type="button" (click)="$event.stopPropagation(); selectCustomer(c)">Select</button>
+                      <button class="btn btn-secondary" type="button" (click)="$event.stopPropagation(); viewCustomerDetails(c)">Details</button>
+                    </div>
+                  </li>
+                </ul>
+              </div>
+            </div>
+
+            <div *ngIf="customerModalTab() === 'add'" style="border:1px solid #e5e7eb; border-radius:8px; padding:0.75rem; background:#fff;">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.5rem;">
+                <strong>{{ isCustomerUpdateMode() ? 'Update Customer' : 'Add New Customer' }}</strong>
+              </div>
+              <div style="display:flex; flex-direction:column; gap:0.6rem;">
+                <div class="customer-field-group">
+                  <label>First Name</label>
+                  <input type="text" [(ngModel)]="customerInfo.soldTo" (ngModelChange)="scheduleCustomerAutoSave()" placeholder="Enter first name">
+                </div>
+                <div class="customer-field-group">
+                  <label>Middle Name (Optional)</label>
+                  <input type="text" [(ngModel)]="customerInfo.tin" (ngModelChange)="scheduleCustomerAutoSave()" placeholder="Enter middle name">
+                </div>
+                <div class="customer-field-group">
+                  <label>Last Name</label>
+                  <input type="text" [(ngModel)]="customerInfo.businessAddress" (ngModelChange)="scheduleCustomerAutoSave()" placeholder="Enter last name">
+                </div>
+                <div class="customer-field-group">
+                  <label>Email (Optional)</label>
+                  <input type="email" [(ngModel)]="customerInfo.email" (ngModelChange)="scheduleCustomerAutoSave()" placeholder="Enter email">
+                </div>
+                <div class="customer-field-group">
+                  <label>Contact Number (Optional)</label>
+                  <input type="text" [(ngModel)]="customerInfo.contactNumber" (ngModelChange)="scheduleCustomerAutoSave()" placeholder="Enter contact number">
+                </div>
+                <div style="display:flex; justify-content:flex-end; margin-top:0.25rem;">
+                  <button type="button" class="btn btn-primary" (click)="saveCustomerFromEntry()">{{ isCustomerUpdateMode() ? 'Update' : 'Add' }}</button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="dialog-actions">
+            <button type="button" class="btn-secondary" (click)="closeCustomerLookup()">Close</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- QR Scanner Dialog (sibling to Payment Dialog) -->
+      <div *ngIf="scannerOpen()" class="modal-overlay">
+        <div class="payment-dialog">
+          <div class="dialog-header">
+            <h3>📷 Scan Customer QR</h3>
+            <p>Use your device camera to scan a customer QR code.</p>
+          </div>
+          <div class="dialog-content">
+            <div style="display:flex; flex-direction:column; gap:0.5rem;">
+              <video #qrVideo autoplay muted playsinline style="width:100%; max-height:60vh; background:#000; border-radius:6px;"></video>
+              <div style="display:flex; gap:0.5rem; align-items:center;">
+                <button class="btn btn-primary" (click)="startCamera()">Start Camera</button>
+                <button class="btn" (click)="stopCamera()">Stop Camera</button>
+                <div style="color:#6b7280; font-size:0.9rem;">(Automatic QR decode not implemented — implement decoder later)</div>
+              </div>
+            </div>
+          </div>
+          <div class="dialog-actions">
+            <button type="button" class="btn-secondary" (click)="closeScanner()">Close</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Cart Information Dialog -->
     <div *ngIf="showCartInformationDialog()" class="modal-overlay">
       <div class="cart-information-dialog">
         <!-- Fixed Header -->

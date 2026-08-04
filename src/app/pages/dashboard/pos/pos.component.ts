@@ -51,6 +51,7 @@ import { DomSanitizer, SafeUrl } from '@angular/platform-browser';
 export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   @ViewChild('processPaymentButton', { read: ElementRef }) processPaymentButton?: ElementRef<HTMLButtonElement>;
   @ViewChild('accessTabListContainer', { read: ElementRef }) accessTabListContainer?: ElementRef;
+  @ViewChild('qrVideo', { read: ElementRef }) qrVideo?: ElementRef<HTMLVideoElement>;
 
   // Services
   private productService = inject(ProductService);
@@ -587,8 +588,33 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     tin: '',
     pwdId: '',
     businessAddress: '',
-    customerId: '' // NEW: for existing/new customers
+    customerId: '',
+    email: '',
+    contactNumber: ''
   };
+
+  // Customer lookup UI state
+  private customerLookupOpenSignal = signal<boolean>(false);
+  readonly customerLookupOpen = computed(() => this.customerLookupOpenSignal());
+  customerLookupQuery: string = '';
+  customerLookupResults: Customer[] = [];
+  private customerLookupDebounce: any = null;
+  private customerAutoSaveDebounce: any = null;
+  private showCustomerEntryPanelSignal = signal<boolean>(false);
+  readonly showCustomerEntryPanel = computed(() => this.showCustomerEntryPanelSignal());
+  private customerModalTabSignal = signal<'search' | 'add'>('search');
+  readonly customerModalTab = computed(() => this.customerModalTabSignal());
+  private isCustomerUpdateModeSignal = signal<boolean>(false);
+  readonly isCustomerUpdateMode = computed(() => this.isCustomerUpdateModeSignal());
+
+  setCustomerModalTab(tab: 'search' | 'add'): void {
+    this.customerModalTabSignal.set(tab);
+  }
+
+  // QR scanner UI state
+  private scannerOpenSignal = signal<boolean>(false);
+  readonly scannerOpen = computed(() => this.scannerOpenSignal());
+  private cameraStream: MediaStream | null = null;
 
   // Order-level information (moved from customerInfo)
   invoiceNumber: string = 'INV-0000-000000';
@@ -3393,6 +3419,288 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     if (this.resizeListener && typeof window !== 'undefined') {
       window.removeEventListener('resize', this.resizeListener);
     }
+    // Ensure camera stream is stopped
+    this.stopCamera();
+    if (this.customerLookupDebounce) {
+      try { clearTimeout(this.customerLookupDebounce); } catch {}
+      this.customerLookupDebounce = null;
+    }
+    if (this.customerAutoSaveDebounce) {
+      try { clearTimeout(this.customerAutoSaveDebounce); } catch {}
+      this.customerAutoSaveDebounce = null;
+    }
+  }
+
+  // --- Customer lookup and scanner helpers ---
+  openCustomerLookup(): void {
+    console.log('POS: openCustomerLookup called');
+    this.customerLookupQuery = '';
+    this.customerLookupResults = [];
+    this.clearCustomer();
+    this.customerModalTabSignal.set('search');
+    this.showCustomerEntryPanelSignal.set(false);
+    this.customerLookupOpenSignal.set(true);
+    try { this.cdr.detectChanges(); } catch {}
+  }
+
+  closeCustomerLookup(): void {
+    console.log('POS: closeCustomerLookup called');
+    this.customerLookupOpenSignal.set(false);
+    try { this.cdr.detectChanges(); } catch {}
+  }
+
+  async searchCustomersForLookup(q?: string): Promise<void> {
+    try {
+      const queryText = (typeof q === 'string' ? q : this.customerLookupQuery) || '';
+      const storeInfo = this.currentStoreInfo();
+      const companyId = storeInfo?.companyId || this.authService.getCurrentPermission()?.companyId || '';
+      const storeId = storeInfo?.id || '';
+      if (!queryText || queryText.trim().length === 0) {
+        this.customerLookupResults = [];
+        this.cdr.markForCheck();
+        return;
+      }
+      this.customerLookupResults = await this.customerService.searchCustomers(companyId, storeId, queryText);
+      this.cdr.markForCheck();
+    } catch (error) {
+      console.error('Customer lookup failed:', error);
+      this.customerLookupResults = [];
+    }
+  }
+
+  /**
+   * Debounced input handler for customer lookup.
+   * - Letters: shorter debounce
+   * - Numbers only: longer debounce to wait for full IDs
+   */
+  onCustomerLookupInput(value: string): void {
+    this.customerLookupQuery = value;
+    if (this.customerLookupDebounce) {
+      try { clearTimeout(this.customerLookupDebounce); } catch {}
+      this.customerLookupDebounce = null;
+    }
+
+    const trimmed = (value || '').trim();
+    if (!trimmed) {
+      this.customerLookupResults = [];
+      this.cdr.markForCheck();
+      return;
+    }
+
+    const isNumeric = /^\d+$/.test(trimmed);
+    const delay = isNumeric ? 2500 : 1500; // numeric inputs wait longer
+
+    this.customerLookupDebounce = setTimeout(() => {
+      this.searchCustomersForLookup(trimmed);
+      this.customerLookupDebounce = null;
+    }, delay);
+  }
+
+  selectCustomer(c: Customer): void {
+    const selectedName = (c.fullName || `${c.firstName || ''} ${c.lastName || ''}`).trim();
+    this.customerInfo.soldTo = selectedName;
+    this.customerInfo.customerId = c.id || c.customerId || '';
+    this.customerInfo.businessAddress = (c.address || '') as any;
+    this.customerInfo.tin = (c.tin || '') as any;
+    this.customerInfo.email = (c.email || '') as any;
+    this.customerInfo.contactNumber = (c.contactNumber || '') as any;
+    this.isSoldToCollapsedSignal.set(false);
+    this.customerLookupOpenSignal.set(false);
+    try { this.cdr.detectChanges(); } catch {}
+  }
+
+  viewCustomerDetails(c: Customer): void {
+    const selectedName = (c.fullName || `${c.firstName || ''} ${c.lastName || ''}`).trim();
+    this.customerInfo.soldTo = selectedName;
+    this.customerInfo.customerId = c.id || c.customerId || '';
+    this.customerInfo.businessAddress = (c.address || '') as any;
+    this.customerInfo.tin = (c.tin || '') as any;
+    this.customerInfo.email = (c.email || '') as any;
+    this.customerInfo.contactNumber = (c.contactNumber || '') as any;
+    this.isCustomerUpdateModeSignal.set(true);
+    this.customerModalTabSignal.set('add');
+    this.showCustomerEntryPanelSignal.set(true);
+    this.customerLookupOpenSignal.set(true);
+    try { this.cdr.detectChanges(); } catch {}
+  }
+
+  async addCustomerFromLookup(): Promise<void> {
+    try {
+      const prefillName = this.customerLookupQuery?.trim() || this.customerInfo.soldTo || '';
+      this.customerInfo.soldTo = prefillName;
+      this.customerInfo.customerId = '';
+      this.customerInfo.email = '';
+      this.customerInfo.contactNumber = '';
+      this.customerLookupResults = [];
+      this.isSoldToCollapsedSignal.set(false);
+      this.customerLookupOpenSignal.set(true);
+      this.customerModalTabSignal.set('add');
+      this.showCustomerEntryPanelSignal.set(true);
+      try { this.cdr.detectChanges(); } catch {}
+    } catch (error) {
+      console.error('Prepare add-customer failed:', error);
+    }
+  }
+
+  private shouldAutoSaveCustomerEntry(): boolean {
+    const values = [
+      this.customerInfo.soldTo,
+      this.customerInfo.tin,
+      this.customerInfo.businessAddress,
+      this.customerInfo.email,
+      this.customerInfo.contactNumber
+    ];
+
+    return values.some(value => typeof value === 'string' && value.trim().length > 0);
+  }
+
+  scheduleCustomerAutoSave(): void {
+    if (this.customerModalTab() !== 'add' || !this.shouldAutoSaveCustomerEntry()) {
+      return;
+    }
+
+    if (this.customerAutoSaveDebounce) {
+      clearTimeout(this.customerAutoSaveDebounce);
+    }
+
+    this.customerAutoSaveDebounce = setTimeout(() => {
+      void this.saveCustomerFromEntry(true);
+    }, 1200);
+  }
+
+  async saveCustomerFromEntry(autoSave: boolean = false): Promise<void> {
+    if (this.customerInfo.customerId) {
+      return this.saveOrUpdateCustomerEntry(autoSave);
+    }
+    try {
+      const storeInfo = this.currentStoreInfo();
+      const companyId = storeInfo?.companyId || this.authService.getCurrentPermission()?.companyId || '';
+      const storeId = storeInfo?.id || '';
+      const formData: any = {
+        soldTo: this.customerInfo.soldTo || '',
+        tin: this.customerInfo.tin || '',
+        businessAddress: this.customerInfo.businessAddress || '',
+        email: this.customerInfo.email || '',
+        contactNumber: this.customerInfo.contactNumber || ''
+      };
+
+      const saved = await this.customerService.saveCustomerFromPOS(formData as any, companyId, storeId);
+      if (saved) {
+        this.customerInfo.customerId = saved.customerId || saved.id || this.customerInfo.customerId;
+        if (!autoSave) {
+          if (this.isCustomerUpdateMode()) {
+            this.isCustomerUpdateModeSignal.set(false);
+          } else {
+            this.selectCustomer(saved as Customer);
+            this.customerModalTabSignal.set('search');
+            this.showCustomerEntryPanelSignal.set(false);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Save customer entry failed:', error);
+    }
+  }
+
+  async saveOrUpdateCustomerEntry(autoSave: boolean = false): Promise<void> {
+    try {
+      const storeInfo = this.currentStoreInfo();
+      const companyId = storeInfo?.companyId || this.authService.getCurrentPermission()?.companyId || '';
+      const storeId = storeInfo?.id || '';
+      const formData: any = {
+        soldTo: this.customerInfo.soldTo || '',
+        tin: this.customerInfo.tin || '',
+        businessAddress: this.customerInfo.businessAddress || '',
+        email: this.customerInfo.email || '',
+        contactNumber: this.customerInfo.contactNumber || ''
+      };
+
+      const saved = await this.customerService.updateCustomer(this.customerInfo.customerId, formData as any, companyId, storeId);
+      if (saved) {
+        if (!autoSave) {
+          this.selectCustomer(saved as Customer);
+          this.customerModalTabSignal.set('search');
+          this.showCustomerEntryPanelSignal.set(false);
+          this.isCustomerUpdateModeSignal.set(false);
+        }
+      }
+    } catch (error) {
+      console.error('Update customer entry failed:', error);
+    }
+  }
+
+  addCustomerEntry(): void {
+    this.isCustomerUpdateModeSignal.set(false);
+    this.customerModalTabSignal.set('add');
+    this.customerLookupOpenSignal.set(true);
+  }
+
+  updateCustomerEntry(): void {
+    void this.saveCustomerFromEntry(false);
+  }
+
+  openScanner(): void {
+    console.log('POS: openScanner called');
+    this.scannerOpenSignal.set(true);
+    try { this.cdr.detectChanges(); } catch {}
+  }
+
+  closeScanner(): void {
+    console.log('POS: closeScanner called');
+    this.scannerOpenSignal.set(false);
+    try { this.cdr.detectChanges(); } catch {}
+    this.stopCamera();
+  }
+
+  async startCamera(): Promise<void> {
+    try {
+      if (!navigator?.mediaDevices?.getUserMedia) return;
+
+      const constraints = {
+        video: {
+          facingMode: { ideal: 'environment' }
+        }
+      } as MediaStreamConstraints;
+
+      try {
+        this.cameraStream = await navigator.mediaDevices.getUserMedia(constraints);
+      } catch (rearCameraError) {
+        // Fallback to front camera if rear is unavailable or blocked.
+        this.cameraStream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: { ideal: 'user' }
+          }
+        });
+      }
+
+      if (this.qrVideo && this.qrVideo.nativeElement) {
+        this.qrVideo.nativeElement.srcObject = this.cameraStream;
+        await this.qrVideo.nativeElement.play();
+      }
+    } catch (error) {
+      console.error('Unable to start camera:', error);
+    }
+  }
+
+  stopCamera(): void {
+    if (this.cameraStream) {
+      this.cameraStream.getTracks().forEach(t => t.stop());
+      this.cameraStream = null;
+    }
+    if (this.qrVideo && this.qrVideo.nativeElement) {
+      try { this.qrVideo.nativeElement.pause(); } catch {}
+      try { (this.qrVideo.nativeElement.srcObject as any) = null; } catch {}
+    }
+  }
+
+  clearCustomer(): void {
+    this.customerInfo.soldTo = '';
+    this.customerInfo.customerId = '';
+    this.customerInfo.tin = '';
+    this.customerInfo.businessAddress = '';
+    this.customerInfo.email = '';
+    this.customerInfo.contactNumber = '';
+    this.showCustomerEntryPanelSignal.set(false);
   }
 
   // F4 Hotkey for Clear Data
@@ -3683,7 +3991,9 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       tin: '',
       pwdId: '',
       businessAddress: '',
-      customerId: ''
+      customerId: '',
+      email: '',
+      contactNumber: ''
     };
     
     this.invoiceNumber = nextInvoice === 'Loading...' ? 'INV-0000-000000' : nextInvoice;
