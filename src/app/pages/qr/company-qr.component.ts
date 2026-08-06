@@ -32,12 +32,14 @@ import { Company } from '../../interfaces/company.interface';
           <div class="profile-row" *ngIf="company()?.email"><span>Email</span><strong>{{ company()?.email }}</strong></div>
           <div class="profile-row" *ngIf="company()?.phone"><span>Phone</span><strong>{{ company()?.phone }}</strong></div>
           <div class="download-button-block">
-            <a
-              [href]="getDownloadUrl()"
+            <button
+              type="button"
               class="btn download-android-btn"
+              [disabled]="isDownloading()"
+              (click)="downloadRewardsApk()"
             >
               🤖 Download Android Rewards
-            </a>
+            </button>
           </div>
           <div class="profile-row" *ngIf="company()?.website"><span>Website</span><strong>{{ company()?.website }}</strong></div>
           <div class="profile-row" *ngIf="company()?.address"><span>Address</span><strong>{{ company()?.address }}</strong></div>
@@ -204,6 +206,7 @@ export class CompanyQrComponent {
   protected loading = signal(true);
   protected error = signal<string | null>(null);
   protected message = signal<string>('');
+  protected isDownloading = signal(false);
   protected qrDataUrl = signal<string | null>(null);
   protected generatedQrPayload = signal<string>('');
 
@@ -248,9 +251,47 @@ export class CompanyQrComponent {
   }
 
   protected getDownloadUrl(): string {
-    const slug = this.company()?.slug?.trim() || 'default';
-    const objectPath = `android/rewards/Rewards${slug}.apk`;
+    const objectPath = 'android/rewards/rewards.apk';
     return `https://firebasestorage.googleapis.com/v0/b/jasperpos-1dfd5.firebasestorage.app/o/${encodeURIComponent(objectPath)}?alt=media`;
+  }
+
+  protected async downloadRewardsApk() {
+    const company = this.company();
+    if (!company?.slug) {
+      this.message.set('Cannot download APK because company slug is missing.');
+      return;
+    }
+
+    this.isDownloading.set(true);
+    this.message.set('Preparing APK download...');
+
+    try {
+      const downloadUrl = this.getDownloadUrl();
+      const response = await fetch(downloadUrl);
+      if (!response.ok) {
+        throw new Error(`APK download failed: ${response.status} ${response.statusText}`);
+      }
+
+      const blob = await response.blob();
+      this.triggerFileDownload(blob, `rewards-${company.slug}.apk`);
+      this.message.set('APK download started with slug-specific filename.');
+    } catch (error) {
+      console.error('APK download failed:', error);
+      this.message.set('Unable to download the APK. Please try again later.');
+    } finally {
+      this.isDownloading.set(false);
+    }
+  }
+
+  private triggerFileDownload(blob: Blob, fileName: string) {
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = fileName;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
   }
 
   private async refreshQrCode(payload: string) {
