@@ -1,7 +1,10 @@
 {
   "name": "tovrika-functions",
   "private": true,
-  "engines": { "node": "^18 || ^20" },
+  "main": "lib/index.js",
+  "engines": {
+    "node": "20"
+  },
   "type": "module",
   "scripts": {
     "build": "tsc -p tsconfig.json",
@@ -10,11 +13,12 @@
     "lint": "echo 'no lint configured'"
   },
   "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.19.2",
     "firebase-admin": "^12.5.0",
     "firebase-functions": "^4.7.0",
     "node-fetch": "^3.3.2",
-    "cors": "^2.8.5",
-    "express": "^4.19.2"
+    "pos-system": "file:.."
   },
   "devDependencies": {
     "typescript": "^5.6.3"

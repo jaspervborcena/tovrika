@@ -4,6 +4,16 @@ import { ActivatedRoute } from '@angular/router';
 import { toDataURL } from 'qrcode';
 import { CompanyService } from '../../services/company.service';
 import { Company } from '../../interfaces/company.interface';
+import { environment } from '../../../environments/environment';
+
+export function buildRewardsApkStoragePath(): string {
+  return 'android/rewards/Rewards.apk';
+}
+
+export function buildRewardsApkDownloadUrl(slug: string): string {
+  const sanitizedSlug = (slug || 'rewards').trim().toLowerCase().replace(/[^a-z0-9._-]+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '') || 'rewards';
+  return `${environment.api?.baseUrl || ''}/downloadRewardsApk?slug=${encodeURIComponent(sanitizedSlug)}`;
+}
 
 @Component({
   selector: 'app-company-qr',
@@ -32,12 +42,14 @@ import { Company } from '../../interfaces/company.interface';
           <div class="profile-row" *ngIf="company()?.email"><span>Email</span><strong>{{ company()?.email }}</strong></div>
           <div class="profile-row" *ngIf="company()?.phone"><span>Phone</span><strong>{{ company()?.phone }}</strong></div>
           <div class="download-button-block">
-            <a
-              [href]="getDownloadUrl()"
+            <button
+              type="button"
               class="btn download-android-btn"
+              [disabled]="isDownloading()"
+              (click)="downloadRewardsApk()"
             >
               🤖 Download Android Rewards
-            </a>
+            </button>
           </div>
           <div class="profile-row" *ngIf="company()?.website"><span>Website</span><strong>{{ company()?.website }}</strong></div>
           <div class="profile-row" *ngIf="company()?.address"><span>Address</span><strong>{{ company()?.address }}</strong></div>
@@ -204,6 +216,7 @@ export class CompanyQrComponent {
   protected loading = signal(true);
   protected error = signal<string | null>(null);
   protected message = signal<string>('');
+  protected isDownloading = signal(false);
   protected qrDataUrl = signal<string | null>(null);
   protected generatedQrPayload = signal<string>('');
 
@@ -247,10 +260,48 @@ export class CompanyQrComponent {
     return `https://app.tovrika.com/qr/${slug}`;
   }
 
-  protected getDownloadUrl(): string {
-    const slug = this.company()?.slug?.trim() || 'default';
-    const objectPath = `android/rewards/Rewards${slug}.apk`;
-    return `https://firebasestorage.googleapis.com/v0/b/jasperpos-1dfd5.firebasestorage.app/o/${encodeURIComponent(objectPath)}?alt=media`;
+  protected async downloadRewardsApk() {
+    const company = this.company();
+    if (!company?.slug) {
+      this.message.set('Cannot download APK because company slug is missing.');
+      return;
+    }
+
+    this.isDownloading.set(true);
+    this.message.set('Preparing APK download...');
+
+    try {
+      const downloadUrl = buildRewardsApkDownloadUrl(company.slug);
+      const downloadFilename = this.buildDownloadFilename(company.slug);
+      const anchor = document.createElement('a');
+      anchor.href = downloadUrl;
+      anchor.download = downloadFilename;
+      anchor.target = '_blank';
+      anchor.rel = 'noopener noreferrer';
+      anchor.setAttribute('download', downloadFilename);
+      anchor.style.display = 'none';
+      document.body.appendChild(anchor);
+      anchor.click();
+      setTimeout(() => {
+        anchor.remove();
+      }, 100);
+      this.message.set(`APK download started as ${downloadFilename}.`);
+    } catch (error) {
+      console.error('APK download failed:', error);
+      this.message.set('Unable to download the APK. Please try again later.');
+    } finally {
+      this.isDownloading.set(false);
+    }
+  }
+
+  private buildDownloadFilename(slug: string): string {
+    const baseName = (slug || 'rewards').trim().toLowerCase();
+    const sanitized = baseName
+      .replace(/[^a-z0-9._-]+/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '');
+
+    return `${sanitized || 'rewards'}.apk`;
   }
 
   private async refreshQrCode(payload: string) {

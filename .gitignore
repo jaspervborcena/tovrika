@@ -12,6 +12,8 @@ android/
 
 # Node
 /node_modules
+/functions/node_modules/
+/functions/lib/
 npm-debug.log
 yarn-error.log
 

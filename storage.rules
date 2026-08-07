@@ -4,11 +4,12 @@ service firebase.storage {
     function isSignedIn() { return request.auth != null; }
 
     // Store logo images: {storeId}/logo.{ext}
-    match /{storeId}/logo.{ext} {
+    match /{storeId}/{fileName} {
       allow read: if true; // logos are public
       allow write: if isSignedIn()
         && request.resource.size < 6 * 1024 * 1024
-        && request.resource.contentType.matches('image/.*');
+        && request.resource.contentType.matches('image/.*')
+        && fileName.matches('logo\\.(png|jpg|jpeg|webp)');
     }
 
     // Product images: {storeId}/products/{fileName}
@@ -17,6 +18,21 @@ service firebase.storage {
       allow write: if isSignedIn()
         && request.resource.size < 6 * 1024 * 1024
         && request.resource.contentType.matches('image/.*');
+    }
+
+    // Company logos: companies/{companyId}/logo.{ext}
+    match /companies/{companyId}/{fileName} {
+      allow read: if true;
+      allow write: if isSignedIn()
+        && request.resource.size < 6 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*')
+        && fileName.matches('logo\\.(png|jpg|jpeg|webp)');
+    }
+
+    // Public rewards APK download: android/rewards/{fileName}
+    match /android/rewards/{fileName} {
+      allow read: if true;
+      allow write: if isSignedIn();
     }
 
     // Subscription payment receipts: {storeId}/payments/{subscriptionId}/{fileName}
