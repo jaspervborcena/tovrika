@@ -12,7 +12,11 @@ export function buildRewardsApkStoragePath(): string {
 
 export function buildRewardsApkDownloadUrl(slug: string): string {
   const sanitizedSlug = (slug || 'rewards').trim().toLowerCase().replace(/[^a-z0-9._-]+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '') || 'rewards';
-  return `${environment.api?.baseUrl || ''}/downloadRewardsApk?slug=${encodeURIComponent(sanitizedSlug)}`;
+  const baseUrl = (environment.api?.baseUrl || '').trim();
+  const functionBaseUrl = baseUrl || (environment.production ? (environment as any)?.paypal?.apiUrl || '' : '');
+  const path = `/downloadRewardsApk?slug=${encodeURIComponent(sanitizedSlug)}`;
+
+  return functionBaseUrl ? `${functionBaseUrl}${path}` : path;
 }
 
 @Component({
@@ -273,8 +277,16 @@ export class CompanyQrComponent {
     try {
       const downloadUrl = buildRewardsApkDownloadUrl(company.slug);
       const downloadFilename = this.buildDownloadFilename(company.slug);
+      const response = await fetch(downloadUrl, { method: 'GET', credentials: 'omit' });
+
+      if (!response.ok) {
+        throw new Error(`Download failed with status ${response.status}`);
+      }
+
+      const blob = await response.blob();
+      const objectUrl = URL.createObjectURL(blob);
       const anchor = document.createElement('a');
-      anchor.href = downloadUrl;
+      anchor.href = objectUrl;
       anchor.download = downloadFilename;
       anchor.target = '_blank';
       anchor.rel = 'noopener noreferrer';
@@ -284,6 +296,7 @@ export class CompanyQrComponent {
       anchor.click();
       setTimeout(() => {
         anchor.remove();
+        URL.revokeObjectURL(objectUrl);
       }, 100);
       this.message.set(`APK download started as ${downloadFilename}.`);
     } catch (error) {
