@@ -36,10 +36,13 @@ import { ProductViewType, OrderDiscount, ReceiptValidityNotice, CartItem, CartIt
 import { Customer, CustomerFormData } from '../../../interfaces/customer.interface';
 import { SubscriptionService } from '../../../services/subscription.service';
 import { toDateValue } from '../../../core/utils/date-utils';
+import { ToastService } from '../../../shared/services/toast.service';
 
 import { NgxBarcode6Module } from 'ngx-barcode6';
 import JsBarcode from 'jsbarcode';
 import { DomSanitizer, SafeUrl } from '@angular/platform-browser';
+import { Html5Qrcode } from 'html5-qrcode';
+import { extractCustomerIdentifierFromQrValue } from './qr-scan.utils';
 
 @Component({
   selector: 'app-pos',
@@ -51,7 +54,7 @@ import { DomSanitizer, SafeUrl } from '@angular/platform-browser';
 export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   @ViewChild('processPaymentButton', { read: ElementRef }) processPaymentButton?: ElementRef<HTMLButtonElement>;
   @ViewChild('accessTabListContainer', { read: ElementRef }) accessTabListContainer?: ElementRef;
-  @ViewChild('qrVideo', { read: ElementRef }) qrVideo?: ElementRef<HTMLVideoElement>;
+  @ViewChild('qrReaderContainer', { read: ElementRef }) qrReaderContainer?: ElementRef<HTMLDivElement>;
 
   // Services
   private productService = inject(ProductService);
@@ -73,6 +76,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   
   private translationService = inject(TranslationService);
   private subscriptionService = inject(SubscriptionService);
+  private toastService = inject(ToastService);
   private firestore = inject(Firestore);
   private router = inject(Router);
   private sanitizer = inject(DomSanitizer);
@@ -617,6 +621,19 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   private cameraStream: MediaStream | null = null;
   private cameraFacingModeSignal = signal<'environment' | 'user'>('environment');
   readonly cameraFacingMode = computed(() => this.cameraFacingModeSignal());
+  private scannerActive = false;
+  protected scannerError = signal<string>('');
+  private qrScanner: Html5Qrcode | null = null;
+
+  private async waitForQrReaderElement(timeoutMs: number = 1500): Promise<void> {
+    const start = Date.now();
+    while (!document.getElementById('qr-reader')) {
+      if (Date.now() - start > timeoutMs) {
+        throw new Error('QR reader element not ready');
+      }
+      await new Promise(resolve => setTimeout(resolve, 16));
+    }
+  }
 
   // Order-level information (moved from customerInfo)
   invoiceNumber: string = 'INV-0000-000000';
@@ -3643,54 +3660,133 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
 
   openScanner(): void {
     console.log('POS: openScanner called');
+    this.scannerError.set('');
     this.scannerOpenSignal.set(true);
     try { this.cdr.detectChanges(); } catch {}
-    void this.startCamera();
+    this.triggerQrCamera();
+  }
+
+  triggerQrCamera(): void {
+    void this.startQrScan();
   }
 
   closeScanner(): void {
     console.log('POS: closeScanner called');
     this.scannerOpenSignal.set(false);
     try { this.cdr.detectChanges(); } catch {}
-    this.stopCamera();
+    void this.stopCamera();
   }
 
   async startCamera(): Promise<void> {
     try {
-      if (!navigator?.mediaDevices?.getUserMedia) return;
-
-      this.stopCamera();
-
-      const requestedFacingMode = this.cameraFacingModeSignal();
-      const constraints = {
-        video: {
-          facingMode: { ideal: requestedFacingMode }
-        }
-      } as MediaStreamConstraints;
-
-      try {
-        this.cameraStream = await navigator.mediaDevices.getUserMedia(constraints);
-      } catch (requestedCameraError) {
-        const fallbackFacingMode = requestedFacingMode === 'environment' ? 'user' : 'environment';
-        try {
-          this.cameraStream = await navigator.mediaDevices.getUserMedia({
-            video: {
-              facingMode: { ideal: fallbackFacingMode }
-            }
-          });
-          this.cameraFacingModeSignal.set(fallbackFacingMode);
-        } catch {
-          this.cameraStream = await navigator.mediaDevices.getUserMedia({ video: true });
-        }
+      if (this.scannerActive) {
+        return;
       }
 
-      if (this.qrVideo && this.qrVideo.nativeElement) {
-        this.qrVideo.nativeElement.srcObject = this.cameraStream;
-        await this.qrVideo.nativeElement.play();
+      this.scannerError.set('');
+      this.scannerActive = true;
+
+      if (!navigator?.mediaDevices?.getUserMedia) {
+        this.scannerError.set('Camera access is not available in this browser.');
+        return;
       }
+
+      await this.stopCamera();
+      await this.startQrScan();
     } catch (error) {
       console.error('Unable to start camera:', error);
+      this.scannerError.set('Unable to open the camera. Please allow camera access and try again.');
+    } finally {
+      this.scannerActive = false;
     }
+  }
+
+  protected isNativeMobile(): boolean {
+    return typeof window !== 'undefined' && /android|iphone|ipad|ipod/i.test(window.navigator.userAgent);
+  }
+
+  private async getPreferredCameraStartConfig(): Promise<{ deviceId?: { exact: string }; facingMode?: 'environment' | 'user' }> {
+    const cameras = await Html5Qrcode.getCameras();
+    const preferredMode = this.cameraFacingModeSignal();
+
+    const matchingCamera = cameras?.find(camera => {
+      const label = (camera.label || '').toLowerCase();
+      if (preferredMode === 'environment') {
+        return label.includes('back') || label.includes('rear') || label.includes('environment');
+      }
+      return label.includes('front') || label.includes('selfie') || label.includes('user');
+    });
+
+    const selectedCamera = matchingCamera || cameras?.[0];
+    if (selectedCamera?.id) {
+      return { deviceId: { exact: selectedCamera.id } };
+    }
+
+    return { facingMode: preferredMode };
+  }
+
+  private async startQrScan(): Promise<void> {
+    try {
+      this.scannerError.set('');
+      this.scannerActive = true;
+
+      if (!navigator?.mediaDevices?.getUserMedia) {
+        this.scannerError.set('Camera access is not available in this browser.');
+        return;
+      }
+
+      if (!this.qrReaderContainer?.nativeElement && !document.getElementById('qr-reader')) {
+        await this.waitForQrReaderElement(3000);
+      }
+
+      const permissionStream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: this.cameraFacingModeSignal() }
+      });
+      permissionStream.getTracks().forEach(track => track.stop());
+      this.cameraStream = null;
+
+      if (!this.qrScanner) {
+        this.qrScanner = new Html5Qrcode('qr-reader');
+      }
+
+      const cameraStartConfig = await this.getPreferredCameraStartConfig();
+      const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+
+      await this.qrScanner.start(
+        cameraStartConfig,
+        config,
+        (decodedText: string) => {
+          const value = (decodedText || '').trim();
+          if (!value) {
+            return;
+          }
+
+          this.scannerError.set('');
+          void this.stopCamera();
+          this.handleScannedQrCode(value);
+          this.closeScanner();
+        },
+        () => undefined
+      );
+    } catch (error) {
+      console.error('QR scan failed:', error);
+      this.scannerError.set('Unable to access the camera. Please allow camera access and try again.');
+      void this.stopCamera();
+    } finally {
+      this.scannerActive = false;
+    }
+  }
+
+  private handleScannedQrCode(scannedText: string): void {
+    const customerId = extractCustomerIdentifierFromQrValue(scannedText);
+
+    if (!customerId) {
+      this.toastService?.success?.('No QR content was detected.');
+      return;
+    }
+
+    this.posSharedService.updateSearchQuery(customerId);
+    this.toastService.success(`QR scanned: ${customerId}`);
   }
 
   async toggleCamera(): Promise<void> {
@@ -3699,14 +3795,23 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     await this.startCamera();
   }
 
-  stopCamera(): void {
+  async stopCamera(): Promise<void> {
+    if (this.qrScanner) {
+      try {
+        await this.qrScanner.stop();
+      } catch {}
+      try {
+        this.qrScanner.clear();
+      } catch {}
+      this.qrScanner = null;
+    }
+
     if (this.cameraStream) {
       this.cameraStream.getTracks().forEach(t => t.stop());
       this.cameraStream = null;
     }
-    if (this.qrVideo && this.qrVideo.nativeElement) {
-      try { this.qrVideo.nativeElement.pause(); } catch {}
-      try { (this.qrVideo.nativeElement.srcObject as any) = null; } catch {}
+    if (this.qrReaderContainer?.nativeElement) {
+      try { this.qrReaderContainer.nativeElement.innerHTML = ''; } catch {}
     }
   }
 
