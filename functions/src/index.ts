@@ -10,17 +10,32 @@ if (!getApps().length) {
 
 const storage = getStorage();
 
-export const downloadRewardsApk = onRequest({ cors: true }, async (req, res) => {
+export const downloadRewardsApk = onRequest({ region: 'asia-east1', cors: true }, async (req, res) => {
   const slug = (req.query.slug as string | undefined)?.trim() || 'rewards';
   const safeSlug = slug.toLowerCase().replace(/[^a-z0-9._-]+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '') || 'rewards';
   const filename = `${safeSlug}.apk`;
 
   try {
     const bucket = storage.bucket();
-    const file = bucket.file('android/rewards/Rewards.apk');
-    const [exists] = await file.exists();
+    const candidatePaths = [
+      `android/rewards/${safeSlug}.apk`,
+      `android/rewards/Rewards-${safeSlug}.apk`,
+      `android/rewards/Rewards${safeSlug}.apk`,
+      'android/rewards/rewards.apk',
+      'android/rewards/Rewards.apk',
+    ];
 
-    if (!exists) {
+    let file = null as ReturnType<typeof bucket.file> | null;
+    for (const candidatePath of candidatePaths) {
+      const candidateFile = bucket.file(candidatePath);
+      const [exists] = await candidateFile.exists();
+      if (exists) {
+        file = candidateFile;
+        break;
+      }
+    }
+
+    if (!file) {
       res.status(404).json({ error: 'APK not found' });
       return;
     }

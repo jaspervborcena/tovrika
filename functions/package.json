@@ -1,8 +1,9 @@
 {
   "name": "tovrika-functions",
   "private": true,
+  "main": "lib/index.js",
   "engines": {
-    "node": "^18 || ^20"
+    "node": "20"
   },
   "type": "module",
   "scripts": {
