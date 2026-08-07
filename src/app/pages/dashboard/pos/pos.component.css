@@ -382,6 +382,38 @@
       font-weight: 500;
     }
 
+    /* Top-level modal overlay should cover the entire viewport */
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0,0,0,0.35);
+      z-index: 20000;
+      pointer-events: auto;
+    }
+
+    /* Specific customer-field-row to keep input and icons on one line */
+    .customer-field-row {
+      flex-direction: row;
+      align-items: center;
+      gap: 0.5rem;
+      flex-wrap: nowrap;
+    }
+
+    .customer-field-row input {
+      min-width: 0;
+      box-sizing: border-box;
+    }
+
+    .customer-field-row .btn {
+      flex: 0 0 auto;
+    }
+
     .customer-details {
       overflow: hidden;
       transition: all 0.3s ease;
@@ -2860,7 +2892,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 9999;
+  z-index: 20000; /* ensure modals appear above other UI layers */
+  pointer-events: auto; /* block interactions behind overlay */
 }
 
 .offline-invoice-dialog {

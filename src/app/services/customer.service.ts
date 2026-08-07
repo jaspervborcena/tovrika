@@ -103,6 +103,42 @@ export class CustomerService {
     }
   }
 
+  async updateCustomer(
+    documentId: string,
+    customerData: CustomerFormData,
+    companyId: string,
+    storeId: string
+  ): Promise<Customer | null> {
+    try {
+      if (!documentId) {
+        return null;
+      }
+
+      const { firstName, lastName } = this.parseFullName(customerData.soldTo || 'Walk-in Customer');
+      const updates: any = {
+        companyId,
+        storeId,
+        firstName,
+        lastName,
+        fullName: customerData.soldTo || 'Walk-in Customer',
+        email: customerData.email,
+        contactNumber: customerData.contactNumber,
+        address: customerData.businessAddress,
+        tin: customerData.tin,
+        exemptionId: customerData.exemptionId,
+        isSeniorCitizen: customerData.isSeniorCitizen || false,
+        isPWD: customerData.isPWD || false,
+        country: 'Philippines'
+      };
+
+      await this.offlineDocService.updateDocument('customers', documentId, updates);
+      return { id: documentId, customerId: documentId, ...updates } as Customer;
+    } catch (error) {
+      console.error('❌ Error updating customer:', error);
+      return null;
+    }
+  }
+
   /**
    * Search customers by name or ID
    */
@@ -122,11 +158,28 @@ export class CustomerService {
         id: doc.id,
         ...doc.data()
       })) as Customer[];
+
+      const uniqueCustomers = (() => {
+        const seen = new Map<string, Customer>();
+        for (const customer of customers) {
+          const name = (customer.fullName || `${customer.firstName || ''} ${customer.lastName || ''}`)
+            .replace(/\s+/g, ' ')
+            .toLowerCase()
+            .trim();
+          const email = (customer.email || '').toLowerCase().trim();
+          const contact = (customer.contactNumber || '').replace(/\s+/g, '').trim();
+          const key = `${name}|${email}|${contact}`;
+          if (!seen.has(key)) {
+            seen.set(key, customer);
+          }
+        }
+        return Array.from(seen.values());
+      })();
       
       // Filter by search term on client side (Firestore doesn't support full-text search)
       if (searchTerm.trim()) {
         const searchLower = searchTerm.toLowerCase();
-        return customers.filter(customer => 
+        return uniqueCustomers.filter(customer => 
           customer.fullName.toLowerCase().includes(searchLower) ||
           customer.customerId.toLowerCase().includes(searchLower) ||
           customer.email?.toLowerCase().includes(searchLower) ||
@@ -134,7 +187,7 @@ export class CustomerService {
         );
       }
       
-      return customers;
+      return uniqueCustomers;
     } catch (error) {
       console.error('❌ Error searching customers:', error);
       return [];

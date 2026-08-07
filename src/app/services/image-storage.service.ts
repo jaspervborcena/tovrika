@@ -85,6 +85,48 @@ export class ImageStorageService {
   }
 
   /**
+   * Upload company logo
+   * Path: companies/{companyId}/logo.{extension}
+   */
+  async uploadCompanyLogo(companyId: string, file: File): Promise<ImageUploadResult> {
+    if (!this.authService.isAuthenticated()) {
+      throw new Error('User must be authenticated to upload images');
+    }
+
+    if (!this.isValidImageFile(file)) {
+      throw new Error('Invalid image file. Only PNG, JPG, JPEG, and WebP are allowed.');
+    }
+
+    const extension = this.getFileExtension(file.name);
+    const fileName = `logo.${extension}`;
+    const fullPath = `companies/${companyId}/${fileName}`;
+    const storageRef = ref(this.storage, fullPath);
+
+    try {
+      const snapshot = await uploadBytes(storageRef, file, {
+        contentType: file.type,
+        customMetadata: {
+          uploadedBy: this.authService.currentUser()?.uid || 'unknown',
+          uploadedAt: new Date().toISOString(),
+          companyId,
+          imageType: 'companyLogo'
+        }
+      });
+
+      const downloadURL = await getDownloadURL(snapshot.ref);
+      return {
+        downloadURL,
+        fullPath,
+        size: snapshot.metadata.size || 0,
+        contentType: snapshot.metadata.contentType || file.type
+      };
+    } catch (error) {
+      console.error('Error uploading company logo:', error);
+      throw new Error(`Failed to upload company logo: ${error}`);
+    }
+  }
+
+  /**
    * Upload product image
    * Path: {storeId}/products/{productId}.{extension}
    */

@@ -1,0 +1,25 @@
+[
+  {
+    "origin": [
+      "http://localhost:4200",
+      "http://127.0.0.1:4200",
+      "https://app.tovrika.com"
+    ],
+    "method": [
+      "GET",
+      "HEAD",
+      "PUT",
+      "POST",
+      "DELETE"
+    ],
+    "responseHeader": [
+      "Content-Type",
+      "Accept",
+      "Authorization",
+      "Content-Length",
+      "User-Agent",
+      "x-goog-resumable"
+    ],
+    "maxAgeSeconds": 3600
+  }
+]
