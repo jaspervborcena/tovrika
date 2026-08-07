@@ -6,6 +6,7 @@ import { getApp, getApps } from 'firebase/app';
 import { provideFirestore, getFirestore } from '@angular/fire/firestore';
 import { enableIndexedDbPersistence, enableMultiTabIndexedDbPersistence } from 'firebase/firestore';
 import { provideAuth, getAuth } from '@angular/fire/auth';
+import { provideStorage, getStorage } from '@angular/fire/storage';
 import { environment } from '../environments/environment';
 import { provideRouter, withPreloading, PreloadAllModules } from '@angular/router';
 import { provideAnimations } from '@angular/platform-browser/animations';
@@ -64,6 +65,14 @@ export const appConfig: ApplicationConfig = {
         return firestore;
       } catch (error) {
         //console.error('❌ Firebase Firestore initialization failed:', error);
+        throw error;
+      }
+    }),
+    provideStorage(() => {
+      try {
+        const app = getApp();
+        return getStorage(app);
+      } catch (error) {
         throw error;
       }
     }),

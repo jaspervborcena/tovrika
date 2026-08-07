@@ -16,6 +16,7 @@ import { BillingHistoryModalComponent } from '../subscriptions/billing-history-m
 import { RoleDefinitionService } from '../../../services/role-definition.service';
 import { ToastService } from '../../../shared/services/toast.service';
 import { BillingService } from '../../../services/billing.service';
+import { ImageStorageService } from '../../../services/image-storage.service';
 import { OfflineDocumentService } from '../../../core/services/offline-document.service';
 import { SubscriptionService } from '../../../services/subscription.service';
 
@@ -169,6 +170,26 @@ import { SubscriptionService } from '../../../services/subscription.service';
               <p class="form-note">
                 Company slug is used for public QR access: <strong>app.tovrika.com/qr/{{ profileForm.get('slug')?.value || currentCompany()?.slug || '' }}</strong>
               </p>
+            </div>
+
+            <!-- Company Logo -->
+            <div class="form-group">
+              <label class="form-label">Company Logo</label>
+              <div class="logo-upload-wrapper">
+                <div class="logo-preview-box">
+                  <img *ngIf="companyLogoPreviewUrl()" [src]="companyLogoPreviewUrl()" alt="Company logo preview" />
+                  <span *ngIf="!companyLogoPreviewUrl()">No logo selected</span>
+                </div>
+                <div class="logo-actions">
+                  <input id="companyLogoFile" type="file" accept="image/png, image/jpeg, image/webp" hidden (change)="onCompanyLogoFileChange($event)" />
+                  <button type="button" class="btn btn-secondary" (click)="triggerCompanyLogoUpload()" [disabled]="loading()">
+                    {{ companyLogoPreviewUrl() ? 'Change Logo' : 'Attach Logo' }}
+                  </button>
+                  <button type="button" class="btn btn-tertiary" *ngIf="companyLogoPreviewUrl()" (click)="removeCompanyLogo()" [disabled]="loading()">
+                    Remove Logo
+                  </button>
+                </div>
+              </div>
             </div>
 
             <!-- UI helper: Show when user has no companyId in permission (explicit requirement) -->
@@ -1220,6 +1241,7 @@ export class CompanyProfileComponent {
   private storeService = inject(StoreService);
   private toastService = inject(ToastService);
   private billingService = inject(BillingService);
+  private imageStorageService = inject(ImageStorageService);
   private offlineDocService = inject(OfflineDocumentService);
   private subscriptionService = inject(SubscriptionService);
 
@@ -1230,6 +1252,9 @@ export class CompanyProfileComponent {
   protected successMessage = signal('');
   protected qrDataUrl = signal<string | null>(null);
   protected generatedQrPayload = signal<string>('');
+  protected companyLogoPreviewUrl = signal<string | null>(null);
+  protected selectedCompanyLogoFile: File | null = null;
+  protected logoRemoved = signal(false);
   // UI-only: Default checkbox to reuse company info for initial store setup
   protected useSameInfoForStore = signal(true);
   
@@ -1295,7 +1320,8 @@ export class CompanyProfileComponent {
       name: ['', Validators.required],
       email: ['', [Validators.required, Validators.email]],
       phone: [''],
-      slug: ['', [Validators.required, Validators.pattern(/^[a-zA-Z0-9-]+$/)]]
+      slug: ['', [Validators.required, Validators.pattern(/^[a-zA-Z0-9-]+$/)]],
+      logoUrl: ['']
     });
 
     // Load companies and set up form subscription
@@ -1327,27 +1353,29 @@ export class CompanyProfileComponent {
     effect(() => {
       const company = this.currentCompany();
       const user = this.currentUser();
-      
+
       if (company) {
-        // Existing company - populate form
         this.profileForm.patchValue({
           name: company.name || '',
           email: company.email || '',
           phone: company.phone || '',
-          slug: company.slug || ''
+          slug: company.slug || '',
+          logoUrl: company.logoUrl || ''
         });
-        
-        // Load stores when company exists
-        this.loadStores();
-        void this.maybeInitializeCompanyQr(company);
-      } else if (user && !this.getPrimaryCompanyId()) {
-        // New company creation - pre-populate with user email if available
+        this.companyLogoPreviewUrl.set(company.logoUrl || null);
+        this.logoRemoved.set(false);
+        this.selectedCompanyLogoFile = null;
+      } else if (user) {
         this.profileForm.patchValue({
           name: '',
           email: user.email || '',
           phone: '',
-          slug: this.generateRandomSlug()
+          slug: this.generateRandomSlug(),
+          logoUrl: ''
         });
+        this.companyLogoPreviewUrl.set(null);
+        this.logoRemoved.set(false);
+        this.selectedCompanyLogoFile = null;
       }
     });
   }
@@ -1400,6 +1428,31 @@ export class CompanyProfileComponent {
     return undefined;
   }
 
+  protected triggerCompanyLogoUpload(): void {
+    const input = document.getElementById('companyLogoFile') as HTMLInputElement | null;
+    input?.click();
+  }
+
+  protected async onCompanyLogoFileChange(ev: Event): Promise<void> {
+    const input = ev.target as HTMLInputElement;
+    if (!input.files || input.files.length === 0) return;
+
+    const file = input.files[0];
+    this.selectedCompanyLogoFile = file;
+    this.logoRemoved.set(false);
+    this.companyLogoPreviewUrl.set(URL.createObjectURL(file));
+    this.toastService.info('Company logo selected. Save the profile to upload it.');
+    input.value = '';
+  }
+
+  protected removeCompanyLogo(): void {
+    this.selectedCompanyLogoFile = null;
+    this.logoRemoved.set(true);
+    this.profileForm.patchValue({ logoUrl: '' });
+    this.companyLogoPreviewUrl.set(null);
+    this.toastService.info('Company logo removed. Save the profile to apply the change.');
+  }
+
   private async loadStores() {
     const companyId = this.getPrimaryCompanyId();
     if (!companyId) return;
@@ -1444,10 +1497,23 @@ export class CompanyProfileComponent {
             slug: formData.slug?.trim() || this.generateRandomSlug(),
             ownerUid: this.currentUser()?.uid || '',
             email: formData.email,
-            phone: formData.phone
+            phone: formData.phone,
+            logoUrl: this.selectedCompanyLogoFile ? undefined : formData.logoUrl || undefined
           };
 
           const newCompanyId = await this.companyService.createCompany(companyData);
+
+          if (this.selectedCompanyLogoFile) {
+            try {
+              const uploadResult = await this.imageStorageService.uploadCompanyLogo(newCompanyId, this.selectedCompanyLogoFile);
+              await this.companyService.updateCompany(newCompanyId, { logoUrl: uploadResult.downloadURL });
+              this.toastService.success('Company profile saved and logo uploaded successfully.');
+            } catch (uploadError) {
+              console.error('Company logo upload failed after create:', uploadError);
+              this.toastService.warning('Company created, but logo upload failed. You can retry from profile settings.');
+            }
+          }
+
           const qrPayload = this.buildCompanyQrPayload({
             slug: companyData.slug,
             id: newCompanyId,
@@ -1562,6 +1628,7 @@ export class CompanyProfileComponent {
           }
           this.successMessage.set('Company created. You will be logged out so your new role can be applied.');
           this.showSuccessMessage.set(true);
+          this.toastService.success('Company profile saved successfully.');
           
           // Show success message, then force logout to apply new role
           setTimeout(async () => {
@@ -1579,12 +1646,24 @@ export class CompanyProfileComponent {
               slug: formData.slug?.trim() || company.slug,
               email: formData.email,
               phone: formData.phone,
+              logoUrl: this.logoRemoved() ? '' : formData.logoUrl || company.logoUrl || undefined,
               updatedAt: new Date()
             };
+
+            if (this.selectedCompanyLogoFile && company.id) {
+              try {
+                const uploadResult = await this.imageStorageService.uploadCompanyLogo(company.id, this.selectedCompanyLogoFile);
+                updateData.logoUrl = uploadResult.downloadURL;
+              } catch (uploadError) {
+                console.error('Company logo upload failed:', uploadError);
+                this.toastService.warning('Logo upload failed. Saving other company changes.');
+              }
+            }
 
             await this.companyService.updateCompany(company.id!, updateData);
             this.successMessage.set('Company profile updated successfully!');
             this.showSuccessMessage.set(true);
+            this.toastService.success('Company profile saved successfully.');
             
             // Hide success message after 3 seconds
             setTimeout(() => {
@@ -1709,15 +1788,23 @@ export class CompanyProfileComponent {
       this.profileForm.patchValue({
         name: company.name || '',
         email: company.email || '',
-        phone: company.phone || ''
+        phone: company.phone || '',
+        logoUrl: company.logoUrl || ''
       });
+      this.companyLogoPreviewUrl.set(company.logoUrl || null);
+      this.selectedCompanyLogoFile = null;
+      this.logoRemoved.set(false);
     } else if (user) {
       // Reset to initial state for new company
       this.profileForm.patchValue({
         name: '',
         email: user.email || '',
-        phone: ''
+        phone: '',
+        logoUrl: ''
       });
+      this.companyLogoPreviewUrl.set(null);
+      this.selectedCompanyLogoFile = null;
+      this.logoRemoved.set(false);
     }
   }
 

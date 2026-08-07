@@ -4,6 +4,16 @@ import { ActivatedRoute } from '@angular/router';
 import { toDataURL } from 'qrcode';
 import { CompanyService } from '../../services/company.service';
 import { Company } from '../../interfaces/company.interface';
+import { environment } from '../../../environments/environment';
+
+export function buildRewardsApkStoragePath(): string {
+  return 'android/rewards/Rewards.apk';
+}
+
+export function buildRewardsApkDownloadUrl(slug: string): string {
+  const sanitizedSlug = (slug || 'rewards').trim().toLowerCase().replace(/[^a-z0-9._-]+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '') || 'rewards';
+  return `${environment.api?.baseUrl || ''}/downloadRewardsApk?slug=${encodeURIComponent(sanitizedSlug)}`;
+}
 
 @Component({
   selector: 'app-company-qr',
@@ -250,11 +260,6 @@ export class CompanyQrComponent {
     return `https://app.tovrika.com/qr/${slug}`;
   }
 
-  protected getDownloadUrl(): string {
-    const objectPath = 'android/rewards/rewards.apk';
-    return `https://firebasestorage.googleapis.com/v0/b/jasperpos-1dfd5.firebasestorage.app/o/${encodeURIComponent(objectPath)}?alt=media`;
-  }
-
   protected async downloadRewardsApk() {
     const company = this.company();
     if (!company?.slug) {
@@ -266,15 +271,21 @@ export class CompanyQrComponent {
     this.message.set('Preparing APK download...');
 
     try {
-      const downloadUrl = this.getDownloadUrl();
-      const response = await fetch(downloadUrl);
-      if (!response.ok) {
-        throw new Error(`APK download failed: ${response.status} ${response.statusText}`);
-      }
-
-      const blob = await response.blob();
-      this.triggerFileDownload(blob, `rewards-${company.slug}.apk`);
-      this.message.set('APK download started with slug-specific filename.');
+      const downloadUrl = buildRewardsApkDownloadUrl(company.slug);
+      const downloadFilename = this.buildDownloadFilename(company.slug);
+      const anchor = document.createElement('a');
+      anchor.href = downloadUrl;
+      anchor.download = downloadFilename;
+      anchor.target = '_blank';
+      anchor.rel = 'noopener noreferrer';
+      anchor.setAttribute('download', downloadFilename);
+      anchor.style.display = 'none';
+      document.body.appendChild(anchor);
+      anchor.click();
+      setTimeout(() => {
+        anchor.remove();
+      }, 100);
+      this.message.set(`APK download started as ${downloadFilename}.`);
     } catch (error) {
       console.error('APK download failed:', error);
       this.message.set('Unable to download the APK. Please try again later.');
@@ -283,15 +294,14 @@ export class CompanyQrComponent {
     }
   }
 
-  private triggerFileDownload(blob: Blob, fileName: string) {
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.download = fileName;
-    document.body.appendChild(anchor);
-    anchor.click();
-    anchor.remove();
-    URL.revokeObjectURL(url);
+  private buildDownloadFilename(slug: string): string {
+    const baseName = (slug || 'rewards').trim().toLowerCase();
+    const sanitized = baseName
+      .replace(/[^a-z0-9._-]+/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '');
+
+    return `${sanitized || 'rewards'}.apk`;
   }
 
   private async refreshQrCode(payload: string) {

@@ -615,6 +615,8 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   private scannerOpenSignal = signal<boolean>(false);
   readonly scannerOpen = computed(() => this.scannerOpenSignal());
   private cameraStream: MediaStream | null = null;
+  private cameraFacingModeSignal = signal<'environment' | 'user'>('environment');
+  readonly cameraFacingMode = computed(() => this.cameraFacingModeSignal());
 
   // Order-level information (moved from customerInfo)
   invoiceNumber: string = 'INV-0000-000000';
@@ -3643,6 +3645,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     console.log('POS: openScanner called');
     this.scannerOpenSignal.set(true);
     try { this.cdr.detectChanges(); } catch {}
+    void this.startCamera();
   }
 
   closeScanner(): void {
@@ -3656,21 +3659,29 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     try {
       if (!navigator?.mediaDevices?.getUserMedia) return;
 
+      this.stopCamera();
+
+      const requestedFacingMode = this.cameraFacingModeSignal();
       const constraints = {
         video: {
-          facingMode: { ideal: 'environment' }
+          facingMode: { ideal: requestedFacingMode }
         }
       } as MediaStreamConstraints;
 
       try {
         this.cameraStream = await navigator.mediaDevices.getUserMedia(constraints);
-      } catch (rearCameraError) {
-        // Fallback to front camera if rear is unavailable or blocked.
-        this.cameraStream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            facingMode: { ideal: 'user' }
-          }
-        });
+      } catch (requestedCameraError) {
+        const fallbackFacingMode = requestedFacingMode === 'environment' ? 'user' : 'environment';
+        try {
+          this.cameraStream = await navigator.mediaDevices.getUserMedia({
+            video: {
+              facingMode: { ideal: fallbackFacingMode }
+            }
+          });
+          this.cameraFacingModeSignal.set(fallbackFacingMode);
+        } catch {
+          this.cameraStream = await navigator.mediaDevices.getUserMedia({ video: true });
+        }
       }
 
       if (this.qrVideo && this.qrVideo.nativeElement) {
@@ -3680,6 +3691,12 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     } catch (error) {
       console.error('Unable to start camera:', error);
     }
+  }
+
+  async toggleCamera(): Promise<void> {
+    const nextFacingMode = this.cameraFacingModeSignal() === 'environment' ? 'user' : 'environment';
+    this.cameraFacingModeSignal.set(nextFacingMode);
+    await this.startCamera();
   }
 
   stopCamera(): void {
