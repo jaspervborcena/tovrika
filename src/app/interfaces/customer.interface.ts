@@ -21,6 +21,9 @@ export interface Customer {
 
 export interface CustomerFormData {
   soldTo?: string;
+  firstName?: string;
+  lastName?: string;
+  fullName?: string;
   tin?: string;
   businessAddress?: string;
   email?: string;

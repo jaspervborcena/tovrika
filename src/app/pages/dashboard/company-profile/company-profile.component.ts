@@ -20,6 +20,10 @@ import { ImageStorageService } from '../../../services/image-storage.service';
 import { OfflineDocumentService } from '../../../core/services/offline-document.service';
 import { SubscriptionService } from '../../../services/subscription.service';
 
+export function shouldGenerateCompanyQrPayload(company?: Pick<Company, 'qrPayload'> | null): boolean {
+  return !company?.qrPayload?.trim().startsWith('https://app.tovrika.com/qr/');
+}
+
 @Component({
   selector: 'app-company-profile',
   standalone: true,
@@ -1365,6 +1369,7 @@ export class CompanyProfileComponent {
         this.companyLogoPreviewUrl.set(company.logoUrl || null);
         this.logoRemoved.set(false);
         this.selectedCompanyLogoFile = null;
+        void this.maybeInitializeCompanyQr(company);
       } else if (user) {
         this.profileForm.patchValue({
           name: '',
@@ -1714,18 +1719,19 @@ export class CompanyProfileComponent {
       return;
     }
 
-    const payload = company.qrPayload?.startsWith('https://app.tovrika.com/qr/')
-      ? company.qrPayload!
-      : this.buildCompanyQrPayload({
+    const shouldGenerate = shouldGenerateCompanyQrPayload(company);
+    const payload = shouldGenerate
+      ? this.buildCompanyQrPayload({
           slug: company.slug,
           id: company.id,
           name: company.name,
           email: company.email || ''
-        });
+        })
+      : company.qrPayload!;
 
     await this.refreshQrCode(payload);
 
-    if ((!company.qrPayload || !company.qrPayload?.startsWith('https://app.tovrika.com/qr/')) && company.id) {
+    if (shouldGenerate && company.id) {
       await this.companyService.updateCompany(company.id, { qrPayload: payload });
     }
   }

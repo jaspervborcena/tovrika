@@ -1589,12 +1589,18 @@
           </div>
           <div class="dialog-content">
             <div style="display:flex; flex-direction:column; gap:0.5rem;">
-              <video #qrVideo autoplay muted playsinline style="width:100%; max-height:60vh; background:#000; border-radius:6px;"></video>
+              <div *ngIf="scannerError()" style="padding:0.6rem 0.75rem; border-radius:6px; background:#fef2f2; color:#b91c1c; font-size:0.9rem;">
+                {{ scannerError() }}
+              </div>
+              <div #qrReaderContainer id="qr-reader" style="width:100%; min-height:280px; max-height:60vh; background:#000; border-radius:6px; overflow:hidden;"></div>
+              <div *ngIf="isNativeMobile()" style="padding:1rem; border:1px dashed #d1d5db; border-radius:8px; text-align:center; color:#6b7280; background:#f9fafb;">
+                The camera feed will appear here when the scanner starts.
+              </div>
               <div style="display:flex; gap:0.5rem; align-items:center; flex-wrap:wrap;">
                 <button class="btn btn-primary" (click)="startCamera()">Start Camera</button>
                 <button class="btn" (click)="toggleCamera()">{{ cameraFacingMode() === 'environment' ? 'Switch to Front' : 'Switch to Back' }}</button>
                 <button class="btn" (click)="stopCamera()">Stop Camera</button>
-                <div style="color:#6b7280; font-size:0.9rem;">(Automatic QR decode not implemented — implement decoder later)</div>
+                <div style="color:#6b7280; font-size:0.9rem;">{{ isNativeMobile() ? 'Tap Start Camera to launch the mobile scanner.' : 'Use your device camera to scan a customer QR code.' }}</div>
               </div>
             </div>
           </div>
