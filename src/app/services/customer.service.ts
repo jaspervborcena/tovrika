@@ -72,7 +72,14 @@ export class CustomerService {
       }
 
       const customerId = await this.generateCustomerId(companyId);
-      const { firstName, lastName } = this.parseFullName(customerData.soldTo || 'Walk-in Customer');
+      const fullNameSource = (customerData.fullName?.trim() || customerData.soldTo?.trim() || `${customerData.firstName?.trim() || ''} ${customerData.lastName?.trim() || ''}`.trim() || 'Walk-in Customer').trim();
+      const nameParts = {
+        firstName: customerData.firstName?.trim() || '',
+        lastName: customerData.lastName?.trim() || ''
+      };
+      const { firstName, lastName } = nameParts.firstName || nameParts.lastName
+        ? nameParts
+        : this.parseFullName(fullNameSource);
       
       // Add security fields to customer data
       const customerWithSecurity = await this.securityService.addSecurityFields({
@@ -81,7 +88,7 @@ export class CustomerService {
         customerId,
         firstName,
         lastName,
-        fullName: customerData.soldTo || 'Walk-in Customer',
+        fullName: fullNameSource,
         email: customerData.email,
         contactNumber: customerData.contactNumber,
         address: customerData.businessAddress,

@@ -7,9 +7,10 @@ describe('buildRewardsApkStoragePath', () => {
 });
 
 describe('buildRewardsApkDownloadUrl', () => {
-  it('should build a function URL using the slug', () => {
+  it('should build a direct function URL using the slug', () => {
     const url = buildRewardsApkDownloadUrl('tovrika');
 
     expect(url).toContain('/downloadRewardsApk?slug=tovrika');
+    expect(url).toMatch(/https?:\/\/|^\/downloadRewardsApk/);
   });
 });

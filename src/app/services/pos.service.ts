@@ -586,7 +586,7 @@ export class PosService {
    * NEW: Process order with new customerInfo and payments structure
    */
   async processOrderWithInvoiceAndPayment(
-    customerInfo: { fullName: string; address: string; tin: string; customerId: string }, 
+    customerInfo: { uid?: string; fullName: string; address: string; tin: string; customerId: string }, 
     payments: { amountTendered: number; changeAmount: number; paymentDescription: string; paymentType: string },
     saveAsOpen: boolean = false,
     tableNumber: string = ''
