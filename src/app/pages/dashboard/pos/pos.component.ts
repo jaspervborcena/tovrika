@@ -587,7 +587,9 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   currentDate = new Date();
   
   // Customer information for order (only customer-specific fields)
+  // uid remains part of the model but is not bound in the UI template.
   customerInfo = {
+    uid: '',
     soldTo: '',
     tin: '',
     pwdId: '',
@@ -3479,7 +3481,22 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
         this.cdr.markForCheck();
         return;
       }
-      this.customerLookupResults = await this.customerService.searchCustomers(companyId, storeId, queryText);
+
+      const [exactCustomer, searchResults] = await Promise.all([
+        this.customerService.getCustomerById(queryText),
+        this.customerService.searchCustomers(companyId, storeId, queryText)
+      ]);
+
+      if (exactCustomer) {
+        const normalizedExactId = exactCustomer.customerId || exactCustomer.id || '';
+        const alreadyIncluded = searchResults.some(result =>
+          (result.customerId || result.id || '').toString() === normalizedExactId.toString()
+        );
+        this.customerLookupResults = alreadyIncluded ? searchResults : [exactCustomer, ...searchResults];
+      } else {
+        this.customerLookupResults = searchResults;
+      }
+
       this.cdr.markForCheck();
     } catch (error) {
       console.error('Customer lookup failed:', error);
@@ -3517,6 +3534,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
 
   selectCustomer(c: Customer): void {
     const selectedName = (c.fullName || `${c.firstName || ''} ${c.lastName || ''}`).trim();
+    this.customerInfo.uid = (c as any).uid || c.id || c.customerId || this.customerInfo.uid || '';
     this.customerInfo.soldTo = selectedName;
     this.customerInfo.customerId = c.id || c.customerId || '';
     this.customerInfo.businessAddress = (c.address || '') as any;
@@ -3530,6 +3548,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
 
   viewCustomerDetails(c: Customer): void {
     const selectedName = (c.fullName || `${c.firstName || ''} ${c.lastName || ''}`).trim();
+    this.customerInfo.uid = (c as any).uid || c.id || c.customerId || this.customerInfo.uid || '';
     this.customerInfo.soldTo = selectedName;
     this.customerInfo.customerId = c.id || c.customerId || '';
     this.customerInfo.businessAddress = (c.address || '') as any;
@@ -3605,6 +3624,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
 
       const saved = await this.customerService.saveCustomerFromPOS(formData as any, companyId, storeId);
       if (saved) {
+        this.customerInfo.uid = (saved as any).uid || saved.id || saved.customerId || this.customerInfo.uid || '';
         this.customerInfo.customerId = saved.customerId || saved.id || this.customerInfo.customerId;
         if (!autoSave) {
           if (this.isCustomerUpdateMode()) {
@@ -3763,7 +3783,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
 
           this.scannerError.set('');
           void this.stopCamera();
-          this.handleScannedQrCode(value);
+          void this.handleScannedQrCode(value);
           this.closeScanner();
         },
         () => undefined
@@ -3777,11 +3797,18 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     }
   }
 
-  private handleScannedQrCode(scannedText: string): void {
+  private async handleScannedQrCode(scannedText: string): Promise<void> {
     const customerId = extractCustomerIdentifierFromQrValue(scannedText);
 
     if (!customerId) {
       this.toastService?.success?.('No QR content was detected.');
+      return;
+    }
+
+    const customer = await this.customerService.getCustomerById(customerId);
+    if (customer) {
+      this.selectCustomer(customer);
+      this.toastService.success(`Customer loaded from QR: ${customerId}`);
       return;
     }
 
@@ -3816,6 +3843,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   clearCustomer(): void {
+    this.customerInfo.uid = '';
     this.customerInfo.soldTo = '';
     this.customerInfo.customerId = '';
     this.customerInfo.tin = '';
@@ -4109,6 +4137,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     const nextInvoice = this.nextInvoiceNumber();
     
     this.customerInfo = {
+      uid: '',
       soldTo: '',
       tin: '',
       pwdId: '',
@@ -4496,7 +4525,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   // Handler for editable order-level customer fields inside Cart Information dialog
   public onCustomerInfoChange(field: 'pwdId' | 'soldTo', value: string): void {
     try {
-      if (!this.customerInfo) this.customerInfo = { soldTo: '', tin: '', pwdId: '', businessAddress: '', customerId: '' } as any;
+      if (!this.customerInfo) this.customerInfo = { uid: '', soldTo: '', tin: '', pwdId: '', businessAddress: '', customerId: '', email: '', contactNumber: '' } as any;
       // update local object
       (this.customerInfo as any)[field] = value;
       console.log(`✏️ Customer info updated: ${field} =`, value);
@@ -4808,6 +4837,9 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
         console.warn('⚠️ Failed to save customer before order - proceeding without attaching id:', err);
       }
 
+      // Ensure uid is present before passing customerInfo to the service
+      processedCustomerInfo.uid = this.customerInfo.uid || this.authService.currentUser()?.uid || '';
+
       // Use the invoice service with the new data structure
       // Add better error handling and offline detection
       let result;
@@ -5014,10 +5046,12 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     const soldToField = this.customerInfo.soldTo?.trim();
     const addressField = this.customerInfo.businessAddress?.trim();
     const tinField = this.customerInfo.tin?.trim();
+    const currentUser = this.authService.getCurrentUser();
     
     return {
+      uid: currentUser?.uid || this.customerInfo.uid || '',
       fullName: soldToField || "Walk-in Customer",
-      address: addressField || "Philippines", 
+      address: addressField || "Philippines",
       tin: tinField || "",
       customerId: this.customerInfo.customerId || ""
     };
@@ -6716,6 +6750,8 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
         console.log('No authenticated user found, skipping customer save');
         return null;
       }
+
+      this.customerInfo.uid = currentUser.uid || this.customerInfo.uid || '';
 
       const storeInfo = this.currentStoreInfo();
       const selectedStore = this.selectedStoreId();

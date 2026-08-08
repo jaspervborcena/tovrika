@@ -238,11 +238,13 @@ export class InvoiceService {
       const completeOrderDataPre = {
         ...orderWithSecurityPre,
         customerInfo: customerInfo ? {
+          uid: customerInfo.uid || currentUserId,
           customerId: customerInfo.customerId || '',
           fullName: customerInfo.fullName || 'Walk-in Customer',
           address: customerInfo.address || 'Philippines',
           tin: customerInfo.tin || ''
         } : {
+          uid: currentUserId,
           customerId: '',
           fullName: 'Walk-in Customer',
           address: 'Philippines',
@@ -506,11 +508,13 @@ export class InvoiceService {
         }],
         statusTags: [transactionData.saveAsOpen ? 'OPEN' : 'completed'],
         customerInfo: customerInfo ? {
+          uid: customerInfo.uid || currentUserId,
           customerId: customerInfo.customerId || '',
           fullName: customerInfo.fullName || 'Walk-in Customer',
           address: customerInfo.address || 'Philippines',
           tin: customerInfo.tin || ''
         } : {
+          uid: currentUserId,
           customerId: '',
           fullName: 'Walk-in Customer',
           address: 'Philippines',
