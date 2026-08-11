@@ -96,7 +96,8 @@ export class CustomerService {
         isSeniorCitizen: customerData.isSeniorCitizen || false,
         isPWD: customerData.isPWD || false,
         exemptionId: customerData.exemptionId,
-        country: 'Philippines' // Default for now
+        country: 'Philippines', // Default for now
+        pointsBalance: 0
       });
 
       // 🔥 OFFLINE-SAFE: Use OfflineDocumentService for pre-generated IDs
