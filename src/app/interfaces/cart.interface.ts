@@ -33,6 +33,7 @@ export interface Receipt extends Cart {
   cashierId: string;
   paymentMethod: 'cash' | 'card' | 'other';
   customerInfo?: {
+    uid?: string;
     name?: string;
     email?: string;
     phone?: string;

@@ -2507,6 +2507,36 @@ export class StoresManagementComponent implements OnInit {
     this.storeForm.get('status')?.enable();
   }
 
+  private normalizeStoreText(value?: string): string {
+    return (value || '').trim().toLowerCase();
+  }
+
+  private hasConflictingStoreNameAndBranch(formData: any): boolean {
+    const targetStoreName = this.normalizeStoreText(formData.storeName);
+    const targetBranchName = this.normalizeStoreText(formData.branchName);
+
+    if (!targetStoreName) {
+      return false;
+    }
+
+    return this.stores.some(store => {
+      if (store.id === this.editingStore?.id) {
+        return false;
+      }
+
+      const existingStoreName = this.normalizeStoreText(store.storeName);
+      if (existingStoreName !== targetStoreName) {
+        return false;
+      }
+
+      const existingBranchName = this.normalizeStoreText(store.branchName);
+      const sameBranch = existingBranchName === targetBranchName;
+      const bothBlank = !existingBranchName && !targetBranchName;
+
+      return sameBranch || bothBlank;
+    });
+  }
+
   async saveStore() {
     if (!this.storeForm.valid) {
       this.storeForm.markAllAsTouched();
@@ -2523,6 +2553,14 @@ export class StoresManagementComponent implements OnInit {
       }
 
       const formData = this.storeForm.value;
+
+      if (this.hasConflictingStoreNameAndBranch(formData)) {
+        const branchLabel = formData.branchName?.trim()
+          ? ` branch "${formData.branchName.trim()}"`
+          : ' without a branch';
+        this.toastService.error(`A store named "${formData.storeName}"${branchLabel} already exists. Please use a different branch name or store name.`);
+        return;
+      }
       
       // Build the BIR details object
       const birDetails = {

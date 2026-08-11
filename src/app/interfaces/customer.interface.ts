@@ -15,12 +15,17 @@ export interface Customer {
   isSeniorCitizen?: boolean;
   isPWD?: boolean;
   exemptionId?: string;
+  qrCode?: string;
+  pointsBalance?: number;
   createdAt?: Date;
   updatedAt?: Date;
 }
 
 export interface CustomerFormData {
   soldTo?: string;
+  firstName?: string;
+  lastName?: string;
+  fullName?: string;
   tin?: string;
   businessAddress?: string;
   email?: string;

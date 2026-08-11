@@ -20,11 +20,12 @@
       <div class="row-header">🏪 {{ 'pos.store' | translate }}</div>
       <div class="stores-tabs-container">
         <button 
-          *ngFor="let store of availableStores()" 
+          *ngFor="let store of displayStores()" 
           class="mobile-tab"
           [class.active]="selectedStoreId() === store.id"
           (click)="selectStore(store.id!)">
-          {{ store.storeName }}
+          <span class="store-name-line">{{ store.displayName }}</span>
+          <span *ngIf="store.branchLabel" class="store-branch-line">{{ store.branchLabel }}</span>
         </button>
       </div>
     </div>

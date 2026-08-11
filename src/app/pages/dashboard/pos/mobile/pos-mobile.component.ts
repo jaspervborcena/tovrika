@@ -108,7 +108,39 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
   readonly isProcessing = computed(() => this.posService.isProcessing());
   
   readonly products = computed(() => this.productService.getProducts());
-  readonly categories = computed(() => this.productService.getCategories());
+  readonly displayStores = computed(() => {
+    const stores = this.availableStores()
+      .filter(store => store?.id && store?.storeName?.trim())
+      .map(store => ({
+        ...store,
+        displayName: store.storeName?.trim() || 'Unnamed Store',
+        branchLabel: store.branchName?.trim() || ''
+      }));
+
+    const seen = new Set<string>();
+    return stores.filter(store => {
+      const key = `${store.storeName?.trim().toLowerCase() || ''}|${store.companyId || ''}`;
+      if (seen.has(key)) {
+        return false;
+      }
+      seen.add(key);
+      return true;
+    });
+  });
+  readonly categories = computed(() => {
+    const storeId = this.selectedStoreId();
+    const storeProducts = storeId
+      ? this.products().filter(p => p.storeId === storeId)
+      : this.products();
+
+    const categorySet = new Set(
+      storeProducts
+        .map(p => p.category)
+        .filter((cat): cat is string => !!cat && cat.trim().length > 0)
+    );
+
+    return Array.from(categorySet).sort();
+  });
   
   readonly currentStoreInfo = computed(() => 
     this.availableStores().find(s => s.id === this.selectedStoreId())
