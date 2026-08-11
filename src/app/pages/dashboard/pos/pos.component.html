@@ -28,12 +28,13 @@
               <h3>🏪 {{ 'pos.selectStore' | translate }}</h3>
               <div class="store-buttons-inline">
                 <button
-                  *ngFor="let store of availableStores()"
+                  *ngFor="let store of displayStores()"
                   [class.active]="selectedStoreId() === store.id"
                   (click)="selectStore(store.id!)"
                   class="store-btn-inline"
-                  title="{{ store.storeName }}">
-                  {{ store.storeName }}
+                  [title]="store.displayName + (store.branchLabel ? ' - ' + store.branchLabel : '')">
+                  <span class="store-btn-main">{{ store.displayName }}</span>
+                  <span *ngIf="store.branchLabel" class="store-btn-branch">{{ store.branchLabel }}</span>
                 </button>
                 <!-- Fallback if no stores -->
                 <div *ngIf="availableStores().length === 0" class="no-stores-message">

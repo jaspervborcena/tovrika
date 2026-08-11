@@ -15,6 +15,8 @@ export interface Customer {
   isSeniorCitizen?: boolean;
   isPWD?: boolean;
   exemptionId?: string;
+  qrCode ?: string;
+  pointsBalance :number;
   createdAt?: Date;
   updatedAt?: Date;
 }

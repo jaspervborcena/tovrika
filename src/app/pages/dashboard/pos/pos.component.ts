@@ -182,18 +182,43 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     return prods;
   });
   readonly categories = computed(() => {
-    // Get all categories from ALL products (global categories)
-    // Categories should be visible across all stores
-    const allProducts = this.products();
-    const categorySet = new Set(allProducts.map(p => p.category).filter(cat => cat && cat.trim()));
-    const cats = Array.from(categorySet).sort();
-    
-    return cats;
+    const storeId = this.selectedStoreId();
+    const storeProducts = storeId
+      ? this.products().filter(p => p.storeId === storeId)
+      : this.products();
+
+    const categorySet = new Set(
+      storeProducts
+        .map(p => p.category)
+        .filter((cat): cat is string => !!cat && cat.trim().length > 0)
+    );
+
+    return Array.from(categorySet).sort();
   });
   
   readonly currentStoreInfo = computed(() => 
     this.availableStores().find(s => s.id === this.selectedStoreId())
   );
+
+  readonly displayStores = computed(() => {
+    const stores = this.availableStores()
+      .filter(store => store?.id && store?.storeName?.trim())
+      .map(store => ({
+        ...store,
+        displayName: store.storeName?.trim() || 'Unnamed Store',
+        branchLabel: store.branchName?.trim() || ''
+      }));
+
+    const seen = new Set<string>();
+    return stores.filter(store => {
+      const key = `${store.storeName?.trim().toLowerCase() || ''}|${store.companyId || ''}`;
+      if (seen.has(key)) {
+        return false;
+      }
+      seen.add(key);
+      return true;
+    });
+  });
 
   // Check if current store has no products
   readonly currentStoreHasNoProducts = computed(() => {
