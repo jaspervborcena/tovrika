@@ -4,7 +4,7 @@ import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, Validators } 
 import { Product, ProductInventory, ProductStatus } from '../../../interfaces/product.interface';
 import { ProductInventoryEntry } from '../../../interfaces/product-inventory-entry.interface';
 import { ProductService } from '../../../services/product.service';
-import { StoreService } from '../../../services/store.service';
+import { StoreService, dedupeStoresForDropdown, formatStoreDisplayName } from '../../../services/store.service';
 import { StoreSelectionService } from '../../../services/store-selection.service';
 
 import { AuthService } from '../../../services/auth.service';
@@ -1945,7 +1945,7 @@ import * as XLSX from 'xlsx';
                     <label for="categoryStoreId">🏪 Store</label>
                     <select id="categoryStoreId" class="form-input" formControlName="storeId">
                       <option value="">Select Store</option>
-                      <option *ngFor="let store of stores()" [value]="store.id">{{ store.storeName }}</option>
+                      <option *ngFor="let store of stores()" [value]="store.id">{{ formatStoreDisplayName(store) }}</option>
                     </select>
                   </div>
                   <div class="form-group">
@@ -2531,7 +2531,7 @@ import * as XLSX from 'xlsx';
 export class ProductManagementComponent implements OnInit {
   // Signals
   readonly products = computed(() => this.productService.getProducts());
-  readonly stores = computed(() => this.storeService.getStores().filter(store => store.status === 'active'));
+  readonly stores = computed(() => dedupeStoresForDropdown(this.storeService.getStores().filter(store => store.status === 'active')));
   // Get categories from category service
   readonly categories = computed(() => {
     const categoryObjects = this.categoryService.getCategories();
@@ -4554,8 +4554,8 @@ export class ProductManagementComponent implements OnInit {
   }
 
   getStoreName(storeId: string): string {
-    const store = this.stores().find(s => s.id === storeId);
-    return store?.storeName || 'Unknown Store';
+    const store = this.stores().find((s: any) => s.id === storeId);
+    return store ? formatStoreDisplayName(store) : 'Unknown Store';
   }
 
   getDisplayProductCount(): number {

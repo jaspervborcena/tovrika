@@ -25,6 +25,38 @@ import { FEATURE_FLAGS } from '../shared/config/feature-flags';
 
 export type { Store } from '../interfaces/store.interface';
 
+export function formatStoreDisplayName(store?: Partial<Store> | null): string {
+  const storeName = (store?.storeName || '').trim();
+  const branchName = (store?.branchName || '').trim();
+
+  if (!storeName && !branchName) {
+    return 'Unnamed Store';
+  }
+
+  if (storeName && branchName) {
+    return `${storeName} - ${branchName}`;
+  }
+
+  return storeName || branchName;
+}
+
+export function dedupeStoresForDropdown<T extends Partial<Store>>(stores: T[]): T[] {
+  const seen = new Set<string>();
+  const uniqueStores: T[] = [];
+
+  stores.forEach((store) => {
+    const label = formatStoreDisplayName(store).trim().toLowerCase();
+    if (!label || seen.has(label)) {
+      return;
+    }
+
+    seen.add(label);
+    uniqueStores.push(store);
+  });
+
+  return uniqueStores;
+}
+
 @Injectable({
   providedIn: 'root'
 })
@@ -123,7 +155,7 @@ export class StoreService {
         return store;
       });
       
-      this.storesSignal.set(stores);
+      this.storesSignal.set(dedupeStoresForDropdown(stores));
       this.loadTimestamp = Date.now();
       // Persist snapshot per-company to IndexedDB settings for offline use
       try {
@@ -582,7 +614,7 @@ export class StoreService {
       
       const activeCount = allStores.filter(s => s.status === 'active').length;
       
-      return accessibleStores;
+      return dedupeStoresForDropdown(accessibleStores);
     } catch (error) {
       console.error('❌ Error loading active stores:', error);
       return [];

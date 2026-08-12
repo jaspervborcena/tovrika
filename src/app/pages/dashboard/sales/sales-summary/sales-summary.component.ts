@@ -3,7 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { OrderService } from '../../../../services/order.service';
 import { AuthService } from '../../../../services/auth.service';
-import { StoreService, Store } from '../../../../services/store.service';
+import { StoreService, Store, dedupeStoresForDropdown, formatStoreDisplayName } from '../../../../services/store.service';
 import { LedgerService } from '../../../../services/ledger.service';
 import { Order as PosOrder, OrderItem } from '../../../../interfaces/pos.interface';
 import { IndexedDBService } from '../../../../core/services/indexeddb.service';
@@ -49,14 +49,14 @@ type Order = OrderDisplay;
                 (change)="onStoreChange()"
                 class="store-select">
                 <option *ngFor="let store of stores()" [value]="store.id">
-                  {{ store.storeName.toUpperCase() }}
+                  {{ formatStoreDisplayName(store) }}
                 </option>
               </select>
             </div>
             <ng-template #singleStore>
               <div class="single-store">
                 <label>Store:</label>
-                <span class="store-name">{{ stores()[0].storeName.toUpperCase() }}</span>
+                <span class="store-name">{{ formatStoreDisplayName(stores()[0]) }}</span>
               </div>
             </ng-template>
           </div>
@@ -1875,8 +1875,10 @@ export class SalesSummaryComponent implements OnInit {
 
       // Load stores into StoreService and use full company list (no userRoles filtering)
       await this.storeService.loadStoresByCompany(currentPermission.companyId);
-      const stores = this.storeService.getStoresByCompany(currentPermission.companyId)
-        .filter(store => store.status === 'active');
+      const stores = dedupeStoresForDropdown(
+        this.storeService.getStoresByCompany(currentPermission.companyId)
+          .filter(store => store.status === 'active')
+      );
       this.stores.set(stores);
 
       // Set selected store - if user has storeId, use it, otherwise use first store

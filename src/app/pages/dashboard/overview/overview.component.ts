@@ -1,7 +1,7 @@
 import { Component, inject, signal, computed, OnInit, effect } from '@angular/core';
 import { environment } from '../../../../environments/environment';
 import { CommonModule } from '@angular/common';
-import { StoreService, Store } from '../../../services/store.service';
+import { StoreService, Store, dedupeStoresForDropdown, formatStoreDisplayName } from '../../../services/store.service';
 import { ProductService } from '../../../services/product.service';
 import { Product } from '../../../interfaces/product.interface';
 import { Order } from '../../../interfaces/pos.interface';
@@ -38,12 +38,12 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
                 <label class="control-label">Store</label>
                 <ng-container *ngIf="storeList().length > 1; else singleStore">
                   <select class="control-select" (change)="onOverviewStoreChange($event)">
-                    <option *ngFor="let s of storeList()" [value]="s.id" [selected]="selectedStoreId()===s.id">{{ s.storeName || s.storeName }}</option>
+                    <option *ngFor="let s of storeList()" [value]="s.id" [selected]="selectedStoreId()===s.id">{{ formatStoreDisplayName(s) }}</option>
                   </select>
                 </ng-container>
                 <ng-template #singleStore>
                   <div class="single-store">
-                    <span class="store-name">{{ storeList().length ? (storeList()[0].storeName | uppercase) : 'All Stores' }}</span>
+                    <span class="store-name">{{ storeList().length ? formatStoreDisplayName(storeList()[0]) : 'All Stores' }}</span>
                   </div>
                 </ng-template>
               </div>
@@ -1634,6 +1634,7 @@ export class OverviewComponent implements OnInit {
   });
   
   protected totalStores = computed(() => this.stores().length);
+  protected storeList = computed(() => dedupeStoresForDropdown(this.stores()));
   protected totalProducts = computed(() => this.products().length);
   protected lowStockCount = computed(() => 
     this.products().filter(p => p.totalStock <= 10).length
@@ -1643,7 +1644,6 @@ export class OverviewComponent implements OnInit {
       .sort((a, b) => (b.createdAt?.getTime() || 0) - (a.createdAt?.getTime() || 0))
       .slice(0, 5)
   );
-  protected storeList = computed(() => this.stores());
   
   // Filtered orders based on selected period for client-side safety
   protected filteredOrders = computed(() => {

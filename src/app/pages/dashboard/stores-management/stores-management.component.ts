@@ -2,7 +2,7 @@ import { Component, OnInit, ChangeDetectorRef, signal, computed } from '@angular
 import { Router } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
-import { StoreService, Store } from '../../../services/store.service';
+import { StoreService, Store, dedupeStoresForDropdown } from '../../../services/store.service';
 import { AuthService } from '../../../services/auth.service';
 import { ToastService } from '../../../shared/services/toast.service';
 import { PredefinedTypesService, PredefinedType } from '../../../services/predefined-types.service';
@@ -2155,8 +2155,9 @@ export class StoresManagementComponent implements OnInit {
       if (currentPermission?.companyId) {
         this.currentCompanyId = currentPermission.companyId;
         await this.storeService.loadStoresByCompany(currentPermission.companyId);
-        // Load all stores (including inactive) for management - admin needs to see all
-        this.stores = this.storeService.getStoresByCompany(currentPermission.companyId);
+        // Load all stores (including inactive) for management - admin needs to see all.
+        // Deduplicate by the user-facing store/branch label to prevent repeated rows.
+        this.stores = dedupeStoresForDropdown(this.storeService.getStoresByCompany(currentPermission.companyId));
         this.filteredStores = [...this.stores];
         
 
@@ -2382,17 +2383,18 @@ export class StoresManagementComponent implements OnInit {
 
   onSearchChange() {
     const term = this.searchTerm?.toLowerCase() || '';
-    this.filteredStores = (this.stores || []).filter(store => 
+    this.filteredStores = dedupeStoresForDropdown((this.stores || []).filter(store => 
       store.storeName?.toLowerCase().includes(term) ||
       store.id?.toLowerCase().includes(term) ||
       store.storeType?.toLowerCase().includes(term) ||
-      store.address?.toLowerCase().includes(term)
-    );
+      store.address?.toLowerCase().includes(term) ||
+      (store.branchName || '').toLowerCase().includes(term)
+    ));
   }
 
   clearSearch() {
     this.searchTerm = '';
-    this.filteredStores = [...this.stores];
+    this.filteredStores = dedupeStoresForDropdown([...this.stores]);
   }
 
   async refreshStores() {
