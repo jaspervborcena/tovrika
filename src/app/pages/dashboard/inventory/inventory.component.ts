@@ -1,7 +1,7 @@
 import { Component, OnInit, signal, computed, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { StoreService, Store } from '../../../services/store.service';
+import { StoreService, Store, dedupeStoresForDropdown, formatStoreDisplayName } from '../../../services/store.service';
 import { AuthService } from '../../../services/auth.service';
 
 @Component({
@@ -28,14 +28,14 @@ import { AuthService } from '../../../services/auth.service';
               (change)="onStoreChange()"
               class="store-select">
               <option *ngFor="let store of stores()" [value]="store.id">
-                {{ store.storeName.toUpperCase() }}
+                {{ formatStoreDisplayName(store) }}
               </option>
             </select>
           </div>
           <ng-template #singleStore>
             <div class="single-store">
               <label>Store:</label>
-              <span class="store-name">{{ stores()[0].storeName.toUpperCase() }}</span>
+              <span class="store-name">{{ formatStoreDisplayName(stores()[0]) }}</span>
             </div>
           </ng-template>
         </div>
@@ -236,6 +236,8 @@ export class InventoryComponent implements OnInit {
   private storeService = inject(StoreService);
   private authService = inject(AuthService);
 
+  protected readonly formatStoreDisplayName = formatStoreDisplayName;
+
   stores = signal<Store[]>([]);
   selectedStoreId = signal<string>('');
 
@@ -260,7 +262,7 @@ export class InventoryComponent implements OnInit {
       // Use centralized method from store.service
       const activeStores = await this.storeService.getActiveStoresForDropdown(currentPermission.companyId);
       
-      this.stores.set(activeStores);
+      this.stores.set(dedupeStoresForDropdown(activeStores));
 
       // Set selected store - if user has storeId, use it, otherwise use first store
       if (currentPermission?.storeId) {
@@ -280,6 +282,6 @@ export class InventoryComponent implements OnInit {
 
   getSelectedStoreName(): string {
     const store = this.stores().find(s => s.id === this.selectedStoreId());
-    return store ? store.storeName : '';
+    return store ? formatStoreDisplayName(store) : '';
   }
 }
