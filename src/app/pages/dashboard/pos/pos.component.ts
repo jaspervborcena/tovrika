@@ -23,7 +23,7 @@ import { AppConstants } from '../../../shared/enums/app-constants.enum';
 import { OrderService } from '../../../services/order.service';
 import { OrdersSellingTrackingService } from '../../../services/orders-selling-tracking.service';
 import { LedgerService } from '../../../services/ledger.service';
-import { StoreService } from '../../../services/store.service';
+import { StoreService, formatStoreDisplayName, dedupeStoresForDropdown } from '../../../services/store.service';
 import { InvoiceService } from '../../../services/invoice.service';
 import { UserRoleService } from '../../../services/user-role.service';
 import { CustomerService } from '../../../services/customer.service';
@@ -202,16 +202,19 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
 
   readonly displayStores = computed(() => {
     const stores = this.availableStores()
-      .filter(store => store?.id && store?.storeName?.trim())
-      .map(store => ({
-        ...store,
-        displayName: store.storeName?.trim() || 'Unnamed Store',
-        branchLabel: store.branchName?.trim() || ''
-      }));
+      .filter(store => store?.id && (store?.storeName?.trim() || store?.branchName?.trim()))
+      .map(store => {
+        const displayName = formatStoreDisplayName(store);
+        return {
+          ...store,
+          displayName,
+          branchLabel: store.branchName?.trim() || ''
+        };
+      });
 
     const seen = new Set<string>();
     return stores.filter(store => {
-      const key = `${store.storeName?.trim().toLowerCase() || ''}|${store.companyId || ''}`;
+      const key = `${store.companyId || ''}|${store.displayName.toLowerCase()}|${store.branchLabel.toLowerCase()}`;
       if (seen.has(key)) {
         return false;
       }
@@ -5632,9 +5635,11 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
         // Load stores into StoreService first
         await this.storeService.loadStoresByCompany(currentPermission.companyId);
         
-        // Use full company store list (no userRoles filtering)
-        const stores = this.storeService.getStoresByCompany(currentPermission.companyId)
-          .filter(store => store.status === 'active');
+        // Use full company store list (no userRoles filtering), but keep distinct store/branch combinations
+        const stores = dedupeStoresForDropdown(
+          this.storeService.getStoresByCompany(currentPermission.companyId)
+            .filter(store => store.status === 'active')
+        );
         this.storesSignal.set(stores);
       } else {
         console.warn('⚠️ loadStoresForPOS: No companyId available for loading stores');

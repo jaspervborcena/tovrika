@@ -2373,7 +2373,7 @@ import * as XLSX from 'xlsx';
                   Columns: <strong>Product Name, Description, SKU ID, Product Code, Total Stock, Cost Price, Original Price, Selling Price, Barcode ID, Image URL, Is Favorite, Is VAT Applicable, VAT Rate, Has Discount, Discount Value, Is Stock Tracked</strong>.
                 </p>
                 <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
-                  <button class="btn btn-secondary btn-sm" (click)="downloadBulkTemplate()">⬇️ Download CSV Template</button>
+                  <button class="btn btn-secondary btn-sm" (click)="downloadBulkTemplate()">⬇️ Download Template</button>
                   <button class="btn btn-secondary btn-sm" (click)="downloadBulkExcelTemplate()">⬇️ Download Excel Template</button>
                 </div>
               </div>
@@ -2387,7 +2387,7 @@ import * as XLSX from 'xlsx';
               </div>
 
               <div class="form-group">
-                <label>CSV or Excel File *</label>
+                <label>File *</label>
                 <input type="file" class="form-input" accept=".csv,.xlsx,.xls" (change)="onBulkFileChange($event)" #bulkFileInput>
                 <span *ngIf="bulkFileName" style="font-size:0.8rem; color:#374151; margin-top:4px; display:block;">📎 {{ bulkFileName }}</span>
                 <span *ngIf="bulkUploadError" style="font-size:0.8rem; color:#dc2626; margin-top:4px; display:block;">⚠️ {{ bulkUploadError }}</span>
