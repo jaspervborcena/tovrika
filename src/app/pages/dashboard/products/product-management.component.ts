@@ -2529,6 +2529,8 @@ import * as XLSX from 'xlsx';
   `
 })
 export class ProductManagementComponent implements OnInit {
+  protected readonly formatStoreDisplayName = formatStoreDisplayName;
+
   // Signals
   readonly products = computed(() => this.productService.getProducts());
   readonly stores = computed(() => dedupeStoresForDropdown(this.storeService.getStores().filter(store => store.status === 'active')));

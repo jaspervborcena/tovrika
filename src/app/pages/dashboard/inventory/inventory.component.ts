@@ -236,6 +236,8 @@ export class InventoryComponent implements OnInit {
   private storeService = inject(StoreService);
   private authService = inject(AuthService);
 
+  protected readonly formatStoreDisplayName = formatStoreDisplayName;
+
   stores = signal<Store[]>([]);
   selectedStoreId = signal<string>('');
 
