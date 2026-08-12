@@ -22,7 +22,7 @@
             [(ngModel)]="selectedStoreId"
             class="store-select">
             <option *ngFor="let store of stores" [value]="store.id">
-              {{ store.storeName.toUpperCase() }}
+              {{ formatStoreDisplayName(store) }}
             </option>
           </select>
         </div>
