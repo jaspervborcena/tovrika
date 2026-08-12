@@ -1710,6 +1710,7 @@ export class SalesSummaryComponent implements OnInit {
   private toast = inject(ToastService);
 
   // Signals for reactive state management
+  protected readonly formatStoreDisplayName = formatStoreDisplayName;
   orders = signal<Order[]>([]);
   stores = signal<Store[]>([]);
   selectedStoreId = signal<string>('');

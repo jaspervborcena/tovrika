@@ -1568,6 +1568,7 @@ export class OverviewComponent implements OnInit {
 
 
   // Signals
+  protected readonly formatStoreDisplayName = formatStoreDisplayName;
   protected stores = signal<Store[]>([]);
   protected products = signal<Product[]>([]);
   protected orders = signal<Order[]>([]);

@@ -21,6 +21,7 @@ export class OfflineOrderReconciliationComponent implements OnInit {
 
   // Expose Math for template
   Math = Math;
+  protected readonly formatStoreDisplayName = formatStoreDisplayName;
 
   stores: any[] = [];
   selectedStoreId: string = '';
@@ -115,8 +116,6 @@ export class OfflineOrderReconciliationComponent implements OnInit {
       this.loading = false;
     }
   }
-
-  formatStoreDisplayName = formatStoreDisplayName;
 
   get filteredDiscrepancies(): ReconciliationDiscrepancy[] {
     let filtered = this.discrepancies;
