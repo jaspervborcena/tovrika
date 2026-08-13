@@ -17,7 +17,7 @@
         class="control-select" 
         (change)="onStoreChange($event)">
         <option *ngFor="let store of stores()" [value]="store.id" [selected]="selectedStoreId() === store.id">
-          {{ store.storeName.toUpperCase() }}
+          {{ formatStoreDisplayName(store) }}
         </option>
       </select>
       

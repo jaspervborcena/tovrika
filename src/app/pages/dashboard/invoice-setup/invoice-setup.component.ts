@@ -1,7 +1,7 @@
 import { Component, inject, OnInit, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { StoreService } from '../../../services/store.service';
+import { StoreService, formatStoreDisplayName } from '../../../services/store.service';
 import { InvoiceService } from '../../../services/invoice.service';
 import { AuthService } from '../../../services/auth.service';
 
@@ -108,7 +108,7 @@ import { AuthService } from '../../../services/auth.service';
           <select [(ngModel)]="selectedStoreId" class="store-select">
             <option value="">Select a store...</option>
             <option *ngFor="let store of stores" [value]="store.id">
-              {{ store.storeName }}
+              {{ formatStoreDisplayName(store) }}
             </option>
           </select>
         </div>
@@ -405,6 +405,7 @@ export class InvoiceSetupComponent implements OnInit {
   isProcessing = false;
   testResults: any[] = [];
   selectedStoreId = '';
+  protected readonly formatStoreDisplayName = formatStoreDisplayName;
   // BIR modal state
   showBirModal = signal(false);
   birModalData: any = null;
