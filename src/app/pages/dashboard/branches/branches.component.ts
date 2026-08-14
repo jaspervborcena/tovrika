@@ -6,6 +6,7 @@ import { ModalComponent } from '../../../shared/ui/modal.component';
 import { AuthService } from '../../../services/auth.service';
 import { Branch } from '../../../interfaces/branch.interface';
 import { Store } from '../../../interfaces/store.interface';
+import { formatStoreDisplayName } from '../../../services/store.service';
 
 @Component({
   selector: 'app-branches',
@@ -93,7 +94,7 @@ import { Store } from '../../../interfaces/store.interface';
                       class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3">
                 <option value="">Select a store</option>
                 @for (store of stores(); track store.id) {
-                  <option [value]="store.id">{{ store.storeName }}</option>
+                  <option [value]="store.id">{{ formatStoreDisplayName(store) }}</option>
                 }
               </select>
             </div>
@@ -155,6 +156,7 @@ export class BranchesComponent implements OnInit {
   protected isModalOpen = signal(false);
   protected isLoading = signal(false);
   protected editingBranch = signal<Branch | null>(null);
+  protected readonly formatStoreDisplayName = formatStoreDisplayName;
 
   // Form
   protected branchForm = this.fb.group({

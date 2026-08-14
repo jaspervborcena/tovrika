@@ -3,7 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { UserRoleService } from '../../../services/user-role.service';
 import { RoleDefinitionService, RoleDefinition } from '../../../services/role-definition.service';
-import { StoreService, Store } from '../../../services/store.service';
+import { StoreService, Store, formatStoreDisplayName } from '../../../services/store.service';
 import { AuthService } from '../../../services/auth.service';
 import { UserRole } from '../../../interfaces/user-role.interface';
 import { AccessRequest } from '../../../interfaces/access-request.interface';
@@ -41,14 +41,14 @@ import { getFirestore, collection, query, where, getDocs, doc, updateDoc, Timest
             (change)="onStoreChange($event)"
             class="store-select">
             <option *ngFor="let store of stores()" [value]="store.id">
-              {{ store.storeName.toUpperCase() }}
+              {{ formatStoreDisplayName(store) }}
             </option>
           </select>
         </div>
         <ng-template #singleStore>
           <div class="single-store">
             <label>Store:</label>
-            <span class="store-name">{{ stores()[0].storeName.toUpperCase() }}</span>
+            <span class="store-name">{{ formatStoreDisplayName(stores()[0]) }}</span>
           </div>
         </ng-template>
       </div>
@@ -328,7 +328,7 @@ import { getFirestore, collection, query, where, getDocs, doc, updateDoc, Timest
                 <option 
                   *ngFor="let store of availableStores" 
                   [value]="store.id">
-                  {{ store.storeName }}
+                  {{ formatStoreDisplayName(store) }}
                 </option>
               </select>
               <p class="form-help">
@@ -1060,6 +1060,7 @@ export class UserRolesComponent implements OnInit {
   // Signals
   readonly stores = signal<Store[]>([]);
   readonly selectedStoreId = signal<string>('');
+  protected readonly formatStoreDisplayName = formatStoreDisplayName;
   readonly hasMultipleStores = computed(() => this.stores().length > 1);
   readonly activeTab = signal<'users' | 'requests'>('users');
   readonly accessRequests = signal<AccessRequest[]>([]);

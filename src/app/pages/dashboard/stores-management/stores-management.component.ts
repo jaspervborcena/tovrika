@@ -274,7 +274,7 @@ import { Timestamp } from '@angular/fire/firestore';
                     <option value="inactive">Inactive</option>
                   </select>
                   @if (!canEditStoreStatus()) {
-                    <small class="text-muted">Only administrators can change store status</small>
+                    <small class="text-muted">Only administrators and business owners can change store status</small>
                   }
                 </div>
               </div>
@@ -2130,11 +2130,11 @@ export class StoresManagementComponent implements OnInit {
 
   canEditStoreStatus(): boolean {
     const role = this.authService.getCurrentPermission()?.roleId;
-    return role === UserRolesEnum.ADMIN; // Only admin can edit store status
+    return role === UserRolesEnum.ADMIN || role === UserRolesEnum.CREATOR;
   }
 
   showAccessDeniedMessage(feature: string): void {
-    this.toastService.error(`Access denied: ${feature} is only available for administrators.`);
+    this.toastService.error(`Access denied: ${feature} is only available for administrators and business owners.`);
   }
 
   async loadStoreTypes() {

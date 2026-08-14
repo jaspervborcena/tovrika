@@ -213,14 +213,11 @@ export class UpgradeSubscriptionModalComponent implements OnChanges, AfterViewCh
         this.currency = config.currency;
       }
     } catch (err) {
-      if (this.isProduction) {
-        throw new Error('Could not load live PayPal configuration. Check CORS and backend availability.');
-      }
-      console.warn('Falling back to environment PayPal config:', err);
+      console.warn('PayPal remote config unavailable; falling back to environment config:', err);
     }
 
     if (!this.paypalClientId) {
-      throw new Error('Missing PayPal client configuration');
+      throw new Error('Missing PayPal client configuration. Add a valid PayPal client ID in the environment or deploy the PayPal backend endpoint.');
     }
 
     return new Promise((resolve, reject) => {
