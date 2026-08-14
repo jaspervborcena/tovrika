@@ -1,6 +1,4 @@
 import { inject, Injectable } from '@angular/core';
-import { HttpClient, HttpHeaders } from '@angular/common/http';
-import { firstValueFrom } from 'rxjs';
 import { environment } from '../../environments/environment';
 import { AuthService } from './auth.service';
 
@@ -28,38 +26,61 @@ interface CaptureOrderResponse {
 
 @Injectable({ providedIn: 'root' })
 export class PaypalService {
-  private http = inject(HttpClient);
   private auth = inject(AuthService);
   // Dev uses /paypal via proxy; prod can point directly to Cloud Functions base URL
   private baseUrl = environment.paypal.apiUrl;
 
-  private async getAuthHeaders(): Promise<HttpHeaders> {
-    const token = await this.auth.getFirebaseIdToken();
-    let headers = new HttpHeaders({ 'Content-Type': 'application/json' });
-    if (token) {
-      headers = headers.set('Authorization', `Bearer ${token}`);
+  private async getAuthToken(): Promise<string | null> {
+    // Prefer the app's AuthService token getter (works with AngularFire)
+    try {
+      const token = await this.auth.getFirebaseIdToken();
+      if (token) return token;
+    } catch (e) {
+      // ignore and try global firebase fallback
     }
-    return headers;
+
+    // Fallback to global firebase client if available (runtime environments)
+    try {
+      const win = window as any;
+      if (win?.firebase?.auth && win.firebase.auth().currentUser?.getIdToken) {
+        return await win.firebase.auth().currentUser.getIdToken();
+      }
+      if (win?.getAuth && win?.getAuth().currentUser?.getIdToken) {
+        return await win.getAuth().currentUser.getIdToken();
+      }
+    } catch (e) {
+      // ignore
+    }
+    return null;
+  }
+
+  private async fetchJson<T>(path: string, options?: RequestInit): Promise<T> {
+    const token = await this.getAuthToken();
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const res = await fetch(`${this.baseUrl}${path}`, { ...(options || {}), headers });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`Failed ${path}: ${res.status} ${res.statusText} ${text}`);
+    }
+    return (await res.json()) as T;
   }
 
   async getClientConfig(): Promise<PaypalClientConfigResponse> {
-    const headers = await this.getAuthHeaders();
-    return await firstValueFrom(
-      this.http.get<PaypalClientConfigResponse>(`${this.baseUrl}/paypal_client_config`, { headers })
-    );
+    return await this.fetchJson<PaypalClientConfigResponse>('/paypal_client_config', { method: 'GET' });
   }
 
   async createOrder(amount: number, currency = 'PHP', description?: string): Promise<CreateOrderResponse> {
-    const headers = await this.getAuthHeaders();
-    return await firstValueFrom(
-      this.http.post<CreateOrderResponse>(`${this.baseUrl}/paypal_create_order`, { amount, currency, description }, { headers })
-    );
+    return await this.fetchJson<CreateOrderResponse>('/paypal_create_order', {
+      method: 'POST',
+      body: JSON.stringify({ amount, currency, description })
+    });
   }
 
   async captureOrder(orderId: string): Promise<CaptureOrderResponse> {
-    const headers = await this.getAuthHeaders();
-    return await firstValueFrom(
-      this.http.post<CaptureOrderResponse>(`${this.baseUrl}/paypal_capture_order`, { orderId }, { headers })
-    );
+    return await this.fetchJson<CaptureOrderResponse>('/paypal_capture_order', {
+      method: 'POST',
+      body: JSON.stringify({ orderId })
+    });
   }
 }
