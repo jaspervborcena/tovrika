@@ -259,16 +259,20 @@ export class InventoryComponent implements OnInit {
         return;
       }
 
-      // Use centralized method from store.service
-      const activeStores = await this.storeService.getActiveStoresForDropdown(currentPermission.companyId);
-      
-      this.stores.set(dedupeStoresForDropdown(activeStores));
+      // Match sales summary: load the full active company store list so branch labels appear consistently
+      await this.storeService.loadStoresByCompany(currentPermission.companyId);
+      const stores = dedupeStoresForDropdown(
+        this.storeService.getStoresByCompany(currentPermission.companyId)
+          .filter(store => store.status === 'active')
+      );
+
+      this.stores.set(stores);
 
       // Set selected store - if user has storeId, use it, otherwise use first store
       if (currentPermission?.storeId) {
         this.selectedStoreId.set(currentPermission.storeId);
-      } else if (activeStores.length > 0 && activeStores[0].id) {
-        this.selectedStoreId.set(activeStores[0].id);
+      } else if (stores.length > 0 && stores[0].id) {
+        this.selectedStoreId.set(stores[0].id);
       }
     } catch (error) {
       console.error('Error loading stores:', error);

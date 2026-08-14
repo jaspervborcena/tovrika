@@ -10,7 +10,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatCardModule } from '@angular/material/card';
 import { MatTableDataSource } from '@angular/material/table';
 import { InventoryService as AppInventoryService } from '../../services/inventory.service';
-import { StoreService, Store } from '../../services/store.service';
+import { StoreService, Store, dedupeStoresForDropdown, formatStoreDisplayName } from '../../services/store.service';
 import { AuthService } from '../../services/auth.service';
 import { OrderService } from '../../services/order.service';
 
@@ -588,6 +588,8 @@ export class InventoryComponent implements OnInit {
     { orderId: 'INV-1004', batchId: 'BATCH-004', productCode: 'PROD-004', sku: 'PROD-004', costPrice: 200, sellingPrice: 250, quantity: 2 },
   ];
 
+  protected readonly formatStoreDisplayName = formatStoreDisplayName;
+
   dataSource = new MatTableDataSource<AggregatedInventoryRow>([]);
 
   // Store management
@@ -724,8 +726,10 @@ export class InventoryComponent implements OnInit {
       }
 
       await this.storeService.loadStoresByCompany(currentPermission.companyId);
-      const stores = this.storeService.getStoresByCompany(currentPermission.companyId)
-        .filter(store => store.status === 'active');
+      const stores = dedupeStoresForDropdown(
+        this.storeService.getStoresByCompany(currentPermission.companyId)
+          .filter(store => store.status === 'active')
+      );
       this.stores.set(stores);
 
       // Set selected store
@@ -759,7 +763,7 @@ export class InventoryComponent implements OnInit {
 
   getSelectedStoreName(): string {
     const store = this.stores().find(s => s.id === this.selectedStoreId());
-    return store?.storeName.toUpperCase() || 'BREW ORGANICS INC';
+    return store ? formatStoreDisplayName(store) : 'BREW ORGANICS INC';
   }
 
   // UI controls - Daily summary optimized (Today/Yesterday recommended)

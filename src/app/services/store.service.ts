@@ -26,8 +26,11 @@ import { FEATURE_FLAGS } from '../shared/config/feature-flags';
 export type { Store } from '../interfaces/store.interface';
 
 export function formatStoreDisplayName(store?: Partial<Store> | null): string {
-  const storeName = (store?.storeName || '').trim();
-  const branchName = (store?.branchName || '').trim();
+  const rawStoreName = (store?.storeName || '').trim();
+  const rawBranchName = ((store as any)?.branchName || (store as any)?.branch || (store as any)?.branchLabel || '').toString().trim();
+
+  const storeName = rawStoreName || (store as any)?.displayName || '';
+  const branchName = rawBranchName || '';
 
   if (!storeName && !branchName) {
     return 'Unnamed Store';
@@ -35,6 +38,10 @@ export function formatStoreDisplayName(store?: Partial<Store> | null): string {
 
   if (storeName && branchName) {
     return `${storeName} - ${branchName}`;
+  }
+
+  if (storeName && !branchName && storeName.includes(' - ')) {
+    return storeName;
   }
 
   return storeName || branchName;

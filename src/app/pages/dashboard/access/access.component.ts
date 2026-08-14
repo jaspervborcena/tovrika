@@ -3,7 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 
 import { RoleDefinitionService, RoleDefinition, RolePermissions } from '../../../services/role-definition.service';
-import { StoreService, Store } from '../../../services/store.service';
+import { StoreService, Store, formatStoreDisplayName } from '../../../services/store.service';
 import { AuthService } from '../../../services/auth.service';
 import { ToastService } from '../../../shared/services/toast.service';
 import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../shared/components/confirmation-dialog/confirmation-dialog.component';
@@ -29,7 +29,7 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
         <label style="font-weight:600; color:#4a5568; margin-right:0.5rem;">Store:</label>
         <select class="form-input" [(ngModel)]="selectedStoreId" (change)="onStoreFilterChange()">
           <option value="">All Stores</option>
-          <option *ngFor="let store of accessibleStores()" [value]="store.id">{{ store.storeName }}</option>
+          <option *ngFor="let store of accessibleStores()" [value]="store.id">{{ formatStoreDisplayName(store) }}</option>
         </select>
       </div>
 
@@ -239,7 +239,7 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
               <label for="storeId">Store</label>
               <select id="storeId" class="form-input" [(ngModel)]="selectedStoreId" (change)="validateRoleName()">
                 <option value="">Select a store</option>
-                <option *ngFor="let store of stores" [value]="store.id">{{ store.storeName }}</option>
+                <option *ngFor="let store of stores" [value]="store.id">{{ formatStoreDisplayName(store) }}</option>
               </select>
             </div>
           </div>
@@ -279,6 +279,7 @@ export class AccessComponent implements OnInit {
   roleNameError = '';
   selectedStoreId = '';
   stores: Store[] = [];
+  protected readonly formatStoreDisplayName = formatStoreDisplayName;
   
   // Tab scrolling properties
   tabScrollPosition = 0;

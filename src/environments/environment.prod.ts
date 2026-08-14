@@ -21,10 +21,11 @@ export const environment = {
     reconciliationMode: 'recon' as 'legacy' | 'recon'
   },
   paypal: {
-    // Production should load the live client ID from the Cloud Function config endpoint
+    // Production must use the real live PayPal client ID here.
+    // If this value is empty, the app will fail to load the PayPal SDK until the backend
+    // endpoint is deployed and the live config is available.
     clientId: '',
     sandbox: false,
-    // Production should call the Cloud Functions base URL directly
     apiUrl: 'https://asia-east1-jasperpos-1dfd5.cloudfunctions.net'
   }
 };

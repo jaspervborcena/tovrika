@@ -1270,12 +1270,12 @@ import * as XLSX from 'xlsx';
             (ngModelChange)="onFilterChange()"
             placeholder="Search products by name, SKU, or category..."
             class="search-input">
-          <select 
+          <select
             [value]="selectedStore()" 
             (change)="onSelectedStoreChange($any($event.target).value)"
             class="filter-select">
             <option value="">All Stores</option>
-            <option *ngFor="let store of stores()" [value]="store.id">{{ store.storeName }}</option>
+            <option *ngFor="let store of stores()" [value]="store.id">{{ formatStoreDisplayName(store) }}</option>
           </select>
           <select 
             [(ngModel)]="selectedCategory" 
@@ -1464,7 +1464,7 @@ import * as XLSX from 'xlsx';
                     class="form-input"
                     (change)="onStoreChange()">
                     <option value="">Select Store</option>
-                    <option *ngFor="let store of stores()" [value]="store.id">{{ store.storeName }}</option>
+                    <option *ngFor="let store of stores()" [value]="store.id">{{ formatStoreDisplayName(store) }}</option>
                   </select>
                   <div class="error-message" *ngIf="productForm.get('storeId')?.invalid && productForm.get('storeId')?.touched">
                     Store is required
@@ -2382,7 +2382,7 @@ import * as XLSX from 'xlsx';
                 <label>Store *</label>
                 <select class="form-input" [(ngModel)]="bulkStoreId">
                   <option value="">Select a store</option>
-                  <option *ngFor="let store of stores()" [value]="store.id">{{ store.storeName }}</option>
+                  <option *ngFor="let store of stores()" [value]="store.id">{{ formatStoreDisplayName(store) }}</option>
                 </select>
               </div>
 
