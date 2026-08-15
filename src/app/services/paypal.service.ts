@@ -7,6 +7,9 @@ interface PaypalClientConfigResponse {
   client_id?: string;
   sandbox?: boolean;
   currency?: string;
+  // Optional full URLs returned by the backend
+  createOrderUrl?: string;
+  captureOrderUrl?: string;
 }
 
 interface CreateOrderResponse {
@@ -29,6 +32,9 @@ export class PaypalService {
   private auth = inject(AuthService);
   // Dev uses /paypal via proxy; prod can point directly to Cloud Functions base URL
   private baseUrl = environment.paypal.apiUrl;
+  private cachedConfig: PaypalClientConfigResponse | null = null;
+  private createOrderUrl: string | null = null;
+  private captureOrderUrl: string | null = null;
 
   private async getAuthToken(): Promise<string | null> {
     // Prefer the app's AuthService token getter (works with AngularFire)
@@ -58,7 +64,8 @@ export class PaypalService {
     const token = await this.getAuthToken();
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (token) headers['Authorization'] = `Bearer ${token}`;
-    const res = await fetch(`${this.baseUrl}${path}`, { ...(options || {}), headers });
+    const url = path.startsWith('http') ? path : `${this.baseUrl}${path}`;
+    const res = await fetch(url, { ...(options || {}), headers });
     if (!res.ok) {
       const text = await res.text().catch(() => '');
       throw new Error(`Failed ${path}: ${res.status} ${res.statusText} ${text}`);
@@ -67,18 +74,26 @@ export class PaypalService {
   }
 
   async getClientConfig(): Promise<PaypalClientConfigResponse> {
-    return await this.fetchJson<PaypalClientConfigResponse>('/paypal_client_config', { method: 'GET' });
+    if (this.cachedConfig) return this.cachedConfig;
+    const cfg = await this.fetchJson<PaypalClientConfigResponse>('/paypal_client_config', { method: 'GET' });
+    this.cachedConfig = cfg;
+    // prefer createOrderUrl/captureOrderUrl when provided by backend
+    this.createOrderUrl = (cfg.createOrderUrl || (cfg as any).create_order_url || null) as string | null;
+    this.captureOrderUrl = (cfg.captureOrderUrl || (cfg as any).capture_order_url || null) as string | null;
+    return cfg;
   }
 
   async createOrder(amount: number, currency = 'PHP', description?: string): Promise<CreateOrderResponse> {
-    return await this.fetchJson<CreateOrderResponse>('/paypal_create_order', {
+    const url = this.createOrderUrl || `${this.baseUrl}/paypal_create_order`;
+    return await this.fetchJson<CreateOrderResponse>(url, {
       method: 'POST',
       body: JSON.stringify({ amount, currency, description })
     });
   }
 
   async captureOrder(orderId: string): Promise<CaptureOrderResponse> {
-    return await this.fetchJson<CaptureOrderResponse>('/paypal_capture_order', {
+    const url = this.captureOrderUrl || `${this.baseUrl}/paypal_capture_order`;
+    return await this.fetchJson<CaptureOrderResponse>(url, {
       method: 'POST',
       body: JSON.stringify({ orderId })
     });
