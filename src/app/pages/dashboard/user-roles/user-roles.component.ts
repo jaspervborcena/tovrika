@@ -3,7 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { UserRoleService } from '../../../services/user-role.service';
 import { RoleDefinitionService, RoleDefinition } from '../../../services/role-definition.service';
-import { StoreService, Store, formatStoreDisplayName } from '../../../services/store.service';
+import { StoreService, Store, dedupeStoresForDropdown, formatStoreDisplayName } from '../../../services/store.service';
 import { AuthService } from '../../../services/auth.service';
 import { UserRole } from '../../../interfaces/user-role.interface';
 import { AccessRequest } from '../../../interfaces/access-request.interface';
@@ -1164,8 +1164,13 @@ export class UserRolesComponent implements OnInit {
       const currentPermission = this.authService.getCurrentPermission();
       if (currentPermission?.companyId) {
         await this.storeService.loadStoresByCompany(currentPermission.companyId);
+        this.availableStores = dedupeStoresForDropdown(
+          this.storeService.getStoresByCompany(currentPermission.companyId)
+            .filter(store => store.status === 'active')
+        );
+      } else {
+        this.availableStores = [];
       }
-      this.availableStores = this.storeService.getStores().filter(store => store.status === 'active');
       
       // Set stores signal and select first store
       this.stores.set(this.availableStores);
