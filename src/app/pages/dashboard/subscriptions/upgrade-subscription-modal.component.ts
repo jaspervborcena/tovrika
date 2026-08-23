@@ -11,11 +11,13 @@ import { ToastService } from '../../../shared/services/toast.service';
 import { SubscriptionRequest } from '../../../interfaces/subscription-request.interface';
 import { OfflineDocumentService } from '../../../core/services/offline-document.service';
 import { PaypalService } from '../../../services/paypal.service';
+import { MayaService } from '../../../services/maya.service';
 import { CouponService, CouponDoc } from '../../../services/coupon.service';
 import { environment } from '../../../../environments/environment';
+import { toDataURL } from 'qrcode';
 
 type Tier = 'basic' | 'standard' | 'premium';
-type PaymentMethod = 'credit_card';
+type PaymentMethod = 'maya' | 'credit_card';
 
 @Component({
   selector: 'app-upgrade-subscription-modal',
@@ -33,6 +35,7 @@ export class UpgradeSubscriptionModalComponent implements OnChanges, AfterViewCh
   private readonly firestore = inject(Firestore);
   private readonly offlineDocService = inject(OfflineDocumentService);
   private readonly paypalService = inject(PaypalService);
+  private readonly mayaService = inject(MayaService);
   private readonly couponService = inject(CouponService);
 
   @Input() isOpen = false;
@@ -51,7 +54,7 @@ export class UpgradeSubscriptionModalComponent implements OnChanges, AfterViewCh
   @Output() completed = new EventEmitter<void>();
 
   // UI State
-  activeTab: PaymentMethod = 'credit_card';
+  activeTab: PaymentMethod = 'maya';
   paypalStatus = signal<'success' | 'error' | ''>('');
   private paypalSdkLoaded = false;
   paypalButtonsInitializing = false;
@@ -83,6 +86,10 @@ export class UpgradeSubscriptionModalComponent implements OnChanges, AfterViewCh
   // QR preview state
   qrPreviewOpen = signal(false);
   qrPreviewUrl = signal<string>('');
+  mayaCheckoutId = signal('');
+  mayaCheckoutUrl = signal('');
+  mayaQrUrl = signal('');
+  mayaStatus = signal<'idle' | 'creating' | 'pending' | 'success' | 'error'>('idle');
 
   // Display account information for the active payment method
   readonly accountInfo = {
@@ -93,6 +100,13 @@ export class UpgradeSubscriptionModalComponent implements OnChanges, AfterViewCh
       nameValue: 'PayPal',
       qrUrl: ''
     },
+    maya: {
+      numberLabel: 'Maya Checkout',
+      numberValue: 'Scan the QR code or open checkout',
+      nameLabel: 'Payment Processor',
+      nameValue: 'Maya',
+      qrUrl: ''
+    }
   } as const;
 
   resolvedCompanyName = signal<string>('');
@@ -110,7 +124,58 @@ export class UpgradeSubscriptionModalComponent implements OnChanges, AfterViewCh
 
   onTabChange(tab: PaymentMethod) {
     this.activeTab = tab;
-    setTimeout(() => this.initPayPalButtons(), 100);
+    if (tab === 'credit_card') setTimeout(() => this.initPayPalButtons(), 100);
+  }
+
+  async startMayaCheckout(): Promise<void> {
+    if (this.mayaStatus() === 'creating' || this.submitting()) return;
+    try {
+      const user = this.auth.getCurrentUser();
+      if (!user?.uid) throw new Error('Not authenticated');
+      this.mayaStatus.set('creating');
+      const checkout = await this.mayaService.createCheckout({
+        companyId: this.companyId,
+        storeId: this.storeId,
+        tier: this.selectedTier(),
+        durationMonths: this.durationMonths(),
+        amount: this.finalAmount(),
+        email: user.email || '',
+        payerName: this.payerName
+      });
+      this.mayaCheckoutId.set(checkout.checkoutId);
+      this.mayaCheckoutUrl.set(checkout.redirectUrl);
+      this.mayaQrUrl.set(await toDataURL(checkout.redirectUrl, { width: 260, margin: 2 }));
+      this.mayaStatus.set('pending');
+      this.toast.success('Maya checkout is ready. Scan the QR code or open checkout to pay.');
+    } catch (error: any) {
+      console.error('Maya checkout creation failed:', error);
+      this.mayaStatus.set('error');
+      this.toast.error(error?.message || 'Unable to create Maya checkout.');
+    }
+  }
+
+  async verifyMayaCheckout(): Promise<void> {
+    const checkoutId = this.mayaCheckoutId();
+    if (!checkoutId || this.submitting()) return;
+    try {
+      this.submitting.set(true);
+      const result = await this.mayaService.verifyCheckout(checkoutId);
+      if (result.status !== 'ACTIVE' || !result.subscriptionActivated) {
+        this.mayaStatus.set('pending');
+        this.toast.info('Maya has not confirmed this payment yet. Please finish checkout and try again.');
+        return;
+      }
+      this.mayaStatus.set('success');
+      this.toast.success('Maya payment successful! Your subscription is now active.');
+      this.completed.emit();
+      this.close();
+    } catch (error: any) {
+      console.error('Maya checkout verification failed:', error);
+      this.mayaStatus.set('error');
+      this.toast.error(error?.message || 'Unable to verify Maya payment.');
+    } finally {
+      this.submitting.set(false);
+    }
   }
 
   public scrollToPayPal(): void {
@@ -412,7 +477,7 @@ export class UpgradeSubscriptionModalComponent implements OnChanges, AfterViewCh
 
   // Basic guard to enable/disable submit button (credit_card uses PayPal's own button)
   canSubmit(): boolean {
-    if (this.activeTab === 'credit_card') return false;
+    if (this.activeTab === 'credit_card' || this.activeTab === 'maya') return false;
     const hasRef = !!this.paymentReference && this.paymentReference.trim().length > 0;
     const hasPayerNo = !!this.payerMobile && this.payerMobile.trim().length > 0;
     const hasPayerName = !!this.payerName && this.payerName.trim().length > 0;
@@ -450,6 +515,12 @@ export class UpgradeSubscriptionModalComponent implements OnChanges, AfterViewCh
       return;
     }
 
+    if (this.activeTab === 'maya') {
+      if (this.mayaCheckoutId()) void this.verifyMayaCheckout();
+      else void this.startMayaCheckout();
+      return;
+    }
+
     if (this.activeTab === 'credit_card') {
       this.scrollToPayPal();
       return;
@@ -467,18 +538,23 @@ export class UpgradeSubscriptionModalComponent implements OnChanges, AfterViewCh
       return this.paypalButtonsInitializing ? 'Preparing Payment…' : 'Submit Upgrade Request';
     }
 
+    if (this.activeTab === 'maya') {
+      return this.mayaCheckoutId() ? 'Check Maya Payment Status' : 'Create Maya Checkout';
+    }
+
     return this.submitting() ? 'Submitting…' : 'Submit Upgrade Request';
   }
 
   mainActionDisabled(): boolean {
     if (this.submitting()) return true;
     if (this.couponIsFree() && !this.promoValid()) return true;
+    if (this.activeTab === 'maya') return this.mayaStatus() === 'creating';
     if (this.activeTab !== 'credit_card') return !this.canSubmit();
     return false;
   }
 
   openQrPreview() {
-    const url = this.accountInfo[this.activeTab].qrUrl;
+    const url = this.activeTab === 'maya' ? this.mayaQrUrl() : this.accountInfo[this.activeTab].qrUrl;
     if (!url) return;
     this.qrPreviewUrl.set(url);
     this.qrPreviewOpen.set(true);
@@ -497,7 +573,7 @@ export class UpgradeSubscriptionModalComponent implements OnChanges, AfterViewCh
       const effectiveAmount = this.amountPaid ?? this.finalAmount();
       const missing: string[] = [];
   if (this.activeTab !== 'credit_card' && (!this.paymentReference || !this.paymentReference.trim())) missing.push('Reference ID');
-  if (this.activeTab !== 'credit_card' && (!this.payerMobile || !this.payerMobile.trim())) missing.push(this.activeTab === 'gcash' ? 'GCash Number' : 'Sender Account / Mobile');
+  if (this.activeTab !== 'credit_card' && (!this.payerMobile || !this.payerMobile.trim())) missing.push('Sender Account / Mobile');
   if (this.activeTab !== 'credit_card' && (!this.payerName || !this.payerName.trim())) missing.push('Payer Name');
   if (this.activeTab !== 'credit_card' && !(typeof effectiveAmount === 'number' && !isNaN(effectiveAmount) && effectiveAmount > 0)) missing.push('Amount');
   if (this.activeTab !== 'credit_card' && !this.receiptFile) missing.push('Payment Receipt');
