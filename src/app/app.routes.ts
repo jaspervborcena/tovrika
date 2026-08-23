@@ -166,6 +166,11 @@ export const routes: Routes = [
     loadComponent: () => import('./pages/account-settings/account-settings.component').then(m => m.AccountSettingsComponent)
   },
   {
+    path: 'change-password',
+    loadComponent: () => import('./pages/auth/change-password/change-password.component').then(m => m.ChangePasswordComponent),
+    canActivate: [authGuard, policyGuard]
+  },
+  {
     path: 'print-setup',
     loadComponent: () => import('./pages/print-setup/print-setup.component').then(m => m.PrintSetupComponent)
   },
