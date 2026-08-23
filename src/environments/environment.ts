@@ -41,4 +41,7 @@ export const environment = {
     reconciliationMode: 'recon' as 'legacy' | 'recon'
   },
   paypal: paypalConfig
+  ,maya: {
+    apiUrl: '/maya'
+  }
 };

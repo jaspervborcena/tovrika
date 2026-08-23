@@ -27,5 +27,8 @@ export const environment = {
     clientId: '',
     sandbox: false,
     apiUrl: 'https://asia-east1-jasperpos-1dfd5.cloudfunctions.net'
+  },
+  maya: {
+    apiUrl: 'https://asia-east1-jasperpos-1dfd5.cloudfunctions.net'
   }
 };

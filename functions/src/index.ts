@@ -3,6 +3,7 @@ import { initializeApp, getApps } from 'firebase-admin/app';
 import { getStorage } from 'firebase-admin/storage';
 import { getDownloadURL } from 'firebase-admin/storage';
 import { createHash } from 'crypto';
+export { mayaCreateCheckout, mayaVerifyCheckout, mayaWebhook } from './maya.js';
 
 if (!getApps().length) {
   initializeApp();

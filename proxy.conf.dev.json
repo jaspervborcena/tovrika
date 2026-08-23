@@ -16,5 +16,14 @@
     "pathRewrite": {
       "^/paypal": ""
     }
+  },
+  "/maya": {
+    "target": "https://asia-east1-jasperpos-dev.cloudfunctions.net",
+    "secure": true,
+    "changeOrigin": true,
+    "logLevel": "debug",
+    "pathRewrite": {
+      "^/maya": ""
+    }
   }
 }

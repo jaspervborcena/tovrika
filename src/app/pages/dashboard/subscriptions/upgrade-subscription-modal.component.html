@@ -59,11 +59,35 @@
 
       <h4 class="section-heading">Payment Details</h4>
 
+      <div class="payment-tabs" role="tablist">
+        <button type="button" [class.active]="activeTab === 'maya'" (click)="onTabChange('maya')">Maya Checkout + QR</button>
+        <button type="button" [class.active]="activeTab === 'credit_card'" (click)="onTabChange('credit_card')">PayPal Card</button>
+      </div>
+
       <div class="tab-content">
-        <p class="help">Pay securely with any Visa, Mastercard, or credit/debit card via PayPal. No PayPal account needed.</p>
+        <ng-container *ngIf="activeTab === 'maya'">
+          <p class="help">Pay with Maya Checkout using Visa, Mastercard, or QRPh.</p>
+          <div class="maya-checkout-panel">
+            <div class="card-amount-row">
+              <span class="card-amount-label">Amount due:</span>
+              <strong class="card-amount-value">₱{{ finalAmount() }}</strong>
+            </div>
+            <div class="qr-wrapper" *ngIf="mayaQrUrl(); else mayaStartPrompt">
+              <button type="button" class="qr-clickable" (click)="openQrPreview()" aria-label="Open Maya payment QR">
+                <img [src]="mayaQrUrl()" alt="Maya payment QR code" class="qr-image" />
+              </button>
+            </div>
+            <ng-template #mayaStartPrompt>
+              <div class="qr-placeholder">Create checkout to generate a payment QR</div>
+            </ng-template>
+            <a *ngIf="mayaCheckoutUrl()" class="maya-open-link" [href]="mayaCheckoutUrl()" target="_blank" rel="noopener">Open Maya Checkout</a>
+            <p class="maya-status" *ngIf="mayaStatus() !== 'idle'">{{ mayaStatus() === 'pending' ? 'Complete payment, then check the status.' : mayaStatus() === 'creating' ? 'Creating secure Maya checkout…' : mayaStatus() === 'success' ? 'Payment confirmed.' : 'Maya checkout needs attention.' }}</p>
+          </div>
+        </ng-container>
 
         <!-- Credit / Debit Card via PayPal -->
-        <ng-container>
+        <ng-container *ngIf="activeTab === 'credit_card'">
+          <p class="help">Pay securely with any Visa, Mastercard, or credit/debit card via PayPal. No PayPal account needed.</p>
           <div class="card-amount-row">
             <span class="card-amount-label">Amount due:</span>
             <strong class="card-amount-value">₱{{ finalAmount() }}</strong>
