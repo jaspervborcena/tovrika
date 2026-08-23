@@ -25,6 +25,8 @@ export interface CouponDoc {
   appliesTo: {
     plan: string;
     product: string;
+    discountType?: 'fixed' | 'percentage';
+    discountValue?: number;
   };
   restrictions: {
     newUsersOnly?: boolean;

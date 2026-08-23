@@ -111,12 +111,13 @@ import { Timestamp } from '@angular/fire/firestore';
                 </td>
                 <td class="status-cell">
                   <label class="toggle-switch" 
-                         [class.disabled]="true"
-                         [title]="isStoreExpired(store) ? 'Expired — status set to Inactive automatically' : 'Active — managed by subscription'">
+                         [class.disabled]="!canEditStoreStatus() || isStoreExpired(store)"
+                         [title]="isStoreExpired(store) ? 'Expired — status set to Inactive automatically' : canEditStoreStatus() ? 'Toggle store status' : 'Only administrators and business owners can change store status'">
                     <input 
                       type="checkbox" 
                       [checked]="getEffectiveStatus(store) === 'active'"
-                      [disabled]="true">
+                      [disabled]="!canEditStoreStatus() || isStoreExpired(store)"
+                      (click)="onToggleClick($event, store)">
                     <span class="toggle-slider"></span>
                   </label>
                 </td>
@@ -2634,6 +2635,8 @@ export class StoresManagementComponent implements OnInit {
     // Prevent the checkbox from changing state
     event.preventDefault();
     event.stopPropagation();
+
+    if (!this.canEditStoreStatus() || this.isStoreExpired(store)) return;
     
     // Call the toggle method
     this.toggleStoreStatus(store);

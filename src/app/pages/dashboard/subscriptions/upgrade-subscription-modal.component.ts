@@ -71,7 +71,7 @@ export class UpgradeSubscriptionModalComponent implements OnChanges, AfterViewCh
   promoMessage = signal('');
   promoChecking = signal(false);
   couponIsFree = signal(false);
-  appliedCoupon?: CouponDoc;
+  appliedCoupon = signal<CouponDoc | undefined>(undefined);
   paymentReference = '';
   amountPaid: number | null = null;
   currency = 'PHP';
@@ -118,8 +118,22 @@ export class UpgradeSubscriptionModalComponent implements OnChanges, AfterViewCh
 
   finalAmount = computed(() => {
     const base = this.planPrice() || 0;
-    const discount = 0; // expand later with promo
-    return calculateFinalAmount(base, discount, this.durationMonths());
+    const duration = Number(this.durationMonths()) || 1;
+    const normalAmount = calculateFinalAmount(base, 0, duration);
+    const coupon = this.appliedCoupon();
+
+    // Fixed-value coupons apply to one month only and cannot reduce the price below zero.
+    if (
+      coupon &&
+      this.promoValid() &&
+      duration === 1 &&
+      coupon.appliesTo?.discountType?.toLowerCase() === 'fixed'
+    ) {
+      const discount = Number(coupon.appliesTo.discountValue) || 0;
+      return Math.max(0, normalAmount - discount);
+    }
+
+    return normalAmount;
   });
 
   onTabChange(tab: PaymentMethod) {
@@ -201,7 +215,8 @@ export class UpgradeSubscriptionModalComponent implements OnChanges, AfterViewCh
     this.promoValid.set(false);
     this.couponIsFree.set(false);
     this.promoMessage.set('');
-    this.appliedCoupon = undefined;
+    this.appliedCoupon.set(undefined);
+    this.amountPaid = null;
 
     try {
       const coupon = await this.couponService.getCoupon(code);
@@ -216,13 +231,24 @@ export class UpgradeSubscriptionModalComponent implements OnChanges, AfterViewCh
         return;
       }
 
-      this.appliedCoupon = coupon;
+      this.appliedCoupon.set(coupon);
       this.promoValid.set(true);
-      const isFree = coupon.durationDays > 0;
+      const isFixedOneMonthDiscount =
+        coupon.appliesTo?.discountType?.toLowerCase() === 'fixed' &&
+        Number(coupon.appliesTo.discountValue) > 0;
+      const isFree = coupon.durationDays > 0 && !isFixedOneMonthDiscount;
       this.couponIsFree.set(isFree);
+      this.amountPaid = null;
 
       if (isFree) {
         this.promoMessage.set(`✓ Coupon valid! ${coupon.description} — ${coupon.durationDays} days free.`);
+      } else if (isFixedOneMonthDiscount) {
+        const discount = Number(coupon.appliesTo.discountValue);
+        this.promoMessage.set(
+          this.durationMonths() === 1
+            ? `✓ Coupon valid! ₱${discount} discount applied to your 1-month subscription.`
+            : `✓ Coupon valid! ₱${discount} discount applies to 1 month only.`
+        );
       } else {
         this.promoMessage.set(`✓ Coupon valid! ${coupon.description}`);
       }
@@ -757,7 +783,7 @@ export class UpgradeSubscriptionModalComponent implements OnChanges, AfterViewCh
     this.promoMessage.set('');
     this.promoChecking.set(false);
     this.couponIsFree.set(false);
-    this.appliedCoupon = undefined;
+    this.appliedCoupon.set(undefined);
     this.paymentReference = '';
     this.amountPaid = null;
     this.receiptFile = null;
