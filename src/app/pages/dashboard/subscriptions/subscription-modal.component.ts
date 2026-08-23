@@ -190,7 +190,10 @@ export class SubscriptionModalComponent implements OnInit {
 
       // Coupon is valid
       this.promoValid.set(true);
-      const isFree = coupon.appliesTo?.plan === 'monthly' && coupon.durationDays > 0;
+      const isFixedDiscount =
+        coupon.appliesTo?.discountType?.toLowerCase() === 'fixed' &&
+        Number(coupon.appliesTo.discountValue) > 0;
+      const isFree = coupon.appliesTo?.plan === 'monthly' && coupon.durationDays > 0 && !isFixedDiscount;
       this.couponIsFree.set(isFree);
 
       if (isFree) {
