@@ -300,29 +300,11 @@ import { getFirestore, collection, query, where, getDocs, doc, updateDoc, Timest
             </div>
 
             <div class="form-group">
-              <label for="roleId">Role</label>
-              <select 
-                id="roleId"
-                [(ngModel)]="userRoleForm.roleId"
-                class="form-select"
-                [disabled]="userRoleForm.roleId === 'cashier'">
-                <option value="">Select a role</option>
-                <option 
-                  *ngFor="let role of availableRoles" 
-                  [value]="role.roleId">
-                  {{ role.roleId | titlecase }}
-                </option>
-              </select>
-              <p class="form-help">
-                Choose the role to assign to this user
-              </p>
-            </div>
-
-            <div class="form-group">
               <label for="storeId">Store</label>
               <select 
                 id="storeId"
                 [(ngModel)]="userRoleForm.storeId"
+                (ngModelChange)="onRoleStoreChange($event)"
                 class="form-select">
                 <option value="">Select a store</option>
                 <option 
@@ -333,6 +315,25 @@ import { getFirestore, collection, query, where, getDocs, doc, updateDoc, Timest
               </select>
               <p class="form-help">
                 Choose the store this user will have access to
+              </p>
+            </div>
+
+            <div class="form-group">
+              <label for="roleId">Role</label>
+              <select 
+                id="roleId"
+                [(ngModel)]="userRoleForm.roleId"
+                class="form-select"
+                [disabled]="!userRoleForm.storeId || userRoleForm.roleId === 'cashier'">
+                <option value="">Select a role</option>
+                <option 
+                  *ngFor="let role of availableRoles" 
+                  [value]="role.roleId">
+                  {{ role.roleId | titlecase }}
+                </option>
+              </select>
+              <p class="form-help">
+                Choose a role for the selected store
               </p>
             </div>
           </div>
@@ -1158,7 +1159,6 @@ export class UserRolesComponent implements OnInit {
 
       // Load available roles
       await this.roleDefinitionService.loadRoleDefinitions();
-      this.availableRoles = this.roleDefinitionService.getCompanyRoleDefinitions();
 
       // Load available stores for the company
       const currentPermission = this.authService.getCurrentPermission();
@@ -1175,8 +1175,14 @@ export class UserRolesComponent implements OnInit {
       // Set stores signal and select first store
       this.stores.set(this.availableStores);
       if (this.availableStores.length > 0) {
-        this.selectedStoreId.set(this.availableStores[0].id || '');
+        const currentStoreId = this.selectedStoreId();
+        const selectedStoreStillAvailable = this.availableStores.some(store => store.id === currentStoreId);
+        this.selectedStoreId.set(
+          selectedStoreStillAvailable ? currentStoreId : (this.availableStores[0].id || '')
+        );
       }
+
+      this.updateAvailableRoles(this.userRoleForm.storeId || this.selectedStoreId());
       
     } catch (error) {
       console.error('Error loading data:', error);
@@ -1336,14 +1342,16 @@ export class UserRolesComponent implements OnInit {
 
   openAddUserRoleModal() {
     this.editingUserRole = null;
+    const storeId = this.selectedStoreId();
     this.userRoleForm = {
       email: '',
       userId: '',
       roleId: '',
-      storeId: ''
+      storeId
     };
     this.searchUserEmail = '';
     this.foundUser = null;
+    this.updateAvailableRoles(storeId);
     this.showUserRoleModal = true;
   }
 
@@ -1355,7 +1363,27 @@ export class UserRolesComponent implements OnInit {
       roleId: userRole.roleId,
       storeId: userRole.storeId
     };
+    this.updateAvailableRoles(userRole.storeId);
     this.showUserRoleModal = true;
+  }
+
+  onRoleStoreChange(storeId: string): void {
+    this.userRoleForm.roleId = '';
+    this.updateAvailableRoles(storeId);
+  }
+
+  private updateAvailableRoles(storeId: string): void {
+    const seenRoleIds = new Set<string>();
+    this.availableRoles = this.roleDefinitionService
+      .getCompanyRoleDefinitions()
+      .filter(role => role.storeId === storeId)
+      .filter(role => {
+        if (!role.roleId || seenRoleIds.has(role.roleId)) {
+          return false;
+        }
+        seenRoleIds.add(role.roleId);
+        return true;
+      });
   }
 
   cancelUserRoleModal() {
