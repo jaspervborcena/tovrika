@@ -72,6 +72,23 @@ export class OrdersSellingTrackingService {
     private indexedDBService: IndexedDBService
   ) {}
 
+  private async hasTrackingStatus(orderId: string, status: string): Promise<boolean> {
+    const q = query(
+      collection(this.firestore, 'ordersSellingTracking'),
+      where('orderId', '==', orderId),
+      where('status', '==', status)
+    );
+    const snaps = await getDocs(q as any);
+    if (!snaps.empty) return true;
+
+    const pending = await this.offlineDocService.getPendingDocuments();
+    return pending.some(pd =>
+      pd.collectionName === 'ordersSellingTracking' &&
+      pd.data?.orderId === orderId &&
+      String(pd.data?.status || '').toLowerCase() === status
+    );
+  }
+
   /**
   * Mark all ordersSellingTracking docs for a given orderId from 'processing' to 'completed'.
    * Will attempt an online write that preserves the original createdAt as updatedAt when possible
@@ -243,6 +260,10 @@ export class OrdersSellingTrackingService {
   const errors: any[] = [];
   let updated = 0;
   try {
+      if (await this.hasTrackingStatus(orderId, 'returned')) {
+        console.log(`markOrderTrackingReturned: order ${orderId} is already returned; skipping duplicate`);
+        return { updated: 0, errors };
+      }
     const q = query(collection(this.firestore, 'ordersSellingTracking'), where('orderId', '==', orderId));
     const snaps = await getDocs(q as any);
     for (const s of snaps.docs) {
@@ -331,6 +352,10 @@ async markOrderTrackingRefunded(orderId: string, refundedBy?: string, reason?: s
   let created = 0;
   const createdIds: string[] = [];
   try {
+    if (await this.hasTrackingStatus(orderId, 'refunded')) {
+      console.log(`markOrderTrackingRefunded: order ${orderId} is already refunded; skipping duplicate`);
+      return { created: 0, errors, createdIds };
+    }
     // Fetch all tracking rows for the order and filter returned ones locally
     const q = query(collection(this.firestore, 'ordersSellingTracking'), where('orderId', '==', orderId));
     const snaps = await getDocs(q as any);
@@ -710,6 +735,10 @@ async markOrderTrackingDamaged(orderId: string, damagedBy?: string, reason?: str
   let created = 0;
   const createdIds: string[] = [];
   try {
+    if (await this.hasTrackingStatus(orderId, 'damaged')) {
+      console.log(`markOrderTrackingDamaged: order ${orderId} is already damaged; skipping duplicate`);
+      return { created: 0, errors, createdIds };
+    }
     const q = query(collection(this.firestore, 'ordersSellingTracking'), where('orderId', '==', orderId));
     const snaps = await getDocs(q as any);
 
@@ -1846,16 +1875,56 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
         orderTotals.set(orderId, existing);
       });
 
+      // Tracking documents retain the unpaid history after payment. Resolve each
+      // order's current status so settled orders are not still shown as unpaid.
+      const currentStatuses = new Map<string, string>();
+      await Promise.all(Array.from(orderTotals.keys()).map(async (orderId) => {
+        try {
+          const orderSnap = await getDoc(doc(this.firestore, 'orders', orderId));
+          if (orderSnap.exists()) {
+            currentStatuses.set(orderId, String((orderSnap.data() as any).status || '').toLowerCase());
+            return;
+          }
+
+          // Some imported/API orders keep their identifier in an orderId field
+          // instead of using it as the Firestore document ID.
+          const orderQuery = query(
+            collection(this.firestore, 'orders'),
+            where('companyId', '==', companyId),
+            ...(storeId && storeId !== 'all' ? [where('storeId', '==', storeId)] : []),
+            where('orderId', '==', orderId),
+            limit(1)
+          );
+          const orderQuerySnapshot = await getDocs(orderQuery as any);
+          const matchingOrder = orderQuerySnapshot.docs[0];
+          if (matchingOrder) {
+            currentStatuses.set(orderId, String((matchingOrder.data() as any).status || '').toLowerCase());
+          }
+        } catch (error) {
+          console.warn(`Unable to resolve current status for order ${orderId}:`, error);
+        }
+      }));
+
       let outstandingAmount = 0;
       let outstandingQty = 0;
       let recoveredAmount = 0;
       let recoveredQty = 0;
 
-      orderTotals.forEach(totals => {
-        recoveredAmount += totals.recoveredAmount;
-        recoveredQty += totals.recoveredQty;
-        outstandingAmount += Math.max(0, totals.unpaidAmount - totals.recoveredAmount);
-        outstandingQty += Math.max(0, totals.unpaidQty - totals.recoveredQty);
+      orderTotals.forEach((totals, orderId) => {
+        const currentStatus = currentStatuses.get(orderId);
+        if (currentStatus === 'unpaid') {
+          outstandingAmount += totals.unpaidAmount;
+          outstandingQty += 1;
+        } else if (currentStatus === 'recovered') {
+          recoveredAmount += totals.recoveredAmount;
+          recoveredQty += 1;
+        } else if (!currentStatus) {
+          // Preserve the historical calculation if the order document is unavailable.
+          recoveredAmount += totals.recoveredAmount;
+          recoveredQty += totals.recoveredQty;
+          outstandingAmount += Math.max(0, totals.unpaidAmount - totals.recoveredAmount);
+          outstandingQty += Math.max(0, totals.unpaidQty - totals.recoveredQty);
+        }
       });
 
       return {

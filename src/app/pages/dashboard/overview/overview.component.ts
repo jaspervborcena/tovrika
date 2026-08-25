@@ -1722,6 +1722,11 @@ export class OverviewComponent implements OnInit {
     } else if (period === 'date_range') {
       return Math.max(0, this.dateRangeRevenue());
     }
+    // For today/yesterday, use current completed orders so returned, refunded,
+    // and damaged orders are excluded even if the ledger has the original sale.
+    if (period === 'today' || period === 'yesterday') {
+      return Math.max(0, this.selectedDayOrderRevenue());
+    }
     // Use ledger balance from orderAccountingLedger for other periods
     return Math.max(0, this.ledgerTotalRevenue());
   });
@@ -1785,6 +1790,8 @@ export class OverviewComponent implements OnInit {
   protected currentMonthOrders = signal<number>(0);
   protected previousMonthRevenue = signal<number>(0);
   protected previousMonthOrders = signal<number>(0);
+  protected selectedDayOrderRevenue = signal<number>(0);
+  protected comparisonDayOrderRevenue = signal<number>(0);
 
   protected revenueChange = computed(() => {
     try {
@@ -1806,8 +1813,8 @@ export class OverviewComponent implements OnInit {
         revPrevious = this.previousDateRangeRevenue();
       } else {
         // Day-over-day comparison for today/yesterday
-        revCurrent = this.ledgerTotalRevenue();
-        revPrevious = this.yesterdayRevenue();
+        revCurrent = this.selectedDayOrderRevenue();
+        revPrevious = this.comparisonDayOrderRevenue();
       }
       
       const diff = revCurrent - revPrevious;
@@ -2505,11 +2512,71 @@ export class OverviewComponent implements OnInit {
 
     try {
       await this.loadCurrentDateData(startDate, endDate);
+      if (this.selectedPeriod() === 'today' || this.selectedPeriod() === 'yesterday') {
+        await this.fetchSingleDayOrderRevenue(startDate);
+      } else {
+        this.selectedDayOrderRevenue.set(0);
+        this.comparisonDayOrderRevenue.set(0);
+      }
       await this.fetchLedgerTotalsForPeriod(startDate, endDate);
     } catch (err) {
       console.error('Error loading analytics data:', err);
     } finally {
       this.isLoading.set(false);
+    }
+  }
+
+  private async fetchSingleDayOrderRevenue(selectedDate: Date): Promise<void> {
+    const storeId = this.selectedStoreId() || this.authService.getCurrentPermission()?.storeId || '';
+    if (!storeId || storeId === 'all') {
+      this.selectedDayOrderRevenue.set(0);
+      this.comparisonDayOrderRevenue.set(0);
+      return;
+    }
+
+    const getDayRange = (date: Date): { start: Date; end: Date } => ({
+      start: new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0, 0),
+      end: new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59, 999)
+    });
+    const sumRevenueGross = async (date: Date): Promise<number> => {
+      const { start, end } = getDayRange(date);
+      const orders = await this.orderService.getOrdersByDateRange(storeId, start, end);
+      const includedOrderIds = new Set<string>();
+      return (orders || []).reduce((sum, order) => {
+        if (order.storeId !== storeId) return sum;
+
+        // Adjustment actions may update statusHistory/statusTags while leaving
+        // the root order status as completed. Use the latest available status.
+        const history = Array.isArray(order.statusHistory) ? order.statusHistory : [];
+        const latestHistoryStatus = history.length > 0
+          ? String(history[history.length - 1]?.status || '').toLowerCase()
+          : '';
+        const tags = Array.isArray(order.statusTags) ? order.statusTags : [];
+        const latestTagStatus = tags.length > 0 ? String(tags[tags.length - 1] || '').toLowerCase() : '';
+        const latestStatus = latestHistoryStatus || latestTagStatus || String(order.status || '').toLowerCase();
+        const status = latestStatus === 'return' ? 'returned' : latestStatus;
+        if (status !== 'completed' && status !== 'returned') return sum;
+
+        const orderId = String(order.id || order.orderId || '');
+        if (orderId && includedOrderIds.has(orderId)) return sum;
+        if (orderId) includedOrderIds.add(orderId);
+        return sum + (Number(order.grossAmount) || 0);
+      }, 0);
+    };
+
+    try {
+      const comparisonDate = new Date(selectedDate);
+      comparisonDate.setDate(comparisonDate.getDate() - 1);
+      const [selectedRevenue, comparisonRevenue] = await Promise.all([
+        sumRevenueGross(selectedDate),
+        sumRevenueGross(comparisonDate)
+      ]);
+      this.selectedDayOrderRevenue.set(selectedRevenue);
+      this.comparisonDayOrderRevenue.set(comparisonRevenue);
+    } catch (error) {
+      console.warn('Overview: failed to load completed order revenue fallback:', error);
+      this.selectedDayOrderRevenue.set(0);
+      this.comparisonDayOrderRevenue.set(0);
     }
   }
 

@@ -537,6 +537,22 @@ async updateOrderStatus(orderId: string, status: string, reason?: string): Promi
       const orderData: any = orderSnap.data();
       existingStatusHistory = orderData.statusHistory || [];
       existingStatusTags = orderData.statusTags || [];
+
+      const normalizeStatus = (value: string): string => {
+        const normalized = value.toLowerCase();
+        if (normalized === 'return') return 'returned';
+        if (normalized === 'refund') return 'refunded';
+        if (normalized === 'damage') return 'damaged';
+        return normalized;
+      };
+      const requestedStatus = normalizeStatus(status);
+      const alreadyCurrent = normalizeStatus(String(orderData.status || '')) === requestedStatus;
+      const alreadyTagged = existingStatusTags.some(tag => normalizeStatus(String(tag)) === requestedStatus);
+      const alreadyRecorded = existingStatusHistory.some(entry => normalizeStatus(String(entry?.status || '')) === requestedStatus);
+      if (alreadyCurrent || alreadyTagged || alreadyRecorded) {
+        console.log(`⏭️ Order ${orderId} already has status ${requestedStatus}; skipping duplicate update and records`);
+        return;
+      }
     }
     
     // Append new status to history
