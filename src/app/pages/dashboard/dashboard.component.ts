@@ -276,7 +276,7 @@ export class DashboardComponent implements OnInit {
     } else {
       this.userRole.set(roleId);
       // For other custom roles, use roledefinition permissions
-      const roleDefRef = collection(this.firestore, 'roledefinition');
+      const roleDefRef = collection(this.firestore, 'roleDefinition');
       const roleDefQuery = query(
         roleDefRef,
         where('companyId', '==', currentPermission.companyId),

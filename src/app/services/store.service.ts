@@ -48,16 +48,21 @@ export function formatStoreDisplayName(store?: Partial<Store> | null): string {
 }
 
 export function dedupeStoresForDropdown<T extends Partial<Store>>(stores: T[]): T[] {
-  const seen = new Set<string>();
+  const seenIds = new Set<string>();
+  const seenLabels = new Set<string>();
   const uniqueStores: T[] = [];
 
   stores.forEach((store) => {
+    const id = String(store.id || '').trim();
     const label = formatStoreDisplayName(store).trim().toLowerCase();
-    if (!label || seen.has(label)) {
+    if (!label || (id && seenIds.has(id)) || seenLabels.has(label)) {
       return;
     }
 
-    seen.add(label);
+    if (id) {
+      seenIds.add(id);
+    }
+    seenLabels.add(label);
     uniqueStores.push(store);
   });
 

@@ -28,7 +28,7 @@ export class UserRoleService {
       { roleId: 'store_manager', name: 'Store Manager', description: 'Manage stores and products.' },
       { roleId: 'cashier', name: 'Cashier', description: 'Access POS and products only.' }
     ];
-    const roleDefRef = collection(this.firestore, 'roledefinition');
+    const roleDefRef = collection(this.firestore, 'roleDefinition');
     for (const role of defaultRoles) {
       const q = query(roleDefRef, where('companyId', '==', companyId), where('roleId', '==', role.roleId));
       const snap = await getDocs(q);
@@ -43,7 +43,7 @@ export class UserRoleService {
           updatedAt: new Date()
         };
         // 🔥 NEW APPROACH: Use OfflineDocumentService for offline-safe creation
-        await this.offlineDocService.createDocument('roledefinition', roleData);
+        await this.offlineDocService.createDocument('roleDefinition', roleData);
       }
     }
   }

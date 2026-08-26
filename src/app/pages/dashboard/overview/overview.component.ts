@@ -1722,6 +1722,14 @@ export class OverviewComponent implements OnInit {
     } else if (period === 'date_range') {
       return Math.max(0, this.dateRangeRevenue());
     }
+    // For today/yesterday, use current completed orders so returned, refunded,
+    // and damaged orders are excluded even if the ledger has the original sale.
+    if (period === 'today' || period === 'yesterday') {
+      if (this.bigQueryRevenueLoaded()) {
+        return Math.max(0, this.bigQueryRevenue());
+      }
+      return Math.max(0, this.selectedDayOrderRevenue());
+    }
     // Use ledger balance from orderAccountingLedger for other periods
     return Math.max(0, this.ledgerTotalRevenue());
   });
@@ -1785,6 +1793,11 @@ export class OverviewComponent implements OnInit {
   protected currentMonthOrders = signal<number>(0);
   protected previousMonthRevenue = signal<number>(0);
   protected previousMonthOrders = signal<number>(0);
+  protected selectedDayOrderRevenue = signal<number>(0);
+  protected comparisonDayOrderRevenue = signal<number>(0);
+  protected bigQueryRevenue = signal<number>(0);
+  protected bigQueryComparisonRevenue = signal<number>(0);
+  protected bigQueryRevenueLoaded = signal<boolean>(false);
 
   protected revenueChange = computed(() => {
     try {
@@ -1806,8 +1819,8 @@ export class OverviewComponent implements OnInit {
         revPrevious = this.previousDateRangeRevenue();
       } else {
         // Day-over-day comparison for today/yesterday
-        revCurrent = this.ledgerTotalRevenue();
-        revPrevious = this.yesterdayRevenue();
+        revCurrent = this.bigQueryRevenueLoaded() ? this.bigQueryRevenue() : this.selectedDayOrderRevenue();
+        revPrevious = this.bigQueryRevenueLoaded() ? this.bigQueryComparisonRevenue() : this.comparisonDayOrderRevenue();
       }
       
       const diff = revCurrent - revPrevious;
@@ -2505,11 +2518,148 @@ export class OverviewComponent implements OnInit {
 
     try {
       await this.loadCurrentDateData(startDate, endDate);
+      if (this.selectedPeriod() === 'today' || this.selectedPeriod() === 'yesterday') {
+        await this.fetchSingleDayOrderRevenue(startDate);
+      } else {
+        this.selectedDayOrderRevenue.set(0);
+        this.comparisonDayOrderRevenue.set(0);
+      }
+      const comparisonEnd = new Date(startDate);
+      comparisonEnd.setDate(comparisonEnd.getDate() - 1);
+      const periodLength = Math.max(0, Math.round((endDate.getTime() - startDate.getTime()) / 86400000));
+      const comparisonStart = new Date(comparisonEnd);
+      comparisonStart.setDate(comparisonStart.getDate() - periodLength);
+      await this.fetchBigQueryRevenue(startDate, endDate, comparisonStart, comparisonEnd);
       await this.fetchLedgerTotalsForPeriod(startDate, endDate);
     } catch (err) {
       console.error('Error loading analytics data:', err);
     } finally {
       this.isLoading.set(false);
+    }
+  }
+
+  private async fetchSingleDayOrderRevenue(selectedDate: Date): Promise<void> {
+    const storeId = this.selectedStoreId() || this.authService.getCurrentPermission()?.storeId || '';
+    if (!storeId || storeId === 'all') {
+      this.selectedDayOrderRevenue.set(0);
+      this.comparisonDayOrderRevenue.set(0);
+      return;
+    }
+
+    const getDayRange = (date: Date): { start: Date; end: Date } => ({
+      start: new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0, 0),
+      end: new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59, 999)
+    });
+    const sumRevenueGross = async (date: Date): Promise<number> => {
+      const { start, end } = getDayRange(date);
+      const orders = await this.orderService.getOrdersByDateRange(storeId, start, end);
+      const includedOrderIds = new Set<string>();
+      return (orders || []).reduce((sum, order) => {
+        if (order.storeId !== storeId) return sum;
+
+        // Adjustment actions may update statusHistory/statusTags while leaving
+        // the root order status as completed. Use the latest available status.
+        const history = Array.isArray(order.statusHistory) ? order.statusHistory : [];
+        const latestHistoryStatus = history.length > 0
+          ? String(history[history.length - 1]?.status || '').toLowerCase()
+          : '';
+        const tags = Array.isArray(order.statusTags) ? order.statusTags : [];
+        const latestTagStatus = tags.length > 0 ? String(tags[tags.length - 1] || '').toLowerCase() : '';
+        const latestStatus = latestHistoryStatus || latestTagStatus || String(order.status || '').toLowerCase();
+        const status = latestStatus === 'return' ? 'returned' : latestStatus;
+        if (status !== 'completed' && status !== 'returned') return sum;
+
+        const orderId = String(order.id || order.orderId || '');
+        if (orderId && includedOrderIds.has(orderId)) return sum;
+        if (orderId) includedOrderIds.add(orderId);
+        return sum + (Number(order.grossAmount) || 0);
+      }, 0);
+    };
+
+    try {
+      const comparisonDate = new Date(selectedDate);
+      comparisonDate.setDate(comparisonDate.getDate() - 1);
+      const [selectedRevenue, comparisonRevenue] = await Promise.all([
+        sumRevenueGross(selectedDate),
+        sumRevenueGross(comparisonDate)
+      ]);
+      this.selectedDayOrderRevenue.set(selectedRevenue);
+      this.comparisonDayOrderRevenue.set(comparisonRevenue);
+    } catch (error) {
+      console.warn('Overview: failed to load completed order revenue fallback:', error);
+      this.selectedDayOrderRevenue.set(0);
+      this.comparisonDayOrderRevenue.set(0);
+    }
+  }
+
+  private async fetchBigQueryRevenue(startDate: Date, endDate: Date, comparisonStart: Date, comparisonEnd: Date): Promise<void> {
+    const storeId = this.selectedStoreId() || this.authService.getCurrentPermission()?.storeId || '';
+    if (!storeId || storeId === 'all') {
+      this.bigQueryRevenueLoaded.set(false);
+      return;
+    }
+
+    const getDate = (date: Date): string => {
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    };
+
+    const readRevenue = (value: any): number | null => {
+      if (Array.isArray(value)) {
+        const values = value.map(item => readRevenue(item)).filter((item): item is number => item !== null);
+        return values.length ? values.reduce((sum, item) => sum + item, 0) : null;
+      }
+      if (!value || typeof value !== 'object') return null;
+      const revenueKeys = [
+        'totalRevenue', 'total_revenue', 'revenue', 'totalSales', 'total_sales',
+        'totalAmount', 'total_amount', 'netAmount', 'net_amount', 'grossAmount', 'gross_amount'
+      ];
+      for (const key of revenueKeys) {
+        if (value[key] !== undefined && value[key] !== null && !Number.isNaN(Number(value[key]))) {
+          return Number(value[key]);
+        }
+      }
+      for (const key of ['data', 'summary', 'result', 'rows']) {
+        const nested = readRevenue(value[key]);
+        if (nested !== null) return nested;
+      }
+      return null;
+    };
+
+    const requestRevenue = async (from: Date, to: Date): Promise<number | null> => {
+      const currentUser = this.authService.getCurrentUser() as any;
+      const token = await currentUser?.getIdToken?.();
+      if (!token) return null;
+
+      const url = new URL('https://asia-east1-jasperpos-dev.cloudfunctions.net/get_sales_summary_bq');
+      url.searchParams.set('storeId', storeId);
+      url.searchParams.set('from', getDate(from));
+      url.searchParams.set('to', getDate(to));
+
+      const response = await fetch(url.toString(), {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (!response.ok) throw new Error(`BigQuery summary request failed: ${response.status}`);
+      return readRevenue(await response.json());
+    };
+
+    try {
+      const [currentRevenue, comparisonRevenue] = await Promise.all([
+        requestRevenue(startDate, endDate),
+        requestRevenue(comparisonStart, comparisonEnd)
+      ]);
+      if (currentRevenue === null || comparisonRevenue === null) {
+        this.bigQueryRevenueLoaded.set(false);
+        return;
+      }
+      this.bigQueryRevenue.set(currentRevenue);
+      this.bigQueryComparisonRevenue.set(comparisonRevenue);
+      this.bigQueryRevenueLoaded.set(true);
+    } catch (error) {
+      console.warn('Overview: BigQuery sales summary unavailable; using existing revenue source:', error);
+      this.bigQueryRevenueLoaded.set(false);
     }
   }
 
