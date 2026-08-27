@@ -1027,15 +1027,15 @@
                   
                   <!-- Status (Read-only Label/Span) -->
                   <div class="col-status">
-                    <span class="status-badge" 
-                          [class.status-completed]="item.status === 'completed'" 
-                          [class.status-pending]="item.status === 'pending'" 
+                    <span class="status-badge"
+                          [class.status-completed]="item.status === 'completed'"
+                          [class.status-pending]="item.status === 'pending'"
                           [class.status-cancelled]="item.status === 'cancelled'"
-                          [class.status-processing]="item.status === 'processing'"
                           [class.status-refunded]="item.status === 'refunded'"
                           [class.status-damaged]="item.status === 'damaged'"
-                          [class.status-returned]="item.status === 'returned'">
-                      {{ item.status || 'unknown' }}
+                          [class.status-returned]="item.status === 'returned'"
+                            [class.status-open]="item.status === 'open'">
+                          {{ item.status || 'unknown' }}
                     </span>
                   </div>
                   
