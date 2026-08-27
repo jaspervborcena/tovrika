@@ -300,8 +300,8 @@ export class UpgradeSubscriptionModalComponent implements OnChanges, AfterViewCh
       if (typeof config.sandbox === 'boolean') {
         this.paypalSandbox = config.sandbox;
       }
-      if (config.currency) {
-        this.currency = config.currency;
+      if (config.currency && config.currency !== 'PHP') {
+        console.warn(`Ignoring unsupported PayPal currency from remote config: ${config.currency}`);
       }
     } catch (err) {
       console.warn('PayPal remote config unavailable; falling back to environment config:', err);
