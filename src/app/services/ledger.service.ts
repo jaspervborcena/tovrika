@@ -261,7 +261,7 @@ export class LedgerService {
         runningBalanceAmount: totalAmount,
         runningBalanceQty: totalQty
       };
-      console.log(`📊 Range totals for ${eventType}: revenue=₱${totalAmount / 100}, items=${totalQty}`);
+      console.log(`📊 Range totals for ${eventType}: amount=${totalAmount}, items=${totalQty}`);
       return result;
     } catch (err) {
       console.warn('LedgerService.getOrderBalancesForRange error', err);
