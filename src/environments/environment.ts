@@ -36,6 +36,7 @@ export const environment = {
     baseUrl: "",
     ordersApi: "",
     directOrdersApi: "",
+    salesSummaryApi: "https://asia-east1-jasperpos-dev.cloudfunctions.net/get_sales_summary_bq",
   },
   inventory: {
     reconciliationMode: 'recon' as 'legacy' | 'recon'

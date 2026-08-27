@@ -1714,6 +1714,11 @@ export class OverviewComponent implements OnInit {
   
   protected totalRevenue = computed(() => {
     const period = this.selectedPeriod();
+    // BigQuery is the authoritative sales-summary source for every period.
+    // Keep the ledger only as a fallback when the summary request is unavailable.
+    if (this.bigQueryRevenueLoaded()) {
+      return Math.max(0, this.bigQueryRevenue());
+    }
     // Use monthly totals for this_month and previous_month periods
     if (period === 'this_month') {
       return Math.max(0, this.currentMonthRevenue());
@@ -1722,12 +1727,9 @@ export class OverviewComponent implements OnInit {
     } else if (period === 'date_range') {
       return Math.max(0, this.dateRangeRevenue());
     }
-    // For today/yesterday, use current completed orders so returned, refunded,
-    // and damaged orders are excluded even if the ledger has the original sale.
+    // For today/yesterday, use current completed orders as the local fallback
+    // so returned, refunded, and damaged orders are excluded.
     if (period === 'today' || period === 'yesterday') {
-      if (this.bigQueryRevenueLoaded()) {
-        return Math.max(0, this.bigQueryRevenue());
-      }
       return Math.max(0, this.selectedDayOrderRevenue());
     }
     // Use ledger balance from orderAccountingLedger for other periods
@@ -2599,63 +2601,17 @@ export class OverviewComponent implements OnInit {
       return;
     }
 
-    const getDate = (date: Date): string => {
-      const year = date.getFullYear();
-      const month = String(date.getMonth() + 1).padStart(2, '0');
-      const day = String(date.getDate()).padStart(2, '0');
-      return `${year}-${month}-${day}`;
-    };
-
-    const readRevenue = (value: any): number | null => {
-      if (Array.isArray(value)) {
-        const values = value.map(item => readRevenue(item)).filter((item): item is number => item !== null);
-        return values.length ? values.reduce((sum, item) => sum + item, 0) : null;
-      }
-      if (!value || typeof value !== 'object') return null;
-      const revenueKeys = [
-        'totalRevenue', 'total_revenue', 'revenue', 'totalSales', 'total_sales',
-        'totalAmount', 'total_amount', 'netAmount', 'net_amount', 'grossAmount', 'gross_amount'
-      ];
-      for (const key of revenueKeys) {
-        if (value[key] !== undefined && value[key] !== null && !Number.isNaN(Number(value[key]))) {
-          return Number(value[key]);
-        }
-      }
-      for (const key of ['data', 'summary', 'result', 'rows']) {
-        const nested = readRevenue(value[key]);
-        if (nested !== null) return nested;
-      }
-      return null;
-    };
-
-    const requestRevenue = async (from: Date, to: Date): Promise<number | null> => {
-      const currentUser = this.authService.getCurrentUser() as any;
-      const token = await currentUser?.getIdToken?.();
-      if (!token) return null;
-
-      const url = new URL('https://asia-east1-jasperpos-dev.cloudfunctions.net/get_sales_summary_bq');
-      url.searchParams.set('storeId', storeId);
-      url.searchParams.set('from', getDate(from));
-      url.searchParams.set('to', getDate(to));
-
-      const response = await fetch(url.toString(), {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      if (!response.ok) throw new Error(`BigQuery summary request failed: ${response.status}`);
-      return readRevenue(await response.json());
-    };
-
     try {
       const [currentRevenue, comparisonRevenue] = await Promise.all([
-        requestRevenue(startDate, endDate),
-        requestRevenue(comparisonStart, comparisonEnd)
+        this.orderService.getSalesSummaryRevenue(storeId, startDate, endDate),
+        this.orderService.getSalesSummaryRevenue(storeId, comparisonStart, comparisonEnd)
       ]);
-      if (currentRevenue === null || comparisonRevenue === null) {
+      if (currentRevenue === null) {
         this.bigQueryRevenueLoaded.set(false);
         return;
       }
       this.bigQueryRevenue.set(currentRevenue);
-      this.bigQueryComparisonRevenue.set(comparisonRevenue);
+      this.bigQueryComparisonRevenue.set(comparisonRevenue ?? 0);
       this.bigQueryRevenueLoaded.set(true);
     } catch (error) {
       console.warn('Overview: BigQuery sales summary unavailable; using existing revenue source:', error);

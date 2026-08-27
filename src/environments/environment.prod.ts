@@ -15,6 +15,7 @@ export const environment = {
     ordersApi: "",
     // directOrdersApi intentionally disabled for Firestore-only Sales Summary
     directOrdersApi: "",
+    salesSummaryApi: "https://asia-east1-jasperpos-1dfd5.cloudfunctions.net/get_sales_summary_bq",
   },
   inventory: {
     // reconciliationMode: 'legacy' uses client-side FIFO; 'recon' defers to Cloud Function with tracking
