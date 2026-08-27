@@ -90,7 +90,7 @@ export class OrdersSellingTrackingService {
   }
 
   /**
-  * Mark all ordersSellingTracking docs for a given orderId from 'processing' to 'completed'.
+  * Mark all active ordersSellingTracking docs for a given orderId to 'completed'.
    * Will attempt an online write that preserves the original createdAt as updatedAt when possible
    * so that updatedAt matches createdAt instead of being a serverTimestamp sentinel map.
    */
@@ -98,7 +98,7 @@ export class OrdersSellingTrackingService {
     const errors: any[] = [];
     let updated = 0;
     try {
-      const q = query(collection(this.firestore, 'ordersSellingTracking'), where('orderId', '==', orderId), where('status', 'in', ['pending', 'processing']));
+      const q = query(collection(this.firestore, 'ordersSellingTracking'), where('orderId', '==', orderId), where('status', 'in', ['pending', 'open']));
       const snaps = await getDocs(q as any);
       for (const s of snaps.docs) {
         const id = s.id;
@@ -132,7 +132,7 @@ export class OrdersSellingTrackingService {
       const pending = await this.offlineDocService.getPendingDocuments();
       for (const pd of pending) {
         try {
-          if (pd.collectionName === 'ordersSellingTracking' && pd.data && pd.data.orderId === orderId && (pd.data.status === 'pending' || pd.data.status === 'processing')) {
+          if (pd.collectionName === 'ordersSellingTracking' && pd.data && pd.data.orderId === orderId && ['pending', 'open'].includes(String(pd.data.status || '').toLowerCase())) {
             // Update the pending offline document to completed locally (this uses updateDocument which will update the pending queue)
             await this.offlineDocService.updateDocument('ordersSellingTracking', pd.id, { status: 'completed', updatedBy: completedBy || pd.data.createdBy || 'system' });
             updated++;
@@ -1123,7 +1123,7 @@ async createUnpaidTrackingFromOrder(
 
 /**
  * Mark order tracking as 'unpaid'.
- * Creates new tracking docs with status 'unpaid' from existing 'completed' or 'processing' items.
+  * Creates new tracking docs with status 'unpaid' from existing completed or active items.
  * @deprecated Use createUnpaidTrackingFromOrder instead for direct creation from order items
  */
 async markOrderTrackingUnpaid(orderId: string, unpaidBy?: string, reason?: string): Promise<{ created: number; errors: any[]; createdIds?: string[] }> {
@@ -1144,8 +1144,8 @@ async markOrderTrackingUnpaid(orderId: string, unpaidBy?: string, reason?: strin
       const data: any = s.data() || {};
       const status = (data.status || '').toString().toLowerCase();
       console.log(`markOrderTrackingUnpaid: doc=${s.id} status=${status}`);
-      // Create unpaid copies for completed or processing items
-      if (status !== 'completed' && status !== 'processing') continue;
+      // Create unpaid copies for completed or active items
+      if (!['completed', 'open'].includes(status)) continue;
 
       // Track totals for single ledger entry
       if (!firstCompanyId) firstCompanyId = data.companyId;
@@ -1668,7 +1668,7 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
           createdAt: new Date(),
           createdBy: ctx.cashierId,
           uid: ctx.cashierId,
-          status: 'processing',
+          status: 'open',
 
           itemIndex: idx,
           orderDetailsId: (it as any).orderDetailsId || undefined,
@@ -2042,21 +2042,21 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
       const startOfRange = new Date(endOfDay);
       startOfRange.setDate(startOfRange.getDate() - 30); // Last 30 days
       
-      // Query ordersSellingTracking filtered by company, store, and status=processing
-      // Note: We fetch all processing records and filter by date in memory to avoid complex index requirements
+      // Query active ordersSellingTracking records filtered by company and store.
+      // Note: We fetch records and filter by date in memory to avoid complex index requirements
       let q: any;
       if (storeId && storeId !== 'all') {
         q = query(
           collection(this.firestore, 'ordersSellingTracking'),
           where('companyId', '==', companyId),
           where('storeId', '==', storeId),
-          where('status', '==', 'processing')
+          where('status', '==', 'open')
         );
       } else {
         q = query(
           collection(this.firestore, 'ordersSellingTracking'),
           where('companyId', '==', companyId),
-          where('status', '==', 'processing')
+          where('status', '==', 'open')
         );
       }
       
@@ -2161,7 +2161,7 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
         collection(this.firestore, 'ordersSellingTracking'),
         where('companyId', '==', companyId),
         where('storeId', '==', storeId),
-        where('status', 'in', ['completed', 'processing']),
+        where('status', 'in', ['completed', 'open']),
         where('createdAt', '>=', this.startOfDayUTC(startDate)),
         where('createdAt', '<=', this.endOfDayUTC(endDate))
       );
@@ -2169,7 +2169,7 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
 //         collection(this.firestore, 'ordersSellingTracking'),
 //         where('companyId', '==', companyId),
 //         where('storeId', '==', storeId),
-//         where('status', 'in', ['completed', 'processing']),
+//         where('status', 'in', ['completed', 'open']),
 //         where('createdAt', '>=', Timestamp.fromDate(this.startOfDay(startDate))),
 //         where('createdAt', '<=', Timestamp.fromDate(this.endOfDay(endDate)))
 //       );

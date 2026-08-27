@@ -63,11 +63,11 @@ export class OfflineReconciliationService {
       // Daily totals for comparison (completed status only)
       const trackingTotalsByDate = new Map<string, { amount: number; quantity: number }>();
 
-      // Build daily tracking totals first (processing/completed status for offline)
+      // Build daily tracking totals first (open/completed status for offline)
       for (const trackingDoc of trackingSnap.docs) {
         const trackingData = trackingDoc.data() as any;
         const status = String(trackingData.status || '').toLowerCase();
-        if (status !== 'completed' && status !== 'processing') continue;
+        if (status !== 'completed' && status !== 'open') continue;
 
         const dateKey = getDateKey(trackingData.createdAt || trackingData.updatedAt || new Date());
         const prev = trackingTotalsByDate.get(dateKey) || { amount: 0, quantity: 0 };

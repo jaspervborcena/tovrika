@@ -332,8 +332,8 @@ export class InventoryService {
     const col = collection(this.firestore, 'ordersSellingTracking');
     const out: InventoryRow[] = [];
     try {
-      // Include completed and processing status for sales (processing docs are sold items pending completion)
-      const statusFilter = where('status', 'in', ['completed', 'processing']);
+      // Include completed and open status for sales (open docs are sold items pending completion)
+      const statusFilter = where('status', 'in', ['completed', 'open']);
       const q = query(col, statusFilter, ...baseFilters, orderBy('createdAt', 'desc'), limit(fetchLimit));
       const snaps = await getDocs(q as any);
       
@@ -432,7 +432,7 @@ export class InventoryService {
     } catch (err) {
       console.warn('fetchRowsFromOrdersSellingTracking query failed, trying fallback:', err);
       // Fallback with simplified query - also include processing
-      const statusFilter = where('status', 'in', ['completed', 'processing']);
+      const statusFilter = where('status', 'in', ['completed', 'open']);
       const fallbackQ = query(col, statusFilter, orderBy('createdAt', 'desc'), limit(fetchLimit));
       const snapsFallback = await getDocs(fallbackQ as any);
       
