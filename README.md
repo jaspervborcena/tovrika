@@ -1299,12 +1299,44 @@ export const environment = {
 ### Sales Summary Dashboard
 - **Date Range Filtering** - Custom date selection for sales analysis
 - **Multi-Store Analytics** - Store-specific sales data with automatic store selection
-- **Real-time Data Loading** - Live sales data from Firestore orders collection
+- **Revenue Summary API** - BigQuery-backed `get_sales_summary_bq` endpoint for completed-order revenue by store and date range
+- **API Response** - Returns `success`, `store_id`, `from`, `to`, `total_sales`, and completed-order `count`
+- **Real-time Data Loading** - Live sales data from Firestore and the sales summary API
 - **Order Details View** - Detailed transaction information with invoice numbers
 - **Professional Interface** - Gradient headers and consistent UI design
 - **Refresh Functionality** - Manual data refresh with professional button styling
 - **Empty State Handling** - Professional empty states with action buttons
 - **Store Name Display** - Uppercase store names in headers for brand consistency
+
+### Revenue Summary API
+The overview calls the configured `environment.api.salesSummaryApi` endpoint with a Firebase ID token and these query parameters:
+
+```text
+GET /get_sales_summary_bq?storeId=STORE001&from=2026-08-01&to=2026-08-28
+Authorization: Bearer <firebase-id-token>
+```
+
+Expected response:
+
+```json
+{
+  "success": true,
+  "store_id": "STORE001",
+  "from": "2026-08-01",
+  "to": "2026-08-28",
+  "total_sales": 125000.5,
+  "count": 87
+}
+```
+
+`total_sales` is used as the authoritative revenue value when the API is available. The overview currently keeps its existing ledger-based order-count signal as a fallback and for non-summary analytics; the API `count` field is available in the response contract for order-count integration.
+
+### Order Status Tracking
+- `status` is the order's current status.
+- `statusTags` is the list of statuses that have occurred on the order, such as `OPEN`, `unpaid`, `completed`, `returned`, `refunded`, or `damage`.
+- `statusHistory` is the detailed audit trail containing `status`, `changedAt`, `changedBy`, and an optional reason.
+- Partial item adjustments use `partial_return`, `partial_refund`, and `partial_damage` in `ordersSellingTracking`; they do not currently update the parent order's `statusTags`.
+- When a partial adjustment covers the full item quantity, it is recorded as the corresponding full status: `returned`, `refunded`, or `damaged`.
 
 ### Customer Management
 - **Walk-in Customer System** - Standardized default for transactions without specific customers

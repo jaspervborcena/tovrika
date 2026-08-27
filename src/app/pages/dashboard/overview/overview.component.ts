@@ -1735,6 +1735,7 @@ export class OverviewComponent implements OnInit {
     // Use ledger balance from orderAccountingLedger for other periods
     return Math.max(0, this.ledgerTotalRevenue());
   });
+  protected revenueSource = computed(() => this.bigQueryRevenueLoaded() ? 'BigQuery' : 'fallback');
   // Use ledger order count from orderAccountingLedger
   protected totalOrders = computed(() => {
     // Always use ledger signals for all periods
@@ -1807,8 +1808,11 @@ export class OverviewComponent implements OnInit {
       let revCurrent: number;
       let revPrevious: number;
       
-      // Use month-over-month comparison for monthly periods
-      if (period === 'this_month') {
+      // Use the sales-summary API values whenever the current revenue card does.
+      if (this.bigQueryRevenueLoaded()) {
+        revCurrent = this.bigQueryRevenue();
+        revPrevious = this.bigQueryComparisonRevenue();
+      } else if (period === 'this_month') {
         revCurrent = this.currentMonthRevenue();
         revPrevious = this.previousMonthRevenue();
       } else if (period === 'previous_month') {
@@ -2596,8 +2600,8 @@ export class OverviewComponent implements OnInit {
 
   private async fetchBigQueryRevenue(startDate: Date, endDate: Date, comparisonStart: Date, comparisonEnd: Date): Promise<void> {
     const storeId = this.selectedStoreId() || this.authService.getCurrentPermission()?.storeId || '';
+    this.bigQueryRevenueLoaded.set(false);
     if (!storeId || storeId === 'all') {
-      this.bigQueryRevenueLoaded.set(false);
       return;
     }
 
@@ -2613,9 +2617,15 @@ export class OverviewComponent implements OnInit {
       this.bigQueryRevenue.set(currentRevenue);
       this.bigQueryComparisonRevenue.set(comparisonRevenue ?? 0);
       this.bigQueryRevenueLoaded.set(true);
+      console.log('Overview Total Revenue source: BigQuery', {
+        storeId,
+        revenue: currentRevenue,
+        comparisonRevenue: comparisonRevenue ?? 0
+      });
     } catch (error) {
       console.warn('Overview: BigQuery sales summary unavailable; using existing revenue source:', error);
       this.bigQueryRevenueLoaded.set(false);
+      console.warn('Overview Total Revenue source: fallback', error);
     }
   }
 
