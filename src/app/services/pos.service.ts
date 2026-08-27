@@ -892,11 +892,12 @@ export class PosService {
 
     // 2. Update product inventory first (creates ordersSellingTracking docs),
     //    then mark them completed — must be sequential to avoid race condition.
-    this.updateProductInventory(cartItems, { orderId, invoiceNumber })
-      .then(() => this.markTrackingCompleted(orderId, userId))
-      .catch(err => {
-        console.warn('⚠️ Inventory update / tracking failed (non-critical):', err);
-      });
+    try {
+      await this.updateProductInventory(cartItems, { orderId, invoiceNumber });
+      await this.markTrackingCompleted(orderId, userId);
+    } catch (err) {
+      console.warn('⚠️ Inventory update / tracking failed (non-critical):', err);
+    }
 
     console.log('✅ Background operations initiated for order:', orderId);
   }

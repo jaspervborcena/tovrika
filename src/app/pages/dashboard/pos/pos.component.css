@@ -4657,7 +4657,7 @@
   border-color: #f59e0b;
 }
 
-.status-badge.status-processing {
+.status-badge.status-open {
   background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
   color: #1e40af;
   border-color: #3b82f6;
@@ -4906,10 +4906,6 @@
 
 .status-select option {
   padding: 0.25rem;
-}
-
-.status-select option[value="processing"] {
-  color: #2563eb;
 }
 
 .status-select option[value="completed"] {
