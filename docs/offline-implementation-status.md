@@ -34,9 +34,12 @@
 
 ### Firestore Offline Persistence
 ```typescript
-// Enabled in app.config.ts
-await enableMultiTabIndexedDbPersistence(db); // Preferred
-await enableIndexedDbPersistence(db); // Fallback
+// Configured in app.config.ts
+initializeFirestore(app, {
+		localCache: persistentLocalCache({
+			tabManager: persistentMultipleTabManager()
+		})
+});
 ```
 
 ### Data Storage Locations
