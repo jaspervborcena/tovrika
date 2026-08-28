@@ -1348,6 +1348,7 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
     },
     items: Array<{
       productId: string;
+      itemCode?: string;
       productName?: string;
       quantity: number;
       unitPrice: number;
@@ -1673,6 +1674,7 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
           itemIndex: idx,
           orderDetailsId: (it as any).orderDetailsId || undefined,
           productId: it.productId,
+          itemCode: it.itemCode,
           productName: it.productName,
           productCode: (it as any).productCode || undefined,
           skuId: it.skuId || (it as any).sku || undefined,

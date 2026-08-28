@@ -29,6 +29,7 @@ import { Device } from '../interfaces/device.interface';
 import { OrdersSellingTrackingService } from './orders-selling-tracking.service';
 import { LedgerService } from './ledger.service';
 import { TagsService } from './tags.service';
+import { ItemCodeService } from './item-code.service';
 import { environment } from '../../environments/environment';
 
 @Injectable({
@@ -42,6 +43,7 @@ export class PosService {
   private readonly isOrderActiveSignal = signal<boolean>(false); // Shared order state
   private readonly isOrderCompletedSignal = signal<boolean>(false); // Shared completion state
   private readonly offlineDocService = inject(OfflineDocumentService);
+  private readonly itemCodeService = inject(ItemCodeService);
   private readonly injector = inject(Injector);
 
   // Computed values
@@ -397,6 +399,10 @@ export class PosService {
   }
 
   // Order Processing with Invoice Number Transaction
+  private generateItemCode(): string {
+    return String(Date.now() % 1000000).padStart(6, '0');
+  }
+
   async processOrder(customerInfo?: any): Promise<string | null> {
     try {
       this.isProcessingSignal.set(true);
@@ -420,7 +426,10 @@ export class PosService {
         throw new Error('Store not found');
       }
 
-      const cartItems = this.cartItems();
+      const cartItems = this.cartItems().map(item => ({
+        ...item,
+        itemCode: this.itemCodeService.generateItemCode()
+      }));
       if (cartItems.length === 0) {
         throw new Error('Cart is empty');
       }
@@ -430,6 +439,7 @@ export class PosService {
       // Prepare order items for storage
       const orderItems: OrderItem[] = cartItems.map(item => ({
         productId: item.productId,
+        itemCode: item.itemCode,
         productName: item.productName,
         quantity: item.quantity,
         price: item.sellingPrice,
@@ -551,18 +561,13 @@ export class PosService {
         await this.updateProductInventory(cartItems, { orderId: invoiceResult.orderId!, invoiceNumber: invoiceResult.invoiceNumber! });
         console.log('✅ Product inventory updated successfully');
         
-        // Mark tracking docs as completed for this order (if any were created as pending)
+        // Mark tracking docs as completed for this paid order.
         try {
-          // Skip tracking update if offline - Firestore will handle sync
-          if (this.networkService.isOnline()) {
-            const markRes = await this.ordersSellingTrackingService.markOrderTrackingCompleted(invoiceResult.orderId!, user.uid);
-            if (markRes.errors && markRes.errors.length) {
-              console.warn('⚠️ Some tracking docs failed to be marked completed:', markRes.errors);
-            } else {
-              console.log(`✅ Marked ${markRes.updated} tracking docs completed for order ${invoiceResult.orderId}`);
-            }
+          const markRes = await this.ordersSellingTrackingService.markOrderTrackingCompleted(invoiceResult.orderId!, user.uid);
+          if (markRes.errors && markRes.errors.length) {
+            console.warn('⚠️ Some tracking docs failed to be marked completed:', markRes.errors);
           } else {
-            console.log('📱 Offline: Skipping tracking update - will sync when online');
+            console.log(`✅ Marked ${markRes.updated} tracking docs completed for order ${invoiceResult.orderId}`);
           }
         } catch (markErr) {
           console.warn('⚠️ Failed to mark ordersSellingTracking docs completed (non-blocking):', markErr);
@@ -613,7 +618,10 @@ export class PosService {
         throw new Error('Store not found');
       }
 
-      const cartItems = this.cartItems();
+      const cartItems = this.cartItems().map(item => ({
+        ...item,
+        itemCode: this.itemCodeService.generateItemCode(),
+      }));
       if (cartItems.length === 0) {
         throw new Error('Cart is empty');
       }
@@ -1205,6 +1213,7 @@ export class PosService {
 
     return {
       productId: product.id!,
+        productCode: product.productCode,
       productName: product.productName,
       skuId: product.skuId,
       unitType: product.unitType,
@@ -1332,6 +1341,7 @@ export class PosService {
         }
         return {
           productId: ci.productId,
+          itemCode: ci.itemCode,
           productName: ci.productName,
           skuId: ci.skuId,
           quantity: ci.quantity,
