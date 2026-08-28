@@ -399,10 +399,6 @@ export class PosService {
   }
 
   // Order Processing with Invoice Number Transaction
-  private generateItemCode(): string {
-    return String(Date.now() % 1000000).padStart(6, '0');
-  }
-
   async processOrder(customerInfo?: any): Promise<string | null> {
     try {
       this.isProcessingSignal.set(true);
@@ -635,6 +631,7 @@ export class PosService {
       // Prepare order items for storage
       const orderItems: OrderItem[] = cartItems.map(item => ({
         productId: item.productId,
+        itemCode: item.itemCode,
         productName: item.productName,
         quantity: item.quantity,
         price: item.sellingPrice,

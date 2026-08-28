@@ -21,10 +21,6 @@ export class OfflineOrderService {
 
   private offlineDocService = inject(OfflineDocumentService);
 
-  private generateItemCode(): string {
-    return String(Date.now() % 1000000).padStart(6, '0');
-  }
-
   // Generate an item id in the format EPOCHMS-RANDOM10 (e.g., 1702012345678-0123456789)
   private generateItemId(): string {
     const epoch = Date.now();
