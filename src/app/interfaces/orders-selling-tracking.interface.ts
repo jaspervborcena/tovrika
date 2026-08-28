@@ -23,6 +23,7 @@ export interface OrdersSellingTrackingDoc {
   itemIndex?: number; // index of the item within the order
   orderDetailsId?: string; // reference to the orderDetails document for this line
   productId: string;
+  itemCode?: string;
   productName?: string;
   productCode: string;
   skuId: string;

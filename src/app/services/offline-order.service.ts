@@ -3,6 +3,7 @@ import { Firestore, collection, doc, updateDoc, query, where, getDocs, deleteDoc
 import { AuthService } from './auth.service';
 import { OfflineDocumentService } from '../core/services/offline-document.service';
 import { FIFOInventoryService } from './fifo-inventory.service';
+import { ItemCodeService } from './item-code.service';
 import { OrderDetails, OrderDetailItem, OfflineOrderQueue, BatchDeductionDetail } from '../interfaces/order-details.interface';
 import { CartItem } from '../interfaces/cart.interface';
 
@@ -13,6 +14,7 @@ export class OfflineOrderService {
   private firestore = inject(Firestore);
   private authService = inject(AuthService);
   private fifoService = inject(FIFOInventoryService);
+  private itemCodeService = inject(ItemCodeService);
 
   private readonly OFFLINE_QUEUE_KEY = 'tovrika_offline_orders';
   private readonly MAX_OFFLINE_ORDERS = 100;
@@ -65,6 +67,7 @@ export class OfflineOrderService {
         const orderItem: OrderDetailItem = {
           itemId: this.generateItemId(),
           productId: cartItem.productId,
+          itemCode: cartItem.itemCode || this.itemCodeService.generateItemCode(),
           productName: cartItem.name,
           productSku: cartItem.productId, // Assuming productId as SKU for now
           quantity: cartItem.quantity,
@@ -85,6 +88,7 @@ export class OfflineOrderService {
         const orderItem: OrderDetailItem = {
           itemId: this.generateItemId(),
           productId: cartItem.productId,
+          itemCode: cartItem.itemCode || this.itemCodeService.generateItemCode(),
           productName: cartItem.name,
           productSku: cartItem.productId,
           quantity: cartItem.quantity,
@@ -177,6 +181,7 @@ export class OfflineOrderService {
         const orderItem: OrderDetailItem = {
           itemId: this.generateItemId(),
           productId: cartItem.productId,
+          itemCode: cartItem.itemCode || this.itemCodeService.generateItemCode(),
           productName: cartItem.name,
           productSku: cartItem.productId,
           quantity: cartItem.quantity,
