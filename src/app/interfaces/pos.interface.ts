@@ -112,6 +112,7 @@ export interface OrderDetail {
 
 export interface OrderItem {
   productId: string;
+  itemCode?: string;
   productName?: string;
   quantity: number;
   price: number;
@@ -126,6 +127,8 @@ export interface CartItem {
   productId: string;
   productName: string;
   skuId: string;
+  itemCode?: string;
+  productCode?: string;
   unitType?: string; // Added for display like "1 pc(s)", "2 boxes"
   quantity: number;
   sellingPrice: number;
