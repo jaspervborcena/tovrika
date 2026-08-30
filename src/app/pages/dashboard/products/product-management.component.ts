@@ -3486,7 +3486,7 @@ export class ProductManagementComponent implements OnInit {
 
       if (this.isEditMode && this.selectedProduct) {
         // Update existing product
-        const updates: Partial<Product> = {
+        const updates: Partial<Product> = ProductService.normalizeProductTaxAndDiscountFields({
           productName: formValue.productName,
           description: formValue.description,
           skuId: formValue.skuId,
@@ -3515,7 +3515,7 @@ export class ProductManagementComponent implements OnInit {
           // Product tags
           tags: this.selectedTagIds(),
           tagLabels: this.getSelectedTagLabels()
-        };
+        });
 
         await this.productService.updateProduct(this.selectedProduct.id!, updates);
 
@@ -3625,7 +3625,7 @@ export class ProductManagementComponent implements OnInit {
         
         const currentPermission = this.authService.getCurrentPermission();
 
-        const newProduct: Omit<Product, 'id' | 'createdAt' | 'updatedAt'> = {
+        const newProduct: Omit<Product, 'id' | 'createdAt' | 'updatedAt'> = ProductService.normalizeProductTaxAndDiscountFields({
           uid: currentUser.uid,  // Required by Product interface
           productName: formValue.productName,
           description: formValue.description,
@@ -3656,7 +3656,7 @@ export class ProductManagementComponent implements OnInit {
           tagLabels: this.getSelectedTagLabels(),
           
           status: ProductStatus.Active
-        };
+        });
 
         productId = await this.productService.createProduct(newProduct);
         

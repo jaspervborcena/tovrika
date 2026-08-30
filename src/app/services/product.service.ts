@@ -47,6 +47,21 @@ interface ProductCacheState {
   providedIn: 'root'
 })
 export class ProductService implements OnDestroy {
+  static normalizeProductTaxAndDiscountFields<T extends Partial<Product>>(product: T): T {
+    const normalized = { ...product } as any;
+
+    const isVatApplicable = !!normalized.isVatApplicable;
+    normalized.isVatApplicable = isVatApplicable;
+    normalized.vatRate = isVatApplicable ? Number(normalized.vatRate ?? 0) : 0;
+
+    const rawDiscountValue = Number(normalized.discountValue ?? 0);
+    const hasDiscount = !!normalized.hasDiscount && rawDiscountValue > 0;
+    normalized.hasDiscount = hasDiscount;
+    normalized.discountType = normalized.discountType || 'percentage';
+    normalized.discountValue = hasDiscount ? rawDiscountValue : 0;
+
+    return normalized as T;
+  }
   private readonly offlineDocService = inject(OfflineDocumentService);
   private logger = inject(LoggerService);
   
@@ -1056,11 +1071,13 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
         hasCategory: !!productData.category
       });
       
-      const baseData: any = this.cleanUndefinedValues({
-        ...productDataWithoutUid,
-        companyId,
-        status: productData.status || 'active'
-      });
+      const baseData: any = ProductService.normalizeProductTaxAndDiscountFields(
+        this.cleanUndefinedValues({
+          ...productDataWithoutUid,
+          companyId,
+          status: (productData.status || ProductStatus.Active) as ProductStatus
+        })
+      );
       
       console.log('📋 Base data after cleaning undefined values:', {
         category: baseData.category,
@@ -1229,10 +1246,16 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
     try {
       // Prepare update data with proper Timestamp conversion
       const updateData: any = { ...updates };
-      
-      // Normalize VAT fields when present
+
+      if ('isVatApplicable' in updates) {
+        updateData.isVatApplicable = !!(updates as any).isVatApplicable;
+        if (!updateData.isVatApplicable) {
+          updateData.vatRate = 0;
+        }
+      }
       if ('vatRate' in updates) {
-        updateData.vatRate = Number((updates as any).vatRate || 0);
+        const nextVatRate = Number((updates as any).vatRate ?? 0);
+        updateData.vatRate = updateData.isVatApplicable === false ? 0 : nextVatRate;
       }
       if ('originalPrice' in updates) {
         updateData.originalPrice = Number((updates as any).originalPrice || 0);
@@ -1243,18 +1266,22 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
       if ('costPrice' in updates) {
         updateData.costPrice = Number((updates as any).costPrice || 0);
       }
-      if ('isVatApplicable' in updates) {
-        updateData.isVatApplicable = !!(updates as any).isVatApplicable;
-      }
       // Normalize Discount fields when present
       if ('hasDiscount' in updates) {
-        updateData.hasDiscount = !!(updates as any).hasDiscount;
+        const hasDiscount = !!(updates as any).hasDiscount && Number((updates as any).discountValue ?? 0) > 0;
+        updateData.hasDiscount = hasDiscount;
+        if (!hasDiscount) {
+          updateData.discountValue = 0;
+        }
       }
       if ('discountType' in updates) {
         updateData.discountType = (updates as any).discountType || 'percentage';
       }
       if ('discountValue' in updates) {
-        updateData.discountValue = Number((updates as any).discountValue || 0);
+        const nextDiscountValue = Number((updates as any).discountValue ?? 0);
+        const hasDiscount = updateData.hasDiscount === true || (!!(updates as any).hasDiscount && nextDiscountValue > 0);
+        updateData.hasDiscount = hasDiscount && nextDiscountValue > 0;
+        updateData.discountValue = updateData.hasDiscount ? nextDiscountValue : 0;
       }
       // Normalize totalStock when present
       if ('totalStock' in updates) {
