@@ -5,7 +5,6 @@ import { SyncStatus } from './product-inventory-entry.interface';
  * Centralized enum to avoid scattered string literals and typos.
  */
 export enum OrderDetailsStatus {
-  PENDING = 'pending',
   COMPLETED = 'completed',
   CANCELLED = 'cancelled',
   REFUNDED = 'refunded',

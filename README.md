@@ -345,6 +345,7 @@ npm start
 - **[Security Implementation](docs/firestore-security-current-status.md)** - Multi-tenant security details
 - **[Subscription System](docs/subscriptions-implementation.md)** - Complete subscription feature guide
 - **[Billing Integration](docs/billing-history-integration.md)** - Payment tracking and billing history
+- **[Financial Calculations](docs/FINANCIAL_CALCULATIONS.md)** - Dashboard revenue, profit, and refund/return/damage logic
 - **[IndexedDB Integration](docs/indexeddb-uid-integration-status.md)** - Offline UID management
 - **[IndexedDB Corruption Fix](docs/indexeddb-permanent-corruption-fix.md)** - Handling database corruption
 - **[Offline Mode Guide](docs/offline-mode-fixes-summary.md)** - Offline functionality overview
