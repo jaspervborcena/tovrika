@@ -446,11 +446,61 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   // Cart VAT and Discount Settings
   public cartVatSettings = {
     isVatApplicable: true,
-    vatRate: 0,
+    vatRate: Number(AppConstants.DEFAULT_VAT_RATE),
     hasDiscount: false,
     discountType: 'percentage' as 'percentage' | 'fixed',
     discountValue: 0
   };
+
+  private getCartDefaultsFromProduct(product?: Partial<Product> | null): {
+    isVatApplicable: boolean;
+    vatRate: number;
+    hasDiscount: boolean;
+    discountType: 'percentage' | 'fixed';
+    discountValue: number;
+  } {
+    const normalizedProduct = product ?? {};
+    const isVatApplicable = normalizedProduct.isVatApplicable !== undefined
+      ? !!normalizedProduct.isVatApplicable
+      : true;
+    const vatRate = isVatApplicable
+      ? Number(normalizedProduct.vatRate ?? Number(AppConstants.DEFAULT_VAT_RATE))
+      : 0;
+    const rawDiscountValue = Number(normalizedProduct.discountValue ?? 0);
+    const hasDiscount = !!normalizedProduct.hasDiscount && rawDiscountValue > 0;
+    const discountType = normalizedProduct.discountType === 'fixed' ? 'fixed' : 'percentage';
+
+    return {
+      isVatApplicable,
+      vatRate,
+      hasDiscount,
+      discountType,
+      discountValue: hasDiscount ? rawDiscountValue : 0
+    };
+  }
+
+  private getCartDefaultsFromCurrentItems(): {
+    isVatApplicable: boolean;
+    vatRate: number;
+    hasDiscount: boolean;
+    discountType: 'percentage' | 'fixed';
+    discountValue: number;
+  } {
+    const items = this.cartItems();
+    if (!items.length) {
+      return this.getCartDefaultsFromProduct({
+        isVatApplicable: true,
+        vatRate: Number(AppConstants.DEFAULT_VAT_RATE),
+        hasDiscount: false,
+        discountType: 'percentage',
+        discountValue: 0
+      });
+    }
+
+    const firstItem = items[0];
+    const matchingProduct = this.products().find(product => product.id === firstItem.productId);
+    return this.getCartDefaultsFromProduct(matchingProduct ?? (firstItem as any));
+  }
 
   async loadNextInvoicePreview(): Promise<void> {
     try {
@@ -4382,41 +4432,54 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   public async openCartInformationDialog(): Promise<void> {
-    console.log('🛒 Opening cart information dialog - using cart VAT settings as source-of-truth');
+    console.log('🛒 Opening cart information dialog using product defaults as the initial source-of-truth');
 
-    // Do NOT pull VAT rates from product collection here. Prefer the user/cart-level VAT settings.
-    // Precedence for VAT values when opening the dialog:
-    // 1. item.vatRate / item.isVatApplicable if already set (user previously edited)
-    // 2. cartVatSettings values if the user saved a cart-level VAT
-    // 3. AppConstants.DEFAULT_VAT_RATE / true as fallback
     try {
-      const items = this.cartItems();
-      const defaultVatRate = this.cartVatSettings?.vatRate ?? AppConstants.DEFAULT_VAT_RATE;
-      const defaultIsVat = this.cartVatSettings?.isVatApplicable ?? true;
+      const productDefaults = this.getCartDefaultsFromCurrentItems();
+      this.cartVatSettings = {
+        ...this.cartVatSettings,
+        ...productDefaults
+      };
 
+      const items = this.cartItems();
       for (const item of items) {
         try {
+          const product = this.products().find(productItem => productItem.id === item.productId);
+          const defaultValues = this.getCartDefaultsFromProduct(product ?? (item as any));
           const updatedItem: any = { ...item };
 
-          // Prefer existing item settings if present
-          updatedItem.isVatApplicable = (item.isVatApplicable !== undefined && item.isVatApplicable !== null)
+          updatedItem.isVatApplicable = item.isVatApplicable !== undefined && item.isVatApplicable !== null
             ? item.isVatApplicable
-            : defaultIsVat;
+            : defaultValues.isVatApplicable;
 
-          updatedItem.vatRate = (item.vatRate !== undefined && item.vatRate !== null)
+          updatedItem.vatRate = item.vatRate !== undefined && item.vatRate !== null
             ? item.vatRate
-            : defaultVatRate;
+            : defaultValues.vatRate;
 
-          // Only update through service if values actually change to avoid unnecessary recalcs
-          if (updatedItem.isVatApplicable !== item.isVatApplicable || updatedItem.vatRate !== item.vatRate) {
+          updatedItem.hasDiscount = item.hasDiscount !== undefined && item.hasDiscount !== null
+            ? item.hasDiscount
+            : defaultValues.hasDiscount;
+
+          updatedItem.discountType = item.discountType || defaultValues.discountType;
+          updatedItem.discountValue = item.discountValue !== undefined && item.discountValue !== null
+            ? item.discountValue
+            : defaultValues.discountValue;
+
+          if (
+            updatedItem.isVatApplicable !== item.isVatApplicable ||
+            updatedItem.vatRate !== item.vatRate ||
+            updatedItem.hasDiscount !== item.hasDiscount ||
+            updatedItem.discountType !== item.discountType ||
+            updatedItem.discountValue !== item.discountValue
+          ) {
             this.posService.updateCartItem(updatedItem);
           }
         } catch (err) {
-          console.warn('Failed to apply cart VAT settings for cart item', item.productId, err);
+          console.warn('Failed to apply product defaults for cart item', item.productId, err);
         }
       }
     } catch (err) {
-      console.warn('Error while applying cart VAT settings to items:', err);
+      console.warn('Error while applying product defaults to cart items:', err);
     }
 
     this.cartInformationModalVisible.set(true);
@@ -6145,23 +6208,36 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     }
     this.posService.addToCart(product);
 
-    // If user has saved a cart-level VAT rate, ensure the newly added/updated cart item uses it
     try {
-      const cartVat = this.cartVatSettings?.vatRate;
-      const cartVatApplicable = this.cartVatSettings?.isVatApplicable;
-      if (cartVat !== undefined && cartVat !== null) {
-        const updatedItems = this.cartItems();
-        const matching = updatedItems.find(i => i.productId === product.id);
-        if (matching) {
-          const shouldUpdateVat = (matching.vatRate !== cartVat) || (matching.isVatApplicable !== (cartVatApplicable ?? matching.isVatApplicable));
-          if (shouldUpdateVat) {
-            const updated = { ...matching, vatRate: cartVat, isVatApplicable: (cartVatApplicable ?? matching.isVatApplicable) } as any;
-            this.posService.updateCartItem(updated);
-          }
+      const productDefaults = this.getCartDefaultsFromProduct(product);
+      this.cartVatSettings = {
+        ...this.cartVatSettings,
+        ...productDefaults
+      };
+
+      const updatedItems = this.cartItems();
+      const matching = updatedItems.find(i => i.productId === product.id);
+      if (matching) {
+        const shouldApplyProductDefaults =
+          matching.isVatApplicable !== productDefaults.isVatApplicable ||
+          matching.vatRate !== productDefaults.vatRate ||
+          matching.hasDiscount !== productDefaults.hasDiscount ||
+          matching.discountType !== productDefaults.discountType ||
+          matching.discountValue !== productDefaults.discountValue;
+
+        if (shouldApplyProductDefaults) {
+          this.posService.updateCartItem({
+            ...matching,
+            isVatApplicable: productDefaults.isVatApplicable,
+            vatRate: productDefaults.vatRate,
+            hasDiscount: productDefaults.hasDiscount,
+            discountType: productDefaults.discountType,
+            discountValue: productDefaults.discountValue
+          });
         }
       }
     } catch (err) {
-      console.warn('Failed to apply cart-level VAT to newly added item:', err);
+      console.warn('Failed to apply product defaults to newly added item:', err);
     }
   }
 
