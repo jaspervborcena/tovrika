@@ -8,7 +8,6 @@ import { NetworkService } from '../core/services/network.service';
 import { IndexedDBService } from '../core/services/indexeddb.service';
 import { OrdersSellingTrackingDoc } from '../interfaces/orders-selling-tracking.interface';
 import { ProductService } from './product.service';
-import { LedgerService } from './ledger.service';
 
 @Injectable({ providedIn: 'root' })
 export class OrdersSellingTrackingService {
@@ -67,7 +66,6 @@ export class OrdersSellingTrackingService {
   constructor(
     private firestore: Firestore,
     private productService: ProductService,
-    private ledgerService: LedgerService,
     private networkService: NetworkService,
     private indexedDBService: IndexedDBService
   ) {}
@@ -201,59 +199,78 @@ export class OrdersSellingTrackingService {
   }
 
   /**
-   * Mark all ordersSellingTracking docs for a given orderId as 'cancelled'.
-   * This updates both online documents and any pending offline queued docs.
+   * Create a new ordersSellingTracking doc for a given orderId with 'cancelled' status.
+   * This creates NEW documents (like returned/refunded/damaged) for audit trail tracking.
+   * Allows deducting cancelled amounts from completed sales.
    */
-  async markOrderTrackingCancelled(orderId: string, cancelledBy?: string, reason?: string): Promise<{ updated: number; errors: any[] }> {
+  async markOrderTrackingCancelled(orderId: string, cancelledBy?: string, reason?: string): Promise<{ created: number; errors: any[]; createdIds?: string[] }> {
     const errors: any[] = [];
-    let updated = 0;
+    let created = 0;
+    const createdIds: string[] = [];
+
     try {
+      // Find all tracking docs for this order
       const q = query(collection(this.firestore, 'ordersSellingTracking'), where('orderId', '==', orderId));
       const snaps = await getDocs(q as any);
-      for (const s of snaps.docs) {
-        const id = s.id;
-        const data: any = s.data() || {};
-        // Skip if already cancelled
-        if (data.status === 'cancelled') continue;
 
-        const updates: any = {
-          status: 'cancelled',
-          updatedBy: cancelledBy || data.updatedBy || cancelledBy || data.createdBy || 'system'
-        };
-        if (reason) updates.updateReason = reason;
+      console.log(`markOrderTrackingCancelled: order ${orderId} found ${snaps.docs.length} tracking docs`);
+
+      for (const s of snaps.docs) {
+        const data = s.data() as any;
+        const status = data?.status || '';
+        console.log(`markOrderTrackingCancelled: doc=${s.id} status=${status}`);
+
+        // Skip if already cancelled (avoid duplicates)
+        if (status === 'cancelled') continue;
 
         try {
-          // Always use Firestore directly for automatic offline sync
-          const ref = doc(this.firestore, 'ordersSellingTracking', id);
-          await setDoc(ref as any, updates as any, { merge: true } as any);
-          updated++;
+          const baseDoc = { ...data };
+          const colRef = collection(this.firestore, 'ordersSellingTracking');
+
+          // Try online first
+          if (this.networkService.isOnline()) {
+            const ref = doc(colRef as any);
+            const cancelledDocData = this.sanitizeForFirestore({
+              ...baseDoc,
+              status: 'cancelled',
+              createdBy: cancelledBy || baseDoc.createdBy || 'system',
+              updatedBy: cancelledBy || baseDoc.createdBy || 'system',
+              createdAt: new Date(),
+              updatedAt: new Date(),
+              reason: reason
+            });
+            await setDoc(ref as any, cancelledDocData as any);
+            console.log(`markOrderTrackingCancelled: created cancelled doc online for tracking=${s.id} -> newId=${ref.id}`);
+            created++;
+            createdIds.push(ref.id);
+
+          } else {
+            // Offline: queue the document
+            const cancelledDocData = this.sanitizeForFirestore({
+              ...baseDoc,
+              status: 'cancelled',
+              createdBy: cancelledBy || baseDoc.createdBy || 'system',
+              updatedBy: cancelledBy || baseDoc.createdBy || 'system',
+              createdAt: new Date(),
+              updatedAt: new Date(),
+              reason: reason
+            });
+            const tentativeId = await this.offlineDocService.createDocument('ordersSellingTracking', cancelledDocData);
+            console.log(`markOrderTrackingCancelled: queueing offline cancelled doc for tracking=${s.id} -> tentativeId=${tentativeId}`);
+            created++;
+            createdIds.push(tentativeId);
+          }
         } catch (e) {
-          console.warn('⚠️ Update failed, Firestore will retry when online:', e);
-          errors.push({ id, error: e });
+          console.error(`markOrderTrackingCancelled: error creating cancelled doc for tracking=${s.id}`, e);
+          errors.push({ id: s.id, error: e });
         }
       }
     } catch (e) {
+      console.error('markOrderTrackingCancelled: query failed', e);
       errors.push({ id: 'query', error: e });
     }
 
-    // ALSO update any pending offline queued tracking documents so local UI reflects the cancelled status immediately.
-    try {
-      const pending = await this.offlineDocService.getPendingDocuments();
-      for (const pd of pending) {
-        try {
-          if (pd.collectionName === 'ordersSellingTracking' && pd.data && pd.data.orderId === orderId && pd.data.status !== 'cancelled') {
-            // Skip - Firestore offline persistence handles pending updates automatically
-            updated++;
-          }
-        } catch (e) {
-          errors.push({ id: pd.id, error: e });
-        }
-      }
-    } catch (e) {
-      errors.push({ id: 'pending-check', error: e });
-    }
-
-    return { updated, errors };
+    return { created, errors, createdIds };
   }
 
   async markOrderTrackingReturned(orderId: string, returnedBy?: string, reason?: string): Promise<{ updated: number; errors: any[] }> {
@@ -685,20 +702,6 @@ async createPartialTrackingFromDoc(trackingId: string, newStatus: string, qty: n
           errors.push({ id: newRef ? newRef.id : null, error: invErr });
         }
       }
-      // If we created an online damaged/partial-damage tracking row, record a ledger 'damage' event
-      try {
-        if (isDamage && this.networkService.isOnline()) {
-          const companyId = data.companyId || newDoc.companyId;
-          const storeId = data.storeId || newDoc.storeId;
-          const orderId = newDoc.orderId || data.orderId;
-          const amount = Number(newDoc.total || 0);
-          const quantity = Number(newDoc.quantity || 0);
-          await this.ledgerService.recordEvent(companyId, storeId, orderId, 'damaged' as any, amount, quantity, createdBy || newDoc.createdBy || 'system');
-          console.log(`createPartialTrackingFromDoc: recorded ledger damage for order ${orderId}`);
-        }
-      } catch (ledgerErr) {
-        console.warn('createPartialTrackingFromDoc: ledger recordEvent failed', ledgerErr);
-      }
     } else {
       const payload = this.sanitizeForFirestore(newDoc);
       await this.offlineDocService.createDocument('ordersSellingTracking', payload as any);
@@ -930,21 +933,6 @@ async markOrderTrackingDamaged(orderId: string, damagedBy?: string, reason?: str
             errors.push({ id: ref.id, error: (invErr && (invErr as any).message) ? (invErr as any).message : String(invErr) });
           }
 
-          // Record ledger entry for damage (online only)
-          try {
-            if (this.networkService.isOnline()) {
-              const companyId = data.companyId || newDoc.companyId;
-              const storeId = data.storeId || newDoc.storeId;
-              const ledgerOrderId = newDoc.orderId || data.orderId || orderId;
-              const amount = Number(data.total || 0);
-              const quantity = Number(data.quantity || 0);
-              await this.ledgerService.recordEvent(companyId, storeId, ledgerOrderId, 'damaged' as any, amount, quantity, damagedBy || data.updatedBy || data.createdBy || 'system');
-              console.log(`markOrderTrackingDamaged: ledger damage recorded for order ${ledgerOrderId}`);
-            }
-          } catch (ledgerErr) {
-            console.warn('markOrderTrackingDamaged: ledger recordEvent failed', ledgerErr);
-          }
-
           created++;
           console.log(`markOrderTrackingDamaged: success created=${created}, pushed id=${ref.id}`);
         } else {
@@ -1099,24 +1087,6 @@ async createUnpaidTrackingFromOrder(
     }
   }
 
-  // Record ledger event once for the whole order total
-  if (created > 0) {
-    try {
-      await this.ledgerService.recordEvent(
-        companyId,
-        storeId,
-        orderId,
-        'unpaid' as any,
-        totalAmount,
-        totalQuantity,
-        unpaidBy || 'system'
-      );
-      console.log(`createUnpaidTrackingFromOrder: ledger unpaid recorded for order ${orderId}, amount=${totalAmount}, qty=${totalQuantity}`);
-    } catch (ledgerErr) {
-      console.warn('createUnpaidTrackingFromOrder: ledger recordEvent failed', ledgerErr);
-    }
-  }
-
   console.log(`Unpaid tracking created for order ${orderId}: created=${created}, errors=${errors.length}`);
   return { created, errors, createdIds };
 }
@@ -1195,23 +1165,6 @@ async markOrderTrackingUnpaid(orderId: string, unpaidBy?: string, reason?: strin
       }
     }
 
-    // Record ledger event once for the whole order total (like completed does)
-    if (created > 0 && firstCompanyId && firstStoreId) {
-      try {
-        await this.ledgerService.recordEvent(
-          firstCompanyId, 
-          firstStoreId, 
-          orderId, 
-          'unpaid' as any, 
-          totalAmount, 
-          totalQuantity, 
-          unpaidBy || 'system'
-        );
-        console.log(`markOrderTrackingUnpaid: ledger unpaid recorded for order ${orderId}, amount=${totalAmount}, qty=${totalQuantity}`);
-      } catch (ledgerErr) {
-        console.warn('markOrderTrackingUnpaid: ledger recordEvent failed', ledgerErr);
-      }
-    }
   } catch (e) {
     errors.push({ id: 'query', error: e });
   }
@@ -1294,23 +1247,6 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
       }
     }
 
-    // Record ledger event once for the whole order total (like completed does)
-    if (created > 0 && firstCompanyId && firstStoreId) {
-      try {
-        await this.ledgerService.recordEvent(
-          firstCompanyId, 
-          firstStoreId, 
-          orderId, 
-          'recovered' as any, 
-          totalAmount, 
-          totalQuantity, 
-          recoveredBy || 'system'
-        );
-        console.log(`markOrderTrackingRecovered: ledger recovered recorded for order ${orderId}, amount=${totalAmount}, qty=${totalQuantity}`);
-      } catch (ledgerErr) {
-        console.warn('markOrderTrackingRecovered: ledger recordEvent failed', ledgerErr);
-      }
-    }
   } catch (e) {
     errors.push({ id: 'query', error: e });
   }
@@ -1318,6 +1254,8 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
   console.log(`Recovered process completed for order ${orderId}: created=${created}, errors=${errors.length}`);
   return { created, errors, createdIds };
 }
+
+
 
   /**
    * Remove undefined fields from object (Firestore rejects undefined values)
