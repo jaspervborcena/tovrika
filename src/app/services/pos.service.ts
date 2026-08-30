@@ -253,6 +253,34 @@ export class PosService {
     }
   }
 
+  static normalizeCartItemForStorage(item: Partial<CartItem>, quantityOverride?: number): any {
+    const quantity = Number(quantityOverride ?? item.quantity ?? 0);
+    const sellingPrice = Number((item.sellingPrice ?? 0).toFixed(2));
+    const discountAmount = Number((item.discountAmount ?? 0).toFixed(2));
+    const vatAmount = Number((item.vatAmount ?? 0).toFixed(2));
+    const total = Number((item.total ?? (sellingPrice * quantity)).toFixed(2));
+    const normalizedDiscount = Number((item.hasDiscount ? discountAmount : 0).toFixed(2));
+
+    return {
+      ...item,
+      quantity,
+      sellingPrice,
+      price: sellingPrice,
+      total,
+      discountAmount: normalizedDiscount,
+      discount: normalizedDiscount,
+      vatAmount,
+      vat: vatAmount,
+      isVatApplicable: !!item.isVatApplicable,
+      isVatExempt: !!item.isVatExempt,
+      hasDiscount: !!item.hasDiscount && Number(item.discountValue ?? 0) > 0,
+      discountType: item.discountType === 'fixed' ? 'fixed' : 'percentage',
+      discountValue: Number(item.discountValue ?? 0),
+      productName: item.productName || '',
+      skuId: item.skuId || ''
+    };
+  }
+
   // Cart Management
   addToCart(product: Product, quantity: number = 1): void {
     const existingItemIndex = this.cartItems().findIndex(item => item.productId === product.id);
@@ -422,28 +450,31 @@ export class PosService {
         throw new Error('Store not found');
       }
 
-      const cartItems = this.cartItems().map(item => ({
-        ...item,
-        itemCode: this.itemCodeService.generateItemCode()
-      }));
+      const cartItems = this.cartItems().map(item => {
+        const normalized = PosService.normalizeCartItemForStorage(item);
+        return {
+          ...normalized,
+          itemCode: this.itemCodeService.generateItemCode()
+        };
+      });
       if (cartItems.length === 0) {
         throw new Error('Cart is empty');
       }
 
       const summary = this.cartSummary();
 
-      // Prepare order items for storage
+      // Prepare order items for storage from the normalized cart state so they match the receipt and checkout values
       const orderItems: OrderItem[] = cartItems.map(item => ({
         productId: item.productId,
         itemCode: item.itemCode,
         productName: item.productName,
         quantity: item.quantity,
-        price: item.sellingPrice,
+        price: Number((item.sellingPrice ?? 0).toFixed(2)),
         costPrice: item.costPrice ?? 0,
-        total: item.total,
-        vat: Number(((item.vatAmount || 0)).toFixed(2)),
-        discount: item.discountAmount,
-        isVatExempt: item.isVatExempt,
+        total: Number((item.total ?? 0).toFixed(2)),
+        vat: Number(((item.vatAmount ?? 0)).toFixed(2)),
+        discount: Number(((item.discountAmount ?? 0)).toFixed(2)),
+        isVatExempt: !!item.isVatExempt,
         // Per-item customer info (optional)
         customerName: (item as any).customerName || null,
         pwdId: (item as any).pwdId || null,
@@ -614,10 +645,13 @@ export class PosService {
         throw new Error('Store not found');
       }
 
-      const cartItems = this.cartItems().map(item => ({
-        ...item,
-        itemCode: this.itemCodeService.generateItemCode(),
-      }));
+      const cartItems = this.cartItems().map(item => {
+        const normalized = PosService.normalizeCartItemForStorage(item);
+        return {
+          ...normalized,
+          itemCode: this.itemCodeService.generateItemCode(),
+        };
+      });
       if (cartItems.length === 0) {
         throw new Error('Cart is empty');
       }
@@ -628,17 +662,17 @@ export class PosService {
 
       const cartSummary = this.cartSummary();
 
-      // Prepare order items for storage
+      // Prepare order items for storage from the normalized cart state so they match the receipt and checkout values
       const orderItems: OrderItem[] = cartItems.map(item => ({
         productId: item.productId,
         itemCode: item.itemCode,
         productName: item.productName,
         quantity: item.quantity,
-        price: item.sellingPrice,
-        total: item.total,
-        vat: Number(((item.vatAmount || 0)).toFixed(2)),
-        discount: item.discountAmount,
-        isVatExempt: item.isVatExempt
+        price: Number((item.sellingPrice ?? 0).toFixed(2)),
+        total: Number((item.total ?? 0).toFixed(2)),
+        vat: Number(((item.vatAmount ?? 0)).toFixed(2)),
+        discount: Number(((item.discountAmount ?? 0)).toFixed(2)),
+        isVatExempt: !!item.isVatExempt
       }));
 
       console.log('📦 Order items prepared:', orderItems.length, 'items');

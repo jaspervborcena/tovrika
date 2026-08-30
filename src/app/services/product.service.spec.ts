@@ -1,4 +1,5 @@
 import { ProductService } from './product.service';
+import { PosService } from './pos.service';
 
 describe('ProductService normalization', () => {
   it('should zero VAT and discount values when their toggles are off', () => {
@@ -71,5 +72,30 @@ describe('ProductService normalization', () => {
     expect(normalized.vatRate).toBe(0);
     expect(normalized.hasDiscount).toBeFalse();
     expect(normalized.discountValue).toBe(0);
+  });
+
+  it('should normalize cart items before saving to orderDetails', () => {
+    const item = PosService.normalizeCartItemForStorage({
+      productId: 'p-1',
+      productName: 'Americano',
+      skuId: 'Americano Large',
+      quantity: 1,
+      sellingPrice: 180,
+      originalPrice: 160.71,
+      total: 180,
+      isVatApplicable: true,
+      vatRate: 12,
+      vatAmount: 19.29,
+      hasDiscount: false,
+      discountType: 'percentage',
+      discountValue: 0,
+      discountAmount: 0,
+      isVatExempt: false
+    } as any, 1);
+
+    expect(item.price).toBe(180);
+    expect(item.vat).toBeCloseTo(19.29, 2);
+    expect(item.discount).toBe(0);
+    expect(item.total).toBe(180);
   });
 });
