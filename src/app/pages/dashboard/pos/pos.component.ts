@@ -445,8 +445,8 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   
   // Cart VAT and Discount Settings
   public cartVatSettings = {
-    isVatApplicable: true,
-    vatRate: Number(AppConstants.DEFAULT_VAT_RATE),
+    isVatApplicable: false,
+    vatRate: 0,
     hasDiscount: false,
     discountType: 'percentage' as 'percentage' | 'fixed',
     discountValue: 0
@@ -460,14 +460,10 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     discountValue: number;
   } {
     const normalizedProduct = product ?? {};
-    const isVatApplicable = normalizedProduct.isVatApplicable !== undefined
-      ? !!normalizedProduct.isVatApplicable
-      : true;
-    const vatRate = isVatApplicable
-      ? Number(normalizedProduct.vatRate ?? Number(AppConstants.DEFAULT_VAT_RATE))
-      : 0;
+    const isVatApplicable = normalizedProduct.isVatApplicable === true;
+    const vatRate = isVatApplicable ? Number(normalizedProduct.vatRate ?? 0) : 0;
     const rawDiscountValue = Number(normalizedProduct.discountValue ?? 0);
-    const hasDiscount = !!normalizedProduct.hasDiscount && rawDiscountValue > 0;
+    const hasDiscount = normalizedProduct.hasDiscount === true && rawDiscountValue > 0;
     const discountType = normalizedProduct.discountType === 'fixed' ? 'fixed' : 'percentage';
 
     return {
