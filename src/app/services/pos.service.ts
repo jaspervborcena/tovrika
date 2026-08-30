@@ -27,7 +27,6 @@ import { Product } from '../interfaces/product.interface';
 import { Store } from '../interfaces/store.interface';
 import { Device } from '../interfaces/device.interface';
 import { OrdersSellingTrackingService } from './orders-selling-tracking.service';
-import { LedgerService } from './ledger.service';
 import { TagsService } from './tags.service';
 import { ItemCodeService } from './item-code.service';
 import { environment } from '../../environments/environment';
@@ -165,7 +164,6 @@ export class PosService {
   private invoiceService = inject(InvoiceService);
   private storeService = inject(StoreService);
   private deviceService = inject(DeviceService);
-  private ledgerService = inject(LedgerService);
   private networkService = inject(NetworkService);
   
   // Cache for product tags
@@ -549,28 +547,6 @@ export class PosService {
         orderId: invoiceResult.orderId
       });
 
-      // Record accounting ledger entry for the created order (non-blocking)
-      try {
-        // Skip ledger recording if offline - it will be handled when synced
-        if (this.networkService.isOnline()) {
-          // Use the locally computed `summary` from above (not an undefined `cartSummary`)
-          const ledgerRes: any = await this.ledgerService.recordEvent(
-            company.id || '',
-            storeId,
-            invoiceResult.orderId!,
-            'completed',
-            Number(summary.netAmount || 0),
-            Number(summary.totalQuantity || 0),
-            user.uid
-          );
-          console.log('LedgerService: order ledger entry created for', invoiceResult.orderId, 'docId=', ledgerRes?.id, 'runningBalance=', ledgerRes?.runningBalanceAmount, ledgerRes?.runningBalanceQty);
-        } else {
-          console.log('📱 Offline: Skipping ledger entry - will sync when online');
-        }
-      } catch (ledgerErr) {
-        console.warn('LedgerService: failed to create ledger entry (non-blocking):', ledgerErr);
-      }
-
       // Sync local product summaries with server values so UI reflects Firestore state
       try {
         if (this.networkService.isOnline()) {
@@ -924,10 +900,7 @@ export class PosService {
   ): Promise<void> {
     console.log('🔄 Starting background operations for order:', orderId);
 
-    // 1. Record ledger entry (non-blocking)
-    this.recordLedgerEntry(companyId, storeId, orderId, cartSummary, userId).catch(err => {
-      console.warn('⚠️ Ledger recording failed (non-critical):', err);
-    });
+    // 1. Keep dashboard totals on API/Firestore path; do not write to orderAccountingLedger here.
 
     // 2. Update product inventory first (creates ordersSellingTracking docs),
     //    then mark them completed — must be sequential to avoid race condition.
@@ -941,43 +914,6 @@ export class PosService {
     console.log('✅ Background operations initiated for order:', orderId);
   }
 
-  /**
-   * Record ledger entry for completed order
-   */
-  private async recordLedgerEntry(
-    companyId: string,
-    storeId: string,
-    orderId: string,
-    cartSummary: any,
-    userId: string
-  ): Promise<void> {
-    try {
-      const ledgerPromise = this.ledgerService.recordEvent(
-        companyId,
-        storeId,
-        orderId,
-        'completed',
-        Number(cartSummary.netAmount || 0),
-        Number(cartSummary.totalQuantity || 0),
-        userId
-      );
-      
-      if (this.networkService.isOnline()) {
-        // Add timeout only when online to prevent indefinite hangs
-        const ledgerRes: any = await Promise.race([
-          ledgerPromise,
-          new Promise((_, reject) => setTimeout(() => reject(new Error('Ledger recording timeout')), 10000))
-        ]);
-        console.log('✅ Ledger entry created:', ledgerRes?.id);
-      } else {
-        console.log('📱 Offline: Recording ledger (will sync when online)');
-        await ledgerPromise;
-      }
-    } catch (error) {
-      console.warn('⚠️ Ledger recording failed:', error);
-      throw error;
-    }
-  }
 
   /**
    * Mark order tracking as completed

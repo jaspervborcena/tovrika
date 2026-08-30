@@ -10,7 +10,6 @@ import {
 import { OrderDetails } from '../interfaces/order-details.interface';
 import { AuthService } from './auth.service';
 import { StoreService } from './store.service';
-import { LedgerService } from './ledger.service';
 import { NetworkService } from './network.service';
 import { OrdersSellingTrackingService } from './orders-selling-tracking.service';
 import { CartItem } from '../interfaces/cart.interface';
@@ -22,7 +21,6 @@ export class OfflineReconciliationService {
   private firestore = inject(Firestore);
   private authService = inject(AuthService);
   private storeService = inject(StoreService);
-  private ledgerService = inject(LedgerService);
   private networkService = inject(NetworkService);
   private ordersSellingTrackingService = inject(OrdersSellingTrackingService);
 
@@ -743,16 +741,7 @@ export class OfflineReconciliationService {
         totalQuantity += Number(data.quantity || 0);
       });
 
-      // Create ledger entry
-      await this.ledgerService.recordEvent(
-        orderDetails.companyId,
-        orderDetails.storeId,
-        orderId,
-        'completed',
-        totalAmount,
-        totalQuantity,
-        this.authService.getCurrentUser()?.uid || 'system'
-      );
+      // No ledger write. Dashboard totals come from the API and Firestore fallback.
 
       // Update flags in orderDetails
       const orderDetailsRef = doc(this.firestore, 'orderDetails', orderDetailsDocId);
