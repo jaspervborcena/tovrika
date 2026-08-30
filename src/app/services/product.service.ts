@@ -50,12 +50,12 @@ export class ProductService implements OnDestroy {
   static normalizeProductTaxAndDiscountFields<T extends Partial<Product>>(product: T): T {
     const normalized = { ...product } as any;
 
-    const isVatApplicable = !!normalized.isVatApplicable;
+    const isVatApplicable = normalized.isVatApplicable === true;
     normalized.isVatApplicable = isVatApplicable;
     normalized.vatRate = isVatApplicable ? Number(normalized.vatRate ?? 0) : 0;
 
     const rawDiscountValue = Number(normalized.discountValue ?? 0);
-    const hasDiscount = !!normalized.hasDiscount && rawDiscountValue > 0;
+    const hasDiscount = normalized.hasDiscount === true && rawDiscountValue > 0;
     normalized.hasDiscount = hasDiscount;
     normalized.discountType = normalized.discountType || 'percentage';
     normalized.discountValue = hasDiscount ? rawDiscountValue : 0;

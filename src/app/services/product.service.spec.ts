@@ -52,4 +52,24 @@ describe('ProductService normalization', () => {
     expect(normalized.discountType).toBe('percentage');
     expect(normalized.discountValue).toBe(10);
   });
+
+  it('should default blank product tax and discount data to off', () => {
+    const normalized = ProductService.normalizeProductTaxAndDiscountFields({
+      uid: 'user-1',
+      productName: 'Sample',
+      skuId: 'SKU-1',
+      unitType: 'pieces',
+      category: 'General',
+      totalStock: 10,
+      originalPrice: 100,
+      sellingPrice: 120,
+      companyId: 'company-1',
+      storeId: 'store-1'
+    } as any);
+
+    expect(normalized.isVatApplicable).toBeFalse();
+    expect(normalized.vatRate).toBe(0);
+    expect(normalized.hasDiscount).toBeFalse();
+    expect(normalized.discountValue).toBe(0);
+  });
 });
