@@ -150,7 +150,7 @@ export class LedgerService {
     companyId: string,
     storeId: string,
     date: Date = new Date(),
-    eventType: 'completed' | 'returned' | 'refunded' | 'cancelled' | 'damaged' | 'unpaid' | 'recovered' = 'completed'
+      eventType: 'completed' | 'returned' | 'refunded' | 'cancelled' | 'damaged' | 'unpaid' | 'recovered' = 'completed'
   ): Promise<{ runningBalanceAmount: number; runningBalanceQty: number }> {
     try {
       const startOfDay = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0, 0);

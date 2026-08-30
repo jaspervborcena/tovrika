@@ -8,7 +8,6 @@ import { Order } from '../interfaces/pos.interface';
 import { AuthService } from './auth.service';
 import { OrdersSellingTrackingService } from './orders-selling-tracking.service';
 import { LoggerService } from '../core/services/logger.service';
-import { LedgerService } from './ledger.service';
 import { FirestoreSecurityService } from '../core/services/firestore-security.service';
 import { IndexedDBService } from '../core/services/indexeddb.service';
 import { toDateValue } from '../core/utils/date-utils';
@@ -24,7 +23,6 @@ export class OrderService {
   private authService = inject(AuthService);
   // Use centralized LoggerService so logs include authenticated uid/company/store via context provider
   private logger = inject(LoggerService);
-  private ledgerService = inject(LedgerService);
   
   constructor(
     private firestore: Firestore,
@@ -695,24 +693,9 @@ async updateOrderStatus(orderId: string, status: string, reason?: string): Promi
         try {
           const safeAmount = Number(amount || 0);
           const safeQty = Number(qty || 0);
-          
-          // Validate required fields before recording ledger
-          if (!companyId || !storeId) {
-            console.error(`❌ Cannot record ledger: missing companyId=${companyId} or storeId=${storeId}`);
-            this.logger.warn('Cannot record ledger entry: missing companyId or storeId', { 
-              area: 'orders', 
-              docId: orderId, 
-              payload: { companyId, storeId, status } 
-            });
-          } else {
-            console.log(`💾 Recording ledger event: eventType=${mappedStatus}, amount=${safeAmount}, qty=${safeQty}, companyId=${companyId}, storeId=${storeId}`);
-            await this.ledgerService.recordEvent(companyId, storeId, orderId, mappedStatus as any, safeAmount, safeQty, performedBy);
-            console.log(`✅ Ledger entry created successfully for orderId=${orderId}, eventType=${mappedStatus}`);
-            this.logger.info('Ledger entry created for status change', { area: 'orders', docId: orderId, payload: { status, amount: safeAmount, qty: safeQty } });
-          }
-        } catch (ledgerErr) {
-          console.error(`❌ Ledger recording failed:`, ledgerErr);
-          this.logger.warn('Failed to create ledger entry for status change', { area: 'orders', docId: orderId, payload: { error: String(ledgerErr) } });
+          this.logger.info('Status change totals calculated for order tracking', { area: 'orders', docId: orderId, payload: { status, amount: safeAmount, qty: safeQty } });
+        } catch (e) {
+          this.logger.warn('Failed while attempting to compute tracking totals for status change', { area: 'orders', docId: orderId, payload: { error: String(e) } });
         }
       } catch (e) {
         this.logger.warn('Failed while attempting to compute tracking totals for ledger', { area: 'orders', docId: orderId, payload: { error: String(e) } });
