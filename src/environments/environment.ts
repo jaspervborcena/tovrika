@@ -34,9 +34,13 @@ export const environment = {
   },
   api: {
     baseUrl: "",
-    ordersApi: "",
-    directOrdersApi: "",
+    ordersApi: "https://asia-east1-jasperpos-dev.cloudfunctions.net/get_sales_orders_bq",
+    directOrdersApi: "https://asia-east1-jasperpos-dev.cloudfunctions.net/get_sales_orders_bq",
     salesSummaryApi: "https://asia-east1-jasperpos-dev.cloudfunctions.net/get_sales_summary_bq",
+    salesRevenueApi: "https://asia-east1-jasperpos-dev.cloudfunctions.net/get_sales_revenue_bq",
+    salesAdjustmentsApi: "https://asia-east1-jasperpos-dev.cloudfunctions.net/get_sales_adjustments_bq",
+    salesCustomersApi: "https://asia-east1-jasperpos-dev.cloudfunctions.net/get_sales_customers_bq",
+    salesStatusBreakdownApi: "https://asia-east1-jasperpos-dev.cloudfunctions.net/get_sales_status_breakdown_bq",
   },
   inventory: {
     reconciliationMode: 'recon' as 'legacy' | 'recon'

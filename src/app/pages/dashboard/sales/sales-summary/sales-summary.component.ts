@@ -2,6 +2,7 @@ import { Component, signal, computed, inject, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { OrderService } from '../../../../services/order.service';
+import { BigQueryService } from '../../../../services/bigquery.service';
 import { AuthService } from '../../../../services/auth.service';
 import { StoreService, Store, dedupeStoresForDropdown, formatStoreDisplayName } from '../../../../services/store.service';
 import { LedgerService } from '../../../../services/ledger.service';
@@ -1700,6 +1701,7 @@ export class SalesSummaryComponent implements OnInit {
     }
   // Services
   private orderService = inject(OrderService);
+  private bigQueryService = inject(BigQueryService);
   private authService = inject(AuthService);
   private storeService = inject(StoreService);
   private indexedDb = inject(IndexedDBService);
@@ -1994,79 +1996,18 @@ export class SalesSummaryComponent implements OnInit {
       }
 
       // Use UTC midnight range for local day to avoid timezone issues
-      
       const { start: startDate, end: endDate } = this.getUTCMidnightRangeForLocalDate(this.fromDate, this.toDate);
 
-      // --- ORDERS LOADING (existing logic) ---
-      let orders: any[] = [];
+      // Dashboard sales data must come from the BigQuery Cloud Functions, not Firestore.
+      this.dataSource.set('api');
+      let orders: Order[] = [];
       try {
-        const results = await this.orderService.getOrdersFromFirestoreByRange(storeId, startDate, endDate);
-        // Client-side guard: only keep orders whose createdAt falls within the range.
-        // Firestore may fall back to querying by updatedAt (when a createdAt index is missing),
-        // which would include orders from previous days that were merely updated today.
-        orders = (results || []).filter((o: any) => {
-          const created = o.createdAt ? new Date(o.createdAt) : null;
-          if (!created || isNaN(created.getTime())) return true; // keep if date unavailable
-          return created >= startDate && created <= endDate;
-        });
+        orders = await this.bigQueryService.getSalesDashboardOrders(storeId, startDate, endDate);
       } catch (e) {
-        console.warn('Firestore sales query failed, setting orders to empty', e);
+        console.warn('BigQuery sales query failed, setting orders to empty', e);
         orders = [];
       }
-      if (!orders || orders.length === 0) {
-        try {
-          const rawDocs = await this.orderService.getSampleOrdersForDebug(storeId, 500);
-          if (rawDocs && rawDocs.length > 0) {
-            const allOrders = rawDocs.map((doc: any) => {
-              const data = doc.data;
-              // Use createdAt as canonical order date (not updatedAt) so orders appear on the day they were placed
-              let orderDate: Date | null = null;
-              if (data.createdAt) orderDate = data.createdAt.toDate ? data.createdAt.toDate() : new Date(data.createdAt);
-              else if (data.created_at) orderDate = data.created_at.toDate ? data.created_at.toDate() : new Date(data.created_at);
-              else if (data.date) orderDate = data.date.toDate ? data.date.toDate() : new Date(data.date);
-              else if (data.updatedAt) orderDate = data.updatedAt.toDate ? data.updatedAt.toDate() : new Date(data.updatedAt);
-              else if (data.updated_at) orderDate = data.updated_at.toDate ? data.updated_at.toDate() : new Date(data.updated_at);
-              return {
-                id: doc.id,
-                companyId: data.companyId || '',
-                storeId: data.storeId || '',
-                terminalId: data.terminalId || '',
-                assignedCashierId: data.assignedCashierId || '',
-                status: data.status || 'paid',
-                cashSale: data.cashSale !== false,
-                soldTo: data.soldTo || 'Walk-in Customer',
-                tin: data.tin || '',
-                businessAddress: data.businessAddress || '',
-                invoiceNumber: data.invoiceNumber || '',
-                logoUrl: data.logoUrl || '',
-                date: orderDate || new Date(),
-                vatableSales: data.vatableSales || 0,
-                vatAmount: data.vatAmount || 0,
-                zeroRatedSales: data.zeroRatedSales || 0,
-                vatExemptAmount: data.vatExemptAmount || 0,
-                discountAmount: data.discountAmount || 0,
-                grossAmount: data.grossAmount || 0,
-                netAmount: data.netAmount || 0,
-                totalAmount: data.totalAmount || data.netAmount || 0,
-                exemptionId: data.exemptionId || '',
-                signature: data.signature || '',
-                atpOrOcn: data.atpOrOcn || '',
-                birPermitNo: data.birPermitNo || '',
-                inclusiveSerialNumber: data.inclusiveSerialNumber || '',
-                createdAt: orderDate || new Date(),
-                message: data.message || '',
-                paymentMethod: data.paymentMethod || data.payment || 'cash'
-              };
-            });
-            orders = allOrders.filter((o: any) => {
-              const oDate = o.createdAt;
-              return oDate >= startDate && oDate <= endDate;
-            });
-          }
-        } catch (debugErr) {
-          console.warn('Failed to fetch orders via getSampleOrdersForDebug', debugErr);
-        }
-      }
+
       this.apiHasMore.set(false);
       try {
         if (orders && orders.length > 0) {
@@ -2079,21 +2020,14 @@ export class SalesSummaryComponent implements OnInit {
         try {
           const saved: any[] = await this.indexedDb.getSetting(`orders_snapshot_${storeId}`);
           if (saved && Array.isArray(saved) && saved.length > 0) {
-            // Apply the same date range filter used on Firestore results
             orders = saved.filter((o: any) => {
               const created = o.createdAt ? new Date(o.createdAt) : null;
               if (!created || isNaN(created.getTime())) return false;
               return created >= startDate && created <= endDate;
-            });
-            if (orders.length > 0) this.dataSource.set('api');
+            }) as Order[];
           }
         } catch (dbErr) {
           console.warn('📦 Failed to read orders snapshot from IndexedDB:', dbErr);
-        }
-        try {
-          const samples = await this.orderService.getSampleOrdersForDebug(storeId, 5);
-        } catch (dbgErr) {
-          console.warn('Failed to fetch sample orders for debug', dbgErr);
         }
       }
       const filteredOrders = orders || [];

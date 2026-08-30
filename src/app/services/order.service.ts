@@ -1426,65 +1426,6 @@ public async restockOrderAndInventoryTransactional(orderId: string, performedBy 
    * Fetch sales-summary revenue from the BigQuery Cloud Function.
    * The function accepts local calendar dates in YYYY-MM-DD format.
    */
-  async getSalesSummaryRevenue(storeId: string, from: Date, to: Date): Promise<number | null> {
-    const currentUser = this.authService.getCurrentUser() as any;
-    const token = await currentUser?.getIdToken?.();
-    const endpoint = environment.api?.salesSummaryApi;
-
-    if (!token || !endpoint || !storeId || storeId === 'all') return null;
-
-    const getDate = (date: Date): string => {
-      const year = date.getFullYear();
-      const month = String(date.getMonth() + 1).padStart(2, '0');
-      const day = String(date.getDate()).padStart(2, '0');
-      return `${year}-${month}-${day}`;
-    };
-
-    const readRevenue = (value: any): number | null => {
-      if (typeof value === 'number' && Number.isFinite(value)) return value;
-      if (typeof value === 'string' && value.trim() !== '' && Number.isFinite(Number(value))) {
-        return Number(value);
-      }
-      if (Array.isArray(value)) {
-        const values = value.map(item => readRevenue(item)).filter((item): item is number => item !== null);
-        return values.length ? values.reduce((sum, item) => sum + item, 0) : null;
-      }
-      if (!value || typeof value !== 'object') return null;
-
-      const revenueKeys = [
-        'totalRevenue', 'total_revenue', 'revenue', 'totalSales', 'total_sales',
-        'totalAmount', 'total_amount', 'netAmount', 'net_amount', 'grossAmount', 'gross_amount',
-        'total', 'amount', 'sales'
-      ];
-      for (const key of revenueKeys) {
-        if (value[key] !== undefined && value[key] !== null && !Number.isNaN(Number(value[key]))) {
-          return Number(value[key]);
-        }
-      }
-      for (const key of ['data', 'summary', 'result', 'rows']) {
-        const nested = readRevenue(value[key]);
-        if (nested !== null) return nested;
-      }
-      return null;
-    };
-
-    const params = new URLSearchParams({
-      storeId,
-      from: getDate(from),
-      to: getDate(to)
-    });
-    const response = await fetch(`${endpoint}?${params.toString()}`, {
-      headers: { Authorization: `Bearer ${token}` }
-    });
-    if (!response.ok) throw new Error(`Sales summary request failed: ${response.status}`);
-
-    const revenue = readRevenue(await response.json());
-    this.logger.info('Sales summary API call succeeded', {
-      area: 'orders',
-      payload: { storeId, from: getDate(from), to: getDate(to), revenue }
-    });
-    return revenue;
-  }
 
   /**
    * Format date for API (YYYYMMDD format for Python Cloud Function)

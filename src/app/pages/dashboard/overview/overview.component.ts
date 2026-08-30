@@ -6,6 +6,7 @@ import { ProductService } from '../../../services/product.service';
 import { Product } from '../../../interfaces/product.interface';
 import { Order } from '../../../interfaces/pos.interface';
 import { OrderService } from '../../../services/order.service';
+import { BigQueryService } from '../../../services/bigquery.service';
 import { AuthService } from '../../../services/auth.service';
 import { IndexedDBService } from '@app/core/services/indexeddb.service';
 import { ExpenseService } from '../../../services/expense.service';
@@ -1550,6 +1551,7 @@ export class OverviewComponent implements OnInit {
   private storeService = inject(StoreService);
   private productService = inject(ProductService);
   private orderService = inject(OrderService);
+  private bigQueryService = inject(BigQueryService);
   private authService = inject(AuthService);
   private indexedDb = inject(IndexedDBService);
   private expenseService = inject(ExpenseService);
@@ -2607,8 +2609,8 @@ export class OverviewComponent implements OnInit {
 
     try {
       const [currentRevenue, comparisonRevenue] = await Promise.all([
-        this.orderService.getSalesSummaryRevenue(storeId, startDate, endDate),
-        this.orderService.getSalesSummaryRevenue(storeId, comparisonStart, comparisonEnd)
+        this.bigQueryService.getSalesSummaryRevenue(storeId, startDate, endDate),
+        this.bigQueryService.getSalesSummaryRevenue(storeId, comparisonStart, comparisonEnd)
       ]);
       if (currentRevenue === null) {
         this.bigQueryRevenueLoaded.set(false);
