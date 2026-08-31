@@ -13,6 +13,72 @@ import { ProductService } from '../../../../services/product.service';
 import { CategoryService } from '../../../../services/category.service';
 import { ToastService } from '../../../../shared/services/toast.service';
 
+export type SalesSummaryPeriod = 'today' | 'yesterday' | 'this_week' | 'previous_week' | 'this_month' | 'previous_month' | 'date_range';
+
+export function resolvePeriodDateRange(
+  period: SalesSummaryPeriod,
+  referenceDate: Date = new Date(),
+  forcedFrom?: string | null,
+  forcedTo?: string | null
+): { from: string; to: string } {
+  if (period === 'date_range') {
+    const from = forcedFrom || formatDateForInput(new Date(referenceDate.getFullYear(), referenceDate.getMonth(), referenceDate.getDate() - 30));
+    const to = forcedTo || formatDateForInput(referenceDate);
+    return { from, to };
+  }
+
+  const now = new Date(referenceDate);
+  let start: Date;
+  let end: Date;
+
+  if (period === 'today') {
+    start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+    end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+  } else if (period === 'yesterday') {
+    const yesterday = new Date(now);
+    yesterday.setDate(now.getDate() - 1);
+    start = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate(), 0, 0, 0, 0);
+    end = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate(), 23, 59, 59, 999);
+  } else if (period === 'this_week') {
+    const nowWeekDay = now.getDay();
+    const mondayOffset = (nowWeekDay + 6) % 7;
+    start = new Date(now);
+    start.setDate(now.getDate() - mondayOffset);
+    start.setHours(0, 0, 0, 0);
+    end = new Date(start);
+    end.setDate(start.getDate() + 6);
+    end.setHours(23, 59, 59, 999);
+  } else if (period === 'previous_week') {
+    const nowWeekDay = now.getDay();
+    const mondayOffset = (nowWeekDay + 6) % 7;
+    const currentWeekStart = new Date(now);
+    currentWeekStart.setDate(now.getDate() - mondayOffset);
+    currentWeekStart.setHours(0, 0, 0, 0);
+    start = new Date(currentWeekStart);
+    start.setDate(currentWeekStart.getDate() - 7);
+    start.setHours(0, 0, 0, 0);
+    end = new Date(start);
+    end.setDate(start.getDate() + 6);
+    end.setHours(23, 59, 59, 999);
+  } else if (period === 'this_month') {
+    start = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+    end = new Date(now.getFullYear(), now.getMonth(), new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate(), 23, 59, 59, 999);
+  } else {
+    const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    start = new Date(prev.getFullYear(), prev.getMonth(), 1, 0, 0, 0, 0);
+    end = new Date(prev.getFullYear(), prev.getMonth(), new Date(prev.getFullYear(), prev.getMonth() + 1, 0).getDate(), 23, 59, 59, 999);
+  }
+
+  return { from: formatDateForInput(start), to: formatDateForInput(end) };
+}
+
+function formatDateForInput(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
 // Extended interface for display purposes
 interface OrderDisplay extends PosOrder {
   customerName?: string;
@@ -61,8 +127,30 @@ type Order = OrderDisplay;
               </div>
             </ng-template>
           </div>
+
+          <div class="period-inline">
+            <label for="salesSummaryPeriod">Period</label>
+            <select
+              id="salesSummaryPeriod"
+              class="control-select"
+              [value]="selectedPeriod()"
+              (change)="onPeriodChange($any($event.target).value)">
+              <option *ngFor="let option of periodOptions" [value]="option.key">{{ option.label }}</option>
+            </select>
+          </div>
+
+          <div class="status-filter">
+            <label class="checkbox-toggle">
+              <input
+                type="checkbox"
+                [checked]="includeAllStatuses()"
+                (change)="onIncludeAllStatusesChange($any($event.target).checked)"
+              />
+              <span>Include all status</span>
+            </label>
+          </div>
           
-          <div class="date-inputs">
+          <div class="date-inputs" *ngIf="selectedPeriod() === 'date_range'">
             <div class="date-input-group">
               <label for="fromDate">From Date:</label>
               <input 
@@ -89,22 +177,49 @@ type Order = OrderDisplay;
                 <span *ngIf="!isLoading()">{{ getDataSourceButtonText() }}</span>
                 <span *ngIf="isLoading()" class="loading-text">Loading...</span>
               </button>
-              <div style="position: relative; display: inline-block;">
-                <button 
-                  (click)="exportSalesSummaryToExcel()"
-                  [disabled]="isLoading() || isExporting()"
-                  class="export-button"
-                  title="Export sales summary and details to Excel"
-                  (mouseenter)="onExportHover(true)"
-                  (mouseleave)="onExportHover(false)">
-                  <span *ngIf="!isExporting()">Export to Excel</span>
-                  <span *ngIf="isExporting()" class="loading-text">Processing...</span>
-                </button>
-                <div *ngIf="isExporting() && exportHover" class="export-hover-overlay">
-                 
-                </div>
-              </div>
+            </div>
+          </div>
 
+          <div class="go-button-group" style="display: flex; gap: 0.5rem; align-items: center;" *ngIf="selectedPeriod() !== 'date_range'">
+            <button 
+              (click)="applySelectedPeriod()"
+              [disabled]="isLoading()"
+              class="go-button">
+              <span *ngIf="!isLoading()">{{ getDataSourceButtonText() }}</span>
+              <span *ngIf="isLoading()" class="loading-text">Loading...</span>
+            </button>
+            <div style="position: relative; display: inline-block;">
+              <button 
+                (click)="exportSalesSummaryToExcel()"
+                [disabled]="isLoading() || isExporting()"
+                class="export-button"
+                title="Export sales summary and details to Excel"
+                (mouseenter)="onExportHover(true)"
+                (mouseleave)="onExportHover(false)">
+                <span *ngIf="!isExporting()">Export to Excel</span>
+                <span *ngIf="isExporting()" class="loading-text">Processing...</span>
+              </button>
+              <div *ngIf="isExporting() && exportHover" class="export-hover-overlay">
+               
+              </div>
+            </div>
+          </div>
+
+          <div class="go-button-group" style="display: flex; gap: 0.5rem; align-items: center;" *ngIf="selectedPeriod() === 'date_range'">
+            <div style="position: relative; display: inline-block;">
+              <button 
+                (click)="exportSalesSummaryToExcel()"
+                [disabled]="isLoading() || isExporting()"
+                class="export-button"
+                title="Export sales summary and details to Excel"
+                (mouseenter)="onExportHover(true)"
+                (mouseleave)="onExportHover(false)">
+                <span *ngIf="!isExporting()">Export to Excel</span>
+                <span *ngIf="isExporting()" class="loading-text">Processing...</span>
+              </button>
+              <div *ngIf="isExporting() && exportHover" class="export-hover-overlay">
+               
+              </div>
             </div>
           </div>
         </div>
@@ -464,10 +579,133 @@ type Order = OrderDisplay;
     .date-picker-section {
       display: flex;
       justify-content: space-between;
-      align-items: flex-start;
+      align-items: center;
       margin-bottom: 30px;
       flex-wrap: wrap;
       gap: 20px;
+    }
+
+    .store-selection {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.75rem;
+      min-height: 52px;
+      padding: 0.625rem 0.875rem;
+      background: #ffffff;
+      border: 1px solid #dfe3eb;
+      border-radius: 10px;
+      box-shadow: 0 1px 0 rgba(15, 23, 42, 0.02);
+      min-width: 350px;
+    }
+
+    .period-inline {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.6rem;
+      min-height: 52px;
+      padding: 0 0.2rem;
+      background: transparent;
+      border: none;
+      border-radius: 0;
+      box-shadow: none;
+    }
+
+    .status-filter {
+      display: inline-flex;
+      align-items: center;
+      min-height: 52px;
+    }
+
+    .checkbox-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.55rem;
+      font-size: 0.95rem;
+      color: #2d3748;
+      font-weight: 500;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .checkbox-toggle input {
+      width: 16px;
+      height: 16px;
+      accent-color: #667eea;
+      cursor: pointer;
+    }
+
+    .store-selector,
+    .single-store {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      width: 100%;
+    }
+
+    .store-selector {
+      width: 100%;
+      justify-content: space-between;
+    }
+
+    .store-selector label,
+    .single-store label,
+    .period-inline label {
+      font-weight: 600;
+      color: #2d3748;
+      min-width: 52px;
+      font-size: 1.05rem;
+      line-height: 1.2;
+    }
+
+    .store-select,
+    .control-select {
+      appearance: none;
+      -webkit-appearance: none;
+      -moz-appearance: none;
+      width: 100%;
+      min-height: 42px;
+      padding: 0.6rem 2.5rem 0.6rem 0.9rem;
+      border: 1px solid #dfe3eb;
+      border-radius: 8px;
+      font-size: 1rem;
+      color: #0f172a;
+      background:
+        linear-gradient(45deg, transparent 50%, #475569 50%),
+        linear-gradient(135deg, #475569 50%, transparent 50%),
+        linear-gradient(to right, #ffffff, #ffffff);
+      background-position:
+        calc(100% - 18px) calc(50% - 2px),
+        calc(100% - 12px) calc(50% - 2px),
+        0 0;
+      background-size: 6px 6px, 6px 6px, 100% 100%;
+      background-repeat: no-repeat;
+      cursor: pointer;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .store-select:focus,
+    .control-select:focus {
+      outline: none;
+      border-color: #667eea;
+      box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.12);
+    }
+
+    .single-store {
+      justify-content: space-between;
+      width: 100%;
+    }
+
+    .store-name {
+      display: inline-flex;
+      align-items: center;
+      min-height: 42px;
+      padding: 0.5rem 0.8rem;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      background: #f8fafc;
+      color: #111827;
+      font-weight: 500;
+      line-height: 1.2;
     }
 
     .date-inputs {
@@ -617,38 +855,65 @@ type Order = OrderDisplay;
     }
 
     .store-selection {
-      margin-bottom: 15px;
-      padding: 12px;
-      background: white;
-      border-radius: 8px;
-      border: 1px solid #e2e8f0;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.75rem;
+      min-height: 52px;
+      padding: 0.625rem 0.875rem;
+      background: #ffffff;
+      border: 1px solid #dfe3eb;
+      border-radius: 10px;
+      box-shadow: 0 1px 0 rgba(15, 23, 42, 0.02);
+      min-width: 350px;
     }
 
     .store-selector {
       display: flex;
       align-items: center;
-      gap: 10px;
+      gap: 0.75rem;
+      width: 100%;
+      justify-content: space-between;
     }
 
     .store-selector label, .single-store label {
       font-weight: 600;
       color: #2d3748;
-      min-width: 50px;
+      min-width: 52px;
+      font-size: 1.05rem;
+      line-height: 1.2;
     }
 
     .store-select {
-      padding: 8px 12px;
-      border: 1px solid #e2e8f0;
-      border-radius: 6px;
-      font-size: 14px;
-      min-width: 200px;
-      background: white;
+      appearance: none;
+      -webkit-appearance: none;
+      -moz-appearance: none;
+      width: 100%;
+      min-height: 42px;
+      padding: 0.6rem 2.5rem 0.6rem 0.9rem;
+      border: 1px solid #dfe3eb;
+      border-radius: 8px;
+      font-size: 1rem;
+      color: #0f172a;
+      background:
+        linear-gradient(45deg, transparent 50%, #475569 50%),
+        linear-gradient(135deg, #475569 50%, transparent 50%),
+        linear-gradient(to right, #ffffff, #ffffff);
+      background-position:
+        calc(100% - 18px) calc(50% - 2px),
+        calc(100% - 12px) calc(50% - 2px),
+        0 0;
+      background-size: 6px 6px, 6px 6px, 100% 100%;
+      background-repeat: no-repeat;
+      cursor: pointer;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
     }
 
     .single-store {
       display: flex;
       align-items: center;
-      gap: 10px;
+      gap: 0.75rem;
+      width: 100%;
+      justify-content: space-between;
     }
 
     /* Modal header styled to match BIR compliance dialog */
@@ -1733,8 +1998,19 @@ export class SalesSummaryComponent implements OnInit {
   // Sorting signals
   sortColumn = signal<string>('createdAt');
   sortDirection = signal<'asc' | 'desc'>('desc');
+  includeAllStatuses = signal<boolean>(false);
 
-  // Date properties
+  // Date and period properties
+  periodOptions = [
+    { key: 'today', label: 'Today' },
+    { key: 'yesterday', label: 'Yesterday' },
+    { key: 'this_week', label: 'This Week' },
+    { key: 'previous_week', label: 'Previous Week' },
+    { key: 'this_month', label: 'This Month' },
+    { key: 'previous_month', label: 'Previous Month' },
+    { key: 'date_range', label: 'Date Range' }
+  ] as const;
+  selectedPeriod = signal<SalesSummaryPeriod>('today');
   fromDate: string = '';
   toDate: string = '';
 
@@ -1826,24 +2102,40 @@ export class SalesSummaryComponent implements OnInit {
   // Ledger-backed totals (preferred)
   ledgerTotalRevenue = signal<number>(0);
   ledgerTotalOrders = signal<number>(0);
+  summaryTotals = signal({ totalSales: 0, totalOrders: 0, totalItems: 0 });
 
-  totalSales = computed(() =>
-    this.orders().reduce((total, order) => total + order.totalAmount, 0)
-  );
+  totalSales = computed(() => {
+    const summary = this.summaryTotals();
+    if (summary.totalSales > 0 || this.orders().length > 0) {
+      return summary.totalSales || this.orders().reduce((total, order) => total + (Number(order.totalAmount) || 0), 0);
+    }
+    return 0;
+  });
 
-  totalOrders = computed(() =>
-    this.orders().filter(o => o.status === 'completed').length
-  );
+  totalOrders = computed(() => {
+    const summary = this.summaryTotals();
+    if (summary.totalOrders > 0 || this.orders().length > 0) {
+      return summary.totalOrders || this.orders().length;
+    }
+    return 0;
+  });
 
   totalTrackedItems = signal<number>(0);
   cancelledTrackedItems = signal<number>(0);
-  netTrackedItems = computed(() => Math.max(0, this.totalTrackedItems() - this.cancelledTrackedItems()));
+  netTrackedItems = computed(() => {
+    const summaryItems = this.summaryTotals().totalItems;
+    if (summaryItems > 0 || this.totalTrackedItems() > 0) {
+      return summaryItems || Math.max(0, this.totalTrackedItems() - this.cancelledTrackedItems());
+    }
+    return 0;
+  });
 
   constructor() {
     // Initialize default range to today
     const today = new Date();
-    this.fromDate = this.formatDateForInput(today);
-    this.toDate = this.formatDateForInput(today);
+    const { from, to } = resolvePeriodDateRange('today', today);
+    this.fromDate = from;
+    this.toDate = to;
   }
 
   async ngOnInit(): Promise<void> {
@@ -1908,6 +2200,19 @@ export class SalesSummaryComponent implements OnInit {
     this.cancelledTrackedItems.set(0);
   }
 
+  onIncludeAllStatusesChange(includeAll: boolean): void {
+    this.includeAllStatuses.set(includeAll);
+    void this.loadSalesDataManual();
+  }
+
+  private applyStatusFilter<T extends { status?: string | null }>(orders: T[]): T[] {
+    if (this.includeAllStatuses()) {
+      return orders;
+    }
+
+    return orders.filter((order) => String(order.status || '').toLowerCase() === 'completed');
+  }
+
   /**
    * Load current date data from Firebase (default behavior)
    */
@@ -1927,6 +2232,35 @@ export class SalesSummaryComponent implements OnInit {
   /**
    * Manual load triggered by Go button - uses hybrid logic
    */
+  onPeriodChange(period: SalesSummaryPeriod): void {
+    this.selectedPeriod.set(period);
+
+    if (period === 'date_range') {
+      const defaults = resolvePeriodDateRange('date_range', new Date());
+      this.fromDate = this.fromDate || defaults.from;
+      this.toDate = this.toDate || defaults.to;
+      return;
+    }
+
+    const { from, to } = resolvePeriodDateRange(period, new Date());
+    this.fromDate = from;
+    this.toDate = to;
+    void this.loadSalesDataManual();
+  }
+
+  applySelectedPeriod(): void {
+    const period = this.selectedPeriod();
+    if (period === 'date_range') {
+      void this.loadSalesDataManual();
+      return;
+    }
+
+    const { from, to } = resolvePeriodDateRange(period, new Date());
+    this.fromDate = from;
+    this.toDate = to;
+    void this.loadSalesDataManual();
+  }
+
   async loadSalesDataManual(): Promise<void> {
     if (!this.fromDate || !this.toDate) {
       alert('Please select both from and to dates');
@@ -2000,6 +2334,15 @@ export class SalesSummaryComponent implements OnInit {
 
       // Dashboard sales data must come from the BigQuery Cloud Functions, not Firestore.
       this.dataSource.set('api');
+
+      try {
+        const summaryTotals = await this.bigQueryService.getSalesSummaryTotals(storeId, startDate, endDate);
+        this.summaryTotals.set(summaryTotals);
+      } catch (e) {
+        console.warn('BigQuery summary totals failed, using fallback totals:', e);
+        this.summaryTotals.set({ totalSales: 0, totalOrders: 0, totalItems: 0 });
+      }
+
       let orders: Order[] = [];
       try {
         orders = await this.bigQueryService.getSalesDashboardOrders(storeId, startDate, endDate);
@@ -2007,6 +2350,8 @@ export class SalesSummaryComponent implements OnInit {
         console.warn('BigQuery sales query failed, setting orders to empty', e);
         orders = [];
       }
+
+      orders = this.applyStatusFilter(orders);
 
       this.apiHasMore.set(false);
       try {

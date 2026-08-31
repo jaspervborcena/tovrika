@@ -2294,8 +2294,13 @@ export class OverviewComponent implements OnInit {
       const currentLedger = await this.ledgerService.getOrderBalancesForRange(companyId, storeId, startDate, endDate, 'completed');
       const previousLedger = await this.ledgerService.getOrderBalancesForRange(companyId, storeId, previousStart, previousEnd, 'completed');
 
-      const currentOrders = await this.orderService.countCompletedOrders(storeId, startDate, endDate);
-      const previousOrders = await this.orderService.countCompletedOrders(storeId, previousStart, previousEnd);
+      const [currentSummary, previousSummary] = await Promise.all([
+        this.bigQueryService.getSalesSummaryTotals(storeId, startDate, endDate),
+        this.bigQueryService.getSalesSummaryTotals(storeId, previousStart, previousEnd)
+      ]);
+
+      const currentOrders = Number(currentSummary?.totalOrders || 0);
+      const previousOrders = Number(previousSummary?.totalOrders || 0);
 
       this.dateRangeRevenue.set(Number(currentLedger?.runningBalanceAmount || 0));
       this.previousDateRangeRevenue.set(Number(previousLedger?.runningBalanceAmount || 0));
@@ -2560,7 +2565,7 @@ export class OverviewComponent implements OnInit {
     });
     const sumRevenueGross = async (date: Date): Promise<number> => {
       const { start, end } = getDayRange(date);
-      const orders = await this.orderService.getOrdersByDateRange(storeId, start, end);
+      const orders = await this.bigQueryService.getSalesDashboardOrders(storeId, start, end);
       const includedOrderIds = new Set<string>();
       return (orders || []).reduce((sum, order) => {
         if (order.storeId !== storeId) return sum;
@@ -2632,8 +2637,7 @@ export class OverviewComponent implements OnInit {
   }
 
   private async loadSalesFromCloudFunction(storeId: string, startDate: Date, endDate: Date, status: string): Promise<void> {
-    // Load orders from the order service
-    const orders = await this.orderService.getOrdersByDateRange(storeId, startDate, endDate);
+    const orders = await this.bigQueryService.getSalesDashboardOrders(storeId, startDate, endDate);
     this.orders.set(orders || []);
   }
 
@@ -2719,8 +2723,8 @@ export class OverviewComponent implements OnInit {
       const queryEnd = endDate ? new Date(endDate) : new Date(now.toISOString().split('T')[0]);
       queryEnd.setHours(23, 59, 59, 999);
 
-      // Load orders for the requested date range from Firestore
-      const orders = await this.orderService.getOrdersByDateRange(storeId, queryStart, queryEnd);
+      // Load orders for the requested date range from the BigQuery-backed dashboard API
+      const orders = await this.bigQueryService.getSalesDashboardOrders(storeId, queryStart, queryEnd);
       if (requestId !== this.overviewLoadSequence) {
         return;
       }
@@ -3026,7 +3030,8 @@ export class OverviewComponent implements OnInit {
       }
 
       if (ledger) {
-        const totalOrders = await this.orderService.countCompletedOrders(storeId, startDate, endDate);
+        const summaryTotals = await this.bigQueryService.getSalesSummaryTotals(storeId, startDate, endDate);
+        const totalOrders = Number(summaryTotals?.totalOrders || 0);
 
         let refundedAmount = 0;
         let returnedAmount = 0;

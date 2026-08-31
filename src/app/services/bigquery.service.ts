@@ -31,6 +31,48 @@ export class BigQueryService {
     return Number(amount ?? 0);
   }
 
+  async getSalesSummaryTotals(storeId: string, from: Date, to: Date): Promise<{ totalSales: number; totalOrders: number; totalItems: number }> {
+    const endpoint = environment.api?.salesSummaryApi || environment.api?.salesRevenueApi;
+    const currentUser = this.authService.getCurrentUser() as any;
+    const token = await currentUser?.getIdToken?.();
+
+    if (!token || !endpoint || !storeId || storeId === 'all') {
+      return { totalSales: 0, totalOrders: 0, totalItems: 0 };
+    }
+
+    const params = new URLSearchParams({
+      storeId,
+      from: this.formatDateForApi(from),
+      to: this.formatDateForApi(to)
+    });
+
+    const response = await fetch(`${endpoint}?${params.toString()}`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+
+    if (!response.ok) {
+      throw new Error(`BigQuery sales summary totals request failed: ${response.status}`);
+    }
+
+    const payload = await response.json();
+    const totalSales = this.readNumericValue(payload, [
+      'total_sales', 'totalSales', 'totalRevenue', 'total_revenue', 'revenue',
+      'totalAmount', 'total_amount', 'grossAmount', 'gross_amount'
+    ]);
+    const totalOrders = this.readNumericValue(payload, [
+      'count', 'total_orders', 'totalOrders', 'orders_count', 'orderCount'
+    ]);
+    const totalItems = this.readNumericValue(payload, [
+      'total_items', 'totalItems', 'items_count', 'itemCount', 'quantity', 'total_quantity'
+    ]);
+
+    return {
+      totalSales: Number(totalSales ?? 0),
+      totalOrders: Number(totalOrders ?? 0),
+      totalItems: Number(totalItems ?? 0)
+    };
+  }
+
   async getSalesDashboardOrders(storeId: string, from: Date, to: Date): Promise<Order[]> {
     const rows = await this.fetchBigQueryRows<any>(
       environment.api?.ordersApi || environment.api?.directOrdersApi || environment.api?.salesSummaryApi,
@@ -133,6 +175,31 @@ export class BigQueryService {
       payload: { storeId, from: getDate(from), to: getDate(to), metric }
     });
     return metric;
+  }
+
+  private readNumericValue(value: any, keys: string[]): number | null {
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+    if (typeof value === 'string' && value.trim() !== '' && Number.isFinite(Number(value))) {
+      return Number(value);
+    }
+    if (Array.isArray(value)) {
+      const values = value.map(item => this.readNumericValue(item, keys)).filter((item): item is number => item !== null);
+      return values.length ? values.reduce((sum, item) => sum + item, 0) : null;
+    }
+    if (!value || typeof value !== 'object') return null;
+
+    for (const key of keys) {
+      if (value[key] !== undefined && value[key] !== null && !Number.isNaN(Number(value[key]))) {
+        return Number(value[key]);
+      }
+    }
+
+    for (const nestedKey of ['data', 'summary', 'result', 'rows']) {
+      const nested = this.readNumericValue(value[nestedKey], keys);
+      if (nested !== null) return nested;
+    }
+
+    return null;
   }
 
   private async fetchBigQueryRows<T>(
