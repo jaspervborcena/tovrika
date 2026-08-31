@@ -5,7 +5,6 @@ import { OrderService } from '../../../../services/order.service';
 import { BigQueryService } from '../../../../services/bigquery.service';
 import { AuthService } from '../../../../services/auth.service';
 import { StoreService, Store, dedupeStoresForDropdown, formatStoreDisplayName } from '../../../../services/store.service';
-import { LedgerService } from '../../../../services/ledger.service';
 import { Order as PosOrder, OrderItem } from '../../../../interfaces/pos.interface';
 import { IndexedDBService } from '../../../../core/services/indexeddb.service';
 import { OrdersSellingTrackingService } from '../../../../services/orders-selling-tracking.service';
@@ -1970,7 +1969,6 @@ export class SalesSummaryComponent implements OnInit {
   private authService = inject(AuthService);
   private storeService = inject(StoreService);
   private indexedDb = inject(IndexedDBService);
-  private ledgerService = inject(LedgerService);
   private ordersSellingTrackingService = inject(OrdersSellingTrackingService);
   private productService = inject(ProductService);
   private categoryService = inject(CategoryService);
@@ -2098,10 +2096,7 @@ export class SalesSummaryComponent implements OnInit {
     return filtered.slice(startIndex, endIndex);
   });
 
-  // Original computed values
-  // Ledger-backed totals (preferred)
-  ledgerTotalRevenue = signal<number>(0);
-  ledgerTotalOrders = signal<number>(0);
+  // Dashboard-aligned totals based on BigQuery summary
   summaryTotals = signal({ totalSales: 0, totalOrders: 0, totalItems: 0 });
 
   totalSales = computed(() => {
@@ -2143,21 +2138,6 @@ export class SalesSummaryComponent implements OnInit {
     this.ensureDateOrder();
     await this.loadStores();
     // Do NOT auto-load data — user must click Go to load sales for the selected date range
-  }
-
-  // Load ledger totals when loading current date data
-  private async loadLedgerTotalsForStore(): Promise<void> {
-    try {
-      const currentPermission = this.authService.getCurrentPermission();
-      const companyId = currentPermission?.companyId || '';
-      const storeId = this.selectedStoreId() || currentPermission?.storeId || '';
-      if (!companyId || !storeId) return;
-      const balances = await this.ledgerService.getLatestOrderBalances(companyId, storeId, new Date(), 'completed');
-      this.ledgerTotalRevenue.set(Number(balances.runningBalanceAmount || 0));
-      this.ledgerTotalOrders.set(Number(balances.runningBalanceQty || 0));
-    } catch (err) {
-      console.warn('SalesSummary: failed to load ledger totals', err);
-    }
   }
 
   async loadStores(): Promise<void> {
@@ -2249,26 +2229,35 @@ export class SalesSummaryComponent implements OnInit {
   }
 
   applySelectedPeriod(): void {
+    console.log('📌 applySelectedPeriod() called');
     const period = this.selectedPeriod();
+    console.log('📌 Selected period:', period);
     if (period === 'date_range') {
+      console.log('📌 Period is date_range, calling loadSalesDataManual()');
       void this.loadSalesDataManual();
       return;
     }
 
     const { from, to } = resolvePeriodDateRange(period, new Date());
+    console.log('📌 Resolved period dates - from:', from, 'to:', to);
     this.fromDate = from;
     this.toDate = to;
+    console.log('📌 Calling loadSalesDataManual() after setting dates');
     void this.loadSalesDataManual();
   }
 
   async loadSalesDataManual(): Promise<void> {
+    console.log('📌 loadSalesDataManual() called');
+    console.log('📌 fromDate:', this.fromDate, 'toDate:', this.toDate);
     if (!this.fromDate || !this.toDate) {
+      console.error('❌ Missing dates:', { fromDate: this.fromDate, toDate: this.toDate });
       alert('Please select both from and to dates');
       return;
     }
 
     // Ensure date ordering before proceeding (swap if user accidentally set From > To)
     this.ensureDateOrder();
+    console.log('📌 Dates ensured, calling loadSalesData()');
 
     // Always use API for sales summary (BigQuery-backed). Save snapshot to IndexedDB after fetch.
     this.dataSource.set('api');
@@ -2315,39 +2304,58 @@ export class SalesSummaryComponent implements OnInit {
    * Determines which data source will be used based on date range
    */
   async loadSalesData(): Promise<void> {
+    console.log('📌 loadSalesData() called');
     this.isLoading.set(true);
 
     try {
       // Use selected store ID or get from permission
       const storeId = this.selectedStoreId() || this.authService.getCurrentPermission()?.storeId;
       const companyId = this.authService.getCurrentPermission()?.companyId;
+      console.log('📌 Store ID:', storeId, 'Company ID:', companyId);
       if (!storeId || !companyId) {
-        console.warn('❌ No storeId or companyId found - cannot load data');
+        console.error('❌ No storeId or companyId found - cannot load data');
         this.orders.set([]);
         this.dataSource.set(null);
         this.totalTrackedItems.set(0);
+        this.isLoading.set(false);
         return;
       }
 
       // Use UTC midnight range for local day to avoid timezone issues
       const { start: startDate, end: endDate } = this.getUTCMidnightRangeForLocalDate(this.fromDate, this.toDate);
+      console.log('📌 Date range - start:', startDate, 'end:', endDate);
 
       // Dashboard sales data must come from the BigQuery Cloud Functions, not Firestore.
       this.dataSource.set('api');
+      console.log('📌 Data source set to API');
 
       try {
-        const summaryTotals = await this.bigQueryService.getSalesSummaryTotals(storeId, startDate, endDate);
+        console.log('📌 Fetching summary totals from BigQuery...');
+        const summaryTotals = await this.bigQueryService.getSalesSummaryTotals(
+          storeId,
+          startDate,
+          endDate,
+          this.includeAllStatuses()
+        );
+        console.log('✅ Summary totals received:', summaryTotals);
         this.summaryTotals.set(summaryTotals);
       } catch (e) {
-        console.warn('BigQuery summary totals failed, using fallback totals:', e);
+        console.error('❌ BigQuery summary totals failed:', e);
         this.summaryTotals.set({ totalSales: 0, totalOrders: 0, totalItems: 0 });
       }
 
       let orders: Order[] = [];
       try {
-        orders = await this.bigQueryService.getSalesDashboardOrders(storeId, startDate, endDate);
+        console.log('📌 Fetching orders from BigQuery...');
+        orders = await this.bigQueryService.getSalesDashboardOrders(
+          storeId,
+          startDate,
+          endDate,
+          this.includeAllStatuses()
+        );
+        console.log('✅ Orders received:', orders.length, 'orders');
       } catch (e) {
-        console.warn('BigQuery sales query failed, setting orders to empty', e);
+        console.error('❌ BigQuery sales query failed:', e);
         orders = [];
       }
 
@@ -2401,35 +2409,10 @@ export class SalesSummaryComponent implements OnInit {
       const deduped = Array.from(dedupMap.values());
       this.orders.set(deduped);
 
-      // --- TOTAL ITEMS LOADING (date range) ---
-      // Use orderAccountingLedger (same source as Overview) for reliable item counts.
-      try {
-        const isSingleDay = this.fromDate === this.toDate;
-        let totalQty = 0;
-        let cancelledQty = 0;
-        if (isSingleDay) {
-          const ledger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, startDate, 'completed');
-          totalQty = Number(ledger.runningBalanceQty || 0);
-          const cancelledLedger = await this.ledgerService.getLatestOrderBalances(companyId, storeId, startDate, 'cancelled');
-          cancelledQty = Number(cancelledLedger.runningBalanceQty || 0);
-        } else {
-          const ledger = await this.ledgerService.getOrderBalancesForRange(companyId, storeId, startDate, endDate, 'completed');
-          totalQty = Number(ledger.runningBalanceQty || 0);
-          const cancelledLedger = await this.ledgerService.getOrderBalancesForRange(companyId, storeId, startDate, endDate, 'cancelled');
-          cancelledQty = Number(cancelledLedger.runningBalanceQty || 0);
-        }
-        this.totalTrackedItems.set(totalQty);
-        this.cancelledTrackedItems.set(cancelledQty);
-      } catch (err) {
-        console.warn('Failed to fetch ledger items for summary', err);
-        // Fallback: sum item quantities from already-loaded orders
-        const fallbackQty = this.orders().reduce((sum: number, o: any) => {
-          const items: any[] = o.items || [];
-          return sum + items.reduce((s: number, i: any) => s + Number(i.quantity || 0), 0);
-        }, 0);
-        this.totalTrackedItems.set(fallbackQty);
-        this.cancelledTrackedItems.set(0);
-      }
+      // --- TOTAL ITEMS LOADING (BigQuery summary, same as dashboard) ---
+      const summaryTotalItems = Number(this.summaryTotals().totalItems || 0);
+      this.totalTrackedItems.set(summaryTotalItems);
+      this.cancelledTrackedItems.set(0);
     } catch (error) {
       console.error('Error loading sales data:', error);
       this.orders.set([]);
