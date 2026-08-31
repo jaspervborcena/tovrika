@@ -4,24 +4,26 @@ import { from, switchMap } from 'rxjs';
 import { AuthService } from '../services/auth.service';
 
 /**
- * HTTP Interceptor that automatically attaches Firebase ID token to all API requests.
- * 
+ * HTTP Interceptor that automatically attaches the Firebase ID token to the app's
+ * internal API and Cloud Function requests.
+ *
  * Applies to:
- * - All requests starting with `/api/` (proxied Cloud Functions and Cloud Run endpoints)
- * 
+ * - `/api/*` proxied requests
+ * - Absolute Cloud Function URLs such as `*.cloudfunctions.net`
+ *
  * Skips:
- * - External URLs (non-relative paths)
- * - Non-API requests
+ * - Non-API external resources that do not require Firebase auth
  */
 export const authInterceptor: HttpInterceptorFn = (req, next) => {
   const authService = inject(AuthService);
 
-  // Only attach token to API requests (proxied endpoints)
-  if (!req.url.startsWith('/api/')) {
+  const isApiRequest = req.url.startsWith('/api/') ||
+    (req.url.startsWith('http') && req.url.includes('cloudfunctions.net'));
+
+  if (!isApiRequest) {
     return next(req);
   }
 
-  // Get Firebase ID token and clone request with Authorization header
   return from(authService.getFirebaseIdToken()).pipe(
     switchMap((token) => {
       if (token) {
@@ -32,9 +34,7 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
         });
         return next(clonedReq);
       }
-      
-      // No token available - proceed without auth header
-      // (backend will return 401 if auth is required)
+
       return next(req);
     })
   );
