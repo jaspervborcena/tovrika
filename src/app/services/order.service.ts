@@ -1226,113 +1226,114 @@ public async restockOrderAndInventoryTransactional(orderId: string, performedBy 
 
   /**
    * Get orders from API (for historical dates)
-   * Auth interceptor automatically adds Firebase ID token to all /api/* requests
+   * Uses the Firebase bearer token directly and sends the includeAllStatus flag to the backend.
    */
-  private async getOrdersFromApi(storeId: string, startDate: Date, endDate: Date): Promise<Order[]> {
+  private async getOrdersFromApi(
+    storeId: string,
+    startDate: Date,
+    endDate: Date,
+    includeAllStatus = false
+  ): Promise<Order[]> {
     const fromDate = this.formatDateForApi(startDate);
     const toDate = this.formatDateForApi(endDate);
-    
-    // Check if user is signed in at all
-    const currentUser = this.authService.getCurrentUser();
+
+    const currentUser = this.authService.getCurrentUser() as any;
     if (!currentUser) {
       this.logger.error('User is not signed in - cannot call orders API', { area: 'orders' });
+      return [];
+    }
+
+    const token = await currentUser?.getIdToken?.().catch(() => null);
+    if (!token) {
+      this.logger.error('No Firebase ID token available for orders API', { area: 'orders' });
       return [];
     }
 
     const params = new URLSearchParams({
       storeId,
       from: fromDate,
-      to: toDate
+      to: toDate,
+      includeAllStatus: String(includeAllStatus)
     });
 
-    // Include the authenticated user's UID so the Cloud Function can perform server-side logging
-    if (currentUser?.uid) {
-      try {
-        params.append('uid', currentUser.uid);
-      } catch (e) {
-        // noop - URLSearchParams should work in modern environments; swallow any error
-      }
-    }
-    // Updated API URLs with authentication - prioritize proxy for development
-    // Build deduplicated API URL list. Keep proxy but ensure direct endpoint is also tried.
     const rawUrls = [environment.api?.ordersApi || '', environment.api?.directOrdersApi || ''].filter(Boolean);
     const apiUrls = Array.from(new Set(rawUrls));
 
     for (let i = 0; i < apiUrls.length; i++) {
       const apiUrl = apiUrls[i];
-      
-      try {
-        this.logger.debug('Attempting API fetch', { area: 'orders', payload: { attempt: i + 1, apiUrl, storeId, fromDate, toDate, currentUser: this.authService.getCurrentUser()?.email || 'null' } });
 
-        const headers: any = {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        };
-        // Note: Auth interceptor automatically adds Authorization header for /api/* requests
+      try {
+        this.logger.debug('Attempting API fetch', {
+          area: 'orders',
+          payload: {
+            attempt: i + 1,
+            apiUrl,
+            storeId,
+            fromDate,
+            toDate,
+            includeAllStatus,
+            currentUser: this.authService.getCurrentUser()?.email || 'null'
+          }
+        });
 
         const response = await this.http.get<any>(
           `${apiUrl}?${params.toString()}`,
-          { headers }
+          {
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+              Authorization: `Bearer ${token}`
+            }
+          }
         ).toPromise();
 
-  this.logger.info('API call success', { area: 'orders', payload: { apiUrl, responseSummary: response?.success ? 'success' : 'no-data' } });
+        this.logger.info('API call success', { area: 'orders', payload: { apiUrl, responseSummary: response?.success ? 'success' : 'no-data' } });
 
         if (response?.success && response.orders) {
           const orders = response.orders.map((order: any) => this.transformApiOrder(order));
-          this.logger.info('API returned orders', { area: 'orders', storeId, payload: { count: orders.length, fromDate, toDate } });
-          this.logger.debug('Sample transformed order', { area: 'orders', payload: orders[0] });
+          this.logger.info('API returned orders', { area: 'orders', storeId, payload: { count: orders.length, fromDate, toDate, includeAllStatus } });
           return orders;
-        } else {
-          this.logger.warn('API response unsuccessful or empty', { area: 'orders', payload: { apiUrl, response } });
-          // If this URL didn't work, try the next one
-          if (i === apiUrls.length - 1) {
-            return []; // This was the last URL, return empty
-          }
-          continue; // Try next URL
         }
+
+        this.logger.warn('API response unsuccessful or empty', { area: 'orders', payload: { apiUrl, response } });
+        if (i === apiUrls.length - 1) return [];
+        continue;
       } catch (error: any) {
-          // Capture as much of the error/response body as possible to help diagnose 500s
-          let bodyText: any = error?.error;
-          try {
-            // If server returned a Blob (stacktrace or HTML), read as text (modern browsers support blob.text())
-            if (bodyText && typeof bodyText === 'object' && typeof (bodyText as any).text === 'function') {
-              bodyText = await (bodyText as any).text();
-            } else if (bodyText && typeof bodyText === 'object') {
-              // Try to stringify JSON body
-              try { bodyText = JSON.stringify(bodyText); } catch { bodyText = String(bodyText); }
-            }
-          } catch (bodyErr) {
-            bodyText = String(error?.error || bodyErr);
+        let bodyText: any = error?.error;
+        try {
+          if (bodyText && typeof bodyText === 'object' && typeof (bodyText as any).text === 'function') {
+            bodyText = await (bodyText as any).text();
+          } else if (bodyText && typeof bodyText === 'object') {
+            try { bodyText = JSON.stringify(bodyText); } catch { bodyText = String(bodyText); }
           }
+        } catch (bodyErr) {
+          bodyText = String(error?.error || bodyErr);
+        }
 
-          const attemptPayload = {
-            attempt: i + 1,
-            apiUrl,
-            message: error?.message,
-            status: error?.status,
-            statusText: error?.statusText,
-            url: error?.url,
-            // HttpClient surfaces server response body under `error` — include it (sanitized later)
-            body: bodyText
-          };
+        const attemptPayload = {
+          attempt: i + 1,
+          apiUrl,
+          message: error?.message,
+          status: error?.status,
+          statusText: error?.statusText,
+          url: error?.url,
+          body: bodyText
+        };
 
-          this.logger.error('API call error', { area: 'orders', payload: attemptPayload }, error);
+        this.logger.error('API call error', { area: 'orders', payload: attemptPayload }, error);
 
-        // Check if it's a CORS/network error (status 0 or unknown)
         if (error?.status === 0 && (error?.statusText === 'Unknown Error' || !error?.statusText)) {
           this.logger.error('Possible CORS or network error for API URL', { area: 'orders', payload: { apiUrl, tryNext: i < apiUrls.length - 1 } }, error);
         }
-        
-        // If this is the last URL, return empty array
+
         if (i === apiUrls.length - 1) {
           this.logger.error('All API endpoints failed', { area: 'orders', storeId });
           return [];
         }
-        // Otherwise, continue to next URL
       }
     }
-    
-    return []; // Fallback return
+
+    return [];
   }
 
   /**
