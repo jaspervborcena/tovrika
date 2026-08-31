@@ -4,6 +4,25 @@ import { LoggerService } from '../core/services/logger.service';
 import { environment } from '../../environments/environment';
 import { Order } from '../interfaces/pos.interface';
 
+export function buildBigQueryRequestParams(
+  storeId: string,
+  from: Date,
+  to: Date,
+  includeAllStatus = false
+): URLSearchParams {
+  return new URLSearchParams({
+    storeId,
+    from: formatDateForApi(from),
+    to: formatDateForApi(to),
+    includeAllStatus: String(includeAllStatus)
+  });
+}
+
+function formatDateForApi(date: Date): string {
+  const dateStr = date.toISOString().split('T')[0];
+  return dateStr.replace(/-/g, '');
+}
+
 @Injectable({
   providedIn: 'root'
 })
@@ -11,27 +30,28 @@ export class BigQueryService {
   private authService = inject(AuthService);
   private logger = inject(LoggerService);
 
-  async getSalesSummaryRevenue(storeId: string, from: Date, to: Date): Promise<number | null> {
+  async getSalesSummaryRevenue(storeId: string, from: Date, to: Date, includeAllStatus = false): Promise<number | null> {
     const endpoint = environment.api?.salesSummaryApi || environment.api?.salesRevenueApi;
     return this.fetchBigQueryMetric(endpoint, storeId, from, to, [
       'totalRevenue', 'total_revenue', 'revenue', 'totalSales', 'total_sales',
       'totalAmount', 'total_amount', 'netAmount', 'net_amount', 'grossAmount', 'gross_amount',
       'total', 'amount', 'sales'
-    ]);
+    ], includeAllStatus);
   }
 
-  async getSalesDashboardRevenue(storeId: string, from: Date, to: Date): Promise<number> {
+  async getSalesDashboardRevenue(storeId: string, from: Date, to: Date, includeAllStatus = false): Promise<number> {
     const amount = await this.fetchBigQueryMetric(
       environment.api?.salesRevenueApi || environment.api?.salesSummaryApi,
       storeId,
       from,
       to,
-      ['totalRevenue', 'total_revenue', 'revenue', 'totalSales', 'total_sales', 'totalAmount', 'total_amount', 'netAmount', 'net_amount', 'grossAmount', 'gross_amount', 'total', 'amount', 'sales']
+      ['totalRevenue', 'total_revenue', 'revenue', 'totalSales', 'total_sales', 'totalAmount', 'total_amount', 'netAmount', 'net_amount', 'grossAmount', 'gross_amount', 'total', 'amount', 'sales'],
+      includeAllStatus
     );
     return Number(amount ?? 0);
   }
 
-  async getSalesSummaryTotals(storeId: string, from: Date, to: Date): Promise<{ totalSales: number; totalOrders: number; totalItems: number }> {
+  async getSalesSummaryTotals(storeId: string, from: Date, to: Date, includeAllStatus = false): Promise<{ totalSales: number; totalOrders: number; totalItems: number }> {
     const endpoint = environment.api?.salesSummaryApi || environment.api?.salesRevenueApi;
     const currentUser = this.authService.getCurrentUser() as any;
     const token = await currentUser?.getIdToken?.();
@@ -40,11 +60,7 @@ export class BigQueryService {
       return { totalSales: 0, totalOrders: 0, totalItems: 0 };
     }
 
-    const params = new URLSearchParams({
-      storeId,
-      from: this.formatDateForApi(from),
-      to: this.formatDateForApi(to)
-    });
+    const params = buildBigQueryRequestParams(storeId, from, to, includeAllStatus);
 
     const response = await fetch(`${endpoint}?${params.toString()}`, {
       headers: { Authorization: `Bearer ${token}` }
@@ -73,45 +89,49 @@ export class BigQueryService {
     };
   }
 
-  async getSalesDashboardOrders(storeId: string, from: Date, to: Date): Promise<Order[]> {
+  async getSalesDashboardOrders(storeId: string, from: Date, to: Date, includeAllStatus = false): Promise<Order[]> {
     const rows = await this.fetchBigQueryRows<any>(
       environment.api?.ordersApi || environment.api?.directOrdersApi || environment.api?.salesSummaryApi,
       storeId,
       from,
       to,
-      ['orders', 'data', 'rows', 'result']
+      ['orders', 'data', 'rows', 'result'],
+      includeAllStatus
     );
 
     return (rows || []).map((order: any) => this.transformApiOrder(order));
   }
 
-  async getSalesDashboardAdjustments(storeId: string, from: Date, to: Date): Promise<any[]> {
+  async getSalesDashboardAdjustments(storeId: string, from: Date, to: Date, includeAllStatus = false): Promise<any[]> {
     return this.fetchBigQueryRows<any>(
       environment.api?.salesAdjustmentsApi,
       storeId,
       from,
       to,
-      ['adjustments', 'data', 'rows', 'result']
+      ['adjustments', 'data', 'rows', 'result'],
+      includeAllStatus
     );
   }
 
-  async getSalesDashboardCustomers(storeId: string, from: Date, to: Date): Promise<any[]> {
+  async getSalesDashboardCustomers(storeId: string, from: Date, to: Date, includeAllStatus = false): Promise<any[]> {
     return this.fetchBigQueryRows<any>(
       environment.api?.salesCustomersApi,
       storeId,
       from,
       to,
-      ['customers', 'data', 'rows', 'result']
+      ['customers', 'data', 'rows', 'result'],
+      includeAllStatus
     );
   }
 
-  async getSalesDashboardStatusBreakdown(storeId: string, from: Date, to: Date): Promise<any[]> {
+  async getSalesDashboardStatusBreakdown(storeId: string, from: Date, to: Date, includeAllStatus = false): Promise<any[]> {
     return this.fetchBigQueryRows<any>(
       environment.api?.salesStatusBreakdownApi,
       storeId,
       from,
       to,
-      ['statusBreakdown', 'status_breakdown', 'statuses', 'status', 'data', 'rows', 'result']
+      ['statusBreakdown', 'status_breakdown', 'statuses', 'status', 'data', 'rows', 'result'],
+      includeAllStatus
     );
   }
 
@@ -120,7 +140,8 @@ export class BigQueryService {
     storeId: string,
     from: Date,
     to: Date,
-    keys: string[]
+    keys: string[],
+    includeAllStatus = false
   ): Promise<number | null> {
     const currentUser = this.authService.getCurrentUser() as any;
     const token = await currentUser?.getIdToken?.();
@@ -157,11 +178,7 @@ export class BigQueryService {
       return null;
     };
 
-    const params = new URLSearchParams({
-      storeId,
-      from: getDate(from),
-      to: getDate(to)
-    });
+    const params = buildBigQueryRequestParams(storeId, from, to, includeAllStatus);
 
     const response = await fetch(`${endpoint}?${params.toString()}`, {
       headers: { Authorization: `Bearer ${token}` }
@@ -207,18 +224,15 @@ export class BigQueryService {
     storeId: string,
     from: Date,
     to: Date,
-    keys: string[]
+    keys: string[],
+    includeAllStatus = false
   ): Promise<T[]> {
     const currentUser = this.authService.getCurrentUser() as any;
     const token = await currentUser?.getIdToken?.();
 
     if (!token || !endpoint || !storeId || storeId === 'all') return [];
 
-    const params = new URLSearchParams({
-      storeId,
-      from: this.formatDateForApi(from),
-      to: this.formatDateForApi(to)
-    });
+    const params = buildBigQueryRequestParams(storeId, from, to, includeAllStatus);
 
     const response = await fetch(`${endpoint}?${params.toString()}`, {
       headers: { Authorization: `Bearer ${token}` }
@@ -240,11 +254,6 @@ export class BigQueryService {
       }
     }
     return [];
-  }
-
-  private formatDateForApi(date: Date): string {
-    const dateStr = date.toISOString().split('T')[0];
-    return dateStr.replace(/-/g, '');
   }
 
   private transformApiOrder(apiOrder: any): Order {
