@@ -1578,6 +1578,7 @@ export class OverviewComponent implements OnInit {
   protected yesterdayExpensesTotal = signal<number>(0);
   // BigQuery-backed summary totals for the dashboard cards
   protected salesSummary = signal({ totalSales: 0, totalOrders: 0, totalItems: 0 });
+  protected statusBreakdown = signal<Array<{ status: string; count: number; amount: number }>>([]);
   protected ledgerTotalRevenue = signal<number>(0);
   protected ledgerTotalOrders = signal<number>(0);
   protected ledgerTotalRefunds = signal<number>(0);
@@ -2326,10 +2327,75 @@ export class OverviewComponent implements OnInit {
     this.loadData();
   }
 
+  private normalizeStatusBreakdown(statusBreakdown: any[] = []): Array<{ status: string; count: number; amount: number }> {
+    const normalized: Array<{ status: string; count: number; amount: number }> = [];
+
+    for (const item of statusBreakdown || []) {
+      if (!item || typeof item !== 'object') continue;
+      const rawStatus = String(item.status ?? item.name ?? '').trim();
+      if (!rawStatus) continue;
+
+      const status = rawStatus.toLowerCase();
+      const canonicalStatus = status
+        .replace(/^return$/, 'returned')
+        .replace(/^refund$/, 'refunded')
+        .replace(/^damage$/, 'damaged')
+        .replace(/^damages$/, 'damaged')
+        .replace(/^cancel$/, 'cancelled')
+        .replace(/^canceled$/, 'cancelled')
+        .replace(/^open$/, 'completed');
+
+      normalized.push({
+        status: canonicalStatus,
+        count: Number(item.count ?? item.qty ?? item.totalCount ?? 0),
+        amount: Number(item.amount ?? item.totalAmount ?? item.value ?? 0)
+      });
+    }
+
+    return normalized;
+  }
+
+  private applyStatusBreakdownToLedger(statusBreakdown: any[] = []): void {
+    const normalized = this.normalizeStatusBreakdown(statusBreakdown);
+    this.statusBreakdown.set(normalized);
+
+    const findStatus = (status: string) => normalized.find((item) => item.status === status.toLowerCase()) ?? { status: status.toLowerCase(), count: 0, amount: 0 };
+
+    const completed = findStatus('completed');
+    const cancelled = findStatus('cancelled');
+    const returned = findStatus('returned');
+    const refunded = findStatus('refunded');
+    const damaged = findStatus('damaged');
+    const unpaid = findStatus('unpaid');
+    const recovered = findStatus('recovered');
+
+    this.ledgerCompletedQty.set(Number(completed.count || 0));
+    this.ledgerCancelQty.set(Number(cancelled.count || 0));
+    this.ledgerReturnQty.set(Number(returned.count || 0));
+    this.ledgerReturnAmount.set(Number(returned.amount || 0));
+    this.ledgerRefundQty.set(Number(refunded.count || 0));
+    this.ledgerRefundAmount.set(Number(refunded.amount || 0));
+    this.ledgerDamageQty.set(Number(damaged.count || 0));
+    this.ledgerDamageAmount.set(Number(damaged.amount || 0));
+    this.ledgerUnpaidQty.set(Number(unpaid.count || 0));
+    this.ledgerUnpaidAmount.set(Number(unpaid.amount || 0));
+    this.ledgerRecoveredQty.set(Number(recovered.count || 0));
+    this.ledgerRecoveredAmount.set(Number(recovered.amount || 0));
+
+    const computedRevenue =
+      Number(completed.amount || 0)
+      - Number(refunded.amount || 0)
+      - Number(unpaid.amount || 0)
+      + Number(recovered.amount || 0);
+
+    this.ledgerTotalRevenue.set(Math.max(0, computedRevenue));
+  }
+
   private async loadAnalyticsData(startDate: Date, endDate: Date): Promise<void> {
     // Load analytics data for the given date range and keep the full-page
     // loading overlay visible until every important fetch has completed.
     this.isLoading.set(true);
+    console.log('📊 [Overview] loadAnalyticsData started for period:', this.selectedPeriod(), 'from', startDate, 'to', endDate);
 
     try {
       await this.loadCurrentDateData(startDate, endDate);
@@ -2345,18 +2411,33 @@ export class OverviewComponent implements OnInit {
       const comparisonStart = new Date(comparisonEnd);
       comparisonStart.setDate(comparisonStart.getDate() - periodLength);
       await this.fetchBigQueryRevenue(startDate, endDate, comparisonStart, comparisonEnd);
+      
       const storeId = this.selectedStoreId() || this.authService.getCurrentPermission()?.storeId || '';
+      console.log('📊 [Overview] storeId for summary:', storeId);
+      
       if (storeId) {
         try {
+          console.log('💰 [Overview] Fetching sales summary totals...');
           const summary = await this.bigQueryService.getSalesSummaryTotals(storeId, startDate, endDate);
+          console.log('✅ [Overview] Sales summary received:', summary);
           this.salesSummary.set(summary ?? { totalSales: 0, totalOrders: 0, totalItems: 0 });
-        } catch {
+
+          console.log('📊 [Overview] Fetching status breakdown...');
+          const breakdown = await this.bigQueryService.getSalesDashboardStatusBreakdown(storeId, startDate, endDate);
+          console.log('✅ [Overview] Status breakdown received:', breakdown);
+          this.applyStatusBreakdownToLedger(breakdown);
+        } catch (err) {
+          console.error('❌ [Overview] Error fetching sales summary or status breakdown:', err);
           this.salesSummary.set({ totalSales: 0, totalOrders: 0, totalItems: 0 });
+          this.statusBreakdown.set([]);
         }
+      } else {
+        console.warn('⚠️ [Overview] No storeId available for summary');
       }
     } catch (err) {
-      console.error('Error loading analytics data:', err);
+      console.error('❌ [Overview] Error loading analytics data:', err);
     } finally {
+      console.log('📊 [Overview] loadAnalyticsData completed');
       this.isLoading.set(false);
     }
   }

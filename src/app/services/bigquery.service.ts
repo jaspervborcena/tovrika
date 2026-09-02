@@ -119,39 +119,50 @@ export class BigQueryService {
     const token = await currentUser?.getIdToken?.();
 
     if (!token || !endpoint || !storeId || storeId === 'all') {
+      console.warn('❌ getSalesSummaryTotals - Missing token, endpoint, storeId, or storeId is "all"');
       return { totalSales: 0, totalOrders: 0, totalItems: 0 };
     }
 
     const params = buildBigQueryRequestParams(storeId, from, to, includeAllStatus);
+    const urlString = `${endpoint}?${params.toString()}`;
+    console.log('💰 [Revenue API Call] GET', urlString);
 
-    const response = await fetch(`${endpoint}?${params.toString()}`, {
+    const response = await fetch(urlString, {
       headers: { Authorization: `Bearer ${token}` }
     });
 
     if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`❌ BigQuery sales summary totals request failed: ${response.status}`, errorText);
       throw new Error(`BigQuery sales summary totals request failed: ${response.status}`);
     }
 
     const payload = await response.json();
+    console.log('📦 [Revenue API Response]', payload);
+
     const totalSales = this.readNumericValue(payload, [
       'total_sales', 'totalSales', 'totalRevenue', 'total_revenue', 'revenue',
-      'totalAmount', 'total_amount', 'grossAmount', 'gross_amount'
+      'totalAmount', 'total_amount', 'grossAmount', 'gross_amount', 'amount'
     ]);
     const totalOrders = this.readNumericValue(payload, [
-      'count', 'total_orders', 'totalOrders', 'orders_count', 'orderCount'
+      'count', 'total_orders', 'totalOrders', 'orders_count', 'orderCount', 'order_count'
     ]);
     const totalItems = this.readNumericValue(payload, [
       'total_items', 'totalItems', 'items_count', 'itemCount', 'quantity', 'total_quantity'
     ]);
 
-    return {
+    const result = {
       totalSales: Number(totalSales ?? 0),
       totalOrders: Number(totalOrders ?? 0),
       totalItems: Number(totalItems ?? 0)
     };
+
+    console.log('✅ [Revenue Extracted]', result);
+    return result;
   }
 
   async getSalesDashboardOrders(storeId: string, from: Date, to: Date, includeAllStatus = false): Promise<Order[]> {
+    console.log('📦 [Orders API] Fetching orders for storeId:', storeId);
     const rows = await this.fetchBigQueryRows<any>(
       environment.api?.ordersApi || environment.api?.directOrdersApi || environment.api?.salesSummaryApi,
       storeId,
@@ -161,7 +172,9 @@ export class BigQueryService {
       includeAllStatus
     );
 
-    return (rows || []).map((order: any) => this.transformApiOrder(order));
+    const orders = (rows || []).map((order: any) => this.transformApiOrder(order));
+    console.log('✅ [Orders API Response] Received', orders.length, 'orders');
+    return orders;
   }
 
   async getSalesDashboardAdjustments(storeId: string, from: Date, to: Date, includeAllStatus = false): Promise<any[]> {
@@ -292,30 +305,69 @@ export class BigQueryService {
     const currentUser = this.authService.getCurrentUser() as any;
     const token = await currentUser?.getIdToken?.();
 
-    if (!token || !endpoint || !storeId || storeId === 'all') return [];
+    if (!token || !endpoint || !storeId || storeId === 'all') {
+      console.warn('❌ fetchBigQueryRows - Missing token, endpoint, storeId, or storeId is "all"');
+      return [];
+    }
 
     const params = buildBigQueryRequestParams(storeId, from, to, includeAllStatus);
+    const urlString = `${endpoint}?${params.toString()}`;
+    console.log('🌐 [BigQuery API Call]', urlString.split('?')[0], '| Params:', params.toString());
 
-    const response = await fetch(`${endpoint}?${params.toString()}`, {
+    const response = await fetch(urlString, {
       headers: { Authorization: `Bearer ${token}` }
     });
+
     if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`❌ BigQuery dashboard rows request failed: ${response.status}`, errorText);
       throw new Error(`BigQuery dashboard rows request failed: ${response.status}`);
     }
 
     const payload = await response.json();
-    if (Array.isArray(payload)) return payload as T[];
-    if (payload && typeof payload === 'object') {
-      for (const key of keys) {
-        const value = payload[key];
-        if (Array.isArray(value)) return value as T[];
+    console.log('📋 [BigQuery Response]', payload);
+
+    const foundArray = this.findNestedArray(payload, keys);
+    if (foundArray) {
+      console.log('✅ [BigQuery] Found nested array in response, returning', foundArray.length, 'items');
+      return foundArray as T[];
+    }
+
+    console.warn('⚠️ [BigQuery] No array found in response');
+    return [];
+  }
+
+  private findNestedArray(value: any, preferredKeys: string[]): any[] | null {
+    if (Array.isArray(value)) {
+      return value;
+    }
+
+    if (!value || typeof value !== 'object') {
+      return null;
+    }
+
+    const directKeys = [...preferredKeys, 'data', 'result', 'rows', 'orders', 'adjustments', 'customers', 'statusBreakdown', 'statuses'];
+
+    for (const key of directKeys) {
+      const nested = value[key];
+      if (Array.isArray(nested)) {
+        return nested;
       }
-      for (const key of ['data', 'result', 'rows', 'orders', 'adjustments', 'customers', 'statusBreakdown']) {
-        const value = payload[key];
-        if (Array.isArray(value)) return value as T[];
+
+      const found = this.findNestedArray(nested, preferredKeys);
+      if (found) {
+        return found;
       }
     }
-    return [];
+
+    for (const nestedValue of Object.values(value)) {
+      const found = this.findNestedArray(nestedValue, preferredKeys);
+      if (found) {
+        return found;
+      }
+    }
+
+    return null;
   }
 
   private transformApiOrder(apiOrder: any): Order {
