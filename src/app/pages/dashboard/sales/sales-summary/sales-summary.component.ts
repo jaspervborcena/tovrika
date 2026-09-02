@@ -2298,16 +2298,16 @@ export class SalesSummaryComponent implements OnInit {
    * Determines which data source will be used based on date range
    */
   async loadSalesData(): Promise<void> {
-    console.log('📌 loadSalesData() called');
+    console.log('� [SalesSummary] loadSalesData() called for period:', this.selectedPeriod());
     this.isLoading.set(true);
 
     try {
       // Use selected store ID or get from permission
       const storeId = this.selectedStoreId() || this.authService.getCurrentPermission()?.storeId;
       const companyId = this.authService.getCurrentPermission()?.companyId;
-      console.log('📌 Store ID:', storeId, 'Company ID:', companyId);
+      console.log('📊 [SalesSummary] Store ID:', storeId, '| Company ID:', companyId);
       if (!storeId || !companyId) {
-        console.error('❌ No storeId or companyId found - cannot load data');
+        console.error('❌ [SalesSummary] No storeId or companyId found - cannot load data');
         this.orders.set([]);
         this.dataSource.set(null);
         this.totalTrackedItems.set(0);
@@ -2317,41 +2317,43 @@ export class SalesSummaryComponent implements OnInit {
 
       // Use UTC midnight range for local day to avoid timezone issues
       const { start: startDate, end: endDate } = this.getUTCMidnightRangeForLocalDate(this.fromDate, this.toDate);
-      console.log('📌 Philippine date input - from:', this.fromDate, 'to:', this.toDate);
-      console.log('📌 Converted to UTC - start:', startDate.toISOString(), 'end:', endDate.toISOString());
-      console.log('📌 API will receive dates (YYYYMMDD format) - from:', startDate.toISOString().split('T')[0].replace(/-/g, ''), 'to:', endDate.toISOString().split('T')[0].replace(/-/g, ''));
+      console.log('📊 [SalesSummary] Local date input - from:', this.fromDate, 'to:', this.toDate);
+      console.log('📊 [SalesSummary] UTC conversion - start:', startDate.toISOString(), 'end:', endDate.toISOString());
+      const fromYYYYMMDD = startDate.toISOString().split('T')[0].replace(/-/g, '');
+      const toYYYYMMDD = endDate.toISOString().split('T')[0].replace(/-/g, '');
+      console.log('📊 [SalesSummary] API params - from:', fromYYYYMMDD, 'to:', toYYYYMMDD);
 
       // Dashboard sales data must come from the BigQuery Cloud Functions, not Firestore.
       this.dataSource.set('api');
-      console.log('📌 Data source set to API');
+      console.log('📊 [SalesSummary] Data source set to API');
 
       try {
-        console.log('📌 Fetching summary totals from BigQuery...');
+        console.log('💰 [SalesSummary] Fetching summary totals from BigQuery...');
         const summaryTotals = await this.bigQueryService.getSalesSummaryTotals(
           storeId,
           startDate,
           endDate,
           this.includeAllStatuses()
         );
-        console.log('✅ Summary totals received:', summaryTotals);
+        console.log('✅ [SalesSummary] Summary totals received:', summaryTotals);
         this.summaryTotals.set(summaryTotals);
       } catch (e) {
-        console.error('❌ BigQuery summary totals failed:', e);
+        console.error('❌ [SalesSummary] BigQuery summary totals failed:', e);
         this.summaryTotals.set({ totalSales: 0, totalOrders: 0, totalItems: 0 });
       }
 
       let orders: Order[] = [];
       try {
-        console.log('📌 Fetching orders from BigQuery...');
+        console.log('📦 [SalesSummary] Fetching orders from BigQuery...');
         orders = await this.bigQueryService.getSalesDashboardOrders(
           storeId,
           startDate,
           endDate,
           this.includeAllStatuses()
         );
-        console.log('✅ Orders received:', orders.length, 'orders');
+        console.log('✅ [SalesSummary] Orders received:', orders.length, 'orders');
       } catch (e) {
-        console.error('❌ BigQuery sales query failed:', e);
+        console.error('❌ [SalesSummary] BigQuery sales query failed:', e);
         orders = [];
       }
 
