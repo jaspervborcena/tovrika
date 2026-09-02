@@ -2,7 +2,7 @@ import { Component, signal, computed, inject, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { OrderService } from '../../../../services/order.service';
-import { BigQueryService } from '../../../../services/bigquery.service';
+import { BigQueryService, convertPhilippineDateRangeToUtc } from '../../../../services/bigquery.service';
 import { AuthService } from '../../../../services/auth.service';
 import { StoreService, Store, dedupeStoresForDropdown, formatStoreDisplayName } from '../../../../services/store.service';
 import { Order as PosOrder, OrderItem } from '../../../../interfaces/pos.interface';
@@ -1849,18 +1849,12 @@ type Order = OrderDisplay;
 export class SalesSummaryComponent implements OnInit {
 
         /**
-         * Given yyyy-mm-dd strings, returns UTC midnight range for Firestore queries (treats input as UTC date, not local)
+         * Given yyyy-mm-dd strings in device's LOCAL time, returns UTC midnight range for Firestore queries
+         * Automatically detects device timezone (Philippines, US, England, etc.) and converts to UTC
          */
         private getUTCMidnightRangeForLocalDate(fromDateStr: string, toDateStr: string): { start: Date, end: Date } {
-          // Parse as UTC date (not local)
-          const fromParts = fromDateStr.split('-').map(Number);
-          const toParts = toDateStr.split('-').map(Number);
-          // JS Date.UTC: year, monthIndex, day, hour, min, sec, ms
-          // const start = new Date(Date.UTC(fromParts[0], fromParts[1] - 1, fromParts[2], 0, 0, 0, 0));
-          // const end = new Date(Date.UTC(toParts[0], toParts[1] - 1, toParts[2], 23, 59, 59, 999));
-         const start = new Date(this.fromDate + 'T00:00:00');
-      const end = new Date(this.toDate + 'T23:59:59.999');
-          return { start, end };
+          // Convert from device's local time to UTC (works for any timezone)
+          return convertPhilippineDateRangeToUtc(fromDateStr, toDateStr);
         }
       exportHover = false;
       exporting = signal(false);
@@ -2323,7 +2317,9 @@ export class SalesSummaryComponent implements OnInit {
 
       // Use UTC midnight range for local day to avoid timezone issues
       const { start: startDate, end: endDate } = this.getUTCMidnightRangeForLocalDate(this.fromDate, this.toDate);
-      console.log('📌 Date range - start:', startDate, 'end:', endDate);
+      console.log('📌 Philippine date input - from:', this.fromDate, 'to:', this.toDate);
+      console.log('📌 Converted to UTC - start:', startDate.toISOString(), 'end:', endDate.toISOString());
+      console.log('📌 API will receive dates (YYYYMMDD format) - from:', startDate.toISOString().split('T')[0].replace(/-/g, ''), 'to:', endDate.toISOString().split('T')[0].replace(/-/g, ''));
 
       // Dashboard sales data must come from the BigQuery Cloud Functions, not Firestore.
       this.dataSource.set('api');

@@ -4,6 +4,64 @@ import { LoggerService } from '../core/services/logger.service';
 import { environment } from '../../environments/environment';
 import { Order } from '../interfaces/pos.interface';
 
+/**
+ * Detects the device's timezone and returns offset info
+ * @returns Object with timezone offset in hours and timezone name
+ */
+export function getDeviceTimezoneInfo(): { offsetHours: number; offsetMinutes: number; name: string } {
+  const now = new Date();
+  const offsetMinutes = now.getTimezoneOffset();
+  const offsetHours = -offsetMinutes / 60;  // Negative because getTimezoneOffset returns west as positive
+  
+  // Get timezone name using Intl API
+  const timeZoneName = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  
+  return {
+    offsetHours,
+    offsetMinutes,
+    name: timeZoneName
+  };
+}
+
+/**
+ * Converts a date string from device's LOCAL time to UTC
+ * Automatically detects the user's timezone (Philippines, US, England, etc.)
+ * @param dateStr Date string in format YYYY-MM-DD (interpreted as device's local time)
+ * @returns Date object representing the UTC equivalent
+ */
+export function convertLocalToUtc(dateStr: string): Date {
+  const parts = dateStr.split('-').map(Number);
+  // Create date in device's LOCAL time (this is key!)
+  // The Date constructor automatically handles timezone conversion
+  const localDate = new Date(parts[0], parts[1] - 1, parts[2], 0, 0, 0, 0);
+  return localDate;
+}
+
+/**
+ * Converts a date range from device's LOCAL time to UTC
+ * Works automatically for any timezone (Philippines UTC+8, US UTC-5, UK UTC+0, etc.)
+ * @param fromDateStr Start date in format YYYY-MM-DD (device's local time)
+ * @param toDateStr End date in format YYYY-MM-DD (device's local time)
+ * @returns Object with start and end dates in UTC
+ */
+export function convertPhilippineDateRangeToUtc(fromDateStr: string, toDateStr: string): { start: Date; end: Date } {
+  const fromParts = fromDateStr.split('-').map(Number);
+  const toParts = toDateStr.split('-').map(Number);
+  
+  // Create dates in device's LOCAL time
+  // The Date constructor automatically handles timezone conversion internally
+  const start = new Date(fromParts[0], fromParts[1] - 1, fromParts[2], 0, 0, 0, 0);
+  const end = new Date(toParts[0], toParts[1] - 1, toParts[2], 23, 59, 59, 999);
+  
+  // Console log for debugging
+  const tzInfo = getDeviceTimezoneInfo();
+  console.log(`🌍 Device Timezone: ${tzInfo.name} (UTC${tzInfo.offsetHours >= 0 ? '+' : ''}${tzInfo.offsetHours})`);
+  console.log(`📅 Local dates: ${fromDateStr} to ${toDateStr}`);
+  console.log(`🔄 UTC conversion: ${start.toISOString()} to ${end.toISOString()}`);
+  
+  return { start, end };
+}
+
 export function buildBigQueryRequestParams(
   storeId: string,
   from: Date,
@@ -19,7 +77,11 @@ export function buildBigQueryRequestParams(
 }
 
 function formatDateForApi(date: Date): string {
-  const dateStr = date.toISOString().split('T')[0];
+  // Ensure date is converted to UTC before formatting
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(date.getUTCDate()).padStart(2, '0');
+  const dateStr = `${year}-${month}-${day}`;
   return dateStr.replace(/-/g, '');
 }
 
