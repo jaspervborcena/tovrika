@@ -6,7 +6,7 @@ import { ProductService } from '../../../services/product.service';
 import { Product } from '../../../interfaces/product.interface';
 import { Order } from '../../../interfaces/pos.interface';
 import { OrderService } from '../../../services/order.service';
-import { BigQueryService } from '../../../services/bigquery.service';
+import { BigQueryService, convertPhilippineDateRangeToUtc } from '../../../services/bigquery.service';
 import { AuthService } from '../../../services/auth.service';
 import { IndexedDBService } from '@app/core/services/indexeddb.service';
 import { ExpenseService } from '../../../services/expense.service';
@@ -1653,57 +1653,62 @@ export class OverviewComponent implements OnInit {
     const period = this.selectedPeriod();
     const now = new Date();
     
-    let start: Date;
-    let end: Date;
+    let dateFromStr: string;
+    let dateToStr: string;
     
     if (period === 'today') {
-      start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
-      end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+      dateFromStr = this.formatDateAsString(now);
+      dateToStr = this.formatDateAsString(now);
     } else if (period === 'yesterday') {
       const yesterday = new Date(now);
       yesterday.setDate(now.getDate() - 1);
-      start = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate(), 0, 0, 0, 0);
-      end = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate(), 23, 59, 59, 999);
+      dateFromStr = this.formatDateAsString(yesterday);
+      dateToStr = this.formatDateAsString(yesterday);
     } else if (period === 'this_week') {
       const nowWeekDay = now.getDay();
       const mondayOffset = (nowWeekDay + 6) % 7;
-      start = new Date(now);
-      start.setDate(now.getDate() - mondayOffset);
-      start.setHours(0, 0, 0, 0);
-      end = new Date(start);
-      end.setDate(start.getDate() + 6);
-      end.setHours(23, 59, 59, 999);
+      const weekStart = new Date(now);
+      weekStart.setDate(now.getDate() - mondayOffset);
+      const weekEnd = new Date(weekStart);
+      weekEnd.setDate(weekStart.getDate() + 6);
+      dateFromStr = this.formatDateAsString(weekStart);
+      dateToStr = this.formatDateAsString(weekEnd);
     } else if (period === 'previous_week') {
       const nowWeekDay = now.getDay();
       const mondayOffset = (nowWeekDay + 6) % 7;
       const currentWeekStart = new Date(now);
       currentWeekStart.setDate(now.getDate() - mondayOffset);
-      currentWeekStart.setHours(0, 0, 0, 0);
-      start = new Date(currentWeekStart);
-      start.setDate(currentWeekStart.getDate() - 7);
-      start.setHours(0, 0, 0, 0);
-      end = new Date(start);
-      end.setDate(start.getDate() + 6);
-      end.setHours(23, 59, 59, 999);
+      const prevWeekStart = new Date(currentWeekStart);
+      prevWeekStart.setDate(currentWeekStart.getDate() - 7);
+      const prevWeekEnd = new Date(prevWeekStart);
+      prevWeekEnd.setDate(prevWeekStart.getDate() + 6);
+      dateFromStr = this.formatDateAsString(prevWeekStart);
+      dateToStr = this.formatDateAsString(prevWeekEnd);
     } else if (period === 'this_month') {
-      start = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
-      end = new Date(now.getFullYear(), now.getMonth(), new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate(), 23, 59, 59, 999);
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+      const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+      dateFromStr = this.formatDateAsString(monthStart);
+      dateToStr = this.formatDateAsString(monthEnd);
     } else if (period === 'previous_month') {
-      const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-      start = new Date(prev.getFullYear(), prev.getMonth(), 1, 0, 0, 0, 0);
-      end = new Date(prev.getFullYear(), prev.getMonth(), new Date(prev.getFullYear(), prev.getMonth() + 1, 0).getDate(), 23, 59, 59, 999);
+      const prevMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const prevMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0);
+      dateFromStr = this.formatDateAsString(prevMonthStart);
+      dateToStr = this.formatDateAsString(prevMonthEnd);
     } else if (period === 'date_range') {
-      const from = this.dateFrom();
-      const to = this.dateTo();
-      if (from && to) {
-        start = new Date(from + 'T00:00:00');
-        end = new Date(to + 'T23:59:59.999');
-      } else {
-        return allOrders; // If no date range set, return all
-      }
+      dateFromStr = this.dateFrom() || '';
+      dateToStr = this.dateTo() || '';
     } else {
       return allOrders; // Fallback
     }
+    
+    if (!dateFromStr || !dateToStr) {
+      return allOrders;
+    }
+    
+    // Convert from device's local time to UTC (works for ANY timezone)
+    const range = convertPhilippineDateRangeToUtc(dateFromStr, dateToStr);
+    const start = range.start;
+    const end = range.end;
     
     // Filter orders by createdAt within the date range
     return allOrders.filter(o => {
@@ -1712,6 +1717,18 @@ export class OverviewComponent implements OnInit {
       return orderDate >= start && orderDate <= end;
     });
   });
+
+  /**
+   * Formats a Date object as YYYY-MM-DD string (local date)
+   * @param date Date object to format
+   * @returns Date string in YYYY-MM-DD format
+   */
+  private formatDateAsString(date: Date): string {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
   
   protected totalRevenue = computed(() => {
     const summary = this.salesSummary();
@@ -2234,52 +2251,60 @@ export class OverviewComponent implements OnInit {
     // where duplicate calls reset data while loading is in progress
     
     const now = new Date();
-    let start: Date | undefined;
-    let end: Date | undefined;
+    let dateFromStr: string | undefined;
+    let dateToStr: string | undefined;
+    
     if (period === 'today') {
-      const today = new Date();
-      start = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0, 0);
-      end = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999);
+      dateFromStr = this.formatDateAsString(now);
+      dateToStr = this.formatDateAsString(now);
     } else if (period === 'yesterday') {
-      const today = new Date();
-      const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1);
-      start = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate(), 0, 0, 0, 0);
-      end = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate(), 23, 59, 59, 999);
+      const yesterday = new Date(now);
+      yesterday.setDate(now.getDate() - 1);
+      dateFromStr = this.formatDateAsString(yesterday);
+      dateToStr = this.formatDateAsString(yesterday);
     } else if (period === 'this_week') {
       const nowWeekDay = now.getDay();
-      const mondayOffset = (nowWeekDay + 6) % 7; // Monday as first day of the week
-      start = new Date(now);
-      start.setDate(now.getDate() - mondayOffset);
-      start.setHours(0, 0, 0, 0);
-      end = new Date(start);
-      end.setDate(start.getDate() + 6);
-      end.setHours(23, 59, 59, 999);
+      const mondayOffset = (nowWeekDay + 6) % 7;
+      const weekStart = new Date(now);
+      weekStart.setDate(now.getDate() - mondayOffset);
+      const weekEnd = new Date(weekStart);
+      weekEnd.setDate(weekStart.getDate() + 6);
+      dateFromStr = this.formatDateAsString(weekStart);
+      dateToStr = this.formatDateAsString(weekEnd);
     } else if (period === 'previous_week') {
       const nowWeekDay = now.getDay();
       const mondayOffset = (nowWeekDay + 6) % 7;
       const currentWeekStart = new Date(now);
       currentWeekStart.setDate(now.getDate() - mondayOffset);
-      currentWeekStart.setHours(0, 0, 0, 0);
-      start = new Date(currentWeekStart);
-      start.setDate(currentWeekStart.getDate() - 7);
-      start.setHours(0, 0, 0, 0);
-      end = new Date(start);
-      end.setDate(start.getDate() + 6);
-      end.setHours(23, 59, 59, 999);
+      const prevWeekStart = new Date(currentWeekStart);
+      prevWeekStart.setDate(currentWeekStart.getDate() - 7);
+      const prevWeekEnd = new Date(prevWeekStart);
+      prevWeekEnd.setDate(prevWeekStart.getDate() + 6);
+      dateFromStr = this.formatDateAsString(prevWeekStart);
+      dateToStr = this.formatDateAsString(prevWeekEnd);
     } else if (period === 'this_month') {
-      start = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
-      end = new Date(now.getFullYear(), now.getMonth(), new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate(), 23, 59, 59, 999);
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+      const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+      dateFromStr = this.formatDateAsString(monthStart);
+      dateToStr = this.formatDateAsString(monthEnd);
     } else if (period === 'previous_month') {
-      const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-      start = new Date(prev.getFullYear(), prev.getMonth(), 1, 0, 0, 0, 0);
-      end = new Date(prev.getFullYear(), prev.getMonth(), new Date(prev.getFullYear(), prev.getMonth() + 1, 0).getDate(), 23, 59, 59, 999);
+      const prevMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const prevMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0);
+      dateFromStr = this.formatDateAsString(prevMonthStart);
+      dateToStr = this.formatDateAsString(prevMonthEnd);
     } else if (period === 'date_range') {
-      const from = this.dateFrom();
-      const to = this.dateTo();
-      if (from && to) {
-        start = new Date(from + 'T00:00:00');
-        end = new Date(to + 'T23:59:59.999');
-      }
+      dateFromStr = this.dateFrom() || undefined;
+      dateToStr = this.dateTo() || undefined;
+    }
+
+    // Convert from device's local time to UTC using timezone-aware conversion
+    let start: Date | undefined;
+    let end: Date | undefined;
+    
+    if (dateFromStr && dateToStr) {
+      const range = convertPhilippineDateRangeToUtc(dateFromStr, dateToStr);
+      start = range.start;
+      end = range.end;
     }
 
     // If we have a store selected, trigger analytics load
