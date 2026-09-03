@@ -1997,6 +1997,20 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
 
       console.log(`✅ Order status updated to ${targetStatus}`);
 
+      // Update ordersSellingTracking records to reflect the new status
+      if (targetStatus === 'completed' && !isRecovery) {
+        console.log('📊 Updating ordersSellingTracking records to completed...');
+        try {
+          const trackingResult = await this.ordersSellingTrackingService.markOrderTrackingCompleted(
+            orderData.id,
+            currentUser?.uid || 'system'
+          );
+          console.log('✅ OrdersSellingTracking records updated:', trackingResult);
+        } catch (trackingError) {
+          console.warn('⚠️ Failed to update ordersSellingTracking (non-critical):', trackingError);
+        }
+      }
+
       // Execute background operations (tracking, inventory, ledger) - only for non-recovery
       if (!isRecovery) {
         console.log('🔄 Executing background operations for existing order...');

@@ -1279,6 +1279,7 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
       companyId: string;
       storeId: string;
       orderId: string;
+      status: string;
       invoiceNumber?: string;
       cashierId: string;
       cashierEmail?: string;
@@ -1309,6 +1310,12 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
     const errors: Array<{ productId: string; error: any }> = [];
     let tracked = 0;
     let adjusted = 0;
+    const trackingStatus = (() => {
+      const raw = String(ctx.status || 'open').trim().toLowerCase();
+      return ['open', 'completed', 'unpaid', 'recovered', 'returned', 'refunded', 'damaged', 'cancelled'].includes(raw)
+        ? raw
+        : 'open';
+    })();
 
     let idx = 0;
     for (const it of items) {
@@ -1607,7 +1614,7 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
           createdAt: new Date(),
           createdBy: ctx.cashierId,
           uid: ctx.cashierId,
-          status: 'open',
+          status: trackingStatus,
 
           itemIndex: idx,
           orderDetailsId: (it as any).orderDetailsId || undefined,

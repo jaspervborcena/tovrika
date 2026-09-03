@@ -2342,8 +2342,7 @@ export class OverviewComponent implements OnInit {
         .replace(/^damage$/, 'damaged')
         .replace(/^damages$/, 'damaged')
         .replace(/^cancel$/, 'cancelled')
-        .replace(/^canceled$/, 'cancelled')
-        .replace(/^open$/, 'completed');
+        .replace(/^canceled$/, 'cancelled');
 
       normalized.push({
         status: canonicalStatus,

@@ -484,7 +484,7 @@ export class InvoiceSetupComponent implements OnInit {
       const testOrderData = {
         companyId: this.authService.getCurrentPermission()?.companyId || 'test-company',
         assignedCashierId: this.authService.getCurrentUser()?.uid || 'test-user',
-        status: 'paid',
+        status: 'completed',
         cashSale: true,
         soldTo: 'Test Customer',
         tin: '',
