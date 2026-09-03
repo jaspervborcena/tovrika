@@ -115,10 +115,23 @@ export class BigQueryService {
 
   async getSalesSummaryTotals(storeId: string, from: Date, to: Date, includeAllStatus = false): Promise<{ totalSales: number; totalOrders: number; totalItems: number }> {
     const endpoint = environment.api?.salesSummaryApi || environment.api?.salesRevenueApi;
+    await this.authService.waitForAuth();
     const token = await this.authService.getFirebaseIdToken(true);
 
-    if (!token || !endpoint || !storeId || storeId === 'all') {
-      console.warn('❌ getSalesSummaryTotals - Missing token, endpoint, storeId, or storeId is "all"');
+    if (!token) {
+      console.warn('❌ getSalesSummaryTotals - Missing token (user not authenticated or session expired)');
+      return { totalSales: 0, totalOrders: 0, totalItems: 0 };
+    }
+    if (!endpoint) {
+      console.warn('❌ getSalesSummaryTotals - Missing endpoint (API URL not configured)');
+      return { totalSales: 0, totalOrders: 0, totalItems: 0 };
+    }
+    if (!storeId) {
+      console.warn('❌ getSalesSummaryTotals - Missing storeId');
+      return { totalSales: 0, totalOrders: 0, totalItems: 0 };
+    }
+    if (storeId === 'all') {
+      console.warn('❌ getSalesSummaryTotals - storeId is "all" (not supported for BigQuery)');
       return { totalSales: 0, totalOrders: 0, totalItems: 0 };
     }
 
@@ -223,6 +236,7 @@ export class BigQueryService {
     keys: string[],
     includeAllStatus = false
   ): Promise<number | null> {
+    await this.authService.waitForAuth();
     const token = await this.authService.getFirebaseIdToken(true);
 
     if (!token || !endpoint || !storeId || storeId === 'all') return null;
@@ -306,6 +320,7 @@ export class BigQueryService {
     keys: string[],
     includeAllStatus = false
   ): Promise<T[]> {
+    await this.authService.waitForAuth();
     const token = await this.authService.getFirebaseIdToken(true);
 
     if (!token) {
