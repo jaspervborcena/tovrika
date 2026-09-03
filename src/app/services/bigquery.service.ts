@@ -82,6 +82,8 @@ export interface SalesOrdersSummary {
   totalSales: number;
 }
 
+const productionSalesOrdersApi = 'https://asia-east1-jasperpos-1dfd5.cloudfunctions.net/get_sales_orders_bq';
+
 function formatDateForApi(date: Date): string {
   // Ensure date is converted to UTC before formatting
   const year = date.getUTCFullYear();
@@ -188,7 +190,9 @@ export class BigQueryService {
   async getSalesDashboardOrders(storeId: string, from: Date, to: Date, includeAllStatus = false): Promise<Order[]> {
     console.log('📦 [Orders API] Fetching orders for storeId:', storeId);
     const rows = await this.fetchBigQueryRows<any>(
-      environment.api?.ordersApi || environment.api?.directOrdersApi || environment.api?.salesSummaryApi,
+      environment.production
+        ? productionSalesOrdersApi
+        : environment.api?.ordersApi || environment.api?.directOrdersApi || environment.api?.salesSummaryApi,
       storeId,
       from,
       to,
@@ -202,7 +206,9 @@ export class BigQueryService {
   }
 
   async getSalesDashboardOrderSummary(storeId: string, from: Date, to: Date, includeAllStatus = false): Promise<SalesOrdersSummary> {
-    const endpoint = environment.api?.ordersApi || environment.api?.directOrdersApi || environment.api?.salesSummaryApi;
+    const endpoint = environment.production
+      ? productionSalesOrdersApi
+      : environment.api?.ordersApi || environment.api?.directOrdersApi || environment.api?.salesSummaryApi;
     await this.authService.waitForAuth();
     const token = await this.authService.getFirebaseIdToken(true);
 
