@@ -2911,13 +2911,21 @@ export class OverviewComponent implements OnInit {
     }
 
     try {
-      const summary = await this.bigQueryService.getSalesSummaryTotals(storeId, startDate, endDate);
-      this.salesSummary.set(summary ?? { totalSales: 0, totalOrders: 0, totalItems: 0 });
-      this.ledgerTotalRevenue.set(Number(summary?.totalSales || 0));
-      this.ledgerTotalOrders.set(Number(summary?.totalOrders || 0));
-      this.ledgerOrderQty.set(Number(summary?.totalOrders || 0));
-      this.ledgerItemsQty.set(Number(summary?.totalItems || 0));
-      this.ledgerCompletedQty.set(Number(summary?.totalOrders || 0));
+      const [summary, ordersSummary] = await Promise.all([
+        this.bigQueryService.getSalesSummaryTotals(storeId, startDate, endDate),
+        this.bigQueryService.getSalesDashboardOrderSummary(storeId, startDate, endDate)
+      ]);
+      const mergedSummary = {
+        totalSales: Number(summary?.totalSales || 0),
+        totalOrders: Number(ordersSummary?.totalOrders || 0),
+        totalItems: Number(ordersSummary?.totalItems || 0)
+      };
+      this.salesSummary.set(mergedSummary);
+      this.ledgerTotalRevenue.set(mergedSummary.totalSales);
+      this.ledgerTotalOrders.set(mergedSummary.totalOrders);
+      this.ledgerOrderQty.set(mergedSummary.totalOrders);
+      this.ledgerItemsQty.set(mergedSummary.totalItems);
+      this.ledgerCompletedQty.set(mergedSummary.totalOrders);
     } catch (err) {
       console.warn('fetchLedgerTotalsForPeriod error:', err);
       this.salesSummary.set({ totalSales: 0, totalOrders: 0, totalItems: 0 });
