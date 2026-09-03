@@ -2416,27 +2416,38 @@ export class OverviewComponent implements OnInit {
       
       if (storeId) {
         try {
-          console.log('💰 [Overview] Fetching sales summary totals...');
-          const [summary, ordersSummary] = await Promise.all([
-            this.bigQueryService.getSalesSummaryTotals(storeId, startDate, endDate),
-            this.bigQueryService.getSalesDashboardOrderSummary(storeId, startDate, endDate)
-          ]);
+          console.log('📦 [Overview] Fetching orders summary totals...');
+          const ordersSummary = await this.bigQueryService.getSalesDashboardOrderSummary(storeId, startDate, endDate);
           const mergedSummary = {
-            totalSales: Number(summary?.totalSales || 0),
+            totalSales: Number(ordersSummary?.totalSales || 0),
             totalOrders: Number(ordersSummary?.totalOrders || 0),
             totalItems: Number(ordersSummary?.totalItems || 0)
           };
-          console.log('✅ [Overview] Sales summary received:', summary);
           console.log('✅ [Overview] Orders API summary received:', ordersSummary);
           this.salesSummary.set(mergedSummary);
+          this.ledgerTotalRevenue.set(mergedSummary.totalSales);
+          this.ledgerTotalOrders.set(mergedSummary.totalOrders);
+          this.ledgerOrderQty.set(mergedSummary.totalOrders);
+          this.ledgerItemsQty.set(mergedSummary.totalItems);
+          this.ledgerCompletedQty.set(mergedSummary.totalOrders);
 
           console.log('📊 [Overview] Fetching status breakdown...');
-          const breakdown = await this.bigQueryService.getSalesDashboardStatusBreakdown(storeId, startDate, endDate);
-          console.log('✅ [Overview] Status breakdown received:', breakdown);
-          this.applyStatusBreakdownToLedger(breakdown);
+          try {
+            const breakdown = await this.bigQueryService.getSalesDashboardStatusBreakdown(storeId, startDate, endDate);
+            console.log('✅ [Overview] Status breakdown received:', breakdown);
+            this.applyStatusBreakdownToLedger(breakdown);
+          } catch (statusError) {
+            console.error('❌ [Overview] Status breakdown API failed:', statusError);
+            this.statusBreakdown.set([]);
+          }
         } catch (err) {
-          console.error('❌ [Overview] Error fetching sales summary or status breakdown:', err);
+          console.error('❌ [Overview] Orders API summary failed:', err);
           this.salesSummary.set({ totalSales: 0, totalOrders: 0, totalItems: 0 });
+          this.ledgerTotalRevenue.set(0);
+          this.ledgerTotalOrders.set(0);
+          this.ledgerOrderQty.set(0);
+          this.ledgerItemsQty.set(0);
+          this.ledgerCompletedQty.set(0);
           this.statusBreakdown.set([]);
         }
       } else {
