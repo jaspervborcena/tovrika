@@ -43,7 +43,12 @@ describe('BigQueryService', () => {
     spyOn(window, 'fetch').and.resolveTo(new Response(JSON.stringify(payload), { status: 200 }));
 
     const summary = await service.getSalesSummaryTotals('store123', new Date('2025-04-01'), new Date('2025-04-30'));
-    expect(summary).toEqual({ totalSales: 12450.75, totalOrders: 45, totalItems: 0 });
+    expect(summary).toEqual({
+      totalSales: 12450.75,
+      totalOrders: 45,
+      totalItems: 0,
+      statusBreakdown: payload.result.statusBreakdown
+    });
 
     const statuses = await service.getSalesDashboardStatusBreakdown('store123', new Date('2025-04-01'), new Date('2025-04-30'));
     expect(statuses).toEqual(payload.result.statusBreakdown);
