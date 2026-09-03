@@ -485,7 +485,7 @@ export class PosService {
         assignedCashierId: user.uid,
         assignedCashierEmail: user.email || 'Unknown Cashier',
         assignedCashierName: user.displayName || user.email || 'Unknown Cashier',
-        status: 'paid',
+        status: 'completed',
 
         // Customer Information
         cashSale: this.salesTypeCashSignal(),
@@ -561,7 +561,7 @@ export class PosService {
 
       // Update product inventory (this happens after successful order creation)
       try {
-        await this.updateProductInventory(cartItems, { orderId: invoiceResult.orderId!, invoiceNumber: invoiceResult.invoiceNumber! });
+        await this.updateProductInventory(cartItems, { orderId: invoiceResult.orderId!, invoiceNumber: invoiceResult.invoiceNumber!, status: orderData.status });
         console.log('✅ Product inventory updated successfully');
         
         // Mark tracking docs as completed for this paid order.
@@ -752,7 +752,8 @@ export class PosService {
                 result.invoiceNumber!,
                 cartSummary,
                 cartItems,
-                user.uid
+                user.uid,
+                orderData.status || 'completed'
               ).catch(err => console.warn('⚠️ Background operations error (non-critical):', err));
             }
           }).catch(() => {}); // If invoice also fails, no background ops needed
@@ -790,7 +791,8 @@ export class PosService {
           invoiceResult.invoiceNumber!,
           cartSummary,
           cartItems,
-          user.uid
+          user.uid,
+           orderData.status || 'completed'
         ).catch(err => {
           console.warn('⚠️ Background operations error (non-critical):', err);
         });
@@ -879,7 +881,8 @@ export class PosService {
         invoiceNumber,
         cartSummary,
         allItems,
-        user.uid
+        user.uid,
+        orderData['status'] || 'completed'
       );
 
       console.log('✅ Background operations completed for existing order:', orderId);
@@ -896,7 +899,8 @@ export class PosService {
     invoiceNumber: string,
     cartSummary: any,
     cartItems: CartItem[],
-    userId: string
+    userId: string,
+    status: string
   ): Promise<void> {
     console.log('🔄 Starting background operations for order:', orderId);
 
@@ -905,7 +909,7 @@ export class PosService {
     // 2. Update product inventory first (creates ordersSellingTracking docs),
     //    then mark them completed — must be sequential to avoid race condition.
     try {
-      await this.updateProductInventory(cartItems, { orderId, invoiceNumber });
+      await this.updateProductInventory(cartItems, { orderId, invoiceNumber, status });
       await this.markTrackingCompleted(orderId, userId);
     } catch (err) {
       console.warn('⚠️ Inventory update / tracking failed (non-critical):', err);
@@ -1017,7 +1021,7 @@ export class PosService {
         vatableSales: cartSummary.vatableSales,
         zeroRatedSales: cartSummary.zeroRatedSales,
         
-        status: 'paid',
+        status: 'completed',
         
         // BIR Required Fields (can be configured per company)
         atpOrOcn: 'ATP-001',
@@ -1046,7 +1050,7 @@ export class PosService {
 
       // Update product inventory (this happens after successful order creation)
       try {
-        await this.updateProductInventory(cartItems, { orderId: invoiceResult.orderId!, invoiceNumber: invoiceResult.invoiceNumber! });
+        await this.updateProductInventory(cartItems, { orderId: invoiceResult.orderId!, invoiceNumber: invoiceResult.invoiceNumber!, status: orderData.status });
         console.log('✅ Product inventory updated successfully');
         // Mark tracking docs as completed for this order (if any were created as pending)
         try {
@@ -1274,7 +1278,7 @@ export class PosService {
 
   private async updateProductInventory(
     cartItems: CartItem[],
-    context?: { orderId?: string; invoiceNumber?: string }
+    context?: { orderId?: string; invoiceNumber?: string; status?: string }
   ): Promise<void> {
     const mode = environment.inventory?.reconciliationMode || 'legacy';
 
@@ -1329,6 +1333,7 @@ export class PosService {
         companyId: company.id!,
         storeId,
         orderId: context?.orderId || 'unknown-order',
+        status: context?.status || 'completed',
         invoiceNumber: context?.invoiceNumber,
         cashierId: user.uid,
         cashierEmail: user.email || undefined,
