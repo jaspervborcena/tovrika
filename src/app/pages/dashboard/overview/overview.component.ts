@@ -2327,49 +2327,24 @@ export class OverviewComponent implements OnInit {
     this.loadData();
   }
 
-  private normalizeStatusBreakdown(statusBreakdown: any[] = []): Array<{ status: string; count: number; amount: number }> {
-    const normalized: Array<{ status: string; count: number; amount: number }> = [];
-
-    for (const item of statusBreakdown || []) {
-      if (!item || typeof item !== 'object') continue;
-      const rawStatus = String(item.status ?? item.name ?? '').trim();
-      if (!rawStatus) continue;
-
-      const status = rawStatus.toLowerCase();
-      const canonicalStatus = status
-        .replace(/^return$/, 'returned')
-        .replace(/^refund$/, 'refunded')
-        .replace(/^damage$/, 'damaged')
-        .replace(/^damages$/, 'damaged')
-        .replace(/^cancel$/, 'cancelled')
-        .replace(/^canceled$/, 'cancelled');
-
-      normalized.push({
-        status: canonicalStatus,
-        count: Number(item.count ?? item.qty ?? item.totalCount ?? 0),
-        amount: Number(item.amount ?? item.totalAmount ?? item.value ?? 0)
-      });
-    }
-
-    return normalized;
-  }
-
   private applyStatusBreakdownToLedger(statusBreakdown: any[] = []): void {
-    const normalized = this.normalizeStatusBreakdown(statusBreakdown);
-    this.statusBreakdown.set(normalized);
+    const findStatus = (status: string) => {
+      const aliases: Record<string, string[]> = {
+        returned: ['returned', 'return'],
+        refunded: ['refunded', 'refund'],
+        damaged: ['damaged', 'damage', 'damages'],
+        cancelled: ['cancelled', 'canceled', 'cancel']
+      };
+      const item = statusBreakdown.find((entry) => aliases[status]?.includes(String(entry?.status ?? entry?.name ?? '').trim().toLowerCase()) ?? false);
+      return item ?? { count: 0, amount: 0 };
+    };
 
-    const findStatus = (status: string) => normalized.find((item) => item.status === status.toLowerCase()) ?? { status: status.toLowerCase(), count: 0, amount: 0 };
-
-    const completed = findStatus('completed');
-    const cancelled = findStatus('cancelled');
     const returned = findStatus('returned');
     const refunded = findStatus('refunded');
     const damaged = findStatus('damaged');
     const unpaid = findStatus('unpaid');
     const recovered = findStatus('recovered');
 
-    this.ledgerCompletedQty.set(Number(completed.count || 0));
-    this.ledgerCancelQty.set(Number(cancelled.count || 0));
     this.ledgerReturnQty.set(Number(returned.count || 0));
     this.ledgerReturnAmount.set(Number(returned.amount || 0));
     this.ledgerRefundQty.set(Number(refunded.count || 0));
@@ -2380,14 +2355,6 @@ export class OverviewComponent implements OnInit {
     this.ledgerUnpaidAmount.set(Number(unpaid.amount || 0));
     this.ledgerRecoveredQty.set(Number(recovered.count || 0));
     this.ledgerRecoveredAmount.set(Number(recovered.amount || 0));
-
-    const computedRevenue =
-      Number(completed.amount || 0)
-      - Number(refunded.amount || 0)
-      - Number(unpaid.amount || 0)
-      + Number(recovered.amount || 0);
-
-    this.ledgerTotalRevenue.set(Math.max(0, computedRevenue));
   }
 
   private async loadAnalyticsData(startDate: Date, endDate: Date): Promise<void> {
@@ -2431,8 +2398,6 @@ export class OverviewComponent implements OnInit {
           this.ledgerItemsQty.set(mergedSummary.totalItems);
           this.ledgerCompletedQty.set(mergedSummary.totalOrders);
 
-          const summary = await this.bigQueryService.getSalesSummaryTotals(storeId, startDate, endDate);
-          this.applyStatusBreakdownToLedger(summary?.statusBreakdown || []);
         } catch (err) {
           console.error('❌ [Overview] Orders API summary failed:', err);
           this.salesSummary.set({ totalSales: 0, totalOrders: 0, totalItems: 0 });
@@ -2442,6 +2407,17 @@ export class OverviewComponent implements OnInit {
           this.ledgerItemsQty.set(0);
           this.ledgerCompletedQty.set(0);
           this.statusBreakdown.set([]);
+        }
+
+        try {
+          const summary = await this.bigQueryService.getSalesSummaryTotals(storeId, startDate, endDate);
+          const statusTotals = summary?.statusBreakdown || [];
+          this.statusBreakdown.set(statusTotals);
+          this.applyStatusBreakdownToLedger(statusTotals);
+        } catch (err) {
+          console.warn('⚠️ [Overview] Status summary query failed; keeping main totals:', err);
+          this.statusBreakdown.set([]);
+          this.applyStatusBreakdownToLedger([]);
         }
       } else {
         console.warn('⚠️ [Overview] No storeId available for summary');
@@ -2930,7 +2906,6 @@ export class OverviewComponent implements OnInit {
       this.ledgerOrderQty.set(mergedSummary.totalOrders);
       this.ledgerItemsQty.set(mergedSummary.totalItems);
       this.ledgerCompletedQty.set(mergedSummary.totalOrders);
-      this.applyStatusBreakdownToLedger(summary?.statusBreakdown || []);
     } catch (err) {
       console.warn('fetchLedgerTotalsForPeriod error:', err);
       this.salesSummary.set({ totalSales: 0, totalOrders: 0, totalItems: 0 });
