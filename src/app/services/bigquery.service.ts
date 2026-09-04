@@ -82,6 +82,10 @@ export interface SalesOrdersSummary {
   totalSales: number;
 }
 
+export interface SalesSummaryTotals extends SalesOrdersSummary {
+  statusBreakdown: Array<{ status: string; count: number; amount: number }>;
+}
+
 const productionSalesOrdersApi = 'https://asia-east1-jasperpos-1dfd5.cloudfunctions.net/get_sales_orders_bq';
 
 function formatDateForApi(date: Date): string {
@@ -121,26 +125,26 @@ export class BigQueryService {
     return Number(amount ?? 0);
   }
 
-  async getSalesSummaryTotals(storeId: string, from: Date, to: Date, includeAllStatus = false): Promise<{ totalSales: number; totalOrders: number; totalItems: number }> {
+  async getSalesSummaryTotals(storeId: string, from: Date, to: Date, includeAllStatus = false): Promise<SalesSummaryTotals> {
     const endpoint = environment.api?.salesSummaryApi || environment.api?.salesRevenueApi;
     await this.authService.waitForAuth();
     const token = await this.authService.getFirebaseIdToken(true);
 
     if (!token) {
       console.warn('❌ getSalesSummaryTotals - Missing token (user not authenticated or session expired)');
-      return { totalSales: 0, totalOrders: 0, totalItems: 0 };
+      return { totalSales: 0, totalOrders: 0, totalItems: 0, statusBreakdown: [] };
     }
     if (!endpoint) {
       console.warn('❌ getSalesSummaryTotals - Missing endpoint (API URL not configured)');
-      return { totalSales: 0, totalOrders: 0, totalItems: 0 };
+      return { totalSales: 0, totalOrders: 0, totalItems: 0, statusBreakdown: [] };
     }
     if (!storeId) {
       console.warn('❌ getSalesSummaryTotals - Missing storeId');
-      return { totalSales: 0, totalOrders: 0, totalItems: 0 };
+      return { totalSales: 0, totalOrders: 0, totalItems: 0, statusBreakdown: [] };
     }
     if (storeId === 'all') {
       console.warn('❌ getSalesSummaryTotals - storeId is "all" (not supported for BigQuery)');
-      return { totalSales: 0, totalOrders: 0, totalItems: 0 };
+      return { totalSales: 0, totalOrders: 0, totalItems: 0, statusBreakdown: [] };
     }
 
     const params = buildBigQueryRequestParams(storeId, from, to, includeAllStatus);
@@ -175,11 +179,15 @@ export class BigQueryService {
     const totalItems = this.readNumericValue(payload, [
       'total_items', 'totalItems', 'items_count', 'itemCount', 'quantity', 'total_quantity'
     ]);
+    const statusBreakdown = this.findNestedArray(payload, [
+      'statusBreakdown', 'status_breakdown', 'statuses'
+    ]) ?? [];
 
     const result = {
       totalSales: Number(totalSales ?? 0),
       totalOrders: Number(totalOrders ?? 0),
-      totalItems: Number(totalItems ?? 0)
+      totalItems: Number(totalItems ?? 0),
+      statusBreakdown: statusBreakdown as Array<{ status: string; count: number; amount: number }>
     };
 
     console.log('✅ [Revenue Extracted] totalSales:', totalSales, 'totalOrders:', totalOrders, 'totalItems:', totalItems);
@@ -258,14 +266,8 @@ export class BigQueryService {
   }
 
   async getSalesDashboardStatusBreakdown(storeId: string, from: Date, to: Date, includeAllStatus = false): Promise<any[]> {
-    return this.fetchBigQueryRows<any>(
-      environment.api?.salesStatusBreakdownApi,
-      storeId,
-      from,
-      to,
-      ['statusBreakdown', 'status_breakdown', 'statuses', 'status', 'data', 'rows', 'result'],
-      includeAllStatus
-    );
+    const summary = await this.getSalesSummaryTotals(storeId, from, to, includeAllStatus);
+    return summary.statusBreakdown;
   }
 
   private async fetchBigQueryMetric(
