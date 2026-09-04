@@ -66,14 +66,17 @@ export function buildBigQueryRequestParams(
   storeId: string,
   from: Date,
   to: Date,
-  includeAllStatus = false
+  includeAllStatus?: boolean
 ): URLSearchParams {
-  return new URLSearchParams({
+  const params = new URLSearchParams({
     storeId,
     from: formatDateForApi(from),
-    to: formatDateForApi(to),
-    includeAllStatus: String(includeAllStatus)
+    to: formatDateForApi(to)
   });
+  if (includeAllStatus !== undefined) {
+    params.set('includeAllStatus', String(includeAllStatus));
+  }
+  return params;
 }
 
 export interface SalesOrdersSummary {
@@ -89,10 +92,10 @@ export interface SalesSummaryTotals extends SalesOrdersSummary {
 const productionSalesOrdersApi = 'https://asia-east1-jasperpos-1dfd5.cloudfunctions.net/get_sales_orders_bq';
 
 function formatDateForApi(date: Date): string {
-  // Ensure date is converted to UTC before formatting
-  const year = date.getUTCFullYear();
-  const month = String(date.getUTCMonth() + 1).padStart(2, '0');
-  const day = String(date.getUTCDate()).padStart(2, '0');
+  // API dates represent the user's local calendar day, not the UTC instant.
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
   const dateStr = `${year}-${month}-${day}`;
   return dateStr.replace(/-/g, '');
 }
@@ -104,13 +107,13 @@ export class BigQueryService {
   private authService = inject(AuthService);
   private logger = inject(LoggerService);
 
-  async getSalesSummaryRevenue(storeId: string, from: Date, to: Date, includeAllStatus = false): Promise<number | null> {
+  async getSalesSummaryRevenue(storeId: string, from: Date, to: Date): Promise<number | null> {
     const endpoint = environment.api?.salesSummaryApi || environment.api?.salesRevenueApi;
     return this.fetchBigQueryMetric(endpoint, storeId, from, to, [
       'totalRevenue', 'total_revenue', 'revenue', 'totalSales', 'total_sales',
       'totalAmount', 'total_amount', 'netAmount', 'net_amount', 'grossAmount', 'gross_amount',
       'total', 'amount', 'sales'
-    ], includeAllStatus);
+    ]);
   }
 
   async getSalesDashboardRevenue(storeId: string, from: Date, to: Date, includeAllStatus = false): Promise<number> {
@@ -125,7 +128,7 @@ export class BigQueryService {
     return Number(amount ?? 0);
   }
 
-  async getSalesSummaryTotals(storeId: string, from: Date, to: Date, includeAllStatus = false): Promise<SalesSummaryTotals> {
+  async getSalesSummaryTotals(storeId: string, from: Date, to: Date): Promise<SalesSummaryTotals> {
     const endpoint = environment.api?.salesSummaryApi || environment.api?.salesRevenueApi;
     await this.authService.waitForAuth();
     const token = await this.authService.getFirebaseIdToken(true);
@@ -147,7 +150,7 @@ export class BigQueryService {
       return { totalSales: 0, totalOrders: 0, totalItems: 0, statusBreakdown: [] };
     }
 
-    const params = buildBigQueryRequestParams(storeId, from, to, includeAllStatus);
+    const params = buildBigQueryRequestParams(storeId, from, to);
     const urlString = `${endpoint}?${params.toString()}`;
     console.log('💰 [Revenue API Call] GET', urlString);
 
@@ -265,8 +268,8 @@ export class BigQueryService {
     );
   }
 
-  async getSalesDashboardStatusBreakdown(storeId: string, from: Date, to: Date, includeAllStatus = false): Promise<any[]> {
-    const summary = await this.getSalesSummaryTotals(storeId, from, to, includeAllStatus);
+  async getSalesDashboardStatusBreakdown(storeId: string, from: Date, to: Date): Promise<any[]> {
+    const summary = await this.getSalesSummaryTotals(storeId, from, to);
     return summary.statusBreakdown;
   }
 
@@ -276,7 +279,7 @@ export class BigQueryService {
     from: Date,
     to: Date,
     keys: string[],
-    includeAllStatus = false
+    includeAllStatus?: boolean
   ): Promise<number | null> {
     await this.authService.waitForAuth();
     const token = await this.authService.getFirebaseIdToken(true);
@@ -360,7 +363,7 @@ export class BigQueryService {
     from: Date,
     to: Date,
     keys: string[],
-    includeAllStatus = false
+    includeAllStatus?: boolean
   ): Promise<T[]> {
     await this.authService.waitForAuth();
     const token = await this.authService.getFirebaseIdToken(true);
