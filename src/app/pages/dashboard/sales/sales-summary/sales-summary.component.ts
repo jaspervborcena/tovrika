@@ -2332,8 +2332,7 @@ export class SalesSummaryComponent implements OnInit {
         const summaryTotals = await this.bigQueryService.getSalesSummaryTotals(
           storeId,
           startDate,
-          endDate,
-          this.includeAllStatuses()
+          endDate
         );
         console.log('✅ [SalesSummary] Summary totals received:', summaryTotals);
         this.summaryTotals.set(summaryTotals);
