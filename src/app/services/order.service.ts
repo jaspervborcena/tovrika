@@ -592,7 +592,7 @@ async updateOrderStatus(orderId: string, status: string, reason?: string): Promi
     await updateDoc(orderDocRef, updatePayload);
     // If we're online and the order was cancelled or returned, attempt a client-side transactional restock.
     // This is a best-effort attempt — the server-side Cloud Function still exists as authoritative.
-  if (navigator.onLine && (status === 'cancelled' || status === 'returned' || status === 'refunded' || status === 'damage' || status === 'damaged')) {
+  if (navigator.onLine && (status === 'cancelled' || status === 'returned' || status === 'refund' || status === 'refunded' || status === 'damage' || status === 'damaged')) {
   const currentUser = this.authService.getCurrentUser();
   const performedBy = currentUser?.uid || currentUser?.email || 'system';
 
@@ -614,9 +614,9 @@ async updateOrderStatus(orderId: string, status: string, reason?: string): Promi
       await this.ordersSellingTrackingService.markOrderTrackingCancelled(orderId, performedBy, reason);
     } else if (status === 'returned') {
       await this.ordersSellingTrackingService.markOrderTrackingReturned(orderId, performedBy, reason);
-    } else if (status === 'refunded') {
+    } else if (status === 'refund' || status === 'refunded') {
       await this.ordersSellingTrackingService.markOrderTrackingRefunded(orderId, performedBy, reason);
-    } else if (status === 'damage') {
+    } else if (status === 'damage' || status === 'damaged') {
       await this.ordersSellingTrackingService.markOrderTrackingDamaged(orderId, performedBy, reason);
     }
   } catch (e) {
@@ -629,8 +629,8 @@ async updateOrderStatus(orderId: string, status: string, reason?: string): Promi
   // Create ledger entry for cancelled/returned/refunded/damage statuses so accounting stays in sync
   try {
     console.log(`🔔 Starting ledger recording section for orderId=${orderId}, status=${status}, online=${navigator.onLine}`);
-    const map: any = { cancelled: 'cancelled', returned: 'returned', refunded: 'refunded', damage: 'damaged', damaged: 'damaged' };
-    if (['cancelled', 'returned', 'refunded', 'damage', 'damaged'].includes(status)) {
+    const map: any = { cancelled: 'cancelled', returned: 'returned', refund: 'refunded', refunded: 'refunded', damage: 'damaged', damaged: 'damaged' };
+    if (['cancelled', 'returned', 'refund', 'refunded', 'damage', 'damaged'].includes(status)) {
       console.log(`✅ Status ${status} is in the list, proceeding with ledger entry...`);
       // Prefer summing authoritative tracking documents created/updated for this order
       const mappedStatus = map[status] || status;

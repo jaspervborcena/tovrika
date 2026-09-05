@@ -376,13 +376,20 @@ async markOrderTrackingRefunded(orderId: string, refundedBy?: string, reason?: s
     // Fetch all tracking rows for the order and filter returned ones locally
     const q = query(collection(this.firestore, 'ordersSellingTracking'), where('orderId', '==', orderId));
     const snaps = await getDocs(q as any);
+    const hasReturnedRows = snaps.docs.some((snap: any) => {
+      const status = String(snap.data()?.status || '').toLowerCase();
+      return status === 'returned' || status === 'return';
+    });
 
     for (const s of snaps.docs) {
       const data: any = s.data() || {};
       const status = (data.status || '').toString().toLowerCase();
       console.log(`markOrderTrackingRefunded: found ${snaps.docs.length} tracking docs for order ${orderId}`);
       console.log(`markOrderTrackingRefunded: doc=${s.id} status=${status}`);
-      if (status !== 'returned' && status !== 'return') continue; // be lenient
+      const isRefundSource = hasReturnedRows
+        ? status === 'returned' || status === 'return'
+        : status === 'completed' || status === 'open';
+      if (!isRefundSource) continue;
       const product = this.productService.getProduct(data.productId);
 
       // Prepare timestamps appropriate for online vs offline storage
@@ -744,14 +751,20 @@ async markOrderTrackingDamaged(orderId: string, damagedBy?: string, reason?: str
     }
     const q = query(collection(this.firestore, 'ordersSellingTracking'), where('orderId', '==', orderId));
     const snaps = await getDocs(q as any);
+    const hasReturnedRows = snaps.docs.some((snap: any) => {
+      const status = String(snap.data()?.status || '').toLowerCase();
+      return status === 'returned' || status === 'return';
+    });
 
     console.log(`markOrderTrackingDamaged: found ${snaps.docs.length} tracking docs for order ${orderId}`);
     for (const s of snaps.docs) {
       const data: any = s.data() || {};
       const status = (data.status || '').toString().toLowerCase();
       console.log(`markOrderTrackingDamaged: doc=${s.id} status=${status}`);
-      // Only create damaged copies for returned items (same source as refunds)
-      if (status !== 'returned' && status !== 'return') continue;
+      const isDamageSource = hasReturnedRows
+        ? status === 'returned' || status === 'return'
+        : status === 'completed' || status === 'open';
+      if (!isDamageSource) continue;
 
       const onlineCreatedAt = new Date();
       const offlineCreatedAt = new Date();
