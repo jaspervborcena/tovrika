@@ -92,12 +92,14 @@ export interface SalesSummaryTotals extends SalesOrdersSummary {
 const productionSalesOrdersApi = 'https://asia-east1-jasperpos-1dfd5.cloudfunctions.net/get_sales_orders_bq';
 
 function formatDateForApi(date: Date): string {
-  // Build the ISO calendar date from device-local parts; Date#toISOString() would shift it to UTC.
+  // Preserve the device-local date and time; Date#toISOString() would shift both to UTC.
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');
   const day = String(date.getDate()).padStart(2, '0');
-  const localIsoDate = `${year}-${month}-${day}`;
-  return localIsoDate.replace(/-/g, '');
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  const seconds = String(date.getSeconds()).padStart(2, '0');
+  return `${year}${month}${day}${hours}${minutes}${seconds}`;
 }
 
 @Injectable({
