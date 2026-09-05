@@ -11,6 +11,7 @@ import { AuthService } from '../../../services/auth.service';
 import { IndexedDBService } from '@app/core/services/indexeddb.service';
 import { ExpenseService } from '../../../services/expense.service';
 import { ExpenseLog } from '../../../interfaces/expense-log.interface';
+import { LedgerService } from '../../../services/ledger.service';
 import { OrdersSellingTrackingService } from '../../../services/orders-selling-tracking.service';
 import { Firestore, collection, query, where, orderBy, limit, getDocs } from '@angular/fire/firestore';
 import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../shared/components/confirmation-dialog/confirmation-dialog.component';
@@ -1554,6 +1555,7 @@ export class OverviewComponent implements OnInit {
   private authService = inject(AuthService);
   private indexedDb = inject(IndexedDBService);
   private expenseService = inject(ExpenseService);
+  private ledgerService = inject(LedgerService);
   private ordersSellingTrackingService = inject(OrdersSellingTrackingService);
   private firestore = inject(Firestore);
 
@@ -2355,6 +2357,19 @@ export class OverviewComponent implements OnInit {
     this.ledgerRecoveredAmount.set(Number(recovered.amount || 0));
   }
 
+  private applyAdjustmentTotalsToCards(totals: Awaited<ReturnType<LedgerService['getAdjustmentTotals']>>): void {
+    this.ledgerReturnQty.set(Number(totals.returns.qty || 0));
+    this.ledgerReturnAmount.set(Number(totals.returns.amount || 0));
+    this.ledgerRefundQty.set(Number(totals.refunds.qty || 0));
+    this.ledgerRefundAmount.set(Number(totals.refunds.amount || 0));
+    this.ledgerDamageQty.set(Number(totals.damages.qty || 0));
+    this.ledgerDamageAmount.set(Number(totals.damages.amount || 0));
+    this.ledgerUnpaidQty.set(Number(totals.unpaid.qty || 0));
+    this.ledgerUnpaidAmount.set(Number(totals.unpaid.amount || 0));
+    this.ledgerRecoveredQty.set(Number(totals.recovered.qty || 0));
+    this.ledgerRecoveredAmount.set(Number(totals.recovered.amount || 0));
+  }
+
   private async loadAnalyticsData(startDate: Date, endDate: Date): Promise<void> {
     // Load analytics data for the given date range and keep the full-page
     // loading overlay visible until every important fetch has completed.
@@ -2377,6 +2392,7 @@ export class OverviewComponent implements OnInit {
       await this.fetchBigQueryRevenue(startDate, endDate, comparisonStart, comparisonEnd);
       
       const storeId = this.selectedStoreId() || this.authService.getCurrentPermission()?.storeId || '';
+      const companyId = this.authService.getCurrentPermission()?.companyId || '';
       console.log('📊 [Overview] storeId for summary:', storeId);
       
       if (storeId) {
@@ -2406,6 +2422,23 @@ export class OverviewComponent implements OnInit {
           this.ledgerItemsQty.set(0);
           this.ledgerCompletedQty.set(0);
           this.statusBreakdown.set([]);
+        }
+
+        if (companyId) {
+          try {
+            const adjustmentTotals = await this.ledgerService.getAdjustmentTotals(companyId, storeId, startDate, endDate);
+            this.applyAdjustmentTotalsToCards(adjustmentTotals);
+          } catch (err) {
+            console.warn('⚠️ [Overview] Ledger adjustment totals failed:', err);
+            this.applyAdjustmentTotalsToCards({
+              completed: { amount: 0, qty: 0 },
+              returns: { amount: 0, qty: 0 },
+              refunds: { amount: 0, qty: 0 },
+              damages: { amount: 0, qty: 0 },
+              unpaid: { amount: 0, qty: 0 },
+              recovered: { amount: 0, qty: 0 }
+            });
+          }
         }
 
       } else {
