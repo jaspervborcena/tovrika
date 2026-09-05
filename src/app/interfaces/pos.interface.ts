@@ -60,6 +60,7 @@ export interface Order {
   grossAmount: number;
   netAmount: number;
   totalAmount: number;
+  itemCount?: number;
   
   // BIR and Legal Requirements
   exemptionId?: string;

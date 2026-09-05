@@ -363,6 +363,7 @@ export class LedgerService {
     endDate: Date
   ): Promise<{
     completed: { amount: number; qty: number };
+    cancelled: { amount: number; qty: number };
     returns: { amount: number; qty: number };
     refunds: { amount: number; qty: number };
     damages: { amount: number; qty: number };
@@ -370,9 +371,10 @@ export class LedgerService {
     recovered: { amount: number; qty: number };
   }> {
     try {
-      const types = ['completed','returned', 'refunded', 'damaged', 'unpaid', 'recovered'];
+      const types = ['completed', 'cancelled', 'returned', 'refunded', 'damaged', 'unpaid', 'recovered'];
       const result = {
         completed: { amount: 0, qty: 0 },
+        cancelled: { amount: 0, qty: 0 },
         returns: { amount: 0, qty: 0 },
         refunds: { amount: 0, qty: 0 },
         damages: { amount: 0, qty: 0 },
@@ -421,6 +423,9 @@ export class LedgerService {
             if (et === 'completed') {
               result.completed.amount += amt;
               result.completed.qty += qty;
+            } else if (et === 'cancelled') {
+              result.cancelled.amount += amt;
+              result.cancelled.qty += qty;
             } else if (et === 'returned') {
               result.returns.amount += amt;
               result.returns.qty += qty;
@@ -452,6 +457,9 @@ export class LedgerService {
           if (et === 'completed') {
             result.completed.amount += amountSum;
             result.completed.qty += qtySum;
+          } else if (et === 'cancelled') {
+            result.cancelled.amount += amountSum;
+            result.cancelled.qty += qtySum;
           } else if (et === 'returned') {
             result.returns.amount += amountSum;
             result.returns.qty += qtySum;
@@ -479,6 +487,7 @@ export class LedgerService {
       console.warn('LedgerService.getAdjustmentTotals error', err);
       return {
         completed: { amount: 0, qty: 0 },
+        cancelled: { amount: 0, qty: 0 },
         returns: { amount: 0, qty: 0 },
         refunds: { amount: 0, qty: 0 },
         damages: { amount: 0, qty: 0 },
