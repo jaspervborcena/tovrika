@@ -22,8 +22,8 @@ describe('SalesSummary period helper', () => {
     const params = buildBigQueryRequestParams('store-1', new Date(2026, 7, 31, 0, 0, 0, 0), new Date(2026, 7, 31, 23, 59, 59, 999), true);
 
     expect(params.get('storeId')).toBe('store-1');
-    expect(params.get('from')).toBe('20260831');
-    expect(params.get('to')).toBe('20260831');
+    expect(params.get('from')).toBe('20260831000000');
+    expect(params.get('to')).toBe('20260831235959');
     expect(params.get('includeAllStatus')).toBe('true');
   });
 
@@ -32,8 +32,8 @@ describe('SalesSummary period helper', () => {
     const localDayEnd = new Date(2026, 7, 31, 23, 59, 59, 999);
     const params = buildBigQueryRequestParams('store-1', localRange, localDayEnd);
 
-    expect(params.get('from')).toBe('20260831');
-    expect(params.get('to')).toBe('20260831');
+    expect(params.get('from')).toBe('20260831000000');
+    expect(params.get('to')).toBe('20260831235959');
   });
 
   it('should omit includeAllStatus when not provided', () => {
