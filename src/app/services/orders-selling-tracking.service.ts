@@ -276,19 +276,24 @@ export class OrdersSellingTrackingService {
   async markOrderTrackingReturned(orderId: string, returnedBy?: string, reason?: string): Promise<{ updated: number; errors: any[] }> {
   const errors: any[] = [];
   let updated = 0;
+    const existingKeys = new Set<string>();
   try {
-      if (await this.hasTrackingStatus(orderId, 'returned')) {
-        console.log(`markOrderTrackingReturned: order ${orderId} is already returned; skipping duplicate`);
-        return { updated: 0, errors };
-      }
     const q = query(collection(this.firestore, 'ordersSellingTracking'), where('orderId', '==', orderId));
     const snaps = await getDocs(q as any);
+      snaps.docs.forEach((snap: any) => {
+        const data = snap.data() || {};
+        if (String(data.status || '').toLowerCase() === 'returned') {
+          existingKeys.add(`${String(data.invoiceNumber || orderId).trim()}|returned`);
+        }
+      });
     for (const s of snaps.docs) {
       const id = s.id;
       const data: any = s.data() || {};
       const product = this.productService.getProduct(data.productId);
       // If already returned, skip
       if (data.status === 'returned') continue;
+        const eventKey = `${String(data.invoiceNumber || orderId).trim()}|returned`;
+        if (existingKeys.has(eventKey)) continue;
 
       // Build a copy of the existing record but mark it as 'returned'.
       const onlineCreatedAt = new Date();
@@ -297,6 +302,7 @@ export class OrdersSellingTrackingService {
       const newDoc: any = {
         companyId: data.companyId || undefined,
         storeId: data.storeId || undefined,
+        invoiceNumber: data.invoiceNumber || undefined,
         batchNumber: data.batchNumber || 1,
         itemIndex: data.itemIndex ?? 0,
         orderDetailsId: data.orderDetailsId || undefined,
@@ -327,6 +333,7 @@ export class OrdersSellingTrackingService {
         // Use Firestore directly for automatic offline sync
         await setDoc(ref as any, payload as any);
         updated++;
+        existingKeys.add(eventKey);
       } catch (e) {
         console.error(`markOrderTrackingReturned: failed to create returned copy for ${id}`, e);
         console.warn('⚠️ Firestore will retry automatically when connection is restored');
@@ -349,10 +356,13 @@ export class OrdersSellingTrackingService {
           pd.data.orderId === orderId &&
           pd.data.status !== 'returned'
         ) {
+          const eventKey = `${String(pd.data.invoiceNumber || orderId).trim()}|returned`;
+          if (existingKeys.has(eventKey)) continue;
           const upd: any = { status: 'returned', updatedBy: returnedBy || pd.data.createdBy || 'system' };
           if (reason) upd.updateReason = reason;
           await this.offlineDocService.updateDocument('ordersSellingTracking', pd.id, upd);
           updated++;
+          existingKeys.add(eventKey);
         }
       } catch (e) {
         errors.push({ id: pd.id, error: e });
@@ -368,14 +378,17 @@ async markOrderTrackingRefunded(orderId: string, refundedBy?: string, reason?: s
   const errors: any[] = [];
   let created = 0;
   const createdIds: string[] = [];
+  const existingKeys = new Set<string>();
   try {
-    if (await this.hasTrackingStatus(orderId, 'refunded')) {
-      console.log(`markOrderTrackingRefunded: order ${orderId} is already refunded; skipping duplicate`);
-      return { created: 0, errors, createdIds };
-    }
     // Fetch all tracking rows for the order and filter returned ones locally
     const q = query(collection(this.firestore, 'ordersSellingTracking'), where('orderId', '==', orderId));
     const snaps = await getDocs(q as any);
+    snaps.docs.forEach((snap: any) => {
+      const data = snap.data() || {};
+      if (String(data.status || '').toLowerCase() === 'refunded') {
+        existingKeys.add(`${String(data.invoiceNumber || orderId).trim()}|refunded`);
+      }
+    });
     const hasReturnedRows = snaps.docs.some((snap: any) => {
       const status = String(snap.data()?.status || '').toLowerCase();
       return status === 'returned' || status === 'return';
@@ -390,6 +403,8 @@ async markOrderTrackingRefunded(orderId: string, refundedBy?: string, reason?: s
         ? status === 'returned' || status === 'return'
         : status === 'completed' || status === 'open';
       if (!isRefundSource) continue;
+      const eventKey = `${String(data.invoiceNumber || orderId).trim()}|refunded`;
+      if (existingKeys.has(eventKey)) continue;
       const product = this.productService.getProduct(data.productId);
 
       // Prepare timestamps appropriate for online vs offline storage
@@ -401,6 +416,7 @@ async markOrderTrackingRefunded(orderId: string, refundedBy?: string, reason?: s
         companyId: data.companyId || undefined,
         storeId: data.storeId || undefined,
         orderId: data.orderId || orderId,
+        invoiceNumber: data.invoiceNumber || undefined,
         batchNumber: data.batchNumber || 1,
         itemIndex: data.itemIndex ?? 0,
         orderDetailsId: data.orderDetailsId || undefined,
@@ -433,6 +449,7 @@ async markOrderTrackingRefunded(orderId: string, refundedBy?: string, reason?: s
           await setDoc(ref as any, payload as any);
           createdIds.push(ref.id);
           created++;
+          existingKeys.add(eventKey);
           console.log(`markOrderTrackingRefunded: success created=${created}, pushed id=${ref.id}`);
         } else {
           // Offline mode: create a new pending doc (use concrete dates)
@@ -464,10 +481,13 @@ async markOrderTrackingRefunded(orderId: string, refundedBy?: string, reason?: s
           pd.data.orderId === orderId &&
           pd.data.status === 'returned'
         ) {
+          const eventKey = `${String(pd.data.invoiceNumber || orderId).trim()}|refunded`;
+          if (existingKeys.has(eventKey)) continue;
           const newDoc: any = {
             companyId: pd.data.companyId || undefined,
             storeId: pd.data.storeId || undefined,
             orderId: pd.data.orderId || orderId,
+            invoiceNumber: pd.data.invoiceNumber || undefined,
             batchNumber: pd.data.batchNumber || 1,
             itemIndex: pd.data.itemIndex ?? 0,
             orderDetailsId: pd.data.orderDetailsId || undefined,
@@ -490,6 +510,7 @@ async markOrderTrackingRefunded(orderId: string, refundedBy?: string, reason?: s
           console.log(`Offline: creating NEW refunded doc for pending ${pd.id}, productId=${pd.data.productId}, qty=${pd.data.quantity}`);
           await this.offlineDocService.createDocument('ordersSellingTracking', payload);
           created++;
+          existingKeys.add(eventKey);
         }
       } catch (e) {
         console.error(`Failed to create refunded doc for pending ${pd.id}`, e);
