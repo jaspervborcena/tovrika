@@ -2129,8 +2129,6 @@ export class OverviewComponent implements OnInit {
     this.dateFrom.set(fromIso);
     this.dateTo.set(toIso);
     
-    this.loadData();
-
     // Re-fetch top products whenever the selected store changes
     effect(() => {
       const sid = this.selectedStoreId();
@@ -2383,23 +2381,24 @@ export class OverviewComponent implements OnInit {
       
       if (storeId) {
         try {
-          console.log('📦 [Overview] Fetching orders summary totals...');
-          const ordersSummary = await this.bigQueryService.getSalesDashboardOrderSummary(storeId, startDate, endDate);
+          console.log('💰 [Overview] Fetching sales summary totals...');
+          const summary = await this.bigQueryService.getSalesSummaryTotals(storeId, startDate, endDate);
           const mergedSummary = {
-            totalSales: Number(ordersSummary?.totalSales || 0),
-            totalOrders: Number(ordersSummary?.totalOrders || 0),
-            totalItems: Number(ordersSummary?.totalItems || 0)
+            totalSales: Number(summary?.totalSales || 0),
+            totalOrders: Number(summary?.totalOrders || 0),
+            totalItems: Number(summary?.totalItems || 0)
           };
-          console.log('✅ [Overview] Orders API summary received:', ordersSummary);
+          console.log('✅ [Overview] Sales summary totals received:', mergedSummary);
           this.salesSummary.set(mergedSummary);
           this.ledgerTotalRevenue.set(mergedSummary.totalSales);
           this.ledgerTotalOrders.set(mergedSummary.totalOrders);
           this.ledgerOrderQty.set(mergedSummary.totalOrders);
           this.ledgerItemsQty.set(mergedSummary.totalItems);
           this.ledgerCompletedQty.set(mergedSummary.totalOrders);
-
+          this.statusBreakdown.set(summary?.statusBreakdown || []);
+          this.applyStatusBreakdownToLedger(summary?.statusBreakdown || []);
         } catch (err) {
-          console.error('❌ [Overview] Orders API summary failed:', err);
+          console.error('❌ [Overview] Sales summary totals failed:', err);
           this.salesSummary.set({ totalSales: 0, totalOrders: 0, totalItems: 0 });
           this.ledgerTotalRevenue.set(0);
           this.ledgerTotalOrders.set(0);
@@ -2409,16 +2408,6 @@ export class OverviewComponent implements OnInit {
           this.statusBreakdown.set([]);
         }
 
-        try {
-          const summary = await this.bigQueryService.getSalesSummaryTotals(storeId, startDate, endDate);
-          const statusTotals = summary?.statusBreakdown || [];
-          this.statusBreakdown.set(statusTotals);
-          this.applyStatusBreakdownToLedger(statusTotals);
-        } catch (err) {
-          console.warn('⚠️ [Overview] Status summary query failed; keeping main totals:', err);
-          this.statusBreakdown.set([]);
-          this.applyStatusBreakdownToLedger([]);
-        }
       } else {
         console.warn('⚠️ [Overview] No storeId available for summary');
       }
