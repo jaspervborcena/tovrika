@@ -2358,10 +2358,10 @@ export class OverviewComponent implements OnInit {
     const findStatus = (status: string) => {
       const aliases: Record<string, string[]> = {
         completed: ['completed', 'complete', 'paid'],
-        returned: ['returned', 'return'],
-        refunded: ['refunded', 'refund'],
+        returned: ['returned', 'return', 'returns'],
+        refunded: ['refunded', 'refund', 'refunds'],
         damaged: ['damaged', 'damage', 'damages'],
-        cancelled: ['cancelled', 'canceled', 'cancel', 'void', 'voided'],
+        cancelled: ['cancelled', 'canceled', 'cancel', 'void', 'voided', 'cancellations'],
         unpaid: ['unpaid', 'open', 'pending'],
         recovered: ['recovered', 'paid_recovered']
       };
@@ -2377,7 +2377,7 @@ export class OverviewComponent implements OnInit {
     const unpaid = findStatus('unpaid');
     const recovered = findStatus('recovered');
 
-    const statusItemQty = (item: any) => Number(item.totalItems ?? item.items ?? item.count ?? 0);
+    const statusItemQty = (item: any) => Number(item.totalItems ?? item.items ?? item.itemCount ?? item.quantity ?? item.count ?? 0);
     this.ledgerCompletedQty.set(Number(completed.count || 0));
     this.ledgerCancelQty.set(statusItemQty(cancelled));
     this.ledgerCancelledQty.set(statusItemQty(cancelled));
@@ -2395,7 +2395,7 @@ export class OverviewComponent implements OnInit {
   }
 
   private hasApiAdjustmentStatuses(statusBreakdown: any[]): boolean {
-    const adjustmentStatuses = new Set(['returned', 'return', 'refunded', 'refund', 'damaged', 'damage', 'damages', 'unpaid', 'recovered', 'cancelled', 'canceled', 'cancel', 'void', 'voided']);
+    const adjustmentStatuses = new Set(['returned', 'return', 'returns', 'refunded', 'refund', 'refunds', 'damaged', 'damage', 'damages', 'unpaid', 'recovered', 'cancelled', 'canceled', 'cancel', 'void', 'voided', 'cancellations']);
     return statusBreakdown.some(entry => adjustmentStatuses.has(String(entry?.status ?? entry?.name ?? '').trim().toLowerCase()));
   }
 
