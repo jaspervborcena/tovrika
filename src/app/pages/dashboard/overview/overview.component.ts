@@ -2377,20 +2377,20 @@ export class OverviewComponent implements OnInit {
     const unpaid = findStatus('unpaid');
     const recovered = findStatus('recovered');
 
+    const statusItemQty = (item: any) => Number(item.totalItems ?? item.items ?? item.count ?? 0);
     this.ledgerCompletedQty.set(Number(completed.count || 0));
-    this.ledgerOrderQty.set(Number(completed.count || 0));
-    this.ledgerCancelQty.set(Number(cancelled.count || 0));
-    this.ledgerCancelledQty.set(Number(cancelled.count || 0));
+    this.ledgerCancelQty.set(statusItemQty(cancelled));
+    this.ledgerCancelledQty.set(statusItemQty(cancelled));
     this.ledgerCancelledAmount.set(Number(cancelled.amount || 0));
-    this.ledgerReturnQty.set(Number(returned.count || 0));
+    this.ledgerReturnQty.set(statusItemQty(returned));
     this.ledgerReturnAmount.set(Number(returned.amount || 0));
-    this.ledgerRefundQty.set(Number(refunded.count || 0));
+    this.ledgerRefundQty.set(statusItemQty(refunded));
     this.ledgerRefundAmount.set(Number(refunded.amount || 0));
-    this.ledgerDamageQty.set(Number(damaged.count || 0));
+    this.ledgerDamageQty.set(statusItemQty(damaged));
     this.ledgerDamageAmount.set(Number(damaged.amount || 0));
-    this.ledgerUnpaidQty.set(Number(unpaid.count || 0));
+    this.ledgerUnpaidQty.set(statusItemQty(unpaid));
     this.ledgerUnpaidAmount.set(Number(unpaid.amount || 0));
-    this.ledgerRecoveredQty.set(Number(recovered.count || 0));
+    this.ledgerRecoveredQty.set(statusItemQty(recovered));
     this.ledgerRecoveredAmount.set(Number(recovered.amount || 0));
   }
 
@@ -2477,10 +2477,14 @@ export class OverviewComponent implements OnInit {
           ]);
           const mergedSummary = {
             totalSales: Number(summary?.totalSales || 0),
-            totalOrders: Number(summary?.totalOrders || ordersSummary?.totalOrders || 0),
+            totalOrders: Number(ordersSummary?.totalOrders || 0),
             totalItems: Number(ordersSummary?.totalItems || summary?.totalItems || this.totalItems())
           };
-          console.log('✅ [Overview] Sales and orders summary totals received:', mergedSummary);
+          console.log('✅ [Overview] Sales summary and orders API totals received:', {
+            salesSummary: summary,
+            ordersSummary,
+            mergedSummary
+          });
           this.salesSummary.set(mergedSummary);
           this.ledgerTotalRevenue.set(mergedSummary.totalSales);
           this.ledgerTotalOrders.set(mergedSummary.totalOrders);
@@ -2491,9 +2495,6 @@ export class OverviewComponent implements OnInit {
           this.applyStatusBreakdownToLedger(summary?.statusBreakdown || []);
           const apiHasAdjustmentStatuses = this.hasApiAdjustmentStatuses(summary?.statusBreakdown || []);
           console.log('📊 [Overview] Summary API adjustment statuses:', apiHasAdjustmentStatuses);
-          if (apiHasAdjustmentStatuses) {
-            this.ledgerTotalOrders.set(this.ledgerOrderQty());
-          }
         } catch (err) {
           console.error('❌ [Overview] Sales summary totals failed:', err);
           this.salesSummary.set({ totalSales: 0, totalOrders: 0, totalItems: 0 });
