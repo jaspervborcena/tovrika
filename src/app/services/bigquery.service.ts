@@ -455,6 +455,16 @@ export class BigQueryService {
     const net = Number(apiOrder.net_amount ?? apiOrder.netAmount ?? apiOrder.total_amount ?? gross);
     const paymentMethod = apiOrder.payment || apiOrder.payment_method || apiOrder.paymentMethod || 'cash';
     const customerName = apiOrder.customerInfo?.fullName || apiOrder.soldTo || apiOrder.customerName || apiOrder.customer_name || 'Walk-in Customer';
+    const items = Array.isArray(apiOrder.items) ? apiOrder.items : undefined;
+    const itemCount = Number(
+      apiOrder.total_items
+      ?? apiOrder.totalItems
+      ?? apiOrder.items_count
+      ?? apiOrder.itemCount
+      ?? apiOrder.total_quantity
+      ?? apiOrder.quantity
+      ?? (items ? items.reduce((sum: number, item: any) => sum + Number(item.quantity ?? item.qty ?? 0), 0) : 0)
+    ) || 0;
 
     return {
       id,
@@ -479,6 +489,8 @@ export class BigQueryService {
       grossAmount: gross,
       netAmount: net,
       totalAmount: Number(apiOrder.total_amount ?? apiOrder.totalAmount ?? net ?? gross),
+      itemCount,
+      items,
       exemptionId: apiOrder.exemptionId || '',
       signature: apiOrder.signature || '',
       atpOrOcn: apiOrder.atpOrOcn || 'OCN-2025-001234',
