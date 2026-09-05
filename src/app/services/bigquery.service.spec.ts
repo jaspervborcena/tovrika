@@ -53,4 +53,30 @@ describe('BigQueryService', () => {
     const statuses = await service.getSalesDashboardStatusBreakdown('store123', new Date('2025-04-01'), new Date('2025-04-30'));
     expect(statuses).toEqual(payload.result.statusBreakdown);
   });
+
+  it('should send UTC ISO dates and parse status rows from sales summary API', async () => {
+    const payload = [
+      { storeId: 'store123', status: 'completed', totalSales: 1500, totalItems: 25, totalOrders: 8 },
+      { storeId: 'store123', status: 'cancelled', totalSales: 100, totalItems: 2, totalOrders: 1 }
+    ];
+
+    spyOn(window, 'fetch').and.resolveTo(new Response(JSON.stringify(payload), { status: 200 }));
+
+    const summary = await service.getSalesSummaryTotals(
+      'store123',
+      new Date('2026-09-03T00:00:00.000Z'),
+      new Date('2026-09-05T00:00:00.000Z')
+    );
+    const requestUrl = (window.fetch as jasmine.Spy).calls.mostRecent().args[0] as string;
+
+    expect(requestUrl).toContain('from=2026-09-03T00%3A00%3A00.000Z');
+    expect(requestUrl).toContain('to=2026-09-05T00%3A00%3A00.000Z');
+    expect(summary.totalSales).toBe(1500);
+    expect(summary.totalOrders).toBe(9);
+    expect(summary.totalItems).toBe(27);
+    expect(summary.statusBreakdown).toEqual([
+      { status: 'completed', count: 8, amount: 1500, totalItems: 25 },
+      { status: 'cancelled', count: 1, amount: 100, totalItems: 2 }
+    ]);
+  });
 });

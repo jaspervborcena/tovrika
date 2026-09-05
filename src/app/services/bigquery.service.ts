@@ -79,6 +79,14 @@ export function buildBigQueryRequestParams(
   return params;
 }
 
+export function buildSalesSummaryRequestParams(storeId: string, from: Date, to: Date): URLSearchParams {
+  return new URLSearchParams({
+    storeId,
+    from: from.toISOString(),
+    to: to.toISOString()
+  });
+}
+
 export interface SalesOrdersSummary {
   totalOrders: number;
   totalItems: number;
@@ -86,7 +94,7 @@ export interface SalesOrdersSummary {
 }
 
 export interface SalesSummaryTotals extends SalesOrdersSummary {
-  statusBreakdown: Array<{ status: string; count: number; amount: number }>;
+  statusBreakdown: Array<{ status: string; count: number; amount: number; totalItems?: number }>;
 }
 
 const productionSalesOrdersApi = 'https://asia-east1-jasperpos-1dfd5.cloudfunctions.net/get_sales_orders_bq';
@@ -152,7 +160,7 @@ export class BigQueryService {
       return { totalSales: 0, totalOrders: 0, totalItems: 0, statusBreakdown: [] };
     }
 
-    const params = buildBigQueryRequestParams(storeId, from, to);
+    const params = buildSalesSummaryRequestParams(storeId, from, to);
     const urlString = `${endpoint}?${params.toString()}`;
     console.log('💰 [Revenue API Call] GET', urlString);
 
@@ -168,6 +176,26 @@ export class BigQueryService {
 
     const payload = await response.json();
     console.log('📦 [Revenue API Response] Full payload:', JSON.stringify(payload, null, 2));
+    console.log('📦 [Revenue API Response] payload:', payload);
+
+    if (Array.isArray(payload)) {
+      const statusBreakdown = payload.map((row: any) => ({
+        status: String(row.status ?? row.orderStatus ?? '').trim().toLowerCase(),
+        count: Number(row.totalOrders ?? row.count ?? 0),
+        amount: Number(row.totalSales ?? row.total_sales ?? 0),
+        totalItems: Number(row.totalItems ?? row.total_items ?? 0)
+      }));
+      const completedRow = statusBreakdown.find(row => row.status === 'completed');
+      const result = {
+        totalSales: Number(completedRow?.amount || 0),
+        totalOrders: statusBreakdown.reduce((sum, row) => sum + row.count, 0),
+        totalItems: statusBreakdown.reduce((sum, row) => sum + row.totalItems, 0),
+        statusBreakdown
+      };
+      console.log('✅ [Revenue Final Result]', result);
+      return result;
+    }
+
     console.log('📦 [Revenue API Response] payload keys:', Object.keys(payload));
     console.log('📦 [Revenue API Response] payload.data:', payload.data);
     console.log('📦 [Revenue API Response] payload.rows:', payload.rows);
@@ -318,7 +346,9 @@ export class BigQueryService {
       return null;
     };
 
-    const params = buildBigQueryRequestParams(storeId, from, to, includeAllStatus);
+    const params = endpoint === environment.api?.salesSummaryApi
+      ? buildSalesSummaryRequestParams(storeId, from, to)
+      : buildBigQueryRequestParams(storeId, from, to, includeAllStatus);
 
     const response = await fetch(`${endpoint}?${params.toString()}`, {
       headers: { Authorization: `Bearer ${token}` }
@@ -326,7 +356,9 @@ export class BigQueryService {
     if (!response.ok) throw new Error(`BigQuery dashboard metric request failed: ${response.status}`);
 
     const payload = await response.json();
-    const metric = readMetric(payload);
+    const metric = Array.isArray(payload)
+      ? readMetric(payload.find((row: any) => String(row?.status ?? row?.orderStatus ?? '').toLowerCase() === 'completed'))
+      : readMetric(payload);
     this.logger.info('BigQuery dashboard metric API call succeeded', {
       area: 'orders',
       payload: { storeId, from: getDate(from), to: getDate(to), metric }

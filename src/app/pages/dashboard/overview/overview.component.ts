@@ -2357,21 +2357,31 @@ export class OverviewComponent implements OnInit {
   private applyStatusBreakdownToLedger(statusBreakdown: any[] = []): void {
     const findStatus = (status: string) => {
       const aliases: Record<string, string[]> = {
+        completed: ['completed', 'complete', 'paid'],
         returned: ['returned', 'return'],
         refunded: ['refunded', 'refund'],
         damaged: ['damaged', 'damage', 'damages'],
-        cancelled: ['cancelled', 'canceled', 'cancel']
+        cancelled: ['cancelled', 'canceled', 'cancel', 'void', 'voided'],
+        unpaid: ['unpaid', 'open', 'pending'],
+        recovered: ['recovered', 'paid_recovered']
       };
       const item = statusBreakdown.find((entry) => aliases[status]?.includes(String(entry?.status ?? entry?.name ?? '').trim().toLowerCase()) ?? false);
       return item ?? { count: 0, amount: 0 };
     };
 
+    const completed = findStatus('completed');
     const returned = findStatus('returned');
+    const cancelled = findStatus('cancelled');
     const refunded = findStatus('refunded');
     const damaged = findStatus('damaged');
     const unpaid = findStatus('unpaid');
     const recovered = findStatus('recovered');
 
+    this.ledgerCompletedQty.set(Number(completed.count || 0));
+    this.ledgerOrderQty.set(Number(completed.count || 0));
+    this.ledgerCancelQty.set(Number(cancelled.count || 0));
+    this.ledgerCancelledQty.set(Number(cancelled.count || 0));
+    this.ledgerCancelledAmount.set(Number(cancelled.amount || 0));
     this.ledgerReturnQty.set(Number(returned.count || 0));
     this.ledgerReturnAmount.set(Number(returned.amount || 0));
     this.ledgerRefundQty.set(Number(refunded.count || 0));
@@ -2382,6 +2392,11 @@ export class OverviewComponent implements OnInit {
     this.ledgerUnpaidAmount.set(Number(unpaid.amount || 0));
     this.ledgerRecoveredQty.set(Number(recovered.count || 0));
     this.ledgerRecoveredAmount.set(Number(recovered.amount || 0));
+  }
+
+  private hasApiAdjustmentStatuses(statusBreakdown: any[]): boolean {
+    const adjustmentStatuses = new Set(['returned', 'return', 'refunded', 'refund', 'damaged', 'damage', 'damages', 'unpaid', 'recovered', 'cancelled', 'canceled', 'cancel', 'void', 'voided']);
+    return statusBreakdown.some(entry => adjustmentStatuses.has(String(entry?.status ?? entry?.name ?? '').trim().toLowerCase()));
   }
 
   private applyAdjustmentTotalsToCards(totals: Awaited<ReturnType<LedgerService['getAdjustmentTotals']>>): void {
@@ -2398,6 +2413,34 @@ export class OverviewComponent implements OnInit {
     this.ledgerCancelledQty.set(Number(totals.cancelled.qty || 0));
     this.ledgerCancelledAmount.set(Number(totals.cancelled.amount || 0));
     this.ledgerCancelQty.set(Number(totals.cancelled.qty || 0));
+  }
+
+  private async applyTrackingAdjustmentFallbacks(
+    companyId: string,
+    storeId: string,
+    startDate: Date,
+    endDate: Date
+  ): Promise<void> {
+    const trackingStatuses = [
+      { status: 'returned', amount: this.ledgerReturnAmount, qty: this.ledgerReturnQty },
+      { status: 'refunded', amount: this.ledgerRefundAmount, qty: this.ledgerRefundQty },
+      { status: 'damaged', amount: this.ledgerDamageAmount, qty: this.ledgerDamageQty }
+    ];
+
+    for (const entry of trackingStatuses) {
+      if (entry.amount() !== 0 || entry.qty() !== 0) continue;
+      const trackingTotals = await this.ordersSellingTrackingService.getTrackingSummary(
+        companyId,
+        storeId,
+        entry.status,
+        startDate,
+        endDate
+      );
+      if (trackingTotals.amount !== 0 || trackingTotals.qty !== 0) {
+        entry.amount.set(Number(trackingTotals.amount || 0));
+        entry.qty.set(Number(trackingTotals.qty || 0));
+      }
+    }
   }
 
   private async loadAnalyticsData(startDate: Date, endDate: Date): Promise<void> {
@@ -2446,6 +2489,11 @@ export class OverviewComponent implements OnInit {
           this.ledgerCompletedQty.set(mergedSummary.totalOrders);
           this.statusBreakdown.set(summary?.statusBreakdown || []);
           this.applyStatusBreakdownToLedger(summary?.statusBreakdown || []);
+          const apiHasAdjustmentStatuses = this.hasApiAdjustmentStatuses(summary?.statusBreakdown || []);
+          console.log('📊 [Overview] Summary API adjustment statuses:', apiHasAdjustmentStatuses);
+          if (apiHasAdjustmentStatuses) {
+            this.ledgerTotalOrders.set(this.ledgerOrderQty());
+          }
         } catch (err) {
           console.error('❌ [Overview] Sales summary totals failed:', err);
           this.salesSummary.set({ totalSales: 0, totalOrders: 0, totalItems: 0 });
@@ -2459,8 +2507,12 @@ export class OverviewComponent implements OnInit {
 
         if (companyId) {
           try {
-            const adjustmentTotals = await this.ledgerService.getAdjustmentTotals(companyId, storeId, startDate, endDate);
-            this.applyAdjustmentTotalsToCards(adjustmentTotals);
+            const statusRows = this.statusBreakdown();
+            if (!this.hasApiAdjustmentStatuses(statusRows)) {
+              const adjustmentTotals = await this.ledgerService.getAdjustmentTotals(companyId, storeId, startDate, endDate);
+              this.applyAdjustmentTotalsToCards(adjustmentTotals);
+              await this.applyTrackingAdjustmentFallbacks(companyId, storeId, startDate, endDate);
+            }
           } catch (err) {
             console.warn('⚠️ [Overview] Ledger adjustment totals failed:', err);
             this.applyAdjustmentTotalsToCards({
@@ -2890,27 +2942,12 @@ export class OverviewComponent implements OnInit {
       const companyId = currentPermission?.companyId || '';
       let resolvedStoreId = storeId || this.selectedStoreId() || this.authService.getCurrentPermission()?.storeId || '';
 
-      // Determine date based on selected period
-      const period = this.selectedPeriod();
-      let queryDate = new Date(); // Default to today
-      
-      if (period === 'yesterday') {
-        queryDate = new Date();
-        queryDate.setDate(queryDate.getDate() - 1);
-      } else if (period === 'this_month') {
-        // Use first day of current month for broader range
-        queryDate = new Date(queryDate.getFullYear(), queryDate.getMonth(), 1);
-      } else if (period === 'previous_month') {
-        // Use first day of previous month
-        queryDate = new Date(queryDate.getFullYear(), queryDate.getMonth() - 1, 1);
-      }
-      
-      const top = await this.ordersSellingTrackingService.getTopProductsCounts(companyId, resolvedStoreId, 10, queryDate);
+      const top = await this.ordersSellingTrackingService.getTopProductsCompletedCounts(companyId, resolvedStoreId, 10);
       const mapped = (top || []).slice(0, 10).map((p: any) => ({
         avatar: (p.productName || '').split(' ').map((s: string) => s.charAt(0)).slice(0, 2).join('').toUpperCase() || 'P',
         name: p.productName || 'Product',
         skuId: p.skuId || '',
-        sales: Number(p.count || 0)
+        sales: Number(p.completedCount || 0)
       }));
       this.topProductsList.set(mapped);
     } catch (err) {
