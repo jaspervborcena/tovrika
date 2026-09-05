@@ -35,7 +35,10 @@ describe('BigQueryService', () => {
         },
         statusBreakdown: [
           { status: 'completed', count: 30, amount: 9500 },
-          { status: 'cancelled', count: 3, amount: 500 }
+          { status: 'returned', totalOrders: 2, totalAmount: 360, totalItems: 2 },
+          { status: 'refunds', totalOrders: 0, totalAmount: 0, totalItems: 0 },
+          { status: 'damage', totalOrders: 0, totalAmount: 0, totalItems: 0 },
+          { status: 'cancellations', totalOrders: 1, totalAmount: 100, totalItems: 1 }
         ]
       }
     };
@@ -47,7 +50,13 @@ describe('BigQueryService', () => {
       totalSales: 12450.75,
       totalOrders: 45,
       totalItems: 0,
-      statusBreakdown: payload.result.statusBreakdown
+      statusBreakdown: [
+        { status: 'completed', count: 30, amount: 9500, totalItems: 0 },
+        { status: 'returned', count: 2, amount: 360, totalItems: 2 },
+        { status: 'refunds', count: 0, amount: 0, totalItems: 0 },
+        { status: 'damage', count: 0, amount: 0, totalItems: 0 },
+        { status: 'cancellations', count: 1, amount: 100, totalItems: 1 }
+      ]
     });
 
     const statuses = await service.getSalesDashboardStatusBreakdown('store123', new Date('2025-04-01'), new Date('2025-04-30'));
