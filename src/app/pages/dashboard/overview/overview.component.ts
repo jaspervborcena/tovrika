@@ -2465,6 +2465,7 @@ export class OverviewComponent implements OnInit {
             console.warn('⚠️ [Overview] Ledger adjustment totals failed:', err);
             this.applyAdjustmentTotalsToCards({
               completed: { amount: 0, qty: 0 },
+              cancelled: { amount: 0, qty: 0 },
               returns: { amount: 0, qty: 0 },
               refunds: { amount: 0, qty: 0 },
               damages: { amount: 0, qty: 0 },
