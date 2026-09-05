@@ -532,6 +532,7 @@ async updateOrderStatus(orderId: string, status: string, reason?: string): Promi
     
     let existingStatusHistory: any[] = [];
     let existingStatusTags: string[] = [];
+    let skipOrderStatusUpdate = false;
     
     if (orderSnap && orderSnap.exists()) {
       const orderData: any = orderSnap.data();
@@ -550,8 +551,8 @@ async updateOrderStatus(orderId: string, status: string, reason?: string): Promi
       const alreadyTagged = existingStatusTags.some(tag => normalizeStatus(String(tag)) === requestedStatus);
       const alreadyRecorded = existingStatusHistory.some(entry => normalizeStatus(String(entry?.status || '')) === requestedStatus);
       if (alreadyCurrent || alreadyTagged || alreadyRecorded) {
-        console.log(`⏭️ Order ${orderId} already has status ${requestedStatus}; skipping duplicate update and records`);
-        return;
+        skipOrderStatusUpdate = true;
+        console.log(`⏭️ Order ${orderId} already has status ${requestedStatus}; reconciling tracking record`);
       }
     }
     
@@ -589,7 +590,9 @@ async updateOrderStatus(orderId: string, status: string, reason?: string): Promi
     
     // Update the order document - Firestore offline persistence handles sync
     const orderDocRef = clientDoc(this.firestore, 'orders', orderId);
-    await updateDoc(orderDocRef, updatePayload);
+    if (!skipOrderStatusUpdate) {
+      await updateDoc(orderDocRef, updatePayload);
+    }
     // If we're online and the order was cancelled or returned, attempt a client-side transactional restock.
     // This is a best-effort attempt — the server-side Cloud Function still exists as authoritative.
   if (navigator.onLine && (status === 'cancelled' || status === 'returned' || status === 'refund' || status === 'refunded' || status === 'damage' || status === 'damaged')) {
