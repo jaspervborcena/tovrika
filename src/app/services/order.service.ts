@@ -7,6 +7,7 @@ import { User } from '@angular/fire/auth';
 import { Order } from '../interfaces/pos.interface';
 import { AuthService } from './auth.service';
 import { OrdersSellingTrackingService } from './orders-selling-tracking.service';
+import { LedgerService } from './ledger.service';
 import { LoggerService } from '../core/services/logger.service';
 import { FirestoreSecurityService } from '../core/services/firestore-security.service';
 import { IndexedDBService } from '../core/services/indexeddb.service';
@@ -21,6 +22,7 @@ import { OrdersSellingTrackingDoc } from '../interfaces/orders-selling-tracking.
 })
 export class OrderService {
   private authService = inject(AuthService);
+  private ledgerService = inject(LedgerService);
   // Use centralized LoggerService so logs include authenticated uid/company/store via context provider
   private logger = inject(LoggerService);
   
@@ -694,6 +696,16 @@ async updateOrderStatus(orderId: string, status: string, reason?: string): Promi
           const safeAmount = Number(amount || 0);
           const safeQty = Number(qty || 0);
           this.logger.info('Status change totals calculated for order tracking', { area: 'orders', docId: orderId, payload: { status, amount: safeAmount, qty: safeQty } });
+          await this.ledgerService.recordEvent(
+            companyId,
+            storeId,
+            orderId,
+            mappedStatus as 'completed' | 'returned' | 'refunded' | 'cancelled' | 'damaged',
+            safeAmount,
+            safeQty,
+            performedBy
+          );
+          console.log(`✅ Ledger entry recorded for ${mappedStatus}: amount=${safeAmount}, qty=${safeQty}`);
         } catch (e) {
           this.logger.warn('Failed while attempting to compute tracking totals for status change', { area: 'orders', docId: orderId, payload: { error: String(e) } });
         }

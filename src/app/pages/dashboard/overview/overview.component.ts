@@ -103,10 +103,27 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
               </div>
               <div class="card-content">
                 <div class="card-value">Orders: ({{ ledgerOrderQty() }})</div>
-                <div class="card-label">Items: ({{ netItemsQty() }})</div>
+                <div class="card-label">Items: ({{ totalItems() }})</div>
                 <div class="card-change">
                   <span class="change-icon">{{ ordersChange().symbol }}</span>
                   <span class="change-text">{{ ordersChange().percent | number:'1.1-1' }}% {{ comparisonLabel() }}</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Cancelled / Void Card -->
+            <div class="sales-card adjustments-card">
+              <div class="card-icon">
+                <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 6l12 12M18 6L6 18"/>
+                </svg>
+              </div>
+              <div class="card-content">
+                <div class="card-value">Cancelled / Void: ₱{{ ledgerCancelledAmount() | number:'1.0-0' }}</div>
+                <div class="card-label">Orders ({{ ledgerCancelledQty() }})</div>
+                <div class="card-change">
+                  <span class="change-icon">×</span>
+                  <span class="change-text">Cancelled transactions</span>
                 </div>
               </div>
             </div>
@@ -1584,6 +1601,8 @@ export class OverviewComponent implements OnInit {
   protected ledgerTotalRevenue = signal<number>(0);
   protected ledgerTotalOrders = signal<number>(0);
   protected ledgerTotalRefunds = signal<number>(0);
+  protected ledgerCancelledAmount = signal<number>(0);
+  protected ledgerCancelledQty = signal<number>(0);
   // Totals for adjustments
   protected ledgerReturnAmount = signal<number>(0);
   protected ledgerReturnQty = signal<number>(0);
@@ -1734,11 +1753,12 @@ export class OverviewComponent implements OnInit {
   }
   
   protected totalRevenue = computed(() => {
-    const summary = this.salesSummary();
-    if (summary.totalSales > 0) {
-      return Math.max(0, summary.totalSales);
+    if (this.bigQueryRevenueLoaded()) {
+      return Math.max(0, this.bigQueryRevenue());
     }
-    return Math.max(0, this.bigQueryRevenueLoaded() ? this.bigQueryRevenue() : this.dateRangeRevenue());
+    const summary = this.salesSummary();
+    const adjustedRevenue = summary.totalSales - this.ledgerRefundAmount() - this.ledgerDamageAmount();
+    return Math.max(0, adjustedRevenue || this.dateRangeRevenue());
   });
   protected revenueSource = computed(() => this.bigQueryRevenueLoaded() ? 'BigQuery' : 'fallback');
   protected totalOrders = computed(() => {
@@ -1750,10 +1770,13 @@ export class OverviewComponent implements OnInit {
   });
   protected totalItems = computed(() => {
     const summary = this.salesSummary();
+    const excludedItems = this.ledgerCancelledQty() + this.ledgerReturnQty();
     if (summary.totalItems > 0) {
-      return Math.max(0, summary.totalItems);
+      return Math.max(0, summary.totalItems - excludedItems);
     }
-    return Math.max(0, this.orders().reduce((sum, order: any) => sum + (Number(order.itemCount || order.totalItems || 0) || 0), 0));
+    return Math.max(0, this.orders()
+      .filter(order => String(order.status || '').toLowerCase() === 'completed')
+      .reduce((sum, order: any) => sum + (Number(order.itemCount || order.totalItems || 0) || 0), 0) - excludedItems);
   });
   // Total expenses shown on the card should reflect the active period.
   // For date-range mode, use the explicit range total; otherwise keep the
@@ -1778,7 +1801,9 @@ export class OverviewComponent implements OnInit {
     const symbol = diff > 0 ? '↗' : (diff < 0 ? '↘' : '→');
     return { symbol, percent, diff };
   });
-  protected netProfit = computed(() => this.totalRevenue() - this.totalExpenses());
+  protected netProfit = computed(() =>
+    this.totalRevenue() + this.ledgerRecoveredAmount() - this.totalExpenses()
+  );
   protected totalCustomers = computed(() => {
     // Customers: not tracked in ledger, fallback to 0
     return 0;
@@ -2166,6 +2191,8 @@ export class OverviewComponent implements OnInit {
     this.ledgerUnpaidQty.set(0);
     this.ledgerRecoveredAmount.set(0);
     this.ledgerRecoveredQty.set(0);
+    this.ledgerCancelledAmount.set(0);
+    this.ledgerCancelledQty.set(0);
     this.ledgerCancelQty.set(0);
     this.ledgerCompletedQty.set(0);
     this.ledgerOrderQty.set(0);
@@ -2368,6 +2395,9 @@ export class OverviewComponent implements OnInit {
     this.ledgerUnpaidAmount.set(Number(totals.unpaid.amount || 0));
     this.ledgerRecoveredQty.set(Number(totals.recovered.qty || 0));
     this.ledgerRecoveredAmount.set(Number(totals.recovered.amount || 0));
+    this.ledgerCancelledQty.set(Number(totals.cancelled.qty || 0));
+    this.ledgerCancelledAmount.set(Number(totals.cancelled.amount || 0));
+    this.ledgerCancelQty.set(Number(totals.cancelled.qty || 0));
   }
 
   private async loadAnalyticsData(startDate: Date, endDate: Date): Promise<void> {
@@ -2398,13 +2428,16 @@ export class OverviewComponent implements OnInit {
       if (storeId) {
         try {
           console.log('💰 [Overview] Fetching sales summary totals...');
-          const summary = await this.bigQueryService.getSalesSummaryTotals(storeId, startDate, endDate);
+          const [summary, ordersSummary] = await Promise.all([
+            this.bigQueryService.getSalesSummaryTotals(storeId, startDate, endDate),
+            this.bigQueryService.getSalesDashboardOrderSummary(storeId, startDate, endDate)
+          ]);
           const mergedSummary = {
             totalSales: Number(summary?.totalSales || 0),
-            totalOrders: Number(summary?.totalOrders || 0),
-            totalItems: Number(summary?.totalItems || 0)
+            totalOrders: Number(summary?.totalOrders || ordersSummary?.totalOrders || 0),
+            totalItems: Number(ordersSummary?.totalItems || summary?.totalItems || this.totalItems())
           };
-          console.log('✅ [Overview] Sales summary totals received:', mergedSummary);
+          console.log('✅ [Overview] Sales and orders summary totals received:', mergedSummary);
           this.salesSummary.set(mergedSummary);
           this.ledgerTotalRevenue.set(mergedSummary.totalSales);
           this.ledgerTotalOrders.set(mergedSummary.totalOrders);
@@ -2432,6 +2465,7 @@ export class OverviewComponent implements OnInit {
             console.warn('⚠️ [Overview] Ledger adjustment totals failed:', err);
             this.applyAdjustmentTotalsToCards({
               completed: { amount: 0, qty: 0 },
+              cancelled: { amount: 0, qty: 0 },
               returns: { amount: 0, qty: 0 },
               refunds: { amount: 0, qty: 0 },
               damages: { amount: 0, qty: 0 },
@@ -2508,27 +2542,49 @@ export class OverviewComponent implements OnInit {
 
   private async fetchBigQueryRevenue(startDate: Date, endDate: Date, comparisonStart: Date, comparisonEnd: Date): Promise<void> {
     const storeId = this.selectedStoreId() || this.authService.getCurrentPermission()?.storeId || '';
+    const companyId = this.authService.getCurrentPermission()?.companyId || '';
     this.bigQueryRevenueLoaded.set(false);
     if (!storeId || storeId === 'all') {
       return;
     }
 
     try {
-      const [currentRevenue, comparisonRevenue] = await Promise.all([
+      const [currentRevenue, comparisonRevenue, currentAdjustments, comparisonAdjustments] = await Promise.all([
         this.bigQueryService.getSalesSummaryRevenue(storeId, startDate, endDate),
-        this.bigQueryService.getSalesSummaryRevenue(storeId, comparisonStart, comparisonEnd)
+        this.bigQueryService.getSalesSummaryRevenue(storeId, comparisonStart, comparisonEnd),
+        companyId
+          ? this.ledgerService.getAdjustmentTotals(companyId, storeId, startDate, endDate)
+          : Promise.resolve(null),
+        companyId
+          ? this.ledgerService.getAdjustmentTotals(companyId, storeId, comparisonStart, comparisonEnd)
+          : Promise.resolve(null)
       ]);
       if (currentRevenue === null) {
         this.bigQueryRevenueLoaded.set(false);
         return;
       }
-      this.bigQueryRevenue.set(currentRevenue);
-      this.bigQueryComparisonRevenue.set(comparisonRevenue ?? 0);
+      const currentAdjustedRevenue = Math.max(
+        0,
+        Number(currentRevenue || 0)
+          - Number(currentAdjustments?.refunds.amount || 0)
+          - Number(currentAdjustments?.damages.amount || 0)
+      );
+      const comparisonAdjustedRevenue = Math.max(
+        0,
+        Number(comparisonRevenue || 0)
+          - Number(comparisonAdjustments?.refunds.amount || 0)
+          - Number(comparisonAdjustments?.damages.amount || 0)
+      );
+      this.bigQueryRevenue.set(currentAdjustedRevenue);
+      this.bigQueryComparisonRevenue.set(comparisonAdjustedRevenue);
       this.bigQueryRevenueLoaded.set(true);
       console.log('Overview Total Revenue source: BigQuery', {
         storeId,
-        revenue: currentRevenue,
-        comparisonRevenue: comparisonRevenue ?? 0
+        completedSales: currentRevenue,
+        refunds: currentAdjustments?.refunds.amount || 0,
+        damage: currentAdjustments?.damages.amount || 0,
+        revenue: currentAdjustedRevenue,
+        comparisonRevenue: comparisonAdjustedRevenue
       });
     } catch (error) {
       console.warn('Overview: BigQuery sales summary unavailable; using existing revenue source:', error);
