@@ -207,6 +207,8 @@ export class OrdersSellingTrackingService {
     const errors: any[] = [];
     let created = 0;
     const createdIds: string[] = [];
+    const existingKeys = new Set<string>();
+    const getCancelledEventKey = (data: any) => `${String(data.invoiceNumber || orderId).trim()}|cancelled|${String(data.itemCode || data.productCode || data.productId || data.itemIndex || '').trim()}`;
     console.log('[Tracking][cancelled] start', { orderId, cancelledBy, reason });
 
     try {
@@ -214,6 +216,10 @@ export class OrdersSellingTrackingService {
       const q = query(collection(this.firestore, 'ordersSellingTracking'), where('orderId', '==', orderId));
       const snaps = await getDocs(q as any);
       console.log('[Tracking][cancelled] source rows', { orderId, count: snaps.docs.length });
+      snaps.docs.forEach((snap: any) => {
+        const data = snap.data() || {};
+        if (String(data.status || '').toLowerCase() === 'cancelled') existingKeys.add(getCancelledEventKey(data));
+      });
 
       console.log(`markOrderTrackingCancelled: order ${orderId} found ${snaps.docs.length} tracking docs`);
 
@@ -227,6 +233,8 @@ export class OrdersSellingTrackingService {
           console.log('[Tracking][cancelled] skip existing row', { orderId, invoiceNumber: data.invoiceNumber, status, trackingId: s.id });
           continue;
         }
+        const eventKey = getCancelledEventKey(data);
+        if (existingKeys.has(eventKey)) continue;
 
         try {
           const baseDoc = { ...data };
@@ -238,6 +246,7 @@ export class OrdersSellingTrackingService {
             const cancelledDocData = this.sanitizeForFirestore({
               ...baseDoc,
               status: 'cancelled',
+              itemCode: data.itemCode || data.productCode || undefined,
               createdBy: cancelledBy || baseDoc.createdBy || 'system',
               updatedBy: cancelledBy || baseDoc.createdBy || 'system',
               createdAt: new Date(),
@@ -248,6 +257,7 @@ export class OrdersSellingTrackingService {
             console.log(`markOrderTrackingCancelled: created cancelled doc online for tracking=${s.id} -> newId=${ref.id}`);
             created++;
             createdIds.push(ref.id);
+            existingKeys.add(eventKey);
             console.log('[Tracking][cancelled] created online', { orderId, invoiceNumber: cancelledDocData.invoiceNumber, status: 'cancelled', sourceId: s.id, trackingId: ref.id });
 
           } else {
@@ -255,6 +265,7 @@ export class OrdersSellingTrackingService {
             const cancelledDocData = this.sanitizeForFirestore({
               ...baseDoc,
               status: 'cancelled',
+              itemCode: data.itemCode || data.productCode || undefined,
               createdBy: cancelledBy || baseDoc.createdBy || 'system',
               updatedBy: cancelledBy || baseDoc.createdBy || 'system',
               createdAt: new Date(),
@@ -265,6 +276,7 @@ export class OrdersSellingTrackingService {
             console.log(`markOrderTrackingCancelled: queueing offline cancelled doc for tracking=${s.id} -> tentativeId=${tentativeId}`);
             created++;
             createdIds.push(tentativeId);
+            existingKeys.add(eventKey);
             console.log('[Tracking][cancelled] queued offline', { orderId, invoiceNumber: cancelledDocData.invoiceNumber, status: 'cancelled', sourceId: s.id, trackingId: tentativeId });
           }
         } catch (e) {
@@ -285,6 +297,11 @@ export class OrdersSellingTrackingService {
   const errors: any[] = [];
   let updated = 0;
     const existingKeys = new Set<string>();
+    const getReturnedEventKey = (data: any) => {
+      const invoiceNumber = String(data.invoiceNumber || orderId).trim();
+      const itemCode = String(data.itemCode || data.productCode || data.productId || data.itemIndex || '').trim();
+      return `${invoiceNumber}|returned|${itemCode}`;
+    };
   console.log('[Tracking][returned] start', { orderId, returnedBy, reason });
   try {
     const q = query(collection(this.firestore, 'ordersSellingTracking'), where('orderId', '==', orderId));
@@ -293,7 +310,7 @@ export class OrdersSellingTrackingService {
       snaps.docs.forEach((snap: any) => {
         const data = snap.data() || {};
         if (String(data.status || '').toLowerCase() === 'returned') {
-          existingKeys.add(`${String(data.invoiceNumber || orderId).trim()}|returned`);
+          existingKeys.add(getReturnedEventKey(data));
         }
       });
     for (const s of snaps.docs) {
@@ -305,9 +322,9 @@ export class OrdersSellingTrackingService {
         console.log('[Tracking][returned] skip existing row', { orderId, invoiceNumber: data.invoiceNumber, status: data.status, trackingId: id });
         continue;
       }
-        const eventKey = `${String(data.invoiceNumber || orderId).trim()}|returned`;
+        const eventKey = getReturnedEventKey(data);
         if (existingKeys.has(eventKey)) {
-          console.log('[Tracking][returned] skip duplicate invoice/status', { orderId, invoiceNumber: data.invoiceNumber, status: 'returned', trackingId: id, eventKey });
+          console.log('[Tracking][returned] skip duplicate invoice/status/itemCode', { orderId, invoiceNumber: data.invoiceNumber, status: 'returned', itemCode: data.itemCode, trackingId: id, eventKey });
           continue;
         }
 
@@ -319,6 +336,7 @@ export class OrdersSellingTrackingService {
         companyId: data.companyId || undefined,
         storeId: data.storeId || undefined,
         invoiceNumber: data.invoiceNumber || undefined,
+        itemCode: data.itemCode || data.productCode || undefined,
         batchNumber: data.batchNumber || 1,
         itemIndex: data.itemIndex ?? 0,
         orderDetailsId: data.orderDetailsId || undefined,
@@ -350,7 +368,7 @@ export class OrdersSellingTrackingService {
         await setDoc(ref as any, payload as any);
         updated++;
         existingKeys.add(eventKey);
-        console.log('[Tracking][returned] created online', { orderId, invoiceNumber: newDoc.invoiceNumber, status: newDoc.status, sourceId: id, trackingId: ref.id, eventKey });
+        console.log('[Tracking][returned] created online', { orderId, invoiceNumber: newDoc.invoiceNumber, status: newDoc.status, itemCode: newDoc.itemCode, sourceId: id, trackingId: ref.id, eventKey });
       } catch (e) {
         console.error(`markOrderTrackingReturned: failed to create returned copy for ${id}`, e);
         console.warn('⚠️ Firestore will retry automatically when connection is restored');
@@ -373,7 +391,7 @@ export class OrdersSellingTrackingService {
           pd.data.orderId === orderId &&
           pd.data.status !== 'returned'
         ) {
-          const eventKey = `${String(pd.data.invoiceNumber || orderId).trim()}|returned`;
+          const eventKey = getReturnedEventKey(pd.data);
           if (existingKeys.has(eventKey)) continue;
           const upd: any = { status: 'returned', updatedBy: returnedBy || pd.data.createdBy || 'system' };
           if (reason) upd.updateReason = reason;
@@ -397,6 +415,7 @@ async markOrderTrackingRefunded(orderId: string, refundedBy?: string, reason?: s
   let created = 0;
   const createdIds: string[] = [];
   const existingKeys = new Set<string>();
+  const getRefundedEventKey = (data: any) => `${String(data.invoiceNumber || orderId).trim()}|refunded|${String(data.itemCode || data.productCode || data.productId || data.itemIndex || '').trim()}`;
   console.log('[Tracking][refunded] start', { orderId, refundedBy, reason });
   try {
     // Fetch all tracking rows for the order and filter returned ones locally
@@ -406,7 +425,7 @@ async markOrderTrackingRefunded(orderId: string, refundedBy?: string, reason?: s
     snaps.docs.forEach((snap: any) => {
       const data = snap.data() || {};
       if (String(data.status || '').toLowerCase() === 'refunded') {
-        existingKeys.add(`${String(data.invoiceNumber || orderId).trim()}|refunded`);
+        existingKeys.add(getRefundedEventKey(data));
       }
     });
     const hasReturnedRows = snaps.docs.some((snap: any) => {
@@ -426,7 +445,7 @@ async markOrderTrackingRefunded(orderId: string, refundedBy?: string, reason?: s
         console.log('[Tracking][refunded] skip non-source row', { orderId, invoiceNumber: data.invoiceNumber, trackingId: s.id, status });
         continue;
       }
-      const eventKey = `${String(data.invoiceNumber || orderId).trim()}|refunded`;
+      const eventKey = getRefundedEventKey(data);
       if (existingKeys.has(eventKey)) {
         console.log('[Tracking][refunded] skip duplicate invoice/status', { orderId, invoiceNumber: data.invoiceNumber, status: 'refunded', trackingId: s.id, eventKey });
         continue;
@@ -443,6 +462,7 @@ async markOrderTrackingRefunded(orderId: string, refundedBy?: string, reason?: s
         storeId: data.storeId || undefined,
         orderId: data.orderId || orderId,
         invoiceNumber: data.invoiceNumber || undefined,
+        itemCode: data.itemCode || data.productCode || undefined,
         batchNumber: data.batchNumber || 1,
         itemIndex: data.itemIndex ?? 0,
         orderDetailsId: data.orderDetailsId || undefined,
@@ -508,13 +528,14 @@ async markOrderTrackingRefunded(orderId: string, refundedBy?: string, reason?: s
           pd.data.orderId === orderId &&
           pd.data.status === 'returned'
         ) {
-          const eventKey = `${String(pd.data.invoiceNumber || orderId).trim()}|refunded`;
+          const eventKey = getRefundedEventKey(pd.data);
           if (existingKeys.has(eventKey)) continue;
           const newDoc: any = {
             companyId: pd.data.companyId || undefined,
             storeId: pd.data.storeId || undefined,
             orderId: pd.data.orderId || orderId,
             invoiceNumber: pd.data.invoiceNumber || undefined,
+            itemCode: pd.data.itemCode || pd.data.productCode || undefined,
             batchNumber: pd.data.batchNumber || 1,
             itemIndex: pd.data.itemIndex ?? 0,
             orderDetailsId: pd.data.orderDetailsId || undefined,
@@ -793,16 +814,17 @@ async markOrderTrackingDamaged(orderId: string, damagedBy?: string, reason?: str
   const errors: any[] = [];
   let created = 0;
   const createdIds: string[] = [];
+  const existingKeys = new Set<string>();
+  const getDamagedEventKey = (data: any) => `${String(data.invoiceNumber || orderId).trim()}|damaged|${String(data.itemCode || data.productCode || data.productId || data.itemIndex || '').trim()}`;
   console.log('[Tracking][damaged] start', { orderId, damagedBy, reason });
   try {
-    if (await this.hasTrackingStatus(orderId, 'damaged')) {
-      console.log(`markOrderTrackingDamaged: order ${orderId} is already damaged; skipping duplicate`);
-      console.log('[Tracking][damaged] complete', { orderId, created: 0, errors: 0, skipped: 'existing status' });
-      return { created: 0, errors, createdIds };
-    }
     const q = query(collection(this.firestore, 'ordersSellingTracking'), where('orderId', '==', orderId));
     const snaps = await getDocs(q as any);
     console.log('[Tracking][damaged] source rows', { orderId, count: snaps.docs.length });
+    snaps.docs.forEach((snap: any) => {
+      const data = snap.data() || {};
+      if (String(data.status || '').toLowerCase() === 'damaged') existingKeys.add(getDamagedEventKey(data));
+    });
     const hasReturnedRows = snaps.docs.some((snap: any) => {
       const status = String(snap.data()?.status || '').toLowerCase();
       return status === 'returned' || status === 'return';
@@ -817,6 +839,11 @@ async markOrderTrackingDamaged(orderId: string, damagedBy?: string, reason?: str
         ? status === 'returned' || status === 'return'
         : status === 'completed' || status === 'open';
       if (!isDamageSource) continue;
+      const eventKey = getDamagedEventKey(data);
+      if (existingKeys.has(eventKey)) {
+        console.log('[Tracking][damaged] skip duplicate invoice/status/itemCode', { orderId, invoiceNumber: data.invoiceNumber, itemCode: data.itemCode, trackingId: s.id, eventKey });
+        continue;
+      }
 
       const onlineCreatedAt = new Date();
       const offlineCreatedAt = new Date();
@@ -826,6 +853,7 @@ async markOrderTrackingDamaged(orderId: string, damagedBy?: string, reason?: str
         storeId: data.storeId || undefined,
         orderId: data.orderId || orderId,
         invoiceNumber: data.invoiceNumber || undefined,
+        itemCode: data.itemCode || data.productCode || undefined,
         batchNumber: data.batchNumber || 1,
         itemIndex: data.itemIndex ?? 0,
         orderDetailsId: data.orderDetailsId || undefined,
@@ -853,6 +881,7 @@ async markOrderTrackingDamaged(orderId: string, damagedBy?: string, reason?: str
           console.log(`markOrderTrackingDamaged: creating damaged doc online for tracking=${s.id} -> tentativeId=${ref.id}`);
           await setDoc(ref as any, payload as any);
           createdIds.push(ref.id);
+          existingKeys.add(eventKey);
 
           // After creating the damaged tracking doc, deduct from product.totalStock and latest productInventory batch
           try {
@@ -1045,6 +1074,7 @@ async markOrderTrackingDamaged(orderId: string, damagedBy?: string, reason?: str
             storeId: pd.data.storeId || undefined,
             orderId: pd.data.orderId || orderId,
             invoiceNumber: pd.data.invoiceNumber || undefined,
+            itemCode: pd.data.itemCode || pd.data.productCode || undefined,
             batchNumber: pd.data.batchNumber || 1,
             itemIndex: pd.data.itemIndex ?? 0,
             orderDetailsId: pd.data.orderDetailsId || undefined,
