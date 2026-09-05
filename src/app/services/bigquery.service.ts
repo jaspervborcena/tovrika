@@ -180,10 +180,10 @@ export class BigQueryService {
 
     if (Array.isArray(payload)) {
       const statusBreakdown = payload.map((row: any) => ({
-        status: String(row.status ?? row.orderStatus ?? '').trim().toLowerCase(),
-        count: Number(row.totalOrders ?? row.count ?? 0),
-        amount: Number(row.totalSales ?? row.total_sales ?? 0),
-        totalItems: Number(row.totalItems ?? row.total_items ?? 0)
+        status: String(row.status ?? row.orderStatus ?? row.order_status ?? '').trim().toLowerCase(),
+        count: Number(row.totalOrders ?? row.total_orders ?? row.orderCount ?? row.order_count ?? row.count ?? 0),
+        amount: Number(row.totalSales ?? row.total_sales ?? row.totalAmount ?? row.total_amount ?? row.amount ?? 0),
+        totalItems: Number(row.totalItems ?? row.total_items ?? row.itemCount ?? row.item_count ?? row.quantity ?? 0)
       }));
       const completedRow = statusBreakdown.find(row => row.status === 'completed');
       const result = {
@@ -220,7 +220,12 @@ export class BigQueryService {
       totalSales: Number(totalSales ?? 0),
       totalOrders: Number(totalOrders ?? 0),
       totalItems: Number(totalItems ?? 0),
-      statusBreakdown: statusBreakdown as Array<{ status: string; count: number; amount: number }>
+      statusBreakdown: statusBreakdown.map((row: any) => ({
+        status: String(row.status ?? row.name ?? row.orderStatus ?? row.order_status ?? '').trim().toLowerCase(),
+        count: Number(row.count ?? row.totalOrders ?? row.total_orders ?? row.orderCount ?? row.order_count ?? 0),
+        amount: Number(row.amount ?? row.totalSales ?? row.total_sales ?? row.totalAmount ?? row.total_amount ?? 0),
+        totalItems: Number(row.totalItems ?? row.total_items ?? row.itemCount ?? row.item_count ?? row.quantity ?? 0)
+      }))
     };
 
     console.log('✅ [Revenue Extracted] totalSales:', totalSales, 'totalOrders:', totalOrders, 'totalItems:', totalItems);
