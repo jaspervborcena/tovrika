@@ -492,6 +492,7 @@ export class BigQueryService {
     const net = Number(apiOrder.net_amount ?? apiOrder.netAmount ?? apiOrder.total_amount ?? gross);
     const paymentMethod = apiOrder.payment || apiOrder.payment_method || apiOrder.paymentMethod || 'cash';
     const customerName = apiOrder.customerInfo?.fullName || apiOrder.soldTo || apiOrder.customerName || apiOrder.customer_name || 'Walk-in Customer';
+    const customerId = apiOrder.customerInfo?.customerId || apiOrder.customer_id || apiOrder.customerId || '';
     const items = Array.isArray(apiOrder.items) ? apiOrder.items : undefined;
     const itemCount = Number(
       apiOrder.total_items
@@ -512,6 +513,7 @@ export class BigQueryService {
       assignedCashierId: apiOrder.assignedCashierId || '',
       status: (apiOrder.status || apiOrder.order_status) ?? 'completed',
       cashSale: true,
+      customerId,
       soldTo: customerName,
       tin: apiOrder.tin || '',
       businessAddress: apiOrder.businessAddress || apiOrder.customer_address || '',
