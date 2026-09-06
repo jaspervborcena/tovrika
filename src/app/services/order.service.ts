@@ -801,7 +801,7 @@ public async restockOrderAndInventoryTransactional(orderId: string, performedBy 
     if (!orderSnap.exists()) throw new Error('Order not found: ' + orderId);
 
     const currentStatus = (orderSnap.data() as any).status;
-    const restockableStatuses = ['cancelled', 'returned', 'refunded'];
+    const restockableStatuses = ['completed', 'cancelled', 'returned', 'refunded'];
     if (!restockableStatuses.includes(currentStatus)) {
       throw new Error('Order status is not restockable: ' + currentStatus);
     }
