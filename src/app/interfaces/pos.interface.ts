@@ -32,6 +32,7 @@ export interface Order {
   // Customer Information
   cashSale?: boolean;
   chargeSale?: boolean;
+  customerId?: string;
   soldTo?: string;
   tin?: string;
   businessAddress?: string;
