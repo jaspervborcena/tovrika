@@ -492,7 +492,12 @@ export class BigQueryService {
     const net = Number(apiOrder.net_amount ?? apiOrder.netAmount ?? apiOrder.total_amount ?? gross);
     const paymentMethod = apiOrder.payment || apiOrder.payment_method || apiOrder.paymentMethod || 'cash';
     const customerName = apiOrder.customerInfo?.fullName || apiOrder.soldTo || apiOrder.customerName || apiOrder.customer_name || 'Walk-in Customer';
-    const customerId = apiOrder.customerInfo?.customerId || apiOrder.customer_id || apiOrder.customerId || '';
+    const customerInfo = apiOrder.customerInfo || apiOrder.customer_info || {};
+    const customerId = customerInfo.customerId
+      || customerInfo.customer_id
+      || apiOrder.customer_id
+      || apiOrder.customerId
+      || '';
     const items = Array.isArray(apiOrder.items) ? apiOrder.items : undefined;
     const itemCount = Number(
       apiOrder.total_items
