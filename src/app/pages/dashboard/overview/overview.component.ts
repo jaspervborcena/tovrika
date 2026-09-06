@@ -1805,8 +1805,16 @@ export class OverviewComponent implements OnInit {
     this.totalRevenue() + this.ledgerRecoveredAmount() - this.totalExpenses()
   );
   protected totalCustomers = computed(() => {
-    // Customers: not tracked in ledger, fallback to 0
-    return 0;
+    const customerIds = new Set<string>();
+
+    for (const order of this.filteredOrders()) {
+      if (String(order.status || '').toLowerCase() !== 'completed') continue;
+      const orderData = order as any;
+      const customerId = String(orderData.customerId || orderData.customerInfo?.customerId || '').trim();
+      if (customerId) customerIds.add(customerId);
+    }
+
+    return customerIds.size;
   });
   protected todayOrders = computed(() => {
     // Always use ledgerCompletedQty
