@@ -68,16 +68,16 @@ service cloud.firestore {
         resource.data.uid == request.auth.uid;
     }
 
-    // Orders Selling Tracking - POS writes sale tracking docs; Functions update status
+    // Orders Selling Tracking - POS writes completed sale rows and audit rows.
     match /ordersSellingTracking/{docId} {
       allow read: if isAuthenticated();
-      // Client create requires uid match and company/store/product fields present
+      // Client creates include completed sale rows and audit rows for status changes.
       allow create: if isAuthenticated() &&
         request.resource.data.uid == request.auth.uid &&
         request.resource.data.companyId is string &&
         request.resource.data.storeId is string &&
         request.resource.data.productId is string &&
-        request.resource.data.status == 'processing';
+        request.resource.data.status in ['completed', 'cancelled', 'returned', 'refunded', 'damaged'];
       // Client updates are restricted to their own docs and cannot change status to reconciled/error
       allow update: if isAuthenticated() &&
         resource.data.uid == request.auth.uid &&

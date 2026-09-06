@@ -335,6 +335,7 @@ export class OrdersSellingTrackingService {
       const newDoc: any = {
         companyId: data.companyId || undefined,
         storeId: data.storeId || undefined,
+        orderId: data.orderId || orderId,
         invoiceNumber: data.invoiceNumber || undefined,
         itemCode: data.itemCode || data.productCode || undefined,
         batchNumber: data.batchNumber || 1,
@@ -347,7 +348,7 @@ export class OrdersSellingTrackingService {
         price: data.price,
         quantity: data.quantity,
         total: data.total,
-        uid: data.uid || data.createdBy || undefined,
+        uid: returnedBy || data.uid || data.createdBy || undefined,
         cashierId: data.cashierId || data.createdBy || undefined,
         status: 'returned',
         createdAt: this.networkService.isOnline() ? onlineCreatedAt : offlineCreatedAt,
