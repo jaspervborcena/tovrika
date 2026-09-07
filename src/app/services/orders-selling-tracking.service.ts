@@ -337,6 +337,7 @@ export class OrdersSellingTrackingService {
         storeId: data.storeId || undefined,
         orderId: data.orderId || orderId,
         invoiceNumber: data.invoiceNumber || undefined,
+        customerId: data.customerId || undefined,
         itemCode: data.itemCode || data.productCode || undefined,
         batchNumber: data.batchNumber || 1,
         itemIndex: data.itemIndex ?? 0,
@@ -463,6 +464,7 @@ async markOrderTrackingRefunded(orderId: string, refundedBy?: string, reason?: s
         storeId: data.storeId || undefined,
         orderId: data.orderId || orderId,
         invoiceNumber: data.invoiceNumber || undefined,
+        customerId: data.customerId || undefined,
         itemCode: data.itemCode || data.productCode || undefined,
         batchNumber: data.batchNumber || 1,
         itemIndex: data.itemIndex ?? 0,
@@ -536,6 +538,7 @@ async markOrderTrackingRefunded(orderId: string, refundedBy?: string, reason?: s
             storeId: pd.data.storeId || undefined,
             orderId: pd.data.orderId || orderId,
             invoiceNumber: pd.data.invoiceNumber || undefined,
+            customerId: pd.data.customerId || undefined,
             itemCode: pd.data.itemCode || pd.data.productCode || undefined,
             batchNumber: pd.data.batchNumber || 1,
             itemIndex: pd.data.itemIndex ?? 0,
@@ -854,6 +857,7 @@ async markOrderTrackingDamaged(orderId: string, damagedBy?: string, reason?: str
         storeId: data.storeId || undefined,
         orderId: data.orderId || orderId,
         invoiceNumber: data.invoiceNumber || undefined,
+        customerId: data.customerId || undefined,
         itemCode: data.itemCode || data.productCode || undefined,
         batchNumber: data.batchNumber || 1,
         itemIndex: data.itemIndex ?? 0,
@@ -1075,6 +1079,7 @@ async markOrderTrackingDamaged(orderId: string, damagedBy?: string, reason?: str
             storeId: pd.data.storeId || undefined,
             orderId: pd.data.orderId || orderId,
             invoiceNumber: pd.data.invoiceNumber || undefined,
+            customerId: pd.data.customerId || undefined,
             itemCode: pd.data.itemCode || pd.data.productCode || undefined,
             batchNumber: pd.data.batchNumber || 1,
             itemIndex: pd.data.itemIndex ?? 0,
@@ -1381,6 +1386,7 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
       orderId: string;
       status: string;
       invoiceNumber?: string;
+      customerId?: string;
       cashierId: string;
       cashierEmail?: string;
       cashierName?: string;
@@ -1710,6 +1716,7 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
           storeId: ctx.storeId,
           orderId: ctx.orderId,
           invoiceNumber: ctx.invoiceNumber || '',
+          customerId: ctx.customerId || '',
           batchNumber: (it as any).batchNumber || 1,
           createdAt: new Date(),
           createdBy: ctx.cashierId,

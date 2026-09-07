@@ -1,4 +1,4 @@
-import { Component, inject, signal, computed, OnInit, effect } from '@angular/core';
+﻿import { Component, inject, signal, computed, OnInit, effect } from '@angular/core';
 import { environment } from '../../../../environments/environment';
 import { CommonModule } from '@angular/common';
 import { StoreService, Store, dedupeStoresForDropdown, formatStoreDisplayName } from '../../../services/store.service';
@@ -32,7 +32,7 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
       <div class="header">
         <div class="header-content">
           <h1 class="page-title">Dashboard Overview</h1>
-          <p class="page-subtitle">Welcome, {{ currentUserName() }} 🎉 - Here's what's happening in your store</p>
+          <p class="page-subtitle">Welcome, {{ currentUserName() }} Here's what's happening in your store</p>
           <!-- Overview controls: store selector and period -->
           <div class="overview-controls">
             <div class="control-row">
@@ -85,7 +85,7 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
                 </svg>
               </div>
               <div class="card-content">
-                <div class="card-value">₱{{ totalRevenue() | number:'1.0-0' }}</div>
+                <div class="card-value">â‚±{{ totalRevenue() | number:'1.0-0' }}</div>
                 <div class="card-label">Total Revenue</div>
                 <div class="card-change">
                   <span class="change-icon">{{ revenueChange().symbol }}</span>
@@ -102,7 +102,7 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
                 </svg>
               </div>
               <div class="card-content">
-                <div class="card-value">Orders: ({{ ledgerOrderQty() }})</div>
+                <div class="card-value">Orders: ({{ totalOrders() }})</div>
                 <div class="card-label">Items: ({{ totalItems() }})</div>
                 <div class="card-change">
                   <span class="change-icon">{{ ordersChange().symbol }}</span>
@@ -119,10 +119,10 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
                 </svg>
               </div>
               <div class="card-content">
-                <div class="card-value">Cancelled / Void: ₱{{ ledgerCancelledAmount() | number:'1.0-0' }}</div>
+                <div class="card-value">Cancelled / Void: â‚±{{ ledgerCancelledAmount() | number:'1.0-0' }}</div>
                 <div class="card-label">Orders ({{ ledgerCancelledQty() }})</div>
                 <div class="card-change">
-                  <span class="change-icon">×</span>
+                  <span class="change-icon">Ã—</span>
                   <span class="change-text">Cancelled transactions</span>
                 </div>
               </div>
@@ -136,9 +136,9 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
                 </svg>
               </div>
               <div class="card-content">
-                <div class="card-value">Returns: ₱{{ ledgerReturnAmount() | number:'1.0-0' }} ({{ ledgerReturnQty() }})</div>
-                <div class="card-label">Refunds: ₱{{ ledgerRefundAmount() | number:'1.0-0' }} ({{ ledgerRefundQty() }})</div>
-                <div class="card-label">Damage: ₱{{ ledgerDamageAmount() | number:'1.0-0' }} ({{ ledgerDamageQty() }})</div>
+                <div class="card-value">Returns: â‚±{{ ledgerReturnAmount() | number:'1.0-0' }} ({{ ledgerReturnQty() }})</div>
+                <div class="card-label">Refunds: â‚±{{ ledgerRefundAmount() | number:'1.0-0' }} ({{ ledgerRefundQty() }})</div>
+                <div class="card-label">Damage: â‚±{{ ledgerDamageAmount() | number:'1.0-0' }} ({{ ledgerDamageQty() }})</div>
               </div>
             </div>
 
@@ -150,10 +150,10 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
                 </svg>
               </div>
               <div class="card-content">
-                <div class="card-value">₱{{ ledgerUnpaidAmount() | number:'1.0-0' }}</div>
+                <div class="card-value">â‚±{{ ledgerUnpaidAmount() | number:'1.0-0' }}</div>
                 <div class="card-label">Unpaid ({{ ledgerUnpaidQty() }})</div>
                 <div class="card-change">
-                  <span class="change-icon">⏳</span>
+                  <span class="change-icon">â³</span>
                   <span class="change-text">Pending payments</span>
                 </div>
               </div>
@@ -167,10 +167,10 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
                 </svg>
               </div>
               <div class="card-content">
-                <div class="card-value">₱{{ ledgerRecoveredAmount() | number:'1.0-0' }}</div>
+                <div class="card-value">â‚±{{ ledgerRecoveredAmount() | number:'1.0-0' }}</div>
                 <div class="card-label">Recovered ({{ ledgerRecoveredQty() }})</div>
                 <div class="card-change">
-                  <span class="change-icon">✓</span>
+                  <span class="change-icon">âœ“</span>
                   <span class="change-text">Payments collected</span>
                 </div>
               </div>
@@ -184,7 +184,7 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
                 </svg>
               </div>
               <div class="card-content">
-                <div class="card-value">₱{{ totalExpenses() | number:'1.0-0' }}</div>
+                <div class="card-value">â‚±{{ totalExpenses() | number:'1.0-0' }}</div>
                 <div class="card-label">Total Expenses</div>
                 <div class="card-change">
                   <span class="change-icon">{{ expenseChange().symbol }}</span>
@@ -201,10 +201,10 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
                 </svg>
               </div>
               <div class="card-content">
-                <div class="card-value">₱{{ netProfit() | number:'1.0-0' }}</div>
+                <div class="card-value">â‚±{{ netProfit() | number:'1.0-0' }}</div>
                 <div class="card-label">Net Profit</div>
                 <div class="card-change">
-                  <span class="change-icon">↗</span>
+                  <span class="change-icon">â†—</span>
                   <span class="change-text">After expenses</span>
                 </div>
               </div>
@@ -271,7 +271,7 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
                     </div>
                     <div class="orders-pie-center">
                       <div class="orders-count">{{ totalOrders() || 0 }}</div>
-                      <div class="orders-profit">₱{{ (netProfit() !== 0 ? netProfit() : 0) | number:'1.0-0' }}</div>
+                      <div class="orders-profit">â‚±{{ (netProfit() !== 0 ? netProfit() : 0) | number:'1.0-0' }}</div>
                     </div>
                   </div>
                     <div class="orders-pie-legend">
@@ -1591,12 +1591,15 @@ export class OverviewComponent implements OnInit {
   protected stores = signal<Store[]>([]);
   protected products = signal<Product[]>([]);
   protected orders = signal<Order[]>([]);
+  protected firestoreCustomerCount = signal<number>(0);
   protected expenses = signal<ExpenseLog[]>([]);
   // Aggregates for expenses: month-to-date and yesterday totals (in PHP, not cents)
   protected monthExpensesTotal = signal<number>(0);
   protected yesterdayExpensesTotal = signal<number>(0);
   // BigQuery-backed summary totals for the dashboard cards
   protected salesSummary = signal({ totalSales: 0, totalOrders: 0, totalItems: 0 });
+  protected revenueSummary = signal({ totalSales: 0, totalOrders: 0, totalItems: 0 });
+  protected netTotalsSummary = signal({ totalSales: 0, totalOrders: 0, totalItems: 0 });
   protected statusBreakdown = signal<Array<{ status: string; count: number; amount: number }>>([]);
   protected ledgerTotalRevenue = signal<number>(0);
   protected ledgerTotalOrders = signal<number>(0);
@@ -1753,30 +1756,13 @@ export class OverviewComponent implements OnInit {
   }
   
   protected totalRevenue = computed(() => {
-    if (this.bigQueryRevenueLoaded()) {
-      return Math.max(0, this.bigQueryRevenue());
-    }
-    const summary = this.salesSummary();
-    const adjustedRevenue = summary.totalSales - this.ledgerRefundAmount() - this.ledgerDamageAmount();
-    return Math.max(0, adjustedRevenue || this.dateRangeRevenue());
+    return this.revenueSummary().totalSales;
   });
-  protected revenueSource = computed(() => this.bigQueryRevenueLoaded() ? 'BigQuery' : 'fallback');
   protected totalOrders = computed(() => {
-    const summary = this.salesSummary();
-    if (summary.totalOrders > 0) {
-      return Math.max(0, summary.totalOrders);
-    }
-    return Math.max(0, this.orders().length || this.dateRangeOrders() || 0);
+    return this.revenueSummary().totalOrders;
   });
   protected totalItems = computed(() => {
-    const summary = this.salesSummary();
-    const excludedItems = this.ledgerCancelledQty() + this.ledgerReturnQty();
-    if (summary.totalItems > 0) {
-      return Math.max(0, summary.totalItems - excludedItems);
-    }
-    return Math.max(0, this.orders()
-      .filter(order => String(order.status || '').toLowerCase() === 'completed')
-      .reduce((sum, order: any) => sum + (Number(order.itemCount || order.totalItems || 0) || 0), 0) - excludedItems);
+    return this.revenueSummary().totalItems;
   });
   // Total expenses shown on the card should reflect the active period.
   // For date-range mode, use the explicit range total; otherwise keep the
@@ -1798,24 +1784,14 @@ export class OverviewComponent implements OnInit {
       const raw = (Math.abs(diff) / yesterday) * 100;
       return Math.round(raw * 10) / 10; // one decimal place
     })();
-    const symbol = diff > 0 ? '↗' : (diff < 0 ? '↘' : '→');
+    const symbol = diff > 0 ? 'â†—' : (diff < 0 ? 'â†˜' : 'â†’');
     return { symbol, percent, diff };
   });
   protected netProfit = computed(() =>
-    this.totalRevenue() + this.ledgerRecoveredAmount() - this.totalExpenses()
+    this.netTotalsSummary().totalSales
   );
   protected totalCustomers = computed(() => {
-    const customerIds = new Set<string>();
-
-    for (const order of this.filteredOrders()) {
-      const status = String(order.status || '').toLowerCase();
-      if (!['completed', 'complete', 'paid'].includes(status)) continue;
-      const orderData = order as any;
-      const customerId = String(orderData.customerId || orderData.customerInfo?.customerId || '').trim();
-      if (customerId) customerIds.add(customerId);
-    }
-
-    return customerIds.size;
+    return this.firestoreCustomerCount();
   });
   protected todayOrders = computed(() => {
     // Always use ledgerCompletedQty
@@ -1844,23 +1820,13 @@ export class OverviewComponent implements OnInit {
   protected currentMonthOrders = signal<number>(0);
   protected previousMonthRevenue = signal<number>(0);
   protected previousMonthOrders = signal<number>(0);
-  protected selectedDayOrderRevenue = signal<number>(0);
-  protected comparisonDayOrderRevenue = signal<number>(0);
-  protected bigQueryRevenue = signal<number>(0);
-  protected bigQueryComparisonRevenue = signal<number>(0);
-  protected bigQueryRevenueLoaded = signal<boolean>(false);
-
   protected revenueChange = computed(() => {
     try {
       const period = this.selectedPeriod();
       let revCurrent: number;
       let revPrevious: number;
       
-      // Use the sales-summary API values whenever the current revenue card does.
-      if (this.bigQueryRevenueLoaded()) {
-        revCurrent = this.bigQueryRevenue();
-        revPrevious = this.bigQueryComparisonRevenue();
-      } else if (period === 'this_month') {
+      if (period === 'this_month') {
         revCurrent = this.currentMonthRevenue();
         revPrevious = this.previousMonthRevenue();
       } else if (period === 'previous_month') {
@@ -1872,9 +1838,9 @@ export class OverviewComponent implements OnInit {
         revCurrent = this.dateRangeRevenue();
         revPrevious = this.previousDateRangeRevenue();
       } else {
-        // Day-over-day comparison for today/yesterday
-        revCurrent = this.bigQueryRevenueLoaded() ? this.bigQueryRevenue() : this.selectedDayOrderRevenue();
-        revPrevious = this.bigQueryRevenueLoaded() ? this.bigQueryComparisonRevenue() : this.comparisonDayOrderRevenue();
+        // Day-over-day comparison from the direct Revenue summary rows.
+        revCurrent = this.totalRevenue();
+        revPrevious = this.yesterdayRevenue();
       }
       
       const diff = revCurrent - revPrevious;
@@ -1886,10 +1852,10 @@ export class OverviewComponent implements OnInit {
         return Math.round(raw * 10) / 10; // one decimal place
       })();
 
-      const symbol = diff > 0 ? '↗' : (diff < 0 ? '↘' : '→');
+      const symbol = diff > 0 ? 'â†—' : (diff < 0 ? 'â†˜' : 'â†’');
       return { symbol, percent, diff, revToday: revCurrent, revYesterday: revPrevious };
     } catch (e) {
-      return { symbol: '→', percent: 0, diff: 0, revToday: 0, revYesterday: 0 };
+      return { symbol: 'â†’', percent: 0, diff: 0, revToday: 0, revYesterday: 0 };
     }
   });
 
@@ -1925,10 +1891,10 @@ export class OverviewComponent implements OnInit {
         return Math.round(raw * 10) / 10;
       })();
 
-      const symbol = diff > 0 ? '↗' : (diff < 0 ? '↘' : '→');
+      const symbol = diff > 0 ? 'â†—' : (diff < 0 ? 'â†˜' : 'â†’');
       return { symbol, percent };
     } catch (e) {
-      return { symbol: '→', percent: 0 };
+      return { symbol: 'â†’', percent: 0 };
     }
   });
 
@@ -1936,9 +1902,9 @@ export class OverviewComponent implements OnInit {
     try {
       const customersToday = this.totalCustomers();
       // For now, return neutral since we don't track yesterday's customers yet
-      return { symbol: '→', percent: 0 };
+      return { symbol: 'â†’', percent: 0 };
     } catch (e) {
-      return { symbol: '→', percent: 0 };
+      return { symbol: 'â†’', percent: 0 };
     }
   });
 
@@ -2456,56 +2422,51 @@ export class OverviewComponent implements OnInit {
     // Load analytics data for the given date range and keep the full-page
     // loading overlay visible until every important fetch has completed.
     this.isLoading.set(true);
-    console.log('📊 [Overview] loadAnalyticsData started for period:', this.selectedPeriod(), 'from', startDate, 'to', endDate);
+    console.log('ðŸ“Š [Overview] loadAnalyticsData started for period:', this.selectedPeriod(), 'from', startDate, 'to', endDate);
 
     try {
       await this.loadCurrentDateData(startDate, endDate);
-      if (this.selectedPeriod() === 'today' || this.selectedPeriod() === 'yesterday') {
-        await this.fetchSingleDayOrderRevenue(startDate);
-      } else {
-        this.selectedDayOrderRevenue.set(0);
-        this.comparisonDayOrderRevenue.set(0);
-      }
-      const comparisonEnd = new Date(startDate);
-      comparisonEnd.setDate(comparisonEnd.getDate() - 1);
-      const periodLength = Math.max(0, Math.round((endDate.getTime() - startDate.getTime()) / 86400000));
-      const comparisonStart = new Date(comparisonEnd);
-      comparisonStart.setDate(comparisonStart.getDate() - periodLength);
-      await this.fetchBigQueryRevenue(startDate, endDate, comparisonStart, comparisonEnd);
       
       const storeId = this.selectedStoreId() || this.authService.getCurrentPermission()?.storeId || '';
       const companyId = this.authService.getCurrentPermission()?.companyId || '';
-      console.log('📊 [Overview] storeId for summary:', storeId);
+      console.log('ðŸ“Š [Overview] storeId for summary:', storeId);
       
       if (storeId) {
         try {
-          console.log('💰 [Overview] Fetching sales summary totals...');
+          console.log('ðŸ’° [Overview] Fetching sales summary totals...');
           const [summary, ordersSummary] = await Promise.all([
             this.bigQueryService.getSalesSummaryTotals(storeId, startDate, endDate),
             this.bigQueryService.getSalesDashboardOrderSummary(storeId, startDate, endDate)
           ]);
+          const statusRows = summary?.statusBreakdown || [];
           const mergedSummary = {
-            totalSales: Number(summary?.totalSales || 0),
-            totalOrders: Number(ordersSummary?.totalOrders || 0),
-            totalItems: Number(ordersSummary?.totalItems || summary?.totalItems || this.totalItems())
+            totalSales: Number(summary?.revenue?.amount || 0),
+            totalOrders: Number(summary?.revenue?.count || 0),
+            totalItems: Number(summary?.revenue?.totalItems || 0)
           };
-          console.log('✅ [Overview] Sales summary and orders API totals received:', {
+          console.log('âœ… [Overview] Sales summary and orders API totals received:', {
             salesSummary: summary,
             ordersSummary,
             mergedSummary
           });
           this.salesSummary.set(mergedSummary);
+          this.revenueSummary.set(mergedSummary);
+          this.netTotalsSummary.set({
+            totalSales: Number(summary?.netTotals?.amount || 0),
+            totalOrders: Number(summary?.netTotals?.count || 0),
+            totalItems: Number(summary?.netTotals?.totalItems || 0)
+          });
           this.ledgerTotalRevenue.set(mergedSummary.totalSales);
           this.ledgerTotalOrders.set(mergedSummary.totalOrders);
           this.ledgerOrderQty.set(mergedSummary.totalOrders);
           this.ledgerItemsQty.set(mergedSummary.totalItems);
           this.ledgerCompletedQty.set(mergedSummary.totalOrders);
-          this.statusBreakdown.set(summary?.statusBreakdown || []);
-          this.applyStatusBreakdownToLedger(summary?.statusBreakdown || []);
-          const apiHasAdjustmentStatuses = this.hasApiAdjustmentStatuses(summary?.statusBreakdown || []);
-          console.log('📊 [Overview] Summary API adjustment statuses:', apiHasAdjustmentStatuses);
+          this.statusBreakdown.set(statusRows);
+          this.applyStatusBreakdownToLedger(statusRows);
+          const apiHasAdjustmentStatuses = this.hasApiAdjustmentStatuses(statusRows);
+          console.log('ðŸ“Š [Overview] Summary API adjustment statuses:', apiHasAdjustmentStatuses);
         } catch (err) {
-          console.error('❌ [Overview] Sales summary totals failed:', err);
+          console.error('âŒ [Overview] Sales summary totals failed:', err);
           this.salesSummary.set({ totalSales: 0, totalOrders: 0, totalItems: 0 });
           this.ledgerTotalRevenue.set(0);
           this.ledgerTotalOrders.set(0);
@@ -2524,7 +2485,7 @@ export class OverviewComponent implements OnInit {
               await this.applyTrackingAdjustmentFallbacks(companyId, storeId, startDate, endDate);
             }
           } catch (err) {
-            console.warn('⚠️ [Overview] Ledger adjustment totals failed:', err);
+            console.warn('âš ï¸ [Overview] Ledger adjustment totals failed:', err);
             this.applyAdjustmentTotalsToCards({
               completed: { amount: 0, qty: 0 },
               cancelled: { amount: 0, qty: 0 },
@@ -2538,120 +2499,13 @@ export class OverviewComponent implements OnInit {
         }
 
       } else {
-        console.warn('⚠️ [Overview] No storeId available for summary');
+        console.warn('âš ï¸ [Overview] No storeId available for summary');
       }
     } catch (err) {
-      console.error('❌ [Overview] Error loading analytics data:', err);
+      console.error('âŒ [Overview] Error loading analytics data:', err);
     } finally {
-      console.log('📊 [Overview] loadAnalyticsData completed');
+      console.log('ðŸ“Š [Overview] loadAnalyticsData completed');
       this.isLoading.set(false);
-    }
-  }
-
-  private async fetchSingleDayOrderRevenue(selectedDate: Date): Promise<void> {
-    const storeId = this.selectedStoreId() || this.authService.getCurrentPermission()?.storeId || '';
-    if (!storeId || storeId === 'all') {
-      this.selectedDayOrderRevenue.set(0);
-      this.comparisonDayOrderRevenue.set(0);
-      return;
-    }
-
-    const getDayRange = (date: Date): { start: Date; end: Date } => ({
-      start: new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0, 0),
-      end: new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59, 999)
-    });
-    const sumRevenueGross = async (date: Date): Promise<number> => {
-      const { start, end } = getDayRange(date);
-      const orders = await this.bigQueryService.getSalesDashboardOrders(storeId, start, end);
-      const includedOrderIds = new Set<string>();
-      return (orders || []).reduce((sum, order) => {
-        if (order.storeId !== storeId) return sum;
-
-        // Adjustment actions may update statusHistory/statusTags while leaving
-        // the root order status as completed. Use the latest available status.
-        const history = Array.isArray(order.statusHistory) ? order.statusHistory : [];
-        const latestHistoryStatus = history.length > 0
-          ? String(history[history.length - 1]?.status || '').toLowerCase()
-          : '';
-        const tags = Array.isArray(order.statusTags) ? order.statusTags : [];
-        const latestTagStatus = tags.length > 0 ? String(tags[tags.length - 1] || '').toLowerCase() : '';
-        const latestStatus = latestHistoryStatus || latestTagStatus || String(order.status || '').toLowerCase();
-        const status = latestStatus === 'return' ? 'returned' : latestStatus;
-        if (status !== 'completed' && status !== 'returned') return sum;
-
-        const orderId = String(order.id || order.orderId || '');
-        if (orderId && includedOrderIds.has(orderId)) return sum;
-        if (orderId) includedOrderIds.add(orderId);
-        return sum + (Number(order.grossAmount) || 0);
-      }, 0);
-    };
-
-    try {
-      const comparisonDate = new Date(selectedDate);
-      comparisonDate.setDate(comparisonDate.getDate() - 1);
-      const [selectedRevenue, comparisonRevenue] = await Promise.all([
-        sumRevenueGross(selectedDate),
-        sumRevenueGross(comparisonDate)
-      ]);
-      this.selectedDayOrderRevenue.set(selectedRevenue);
-      this.comparisonDayOrderRevenue.set(comparisonRevenue);
-    } catch (error) {
-      console.warn('Overview: failed to load completed order revenue fallback:', error);
-      this.selectedDayOrderRevenue.set(0);
-      this.comparisonDayOrderRevenue.set(0);
-    }
-  }
-
-  private async fetchBigQueryRevenue(startDate: Date, endDate: Date, comparisonStart: Date, comparisonEnd: Date): Promise<void> {
-    const storeId = this.selectedStoreId() || this.authService.getCurrentPermission()?.storeId || '';
-    const companyId = this.authService.getCurrentPermission()?.companyId || '';
-    this.bigQueryRevenueLoaded.set(false);
-    if (!storeId || storeId === 'all') {
-      return;
-    }
-
-    try {
-      const [currentRevenue, comparisonRevenue, currentAdjustments, comparisonAdjustments] = await Promise.all([
-        this.bigQueryService.getSalesSummaryRevenue(storeId, startDate, endDate),
-        this.bigQueryService.getSalesSummaryRevenue(storeId, comparisonStart, comparisonEnd),
-        companyId
-          ? this.ledgerService.getAdjustmentTotals(companyId, storeId, startDate, endDate)
-          : Promise.resolve(null),
-        companyId
-          ? this.ledgerService.getAdjustmentTotals(companyId, storeId, comparisonStart, comparisonEnd)
-          : Promise.resolve(null)
-      ]);
-      if (currentRevenue === null) {
-        this.bigQueryRevenueLoaded.set(false);
-        return;
-      }
-      const currentAdjustedRevenue = Math.max(
-        0,
-        Number(currentRevenue || 0)
-          - Number(currentAdjustments?.refunds.amount || 0)
-          - Number(currentAdjustments?.damages.amount || 0)
-      );
-      const comparisonAdjustedRevenue = Math.max(
-        0,
-        Number(comparisonRevenue || 0)
-          - Number(comparisonAdjustments?.refunds.amount || 0)
-          - Number(comparisonAdjustments?.damages.amount || 0)
-      );
-      this.bigQueryRevenue.set(currentAdjustedRevenue);
-      this.bigQueryComparisonRevenue.set(comparisonAdjustedRevenue);
-      this.bigQueryRevenueLoaded.set(true);
-      console.log('Overview Total Revenue source: BigQuery', {
-        storeId,
-        completedSales: currentRevenue,
-        refunds: currentAdjustments?.refunds.amount || 0,
-        damage: currentAdjustments?.damages.amount || 0,
-        revenue: currentAdjustedRevenue,
-        comparisonRevenue: comparisonAdjustedRevenue
-      });
-    } catch (error) {
-      console.warn('Overview: BigQuery sales summary unavailable; using existing revenue source:', error);
-      this.bigQueryRevenueLoaded.set(false);
-      console.warn('Overview Total Revenue source: fallback', error);
     }
   }
 
@@ -2674,21 +2528,21 @@ export class OverviewComponent implements OnInit {
       this.isLoading.set(false);
 
     } catch (error) {
-      console.error('❌ Dashboard error loading data:', error);
+      console.error('âŒ Dashboard error loading data:', error);
       // Don't block the UI - allow dashboard to render with whatever data is available
-      console.warn('⚠️ Dashboard will show with cached/available data');
+      console.warn('âš ï¸ Dashboard will show with cached/available data');
       this.isLoading.set(false);
     }
   }
 
-  // Note: SVG pie helpers removed — Chart.js (ng2-charts) canvas is used instead.
+  // Note: SVG pie helpers removed â€” Chart.js (ng2-charts) canvas is used instead.
 
   async loadStores(): Promise<void> {
     try {
       const currentPermission = this.authService.getCurrentPermission();
       
       if (!currentPermission?.companyId) {
-        console.warn('⚠️ No companyId found in current permission');
+        console.warn('âš ï¸ No companyId found in current permission');
         return;
       }
 
@@ -2707,11 +2561,11 @@ export class OverviewComponent implements OnInit {
       } else if (stores.length > 0 && stores[0].id) {
         this.selectedStoreId.set(stores[0].id);
       } else {
-        console.warn('⚠️ Overview: No stores available to select');
+        console.warn('âš ï¸ Overview: No stores available to select');
       }
     } catch (error) {
-      console.error('❌ Error loading stores:', error);
-      console.warn('⚠️ Will use cached store data if available');
+      console.error('âŒ Error loading stores:', error);
+      console.warn('âš ï¸ Will use cached store data if available');
       // Try to set selectedStoreId from permission even if store load failed
       const currentPermission = this.authService.getCurrentPermission();
       if (currentPermission?.storeId) {
@@ -2731,7 +2585,7 @@ export class OverviewComponent implements OnInit {
       const companyId = this.authService.getCurrentPermission()?.companyId || '';
       
       if (!storeId) {
-        console.warn('❌ Dashboard: No storeId found - cannot load data');
+        console.warn('âŒ Dashboard: No storeId found - cannot load data');
         this.orders.set([]);
         return;
       }
@@ -2748,6 +2602,7 @@ export class OverviewComponent implements OnInit {
         return;
       }
       this.orders.set(orders || []);
+      await this.loadFirestoreCustomerCount(queryStart, queryEnd);
 
       // Load expenses for the requested date range
       const expenses = await this.expenseService.getExpensesByStore(storeId, queryStart, queryEnd);
@@ -2792,7 +2647,65 @@ export class OverviewComponent implements OnInit {
       // Loading completion is managed by the outer analytics load wrapper.
       // This preserves the full-page loader until all dashboard data has finished.
     } catch (error) {
-      console.error('❌ Error loading current date data:', error);
+      console.error('âŒ Error loading current date data:', error);
+    }
+  }
+
+  private async loadFirestoreCustomerCount(startDate: Date, endDate: Date): Promise<void> {
+    const permission = this.authService.getCurrentPermission();
+    const storeId = this.selectedStoreId() || permission?.storeId || '';
+    const companyId = permission?.companyId || '';
+
+    if (!companyId || !storeId) {
+      this.firestoreCustomerCount.set(0);
+      return;
+    }
+
+    try {
+      const ordersRef = collection(this.firestore, 'orders');
+      let orderDocs;
+      try {
+        orderDocs = (await getDocs(query(
+          ordersRef,
+          where('companyId', '==', companyId),
+          where('storeId', '==', storeId),
+          where('createdAt', '>=', startDate),
+          where('createdAt', '<=', endDate)
+        ))).docs;
+      } catch (queryError) {
+        console.warn('Overview: date-range customer query failed; using store fallback:', queryError);
+        orderDocs = (await getDocs(query(
+          ordersRef,
+          where('companyId', '==', companyId),
+          where('storeId', '==', storeId)
+        ))).docs;
+      }
+      const customerUids = new Set<string>();
+
+      for (const orderDoc of orderDocs) {
+        const data = orderDoc.data() as any;
+        const createdAt = data.createdAt?.toDate?.() || new Date(data.createdAt || 0);
+        const status = String(data.status || '').toLowerCase();
+        const customerInfo = data.customerInfo || {};
+        const customerUid = String(customerInfo.uid || '').trim();
+        const customerId = String(customerInfo.customerId || '').trim();
+        const customerName = String(customerInfo.fullName || '').trim();
+
+        if (createdAt < startDate || createdAt > endDate) continue;
+        if (!['completed', 'complete', 'paid'].includes(status)) continue;
+        if (customerUid) {
+          customerUids.add(`uid:${customerUid}`);
+        } else if (customerId) {
+          customerUids.add(`customer-id:${customerId}`);
+        } else if (customerName && customerName.toLowerCase() !== 'walk-in customer') {
+          customerUids.add(`name:${customerName.toLowerCase()}`);
+        }
+      }
+
+      this.firestoreCustomerCount.set(customerUids.size);
+    } catch (error) {
+      console.error('Overview: failed to load Firestore customer count:', error);
+      this.firestoreCustomerCount.set(0);
     }
   }
 

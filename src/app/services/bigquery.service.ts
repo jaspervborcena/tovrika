@@ -95,6 +95,8 @@ export interface SalesOrdersSummary {
 
 export interface SalesSummaryTotals extends SalesOrdersSummary {
   statusBreakdown: Array<{ status: string; count: number; amount: number; totalItems?: number }>;
+  revenue?: { status: string; count: number; amount: number; totalItems?: number };
+  netTotals?: { status: string; count: number; amount: number; totalItems?: number };
 }
 
 const productionSalesOrdersApi = 'https://asia-east1-jasperpos-1dfd5.cloudfunctions.net/get_sales_orders_bq';
@@ -145,19 +147,19 @@ export class BigQueryService {
 
     if (!token) {
       console.warn('❌ getSalesSummaryTotals - Missing token (user not authenticated or session expired)');
-      return { totalSales: 0, totalOrders: 0, totalItems: 0, statusBreakdown: [] };
+      return this.emptySalesSummaryTotals();
     }
     if (!endpoint) {
       console.warn('❌ getSalesSummaryTotals - Missing endpoint (API URL not configured)');
-      return { totalSales: 0, totalOrders: 0, totalItems: 0, statusBreakdown: [] };
+      return this.emptySalesSummaryTotals();
     }
     if (!storeId) {
       console.warn('❌ getSalesSummaryTotals - Missing storeId');
-      return { totalSales: 0, totalOrders: 0, totalItems: 0, statusBreakdown: [] };
+      return this.emptySalesSummaryTotals();
     }
     if (storeId === 'all') {
       console.warn('❌ getSalesSummaryTotals - storeId is "all" (not supported for BigQuery)');
-      return { totalSales: 0, totalOrders: 0, totalItems: 0, statusBreakdown: [] };
+      return this.emptySalesSummaryTotals();
     }
 
     const params = buildSalesSummaryRequestParams(storeId, from, to);
@@ -179,18 +181,22 @@ export class BigQueryService {
     console.log('📦 [Revenue API Response] payload:', payload);
 
     if (Array.isArray(payload)) {
-      const statusBreakdown = payload.map((row: any) => ({
+      const rows = payload.map((row: any) => ({
         status: String(row.status ?? row.orderStatus ?? row.order_status ?? '').trim().toLowerCase(),
         count: Number(row.totalOrders ?? row.total_orders ?? row.orderCount ?? row.order_count ?? row.count ?? 0),
         amount: Number(row.totalSales ?? row.total_sales ?? row.totalAmount ?? row.total_amount ?? row.amount ?? 0),
         totalItems: Number(row.totalItems ?? row.total_items ?? row.itemCount ?? row.item_count ?? row.quantity ?? 0)
       }));
-      const completedRow = statusBreakdown.find(row => row.status === 'completed');
+      const revenue = rows.find(row => row.status === 'revenue') ?? { status: 'revenue', count: 0, amount: 0, totalItems: 0 };
+      const netTotals = rows.find(row => row.status === 'nettotals') ?? { status: 'nettotals', count: 0, amount: 0, totalItems: 0 };
+      const statusBreakdown = rows.filter(row => row.status !== 'revenue' && row.status !== 'nettotals');
       const result = {
-        totalSales: Number(completedRow?.amount || 0),
-        totalOrders: statusBreakdown.reduce((sum, row) => sum + row.count, 0),
-        totalItems: statusBreakdown.reduce((sum, row) => sum + row.totalItems, 0),
-        statusBreakdown
+        totalSales: revenue.amount,
+        totalOrders: revenue.count,
+        totalItems: revenue.totalItems || 0,
+        statusBreakdown,
+        revenue,
+        netTotals
       };
       console.log('✅ [Revenue Final Result]', result);
       return result;
@@ -212,25 +218,42 @@ export class BigQueryService {
     const totalItems = this.readNumericValue(payload, [
       'total_items', 'totalItems', 'items_count', 'itemCount', 'quantity', 'total_quantity'
     ]);
-    const statusBreakdown = this.findNestedArray(payload, [
+    const rawStatusBreakdown = this.findNestedArray(payload, [
       'statusBreakdown', 'status_breakdown', 'statuses'
     ]) ?? [];
+    const rows = rawStatusBreakdown.map((row: any) => ({
+      status: String(row.status ?? row.name ?? row.orderStatus ?? row.order_status ?? '').trim().toLowerCase(),
+      count: Number(row.count ?? row.totalOrders ?? row.total_orders ?? row.orderCount ?? row.order_count ?? 0),
+      amount: Number(row.amount ?? row.totalSales ?? row.total_sales ?? row.totalAmount ?? row.total_amount ?? 0),
+      totalItems: Number(row.totalItems ?? row.total_items ?? row.itemCount ?? row.item_count ?? row.quantity ?? 0)
+    }));
+    const revenue = rows.find(row => row.status === 'revenue') ?? { status: 'revenue', count: Number(totalOrders ?? 0), amount: Number(totalSales ?? 0), totalItems: Number(totalItems ?? 0) };
+    const netTotals = rows.find(row => row.status === 'nettotals') ?? { status: 'nettotals', count: 0, amount: 0, totalItems: 0 };
+    const statusBreakdown = rows.filter(row => row.status !== 'revenue' && row.status !== 'nettotals');
 
     const result = {
-      totalSales: Number(totalSales ?? 0),
-      totalOrders: Number(totalOrders ?? 0),
-      totalItems: Number(totalItems ?? 0),
-      statusBreakdown: statusBreakdown.map((row: any) => ({
-        status: String(row.status ?? row.name ?? row.orderStatus ?? row.order_status ?? '').trim().toLowerCase(),
-        count: Number(row.count ?? row.totalOrders ?? row.total_orders ?? row.orderCount ?? row.order_count ?? 0),
-        amount: Number(row.amount ?? row.totalSales ?? row.total_sales ?? row.totalAmount ?? row.total_amount ?? 0),
-        totalItems: Number(row.totalItems ?? row.total_items ?? row.itemCount ?? row.item_count ?? row.quantity ?? 0)
-      }))
+      totalSales: revenue.amount,
+      totalOrders: revenue.count,
+      totalItems: revenue.totalItems || 0,
+      statusBreakdown,
+      revenue,
+      netTotals
     };
 
     console.log('✅ [Revenue Extracted] totalSales:', totalSales, 'totalOrders:', totalOrders, 'totalItems:', totalItems);
     console.log('✅ [Revenue Final Result]', result);
     return result;
+  }
+
+  private emptySalesSummaryTotals(): SalesSummaryTotals {
+    return {
+      totalSales: 0,
+      totalOrders: 0,
+      totalItems: 0,
+      statusBreakdown: [],
+      revenue: { status: 'revenue', count: 0, amount: 0, totalItems: 0 },
+      netTotals: { status: 'nettotals', count: 0, amount: 0, totalItems: 0 }
+    };
   }
 
   async getSalesDashboardOrders(storeId: string, from: Date, to: Date, includeAllStatus = false): Promise<Order[]> {
