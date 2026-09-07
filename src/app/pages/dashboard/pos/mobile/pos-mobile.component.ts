@@ -809,8 +809,10 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
     }
 
     // Determine customer name - consistent with prepareReceiptData
-    const customerName = order.soldTo && order.soldTo.trim() && order.soldTo !== 'Walk-in Customer' 
-      ? order.soldTo.trim() 
+    const customerInfo = order.customerInfo || {};
+    const customerNameValue = customerInfo.fullName || order.soldTo || '';
+    const customerName = customerNameValue && customerNameValue.trim() && customerNameValue !== 'Walk-in Customer'
+      ? customerNameValue.trim()
       : null;
 
     // Resolve cashier name from order data
@@ -875,8 +877,8 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
         inclusiveSerialNumber: (storeInfo as any)?.inclusiveSerialNumber || null
       },
       customerName: customerName,
-      customerAddress: customerName ? (order.businessAddress || 'N/A') : null,
-      customerTin: customerName ? (order.tin || 'N/A') : null,
+      customerAddress: customerName ? (customerInfo.address || order.businessAddress || 'N/A') : null,
+      customerTin: customerName ? (customerInfo.tin || order.tin || 'N/A') : null,
       cashier: cashierName,
       paymentMethod: order.cashSale ? 'Cash' : 'Charge',
       isCashSale: order.cashSale || true,
