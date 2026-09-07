@@ -1447,7 +1447,8 @@ public async restockOrderAndInventoryTransactional(orderId: string, performedBy 
     const net = Number(apiOrder.net_amount ?? apiOrder.netAmount ?? apiOrder.total_amount ?? gross);
     const paymentMethod = apiOrder.payment || apiOrder.payment_method || apiOrder.paymentMethod || 'cash';
 
-    const customerName = apiOrder.customerInfo?.fullName || apiOrder.soldTo || apiOrder.customerName || apiOrder.customer_name || 'Walk-in Customer';
+    const customerInfo = apiOrder.customerInfo || apiOrder.customer_info || {};
+    const customerName = customerInfo.fullName || apiOrder.soldTo || apiOrder.customerName || apiOrder.customer_name || 'Walk-in Customer';
 
     return {
       id: id,
@@ -1460,9 +1461,10 @@ public async restockOrderAndInventoryTransactional(orderId: string, performedBy 
       status: (apiOrder.status || apiOrder.order_status) ?? this.mapApiStatus(apiOrder.status),
 
       cashSale: true,
+      customerId: customerInfo.customerId || customerInfo.customer_id || apiOrder.customerId || apiOrder.customer_id || '',
       soldTo: customerName,
-      tin: apiOrder.tin || '',
-      businessAddress: apiOrder.businessAddress || apiOrder.customer_address || '',
+      tin: customerInfo.tin || apiOrder.tin || '',
+      businessAddress: customerInfo.address || apiOrder.businessAddress || apiOrder.customer_address || '',
 
       invoiceNumber: apiOrder.invoice_number || apiOrder.invoiceNumber || '',
       logoUrl: apiOrder.logoUrl || '',
