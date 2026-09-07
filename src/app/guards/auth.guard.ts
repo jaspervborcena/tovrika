@@ -2,9 +2,12 @@ import { inject } from '@angular/core';
 import { CanActivateFn, Router } from '@angular/router';
 import { AuthService } from '../services/auth.service';
 
-export const authGuard: CanActivateFn = (route, state) => {
+export const authGuard: CanActivateFn = async (route, state) => {
   const router = inject(Router);
   const authService = inject(AuthService);
+
+  // Firebase may still be restoring a persisted session during direct navigation.
+  await authService.waitForAuth();
 
   // Check if user is authenticated
   if (!authService.isAuthenticated()) {
