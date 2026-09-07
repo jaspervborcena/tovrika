@@ -561,7 +561,7 @@ export class PosService {
 
       // Update product inventory (this happens after successful order creation)
       try {
-        await this.updateProductInventory(cartItems, { orderId: invoiceResult.orderId!, invoiceNumber: invoiceResult.invoiceNumber!, status: orderData.status });
+        await this.updateProductInventory(cartItems, { orderId: invoiceResult.orderId!, invoiceNumber: invoiceResult.invoiceNumber!, customerId: customerInfo?.customerId, status: orderData.status });
         console.log('✅ Product inventory updated successfully');
         
         // Mark tracking docs as completed for this paid order.
@@ -882,7 +882,8 @@ export class PosService {
         cartSummary,
         allItems,
         user.uid,
-        orderData['status'] || 'completed'
+        orderData['status'] || 'completed',
+        orderData['customerInfo']?.customerId || ''
       );
 
       console.log('✅ Background operations completed for existing order:', orderId);
@@ -900,7 +901,8 @@ export class PosService {
     cartSummary: any,
     cartItems: CartItem[],
     userId: string,
-    status: string
+    status: string,
+    customerId?: string
   ): Promise<void> {
     console.log('🔄 Starting background operations for order:', orderId);
 
@@ -909,7 +911,7 @@ export class PosService {
     // 2. Update product inventory first (creates ordersSellingTracking docs),
     //    then mark them completed — must be sequential to avoid race condition.
     try {
-      await this.updateProductInventory(cartItems, { orderId, invoiceNumber, status });
+      await this.updateProductInventory(cartItems, { orderId, invoiceNumber, customerId, status });
       await this.markTrackingCompleted(orderId, userId);
     } catch (err) {
       console.warn('⚠️ Inventory update / tracking failed (non-critical):', err);
@@ -1050,7 +1052,7 @@ export class PosService {
 
       // Update product inventory (this happens after successful order creation)
       try {
-        await this.updateProductInventory(cartItems, { orderId: invoiceResult.orderId!, invoiceNumber: invoiceResult.invoiceNumber!, status: orderData.status });
+        await this.updateProductInventory(cartItems, { orderId: invoiceResult.orderId!, invoiceNumber: invoiceResult.invoiceNumber!, customerId: customerInfo?.customerId, status: orderData.status });
         console.log('✅ Product inventory updated successfully');
         // Mark tracking docs as completed for this order (if any were created as pending)
         try {
@@ -1278,7 +1280,7 @@ export class PosService {
 
   private async updateProductInventory(
     cartItems: CartItem[],
-    context?: { orderId?: string; invoiceNumber?: string; status?: string }
+    context?: { orderId?: string; invoiceNumber?: string; customerId?: string; status?: string }
   ): Promise<void> {
     const mode = environment.inventory?.reconciliationMode || 'legacy';
 
@@ -1335,6 +1337,7 @@ export class PosService {
         orderId: context?.orderId || 'unknown-order',
         status: context?.status || 'completed',
         invoiceNumber: context?.invoiceNumber,
+        customerId: context?.customerId,
         cashierId: user.uid,
         cashierEmail: user.email || undefined,
         cashierName: user.displayName || user.email || 'Unknown Cashier'
