@@ -91,12 +91,13 @@ export interface SalesOrdersSummary {
   totalOrders: number;
   totalItems: number;
   totalSales: number;
+  totalCustomers: number;
 }
 
 export interface SalesSummaryTotals extends SalesOrdersSummary {
-  statusBreakdown: Array<{ status: string; count: number; amount: number; totalItems?: number }>;
-  revenue?: { status: string; count: number; amount: number; totalItems?: number };
-  netTotals?: { status: string; count: number; amount: number; totalItems?: number };
+  statusBreakdown: Array<{ status: string; count: number; amount: number; totalItems?: number; totalCustomers?: number }>;
+  revenue?: { status: string; count: number; amount: number; totalItems?: number; totalCustomers?: number };
+  netTotals?: { status: string; count: number; amount: number; totalItems?: number; totalCustomers?: number };
 }
 
 const productionSalesOrdersApi = 'https://asia-east1-jasperpos-1dfd5.cloudfunctions.net/get_sales_orders_bq';
@@ -185,15 +186,18 @@ export class BigQueryService {
         status: String(row.status ?? row.orderStatus ?? row.order_status ?? '').trim().toLowerCase(),
         count: Number(row.totalOrders ?? row.total_orders ?? row.orderCount ?? row.order_count ?? row.count ?? 0),
         amount: Number(row.totalSales ?? row.total_sales ?? row.totalAmount ?? row.total_amount ?? row.amount ?? 0),
-        totalItems: Number(row.totalItems ?? row.total_items ?? row.itemCount ?? row.item_count ?? row.quantity ?? 0)
+        totalItems: Number(row.totalItems ?? row.total_items ?? row.itemCount ?? row.item_count ?? row.quantity ?? 0),
+        totalCustomers: Number(row.totalCustomer ?? row.totalCustomers ?? row.total_customer ?? row.total_customers ?? 0)
       }));
-      const revenue = rows.find(row => row.status === 'revenue') ?? { status: 'revenue', count: 0, amount: 0, totalItems: 0 };
-      const netTotals = rows.find(row => row.status === 'nettotals') ?? { status: 'nettotals', count: 0, amount: 0, totalItems: 0 };
+      const revenue = rows.find(row => row.status === 'revenue') ?? { status: 'revenue', count: 0, amount: 0, totalItems: 0, totalCustomers: 0 };
+      const netTotals = rows.find(row => row.status === 'nettotals') ?? { status: 'nettotals', count: 0, amount: 0, totalItems: 0, totalCustomers: 0 };
+      const completed = rows.find(row => row.status === 'completed');
       const statusBreakdown = rows.filter(row => row.status !== 'revenue' && row.status !== 'nettotals');
       const result = {
         totalSales: revenue.amount,
         totalOrders: revenue.count,
         totalItems: revenue.totalItems || 0,
+        totalCustomers: revenue.totalCustomers || completed?.totalCustomers || 0,
         statusBreakdown,
         revenue,
         netTotals
@@ -225,16 +229,19 @@ export class BigQueryService {
       status: String(row.status ?? row.name ?? row.orderStatus ?? row.order_status ?? '').trim().toLowerCase(),
       count: Number(row.count ?? row.totalOrders ?? row.total_orders ?? row.orderCount ?? row.order_count ?? 0),
       amount: Number(row.amount ?? row.totalSales ?? row.total_sales ?? row.totalAmount ?? row.total_amount ?? 0),
-      totalItems: Number(row.totalItems ?? row.total_items ?? row.itemCount ?? row.item_count ?? row.quantity ?? 0)
+      totalItems: Number(row.totalItems ?? row.total_items ?? row.itemCount ?? row.item_count ?? row.quantity ?? 0),
+      totalCustomers: Number(row.totalCustomer ?? row.totalCustomers ?? row.total_customer ?? row.total_customers ?? 0)
     }));
-    const revenue = rows.find(row => row.status === 'revenue') ?? { status: 'revenue', count: Number(totalOrders ?? 0), amount: Number(totalSales ?? 0), totalItems: Number(totalItems ?? 0) };
-    const netTotals = rows.find(row => row.status === 'nettotals') ?? { status: 'nettotals', count: 0, amount: 0, totalItems: 0 };
+    const revenue = rows.find(row => row.status === 'revenue') ?? { status: 'revenue', count: Number(totalOrders ?? 0), amount: Number(totalSales ?? 0), totalItems: Number(totalItems ?? 0), totalCustomers: 0 };
+    const netTotals = rows.find(row => row.status === 'nettotals') ?? { status: 'nettotals', count: 0, amount: 0, totalItems: 0, totalCustomers: 0 };
+    const completed = rows.find(row => row.status === 'completed');
     const statusBreakdown = rows.filter(row => row.status !== 'revenue' && row.status !== 'nettotals');
 
     const result = {
       totalSales: revenue.amount,
       totalOrders: revenue.count,
       totalItems: revenue.totalItems || 0,
+      totalCustomers: revenue.totalCustomers || completed?.totalCustomers || 0,
       statusBreakdown,
       revenue,
       netTotals
@@ -250,6 +257,7 @@ export class BigQueryService {
       totalSales: 0,
       totalOrders: 0,
       totalItems: 0,
+      totalCustomers: 0,
       statusBreakdown: [],
       revenue: { status: 'revenue', count: 0, amount: 0, totalItems: 0 },
       netTotals: { status: 'nettotals', count: 0, amount: 0, totalItems: 0 }
@@ -282,7 +290,7 @@ export class BigQueryService {
     const token = await this.authService.getFirebaseIdToken(true);
 
     if (!token || !endpoint || !storeId || storeId === 'all') {
-      return { totalOrders: 0, totalItems: 0, totalSales: 0 };
+      return { totalOrders: 0, totalItems: 0, totalSales: 0, totalCustomers: 0 };
     }
 
     const params = buildBigQueryRequestParams(storeId, from, to, includeAllStatus);
@@ -300,7 +308,8 @@ export class BigQueryService {
     return {
       totalOrders: Number(this.readNumericValue(payload, ['totalOrders', 'total_orders', 'orders_count', 'orderCount', 'order_count', 'count']) ?? 0),
       totalItems: Number(this.readNumericValue(payload, ['totalItems', 'total_items', 'items_count', 'itemCount', 'total_quantity', 'quantity']) ?? 0),
-      totalSales: Number(this.readNumericValue(payload, ['totalSales', 'total_sales', 'totalRevenue', 'total_revenue', 'totalAmount', 'total_amount', 'amount']) ?? 0)
+      totalSales: Number(this.readNumericValue(payload, ['totalSales', 'total_sales', 'totalRevenue', 'total_revenue', 'totalAmount', 'total_amount', 'amount']) ?? 0),
+      totalCustomers: Number(this.readNumericValue(payload, ['totalCustomer', 'totalCustomers', 'total_customer', 'total_customers']) ?? 0)
     };
   }
 
