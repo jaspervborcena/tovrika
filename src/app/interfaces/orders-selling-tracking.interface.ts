@@ -13,6 +13,7 @@ export interface OrdersSellingTrackingDoc {
   createdBy: string; // uid of creator
   orderId: string;
   invoiceNumber?: string;
+  customerId?: string;
   status: OrderDetailsStatus | string;
   storeId: string;
   uid?: string; // convenience alias for createdBy (used in security rules)
