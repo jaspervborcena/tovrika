@@ -50,12 +50,13 @@ describe('BigQueryService', () => {
       totalSales: 12450.75,
       totalOrders: 45,
       totalItems: 0,
+      totalCustomers: 0,
       statusBreakdown: [
-        { status: 'completed', count: 30, amount: 9500, totalItems: 0 },
-        { status: 'returned', count: 2, amount: 360, totalItems: 2 },
-        { status: 'refunds', count: 0, amount: 0, totalItems: 0 },
-        { status: 'damage', count: 0, amount: 0, totalItems: 0 },
-        { status: 'cancellations', count: 1, amount: 100, totalItems: 1 }
+        { status: 'completed', count: 30, amount: 9500, totalItems: 0, totalCustomers: 0 },
+        { status: 'returned', count: 2, amount: 360, totalItems: 2, totalCustomers: 0 },
+        { status: 'refunds', count: 0, amount: 0, totalItems: 0, totalCustomers: 0 },
+        { status: 'damage', count: 0, amount: 0, totalItems: 0, totalCustomers: 0 },
+        { status: 'cancellations', count: 1, amount: 100, totalItems: 1, totalCustomers: 0 }
       ]
     });
 
@@ -65,8 +66,9 @@ describe('BigQueryService', () => {
 
   it('should send UTC ISO dates and parse status rows from sales summary API', async () => {
     const payload = [
-      { storeId: 'store123', status: 'completed', totalSales: 1500, totalItems: 25, totalOrders: 8 },
-      { storeId: 'store123', status: 'cancelled', totalSales: 100, totalItems: 2, totalOrders: 1 }
+      { storeId: 'store123', status: 'completed', totalSales: 1500, totalItems: 25, totalOrders: 8, totalCustomer: 6 },
+      { storeId: 'store123', status: 'cancelled', totalSales: 100, totalItems: 2, totalOrders: 1, totalCustomer: 1 },
+      { storeId: 'store123', status: 'Revenue', totalSales: 1500, totalItems: 25, totalOrders: 8, totalCustomer: 6 }
     ];
 
     spyOn(window, 'fetch').and.resolveTo(new Response(JSON.stringify(payload), { status: 200 }));
@@ -83,9 +85,10 @@ describe('BigQueryService', () => {
     expect(summary.totalSales).toBe(1500);
     expect(summary.totalOrders).toBe(9);
     expect(summary.totalItems).toBe(27);
+    expect(summary.totalCustomers).toBe(6);
     expect(summary.statusBreakdown).toEqual([
-      { status: 'completed', count: 8, amount: 1500, totalItems: 25 },
-      { status: 'cancelled', count: 1, amount: 100, totalItems: 2 }
+      { status: 'completed', count: 8, amount: 1500, totalItems: 25, totalCustomers: 6 },
+      { status: 'cancelled', count: 1, amount: 100, totalItems: 2, totalCustomers: 1 }
     ]);
   });
 });

@@ -1597,9 +1597,9 @@ export class OverviewComponent implements OnInit {
   protected monthExpensesTotal = signal<number>(0);
   protected yesterdayExpensesTotal = signal<number>(0);
   // BigQuery-backed summary totals for the dashboard cards
-  protected salesSummary = signal({ totalSales: 0, totalOrders: 0, totalItems: 0 });
-  protected revenueSummary = signal({ totalSales: 0, totalOrders: 0, totalItems: 0 });
-  protected netTotalsSummary = signal({ totalSales: 0, totalOrders: 0, totalItems: 0 });
+  protected salesSummary = signal({ totalSales: 0, totalOrders: 0, totalItems: 0, totalCustomers: 0 });
+  protected revenueSummary = signal({ totalSales: 0, totalOrders: 0, totalItems: 0, totalCustomers: 0 });
+  protected netTotalsSummary = signal({ totalSales: 0, totalOrders: 0, totalItems: 0, totalCustomers: 0 });
   protected statusBreakdown = signal<Array<{ status: string; count: number; amount: number }>>([]);
   protected ledgerTotalRevenue = signal<number>(0);
   protected ledgerTotalOrders = signal<number>(0);
@@ -1791,7 +1791,8 @@ export class OverviewComponent implements OnInit {
     this.netTotalsSummary().totalSales
   );
   protected totalCustomers = computed(() => {
-    return this.firestoreCustomerCount();
+    const apiCustomers = this.salesSummary().totalCustomers;
+    return apiCustomers > 0 ? apiCustomers : this.firestoreCustomerCount();
   });
   protected todayOrders = computed(() => {
     // Always use ledgerCompletedQty
@@ -1940,7 +1941,7 @@ export class OverviewComponent implements OnInit {
       const summary = await this.bigQueryService.getSalesSummaryTotals(storeId, yesterday, yesterday);
       this.yesterdayRevenue.set(Number(summary?.totalSales || 0));
       this.yesterdayOrders.set(Number(summary?.totalOrders || 0));
-      this.salesSummary.set(summary ?? { totalSales: 0, totalOrders: 0, totalItems: 0 });
+      this.salesSummary.set(summary ?? { totalSales: 0, totalOrders: 0, totalItems: 0, totalCustomers: 0 });
     } catch (error) {
       console.error('Error fetching yesterday revenue:', error);
       this.yesterdayRevenue.set(0);
@@ -1958,7 +1959,7 @@ export class OverviewComponent implements OnInit {
     const today = new Date();
     try {
       const summary = await this.bigQueryService.getSalesSummaryTotals(storeId, today, today);
-      this.salesSummary.set(summary ?? { totalSales: 0, totalOrders: 0, totalItems: 0 });
+      this.salesSummary.set(summary ?? { totalSales: 0, totalOrders: 0, totalItems: 0, totalCustomers: 0 });
       this.ledgerTotalRevenue.set(Number(summary?.totalSales || 0));
       this.ledgerTotalOrders.set(Number(summary?.totalOrders || 0));
       this.ledgerCompletedQty.set(Number(summary?.totalOrders || 0));
@@ -2442,7 +2443,8 @@ export class OverviewComponent implements OnInit {
           const mergedSummary = {
             totalSales: Number(summary?.revenue?.amount || 0),
             totalOrders: Number(summary?.revenue?.count || 0),
-            totalItems: Number(summary?.revenue?.totalItems || 0)
+            totalItems: Number(summary?.revenue?.totalItems || 0),
+            totalCustomers: Number(summary?.revenue?.totalCustomers || summary?.totalCustomers || 0)
           };
           console.log('âœ… [Overview] Sales summary and orders API totals received:', {
             salesSummary: summary,
@@ -2454,7 +2456,8 @@ export class OverviewComponent implements OnInit {
           this.netTotalsSummary.set({
             totalSales: Number(summary?.netTotals?.amount || 0),
             totalOrders: Number(summary?.netTotals?.count || 0),
-            totalItems: Number(summary?.netTotals?.totalItems || 0)
+            totalItems: Number(summary?.netTotals?.totalItems || 0),
+            totalCustomers: Number(summary?.netTotals?.totalCustomers || 0)
           });
           this.ledgerTotalRevenue.set(mergedSummary.totalSales);
           this.ledgerTotalOrders.set(mergedSummary.totalOrders);
@@ -2467,7 +2470,7 @@ export class OverviewComponent implements OnInit {
           console.log('ðŸ“Š [Overview] Summary API adjustment statuses:', apiHasAdjustmentStatuses);
         } catch (err) {
           console.error('âŒ [Overview] Sales summary totals failed:', err);
-          this.salesSummary.set({ totalSales: 0, totalOrders: 0, totalItems: 0 });
+          this.salesSummary.set({ totalSales: 0, totalOrders: 0, totalItems: 0, totalCustomers: 0 });
           this.ledgerTotalRevenue.set(0);
           this.ledgerTotalOrders.set(0);
           this.ledgerOrderQty.set(0);
@@ -2924,7 +2927,7 @@ export class OverviewComponent implements OnInit {
   private async fetchLedgerTotalsForPeriod(startDate: Date, endDate: Date): Promise<void> {
     const storeId = this.selectedStoreId() || this.authService.getCurrentPermission()?.storeId || '';
     if (!storeId) {
-      this.salesSummary.set({ totalSales: 0, totalOrders: 0, totalItems: 0 });
+      this.salesSummary.set({ totalSales: 0, totalOrders: 0, totalItems: 0, totalCustomers: 0 });
       return;
     }
 
@@ -2936,7 +2939,8 @@ export class OverviewComponent implements OnInit {
       const mergedSummary = {
         totalSales: Number(summary?.totalSales || 0),
         totalOrders: Number(ordersSummary?.totalOrders || 0),
-        totalItems: Number(ordersSummary?.totalItems || 0)
+        totalItems: Number(ordersSummary?.totalItems || 0),
+        totalCustomers: Number(summary?.revenue?.totalCustomers || summary?.totalCustomers || 0)
       };
       this.salesSummary.set(mergedSummary);
       this.ledgerTotalRevenue.set(mergedSummary.totalSales);
@@ -2946,7 +2950,7 @@ export class OverviewComponent implements OnInit {
       this.ledgerCompletedQty.set(mergedSummary.totalOrders);
     } catch (err) {
       console.warn('fetchLedgerTotalsForPeriod error:', err);
-      this.salesSummary.set({ totalSales: 0, totalOrders: 0, totalItems: 0 });
+      this.salesSummary.set({ totalSales: 0, totalOrders: 0, totalItems: 0, totalCustomers: 0 });
       this.ledgerTotalRevenue.set(0);
       this.ledgerTotalOrders.set(0);
     }
