@@ -85,7 +85,7 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
                 </svg>
               </div>
               <div class="card-content">
-                <div class="card-value">â‚±{{ totalRevenue() | number:'1.0-0' }}</div>
+                <div class="card-value">₱{{ totalRevenue() | number:'1.0-0' }}</div>
                 <div class="card-label">Total Revenue</div>
                 <div class="card-change">
                   <span class="change-icon">{{ revenueChange().symbol }}</span>
@@ -119,10 +119,10 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
                 </svg>
               </div>
               <div class="card-content">
-                <div class="card-value">Cancelled / Void: â‚±{{ ledgerCancelledAmount() | number:'1.0-0' }}</div>
+                <div class="card-value">Cancelled / Void: ₱{{ ledgerCancelledAmount() | number:'1.0-0' }}</div>
                 <div class="card-label">Orders ({{ ledgerCancelledQty() }})</div>
                 <div class="card-change">
-                  <span class="change-icon">Ã—</span>
+                  <span class="change-icon">×</span>
                   <span class="change-text">Cancelled transactions</span>
                 </div>
               </div>
@@ -136,9 +136,9 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
                 </svg>
               </div>
               <div class="card-content">
-                <div class="card-value">Returns: â‚±{{ ledgerReturnAmount() | number:'1.0-0' }} ({{ ledgerReturnQty() }})</div>
-                <div class="card-label">Refunds: â‚±{{ ledgerRefundAmount() | number:'1.0-0' }} ({{ ledgerRefundQty() }})</div>
-                <div class="card-label">Damage: â‚±{{ ledgerDamageAmount() | number:'1.0-0' }} ({{ ledgerDamageQty() }})</div>
+                <div class="card-value">Returns: ₱{{ ledgerReturnAmount() | number:'1.0-0' }} ({{ ledgerReturnQty() }})</div>
+                <div class="card-label">Refunds: ₱{{ ledgerRefundAmount() | number:'1.0-0' }} ({{ ledgerRefundQty() }})</div>
+                <div class="card-label">Damage: ₱{{ ledgerDamageAmount() | number:'1.0-0' }} ({{ ledgerDamageQty() }})</div>
               </div>
             </div>
 
@@ -150,10 +150,10 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
                 </svg>
               </div>
               <div class="card-content">
-                <div class="card-value">â‚±{{ ledgerUnpaidAmount() | number:'1.0-0' }}</div>
+                <div class="card-value">₱{{ ledgerUnpaidAmount() | number:'1.0-0' }}</div>
                 <div class="card-label">Unpaid ({{ ledgerUnpaidQty() }})</div>
                 <div class="card-change">
-                  <span class="change-icon">â³</span>
+                  <span class="change-icon">⏳</span>
                   <span class="change-text">Pending payments</span>
                 </div>
               </div>
@@ -167,10 +167,10 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
                 </svg>
               </div>
               <div class="card-content">
-                <div class="card-value">â‚±{{ ledgerRecoveredAmount() | number:'1.0-0' }}</div>
+                <div class="card-value">₱{{ ledgerRecoveredAmount() | number:'1.0-0' }}</div>
                 <div class="card-label">Recovered ({{ ledgerRecoveredQty() }})</div>
                 <div class="card-change">
-                  <span class="change-icon">âœ“</span>
+                  <span class="change-icon">✓</span>
                   <span class="change-text">Payments collected</span>
                 </div>
               </div>
@@ -184,7 +184,7 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
                 </svg>
               </div>
               <div class="card-content">
-                <div class="card-value">â‚±{{ totalExpenses() | number:'1.0-0' }}</div>
+                <div class="card-value">₱{{ totalExpenses() | number:'1.0-0' }}</div>
                 <div class="card-label">Total Expenses</div>
                 <div class="card-change">
                   <span class="change-icon">{{ expenseChange().symbol }}</span>
@@ -201,10 +201,10 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
                 </svg>
               </div>
               <div class="card-content">
-                <div class="card-value">â‚±{{ netProfit() | number:'1.0-0' }}</div>
+                <div class="card-value">₱{{ netProfit() | number:'1.0-0' }}</div>
                 <div class="card-label">Net Profit</div>
                 <div class="card-change">
-                  <span class="change-icon">â†—</span>
+                  <span class="change-icon">↗</span>
                   <span class="change-text">After expenses</span>
                 </div>
               </div>
@@ -271,7 +271,7 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
                     </div>
                     <div class="orders-pie-center">
                       <div class="orders-count">{{ totalOrders() || 0 }}</div>
-                      <div class="orders-profit">â‚±{{ (netProfit() !== 0 ? netProfit() : 0) | number:'1.0-0' }}</div>
+                      <div class="orders-profit">₱{{ (netProfit() !== 0 ? netProfit() : 0) | number:'1.0-0' }}</div>
                     </div>
                   </div>
                     <div class="orders-pie-legend">
@@ -1784,7 +1784,7 @@ export class OverviewComponent implements OnInit {
       const raw = (Math.abs(diff) / yesterday) * 100;
       return Math.round(raw * 10) / 10; // one decimal place
     })();
-    const symbol = diff > 0 ? 'â†—' : (diff < 0 ? 'â†˜' : 'â†’');
+    const symbol = diff > 0 ? '↗' : (diff < 0 ? '↘' : '→');
     return { symbol, percent, diff };
   });
   protected netProfit = computed(() =>
@@ -1853,10 +1853,10 @@ export class OverviewComponent implements OnInit {
         return Math.round(raw * 10) / 10; // one decimal place
       })();
 
-      const symbol = diff > 0 ? 'â†—' : (diff < 0 ? 'â†˜' : 'â†’');
+      const symbol = diff > 0 ? '↗' : (diff < 0 ? '↘' : '→');
       return { symbol, percent, diff, revToday: revCurrent, revYesterday: revPrevious };
     } catch (e) {
-      return { symbol: 'â†’', percent: 0, diff: 0, revToday: 0, revYesterday: 0 };
+      return { symbol: '→', percent: 0, diff: 0, revToday: 0, revYesterday: 0 };
     }
   });
 
@@ -1892,10 +1892,10 @@ export class OverviewComponent implements OnInit {
         return Math.round(raw * 10) / 10;
       })();
 
-      const symbol = diff > 0 ? 'â†—' : (diff < 0 ? 'â†˜' : 'â†’');
+      const symbol = diff > 0 ? '↗' : (diff < 0 ? '↘' : '→');
       return { symbol, percent };
     } catch (e) {
-      return { symbol: 'â†’', percent: 0 };
+      return { symbol: '→', percent: 0 };
     }
   });
 
@@ -1903,9 +1903,9 @@ export class OverviewComponent implements OnInit {
     try {
       const customersToday = this.totalCustomers();
       // For now, return neutral since we don't track yesterday's customers yet
-      return { symbol: 'â†’', percent: 0 };
+      return { symbol: '→', percent: 0 };
     } catch (e) {
-      return { symbol: 'â†’', percent: 0 };
+      return { symbol: '→', percent: 0 };
     }
   });
 
