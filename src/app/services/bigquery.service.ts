@@ -282,37 +282,6 @@ export class BigQueryService {
     return orders;
   }
 
-  async getSalesDashboardOrderSummary(storeId: string, from: Date, to: Date, includeAllStatus = false): Promise<SalesOrdersSummary> {
-    const endpoint = environment.production
-      ? productionSalesOrdersApi
-      : environment.api?.ordersApi || environment.api?.directOrdersApi || environment.api?.salesSummaryApi;
-    await this.authService.waitForAuth();
-    const token = await this.authService.getFirebaseIdToken(true);
-
-    if (!token || !endpoint || !storeId || storeId === 'all') {
-      return { totalOrders: 0, totalItems: 0, totalSales: 0, totalCustomers: 0 };
-    }
-
-    const params = buildBigQueryRequestParams(storeId, from, to, includeAllStatus);
-    const response = await fetch(`${endpoint}?${params.toString()}`, {
-      headers: { Authorization: `Bearer ${token}` }
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`❌ BigQuery orders summary request failed: ${response.status}`, errorText);
-      throw new Error(`BigQuery orders summary request failed: ${response.status}`);
-    }
-
-    const payload = await response.json();
-    return {
-      totalOrders: Number(this.readNumericValue(payload, ['totalOrders', 'total_orders', 'orders_count', 'orderCount', 'order_count', 'count']) ?? 0),
-      totalItems: Number(this.readNumericValue(payload, ['totalItems', 'total_items', 'items_count', 'itemCount', 'total_quantity', 'quantity']) ?? 0),
-      totalSales: Number(this.readNumericValue(payload, ['totalSales', 'total_sales', 'totalRevenue', 'total_revenue', 'totalAmount', 'total_amount', 'amount']) ?? 0),
-      totalCustomers: Number(this.readNumericValue(payload, ['totalCustomer', 'totalCustomers', 'total_customer', 'total_customers']) ?? 0)
-    };
-  }
-
   async getSalesDashboardAdjustments(storeId: string, from: Date, to: Date, includeAllStatus = false): Promise<any[]> {
     return this.fetchBigQueryRows<any>(
       environment.api?.salesAdjustmentsApi,
