@@ -2435,10 +2435,7 @@ export class OverviewComponent implements OnInit {
       if (storeId) {
         try {
           console.log('ðŸ’° [Overview] Fetching sales summary totals...');
-          const [summary, ordersSummary] = await Promise.all([
-            this.bigQueryService.getSalesSummaryTotals(storeId, startDate, endDate),
-            this.bigQueryService.getSalesDashboardOrderSummary(storeId, startDate, endDate)
-          ]);
+          const summary = await this.bigQueryService.getSalesSummaryTotals(storeId, startDate, endDate);
           const statusRows = summary?.statusBreakdown || [];
           const mergedSummary = {
             totalSales: Number(summary?.revenue?.amount || 0),
@@ -2448,7 +2445,6 @@ export class OverviewComponent implements OnInit {
           };
           console.log('âœ… [Overview] Sales summary and orders API totals received:', {
             salesSummary: summary,
-            ordersSummary,
             mergedSummary
           });
           this.salesSummary.set(mergedSummary);
@@ -2510,11 +2506,6 @@ export class OverviewComponent implements OnInit {
       console.log('ðŸ“Š [Overview] loadAnalyticsData completed');
       this.isLoading.set(false);
     }
-  }
-
-  private async loadSalesFromCloudFunction(storeId: string, startDate: Date, endDate: Date, status: string): Promise<void> {
-    const orders = await this.bigQueryService.getSalesDashboardOrders(storeId, startDate, endDate);
-    this.orders.set(orders || []);
   }
 
   private async loadData() {
@@ -2599,8 +2590,8 @@ export class OverviewComponent implements OnInit {
       const queryEnd = endDate ? new Date(endDate) : new Date(now.toISOString().split('T')[0]);
       queryEnd.setHours(23, 59, 59, 999);
 
-      // Load orders for the requested date range from the BigQuery-backed dashboard API
-      const orders = await this.bigQueryService.getSalesDashboardOrders(storeId, queryStart, queryEnd);
+      // Load supporting order rows from Firestore; dashboard totals come from sales summary API.
+      const orders = await this.orderService.getOrdersFromFirestoreByRange(storeId, queryStart, queryEnd);
       if (requestId !== this.overviewLoadSequence) {
         return;
       }
@@ -2932,14 +2923,11 @@ export class OverviewComponent implements OnInit {
     }
 
     try {
-      const [summary, ordersSummary] = await Promise.all([
-        this.bigQueryService.getSalesSummaryTotals(storeId, startDate, endDate),
-        this.bigQueryService.getSalesDashboardOrderSummary(storeId, startDate, endDate)
-      ]);
+      const summary = await this.bigQueryService.getSalesSummaryTotals(storeId, startDate, endDate);
       const mergedSummary = {
         totalSales: Number(summary?.totalSales || 0),
-        totalOrders: Number(ordersSummary?.totalOrders || 0),
-        totalItems: Number(ordersSummary?.totalItems || 0),
+        totalOrders: Number(summary?.revenue?.count || summary?.totalOrders || 0),
+        totalItems: Number(summary?.revenue?.totalItems || summary?.totalItems || 0),
         totalCustomers: Number(summary?.revenue?.totalCustomers || summary?.totalCustomers || 0)
       };
       this.salesSummary.set(mergedSummary);
