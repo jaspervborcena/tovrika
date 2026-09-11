@@ -64,7 +64,7 @@ describe('BigQueryService', () => {
     expect(statuses).toEqual(payload.result.statusBreakdown);
   });
 
-  it('should send UTC ISO dates and parse status rows from sales summary API', async () => {
+  it('should send compact date-time values and parse status rows from sales summary API', async () => {
     const payload = [
       { storeId: 'store123', status: 'completed', totalSales: 1500, totalItems: 25, totalOrders: 8, totalCustomer: 6 },
       { storeId: 'store123', status: 'cancelled', totalSales: 100, totalItems: 2, totalOrders: 1, totalCustomer: 1 },
@@ -80,8 +80,8 @@ describe('BigQueryService', () => {
     );
     const requestUrl = (window.fetch as jasmine.Spy).calls.mostRecent().args[0] as string;
 
-    expect(requestUrl).toContain('from=2026-09-03T00%3A00%3A00.000Z');
-    expect(requestUrl).toContain('to=2026-09-05T00%3A00%3A00.000Z');
+    expect(requestUrl).toContain('from=20260903000000');
+    expect(requestUrl).toContain('to=20260905000000');
     expect(summary.totalSales).toBe(1500);
     expect(summary.totalOrders).toBe(9);
     expect(summary.totalItems).toBe(27);
