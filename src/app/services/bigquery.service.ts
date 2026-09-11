@@ -166,6 +166,15 @@ export class BigQueryService {
     const params = buildSalesSummaryRequestParams(storeId, from, to);
     const urlString = `${endpoint}?${params.toString()}`;
     console.log('💰 [Revenue API Call] GET', urlString);
+    console.log('[DEBUG get_sales_summary_bq] Request', {
+      endpoint,
+      storeId,
+      localFrom: from.toString(),
+      localTo: to.toString(),
+      utcFrom: from.toISOString(),
+      utcTo: to.toISOString(),
+      query: params.toString()
+    });
 
     const response = await fetch(urlString, {
       headers: { Authorization: `Bearer ${token}` }
@@ -178,6 +187,11 @@ export class BigQueryService {
     }
 
     const payload = await response.json();
+    console.log('[DEBUG get_sales_summary_bq] HTTP response', {
+      status: response.status,
+      ok: response.ok
+    });
+    console.log('[DEBUG get_sales_summary_bq] Raw payload', payload);
     console.log('📦 [Revenue API Response] Full payload:', JSON.stringify(payload, null, 2));
     console.log('📦 [Revenue API Response] payload:', payload);
 
@@ -202,6 +216,18 @@ export class BigQueryService {
         revenue,
         netTotals
       };
+      console.log('[DEBUG get_sales_summary_bq] Card rows', {
+        revenue,
+        netTotals,
+        completed,
+        statusBreakdown,
+        dashboardTotals: {
+          totalRevenue: result.totalSales,
+          totalOrders: result.totalOrders,
+          totalItems: result.totalItems,
+          totalCustomers: result.totalCustomers
+        }
+      });
       console.log('✅ [Revenue Final Result]', result);
       return result;
     }

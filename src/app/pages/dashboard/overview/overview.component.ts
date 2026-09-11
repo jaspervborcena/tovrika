@@ -1937,8 +1937,10 @@ export class OverviewComponent implements OnInit {
       const today = new Date();
       const yesterday = new Date(today);
       yesterday.setDate(today.getDate() - 1);
+      const yesterdayStart = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate(), 0, 0, 0, 0);
+      const yesterdayEnd = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate(), 23, 59, 59, 999);
 
-      const summary = await this.bigQueryService.getSalesSummaryTotals(storeId, yesterday, yesterday);
+      const summary = await this.bigQueryService.getSalesSummaryTotals(storeId, yesterdayStart, yesterdayEnd);
       this.yesterdayRevenue.set(Number(summary?.totalSales || 0));
       this.yesterdayOrders.set(Number(summary?.totalOrders || 0));
       this.salesSummary.set(summary ?? { totalSales: 0, totalOrders: 0, totalItems: 0, totalCustomers: 0 });
@@ -1958,7 +1960,9 @@ export class OverviewComponent implements OnInit {
 
     const today = new Date();
     try {
-      const summary = await this.bigQueryService.getSalesSummaryTotals(storeId, today, today);
+      const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0, 0);
+      const todayEnd = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999);
+      const summary = await this.bigQueryService.getSalesSummaryTotals(storeId, todayStart, todayEnd);
       this.salesSummary.set(summary ?? { totalSales: 0, totalOrders: 0, totalItems: 0, totalCustomers: 0 });
       this.ledgerTotalRevenue.set(Number(summary?.totalSales || 0));
       this.ledgerTotalOrders.set(Number(summary?.totalOrders || 0));
@@ -2025,15 +2029,21 @@ export class OverviewComponent implements OnInit {
 
       const fromStr = this.dateFrom();
       const toStr = this.dateTo();
-      const startDate = fromStr ? new Date(fromStr) : new Date();
-      const endDate = toStr ? new Date(toStr) : new Date();
-      endDate.setHours(23, 59, 59, 999);
+      const fallbackDate = this.formatDateAsString(new Date());
+      const range = convertPhilippineDateRangeToUtc(
+        fromStr || toStr || fallbackDate,
+        toStr || fromStr || fallbackDate
+      );
+      const startDate = range.start;
+      const endDate = range.end;
 
       const days = Math.round((endDate.getTime() - startDate.getTime()) / (24 * 3600 * 1000)) + 1;
       const prevEnd = new Date(startDate);
       prevEnd.setDate(prevEnd.getDate() - 1);
+      prevEnd.setHours(23, 59, 59, 999);
       const prevStart = new Date(prevEnd);
       prevStart.setDate(prevStart.getDate() - (days - 1));
+      prevStart.setHours(0, 0, 0, 0);
 
       const [currentSummary, previousSummary] = await Promise.all([
         this.bigQueryService.getSalesSummaryTotals(storeId, startDate, endDate),
@@ -2586,8 +2596,10 @@ export class OverviewComponent implements OnInit {
 
       // Default to today if no explicit range is supplied
       const now = new Date();
-      const queryStart = startDate ? new Date(startDate) : new Date(now.toISOString().split('T')[0]);
-      const queryEnd = endDate ? new Date(endDate) : new Date(now.toISOString().split('T')[0]);
+      const today = this.formatDateAsString(now);
+      const localToday = convertPhilippineDateRangeToUtc(today, today);
+      const queryStart = startDate ? new Date(startDate) : localToday.start;
+      const queryEnd = endDate ? new Date(endDate) : localToday.end;
       queryEnd.setHours(23, 59, 59, 999);
 
       // Load supporting order rows from Firestore; dashboard totals come from sales summary API.
