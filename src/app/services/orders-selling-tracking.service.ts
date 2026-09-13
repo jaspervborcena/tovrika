@@ -733,7 +733,7 @@ async createPartialTrackingFromDoc(trackingId: string, newStatus: string, qty: n
               const prodData: any = productSnap.data();
               const currentTotal = Number(prodData.totalStock || 0);
               const newTotal = Math.max(0, currentTotal - dedQty);
-              transaction.update(productRef as any, { totalStock: newTotal, lastUpdated: new Date(), updatedBy: createdBy || 'system' } as any);
+              transaction.update(productRef as any, { totalStock: newTotal, lastUpdated: new Date(), updatedAt: new Date(), updatedBy: createdBy || 'system' } as any);
 
               if (batchSnap && batchData) {
                 const currentQty = Number(batchData.quantity || 0);
@@ -976,7 +976,7 @@ async markOrderTrackingDamaged(orderId: string, damagedBy?: string, reason?: str
                 const prodData: any = productSnap.data();
                 const currentTotal = Number(prodData.totalStock || 0);
                 const newTotal = Math.max(0, currentTotal - qty);
-                transaction.update(productRef as any, { totalStock: newTotal, lastUpdated: new Date(), updatedBy: damagedBy || 'system' } as any);
+                transaction.update(productRef as any, { totalStock: newTotal, lastUpdated: new Date(), updatedAt: new Date(), updatedBy: damagedBy || 'system' } as any);
 
                 if (batchSnap && batchData) {
                   const currentQty = Number(batchData.quantity || 0);
@@ -2275,6 +2275,7 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
         if (product.tagLabels !== undefined) updateFields.tagLabels = product.tagLabels;
         if (product.tags !== undefined) updateFields.tags = product.tags;
         if (Object.keys(updateFields).length > 0) {
+          updateFields.updatedAt = Timestamp.now();
           const ref = doc(this.firestore, 'ordersSellingTracking', docSnap.id);
           updates.push(updateDoc(ref, updateFields).then(() => { updatedCount++; }));
         }

@@ -1442,6 +1442,7 @@ export class PosService {
         batch.update(productRef as any, {
           totalStock: increment(-quantityToDeduct),
           lastUpdated: new Date(),
+          updatedAt: new Date(),
           updatedBy: currentUser?.uid || 'system'
         });
         

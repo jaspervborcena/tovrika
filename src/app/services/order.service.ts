@@ -849,7 +849,7 @@ public async restockOrderAndInventoryTransactional(orderId: string, performedBy 
       const currentTotal = prodSnap?.exists() ? Number((prodSnap.data() as any).totalStock || 0) : 0;
       const newTotal = currentTotal + c.quantity;
       console.log(`Updating product ${c.productId}: currentTotal=${currentTotal}, newTotal=${newTotal}`);
-      batch.update(prodRef, { totalStock: newTotal, lastUpdated: new Date(), updatedBy: performedBy });
+      batch.update(prodRef, { totalStock: newTotal, lastUpdated: new Date(), updatedAt: new Date(), updatedBy: performedBy });
 
       // Update inventory batch (if we have one)
       const invEntry = inventorySnaps.get(c.productId);
@@ -859,7 +859,7 @@ public async restockOrderAndInventoryTransactional(orderId: string, performedBy 
         const currentInvQty = invSnap?.exists() ? Number((invSnap.data() as any).quantity || 0) : 0;
         const newInvQty = currentInvQty + c.quantity;
         console.log(`Updating inventory for product ${c.productId}: currentInvQty=${currentInvQty}, newInvQty=${newInvQty}`);
-        batch.update(invRef, { quantity: newInvQty, lastUpdated: new Date(), updatedBy: performedBy });
+        batch.update(invRef, { quantity: newInvQty, lastUpdated: new Date(), updatedAt: new Date(), updatedBy: performedBy });
       }
 
       // Mark tracking doc as restocked

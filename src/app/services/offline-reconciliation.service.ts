@@ -646,7 +646,8 @@ export class OfflineReconciliationService {
             deductedBy: this.authService.getCurrentUser()?.uid || 'system',
             createdBy: this.authService.getCurrentUser()?.uid || 'system',
             createdAt: Timestamp.now(),
-            note: 'Reconciliation - FIFO reprocessed'
+            note: 'Reconciliation - FIFO reprocessed',
+            updatedAt: Timestamp.now()
           });
         }
         
@@ -659,7 +660,8 @@ export class OfflineReconciliationService {
         inventoryProcessed: true,
         'offlineMetadata.fifoSkipped': false,
         reconciledAt: Timestamp.now(),
-        reconciledBy: this.authService.getCurrentUser()?.uid || 'system'
+        reconciledBy: this.authService.getCurrentUser()?.uid || 'system',
+        updatedAt: Timestamp.now()
       });
 
       // Log audit trail
@@ -749,7 +751,8 @@ export class OfflineReconciliationService {
         ledgerProcessed: true,
         'offlineMetadata.ledgerSkipped': false,
         reconciledAt: Timestamp.now(),
-        reconciledBy: this.authService.getCurrentUser()?.uid || 'system'
+        reconciledBy: this.authService.getCurrentUser()?.uid || 'system',
+        updatedAt: Timestamp.now()
       });
 
       // Log audit trail
@@ -799,7 +802,8 @@ export class OfflineReconciliationService {
       await updateDoc(orderDetailsRef, {
         needsReconciliation: false,
         reconciledAt: Timestamp.now(),
-        reconciledBy: this.authService.getCurrentUser()?.uid || 'system'
+        reconciledBy: this.authService.getCurrentUser()?.uid || 'system',
+        updatedAt: Timestamp.now()
       });
 
       // Log audit trail

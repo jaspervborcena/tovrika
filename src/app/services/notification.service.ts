@@ -218,7 +218,8 @@ export class NotificationService {
       const notificationRef = doc(this.firestore, 'notifications', id);
       batch.update(notificationRef, {
         read: true,
-        readAt: Timestamp.now()
+        readAt: Timestamp.now(),
+        updatedAt: Timestamp.now()
       });
     });
 
