@@ -128,6 +128,7 @@ export class CouponService {
     const couponRef = doc(this.firestore, 'coupons', coupon.id);
     await updateDoc(couponRef, {
       redemptionsUsed: increment(1),
+      updatedAt: new Date(),
     });
 
     return {
