@@ -187,6 +187,7 @@ export class InventoryTransactionService {
       sellingPrice,
       originalPrice,
       lastUpdated: new Date(),
+      updatedAt: new Date(),
       updatedBy: currentUser.uid
     });
     

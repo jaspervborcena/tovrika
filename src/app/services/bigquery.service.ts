@@ -82,8 +82,8 @@ export function buildBigQueryRequestParams(
 export function buildSalesSummaryRequestParams(storeId: string, from: Date, to: Date): URLSearchParams {
   return new URLSearchParams({
     storeId,
-    from: formatDateForApi(from),
-    to: formatDateForApi(to)
+    from: formatUtcDateForApi(from),
+    to: formatUtcDateForApi(to)
   });
 }
 
@@ -110,6 +110,16 @@ function formatDateForApi(date: Date): string {
   const hours = String(date.getHours()).padStart(2, '0');
   const minutes = String(date.getMinutes()).padStart(2, '0');
   const seconds = String(date.getSeconds()).padStart(2, '0');
+  return `${year}${month}${day}${hours}${minutes}${seconds}`;
+}
+
+function formatUtcDateForApi(date: Date): string {
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(date.getUTCDate()).padStart(2, '0');
+  const hours = String(date.getUTCHours()).padStart(2, '0');
+  const minutes = String(date.getUTCMinutes()).padStart(2, '0');
+  const seconds = String(date.getUTCSeconds()).padStart(2, '0');
   return `${year}${month}${day}${hours}${minutes}${seconds}`;
 }
 
@@ -166,15 +176,6 @@ export class BigQueryService {
     const params = buildSalesSummaryRequestParams(storeId, from, to);
     const urlString = `${endpoint}?${params.toString()}`;
     console.log('💰 [Revenue API Call] GET', urlString);
-    console.log('[DEBUG get_sales_summary_bq] Request', {
-      endpoint,
-      storeId,
-      localFrom: from.toString(),
-      localTo: to.toString(),
-      utcFrom: from.toISOString(),
-      utcTo: to.toISOString(),
-      query: params.toString()
-    });
 
     const response = await fetch(urlString, {
       headers: { Authorization: `Bearer ${token}` }
@@ -187,11 +188,6 @@ export class BigQueryService {
     }
 
     const payload = await response.json();
-    console.log('[DEBUG get_sales_summary_bq] HTTP response', {
-      status: response.status,
-      ok: response.ok
-    });
-    console.log('[DEBUG get_sales_summary_bq] Raw payload', payload);
     console.log('📦 [Revenue API Response] Full payload:', JSON.stringify(payload, null, 2));
     console.log('📦 [Revenue API Response] payload:', payload);
 
@@ -216,18 +212,6 @@ export class BigQueryService {
         revenue,
         netTotals
       };
-      console.log('[DEBUG get_sales_summary_bq] Card rows', {
-        revenue,
-        netTotals,
-        completed,
-        statusBreakdown,
-        dashboardTotals: {
-          totalRevenue: result.totalSales,
-          totalOrders: result.totalOrders,
-          totalItems: result.totalItems,
-          totalCustomers: result.totalCustomers
-        }
-      });
       console.log('✅ [Revenue Final Result]', result);
       return result;
     }
