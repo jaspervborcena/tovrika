@@ -89,13 +89,13 @@ describe('BigQueryService', () => {
 
     const summary = await service.getSalesSummaryTotals(
       'store123',
-      new Date('2026-09-03T00:00:00.000Z'),
-      new Date('2026-09-05T00:00:00.000Z')
+      new Date(2026, 8, 3, 0, 0, 0, 0),
+      new Date(2026, 8, 5, 23, 59, 59, 999)
     );
     const requestUrl = (window.fetch as jasmine.Spy).calls.mostRecent().args[0] as string;
 
     expect(requestUrl).toContain('from=20260903000000');
-    expect(requestUrl).toContain('to=20260905000000');
+    expect(requestUrl).toContain('to=20260905235959');
     expect(summary.totalSales).toBe(1500);
     expect(summary.totalOrders).toBe(9);
     expect(summary.totalItems).toBe(27);
