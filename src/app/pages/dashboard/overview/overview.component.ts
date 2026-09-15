@@ -1754,6 +1754,12 @@ export class OverviewComponent implements OnInit {
     const day = String(date.getDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
   }
+
+  private getOverviewDayDate(dayOffset = 0): string {
+    const day = new Date();
+    day.setDate(day.getDate() + dayOffset);
+    return this.formatDateAsString(day);
+  }
   
   protected totalRevenue = computed(() => {
     return this.revenueSummary().totalSales;
@@ -1937,10 +1943,10 @@ export class OverviewComponent implements OnInit {
       const today = new Date();
       const yesterday = new Date(today);
       yesterday.setDate(today.getDate() - 1);
-      const yesterdayStart = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate(), 0, 0, 0, 0);
-      const yesterdayEnd = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate(), 23, 59, 59, 999);
+      const yesterdayDate = this.formatDateAsString(yesterday);
+      const yesterdayRange = convertPhilippineDateRangeToUtc(yesterdayDate, yesterdayDate);
 
-      const summary = await this.bigQueryService.getSalesSummaryTotals(storeId, yesterdayStart, yesterdayEnd);
+      const summary = await this.bigQueryService.getSalesSummaryTotals(storeId, yesterdayRange.start, yesterdayRange.end);
       this.yesterdayRevenue.set(Number(summary?.totalSales || 0));
       this.yesterdayOrders.set(Number(summary?.totalOrders || 0));
       this.salesSummary.set(summary ?? { totalSales: 0, totalOrders: 0, totalItems: 0, totalCustomers: 0 });
@@ -1960,9 +1966,9 @@ export class OverviewComponent implements OnInit {
 
     const today = new Date();
     try {
-      const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0, 0);
-      const todayEnd = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999);
-      const summary = await this.bigQueryService.getSalesSummaryTotals(storeId, todayStart, todayEnd);
+      const todayDate = this.formatDateAsString(today);
+      const todayRange = convertPhilippineDateRangeToUtc(todayDate, todayDate);
+      const summary = await this.bigQueryService.getSalesSummaryTotals(storeId, todayRange.start, todayRange.end);
       this.salesSummary.set(summary ?? { totalSales: 0, totalOrders: 0, totalItems: 0, totalCustomers: 0 });
       this.ledgerTotalRevenue.set(Number(summary?.totalSales || 0));
       this.ledgerTotalOrders.set(Number(summary?.totalOrders || 0));
@@ -2269,13 +2275,11 @@ export class OverviewComponent implements OnInit {
     let dateToStr: string | undefined;
     
     if (period === 'today') {
-      dateFromStr = this.formatDateAsString(now);
-      dateToStr = this.formatDateAsString(now);
+      dateFromStr = this.getOverviewDayDate();
+      dateToStr = dateFromStr;
     } else if (period === 'yesterday') {
-      const yesterday = new Date(now);
-      yesterday.setDate(now.getDate() - 1);
-      dateFromStr = this.formatDateAsString(yesterday);
-      dateToStr = this.formatDateAsString(yesterday);
+      dateFromStr = this.getOverviewDayDate(-1);
+      dateToStr = dateFromStr;
     } else if (period === 'this_week') {
       const nowWeekDay = now.getDay();
       const mondayOffset = (nowWeekDay + 6) % 7;
@@ -2448,9 +2452,9 @@ export class OverviewComponent implements OnInit {
           const summary = await this.bigQueryService.getSalesSummaryTotals(storeId, startDate, endDate);
           const statusRows = summary?.statusBreakdown || [];
           const mergedSummary = {
-            totalSales: Number(summary?.revenue?.amount || 0),
-            totalOrders: Number(summary?.revenue?.count || 0),
-            totalItems: Number(summary?.revenue?.totalItems || 0),
+            totalSales: Number(summary?.revenue?.amount ?? summary?.totalSales ?? 0),
+            totalOrders: Number(summary?.revenue?.count ?? summary?.totalOrders ?? 0),
+            totalItems: Number(summary?.revenue?.totalItems ?? summary?.totalItems ?? 0),
             totalCustomers: Number(summary?.revenue?.totalCustomers || summary?.totalCustomers || 0)
           };
           console.log('âœ… [Overview] Sales summary and orders API totals received:', {
@@ -2600,7 +2604,6 @@ export class OverviewComponent implements OnInit {
       const localToday = convertPhilippineDateRangeToUtc(today, today);
       const queryStart = startDate ? new Date(startDate) : localToday.start;
       const queryEnd = endDate ? new Date(endDate) : localToday.end;
-      queryEnd.setHours(23, 59, 59, 999);
 
       // Load supporting order rows from Firestore; dashboard totals come from sales summary API.
       const orders = await this.orderService.getOrdersFromFirestoreByRange(storeId, queryStart, queryEnd);
