@@ -199,14 +199,21 @@ export class BigQueryService {
         totalItems: Number(row.totalItems ?? row.total_items ?? row.itemCount ?? row.item_count ?? row.quantity ?? 0),
         totalCustomers: Number(row.totalCustomer ?? row.totalCustomers ?? row.total_customer ?? row.total_customers ?? 0)
       }));
-      const revenue = rows.find(row => row.status === 'revenue') ?? { status: 'revenue', count: 0, amount: 0, totalItems: 0, totalCustomers: 0 };
+      const revenueRow = rows.find(row => row.status === 'revenue');
+      const completedRow = rows.find(row => ['completed', 'complete', 'paid'].includes(row.status));
+      const revenue = revenueRow && (revenueRow.amount !== 0 || revenueRow.count !== 0)
+        ? revenueRow
+        : completedRow ?? { status: 'revenue', count: 0, amount: 0, totalItems: 0, totalCustomers: 0 };
       const netTotals = rows.find(row => row.status === 'nettotals') ?? { status: 'nettotals', count: 0, amount: 0, totalItems: 0, totalCustomers: 0 };
       const completed = rows.find(row => row.status === 'completed');
       const statusBreakdown = rows.filter(row => row.status !== 'revenue' && row.status !== 'nettotals');
+      const adjustmentRows = statusBreakdown.filter(row => !['completed', 'complete', 'paid'].includes(row.status));
+      const adjustmentOrders = revenueRow ? adjustmentRows.reduce((sum, row) => sum + row.count, 0) : 0;
+      const adjustmentItems = revenueRow ? adjustmentRows.reduce((sum, row) => sum + row.totalItems, 0) : 0;
       const result = {
         totalSales: revenue.amount,
-        totalOrders: revenue.count,
-        totalItems: revenue.totalItems || 0,
+        totalOrders: revenue.count + adjustmentOrders,
+        totalItems: revenue.totalItems + adjustmentItems,
         totalCustomers: revenue.totalCustomers || completed?.totalCustomers || 0,
         statusBreakdown,
         revenue,
@@ -242,7 +249,11 @@ export class BigQueryService {
       totalItems: Number(row.totalItems ?? row.total_items ?? row.itemCount ?? row.item_count ?? row.quantity ?? 0),
       totalCustomers: Number(row.totalCustomer ?? row.totalCustomers ?? row.total_customer ?? row.total_customers ?? 0)
     }));
-    const revenue = rows.find(row => row.status === 'revenue') ?? { status: 'revenue', count: Number(totalOrders ?? 0), amount: Number(totalSales ?? 0), totalItems: Number(totalItems ?? 0), totalCustomers: 0 };
+    const revenueRow = rows.find(row => row.status === 'revenue');
+    const completedRow = rows.find(row => ['completed', 'complete', 'paid'].includes(row.status));
+    const revenue = revenueRow && (revenueRow.amount !== 0 || revenueRow.count !== 0)
+      ? revenueRow
+      : { status: 'revenue', count: Number(totalOrders ?? completedRow?.count ?? 0), amount: Number(totalSales ?? completedRow?.amount ?? 0), totalItems: Number(totalItems ?? completedRow?.totalItems ?? 0), totalCustomers: completedRow?.totalCustomers ?? 0 };
     const netTotals = rows.find(row => row.status === 'nettotals') ?? { status: 'nettotals', count: 0, amount: 0, totalItems: 0, totalCustomers: 0 };
     const completed = rows.find(row => row.status === 'completed');
     const statusBreakdown = rows.filter(row => row.status !== 'revenue' && row.status !== 'nettotals');

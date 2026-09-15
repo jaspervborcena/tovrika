@@ -2452,9 +2452,9 @@ export class OverviewComponent implements OnInit {
           const summary = await this.bigQueryService.getSalesSummaryTotals(storeId, startDate, endDate);
           const statusRows = summary?.statusBreakdown || [];
           const mergedSummary = {
-            totalSales: Number(summary?.revenue?.amount ?? summary?.totalSales ?? 0),
-            totalOrders: Number(summary?.revenue?.count ?? summary?.totalOrders ?? 0),
-            totalItems: Number(summary?.revenue?.totalItems ?? summary?.totalItems ?? 0),
+            totalSales: Number(summary?.revenue?.amount || summary?.totalSales || 0),
+            totalOrders: Number(summary?.revenue?.count || summary?.totalOrders || 0),
+            totalItems: Number(summary?.revenue?.totalItems || summary?.totalItems || 0),
             totalCustomers: Number(summary?.revenue?.totalCustomers || summary?.totalCustomers || 0)
           };
           console.log('âœ… [Overview] Sales summary and orders API totals received:', {
