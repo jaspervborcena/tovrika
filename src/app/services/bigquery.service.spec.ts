@@ -1,16 +1,28 @@
 import { TestBed } from '@angular/core/testing';
 import { BigQueryService } from './bigquery.service';
+import { AuthService } from './auth.service';
 
 describe('BigQueryService', () => {
   let service: BigQueryService;
 
   beforeEach(() => {
     TestBed.configureTestingModule({
-      providers: [BigQueryService]
+      providers: [
+        BigQueryService,
+        {
+          provide: AuthService,
+          useValue: {
+            waitForAuth: async () => undefined,
+            getFirebaseIdToken: async () => 'fake-token'
+          }
+        }
+      ]
     });
     service = TestBed.inject(BigQueryService);
     (service as any).authService = {
-      getCurrentUser: () => ({ getIdToken: async () => 'fake-token' })
+      getCurrentUser: () => ({ getIdToken: async () => 'fake-token' }),
+      waitForAuth: async () => undefined,
+      getFirebaseIdToken: async () => 'fake-token'
     };
   });
 
@@ -43,7 +55,7 @@ describe('BigQueryService', () => {
       }
     };
 
-    spyOn(window, 'fetch').and.resolveTo(new Response(JSON.stringify(payload), { status: 200 }));
+    spyOn(window, 'fetch').and.callFake(async () => new Response(JSON.stringify(payload), { status: 200 }));
 
     const summary = await service.getSalesSummaryTotals('store123', new Date('2025-04-01'), new Date('2025-04-30'));
     expect(summary).toEqual({
@@ -57,11 +69,13 @@ describe('BigQueryService', () => {
         { status: 'refunds', count: 0, amount: 0, totalItems: 0, totalCustomers: 0 },
         { status: 'damage', count: 0, amount: 0, totalItems: 0, totalCustomers: 0 },
         { status: 'cancellations', count: 1, amount: 100, totalItems: 1, totalCustomers: 0 }
-      ]
+      ],
+      revenue: { status: 'revenue', count: 45, amount: 12450.75, totalItems: 0, totalCustomers: 0 },
+      netTotals: { status: 'nettotals', count: 0, amount: 0, totalItems: 0, totalCustomers: 0 }
     });
 
     const statuses = await service.getSalesDashboardStatusBreakdown('store123', new Date('2025-04-01'), new Date('2025-04-30'));
-    expect(statuses).toEqual(payload.result.statusBreakdown);
+    expect(statuses).toEqual(summary.statusBreakdown);
   });
 
   it('should send compact date-time values and parse status rows from sales summary API', async () => {
@@ -90,5 +104,25 @@ describe('BigQueryService', () => {
       { status: 'completed', count: 8, amount: 1500, totalItems: 25, totalCustomers: 6 },
       { status: 'cancelled', count: 1, amount: 100, totalItems: 2, totalCustomers: 1 }
     ]);
+  });
+
+  it('should use completed totals when an array response has no revenue row', async () => {
+    const payload = [
+      { storeId: 'store123', status: 'completed', totalSales: 900, totalItems: 6, totalOrders: 3, totalCustomer: 2 },
+      { storeId: 'store123', status: 'cancelled', totalSales: 100, totalItems: 1, totalOrders: 1, totalCustomer: 1 }
+    ];
+
+    spyOn(window, 'fetch').and.resolveTo(new Response(JSON.stringify(payload), { status: 200 }));
+
+    const summary = await service.getSalesSummaryTotals(
+      'store123',
+      new Date('2026-09-15T00:00:00.000Z'),
+      new Date('2026-09-15T23:59:59.999Z')
+    );
+
+    expect(summary.totalSales).toBe(900);
+    expect(summary.totalOrders).toBe(3);
+    expect(summary.totalItems).toBe(6);
+    expect(summary.totalCustomers).toBe(2);
   });
 });
