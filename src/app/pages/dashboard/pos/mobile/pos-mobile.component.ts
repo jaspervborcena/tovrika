@@ -698,7 +698,7 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
   // (Removed debug-only createTestOrder method)
 
   // Process individual item actions (return, damage, refund, cancel)
-  async processItemAction(orderId: string, itemIndex: number, action: string, item: any): Promise<void> {
+  async processItemAction(orderId: string, itemCode: string, action: string, item: any): Promise<void> {
     try {
 
       

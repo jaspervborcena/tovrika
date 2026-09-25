@@ -637,9 +637,9 @@ export class PosMobileBakComponent implements OnInit, AfterViewInit, OnDestroy {
   // (Removed debug-only createTestOrder method)
 
   // Process individual item actions (return, damage, refund, cancel)
-  async processItemAction(orderId: string, itemIndex: number, action: string, item: any): Promise<void> {
+  async processItemAction(orderId: string, itemCode: string, action: string, item: any): Promise<void> {
     try {
-      console.log(`Mobile Processing ${action} for item:`, { orderId, itemIndex, action, item });
+      console.log(`Mobile Processing ${action} for item:`, { orderId, itemCode, action, item });
       
       const confirmed = await this.showConfirmationDialog({
         title: `${action.charAt(0).toUpperCase() + action.slice(1)} Item`,
