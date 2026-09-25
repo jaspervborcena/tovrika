@@ -102,10 +102,6 @@
         <div class="text-3xl font-bold text-yellow-700">{{ summary.warningIssues }}</div>
       </div>
 
-      <div class="summary-card bg-blue-50">
-        <div class="text-sm text-blue-600 mb-1 font-medium">Amount Discrepancy</div>
-        <div class="text-3xl font-bold text-blue-700">₱{{ summary.totalAmountDiscrepancy.toFixed(2) }}</div>
-      </div>
     </div>
   </div>
 
@@ -144,19 +140,11 @@
             </td>
             <td class="text-sm">
               <div *ngIf="!disc.inventoryProcessed" class="text-red-600 mb-1">❌ No Inventory</div>
-              <div *ngIf="!disc.ledgerExists" class="text-red-600 mb-1">❌ No Ledger</div>
               <div *ngIf="disc.fifoSkipped" class="text-yellow-600">⚠️ FIFO Skipped</div>
             </td>
             <td style="text-align: right;">
               <div class="text-sm font-medium text-gray-900">₱{{ disc.trackingAmount.toFixed(2) }}</div>
               <div class="text-xs text-gray-500">{{ disc.trackingQuantity }} items</div>
-            </td>
-            <td style="text-align: right;">
-              <div *ngIf="disc.ledgerExists" class="text-sm font-medium text-gray-900">₱{{ disc.ledgerAmount?.toFixed(2) }}</div>
-              <div *ngIf="!disc.ledgerExists" class="text-sm font-medium text-red-600">Missing</div>
-              <div *ngIf="disc.ledgerExists && Math.abs(disc.amountDiscrepancy) > 0.01" class="text-xs text-red-600">
-                Δ ₱{{ Math.abs(disc.amountDiscrepancy).toFixed(2) }}
-              </div>
             </td>
             <td style="text-align: center;">
               <button 
@@ -245,14 +233,6 @@
                 </span>
               </span>
             </div>
-            <div class="info-row">
-              <span class="info-label">Ledger Entry:</span>
-              <span class="info-value">
-                <span [class]="selectedDiscrepancy.ledgerExists ? 'text-success' : 'text-danger'">
-                  {{ selectedDiscrepancy.ledgerExists ? '✓ Exists' : '✗ Missing' }}
-                </span>
-              </span>
-            </div>
             <div *ngIf="selectedDiscrepancy.fifoSkipped" class="info-row">
               <span class="info-label">FIFO Status:</span>
               <span class="info-value text-warning">⚠️ Skipped</span>
@@ -274,17 +254,6 @@
             <div class="info-row">
               <span class="info-label">Tracking Quantity:</span>
               <span class="info-value">{{ selectedDiscrepancy.trackingQuantity }} items</span>
-            </div>
-            <div class="info-row">
-              <span class="info-label">Ledger Amount:</span>
-              <span class="info-value">
-                <span *ngIf="selectedDiscrepancy.ledgerExists">₱{{ selectedDiscrepancy.ledgerAmount?.toFixed(2) }}</span>
-                <span *ngIf="!selectedDiscrepancy.ledgerExists" class="text-danger">Missing</span>
-              </span>
-            </div>
-            <div class="info-row" *ngIf="Math.abs(selectedDiscrepancy.amountDiscrepancy) > 0.01">
-              <span class="info-label">Amount Discrepancy:</span>
-              <span class="info-value text-danger">₱{{ Math.abs(selectedDiscrepancy.amountDiscrepancy).toFixed(2) }}</span>
             </div>
           </div>
         </div>
@@ -323,14 +292,6 @@
           [disabled]="processing"
           class="btn btn-primary">
           Reprocess Inventory
-        </button>
-
-        <button 
-          *ngIf="selectedDiscrepancy.needsLedgerCreation"
-          (click)="createLedgerEntry(selectedDiscrepancy)"
-          [disabled]="processing"
-          class="btn btn-primary">
-          Create Ledger Entry
         </button>
 
         <button 

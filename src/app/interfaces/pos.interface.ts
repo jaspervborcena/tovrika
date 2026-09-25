@@ -77,30 +77,6 @@ export interface Order {
   items?: OrderItem[];
 }
 
-// Ledger entry for order-level accounting events (order, return, refund, cancel, damage)
-export interface OrderAccountingLedger {
-  id?: string;
-  companyId: string;
-  storeId: string;
-  orderId: string;
-  // Event type describing the kind of ledger entry
-  // Note: use 'completed' for successful orders. Added unpaid/recovered types.
-  eventType: 'completed' | 'returned' | 'refunded' | 'cancelled' | 'damaged' | 'unpaid' | 'recovered';
-
-  // Monetary and quantity impact of this event (cumulative for the day)
-  amount: number;
-  quantity: number;
-
-  // Running balances immediately after this event is applied
-  runningBalanceAmount: number;
-  runningBalanceQty: number;
-
-  // Audit fields
-  createdAt: Date;
-  createdBy?: string;
-  updatedAt: Date;
-  updatedBy?: string;
-}
 
 export interface OrderDetail {
   id?: string;
