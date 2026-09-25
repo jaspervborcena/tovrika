@@ -25,7 +25,7 @@ export class OfflineReconciliationService {
   private ordersSellingTrackingService = inject(OrdersSellingTrackingService);
 
   /**
-   * Find all orders with discrepancies between ordersSellingTracking and orderAccountingLedger
+   * Find offline orders with inventory discrepancies.
    */
   async findDiscrepancies(
     storeId: string,
@@ -72,27 +72,6 @@ export class OfflineReconciliationService {
         trackingTotalsByDate.set(dateKey, {
           amount: prev.amount + Number(trackingData.total || 0),
           quantity: prev.quantity + Number(trackingData.quantity || 0)
-        });
-      }
-
-      // Daily ledger totals for comparison (completed eventType)
-      const ledgerTotalsByDate = new Map<string, { amount: number; quantity: number }>();
-      const ledgerQuery = query(
-        collection(this.firestore, 'orderAccountingLedger'),
-        where('storeId', '==', storeId),
-        where('eventType', '==', 'completed')
-      );
-
-      const ledgerSnap = await getDocs(ledgerQuery);
-      for (const ledgerDoc of ledgerSnap.docs) {
-        const ledgerData = ledgerDoc.data() as any;
-        const createdAt = ledgerData.createdAt?.toDate ? ledgerData.createdAt.toDate() : new Date(ledgerData.createdAt || new Date());
-        if (createdAt < startDate || createdAt > endDate) continue;
-        const dateKey = getDateKey(createdAt);
-        const prev = ledgerTotalsByDate.get(dateKey) || { amount: 0, quantity: 0 };
-        ledgerTotalsByDate.set(dateKey, {
-          amount: prev.amount + Number(ledgerData.amount || 0),
-          quantity: prev.quantity + Number(ledgerData.quantity || 0)
         });
       }
 
@@ -186,8 +165,6 @@ export class OfflineReconciliationService {
         const invoiceNumber = orderData.invoiceNumber;
         const orderDateKey = getDateKey(orderData.orderDate);
         const dailyTracking = trackingTotalsByDate.get(orderDateKey) || { amount: 0, quantity: 0 };
-        const dailyLedger = ledgerTotalsByDate.get(orderDateKey) || { amount: 0, quantity: 0 };
-        const ledgerExists = ledgerTotalsByDate.has(orderDateKey);
 
         // Check if inventoryTracking entries exist (FIFO processed)
         // inventoryTracking records the actual deductions made during FIFO processing
@@ -219,32 +196,21 @@ export class OfflineReconciliationService {
         const trackingQuantity = dailyTracking.quantity;
         const trackingExists = true; // We already have tracking data
 
-        const ledgerAmount: number | undefined = ledgerExists ? dailyLedger.amount : undefined;
-        const ledgerQuantity: number | undefined = ledgerExists ? dailyLedger.quantity : undefined;
-
-        // Calculate discrepancies
-        const amountDiscrepancy = trackingAmount - (ledgerAmount || 0);
-        const quantityDiscrepancy = trackingQuantity - (ledgerQuantity || 0);
         const isOfflineOrder = orderData.isOffline;
 
         // Determine if needs reconciliation
         const needsInventoryReprocess = !inventoryProcessed || fifoSkipped;
-        const needsLedgerCreation = !ledgerExists;
-        const hasDiscrepancy = Math.abs(amountDiscrepancy) > 0.01 || Math.abs(quantityDiscrepancy) > 0;
 
         // Only include if there are issues
-        if (needsInventoryReprocess || needsLedgerCreation || hasDiscrepancy) {
+        if (needsInventoryReprocess) {
           // Determine severity
           let severity: 'critical' | 'warning' | 'info' = 'info';
           let priority = 3;
 
-          if (!ledgerExists && !inventoryProcessed) {
+          if (!inventoryProcessed) {
             severity = 'critical';
             priority = 1;
-          } else if (!ledgerExists || !inventoryProcessed) {
-            severity = 'warning';
-            priority = 2;
-          } else if (hasDiscrepancy) {
+          } else if (fifoSkipped) {
             severity = 'warning';
             priority = 2;
           }
@@ -259,26 +225,6 @@ export class OfflineReconciliationService {
               canAutomate: true,
               riskLevel: 'medium',
               estimatedDuration: '30 seconds'
-            });
-          }
-
-          if (needsLedgerCreation) {
-            actions.push({
-              type: 'create_ledger',
-              description: 'Create missing accounting ledger entry',
-              canAutomate: true,
-              riskLevel: 'low',
-              estimatedDuration: '5 seconds'
-            });
-          }
-
-          if (hasDiscrepancy && ledgerExists && inventoryProcessed) {
-            actions.push({
-              type: 'review_manual',
-              description: 'Manual review required for amount/quantity mismatch',
-              canAutomate: false,
-              riskLevel: 'high',
-              estimatedDuration: '5-10 minutes'
             });
           }
 
@@ -300,16 +246,10 @@ export class OfflineReconciliationService {
             trackingQuantity,
             trackingItemCount: orderData.trackingItemCount,
             trackingExists,
-            ledgerAmount,
-            ledgerQuantity,
-            ledgerExists,
             inventoryProcessed,
             fifoSkipped,
-            amountDiscrepancy,
-            quantityDiscrepancy,
             isOfflineOrder,
             needsInventoryReprocess,
-            needsLedgerCreation,
             severity,
             priority,
             reconciliationActions: actions,
@@ -349,10 +289,8 @@ export class OfflineReconciliationService {
       ordersWithDiscrepancies: discrepancies.length,
       criticalIssues: discrepancies.filter(d => d.severity === 'critical').length,
       warningIssues: discrepancies.filter(d => d.severity === 'warning').length,
-      totalAmountDiscrepancy: discrepancies.reduce((sum, d) => sum + Math.abs(d.amountDiscrepancy), 0),
-      totalQuantityDiscrepancy: discrepancies.reduce((sum, d) => sum + Math.abs(d.quantityDiscrepancy), 0),
       offlineOrders: discrepancies.filter(d => d.isOfflineOrder).length,
-      unreconciledOrders: discrepancies.filter(d => d.needsInventoryReprocess || d.needsLedgerCreation).length
+      unreconciledOrders: discrepancies.filter(d => d.needsInventoryReprocess).length
     };
   }
 
@@ -667,11 +605,9 @@ export class OfflineReconciliationService {
       // Log audit trail
       await this.logReconciliationAction(orderId, invoiceNumber, orderDetails.storeId, 'inventory_reprocess', {
         inventoryProcessed: false,
-        ledgerProcessed: orderDetails.ledgerProcessed ?? false,
         needsReconciliation: true
       }, {
         inventoryProcessed: true,
-        ledgerProcessed: orderDetails.ledgerProcessed ?? false,
         needsReconciliation: false
       }, true);
 
@@ -683,97 +619,6 @@ export class OfflineReconciliationService {
       return {
         success: false,
         message: `Failed to reprocess inventory: ${error}`,
-        error
-      };
-    }
-  }
-
-  /**
-   * Create missing ledger entry for an order
-   */
-  async createMissingLedger(orderId: string): Promise<{ success: boolean; message: string; error?: any }> {
-    try {
-      console.log('📊 Creating missing ledger entry for order:', orderId);
-
-      // Get order details
-      const orderDetailsQuery = query(
-        collection(this.firestore, 'orderDetails'),
-        where('orderId', '==', orderId),
-        limit(1)
-      );
-
-      const orderDetailsSnap = await getDocs(orderDetailsQuery);
-      if (orderDetailsSnap.empty) {
-        return { success: false, message: 'Order details not found' };
-      }
-
-      const orderDetails = orderDetailsSnap.docs[0].data() as OrderDetails;
-      const orderDetailsDocId = orderDetailsSnap.docs[0].id;
-
-      // Get order data for company info
-      const orderRef = doc(this.firestore, 'orders', orderId);
-      const orderSnap = await getDoc(orderRef);
-      
-      if (!orderSnap.exists()) {
-        return { success: false, message: 'Order not found' };
-      }
-
-      const orderData = orderSnap.data() as any;
-
-      // Calculate totals from ordersSellingTracking
-      const trackingQuery = query(
-        collection(this.firestore, 'ordersSellingTracking'),
-        where('orderId', '==', orderId)
-      );
-
-      const trackingSnap = await getDocs(trackingQuery);
-      let totalAmount = 0;
-      let totalQuantity = 0;
-
-      // Event-copy statuses must be excluded — docs with these statuses are created as copies
-      // (e.g. unpaid tracking from createUnpaidTrackingFromOrder, recovered from markOrderTrackingRecovered)
-      // and share the same orderId, so summing them would double-count the qty in the completed ledger.
-      const eventCopyStatuses = ['unpaid', 'recovered', 'returned', 'refunded', 'damaged'];
-
-      trackingSnap.docs.forEach(doc => {
-        const data = doc.data() as any;
-        const docStatus = (data.status || '').toLowerCase();
-        if (eventCopyStatuses.includes(docStatus)) return; // skip event-copy docs
-        totalAmount += Number(data.total || 0);
-        totalQuantity += Number(data.quantity || 0);
-      });
-
-      // No ledger write. Dashboard totals come from the API and Firestore fallback.
-
-      // Update flags in orderDetails
-      const orderDetailsRef = doc(this.firestore, 'orderDetails', orderDetailsDocId);
-      await updateDoc(orderDetailsRef, {
-        ledgerProcessed: true,
-        'offlineMetadata.ledgerSkipped': false,
-        reconciledAt: Timestamp.now(),
-        reconciledBy: this.authService.getCurrentUser()?.uid || 'system',
-        updatedAt: Timestamp.now()
-      });
-
-      // Log audit trail
-      await this.logReconciliationAction(orderId, orderData.invoiceNumber || orderId, orderDetails.storeId, 'ledger_create', {
-        inventoryProcessed: orderDetails.inventoryProcessed ?? false,
-        ledgerProcessed: false,
-        needsReconciliation: true
-      }, {
-        inventoryProcessed: orderDetails.inventoryProcessed ?? false,
-        ledgerProcessed: true,
-        needsReconciliation: false
-      }, true);
-
-      console.log('✅ Ledger entry created successfully');
-      return { success: true, message: 'Ledger entry created successfully' };
-
-    } catch (error) {
-      console.error('❌ Error creating ledger entry:', error);
-      return {
-        success: false,
-        message: `Failed to create ledger entry: ${error}`,
         error
       };
     }
@@ -809,11 +654,9 @@ export class OfflineReconciliationService {
       // Log audit trail
       await this.logReconciliationAction(orderId, 'N/A', orderDetails.storeId, 'mark_reconciled', {
         inventoryProcessed: orderDetails.inventoryProcessed ?? false,
-        ledgerProcessed: orderDetails.ledgerProcessed ?? false,
         needsReconciliation: true
       }, {
         inventoryProcessed: orderDetails.inventoryProcessed ?? false,
-        ledgerProcessed: orderDetails.ledgerProcessed ?? false,
         needsReconciliation: false
       }, true);
 
