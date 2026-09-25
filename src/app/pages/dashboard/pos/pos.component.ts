@@ -22,7 +22,6 @@ import { AppConstants } from '../../../shared/enums/app-constants.enum';
 
 import { OrderService } from '../../../services/order.service';
 import { OrdersSellingTrackingService } from '../../../services/orders-selling-tracking.service';
-import { LedgerService } from '../../../services/ledger.service';
 import { StoreService, formatStoreDisplayName, dedupeStoresForDropdown } from '../../../services/store.service';
 import { InvoiceService } from '../../../services/invoice.service';
 import { UserRoleService } from '../../../services/user-role.service';
@@ -69,7 +68,6 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   private invoiceService = inject(InvoiceService);
   private orderService = inject(OrderService);
   private ordersSellingTrackingService = inject(OrdersSellingTrackingService);
-  private ledgerService = inject(LedgerService);
   private userRoleService = inject(UserRoleService);
   private customerService = inject(CustomerService);
   private companyService = inject(CompanyService);
@@ -1731,24 +1729,6 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       const storeId = order.storeId || this.posService.selectedStoreId() || '';
       console.log('🔍 markOpenOrderAsUnpaid: using companyId=', companyId, 'storeId=', storeId);
       
-      // Record ledger entry for unpaid (same pattern as completed orders)
-      try {
-        const totalAmount = Number(order.totalAmount || order.netAmount || 0);
-        const totalQuantity = allItems.reduce((sum: number, item: any) => sum + (Number(item.quantity || item.qty) || 1), 0) || 1;
-        
-        await this.ledgerService.recordEvent(
-          companyId,
-          storeId,
-          orderId,
-          'unpaid',
-          totalAmount,
-          totalQuantity,
-          currentUser?.uid || 'system'
-        );
-        console.log('✅ Unpaid ledger entry recorded - amount:', totalAmount, 'qty:', totalQuantity);
-      } catch (ledgerError) {
-        console.warn('⚠️ Failed to record unpaid ledger entry:', ledgerError);
-      }
       
       // Create tracking entries (optional - for item-level tracking)
       try {
@@ -2037,24 +2017,6 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
           );
           console.log('✅ Recovered tracking entries created:', recoveredResult);
 
-          // Record recovered event in ledger
-          const companyId = orderData.companyId || this.authService.getCurrentPermission()?.companyId || '';
-          const storeId = this.selectedStoreId();
-          const recoveredAmount = totalAmount; // The full order amount that was recovered
-          const recoveredQty = (orderData.items || []).reduce((sum: number, item: any) => sum + (item.quantity || 1), 0);
-          
-          console.log('📊 Recording recovered event to ledger - Amount:', recoveredAmount, 'Qty:', recoveredQty);
-          
-          await this.ledgerService.recordEvent(
-            companyId,
-            storeId,
-            orderData.id,
-            'recovered',
-            recoveredAmount,
-            recoveredQty,
-            currentUser?.uid || 'system'
-          );
-          console.log('✅ Recovered event recorded in ledger');
         } catch (trackingError) {
           console.warn('⚠️ Failed to create recovered tracking entries (non-critical):', trackingError);
         }
@@ -2409,26 +2371,6 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
 
       // Refresh the tracking data
       await this.openManageItemStatus();
-
-      // After refreshing, write aggregated ledger entries per event type (non-blocking)
-      try {
-        const companyId = order?.companyId || '';
-        const storeId = order?.storeId || '';
-        const performedBy = userId || this.authService.getCurrentUser()?.uid || 'system';
-        for (const [eventType, sums] of Object.entries(totalsByEvent)) {
-          try {
-            // `eventType` is derived from keys and TypeScript treats it as string;
-            // cast to the allowed union to satisfy the LedgerService signature.
-            const typedEvent = eventType as 'completed' | 'returned' | 'refunded' | 'cancelled' | 'damaged';
-            const res: any = await this.ledgerService.recordEvent(companyId, storeId, orderId, typedEvent, Number((sums as any).amount || 0), Number((sums as any).qty || 0), performedBy);
-
-          } catch (ledgerErr) {
-            console.warn('LedgerService: failed to create aggregated ledger entry', ledgerErr);
-          }
-        }
-      } catch (aggErr) {
-        console.warn('Failed to write aggregated ledger entries after saving tracking changes', aggErr);
-      }
 
     } catch (error) {
       console.error('❌ Error saving tracking changes:', error);

@@ -12,23 +12,13 @@ export interface ReconciliationDiscrepancy {
   trackingItemCount: number;
   trackingExists: boolean;
   
-  // Ledger data (from orderAccountingLedger)
-  ledgerAmount?: number;
-  ledgerQuantity?: number;
-  ledgerExists: boolean;
-  
   // Inventory processing status
   inventoryProcessed: boolean;
   fifoSkipped: boolean;
   
-  // Calculated discrepancies
-  amountDiscrepancy: number;  // tracking - ledger
-  quantityDiscrepancy: number;
-  
   // Order flags
   isOfflineOrder: boolean;
   needsInventoryReprocess: boolean;
-  needsLedgerCreation: boolean;
   
   // Severity and priority
   severity: 'critical' | 'warning' | 'info';
@@ -43,7 +33,7 @@ export interface ReconciliationDiscrepancy {
 }
 
 export interface ReconciliationAction {
-  type: 'reprocess_inventory' | 'create_ledger' | 'mark_reconciled' | 'review_manual';
+  type: 'reprocess_inventory' | 'mark_reconciled';
   description: string;
   canAutomate: boolean;
   riskLevel: 'low' | 'medium' | 'high';
@@ -58,15 +48,13 @@ export interface ReconciliationAuditLog {
   performedBy: string;
   performedByName?: string;
   performedAt: Date;
-  action: 'inventory_reprocess' | 'ledger_create' | 'mark_reconciled' | 'flag_review';
+  action: 'inventory_reprocess' | 'mark_reconciled' | 'flag_review';
   beforeState: {
     inventoryProcessed: boolean;
-    ledgerProcessed: boolean;
     needsReconciliation: boolean;
   };
   afterState: {
     inventoryProcessed: boolean;
-    ledgerProcessed: boolean;
     needsReconciliation: boolean;
   };
   success: boolean;
@@ -87,8 +75,6 @@ export interface ReconciliationSummary {
   ordersWithDiscrepancies: number;
   criticalIssues: number;
   warningIssues: number;
-  totalAmountDiscrepancy: number;
-  totalQuantityDiscrepancy: number;
   offlineOrders: number;
   unreconciledOrders: number;
 }

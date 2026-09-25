@@ -906,9 +906,7 @@ export class PosService {
   ): Promise<void> {
     console.log('🔄 Starting background operations for order:', orderId);
 
-    // 1. Keep dashboard totals on API/Firestore path; do not write to orderAccountingLedger here.
-
-    // 2. Update product inventory first (creates ordersSellingTracking docs),
+    // Update product inventory first (creates ordersSellingTracking docs),
     //    then mark them completed — must be sequential to avoid race condition.
     try {
       await this.updateProductInventory(cartItems, { orderId, invoiceNumber, customerId, status });
