@@ -1379,6 +1379,287 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
    * Log a batch of sale items for later reconciliation and apply stock deltas to products.
    * Best-effort per item; continues on individual failures, returns summary.
    */
+  private async logSaleAndAdjustStockAtomic(
+    ctx: {
+      companyId: string;
+      storeId: string;
+      orderId: string;
+      status: string;
+      invoiceNumber?: string;
+      customerId?: string;
+      cashierId: string;
+      cashierEmail?: string;
+      cashierName?: string;
+    },
+    items: Array<{
+      productId: string;
+      itemCode?: string;
+      productName?: string;
+      quantity: number;
+      unitPrice: number;
+      lineTotal: number;
+      costPrice?: number;
+      skuId?: string;
+      tags?: string[];
+      tagLabels?: string[];
+      discount?: number;
+      discountType?: 'percentage' | 'fixed' | 'none' | string;
+      vat?: number;
+      isVatExempt?: boolean;
+      batchNumber?: number;
+      isStockTracked?: boolean;
+    }>
+  ): Promise<{ success: boolean; tracked: number; adjusted: number; errors: Array<{ productId: string; error: any }> }> {
+    const trackingStatus = String(ctx.status || 'open').trim().toLowerCase();
+    const isCompletedSale = trackingStatus === 'completed';
+    const plans: any[] = [];
+    try {
+      await runTransaction(this.firestore, async transaction => {
+        plans.length = 0;
+        const plannedLockKeys = new Set<string>();
+        const plannedBatchQuantities = new Map<string, number>();
+        const plannedProductQuantities = new Map<string, number>();
+
+        // Read and validate the complete order before issuing any transaction writes.
+        for (let itemIndex = 0; itemIndex < items.length; itemIndex++) {
+          const item = items[itemIndex];
+          const itemCode = String(item.itemCode || '').trim();
+          if (isCompletedSale && !itemCode) {
+            throw new Error(`Missing itemCode for completed sale item ${item.productId}`);
+          }
+
+          const isStockTracked = item.isStockTracked !== false;
+          const lockKey = encodeURIComponent(`${ctx.orderId}|${itemIndex}|${item.productId}|${itemCode}`);
+          if (plannedLockKeys.has(lockKey)) {
+            throw new Error(`Duplicate sale line in order ${ctx.orderId}: ${item.productId}|${itemCode}`);
+          }
+          plannedLockKeys.add(lockKey);
+
+          const lockRef = doc(this.firestore, 'inventorySaleLocks', lockKey);
+          const productRef = doc(this.firestore, 'products', item.productId);
+          const lockSnap = await transaction.get(lockRef as any);
+          if (lockSnap.exists()) {
+            throw new Error(`Duplicate sale item already processed: ${ctx.orderId}|${item.productId}|${itemCode}`);
+          }
+
+          const productSnap = await transaction.get(productRef as any);
+          if (!productSnap.exists()) {
+            throw new Error(`Product ${item.productId} not found`);
+          }
+          const productData = productSnap.data() as any;
+          const product = this.productService.getProduct(item.productId);
+          const previousTotalStock = Number(productData.totalStock || 0);
+          const now = new Date();
+          let fulfilledQty = Number(item.quantity || 0);
+          let actualCost = Number(item.costPrice || 0);
+          const batchDeductions: any[] = [];
+
+          if (isStockTracked) {
+            const batchesQuery = query(
+              collection(this.firestore, 'productInventory'),
+              where('productId', '==', item.productId),
+              where('storeId', '==', ctx.storeId)
+            );
+            const batchSnapshot: any = await transaction.get(batchesQuery as any);
+            const batchDocs = batchSnapshot.docs
+              .map((batchDoc: any) => ({ id: batchDoc.id, data: batchDoc.data() }))
+              .filter((batch: any) => batch.data.companyId === ctx.companyId &&
+                String(batch.data.status || '').toLowerCase() === 'active' &&
+                Number(batch.data.quantity || 0) > 0)
+              .sort((a: any, b: any) => String(a.data.batchId || a.id).localeCompare(String(b.data.batchId || b.id)));
+
+            fulfilledQty = 0;
+            let remainingQty = Math.max(0, Number(item.quantity || 0));
+            for (const batch of batchDocs) {
+              if (remainingQty <= 0) break;
+              const batchData = batch.data;
+              const priorQuantity = plannedBatchQuantities.get(batch.id) || 0;
+              const availableQuantity = Math.max(0, Number(batchData.quantity || 0) - priorQuantity);
+              const quantity = Math.min(remainingQty, availableQuantity);
+              if (quantity <= 0) continue;
+              const plannedQuantity = priorQuantity + quantity;
+              batchDeductions.push({
+                batchRef: doc(this.firestore, 'productInventory', batch.id),
+                batchId: batchData.batchId || batch.id,
+                refId: batch.id,
+                costPrice: Number(batchData.costPrice || batchData.unitPrice || item.costPrice || 0),
+                quantity,
+                newQuantity: Number(batchData.quantity || 0) - plannedQuantity,
+                totalDeducted: Number(batchData.totalDeducted || 0) + plannedQuantity
+              });
+              plannedBatchQuantities.set(batch.id, plannedQuantity);
+              fulfilledQty += quantity;
+              remainingQty -= quantity;
+            }
+
+            if (batchDocs.length === 0) {
+              const priorProductQuantity = plannedProductQuantities.get(item.productId) || 0;
+              fulfilledQty = Math.min(
+                Math.max(0, Number(item.quantity || 0)),
+                Math.max(0, previousTotalStock - priorProductQuantity)
+              );
+            }
+          }
+
+          if (fulfilledQty <= 0 && Number(item.quantity || 0) > 0) {
+            throw new Error(`Insufficient stock for product ${item.productId}`);
+          }
+          if (batchDeductions.length > 0) {
+            const weightedCost = batchDeductions.reduce((sum, deduction) => sum + deduction.costPrice * deduction.quantity, 0);
+            actualCost = weightedCost / fulfilledQty || actualCost;
+          } else if (!actualCost) {
+            actualCost = Number(productData.costPrice || 0);
+          }
+
+          const priorProductQuantity = isStockTracked
+            ? plannedProductQuantities.get(item.productId) || 0
+            : 0;
+          const totalProductQuantity = priorProductQuantity + fulfilledQty;
+          if (isStockTracked) {
+            plannedProductQuantities.set(item.productId, totalProductQuantity);
+          }
+          plans.push({
+            item,
+            itemCode,
+            isStockTracked,
+            lockRef,
+            lockKey,
+            productRef,
+            product,
+            previousTotalStock,
+            updatedTotalStock: isStockTracked ? Math.max(0, previousTotalStock - totalProductQuantity) : previousTotalStock,
+            fulfilledQty,
+            actualCost,
+            batchDeductions,
+            now,
+            trackingRef: doc(collection(this.firestore, 'ordersSellingTracking'))
+          });
+        }
+
+        for (const plan of plans) {
+          const { item, isStockTracked, productRef, batchDeductions, now } = plan;
+          if (isStockTracked) {
+            transaction.update(productRef as any, {
+              totalStock: plan.updatedTotalStock,
+              lastUpdated: now,
+              updatedAt: now,
+              updatedBy: ctx.cashierId
+            } as any);
+          }
+
+          for (const deduction of batchDeductions) {
+            transaction.update(deduction.batchRef as any, {
+              quantity: deduction.newQuantity,
+              totalDeducted: deduction.totalDeducted,
+              status: deduction.newQuantity === 0 ? 'depleted' : 'active',
+              updatedAt: now,
+              updatedBy: ctx.cashierId
+            } as any);
+            const deductionRef = doc(collection(this.firestore, 'inventoryTracking'));
+            transaction.set(deductionRef as any, this.removeUndefinedFields(this.sanitizeForFirestore({
+              eventType: 'completed',
+              companyId: ctx.companyId,
+              storeId: ctx.storeId,
+              orderId: ctx.orderId,
+              invoiceNumber: ctx.invoiceNumber || '',
+              productId: item.productId,
+              productName: item.productName || '',
+              productCode: (item as any).productCode || '',
+              skuId: item.skuId || (item as any).sku || '',
+              batchId: deduction.batchId,
+              refId: deduction.refId,
+              costPrice: deduction.costPrice,
+              quantity: deduction.quantity,
+              runningBalanceTotalStock: plan.previousTotalStock,
+              deductedAt: now,
+              deductedBy: ctx.cashierId,
+              createdAt: now
+            })) as any);
+          }
+
+          const trackedTotal = Number(item.quantity || 0) > 0
+            ? Number(item.lineTotal || 0) * plan.fulfilledQty / Number(item.quantity)
+            : 0;
+          transaction.set(plan.trackingRef as any, this.removeUndefinedFields({
+            companyId: ctx.companyId,
+            storeId: ctx.storeId,
+            orderId: ctx.orderId,
+            invoiceNumber: ctx.invoiceNumber || '',
+            customerId: ctx.customerId || '',
+            batchNumber: item.batchNumber || 1,
+            createdAt: now,
+            createdBy: ctx.cashierId,
+            uid: ctx.cashierId,
+            status: trackingStatus,
+            productId: item.productId,
+            itemCode: plan.itemCode,
+            productName: item.productName,
+            productCode: (item as any).productCode,
+            skuId: item.skuId || (item as any).sku,
+            cost: plan.actualCost,
+            price: item.unitPrice,
+            quantity: plan.fulfilledQty,
+            discount: item.discount ?? 0,
+            discountType: item.discountType ?? 'none',
+            vat: item.vat ?? 0,
+            total: trackedTotal,
+            isVatExempt: !!item.isVatExempt,
+            runningBalanceTotalStock: plan.updatedTotalStock,
+            isStockTracked,
+            category: plan.product?.category,
+            tagLabels: item.tagLabels ?? plan.product?.tagLabels,
+            tags: item.tags ?? plan.product?.tags,
+            cashierId: ctx.cashierId,
+            cashierEmail: ctx.cashierEmail,
+            cashierName: ctx.cashierName,
+            version: environment.version,
+            number: (item as any).number
+          }) as any);
+          transaction.set(plan.lockRef as any, {
+            orderId: ctx.orderId,
+            itemIndex: plans.indexOf(plan),
+            productId: item.productId,
+            itemCode: plan.itemCode,
+            trackingId: plan.trackingRef.id,
+            createdAt: now,
+            createdBy: ctx.cashierId
+          } as any);
+        }
+      });
+
+      for (const plan of plans) {
+        if (plan.isStockTracked) {
+          this.productService.applyLocalPatch(plan.item.productId, {
+            totalStock: plan.updatedTotalStock,
+            lastUpdated: plan.now,
+            updatedAt: plan.now,
+            updatedBy: ctx.cashierId
+          } as any);
+        }
+      }
+
+      const errors = plans
+        .filter(plan => plan.fulfilledQty < Number(plan.item.quantity || 0))
+        .map(plan => ({
+          productId: plan.item.productId,
+          error: `Insufficient stock. Fulfilled ${plan.fulfilledQty} of ${plan.item.quantity}.`
+        }));
+      return {
+        success: errors.length === 0,
+        tracked: plans.length,
+        adjusted: plans.filter(plan => plan.isStockTracked).length,
+        errors
+      };
+    } catch (error) {
+      return {
+        success: false,
+        tracked: 0,
+        adjusted: 0,
+        errors: [{ productId: 'order', error }]
+      };
+    }
+  }
+
   async logSaleAndAdjustStock(
     ctx: {
       companyId: string;
@@ -1412,6 +1693,9 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
       isStockTracked?: boolean;
     }>
   ): Promise<{ success: boolean; tracked: number; adjusted: number; errors: Array<{ productId: string; error: any }> }> {
+    return this.logSaleAndAdjustStockAtomic(ctx, items);
+
+    /* Legacy implementation retained below temporarily for reference. */
     const colName = 'ordersSellingTracking';
     const errors: Array<{ productId: string; error: any }> = [];
     let tracked = 0;
@@ -1423,10 +1707,35 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
         : 'open';
     })();
 
-    let idx = 0;
+    // A timed-out checkout can retry the background work after the first attempt
+    // already created tracking and deducted stock. Reuse the same item identity
+    // so completed sale items are not processed twice for one order.
+    const processedSaleKeys = new Set<string>();
+    if (ctx.orderId && !['returned', 'refunded', 'damaged', 'cancelled'].includes(trackingStatus)) {
+      const existingTrackingQuery = query(
+        collection(this.firestore, colName),
+        where('orderId', '==', ctx.orderId)
+      );
+      const existingTrackingSnapshot = await getDocs(existingTrackingQuery);
+      existingTrackingSnapshot.docs.forEach(existingDoc => {
+        const existingData = existingDoc.data() as any;
+        const existingStatus = String(existingData.status || '').trim().toLowerCase();
+        if (!['open', 'pending', 'processing', 'completed'].includes(existingStatus)) return;
+
+        const existingItemKey = `${existingData.productId || ''}|${existingData.itemCode || ''}`.trim();
+        if (existingItemKey) processedSaleKeys.add(existingItemKey);
+      });
+    }
+
     for (const it of items) {
       try {
         const isOffline = !this.networkService.isOnline();
+        const saleItemKey = `${it.productId}|${it.itemCode || ''}`.trim();
+        if (processedSaleKeys.has(saleItemKey)) {
+          console.log(`⏭️ Skipping duplicate sale inventory processing for order ${ctx.orderId}, item ${saleItemKey}`);
+          continue;
+        }
+
         // isStockTracked defaults to true — only skip deduction when explicitly false
         const isStockTracked = (it as any).isStockTracked !== false;
 
@@ -1446,7 +1755,7 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
           let batchesSnapshot;
           try {
             batchesSnapshot = await getDocs(batchesQuery);
-            batches = batchesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            batches = batchesSnapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }));
             
             const isFromCache = batchesSnapshot.metadata.fromCache;
             console.log(`🔥 Firestore returned ${batches.length} batches for product ${it.productId} (source: ${isFromCache ? 'CACHE' : 'SERVER'})`);
@@ -1723,7 +2032,6 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
           uid: ctx.cashierId,
           status: trackingStatus,
 
-          itemIndex: idx,
           orderDetailsId: (it as any).orderDetailsId || undefined,
           productId: it.productId,
           itemCode: it.itemCode,
@@ -1761,6 +2069,7 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
           const trackingRef = collection(this.firestore, colName);
           const cleanedDoc = this.removeUndefinedFields(docData as any);
           await addDoc(trackingRef, cleanedDoc);
+          processedSaleKeys.add(saleItemKey);
           tracked++;
           console.log(`📝 Created tracking log for product ${it.productId}, qty=${it.quantity}`);
         } catch (error) {
@@ -1771,20 +2080,38 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
         // Step 5: Update product totalStock
         // Step 5: Update product totalStock — only for stock-tracked products
         if (isStockTracked) {
-          const productForStockUpdate = this.productService.getProduct(it.productId);
-          if (productForStockUpdate) {
-            const current = productForStockUpdate.totalStock ?? 0;
-            const newTotal = Math.max(0, current - it.quantity);
-            
-            await this.productService.updateProduct(it.productId, {
-              totalStock: newTotal,
-              lastUpdated: new Date(),
-              updatedBy: ctx.cashierId
-            } as any);
+          const productRef = doc(this.firestore, 'products', it.productId);
+          let previousTotalStock = 0;
+          let updatedTotalStock = 0;
+          const stockUpdatedAt = new Date();
 
-            console.log(`✅ Adjusted product ${it.productId} stock: ${current} -> ${newTotal}`);
-            adjusted++;
-          }
+          await runTransaction(this.firestore, async transaction => {
+            const productSnapshot = await transaction.get(productRef);
+            if (!productSnapshot.exists()) {
+              throw new Error(`Product ${it.productId} not found while updating stock`);
+            }
+
+            const productData = productSnapshot.data() as any;
+            previousTotalStock = Number(productData.totalStock || 0);
+            updatedTotalStock = Math.max(0, previousTotalStock - it.quantity);
+
+            transaction.update(productRef, {
+              totalStock: updatedTotalStock,
+              lastUpdated: stockUpdatedAt,
+              updatedAt: stockUpdatedAt,
+              updatedBy: ctx.cashierId
+            });
+          });
+
+          this.productService.applyLocalPatch(it.productId, {
+            totalStock: updatedTotalStock,
+            lastUpdated: stockUpdatedAt,
+            updatedAt: stockUpdatedAt,
+            updatedBy: ctx.cashierId
+          } as any);
+
+          console.log(`✅ Adjusted product ${it.productId} stock: ${previousTotalStock} -> ${updatedTotalStock}`);
+          adjusted++;
         } else {
           console.log(`⏭️ Skipping stock deduction for non-tracked product ${it.productId}`);
         }
@@ -1794,7 +2121,6 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
         errors.push({ productId: it.productId, error: e });
       }
 
-      idx++;
     }
 
     return { success: errors.length === 0, tracked, adjusted, errors };

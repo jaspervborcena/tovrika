@@ -31,10 +31,11 @@ service cloud.firestore {
       allow create: if isAuthenticated() && 
                     request.resource.data.uid == request.auth.uid;
       
-      // Allow update if user owns the product
-      allow update: if isAuthenticated() && 
-                    resource.data.uid == request.auth.uid && 
-                    request.resource.data.uid == request.auth.uid;
+      // POS cashiers may adjust stock on an existing product without taking ownership.
+      allow update: if isAuthenticated() &&
+            resource.data.uid == request.resource.data.uid &&
+            resource.data.companyId == request.resource.data.companyId &&
+            resource.data.storeId == request.resource.data.storeId;
       
       // Allow delete if user owns the product
       allow delete: if isAuthenticated() && 
@@ -47,9 +48,11 @@ service cloud.firestore {
       allow create: if isAuthenticated() &&
         request.resource.data.uid == request.auth.uid &&
         request.resource.data.productId is string;
+      // POS cashiers may deduct an existing batch without taking ownership.
       allow update: if isAuthenticated() &&
-        resource.data.uid == request.auth.uid &&
-        request.resource.data.uid == request.auth.uid;
+        resource.data.uid == request.resource.data.uid &&
+        resource.data.companyId == request.resource.data.companyId &&
+        resource.data.storeId == request.resource.data.storeId;
       allow delete: if isAuthenticated() && 
         resource.data.uid == request.auth.uid;
     }

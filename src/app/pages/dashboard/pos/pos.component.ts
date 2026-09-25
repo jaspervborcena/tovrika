@@ -2789,10 +2789,10 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   // Wrapper to require manager auth before processing item actions
-  async processItemActionAuthorized(orderId: string, itemIndex: number, action: string, item: any): Promise<void> {
+  async processItemActionAuthorized(orderId: string, itemCode: string, action: string, item: any): Promise<void> {
     const creds = await this.showManagerAuthDialog();
     if (!creds) return;
-    await this.processItemAction(orderId, itemIndex, action, item);
+    await this.processItemAction(orderId, itemCode, action, item);
   }
 
   // Wrapper for opening return/damage modes with auth
@@ -2819,7 +2819,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   // Process individual item actions (return, damage, refund, cancel)
-  async processItemAction(orderId: string, itemIndex: number, action: string, item: any): Promise<void> {
+  async processItemAction(orderId: string, itemCode: string, action: string, item: any): Promise<void> {
     try {
 
       

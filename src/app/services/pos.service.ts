@@ -1342,7 +1342,8 @@ export class PosService {
       }, items);
 
       if (!res.success) {
-        console.warn('⚠️ Some items failed to track/adjust:', res.errors);
+        const details = res.errors.map(error => `${error.productId}: ${error.error instanceof Error ? error.error.message : String(error.error)}`).join('; ');
+        throw new Error(`Inventory transaction failed: ${details}`);
       }
       return;
     }
