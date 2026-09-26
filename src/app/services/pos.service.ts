@@ -452,7 +452,7 @@ export class PosService {
         const normalized = PosService.normalizeCartItemForStorage(item);
         return {
           ...normalized,
-          itemCode: this.itemCodeService.generateItemCode()
+          itemCode: normalized.itemCode || this.itemCodeService.generateItemCode()
         };
       });
       if (cartItems.length === 0) {
@@ -625,7 +625,7 @@ export class PosService {
         const normalized = PosService.normalizeCartItemForStorage(item);
         return {
           ...normalized,
-          itemCode: this.itemCodeService.generateItemCode(),
+          itemCode: normalized.itemCode || this.itemCodeService.generateItemCode(),
         };
       });
       if (cartItems.length === 0) {
@@ -975,7 +975,10 @@ export class PosService {
         throw new Error('Store not found');
       }
 
-      const cartItems = this.cartItems();
+      const cartItems = this.cartItems().map(item => ({
+        ...PosService.normalizeCartItemForStorage(item),
+        itemCode: item.itemCode || this.itemCodeService.generateItemCode()
+      }));
       if (cartItems.length === 0) {
         throw new Error('Cart is empty');
       }
@@ -983,6 +986,18 @@ export class PosService {
       console.log('Processing order for store:', storeId);
 
       const cartSummary = this.cartSummary();
+      const orderItems: OrderItem[] = cartItems.map(item => ({
+        productId: item.productId,
+        itemCode: item.itemCode,
+        productName: item.productName,
+        quantity: item.quantity,
+        price: Number((item.sellingPrice ?? 0).toFixed(2)),
+        costPrice: item.costPrice ?? 0,
+        total: Number((item.total ?? 0).toFixed(2)),
+        vat: Number((item.vatAmount ?? 0).toFixed(2)),
+        discount: Number((item.discountAmount ?? 0).toFixed(2)),
+        isVatExempt: !!item.isVatExempt
+      }));
 
       // Prepare complete order data (without invoice number - will be assigned by transaction)
       const orderData = {
@@ -1022,6 +1037,8 @@ export class PosService {
         zeroRatedSales: cartSummary.zeroRatedSales,
         
         status: 'completed',
+
+        items: orderItems,
         
         // BIR Required Fields (can be configured per company)
         atpOrOcn: 'ATP-001',
@@ -1184,7 +1201,8 @@ export class PosService {
 
     return {
       productId: product.id!,
-        productCode: product.productCode,
+      itemCode: this.itemCodeService.generateItemCode(),
+      productCode: product.productCode,
       productName: product.productName,
       skuId: product.skuId,
       unitType: product.unitType,
