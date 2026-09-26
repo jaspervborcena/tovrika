@@ -1428,7 +1428,6 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
             throw new Error(`Missing itemCode for completed sale item ${item.productId}`);
           }
 
-          const isStockTracked = item.isStockTracked !== false;
           const lockKey = encodeURIComponent(`${ctx.orderId}|${itemIndex}|${item.productId}|${itemCode}`);
           if (plannedLockKeys.has(lockKey)) {
             throw new Error(`Duplicate sale line in order ${ctx.orderId}: ${item.productId}|${itemCode}`);
@@ -1454,20 +1453,23 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
           let actualCost = Number(item.costPrice || 0);
           const batchDeductions: any[] = [];
 
-          if (isStockTracked) {
-            const batchesQuery = query(
-              collection(this.firestore, 'productInventory'),
-              where('productId', '==', item.productId),
-              where('storeId', '==', ctx.storeId)
-            );
-            const batchSnapshot: any = await transaction.get(batchesQuery as any);
-            const batchDocs = batchSnapshot.docs
-              .map((batchDoc: any) => ({ id: batchDoc.id, data: batchDoc.data() }))
-              .filter((batch: any) => batch.data.companyId === ctx.companyId &&
-                String(batch.data.status || '').toLowerCase() === 'active' &&
-                Number(batch.data.quantity || 0) > 0)
-              .sort((a: any, b: any) => String(a.data.batchId || a.id).localeCompare(String(b.data.batchId || b.id)));
+          const batchesQuery = query(
+            collection(this.firestore, 'productInventory'),
+            where('productId', '==', item.productId),
+            where('storeId', '==', ctx.storeId)
+          );
+          const batchSnapshot: any = await transaction.get(batchesQuery as any);
+          const batchDocs = batchSnapshot.docs
+            .map((batchDoc: any) => ({ id: batchDoc.id, data: batchDoc.data() }))
+            .filter((batch: any) => batch.data.companyId === ctx.companyId &&
+              String(batch.data.status || '').toLowerCase() === 'active' &&
+              Number(batch.data.quantity || 0) > 0)
+            .sort((a: any, b: any) => String(a.data.batchId || a.id).localeCompare(String(b.data.batchId || b.id)));
+          // Existing inventory batches make a product stock-tracked even when legacy
+          // product documents still carry the old default isStockTracked=false value.
+          const isStockTracked = item.isStockTracked !== false || batchDocs.length > 0;
 
+          if (isStockTracked) {
             fulfilledQty = 0;
             let remainingQty = Math.max(0, Number(item.quantity || 0));
             for (const batch of batchDocs) {
