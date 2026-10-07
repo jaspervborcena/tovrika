@@ -1379,6 +1379,40 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
    * Log a batch of sale items for later reconciliation and apply stock deltas to products.
    * Best-effort per item; continues on individual failures, returns summary.
    */
+  private async hasExistingTrackingForOrderItems(
+    orderId: string,
+    items: Array<{ productId: string; itemCode?: string; productName?: string }> 
+  ): Promise<boolean> {
+    if (!orderId || !items.length) {
+      return false;
+    }
+
+    const trackingQuery = query(
+      collection(this.firestore, 'ordersSellingTracking'),
+      where('orderId', '==', orderId)
+    );
+    const trackingSnap = await getDocs(trackingQuery as any);
+    const trackedKeys = new Set<string>();
+
+    trackingSnap.docs.forEach((docSnap: any) => {
+      const data = docSnap.data() || {};
+      const status = String(data.status || '').trim().toLowerCase();
+      if (!status) {
+        return;
+      }
+
+      const key = `${String(data.productId || '').trim()}|${String(data.itemCode || data.productCode || '').trim()}`.trim();
+      if (key) {
+        trackedKeys.add(key);
+      }
+    });
+
+    return items.every(item => {
+      const key = `${String(item.productId || '').trim()}|${String(item.itemCode || '').trim()}`.trim();
+      return trackedKeys.has(key);
+    });
+  }
+
   private async logSaleAndAdjustStockAtomic(
     ctx: {
       companyId: string;
@@ -1413,12 +1447,25 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
     const trackingStatus = String(ctx.status || 'open').trim().toLowerCase();
     const isCompletedSale = trackingStatus === 'completed';
     const plans: any[] = [];
+    const orderLockKey = ctx.orderId ? `order:${ctx.orderId}` : `order:${Date.now()}`;
+    const orderLockRef = ctx.orderId ? doc(this.firestore, 'inventorySaleLocks', orderLockKey) : null;
+    const orderRef = ctx.orderId && ctx.orderId !== 'unknown-order'
+      ? doc(this.firestore, 'orders', ctx.orderId)
+      : null;
+
     try {
       await runTransaction(this.firestore, async transaction => {
         plans.length = 0;
         const plannedLockKeys = new Set<string>();
-        const plannedBatchQuantities = new Map<string, number>();
         const plannedProductQuantities = new Map<string, number>();
+        const orderSnapshot = orderRef ? await transaction.get(orderRef as any) : null;
+
+        if (orderLockRef) {
+          const existingOrderLock = await transaction.get(orderLockRef as any);
+          if (existingOrderLock.exists()) {
+            throw new Error(`Order inventory already processed: ${ctx.orderId}`);
+          }
+        }
 
         // Read and validate the complete order before issuing any transaction writes.
         for (let itemIndex = 0; itemIndex < items.length; itemIndex++) {
@@ -1449,73 +1496,28 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
           const product = this.productService.getProduct(item.productId);
           const previousTotalStock = Number(productData.totalStock || 0);
           const now = new Date();
-          let fulfilledQty = Number(item.quantity || 0);
+          const requestedQty = Math.max(0, Number(item.quantity || 0));
           let actualCost = Number(item.costPrice || 0);
-          const batchDeductions: any[] = [];
 
-          const batchesQuery = query(
-            collection(this.firestore, 'productInventory'),
-            where('productId', '==', item.productId),
-            where('storeId', '==', ctx.storeId)
-          );
-          const batchSnapshot: any = await transaction.get(batchesQuery as any);
-          const batchDocs = batchSnapshot.docs
-            .map((batchDoc: any) => ({ id: batchDoc.id, data: batchDoc.data() }))
-            .filter((batch: any) => batch.data.companyId === ctx.companyId &&
-              String(batch.data.status || '').toLowerCase() === 'active' &&
-              Number(batch.data.quantity || 0) > 0)
-            .sort((a: any, b: any) => String(a.data.batchId || a.id).localeCompare(String(b.data.batchId || b.id)));
-          // Existing inventory batches make a product stock-tracked even when legacy
-          // product documents still carry the old default isStockTracked=false value.
-          const isStockTracked = item.isStockTracked !== false || batchDocs.length > 0;
-
-          if (isStockTracked) {
-            fulfilledQty = 0;
-            let remainingQty = Math.max(0, Number(item.quantity || 0));
-            for (const batch of batchDocs) {
-              if (remainingQty <= 0) break;
-              const batchData = batch.data;
-              const priorQuantity = plannedBatchQuantities.get(batch.id) || 0;
-              const availableQuantity = Math.max(0, Number(batchData.quantity || 0) - priorQuantity);
-              const quantity = Math.min(remainingQty, availableQuantity);
-              if (quantity <= 0) continue;
-              const plannedQuantity = priorQuantity + quantity;
-              batchDeductions.push({
-                batchRef: doc(this.firestore, 'productInventory', batch.id),
-                batchId: batchData.batchId || batch.id,
-                refId: batch.id,
-                costPrice: Number(batchData.costPrice || batchData.unitPrice || item.costPrice || 0),
-                quantity,
-                newQuantity: Number(batchData.quantity || 0) - plannedQuantity,
-                totalDeducted: Number(batchData.totalDeducted || 0) + plannedQuantity
-              });
-              plannedBatchQuantities.set(batch.id, plannedQuantity);
-              fulfilledQty += quantity;
-              remainingQty -= quantity;
-            }
-
-            if (batchDocs.length === 0) {
-              const priorProductQuantity = plannedProductQuantities.get(item.productId) || 0;
-              fulfilledQty = Math.min(
-                Math.max(0, Number(item.quantity || 0)),
-                Math.max(0, previousTotalStock - priorProductQuantity)
-              );
-            }
-          }
-
-          if (fulfilledQty <= 0 && Number(item.quantity || 0) > 0) {
-            throw new Error(`Insufficient stock for product ${item.productId}`);
-          }
-          if (batchDeductions.length > 0) {
-            const weightedCost = batchDeductions.reduce((sum, deduction) => sum + deduction.costPrice * deduction.quantity, 0);
-            actualCost = weightedCost / fulfilledQty || actualCost;
-          } else if (!actualCost) {
-            actualCost = Number(productData.costPrice || 0);
-          }
-
+          // Reserve the aggregate stock now; batch FIFO is applied during shift reconciliation.
+          const hasLiveStock = previousTotalStock > 0;
+          const isStockTracked = item.isStockTracked === true || hasLiveStock;
           const priorProductQuantity = isStockTracked
             ? plannedProductQuantities.get(item.productId) || 0
             : 0;
+          const fulfilledQty = isStockTracked
+            ? Math.min(requestedQty, Math.max(0, previousTotalStock - priorProductQuantity))
+            : requestedQty;
+          if (isStockTracked && fulfilledQty < requestedQty) {
+            throw new Error(`Insufficient stock for product ${item.productId}. Fulfilled ${fulfilledQty} of ${requestedQty}.`);
+          }
+          if (fulfilledQty <= 0 && requestedQty > 0) {
+            throw new Error(`Insufficient stock for product ${item.productId}`);
+          }
+          if (!actualCost && Number(productData.costPrice || 0) > 0) {
+            actualCost = Number(productData.costPrice || 0);
+          }
+
           const totalProductQuantity = priorProductQuantity + fulfilledQty;
           if (isStockTracked) {
             plannedProductQuantities.set(item.productId, totalProductQuantity);
@@ -1530,53 +1532,35 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
             product,
             previousTotalStock,
             updatedTotalStock: isStockTracked ? Math.max(0, previousTotalStock - totalProductQuantity) : previousTotalStock,
+            previousPendingBatchDeductionQty: Number(productData.pendingBatchDeductionQty || 0),
             fulfilledQty,
             actualCost,
-            batchDeductions,
             now,
             trackingRef: doc(collection(this.firestore, 'ordersSellingTracking'))
           });
         }
 
+        if (orderLockRef) {
+          transaction.set(orderLockRef as any, {
+            orderId: ctx.orderId,
+            itemCount: items.length,
+            createdAt: new Date(),
+            createdBy: ctx.cashierId,
+            status: 'processed'
+          } as any);
+        }
+
         for (const plan of plans) {
-          const { item, isStockTracked, productRef, batchDeductions, now } = plan;
+          const { item, isStockTracked, productRef, now } = plan;
           if (isStockTracked) {
             transaction.update(productRef as any, {
               totalStock: plan.updatedTotalStock,
+              pendingBatchDeductionQty: plan.previousPendingBatchDeductionQty +
+                (plannedProductQuantities.get(item.productId) || 0),
               lastUpdated: now,
               updatedAt: now,
               updatedBy: ctx.cashierId
             } as any);
-          }
-
-          for (const deduction of batchDeductions) {
-            transaction.update(deduction.batchRef as any, {
-              quantity: deduction.newQuantity,
-              totalDeducted: deduction.totalDeducted,
-              status: deduction.newQuantity === 0 ? 'depleted' : 'active',
-              updatedAt: now,
-              updatedBy: ctx.cashierId
-            } as any);
-            const deductionRef = doc(collection(this.firestore, 'inventoryTracking'));
-            transaction.set(deductionRef as any, this.removeUndefinedFields(this.sanitizeForFirestore({
-              eventType: 'completed',
-              companyId: ctx.companyId,
-              storeId: ctx.storeId,
-              orderId: ctx.orderId,
-              invoiceNumber: ctx.invoiceNumber || '',
-              productId: item.productId,
-              productName: item.productName || '',
-              productCode: (item as any).productCode || '',
-              skuId: item.skuId || (item as any).sku || '',
-              batchId: deduction.batchId,
-              refId: deduction.refId,
-              costPrice: deduction.costPrice,
-              quantity: deduction.quantity,
-              runningBalanceTotalStock: plan.previousTotalStock,
-              deductedAt: now,
-              deductedBy: ctx.cashierId,
-              createdAt: now
-            })) as any);
           }
 
           const trackedTotal = Number(item.quantity || 0) > 0
@@ -1589,8 +1573,11 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
             invoiceNumber: ctx.invoiceNumber || '',
             customerId: ctx.customerId || '',
             batchNumber: item.batchNumber || 1,
+            itemIndex: plans.indexOf(plan),
             createdAt: now,
             createdBy: ctx.cashierId,
+            updatedAt: now,
+            updatedBy: ctx.cashierId,
             uid: ctx.cashierId,
             status: trackingStatus,
             productId: item.productId,
@@ -1608,6 +1595,7 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
             isVatExempt: !!item.isVatExempt,
             runningBalanceTotalStock: plan.updatedTotalStock,
             isStockTracked,
+            batchReconciliationStatus: isStockTracked ? 'pending' : 'not_required',
             category: plan.product?.category,
             tagLabels: item.tagLabels ?? plan.product?.tagLabels,
             tags: item.tags ?? plan.product?.tags,
@@ -1627,12 +1615,26 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
             createdBy: ctx.cashierId
           } as any);
         }
+
+        if (orderRef && orderSnapshot?.exists()) {
+          const hasPendingBatchReconciliation = plans.some(plan =>
+            plan.isStockTracked && plan.fulfilledQty > 0
+          );
+          transaction.update(orderRef as any, {
+            inventoryStatus: hasPendingBatchReconciliation ? 'batch_reconciliation_pending' : 'applied',
+            inventoryReservedAt: new Date(),
+            inventoryLastError: null
+          } as any);
+        }
       });
 
       for (const plan of plans) {
         if (plan.isStockTracked) {
           this.productService.applyLocalPatch(plan.item.productId, {
             totalStock: plan.updatedTotalStock,
+            pendingBatchDeductionQty: plan.previousPendingBatchDeductionQty +
+              (plans.filter(otherPlan => otherPlan.isStockTracked && otherPlan.item.productId === plan.item.productId)
+                .reduce((sum, otherPlan) => sum + otherPlan.fulfilledQty, 0)),
             lastUpdated: plan.now,
             updatedAt: plan.now,
             updatedBy: ctx.cashierId
@@ -1653,6 +1655,15 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
         errors
       };
     } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (message.includes('Order inventory already processed')) {
+        return {
+          success: true,
+          tracked: 0,
+          adjusted: 0,
+          errors: []
+        };
+      }
       return {
         success: false,
         tracked: 0,
@@ -1738,8 +1749,9 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
           continue;
         }
 
-        // isStockTracked defaults to true — only skip deduction when explicitly false
-        const isStockTracked = (it as any).isStockTracked !== false;
+        // If the product still has stock to sell, deduct it even when the legacy
+        // isStockTracked flag is false. The tracking record remains for auditing.
+        const isStockTracked = (it as any).isStockTracked === true || (it as any).quantity > 0;
 
         // Step 1: Find batches for this product using FIFO (oldest first, active only)
         // Query Firestore - it will automatically use its cache when offline

@@ -3,8 +3,8 @@
   <div class="header">
     <div class="header-content">
       <div>
-        <h1 class="page-title">Offline Order Reconciliation</h1>
-        <p class="page-subtitle">Find and fix orders with missing inventory deductions or ledger entries</p>
+        <h1 class="page-title">Inventory Reconciliation</h1>
+        <p class="page-subtitle">Review offline orders and apply pending FIFO deductions at shift close</p>
       </div>
     </div>
   </div>
@@ -126,6 +126,7 @@
             <td>
               <div class="font-medium text-gray-900">{{ disc.invoiceNumber }}</div>
               <div *ngIf="disc.isOfflineOrder" class="text-xs text-orange-600 font-medium mt-1">📴 Offline</div>
+              <div *ngIf="disc.isDeferredInventory" class="text-xs text-amber-700 font-medium mt-1">Shift close pending</div>
             </td>
             <td class="text-sm text-gray-600">
               {{ disc.orderDate | date:'short' }}

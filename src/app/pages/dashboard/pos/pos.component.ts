@@ -6138,14 +6138,12 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   async addToCart(product: Product): Promise<void> {
     // Check if order is already completed
     if (this.isOrderCompleted()) {
-      // Use unified flow
-      const started = await this.requestStartNewOrder('item');
+      await this.requestStartNewOrder('item');
       return;
     }
 
     // Check if new order is active first
     if (!this.canInteractWithProducts()) {
-      // Use unified flow; do not auto-add the product on the same click
       await this.requestStartNewOrder('item');
       return;
     }

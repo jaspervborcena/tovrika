@@ -62,20 +62,55 @@ export class CouponService {
   }
 
   /**
+   * Normalize Firestore Timestamp / Date / ISO strings into a JavaScript Date.
+   */
+  private toDate(value: unknown): Date | null {
+    if (!value) return null;
+
+    if (value instanceof Date) return value;
+
+    if (typeof value === 'string') {
+      const parsed = new Date(value);
+      return Number.isNaN(parsed.getTime()) ? null : parsed;
+    }
+
+    if (typeof value === 'object') {
+      const candidate = value as any;
+      if (typeof candidate.toDate === 'function') {
+        const date = candidate.toDate();
+        return date instanceof Date && !Number.isNaN(date.getTime()) ? date : null;
+      }
+      if (typeof candidate.seconds === 'number') {
+        const date = new Date(candidate.seconds * 1000);
+        return Number.isNaN(date.getTime()) ? null : date;
+      }
+    }
+
+    return null;
+  }
+
+  /**
    * Validate a coupon. Returns an error message string if invalid, or null if valid.
    */
   validateCoupon(coupon: CouponDoc, region: string, isNewUser: boolean): string | null {
     if (coupon.status !== 'active') return 'Coupon is not active.';
 
     const now = new Date();
-    const validUntil = coupon.validUntil.toDate();
-    if (now > validUntil) return 'Coupon has expired.';
+    const validUntil = this.toDate((coupon as any).validUntil ?? (coupon as any).validUntilDate ?? (coupon as any).expiresAt);
+    if (!validUntil) return 'Coupon expiry date is missing.';
+    if (now.getTime() > validUntil.getTime()) return 'Coupon has expired.';
 
     if (coupon.redemptionsUsed >= coupon.maxRedemptions)
       return 'Coupon has reached its maximum redemptions.';
 
-    if (coupon.restrictions?.region && coupon.restrictions.region !== region)
-      return `Coupon is only valid in region: ${coupon.restrictions.region}.`;
+    const newUsersOnly = (coupon as any).restrictions?.newUsersOnly ?? (coupon as any).newUsersOnly ?? false;
+    if (newUsersOnly && !isNewUser) {
+      return 'This coupon is only valid for new users.';
+    }
+
+    const regionRule = (coupon as any).restrictions?.region ?? (coupon as any).region;
+    if (regionRule && String(regionRule) !== String(region))
+      return `Coupon is only valid in region: ${regionRule}.`;
 
     return null;
   }

@@ -18,6 +18,7 @@ export interface ReconciliationDiscrepancy {
   
   // Order flags
   isOfflineOrder: boolean;
+  isDeferredInventory: boolean;
   needsInventoryReprocess: boolean;
   
   // Severity and priority
