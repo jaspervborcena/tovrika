@@ -1,5 +1,6 @@
-import { Injectable } from '@angular/core';
+import { Injectable, inject } from '@angular/core';
 import { User } from '../../services/auth.service';
+import { SqliteStorageService } from './sqlite-storage.service';
 
 export interface UserPermission {
   companyId: string;
@@ -81,6 +82,8 @@ export class IndexedDBService {
   private dbVersion = 3; // Increment version to add productInventory store
   private db: IDBDatabase | null = null;
   private isPermanentlyBroken = false; // Flag to stop retrying corrupted DB
+  private readonly sqliteStorage = inject(SqliteStorageService);
+  private readonly useSQLite = true;
 
   /**
    * Create all object stores in the database
@@ -153,15 +156,18 @@ export class IndexedDBService {
   }
 
   async initDB(): Promise<void> {
+    if (this.useSQLite) {
+      await this.sqliteStorage.init();
+      return;
+    }
+
     // Check if IndexedDB is permanently broken
     if (this.isPermanentlyBroken) {
-      //console.warn('📦 IndexedDB: Permanently unavailable - using in-memory fallback');
       return; // Silently fail and use in-memory storage
     }
 
     // Check if IndexedDB is available
     if (!window.indexedDB) {
-      //console.warn('📦 IndexedDB: Not available in this browser - using in-memory fallback');
       this.isPermanentlyBroken = true;
       return; // Silently fail instead of throwing
     }
@@ -255,6 +261,11 @@ export class IndexedDBService {
 
   // User Data Methods
   async saveUserData(userData: OfflineUserData): Promise<void> {
+    if (this.useSQLite) {
+      await this.sqliteStorage.saveUserData(userData);
+      return;
+    }
+
     // If IndexedDB is unavailable, silently skip
     if (this.isPermanentlyBroken) {
       //console.warn('📦 IndexedDB: Unavailable - skipping user data save');
@@ -295,13 +306,17 @@ export class IndexedDBService {
    * Check if IndexedDB is available and working
    */
   isAvailable(): boolean {
-    return !this.isPermanentlyBroken && !!this.db;
+    return this.useSQLite ? this.sqliteStorage.isReady() : !this.isPermanentlyBroken && !!this.db;
   }
 
   /**
    * Get status information about IndexedDB
    */
   getStatus(): { available: boolean; reason?: string } {
+    if (this.useSQLite) {
+      return { available: this.sqliteStorage.isReady(), reason: this.sqliteStorage.isReady() ? undefined : 'SQLite storage not initialized' };
+    }
+
     if (!window.indexedDB) {
       return { available: false, reason: 'IndexedDB not supported in this browser' };
     }
@@ -428,6 +443,61 @@ export class IndexedDBService {
   }
 
   // Clear all user data from IndexedDB (useful when switching accounts)
+  async saveOfflineDocument(doc: any): Promise<void> {
+    if (this.useSQLite) {
+      await this.sqliteStorage.saveOfflineDocument(doc);
+      return;
+    }
+
+    const pendingDocs = this.getPendingDocumentsFromStorage();
+    pendingDocs.push(doc);
+    localStorage.setItem('pendingDocuments', JSON.stringify(pendingDocs));
+  }
+
+  async getPendingDocuments(): Promise<any[]> {
+    if (this.useSQLite) {
+      return await this.sqliteStorage.getPendingDocuments();
+    }
+
+    return this.getPendingDocumentsFromStorage();
+  }
+
+  async getOfflineDocumentsByCollection(collectionName: string): Promise<any[]> {
+    if (this.useSQLite) {
+      return await this.sqliteStorage.getOfflineDocumentsByCollection(collectionName);
+    }
+
+    return this.getPendingDocumentsFromStorage().filter(doc => doc.collectionName === collectionName);
+  }
+
+  async deleteOfflineDocument(documentId: string, collectionName: string): Promise<void> {
+    if (this.useSQLite) {
+      await this.sqliteStorage.deleteOfflineDocument(documentId, collectionName);
+      return;
+    }
+
+    const pendingDocs = this.getPendingDocumentsFromStorage().filter(d => !(d.id === documentId && d.collectionName === collectionName));
+    localStorage.setItem('pendingDocuments', JSON.stringify(pendingDocs));
+  }
+
+  async clearOfflineDocuments(): Promise<void> {
+    if (this.useSQLite) {
+      await this.sqliteStorage.clearOfflineDocuments();
+      return;
+    }
+
+    localStorage.removeItem('pendingDocuments');
+  }
+
+  private getPendingDocumentsFromStorage(): any[] {
+    try {
+      const stored = localStorage.getItem('pendingDocuments');
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  }
+
   async clearAllUserData(): Promise<void> {
     // Check if database is permanently broken
     if (this.isPermanentlyBroken) {
@@ -491,6 +561,10 @@ export class IndexedDBService {
   }
 
   async getUserData(uid: string): Promise<OfflineUserData | null> {
+    if (this.useSQLite) {
+      return await this.sqliteStorage.getUserData(uid);
+    }
+
     if (this.isPermanentlyBroken) {
       return null; // Return null if unavailable
     }
@@ -517,6 +591,10 @@ export class IndexedDBService {
   }
 
   async getCurrentUser(): Promise<OfflineUserData | null> {
+    if (this.useSQLite) {
+      return await this.sqliteStorage.getCurrentUser();
+    }
+
     if (this.isPermanentlyBroken) {
       return null; // Return null if unavailable
     }
@@ -545,6 +623,11 @@ export class IndexedDBService {
 
   // Product Methods
   async saveProducts(products: OfflineProduct[]): Promise<void> {
+    if (this.useSQLite) {
+      await this.sqliteStorage.saveProducts(products);
+      return;
+    }
+
     // Check if database is permanently broken
     if (this.isPermanentlyBroken) {
       console.warn('⚠️ IndexedDB: Cannot save products - database permanently unavailable');
@@ -646,6 +729,10 @@ export class IndexedDBService {
   }
 
   async getProductsByStore(storeId: string): Promise<OfflineProduct[]> {
+    if (this.useSQLite) {
+      return await this.sqliteStorage.getProductsByStore(storeId);
+    }
+
     // Check if database is permanently broken
     if (this.isPermanentlyBroken) {
       console.warn('⚠️ IndexedDB: Cannot get products - database permanently unavailable');
@@ -800,6 +887,11 @@ export class IndexedDBService {
 
   // Order Methods (for offline transactions)
   async saveOrder(order: OfflineOrder): Promise<void> {
+    if (this.useSQLite) {
+      await this.sqliteStorage.saveOrder(order);
+      return;
+    }
+
     // Check if database is permanently broken
     if (this.isPermanentlyBroken) {
       console.warn('⚠️ IndexedDB: Cannot save order - database permanently unavailable');
@@ -836,6 +928,10 @@ export class IndexedDBService {
   }
 
   async getPendingOrders(storeId: string): Promise<OfflineOrder[]> {
+    if (this.useSQLite) {
+      return await this.sqliteStorage.getPendingOrders(storeId);
+    }
+
     // Check if database is permanently broken
     if (this.isPermanentlyBroken) {
       console.warn('⚠️ IndexedDB: Cannot get pending orders - database permanently unavailable');
@@ -875,6 +971,11 @@ export class IndexedDBService {
 
   // Settings Methods
   async saveSetting(key: string, value: any): Promise<void> {
+    if (this.useSQLite) {
+      await this.sqliteStorage.saveSetting(key, value);
+      return;
+    }
+
     if (this.isPermanentlyBroken) {
       return;
     }
@@ -899,6 +1000,10 @@ export class IndexedDBService {
   }
 
   async getSetting(key: string): Promise<any> {
+    if (this.useSQLite) {
+      return await this.sqliteStorage.getSetting(key);
+    }
+
     if (this.isPermanentlyBroken) {
       return null;
     }
@@ -946,6 +1051,11 @@ export class IndexedDBService {
 
   // Companies and Stores Methods
   async saveCompanies(companies: OfflineCompany[]): Promise<void> {
+    if (this.useSQLite) {
+      await this.sqliteStorage.saveCompanies(companies);
+      return;
+    }
+
     if (!this.db) await this.initDB();
     if (!this.db) {
       console.error('📦 IndexedDB: Database not initialized, cannot save companies');
@@ -1029,6 +1139,10 @@ export class IndexedDBService {
   // The explicit IndexedDB-level getter was removed to avoid duplicate logic.
 
   async getAllCompanies(): Promise<OfflineCompany[]> {
+    if (this.useSQLite) {
+      return await this.sqliteStorage.getAllCompanies();
+    }
+
     if (!this.db) await this.initDB();
 
     return new Promise((resolve, reject) => {
@@ -1152,6 +1266,11 @@ export class IndexedDBService {
   }
 
   async saveStores(stores: OfflineStore[]): Promise<void> {
+    if (this.useSQLite) {
+      await this.sqliteStorage.saveStores(stores);
+      return;
+    }
+
     if (!this.db) await this.initDB();
     if (!this.db) {
       console.error('📦 IndexedDB: Database not initialized, cannot save stores');
@@ -1182,6 +1301,10 @@ export class IndexedDBService {
   }
 
   async getStoreById(id: string): Promise<OfflineStore | null> {
+    if (this.useSQLite) {
+      return await this.sqliteStorage.getStoreById(id);
+    }
+
     if (!this.db) await this.initDB();
 
     return new Promise((resolve, reject) => {
@@ -1195,6 +1318,10 @@ export class IndexedDBService {
   }
 
   async getAllStores(): Promise<OfflineStore[]> {
+    if (this.useSQLite) {
+      return await this.sqliteStorage.getAllStores();
+    }
+
     if (!this.db) await this.initDB();
 
     return new Promise((resolve, reject) => {
@@ -1223,6 +1350,11 @@ export class IndexedDBService {
 
   // Utility Methods
   async clearAllData(): Promise<void> {
+    if (this.useSQLite) {
+      await this.sqliteStorage.clearAllData();
+      return;
+    }
+
     if (!this.db) await this.initDB();
 
     const storeNames = ['userData', 'products', 'orders', 'settings', 'companies', 'stores'];
@@ -1246,6 +1378,11 @@ export class IndexedDBService {
    * This allows users to sign out and still be able to login offline later.
    */
   async clearAllDataPreserveOfflineAuth(): Promise<void> {
+    if (this.useSQLite) {
+      await this.sqliteStorage.clearAllDataPreserveOfflineAuth();
+      return;
+    }
+
     if (!this.db) await this.initDB();
 
     // Clear userData, products, orders, companies, stores (but preserve settings keys that start with 'offlineAuth_')

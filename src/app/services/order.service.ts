@@ -91,6 +91,16 @@ export class OrderService {
 
   async getRecentOrders(companyId: string, storeId?: string, limitCount = 20): Promise<Order[]> {
     try {
+      if (!navigator.onLine) {
+        const localOrders = await this.getLocalOrdersForDateRange(
+          companyId,
+          storeId,
+          new Date(0),
+          new Date(8640000000000000)
+        );
+        return localOrders.slice(0, limitCount);
+      }
+
       const ordersRef = collection(this.firestore, 'orders');
 
       // Sanity check: ensure we can read from the collection
@@ -98,7 +108,13 @@ export class OrderService {
         await getDocs(query(ordersRef, limit(1)));
       } catch (simpleError) {
         this.logger.error('Simple Firestore connectivity check failed', { area: 'orders' }, simpleError);
-        return [];
+        const localOrders = await this.getLocalOrdersForDateRange(
+          companyId,
+          storeId,
+          new Date(0),
+          new Date(8640000000000000)
+        );
+        return localOrders.slice(0, limitCount);
       }
 
       if (!companyId) {
@@ -123,7 +139,13 @@ export class OrderService {
               limit(limitCount)
             );
         const snapshot = await getDocs(primaryQuery);
-        return snapshot.docs.map((d) => this.transformDoc(d));
+        return await this.mergeLocalOrders(
+          snapshot.docs.map((d) => this.transformDoc(d)),
+          companyId,
+          storeId,
+          new Date(0),
+          new Date(8640000000000000)
+        ).then(orders => orders.slice(0, limitCount));
       } catch (primaryError) {
         this.logger.warn('Primary recent orders query failed, attempting fallback without orderBy', { area: 'orders', payload: { error: String(primaryError) } });
         try {
@@ -137,15 +159,33 @@ export class OrderService {
             const dateB = toDateValue(b.createdAt)?.getTime() || 0;
             return dateB - dateA; // Descending (newest first)
           });
-          return results;
+          const localOrders = await this.getLocalOrdersForDateRange(
+            companyId,
+            storeId,
+            new Date(0),
+            new Date(8640000000000000)
+          );
+          return this.mergeOrderLists(results, localOrders).slice(0, limitCount);
           } catch (fallbackError) {
           this.logger.error('Fallback recent orders query failed', { area: 'orders' }, fallbackError);
-          return [];
+            const localOrders = await this.getLocalOrdersForDateRange(
+              companyId,
+              storeId,
+              new Date(0),
+              new Date(8640000000000000)
+            );
+            return localOrders.slice(0, limitCount);
         }
       }
     } catch (error) {
       this.logger.error('Critical error loading recent orders', { area: 'orders' }, error);
-      return [];
+        const localOrders = await this.getLocalOrdersForDateRange(
+          companyId,
+          storeId,
+          new Date(0),
+          new Date(8640000000000000)
+        );
+        return localOrders.slice(0, limitCount);
     }
   }
 
@@ -890,6 +930,10 @@ public async restockOrderAndInventoryTransactional(orderId: string, performedBy 
 
   async getOrdersByDateRange(storeId: string, startDate: Date, endDate: Date): Promise<Order[]> {
     try {
+      if (!navigator.onLine) {
+        return await this.getLocalOrdersForDateRange(undefined, storeId, startDate, endDate);
+      }
+
       this.logger.info('HYBRID QUERY - Loading orders', { area: 'orders', payload: { storeId, startDate: startDate.toISOString(), endDate: endDate.toISOString(), userAuth: { isLoggedIn: !!this.authService.getCurrentUser(), userEmail: this.authService.getCurrentUser()?.email || 'null', uid: this.authService.getCurrentUser()?.uid || 'null' } } });
 
       // Check if we should use API or Firebase based on date
@@ -914,7 +958,7 @@ public async restockOrderAndInventoryTransactional(orderId: string, performedBy 
                 return { ...(o as any), items: [] };
               }
             }));
-            return ordersWithItems as any as Order[];
+            return await this.mergeLocalOrders(ordersWithItems as any as Order[], undefined, storeId, startDate, endDate);
           }
           // If API returned nothing, fall through to Firebase fallback logic below
           this.logger.warn('API returned no orders for this range; falling back to Firebase', { area: 'orders', storeId });
@@ -967,7 +1011,7 @@ public async restockOrderAndInventoryTransactional(orderId: string, performedBy 
             baseOrders.map(async (o) => ({ ...(o as any), items: await this.fetchOrderItems(o.id || '') }))
           );
           this.logger.info('Returning orders with items', { area: 'orders', storeId, payload: { count: ordersWithItems.length } });
-          return ordersWithItems as any as Order[];
+          return await this.mergeLocalOrders(ordersWithItems as any as Order[], undefined, storeId, startDate, endDate);
         }
       } catch (dateQueryError) {
         this.logger.warn('Date range query failed, trying without date filter', { area: 'orders', storeId, payload: { error: String(dateQueryError) } });
@@ -999,31 +1043,108 @@ public async restockOrderAndInventoryTransactional(orderId: string, performedBy 
         });
         
   this.logger.info('After client-side date filtering', { area: 'orders', storeId, payload: { count: filteredOrders.length } });
-        return filteredOrders as any as Order[];
+        return await this.mergeLocalOrders(filteredOrders as any as Order[], undefined, storeId, startDate, endDate);
       } else {
         this.logger.warn('No orders found for storeId', { area: 'orders', storeId, payload: { hints: ['Wrong storeId', 'No orders exist for this store', 'Orders exist but with different storeId format'] } });
-        return [];
+        return await this.getLocalOrdersForDateRange(undefined, storeId, startDate, endDate);
       }
-      // If nothing found remotely, attempt offline snapshot fallback
-      try {
-        const saved: any[] = await this.indexedDb.getSetting(`orders_snapshot_${storeId}`);
-        if (saved && Array.isArray(saved)) {
-          const filtered = saved.filter(order => {
-            const orderDate = toDateValue(order.createdAt) ?? new Date(order.createdAt);
-            return orderDate >= startDate && orderDate <= endDate;
-          });
-          if (filtered.length > 0) return filtered;
-        }
-      } catch (e) {
-        this.logger.warn('Failed to read orders snapshot from IndexedDB', { area: 'orders', storeId, payload: { error: String(e) } });
-      }
-
-      return [];
-      
     } catch (error) {
       this.logger.error('Error getting orders by date range', { area: 'orders', storeId }, error);
+      return await this.getLocalOrdersForDateRange(undefined, storeId, startDate, endDate);
+    }
+  }
+
+  private async getLocalOrdersForDateRange(
+    companyId: string | undefined,
+    storeId: string | undefined,
+    startDate: Date,
+    endDate: Date
+  ): Promise<Order[]> {
+    try {
+      const [queuedOrders, queuedDetails, savedOrders] = await Promise.all([
+        this.indexedDb.getOfflineDocumentsByCollection('orders'),
+        this.indexedDb.getOfflineDocumentsByCollection('orderDetails'),
+        storeId ? this.indexedDb.getSetting(`orders_snapshot_${storeId}`) : Promise.resolve([])
+      ]);
+
+      const itemsByOrderId = new Map<string, any[]>();
+      for (const queuedDetail of queuedDetails) {
+        const orderId = queuedDetail?.data?.orderId;
+        if (!orderId) continue;
+        const items = itemsByOrderId.get(orderId) || [];
+        items.push(...(Array.isArray(queuedDetail.data.items) ? queuedDetail.data.items : []));
+        itemsByOrderId.set(orderId, items);
+      }
+
+      const ordersById = new Map<string, any>();
+      if (Array.isArray(savedOrders)) {
+        for (const order of savedOrders) {
+          if (order?.id) ordersById.set(order.id, order);
+        }
+      }
+
+      for (const queuedOrder of queuedOrders) {
+        if (!queuedOrder?.id || !queuedOrder.data) continue;
+        const order = { ...queuedOrder.data, id: queuedOrder.id };
+        const queuedItems = itemsByOrderId.get(queuedOrder.id);
+        if (queuedItems?.length) order.items = queuedItems;
+        ordersById.set(order.id, order);
+      }
+
+      return [...ordersById.values()]
+        .filter(order => {
+          if (storeId && order.storeId !== storeId) return false;
+          if (companyId && order.companyId !== companyId) return false;
+          const createdAt = toDateValue(order.createdAt) ?? new Date(order.createdAt);
+          return !Number.isNaN(createdAt.getTime()) && createdAt >= startDate && createdAt <= endDate;
+        })
+        .sort((left, right) => {
+          const leftDate = toDateValue(left.createdAt)?.getTime() ?? 0;
+          const rightDate = toDateValue(right.createdAt)?.getTime() ?? 0;
+          return rightDate - leftDate;
+        }) as Order[];
+    } catch (error) {
+      this.logger.warn('Failed to load local offline orders', { area: 'orders', storeId, payload: { error: String(error) } });
       return [];
     }
+  }
+
+  private async mergeLocalOrders(
+    remoteOrders: Order[],
+    companyId: string | undefined,
+    storeId: string | undefined,
+    startDate: Date,
+    endDate: Date
+  ): Promise<Order[]> {
+    const localOrders = await this.getLocalOrdersForDateRange(companyId, storeId, startDate, endDate);
+    const mergedOrders = this.mergeOrderLists(remoteOrders, localOrders);
+    if (storeId && mergedOrders.length > 0) {
+      try {
+        await this.indexedDb.saveSetting(`orders_snapshot_${storeId}`, mergedOrders);
+      } catch (error) {
+        this.logger.warn('Failed to persist transaction history snapshot', {
+          area: 'orders',
+          storeId,
+          payload: { error: String(error) }
+        });
+      }
+    }
+    return mergedOrders;
+  }
+
+  private mergeOrderLists(remoteOrders: Order[], localOrders: Order[]): Order[] {
+    const ordersById = new Map<string, Order>();
+    for (const order of remoteOrders) {
+      if (order.id) ordersById.set(order.id, order);
+    }
+    for (const order of localOrders) {
+      if (order.id && !ordersById.has(order.id)) ordersById.set(order.id, order);
+    }
+    return [...ordersById.values()].sort((left, right) => {
+      const leftDate = toDateValue(left.createdAt)?.getTime() ?? 0;
+      const rightDate = toDateValue(right.createdAt)?.getTime() ?? 0;
+      return rightDate - leftDate;
+    });
   }
 
   /**

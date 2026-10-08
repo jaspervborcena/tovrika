@@ -153,8 +153,8 @@ export class OfflineDocumentTestComponent {
     }
   }
 
-  showPendingDocuments() {
-    this.pendingDocs = this.offlineDocService.getPendingDocuments();
+  async showPendingDocuments() {
+    this.pendingDocs = await this.offlineDocService.getPendingDocuments();
     this.testResults.unshift({
       action: 'Show Pending',
       message: `Found ${this.pendingDocs.length} pending documents`,
@@ -196,8 +196,8 @@ export class OfflineDocumentTestComponent {
     }
   }
 
-  clearPending() {
-    this.offlineDocService.clearPendingDocuments();
+  async clearPending() {
+    await this.offlineDocService.clearPendingDocuments();
     this.pendingDocs = [];
     this.testResults.unshift({
       action: 'Clear Pending',

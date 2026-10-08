@@ -2144,35 +2144,40 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
    * Fetch tracking entries for an order directly from Firestore as a fallback when Cloud Function is unavailable.
    */
   async fetchTrackingEntries(orderId: string): Promise<any[]> {
+    const results: any[] = [];
     try {
       const q = query(collection(this.firestore, 'ordersSellingTracking'), where('orderId', '==', orderId));
       const snaps = await getDocs(q as any);
-      if (!snaps || snaps.empty) return [];
-
-      const results: any[] = [];
-      for (const s of snaps.docs) {
-        const data: any = s.data() || {};
-        const product = this.productService.getProduct(data.productId);
-        results.push({
-          id: s.id,
-          productId: data.productId,
-          productName: data.productName || product?.productName || '',
-          skuId: product?.skuId || undefined,
-          quantity: data.quantity,
-          price: data.price,
-          total: data.total,
-          status: data.status,
-          createdAt: toDateValue(data.createdAt) || undefined,
-          updatedAt: toDateValue(data.updatedAt) || undefined,
-          orderDetailsId: data.orderDetailsId,
-          batchNumber: data.batchNumber,
-          cashierId: data.cashierId || data.createdBy
-        });
+      for (const snapshot of snaps?.docs ?? []) {
+        const data = snapshot.data() as Record<string, any>;
+        results.push({ id: snapshot.id, ...data });
       }
-      return results;
-    } catch (e) {
-      return [];
+    } catch {
+      // Return locally queued tracking rows below when offline.
     }
+
+    try {
+      const pending = await this.offlineDocService.getPendingDocuments();
+      for (const entry of pending) {
+        if (entry.collectionName !== 'ordersSellingTracking' || entry.data?.orderId !== orderId) continue;
+        if (results.some(result => result.id === entry.id)) continue;
+        results.push({ id: entry.id, ...entry.data });
+      }
+    } catch {
+      // Remote tracking rows remain usable if local storage cannot be read.
+    }
+
+    return results.map(entry => {
+      const product = this.productService.getProduct(entry.productId);
+      return {
+        ...entry,
+        productName: entry.productName || product?.productName || '',
+        skuId: entry.skuId || product?.skuId || undefined,
+        createdAt: toDateValue(entry.createdAt) || undefined,
+        updatedAt: toDateValue(entry.updatedAt) || undefined,
+        cashierId: entry.cashierId || entry.createdBy
+      };
+    });
   }
 
   async getTrackingSummary(
