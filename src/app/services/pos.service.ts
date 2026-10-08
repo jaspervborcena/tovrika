@@ -10,7 +10,8 @@ import {
   where,
   runTransaction,
   writeBatch,
-  increment
+  increment,
+  setDoc
 } from '@angular/fire/firestore';
 import { AuthService } from './auth.service';
 import { CompanyService } from './company.service';
@@ -547,22 +548,22 @@ export class PosService {
         orderId: invoiceResult.orderId
       });
 
-      // Sync local product summaries with server values so UI reflects Firestore state
-      try {
-        if (this.networkService.isOnline()) {
-          await this.syncProductsFromOrder(orderItems);
-          console.log('🔄 Local product summaries synced from server after invoice');
-        } else {
-          console.log('📱 Offline: Skipping product sync - will sync when online');
-        }
-      } catch (syncErr) {
-        console.warn('⚠️ Failed to sync local product summaries after invoice (non-blocking):', syncErr);
-      }
-
       // Update product inventory (this happens after successful order creation)
       try {
         await this.updateProductInventory(cartItems, { orderId: invoiceResult.orderId!, invoiceNumber: invoiceResult.invoiceNumber!, customerId: customerInfo?.customerId, status: orderData.status });
         console.log('✅ Product inventory updated successfully');
+
+        // Sync local product summaries after the deduction has been applied so the POS UI shows the updated totalStock.
+        try {
+          if (this.networkService.isOnline()) {
+            await this.syncProductsFromOrder(orderItems);
+            console.log('🔄 Local product summaries synced from server after inventory deduction');
+          } else {
+            console.log('📱 Offline: Skipping product sync - will sync when online');
+          }
+        } catch (syncErr) {
+          console.warn('⚠️ Failed to sync local product summaries after inventory deduction (non-blocking):', syncErr);
+        }
         
         // Mark tracking docs as completed for this paid order.
         try {
@@ -783,8 +784,8 @@ export class PosService {
       // Fire all background operations without blocking receipt display
       // Skip background operations for OPEN orders (no tracking/inventory/ledger)
       if (!saveAsOpen) {
-        // These will complete asynchronously and Firestore offline persistence will queue them
-        this.executeBackgroundOrderOperations(
+        // Wait for stock updates so the POS product cards reflect the completed sale.
+        await this.executeBackgroundOrderOperations(
           company.id!,
           storeId,
           invoiceResult.orderId!,
@@ -793,9 +794,7 @@ export class PosService {
           cartItems,
           user.uid,
            orderData.status || 'completed'
-        ).catch(err => {
-          console.warn('⚠️ Background operations error (non-critical):', err);
-        });
+        );
       } else {
         console.log('💼 OPEN order: Skipping background operations (tracking/inventory/ledger)');
       }
@@ -906,13 +905,31 @@ export class PosService {
   ): Promise<void> {
     console.log('🔄 Starting background operations for order:', orderId);
 
-    // Update product inventory first (creates ordersSellingTracking docs),
-    //    then mark them completed — must be sequential to avoid race condition.
     try {
       await this.updateProductInventory(cartItems, { orderId, invoiceNumber, customerId, status });
+    } catch (err) {
+      const inventoryError = err instanceof Error ? err.message : String(err);
+      try {
+        const orderRef = doc(this.firestore, 'orders', orderId);
+        const orderSnapshot = await getDoc(orderRef as any);
+        const inventoryAlreadyApplied = orderSnapshot.exists() &&
+          (orderSnapshot.data() as any).inventoryStatus === 'applied';
+        await setDoc(orderRef as any, {
+          ...(inventoryAlreadyApplied ? {} : { inventoryStatus: 'pending' }),
+          inventoryLastError: inventoryError,
+          inventoryLastAttemptAt: new Date()
+        } as any, { merge: true } as any);
+      } catch (statusError) {
+        console.warn('⚠️ Could not persist pending inventory status:', statusError);
+      }
+      console.warn('⚠️ Inventory update failed; order requires inventory reconciliation:', inventoryError);
+      return;
+    }
+
+    try {
       await this.markTrackingCompleted(orderId, userId);
     } catch (err) {
-      console.warn('⚠️ Inventory update / tracking failed (non-critical):', err);
+      console.warn('⚠️ Tracking completion failed after inventory was applied:', err);
     }
 
     console.log('✅ Background operations initiated for order:', orderId);
@@ -1300,10 +1317,8 @@ export class PosService {
   ): Promise<void> {
     const mode = environment.inventory?.reconciliationMode || 'legacy';
 
-    if (mode === 'recon') {
-      // Recon mode: pass ALL items to logSaleAndAdjustStock so an ordersSellingTracking
-      // record is always created regardless of isStockTracked. The service will skip
-      // FIFO batch deduction and totalStock update for non-tracked items.
+    if (mode === 'recon' || mode === 'legacy') {
+      // Checkout reserves aggregate stock and defers FIFO batch writes to reconciliation.
       console.log('📊 Tracking sale for reconciliation mode. Total items:', cartItems.length);
       const user = this.authService.getCurrentUser();
       const company = await this.companyService.getActiveCompany();
@@ -1315,18 +1330,18 @@ export class PosService {
 
       // Resolve isStockTracked for every item in one pass
       const items = await Promise.all(cartItems.map(async ci => {
-        let isStockTracked = true; // default: assume tracked
+        let isStockTracked = false;
         try {
           const productDoc = await getDoc(doc(this.firestore, 'products', ci.productId) as any);
           if (productDoc.exists()) {
             const data = productDoc.data() as any;
-            isStockTracked = data.isStockTracked !== false;
+            isStockTracked = data.isStockTracked === true || Number(data.totalStock || 0) > 0;
           }
         } catch {
-          // If lookup fails, default to tracked so we don't silently skip
+          // If lookup fails, default to false so we don't create a false-positive deduction.
         }
         if (!isStockTracked) {
-          console.log(`⏭️ ${ci.productName} is not stock-tracked — tracking record will be created but no deduction`);
+          console.log(`⏭️ ${ci.productName} is not stock-tracked and has no stock — tracking record will be created but no deduction`);
         }
         return {
           productId: ci.productId,
@@ -1373,22 +1388,29 @@ export class PosService {
         const productDoc = await getDoc(doc(this.firestore, 'products', item.productId) as any);
         if (productDoc.exists()) {
           const productData = productDoc.data() as any;
-          if (productData.isStockTracked !== false) {
+          const hasStock = Number(productData.totalStock || 0) > 0;
+          if (productData.isStockTracked === true || hasStock) {
             trackedItems.push(item);
           } else {
-            console.log(`⏭️ Skipping inventory deduction for ${item.productName} (isStockTracked=false)`);
+            console.log(`⏭️ Skipping inventory deduction for ${item.productName} (no stock and isStockTracked is false)`);
           }
         } else {
-          trackedItems.push(item); // If product not found, process anyway (backward compatibility)
+          console.log(`⏭️ Skipping inventory deduction for ${item.productName} (product not found)`);
         }
       } catch (err) {
-        console.warn(`⚠️ Error checking isStockTracked for ${item.productName}, including in deduction:`, err);
-        trackedItems.push(item);
+        console.warn(`⚠️ Error checking isStockTracked for ${item.productName}; skipping deduction because tracking status is unconfirmed:`, err);
       }
     }
 
     if (trackedItems.length === 0) {
       console.log('⏭️ No tracked items to process inventory for');
+      if (context?.orderId && context.orderId !== 'unknown-order') {
+        await setDoc(doc(this.firestore, 'orders', context.orderId), {
+          inventoryStatus: 'applied',
+          inventoryProcessedAt: new Date(),
+          inventoryLastError: null
+        } as any, { merge: true } as any);
+      }
       return;
     }
 
@@ -1396,13 +1418,25 @@ export class PosService {
     console.log('🔄 Starting FIFO inventory deduction for cart items:', trackedItems.length);
     const { InventoryDataService } = await import('./inventory-data.service');
     const inventoryService = this.injector.get(InventoryDataService);
+    const inventoryErrors: string[] = [];
     for (const cartItem of trackedItems) {
       try {
         await this.deductInventoryFifo(cartItem.productId, cartItem.quantity, inventoryService);
         console.log(`✅ Inventory deducted for ${cartItem.productName}: ${cartItem.quantity} units`);
       } catch (error) {
         console.error(`❌ Failed to deduct inventory for ${cartItem.productName}:`, error);
+        inventoryErrors.push(`${cartItem.productName}: ${error instanceof Error ? error.message : String(error)}`);
       }
+    }
+    if (inventoryErrors.length > 0) {
+      throw new Error(inventoryErrors.join('; '));
+    }
+    if (context?.orderId && context.orderId !== 'unknown-order') {
+      await setDoc(doc(this.firestore, 'orders', context.orderId), {
+        inventoryStatus: 'applied',
+        inventoryProcessedAt: new Date(),
+        inventoryLastError: null
+      } as any, { merge: true } as any);
     }
     console.log('✅ FIFO inventory deduction completed for all items');
   }

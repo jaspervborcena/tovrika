@@ -225,6 +225,7 @@ export class InvoiceService {
         storeId: storeId,
         companyTaxId: storeTaxId,
         status: saveAsOpen ? 'OPEN' : 'completed',
+        inventoryStatus: saveAsOpen ? 'not_required' : 'pending',
         createdBy: currentUserId,
         // Initialize status tracking
         statusHistory: [{
@@ -498,6 +499,7 @@ export class InvoiceService {
         invoiceNumber: nextInvoiceNo,
         storeId: storeId,
         status: transactionData.saveAsOpen ? 'OPEN' : 'completed',
+        inventoryStatus: transactionData.saveAsOpen ? 'not_required' : 'pending',
         createdBy: currentUserId,
         createdAt: now,
         updatedAt: now,
