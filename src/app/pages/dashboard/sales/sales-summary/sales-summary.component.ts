@@ -11,6 +11,7 @@ import { OrdersSellingTrackingService } from '../../../../services/orders-sellin
 import { ProductService } from '../../../../services/product.service';
 import { CategoryService } from '../../../../services/category.service';
 import { ToastService } from '../../../../shared/services/toast.service';
+import { environment } from '../../../../../environments/environment';
 
 export type SalesSummaryPeriod = 'today' | 'yesterday' | 'this_week' | 'previous_week' | 'this_month' | 'previous_month' | 'date_range';
 
@@ -358,7 +359,12 @@ type Order = OrderDisplay;
                 <td colspan="7">
                   <div class="empty-message">
                     <div class="empty-icon">📊</div>
-                    <p>No sales found for the selected date range</p>
+                    <p *ngIf="totalOrders() > 0; else noSalesForPeriod">
+                      Summary reports {{ totalOrders() }} orders, but no order details were returned for this store and period.
+                    </p>
+                    <ng-template #noSalesForPeriod>
+                      <p>No sales found for the selected date range</p>
+                    </ng-template>
                     <button (click)="refreshData()" class="refresh-btn">
                       <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
                         <path d="M4 12a8 8 0 0 1 8-8V2.5L16 6l-4 3.5V8a6 6 0 1 0 6 6h1.5A7.5 7.5 0 1 1 4 12Z"/>
@@ -492,8 +498,9 @@ type Order = OrderDisplay;
                 <span>🛒</span>
                 <span>Items Ordered</span>
               </h4>
+              <p *ngIf="isOrderDetailsLoading()" class="loading-text">Loading order details...</p>
               <div class="order-items-table-wrapper">
-                <table class="order-items-table">
+                <table *ngIf="!isOrderDetailsLoading()" class="order-items-table">
                   <thead>
                     <tr>
                       <th>Product Name</th>
@@ -1974,6 +1981,7 @@ export class SalesSummaryComponent implements OnInit {
   stores = signal<Store[]>([]);
   selectedStoreId = signal<string>('');
   isLoading = signal(false);
+  isOrderDetailsLoading = signal(false);
   showOrderDetails = signal(false);
   selectedOrder = signal<Order | null>(null);
   dataSource = signal<'firebase' | 'api' | null>(null);
@@ -2342,14 +2350,29 @@ export class SalesSummaryComponent implements OnInit {
       }
 
       let orders: Order[] = [];
+      let hasMoreApiOrders = false;
       try {
         console.log('📦 [SalesSummary] Fetching orders from BigQuery...');
-        orders = await this.bigQueryService.getSalesDashboardOrders(
-          storeId,
-          startDate,
-          endDate,
-          this.includeAllStatuses()
-        );
+        if (environment.api?.salesSummaryDetailsApi) {
+          const page = await this.bigQueryService.getSalesSummaryDetails(
+            storeId,
+            this.fromDate,
+            this.toDate,
+            1,
+            this.apiPageSize
+          );
+          orders = page.orders;
+          this.apiCurrentPage.set(page.pageNumber);
+          hasMoreApiOrders = page.hasMore;
+        } else {
+          orders = await this.bigQueryService.getSalesDashboardOrders(
+            storeId,
+            startDate,
+            endDate,
+            this.includeAllStatuses()
+          );
+          this.apiCurrentPage.set(1);
+        }
         console.log('✅ [SalesSummary] Orders received:', orders.length, 'orders');
       } catch (e) {
         console.error('❌ [SalesSummary] BigQuery sales query failed:', e);
@@ -2358,7 +2381,7 @@ export class SalesSummaryComponent implements OnInit {
 
       orders = this.applyStatusFilter(orders);
 
-      this.apiHasMore.set(false);
+      this.apiHasMore.set(hasMoreApiOrders);
       try {
         if (orders && orders.length > 0) {
           await this.indexedDb.saveSetting(`orders_snapshot_${storeId}`, orders);
@@ -2426,13 +2449,29 @@ export class SalesSummaryComponent implements OnInit {
     try {
       const storeId = this.selectedStoreId() || this.authService.getCurrentPermission()?.storeId;
       if (!storeId) return;
-      const startDate = new Date(this.fromDate);
-      const endDate = new Date(this.toDate);
-      endDate.setHours(23, 59, 59, 999);
       const nextPage = this.apiCurrentPage() + 1;
-      const fields = ['invoice_number','updated_at','gross_amount','net_amount','payment','status'];
-      const page = await this.orderService.getOrdersPage(storeId, startDate, endDate, this.apiPageSize, nextPage, fields);
-        if (page && page.length > 0) {
+      let page: Order[];
+      let hasMore = false;
+      if (environment.api?.salesSummaryDetailsApi) {
+        const result = await this.bigQueryService.getSalesSummaryDetails(
+          storeId,
+          this.fromDate,
+          this.toDate,
+          nextPage,
+          this.apiPageSize
+        );
+        page = this.applyStatusFilter(result.orders);
+        hasMore = result.hasMore;
+        this.apiCurrentPage.set(result.pageNumber);
+      } else {
+        const startDate = new Date(this.fromDate);
+        const endDate = new Date(this.toDate);
+        endDate.setHours(23, 59, 59, 999);
+        const fields = ['invoice_number','updated_at','gross_amount','net_amount','payment','status'];
+        page = await this.orderService.getOrdersPage(storeId, startDate, endDate, this.apiPageSize, nextPage, fields);
+        hasMore = page.length >= this.apiPageSize;
+      }
+      if (page && page.length > 0) {
         // Append - transform and dedupe against existing orders
         const current = this.orders();
         const transformed = page.map((order: any) => ({ ...(order as any), customerName: order.soldTo || 'Walk-in Customer', paymentMethod: order.payment || order.paymentMethod || 'cash' }));
@@ -2461,11 +2500,9 @@ export class SalesSummaryComponent implements OnInit {
         }
 
         this.orders.set(Array.from(map.values()));
-        this.apiCurrentPage.set(nextPage);
-        this.apiHasMore.set(page.length >= this.apiPageSize);
-      } else {
-        this.apiHasMore.set(false);
       }
+      if (!environment.api?.salesSummaryDetailsApi) this.apiCurrentPage.set(nextPage);
+      this.apiHasMore.set(hasMore);
     } catch (err) {
       console.error('Error loading more API orders:', err);
     } finally {
@@ -2474,11 +2511,22 @@ export class SalesSummaryComponent implements OnInit {
   }
 
   async openOrderDetails(order: Order): Promise<void> {
+    this.selectedOrder.set(order);
+    this.showOrderDetails.set(true);
+    this.isOrderDetailsLoading.set(true);
     try {
-      // Fetch order items (orderDetails) by orderId. Some orders may have multiple orderDetails documents (batches).
       const targetOrderId = (order as any).orderId || order.id || '';
       let items: any[] = [];
-      if (targetOrderId) {
+      if (environment.api?.salesSummaryOrderDetailsApi) {
+        const invoiceNumber = order.invoiceNumber || '';
+        if (targetOrderId) {
+          items = await this.bigQueryService.getSalesSummaryOrderDetails({ orderId: targetOrderId }) || [];
+        } else if (invoiceNumber) {
+          items = await this.bigQueryService.getSalesSummaryOrderDetails({ invoiceNumber }) || [];
+        } else {
+          throw new Error('This order has no order ID or invoice number');
+        }
+      } else if (targetOrderId) {
         try {
           items = await this.orderService.fetchOrderItems(targetOrderId);
         } catch (e) {
@@ -2487,20 +2535,20 @@ export class SalesSummaryComponent implements OnInit {
         }
       }
 
-      // Merge items into a copy of the order for display. Do not surface internal document ids.
       const displayOrder = { ...(order as any), items } as Order & { items?: any[] };
       this.selectedOrder.set(displayOrder as any);
-      this.showOrderDetails.set(true);
     } catch (err) {
       console.error('Error opening order details', err);
-      this.selectedOrder.set(order);
-      this.showOrderDetails.set(true);
+      this.toast.warning('Could not load details for this order. Please try again.');
+    } finally {
+      this.isOrderDetailsLoading.set(false);
     }
   }
 
   closeOrderDetails(): void {
     this.showOrderDetails.set(false);
     this.selectedOrder.set(null);
+    this.isOrderDetailsLoading.set(false);
   }
 
   trackByOrderId(index: number, order: Order): string {

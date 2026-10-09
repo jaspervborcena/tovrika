@@ -100,6 +100,14 @@ export interface SalesSummaryTotals extends SalesOrdersSummary {
   netTotals?: { status: string; count: number; amount: number; totalItems?: number; totalCustomers?: number };
 }
 
+export interface SalesSummaryDetailsPage {
+  orders: Order[];
+  count: number;
+  pageSize: number;
+  pageNumber: number;
+  hasMore: boolean;
+}
+
 const productionSalesOrdersApi = 'https://asia-east1-jasperpos-1dfd5.cloudfunctions.net/get_sales_orders_bq';
 
 function formatDateForApi(date: Date): string {
@@ -301,6 +309,79 @@ export class BigQueryService {
     const orders = (rows || []).map((order: any) => this.transformApiOrder(order));
     console.log('✅ [Orders API Response] Received', orders.length, 'orders');
     return orders;
+  }
+
+  async getSalesSummaryDetails(
+    storeId: string,
+    from: string,
+    to: string,
+    pageNumber = 1,
+    pageSize = 50
+  ): Promise<SalesSummaryDetailsPage> {
+    const endpoint = environment.api?.salesSummaryDetailsApi;
+    await this.authService.waitForAuth();
+    const token = await this.authService.getFirebaseIdToken(true);
+    if (!token) throw new Error('Sign in before loading sales details');
+    if (!endpoint) throw new Error('Sales summary details API is not configured');
+    if (!storeId || storeId === 'all') throw new Error('A specific store is required');
+
+    const params = new URLSearchParams({
+      storeId,
+      from: from.replace(/-/g, ''),
+      to: to.replace(/-/g, ''),
+      page_number: String(pageNumber),
+      page_size: String(Math.min(pageSize, 100))
+    });
+    const response = await fetch(`${endpoint}?${params.toString()}`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (!response.ok) {
+      throw new Error(`Sales summary details request failed: ${response.status}`);
+    }
+
+    const payload = await response.json();
+    const rows = Array.isArray(payload?.orders) ? payload.orders : [];
+    return {
+      orders: rows.map((order: any) => this.transformApiOrder(order)),
+      count: Number(payload?.count ?? rows.length),
+      pageSize: Number(payload?.page_size ?? Math.min(pageSize, 100)),
+      pageNumber: Number(payload?.page_number ?? pageNumber),
+      hasMore: Boolean(payload?.has_more)
+    };
+  }
+
+  async getSalesSummaryOrderDetails(identifier: { orderId: string } | { invoiceNumber: string }): Promise<Order['items']> {
+    const endpoint = environment.api?.salesSummaryOrderDetailsApi;
+    await this.authService.waitForAuth();
+    const token = await this.authService.getFirebaseIdToken(true);
+    if (!token) throw new Error('Sign in before loading order details');
+    if (!endpoint) throw new Error('Sales summary order details API is not configured');
+
+    const params = new URLSearchParams(
+      'orderId' in identifier
+        ? { orderId: identifier.orderId }
+        : { invoiceNumber: identifier.invoiceNumber }
+    );
+    const response = await fetch(`${endpoint}?${params.toString()}`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (!response.ok) {
+      throw new Error(`Sales summary order details request failed: ${response.status}`);
+    }
+
+    const payload = await response.json();
+    const details = Array.isArray(payload?.details) ? payload.details : [];
+    return details.map((row: any) => ({
+      productId: row.product_id ?? row.productId ?? '',
+      itemCode: row.item_code ?? row.itemCode,
+      productName: row.product_name ?? row.productName ?? row.product ?? '',
+      quantity: Number(row.quantity ?? row.qty ?? 0),
+      price: Number(row.price ?? row.unit_price ?? row.unitPrice ?? 0),
+      total: Number(row.total ?? row.total_amount ?? row.totalAmount ?? 0),
+      vat: Number(row.vat ?? row.vat_amount ?? row.vatAmount ?? 0),
+      discount: Number(row.discount ?? row.discount_amount ?? row.discountAmount ?? 0),
+      isVatExempt: Boolean(row.is_vat_exempt ?? row.isVatExempt ?? row.isVatExempted)
+    }));
   }
 
   async getSalesDashboardAdjustments(storeId: string, from: Date, to: Date, includeAllStatus = false): Promise<any[]> {
@@ -510,8 +591,8 @@ export class BigQueryService {
     const id = apiOrder.order_id || apiOrder.orderId || apiOrder.id || '';
     const dateRaw = apiOrder.updated_at || apiOrder.updatedAt || apiOrder.created_at || apiOrder.createdAt;
     const date = dateRaw ? new Date(dateRaw) : new Date();
-    const gross = Number(apiOrder.gross_amount ?? apiOrder.grossAmount ?? apiOrder.total_amount ?? 0);
-    const net = Number(apiOrder.net_amount ?? apiOrder.netAmount ?? apiOrder.total_amount ?? gross);
+    const gross = Number(apiOrder.gross_amount ?? apiOrder.grossAmount ?? apiOrder.total ?? apiOrder.total_amount ?? 0);
+    const net = Number(apiOrder.net_amount ?? apiOrder.netAmount ?? apiOrder.total ?? apiOrder.total_amount ?? gross);
     const paymentMethod = apiOrder.payment || apiOrder.payment_method || apiOrder.paymentMethod || 'cash';
     const customerInfo = apiOrder.customerInfo || apiOrder.customer_info || {};
     const customerName = customerInfo.fullName || apiOrder.soldTo || apiOrder.customerName || apiOrder.customer_name || 'Walk-in Customer';
@@ -548,13 +629,13 @@ export class BigQueryService {
       logoUrl: apiOrder.logoUrl || '',
       date,
       vatableSales: Number(apiOrder.vatable_sales ?? apiOrder.vatableSales ?? 0),
-      vatAmount: Number(apiOrder.vat_amount ?? apiOrder.vatAmount ?? 0),
+      vatAmount: Number(apiOrder.vat_amount ?? apiOrder.vatAmount ?? apiOrder.vat ?? 0),
       zeroRatedSales: Number(apiOrder.zero_rated_sales ?? apiOrder.zeroRatedSales ?? 0),
       vatExemptAmount: Number(apiOrder.vat_exempt_amount ?? apiOrder.vatExemptAmount ?? 0),
-      discountAmount: Number(apiOrder.discount_amount ?? apiOrder.discountAmount ?? 0),
+      discountAmount: Number(apiOrder.discount_amount ?? apiOrder.discountAmount ?? apiOrder.discount ?? 0),
       grossAmount: gross,
       netAmount: net,
-      totalAmount: Number(apiOrder.total_amount ?? apiOrder.totalAmount ?? net ?? gross),
+      totalAmount: Number(apiOrder.total_amount ?? apiOrder.totalAmount ?? apiOrder.total ?? net ?? gross),
       itemCount,
       items,
       exemptionId: apiOrder.exemptionId || '',

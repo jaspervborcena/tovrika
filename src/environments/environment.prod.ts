@@ -19,6 +19,8 @@ export const environment = {
     salesRevenueApi: "https://asia-east1-jasperpos-1dfd5.cloudfunctions.net/get_sales_revenue_bq",
     salesAdjustmentsApi: "https://asia-east1-jasperpos-1dfd5.cloudfunctions.net/get_sales_adjustments_bq",
     salesCustomersApi: "https://asia-east1-jasperpos-1dfd5.cloudfunctions.net/get_sales_customers_bq",
+    salesSummaryDetailsApi: "https://get-sales-summary-details-bq-3ao45uhsoq-de.a.run.app",
+    salesSummaryOrderDetailsApi: "https://get-sales-summary-order-details-bq-3ao45uhsoq-de.a.run.app",
   },
   inventory: {
     // reconciliationMode: 'legacy' uses client-side FIFO; 'recon' defers to Cloud Function with tracking

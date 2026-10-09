@@ -34,6 +34,63 @@ describe('BigQueryService', () => {
     expect(typeof service.getSalesDashboardRevenue).toBe('function');
   });
 
+  it('should request a paginated sales summary page with auth and normalize its orders', async () => {
+    spyOn(window, 'fetch').and.resolveTo(new Response(JSON.stringify({
+      success: true,
+      count: 1,
+      page_size: 25,
+      page_number: 2,
+      has_more: true,
+      orders: [{
+        orderId: 'ORD-1001',
+        invoiceNumber: 'INV-1001',
+        status: 'completed',
+        storeId: 'STORE-001',
+        createdAt: '2026-10-06T10:23:44Z',
+        total: 245.5,
+        vat: 12.25,
+        discount: 0,
+        customerId: 'CUST-77'
+      }]
+    }), { status: 200 }));
+
+    const page = await service.getSalesSummaryDetails('store123', '2026-10-01', '2026-10-09', 2, 25);
+    const [requestUrl, requestInit] = (window.fetch as jasmine.Spy).calls.mostRecent().args as [string, RequestInit];
+
+    expect(requestUrl).toContain('storeId=store123');
+    expect(requestUrl).toContain('from=20261001');
+    expect(requestUrl).toContain('to=20261009');
+    expect(requestUrl).toContain('page_number=2');
+    expect(requestUrl).toContain('page_size=25');
+    expect(requestInit.headers).toEqual({ Authorization: 'Bearer fake-token' });
+    expect(page.hasMore).toBeTrue();
+    expect(page.orders[0].id).toBe('ORD-1001');
+    expect(page.orders[0].invoiceNumber).toBe('INV-1001');
+    expect(page.orders[0].createdAt).toEqual(new Date('2026-10-06T10:23:44Z'));
+    expect(page.orders[0].totalAmount).toBe(245.5);
+    expect(page.orders[0].vatAmount).toBe(12.25);
+    expect(page.orders[0].discountAmount).toBe(0);
+    expect(page.orders[0].customerId).toBe('CUST-77');
+  });
+
+  it('should request order tracking details by orderId and normalize the rows', async () => {
+    spyOn(window, 'fetch').and.resolveTo(new Response(JSON.stringify({
+      success: true,
+      count: 1,
+      details: [{ product_id: 'product-1', product_name: 'Coffee', quantity: 2, unit_price: 30, total_amount: 60 }]
+    }), { status: 200 }));
+
+    const details = await service.getSalesSummaryOrderDetails({ orderId: 'order-1' });
+    const [requestUrl, requestInit] = (window.fetch as jasmine.Spy).calls.mostRecent().args as [string, RequestInit];
+
+    expect(requestUrl).toContain('orderId=order-1');
+    expect(requestUrl).not.toContain('invoiceNumber=');
+    expect(requestInit.headers).toEqual({ Authorization: 'Bearer fake-token' });
+    expect(details).toEqual([jasmine.objectContaining({
+      productId: 'product-1', productName: 'Coffee', quantity: 2, price: 30, total: 60
+    })]);
+  });
+
   it('should parse nested summary payloads and status arrays from the new API response', async () => {
     const payload = {
       success: true,
