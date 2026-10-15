@@ -2136,10 +2136,18 @@ export class SalesSummaryComponent implements OnInit {
   }
 
   async ngOnInit(): Promise<void> {
-    // Ensure default date range is ordered correctly
+    // Default to today so the report loads immediately on first open.
+    this.selectedPeriod.set('today');
+    const { from, to } = resolvePeriodDateRange('today', new Date());
+    this.fromDate = from;
+    this.toDate = to;
+
     this.ensureDateOrder();
     await this.loadStores();
-    // Do NOT auto-load data — user must click Go to load sales for the selected date range
+
+    if (this.selectedStoreId()) {
+      await this.loadSalesData();
+    }
   }
 
   async loadStores(): Promise<void> {
@@ -2361,6 +2369,15 @@ export class SalesSummaryComponent implements OnInit {
             1,
             this.apiPageSize
           );
+          console.log('[SalesSummary][BigQuery] getSalesSummaryDetails response:', {
+            storeId,
+            fromDate: this.fromDate,
+            toDate: this.toDate,
+            pageNumber: page.pageNumber,
+            pageSize: this.apiPageSize,
+            hasMore: page.hasMore,
+            orders: page.orders
+          });
           orders = page.orders;
           this.apiCurrentPage.set(page.pageNumber);
           hasMoreApiOrders = page.hasMore;
@@ -2427,6 +2444,13 @@ export class SalesSummaryComponent implements OnInit {
         }
       }
       const deduped = Array.from(dedupMap.values());
+      console.log('[SalesSummary][Grid] rows assigned to grid:', {
+        storeId,
+        fromDate: this.fromDate,
+        toDate: this.toDate,
+        rowCount: deduped.length,
+        rows: deduped
+      });
       this.orders.set(deduped);
 
       // --- TOTAL ITEMS LOADING (BigQuery summary, same as dashboard) ---

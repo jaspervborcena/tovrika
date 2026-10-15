@@ -37,6 +37,38 @@ export function convertLocalToUtc(dateStr: string): Date {
   return localDate;
 }
 
+export function formatLocalDateString(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+export function normalizeLocalDateRange(fromDateStr: string | null | undefined, toDateStr: string | null | undefined): { from: string; to: string } {
+  const normalize = (value: string | null | undefined): string | null => {
+    if (!value || typeof value !== 'string') return null;
+    const trimmed = value.trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return null;
+
+    const date = new Date(`${trimmed}T00:00:00`);
+    if (Number.isNaN(date.getTime())) return null;
+
+    return formatLocalDateString(date);
+  };
+
+  const from = normalize(fromDateStr) ?? normalize(toDateStr) ?? formatLocalDateString(new Date());
+  const to = normalize(toDateStr) ?? from;
+
+  const fromDate = new Date(`${from}T00:00:00`);
+  const toDate = new Date(`${to}T23:59:59.999`);
+
+  if (fromDate.getTime() > toDate.getTime()) {
+    return { from: to, to: from };
+  }
+
+  return { from, to };
+}
+
 /**
  * Converts a date range from device's LOCAL time to UTC
  * Works automatically for any timezone (Philippines UTC+8, US UTC-5, UK UTC+0, etc.)
@@ -45,20 +77,21 @@ export function convertLocalToUtc(dateStr: string): Date {
  * @returns Object with start and end dates in UTC
  */
 export function convertPhilippineDateRangeToUtc(fromDateStr: string, toDateStr: string): { start: Date; end: Date } {
-  const fromParts = fromDateStr.split('-').map(Number);
-  const toParts = toDateStr.split('-').map(Number);
-  
+  const { from, to } = normalizeLocalDateRange(fromDateStr, toDateStr);
+  const fromParts = from.split('-').map(Number);
+  const toParts = to.split('-').map(Number);
+
   // Create dates in device's LOCAL time
   // The Date constructor automatically handles timezone conversion internally
   const start = new Date(fromParts[0], fromParts[1] - 1, fromParts[2], 0, 0, 0, 0);
   const end = new Date(toParts[0], toParts[1] - 1, toParts[2], 23, 59, 59, 999);
-  
+
   // Console log for debugging
   const tzInfo = getDeviceTimezoneInfo();
   console.log(`🌍 Device Timezone: ${tzInfo.name} (UTC${tzInfo.offsetHours >= 0 ? '+' : ''}${tzInfo.offsetHours})`);
-  console.log(`📅 Local dates: ${fromDateStr} to ${toDateStr}`);
+  console.log(`📅 Local dates: ${from} to ${to}`);
   console.log(`🔄 UTC conversion: ${start.toISOString()} to ${end.toISOString()}`);
-  
+
   return { start, end };
 }
 

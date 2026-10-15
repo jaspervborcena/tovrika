@@ -1,5 +1,5 @@
 import { TestBed } from '@angular/core/testing';
-import { BigQueryService } from './bigquery.service';
+import { BigQueryService, normalizeLocalDateRange } from './bigquery.service';
 import { AuthService } from './auth.service';
 
 describe('BigQueryService', () => {
@@ -32,6 +32,18 @@ describe('BigQueryService', () => {
 
   it('should expose sales dashboard revenue lookup', () => {
     expect(typeof service.getSalesDashboardRevenue).toBe('function');
+  });
+
+  it('should normalize local date ranges without shifting days across timezones', () => {
+    expect(normalizeLocalDateRange('2026-08-31', '2026-09-06')).toEqual({
+      from: '2026-08-31',
+      to: '2026-09-06'
+    });
+
+    expect(normalizeLocalDateRange('2026-10-10', '2026-10-01')).toEqual({
+      from: '2026-10-01',
+      to: '2026-10-10'
+    });
   });
 
   it('should request a paginated sales summary page with auth and normalize its orders', async () => {
