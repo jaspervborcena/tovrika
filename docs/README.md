@@ -2,6 +2,10 @@
 
 A comprehensive Point of Sale (POS) system built with Angular 19 and Firebase, designed for multi-store retail operations with advanced features and mobile-responsive design.
 
+## Offline Storage
+
+The app-managed offline cache uses SQLite via `sql.js`; Firebase Auth and Firestore may maintain separate SDK-managed browser persistence. See [SQLite Offline Storage](sqlite-offline-storage.md) for the schema, legacy queue migration, and troubleshooting.
+
 ## 🚀 Features
 
 ### Core Functionality
@@ -29,7 +33,7 @@ A comprehensive Point of Sale (POS) system built with Angular 19 and Firebase, d
 - 🎯 **Customer View** - Customer-facing display capabilities
 - 🔄 **Advanced Offline Support** - Complete offline authentication and data persistence
 - 🔒 **Secure Offline Credentials** - SHA-256 hashed password storage with salt encryption
-- 💿 **IndexedDB Integration** - Local database for offline data and session management
+- 💿 **SQLite Integration** - App-managed offline database via `sql.js`, persisted in `localStorage`
 
 ### Business Compliance
 - 🇵🇭 **BIR Compliance** - Philippine tax requirements with dynamic invoice types
@@ -47,7 +51,7 @@ The POS system features a sophisticated offline authentication system that provi
 ### Key Features
 - **🌐 Online-First Approach** - Attempts Firebase authentication first, with automatic offline fallback
 - **🔒 Secure Credential Storage** - SHA-256 password hashing with random salt generation
-- **💾 Local Session Management** - IndexedDB-based storage for encrypted user credentials
+- **💾 Local Session Management** - SQLite-backed storage for offline user credentials
 - **⏰ Configurable Session Duration** - 1 day default, 30 days with "Remember Me" option
 - **🔄 Seamless Fallback** - Automatic detection and switching between online/offline modes
 - **📱 Network State Awareness** - Real-time network connectivity monitoring
@@ -64,7 +68,7 @@ The POS system features a sophisticated offline authentication system that provi
 
 // Session Management  
 - Email-to-UID mapping for efficient user lookup
-- Encrypted credential storage in IndexedDB
+- Encrypted credential storage in SQLite-backed settings
 - Automatic session expiry and cleanup
 - "Remember Me" extends session to 30 days
 ```
@@ -144,7 +148,7 @@ await printService.printReceipt(receiptData, 'thermal');
 - **AngularFire v17+** - Official Angular library for Firebase integration
 
 ### Offline & Local Storage
-- **IndexedDB API** - Browser database for offline data persistence
+- **SQLite Storage Service** - App-managed offline data persistence via `sql.js`
 - **Web Crypto API** - Secure password hashing with SHA-256 and salt
 - **Local Storage** - Browser storage for user preferences
 - **Service Workers** - Background sync and caching strategies
@@ -367,8 +371,8 @@ The POS system includes dedicated mobile components optimized for mobile browser
 
 ### Service Layer
 - **AuthService** - Hybrid authentication system with online/offline capabilities, secure credential storage, and session management
-- **OfflineStorageService** - IndexedDB management for offline data persistence and user session storage
-- **IndexedDBService** - Low-level database operations for offline functionality and data synchronization
+- **OfflineStorageService** - Offline data and user session workflows
+- **SqliteStorageService** - SQLite persistence for offline data and synchronization queues
 - **NetworkService** - Network connectivity monitoring and online/offline state management
 - **PosService** - Core POS functionality and cart management
 - **ProductService** - Product catalog operations
@@ -469,7 +473,7 @@ This project is proprietary software. All rights reserved.
 #### 🔄 Offline Authentication System Implementation (October 8, 2025)
 - **Hybrid Authentication Architecture** - Seamless online/offline authentication with automatic fallback mechanisms
 - **Secure Credential Storage** - SHA-256 password hashing with cryptographically secure salt generation using Web Crypto API
-- **IndexedDB Integration** - Local database storage for encrypted user credentials and session management
+- **SQLite Integration** - App-managed local storage for offline credentials and session management
 - **Session Management** - Configurable session duration (1 day default, 30 days with "Remember Me" functionality)
 - **Network State Detection** - Real-time connectivity monitoring with smart authentication routing
 - **Policy Agreement Integration** - Offline users maintain policy compliance state and agreement status
@@ -581,7 +585,7 @@ For support and questions:
 
 ### Completed ✅
 - **Offline Authentication System** - Complete hybrid authentication with secure credential storage and session management
-- **IndexedDB Integration** - Local database for offline data persistence and synchronization
+- **SQLite Integration** - App-managed database for offline data persistence and synchronization
 - **Network State Management** - Real-time connectivity monitoring with smart fallback mechanisms
 - **Security Architecture** - SHA-256 password hashing, salt encryption, and secure session management
 - Multi-store POS system with standalone cashier interface

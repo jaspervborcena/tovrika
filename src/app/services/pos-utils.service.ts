@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import { OfflineUserData, UserPermission } from '../core/services/indexeddb.service';
+import { OfflineUserData, UserPermission } from '../core/services/sqlite-storage.service';
 
 @Injectable({
   providedIn: 'root'
@@ -30,7 +30,7 @@ export class PosUtilsService {
   /**
    * Extract store initialization logic that's common between POS and POS Mobile
    */
-  async getStoreFromIndexedDB(
+  async getStoreFromSQLite(
     getUserData: (uid: string) => Promise<OfflineUserData | null>,
     currentUser: any,
     availableStores: any[]
@@ -51,7 +51,7 @@ export class PosUtilsService {
         }
       }
       
-      // If no currentStoreId, try to get from permissions in IndexedDB
+      // If no currentStoreId, try to get from permissions in SQLite
       if (offlineUserData?.permissions && offlineUserData.permissions.length > 0) {
         const permission = this.getActivePermission(offlineUserData);
         if (permission?.storeId) {
@@ -66,16 +66,16 @@ export class PosUtilsService {
         }
       }
     } catch (error) {
-      console.log('⚠️ Could not retrieve userData from IndexedDB:', error);
+      console.log('⚠️ Could not retrieve userData from SQLite:', error);
     }
 
     return null;
   }
 
   /**
-   * Get company ID from IndexedDB for a specific store
+   * Get company ID from SQLite for a specific store
    */
-  async getCompanyIdFromIndexedDB(
+  async getCompanyIdFromSQLite(
     getUserData: (uid: string) => Promise<OfflineUserData | null>,
     currentUser: any,
     storeId: string
@@ -88,7 +88,7 @@ export class PosUtilsService {
         return permission?.companyId || null;
       }
     } catch (error) {
-      console.log('⚠️ Could not get companyId from IndexedDB:', error);
+      console.log('⚠️ Could not get companyId from SQLite:', error);
     }
 
     return null;

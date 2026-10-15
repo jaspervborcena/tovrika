@@ -1,13 +1,13 @@
 import { Injectable, inject, signal, computed } from '@angular/core';
 import { User } from '../../services/auth.service';
-import { IndexedDBService, OfflineUserData, OfflineProduct, OfflineOrder } from './indexeddb.service';
+import { SqliteStorageService, OfflineUserData, OfflineProduct, OfflineOrder } from './sqlite-storage.service';
 import { NetworkService } from './network.service';
 
 @Injectable({
   providedIn: 'root'
 })
 export class OfflineStorageService {
-  private indexedDBService = inject(IndexedDBService);
+  private sqliteService = inject(SqliteStorageService);
   private networkService = inject(NetworkService);
 
   // Signals for offline data
@@ -28,12 +28,12 @@ export class OfflineStorageService {
 
   private async initOfflineStorage(): Promise<void> {
     try {
-      await this.indexedDBService.initDB();
+      await this.sqliteService.initDB();
       
-      // Check IndexedDB status after initialization
-      const status = this.indexedDBService.getStatus();
+      // Check SQLite status after initialization
+      const status = this.sqliteService.getStatus();
       if (!status.available) {
-        console.warn('⚠️ OfflineStorage: IndexedDB not available:', status.reason);
+        console.warn('⚠️ OfflineStorage: SQLite not available:', status.reason);
         console.warn('🔐 App will run in online-only mode - all data comes from Firestore');
         console.warn('👍 This is normal if browser storage is full or corrupted');
         console.warn('💡 To restore offline features: Clear browser data and refresh');
@@ -51,10 +51,10 @@ export class OfflineStorageService {
   async loadOfflineData(): Promise<void> {
     try {
       // Ensure database is initialized
-      await this.indexedDBService.initDB();
+      await this.sqliteService.initDB();
       
       // Load current user (will return null if DB is unavailable)
-      const currentUser = await this.indexedDBService.getCurrentUser();
+      const currentUser = await this.sqliteService.getCurrentUser();
       this.currentUserSignal.set(currentUser);
       
       // console.log('💾 OfflineStorage: Current user loaded:', {
@@ -67,11 +67,11 @@ export class OfflineStorageService {
 
       if (currentUser?.currentStoreId) {
         // Load products for current store
-        const products = await this.indexedDBService.getProductsByStore(currentUser.currentStoreId);
+        const products = await this.sqliteService.getProductsByStore(currentUser.currentStoreId);
         this.productsSignal.set(products);
 
         // Load pending orders
-        const orders = await this.indexedDBService.getPendingOrders(currentUser.currentStoreId);
+        const orders = await this.sqliteService.getPendingOrders(currentUser.currentStoreId);
         this.pendingOrdersSignal.set(orders);
         
         //console.log('💾 OfflineStorage: Store data loaded for store:', currentUser.currentStoreId);
@@ -154,18 +154,18 @@ export class OfflineStorageService {
         lastSync: new Date()
       };
       
-      // Always set the signal first (so user data is available even if IndexedDB fails)
+      // Always set the signal first (so user data is available even if SQLite fails)
       this.currentUserSignal.set(offlineUserData);
       
-      // Try to save to IndexedDB (optional)
+      // Try to save to SQLite (optional)
       try {
-        await this.indexedDBService.initDB();
+        await this.sqliteService.initDB();
         // Use the new method that clears all previous users and saves only the current one
-        await this.indexedDBService.saveUserDataAsOnlyUser(offlineUserData);
+        await this.sqliteService.saveUserDataAsOnlyUser(offlineUserData);
       } catch (dbError: any) {
-        // Check if IndexedDB is permanently broken
+        // Check if SQLite is permanently broken
         if (dbError.message?.includes('permanently unavailable')) {
-          console.warn('⚠️ OfflineStorage: IndexedDB permanently unavailable - user data saved in memory only');
+          console.warn('⚠️ OfflineStorage: SQLite permanently unavailable - user data saved in memory only');
           console.warn('📝 To restore offline functionality: Clear browser data (Ctrl+Shift+Delete) and refresh');
           return; // Don't throw - signal already set
         }
@@ -173,11 +173,11 @@ export class OfflineStorageService {
         console.warn('💾 OfflineStorage: Database init failed, attempting recovery:', dbError);
         // Try one more time
         try {
-          await this.indexedDBService.initDB();
-          await this.indexedDBService.saveUserDataAsOnlyUser(offlineUserData);
+          await this.sqliteService.initDB();
+          await this.sqliteService.saveUserDataAsOnlyUser(offlineUserData);
         } catch (retryError: any) {
           if (retryError.message?.includes('permanently unavailable')) {
-            console.warn('⚠️ OfflineStorage: IndexedDB permanently unavailable after retry - user data in memory only');
+            console.warn('⚠️ OfflineStorage: SQLite permanently unavailable after retry - user data in memory only');
             return; // Don't throw - signal already set
           }
           throw retryError; // Re-throw other errors
@@ -206,7 +206,7 @@ export class OfflineStorageService {
 
     try {
       const updatedUser = { ...currentUser, isAgreedToPolicy: agreed, lastSync: new Date() };
-      await this.indexedDBService.saveUserData(updatedUser);
+      await this.sqliteService.saveUserData(updatedUser);
       this.currentUserSignal.set(updatedUser);
       
       console.log('💾 OfflineStorage: Policy agreement updated:', agreed);
@@ -219,8 +219,8 @@ export class OfflineStorageService {
       console.error('💾 OfflineStorage: Failed to update policy agreement:', error);
       // Check if permanently broken
       if (error.message?.includes('permanently unavailable')) {
-        console.warn('⚠️ OfflineStorage: IndexedDB permanently unavailable - updating in-memory state only');
-        // Update in-memory state even if IndexedDB fails
+        console.warn('⚠️ OfflineStorage: SQLite permanently unavailable - updating in-memory state only');
+        // Update in-memory state even if SQLite fails
         const updatedUser = { ...currentUser, isAgreedToPolicy: agreed, lastSync: new Date() };
         this.currentUserSignal.set(updatedUser);
         console.log('✅ OfflineStorage: Policy agreement updated in memory only');
@@ -230,11 +230,11 @@ export class OfflineStorageService {
     }
   }
 
-  // Force refresh user data from IndexedDB
+  // Force refresh user data from SQLite
   async refreshUserData(): Promise<void> {
     try {
       console.log('💾 OfflineStorage: Refreshing user data...');
-      const currentUser = await this.indexedDBService.getCurrentUser();
+      const currentUser = await this.sqliteService.getCurrentUser();
       this.currentUserSignal.set(currentUser);
       
       console.log('💾 OfflineStorage: User data refreshed:', {
@@ -246,7 +246,7 @@ export class OfflineStorageService {
       console.error('💾 OfflineStorage: Failed to refresh user data:', error);
       // Check if permanently broken
       if (error.message?.includes('permanently unavailable')) {
-        console.warn('⚠️ OfflineStorage: IndexedDB permanently unavailable - cannot refresh from cache');
+        console.warn('⚠️ OfflineStorage: SQLite permanently unavailable - cannot refresh from cache');
         return; // Don't throw - allow app to continue
       }
       throw error;
@@ -258,8 +258,8 @@ export class OfflineStorageService {
     try {
       console.log('💾 OfflineStorage: Setting active user:', uid);
       
-      // Set the user as active in IndexedDB
-      await this.indexedDBService.setActiveUser(uid);
+      // Set the user as active in SQLite
+      await this.sqliteService.setActiveUser(uid);
       
       // Refresh user data to update the signal
       await this.refreshUserData();
@@ -279,8 +279,8 @@ export class OfflineStorageService {
       // Clear the signal
       this.currentUserSignal.set(null);
       
-      // Clear IndexedDB user data
-      await this.indexedDBService.clearAllUserData();
+      // Clear SQLite user data
+      await this.sqliteService.clearAllUserData();
       
       console.log('💾 OfflineStorage: All user data cleared successfully');
     } catch (error: any) {
@@ -295,15 +295,15 @@ export class OfflineStorageService {
 
     try {
       const updatedUser = { ...currentUser, storeId, lastSync: new Date() };
-      await this.indexedDBService.saveUserData(updatedUser);
+      await this.sqliteService.saveUserData(updatedUser);
       this.currentUserSignal.set(updatedUser);
 
       // Load products for the new store
-      const products = await this.indexedDBService.getProductsByStore(storeId);
+      const products = await this.sqliteService.getProductsByStore(storeId);
       this.productsSignal.set(products);
 
       // Load pending orders for the new store
-      const orders = await this.indexedDBService.getPendingOrders(storeId);
+      const orders = await this.sqliteService.getPendingOrders(storeId);
       this.pendingOrdersSignal.set(orders);
 
       console.log('💾 OfflineStorage: Store ID updated to:', storeId);
@@ -319,7 +319,7 @@ export class OfflineStorageService {
 
     try {
       const updatedUser = { ...currentUser, isLoggedIn: false };
-      await this.indexedDBService.saveUserData(updatedUser);
+      await this.sqliteService.saveUserData(updatedUser);
       
       // Clear signals
       this.currentUserSignal.set(null);
@@ -336,7 +336,7 @@ export class OfflineStorageService {
   // Product Management
   async syncProducts(products: OfflineProduct[]): Promise<void> {
     try {
-      await this.indexedDBService.saveProducts(products);
+      await this.sqliteService.saveProducts(products);
       
       // Update signal if products are for current store
       const currentUser = this.currentUserSignal();
@@ -372,7 +372,7 @@ export class OfflineStorageService {
         synced: false
       };
 
-      await this.indexedDBService.saveOrder(fullOrder);
+      await this.sqliteService.saveOrder(fullOrder);
       
       // Update pending orders signal
       const currentOrders = this.pendingOrdersSignal();
@@ -417,7 +417,7 @@ export class OfflineStorageService {
   }
 
   private async markOrderAsSynced(orderId: string): Promise<void> {
-    // This would update the order in IndexedDB to mark it as synced
+    // This would update the order in SQLite to mark it as synced
     // Implementation depends on your backend sync logic
   }
 
@@ -426,10 +426,10 @@ export class OfflineStorageService {
     try {
       // Clear most offline data but preserve offline auth entries so users can still login offline
       // after signing out. This prevents accidental removal of offline credentials.
-      if (typeof this.indexedDBService.clearAllDataPreserveOfflineAuth === 'function') {
-        await this.indexedDBService.clearAllDataPreserveOfflineAuth();
+      if (typeof this.sqliteService.clearAllDataPreserveOfflineAuth === 'function') {
+        await this.sqliteService.clearAllDataPreserveOfflineAuth();
       } else {
-        await this.indexedDBService.clearAllData();
+        await this.sqliteService.clearAllData();
       }
       this.currentUserSignal.set(null);
       this.productsSignal.set([]);
@@ -448,8 +448,8 @@ export class OfflineStorageService {
     hasData: boolean;
   }> {
     try {
-      const isSupported = 'indexedDB' in window;
-      const currentSize = await this.indexedDBService.getDatabaseSize();
+      const isSupported = 'sqlite' in window;
+      const currentSize = await this.sqliteService.getDatabaseSize();
       const currentUser = this.currentUserSignal();
       const hasData = !!currentUser || this.products().length > 0;
 

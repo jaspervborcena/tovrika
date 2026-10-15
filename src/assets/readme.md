@@ -48,14 +48,14 @@ An enterprise-grade **Point of Sale (POS) system** built with Angular 19 and Fir
 ### 🛡️ Multi-Tenant Data Security
 - **Enterprise-Level Data Isolation** - Each user can only access their own data via UID-based security
 - **Firestore Security Rules** - Database-level protection preventing unauthorized cross-tenant access
-- **Automatic UID Injection** - All documents automatically include user UID from Firebase Auth or IndexedDB
+- **Automatic UID Injection** - All documents automatically include user UID from Firebase Auth or SQLite cache
 - **Secure Offline Operations** - Full security even when operating offline using cached credentials
 
 ### 🔄 Offline-First Architecture
 - **Complete Offline POS** - Full point-of-sale functionality without internet connectivity
-- **IndexedDB Integration** - Robust local database for offline data and session management
+- **SQLite Integration** - App-managed offline data via `sql.js`, persisted in `localStorage`
 - **Smart Data Sync** - Automatic synchronization when connectivity returns
-- **Corruption Recovery** - Detection and graceful degradation with `isPermanentlyBroken` flag
+- **Firestore Persistence** - Firebase SDK browser persistence is separate from the app-managed SQLite cache
 
 ## 🛠️ Technology Stack
 
@@ -72,7 +72,7 @@ An enterprise-grade **Point of Sale (POS) system** built with Angular 19 and Fir
 - **Firebase Auth** - Secure user authentication and authorization
 
 ### **Offline & Local Storage**
-- **IndexedDB** - Browser-based database for offline data storage
+- **SQLite (`sql.js`)** - App-managed local database for offline data storage
 - **Web Crypto API** - Secure cryptographic operations for password hashing
 - **Firestore Persistence** - Automatic offline queuing and sync
 
@@ -340,9 +340,9 @@ ng serve --port 4201
 - Review Firebase console for errors
 
 **Offline Mode Not Working**
-- Clear browser IndexedDB and localStorage
-- Check Firefox Privacy settings
-- Verify IndexedDB is enabled
+- Check browser `localStorage` availability
+- Verify the `sql.js` WebAssembly asset loads successfully
+- Reset the app-managed cache only if needed by removing `tovrika_sqlite_database` from localStorage
 - Restart browser and app
 
 ## 🚀 Next Steps

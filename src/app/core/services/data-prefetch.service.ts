@@ -12,7 +12,7 @@ export class DataPrefetchService {
   private orderService = inject(OrderService);
 
   /**
-   * Prefetch commonly used collections and let those services persist snapshots to IndexedDB.
+   * Prefetch commonly used collections and let those services persist snapshots to SQLite.
    * Run this once after a successful online login. Best-effort only - failures are swallowed.
    */
   async prefetchForUser(userId: string, companyId?: string): Promise<void> {

@@ -50,7 +50,7 @@ export class OfflineNavigationService {
 
       // We're offline - allow navigation but mark the navigation state as offline.
       // This avoids blocking the user from visiting pages they haven't cached yet
-      // while enabling components to detect offline state and use IndexedDB fallbacks.
+      // while enabling components to detect offline state and use SQLite fallbacks.
       try {
         console.log(`🧭 OfflineNavigation: Offline - navigating to ${route} with offline state`);
         await this.router.navigate([route], { state: { offline: true } });

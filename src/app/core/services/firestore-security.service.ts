@@ -1,16 +1,16 @@
 import { Injectable, inject } from '@angular/core';
 import { Auth } from '@angular/fire/auth';
-import { IndexedDBService } from './indexeddb.service';
+import { SqliteStorageService } from './sqlite-storage.service';
 
 @Injectable({
   providedIn: 'root'
 })
 export class FirestoreSecurityService {
   private auth = inject(Auth);
-  private indexedDBService = inject(IndexedDBService);
+  private sqliteService = inject(SqliteStorageService);
 
   /**
-   * Get the current authenticated user's UID from Firebase Auth or IndexedDB
+   * Get the current authenticated user's UID from Firebase Auth or SQLite
    * @returns Promise<string | null> - The user's UID or null if not authenticated
    */
   async getCurrentUserUID(): Promise<string | null> {
@@ -20,12 +20,12 @@ export class FirestoreSecurityService {
       return currentUser.uid;
     }
 
-    // Fallback to IndexedDB (offline/cached)
+    // Fallback to SQLite (offline/cached)
     try {
-      const offlineUser = await this.indexedDBService.getCurrentUser();
+      const offlineUser = await this.sqliteService.getCurrentUser();
       return offlineUser?.uid || null;
     } catch (error) {
-      console.error('❌ Error getting UID from IndexedDB:', error);
+      console.error('❌ Error getting UID from SQLite:', error);
       return null;
     }
   }
@@ -40,7 +40,7 @@ export class FirestoreSecurityService {
   }
 
   /**
-   * Add standard security fields to any document data (with IndexedDB support)
+   * Add standard security fields to any document data (with SQLite support)
    * @param data - The document data to enhance
    * @returns Enhanced data with security fields
    */
@@ -72,7 +72,7 @@ export class FirestoreSecurityService {
   }
 
   /**
-   * Add update security fields (for update operations, with IndexedDB support)
+   * Add update security fields (for update operations, with SQLite support)
    * @param data - The document data to enhance
    * @returns Enhanced data with update fields
    */
@@ -93,7 +93,7 @@ export class FirestoreSecurityService {
   }
 
   /**
-   * Validate that the current user can access a document (with IndexedDB support)
+   * Validate that the current user can access a document (with SQLite support)
    * @param documentUID - The UID associated with the document
    * @returns Promise<boolean> - True if user can access, false otherwise
    */
@@ -103,7 +103,7 @@ export class FirestoreSecurityService {
   }
 
   /**
-   * Ensure user is authenticated before proceeding (with IndexedDB support)
+   * Ensure user is authenticated before proceeding (with SQLite support)
    * @throws Error if user is not authenticated
    */
   async requireAuthentication(): Promise<string> {

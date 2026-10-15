@@ -23,10 +23,9 @@ The repository has a solid feature set and the current build is successful. The 
 - The selected line item is used as the source of truth for the adjustment event, which improves consistency for stock impact and summary reporting.
 - The remaining work is mainly validation across invoices and edge cases rather than reworking the core workflow.
 
-#### **2. Offline sync persistence is still partially implemented**
-- The offline document service still uses `localStorage` as a temporary queue mechanism.
-- The TODO in the offline service indicates that a real IndexedDB-backed pending document store is still missing.
-- This is a reliability issue for long-term offline sync behavior.
+#### **2. SQLite offline persistence needs hardening**
+- Offline documents and cached app data use SQLite through `sql.js`.
+- The current browser implementation serializes the SQLite database into `localStorage`, so durability and storage limits still need review.
 
 #### **3. Some dashboard screens still contain placeholder work**
 - The branches, inventory, and products screens still include TODO-style placeholder comments.
@@ -47,7 +46,7 @@ The repository has a solid feature set and the current build is successful. The 
 ### **Immediate TODO / next sprint**
 1. Validate return and refund adjustments across invoices and summary reports.
 2. Continue hardening damage and cancel handling so the full adjustment lifecycle remains consistent.
-3. Replace the temporary offline document queue with a proper IndexedDB-backed sync mechanism.
+3. Harden SQLite persistence so offline data does not depend on a serialized database blob in `localStorage`.
 4. Finish the placeholder admin/dashboard screens and remove remaining stub comments.
 5. Add automated tests for critical order, auth, and inventory workflows.
 6. Address the `jsbarcode` build warning and remove remaining noisy debug logging where practical.
@@ -76,15 +75,14 @@ The repository has a solid feature set and the current build is successful. The 
 - **Enterprise Requests** - Custom enterprise plan request system
 - **Subscription Details Modal** - Professional display of subscription information in textbox format
 
-### 🔧 **IndexedDB Corruption Handling (NEW!)**
-- **Permanent Failure Detection** - Smart detection of corrupted IndexedDB with `isPermanentlyBroken` flag
-- **Graceful Degradation** - App continues to function even with database corruption
-- **Signal-First Pattern** - In-memory state updates before database operations
-- **Offline Mode Compatibility** - Enhanced offline functionality with better error handling
+### 💾 **SQLite Offline Storage**
+- App-managed offline data is stored in SQLite through `sql.js`.
+- The browser build persists the exported SQLite database in `localStorage`.
+- Firebase Auth and Firestore SDK persistence are separate browser-storage mechanisms.
 
 ### 🔐 **Enterprise Multi-Tenant Security**
 - **UID-Based Data Isolation** - Complete user data segregation using Firestore security rules
-- **IndexedDB UID Integration** - Seamless UID injection from cached user data for offline operations
+- **SQLite UID Integration** - Seamless UID injection from cached user data for offline operations
 - **Comprehensive Security Fields** - Enhanced document tracking with `createdBy`, `updatedBy`, and offline operation flags
 - **Firestore Security Rules** - Database-level protection preventing unauthorized access to other users' data
 - **Multi-Company Support** - Full tenant isolation for enterprise deployments
@@ -134,7 +132,7 @@ The repository has a solid feature set and the current build is successful. The 
 - ✅ **User Authentication** - Hybrid online/offline authentication system with corruption handling
 - ✅ **Permission Management** - Granular permissions for different user roles
 - ✅ **Secure User Sessions** - Complete session management with offline support
-- ✅ **IndexedDB Corruption Recovery** - Automatic detection and graceful degradation
+- ✅ **SQLite Offline Cache** - Cached user, product, store, and pending document data
 
 ### 📱 **Interface & User Experience**
 - ✅ **Standalone POS Interface** - Dedicated cashier interface accessible at `/pos`
@@ -147,7 +145,7 @@ The repository has a solid feature set and the current build is successful. The 
 
 ### 🛡️ **Data Security Features**
 - **Enterprise-Level Data Isolation** - Each user can only access their own data via UID-based security
-- **Automatic UID Injection** - All documents automatically include user UID from Firebase Auth or IndexedDB
+- **Automatic UID Injection** - All documents automatically include user UID from Firebase Auth or SQLite cache
 - **Enhanced Document Tracking** - Complete audit trail with creator/updater tracking and offline operation flags
 - **Secure Offline Operations** - Full security even when operating offline using cached credentials
 
@@ -160,16 +158,16 @@ The repository has a solid feature set and the current build is successful. The 
 ## 🔄 Offline-First Architecture
 
 ### 🌐 **Hybrid Online/Offline Operations**
-- **Seamless Authentication** - Automatic fallback from Firebase Auth to IndexedDB credentials
-- **IndexedDB Corruption Handling** - Permanent failure detection with graceful degradation
+- **Seamless Authentication** - Automatic fallback from Firebase Auth to SQLite-cached credentials
+- **App-Managed Local Cache** - Offline data is stored through SQLite
 - **Signal-First Pattern** - In-memory state updates before attempting database operations
 - **Complete Offline POS** - Full point-of-sale functionality without internet connectivity
 - **Smart Data Sync** - Automatic synchronization when connectivity returns
 - **Offline Order Processing** - Create and process orders completely offline
 
 ### 💾 **Local Data Management**
-- **IndexedDB Integration** - Robust local database for offline data and session management
-- **Corruption Detection** - `isPermanentlyBroken` flag for identifying corrupt databases
+- **SQLite Integration** - Local database for offline data and session management via `sql.js`
+- **Browser Persistence** - The exported SQLite database image is stored in `localStorage`
 - **Secure Credential Storage** - SHA-256 hashed password storage with salt encryption
 - **Cached User Data** - User profiles and permissions stored locally for offline access
 - **Offline Product Catalog** - Complete product information available offline
@@ -225,7 +223,8 @@ npm start
 - **Firestore Security Rules** - Database-level security enforcement
 
 ### **Offline & Local Storage**
-- **IndexedDB** - Browser-based database for offline data storage
+- **SQLite (`sql.js`)** - App-managed local database for offline data storage
+- **Firestore Persistence** - Firebase SDK browser cache, configured separately from the app-managed SQLite database
 - **Web Crypto API** - Secure cryptographic operations for password hashing
 - **Service Workers** - Background processes for offline functionality
 - **Local Storage** - Additional browser storage for app settings
@@ -257,7 +256,7 @@ npm start
 ├── docs/                           # 📚 Complete documentation (35+ files)
 │   ├── subscription-*.md          # Subscription system documentation
 │   ├── billing-history-integration.md
-│   ├── indexeddb-*.md             # IndexedDB and offline mode docs
+│   ├── sqlite-offline-storage.md  # Current app-managed offline storage
 │   ├── firestore-security-current-status.md
 │   ├── company-profile-*.md       # Company and profile features
 │   ├── offline-*.md               # Offline functionality guides
@@ -281,7 +280,7 @@ npm start
 │   │   └── pos.service.ts          # POS operations
 │   ├── core/services/             # 🛠️ Core system services
 │   │   ├── firestore-security.service.ts    # UID security management
-│   │   ├── indexeddb.service.ts             # Local database with corruption handling
+│   │   ├── sqlite-storage.service.ts        # App-managed SQLite offline cache
 │   │   ├── offline-storage.service.ts       # Offline data management
 │   │   └── network.service.ts               # Network status monitoring
 │   ├── shared/                    # 🔄 Shared components
@@ -304,8 +303,7 @@ npm start
 - **[Subscription System](docs/subscriptions-implementation.md)** - Complete subscription feature guide
 - **[Billing Integration](docs/billing-history-integration.md)** - Payment tracking and billing history
 - **[Financial Calculations](docs/FINANCIAL_CALCULATIONS.md)** - Dashboard revenue, profit, and refund/return/damage logic
-- **[IndexedDB Integration](docs/indexeddb-uid-integration-status.md)** - Offline UID management
-- **[IndexedDB Corruption Fix](docs/indexeddb-permanent-corruption-fix.md)** - Handling database corruption
+- **[SQLite Offline Storage](docs/sqlite-offline-storage.md)** - App-managed cache, schema, and migration details
 - **[Offline Mode Guide](docs/offline-mode-fixes-summary.md)** - Offline functionality overview
 - **[Testing Checklist](docs/TESTING-CHECKLIST.md)** - Comprehensive testing guide
 - **[Company Profile Integration](docs/company-profile-subscription-integration.md)** - Subscription management UI
@@ -314,7 +312,7 @@ npm start
 - **Subscription Testing** - Test all subscription tiers and payment flows
 - **Security Testing** - Validate UID integration and data isolation
 - **Offline Testing** - Test complete POS functionality without internet
-- **Corruption Recovery** - Validate IndexedDB corruption handling
+- **SQLite Persistence** - Validate cache persistence and legacy pending-queue migration
 - **Multi-User Testing** - Verify data isolation between different users
 - **Receipt Testing** - Validate thermal printer compatibility
 - **BIR Compliance** - Test device registration and invoice generation
@@ -364,7 +362,7 @@ npm run lint
 ### **For Developers**
 - ✅ **Modern Architecture** - Angular 19 with standalone components, signals, and reactive programming
 - ✅ **Enterprise Security** - Multi-tenant UID-based isolation with Firestore security rules
-- ✅ **Offline-First Design** - Complete offline functionality with IndexedDB and corruption handling
+- ✅ **Offline-First Design** - Offline functionality backed by the app-managed SQLite cache
 - ✅ **Comprehensive Features** - 2,800+ line POS component with full retail functionality
 - ✅ **Clean Separation** - Service-oriented architecture with 25+ specialized services
 - ✅ **Type Safety** - TypeScript with interfaces (note: some areas need `any` type cleanup)
@@ -415,13 +413,15 @@ npm run lint
 │  ├── Cloud Storage (Receipt uploads)                          │
 │  └── Security Rules (UID-based isolation)                     │
 │                                                                 │
-│  Local Storage (IndexedDB)                                     │
-│  ├── User credentials (SHA-256 hashed)                        │
-│  ├── Offline data cache                                        │
-│  ├── Transaction queue                                         │
-│  └── Session management                                        │
+│  SQLite database (sql.js, persisted in localStorage)           │
+│  ├── User credentials (SHA-256 hashed)                         │
+│  ├── Offline data cache                                         │
+│  ├── Transaction queue                                          │
+│  └── Session management                                         │
 └─────────────────────────────────────────────────────────────────┘
 ```
+
+> The flow examples below are historical in places. App-managed cache APIs now use `SqliteStorageService`; Firebase SDK persistence remains separate.
 
 ### **🔐 Authentication Flow (Hybrid Online/Offline)**
 
@@ -433,12 +433,12 @@ User Entry → Route Guard → Authentication Flow
 │   ├── YES → Firebase Authentication
 │   │   ├── Success → Load User Profile
 │   │   │   ├── Save Offline Credentials (SHA-256 + Salt)
-│   │   │   ├── Store User Permissions in IndexedDB
+│   │   │   ├── Store User Permissions in SQLite
 │   │   │   └── Navigate to Dashboard/POS
 │   │   └── Failure → Try Offline Authentication
 │   │
 │   └── NO → Offline Authentication
-│       ├── Load Stored Credentials from IndexedDB
+│       ├── Load Stored Credentials from SQLite
 │       ├── Validate Password (SHA-256 comparison)
 │       ├── Check Session Expiry
 │       ├── Success → Restore User Session
@@ -459,13 +459,13 @@ if (isOnline) {
   salt = crypto.getRandomValues(new Uint8Array(16))
   hashedPassword = await crypto.subtle.digest('SHA-256', password + salt)
   
-  // Store in IndexedDB for offline access
-  await indexedDBService.saveSetting(`offlineAuth_${uid}`, {
+  // Store in SQLite for offline access
+  await sqliteStorageService.saveSetting(`offlineAuth_${uid}`, {
     email, hashedPassword, salt, userProfile, sessionExpiry
   })
 } else {
   // Offline Authentication
-  storedAuth = await indexedDBService.getSetting(`offlineAuth_${uid}`)
+  storedAuth = await sqliteStorageService.getSetting(`offlineAuth_${uid}`)
   inputHash = await crypto.subtle.digest('SHA-256', password + storedAuth.salt)
   isValid = inputHash === storedAuth.hashedPassword
 }
@@ -478,7 +478,7 @@ URL Request → Angular Router → Route Guards Chain
 │
 ├── authGuard: Check if user is authenticated
 │   ├── Online: Verify Firebase Auth state
-│   ├── Offline: Check IndexedDB session validity
+│   ├── Offline: Check SQLite session validity
 │   └── Redirect to /login if not authenticated
 │
 ├── policyGuard: Verify policy agreement
@@ -504,7 +504,7 @@ URL Request → Angular Router → Route Guards Chain
 POS Component Load → Route: /pos
 │
 ├── Guard Validation (auth + policy + onboarding + role)
-├── Load User Permissions from IndexedDB (Priority)
+├── Load User Permissions from SQLite (Priority)
 ├── Load Available Stores (filtered by user role)
 ├── Auto-select Store (single store) or Show Store Selector
 ├── Load Products for Selected Store
@@ -575,14 +575,14 @@ User Action → Service Layer → Data Persistence
 │   ├── Add UID Security Fields (automatic)
 │   ├── Generate Firestore-compatible ID
 │   ├── Save to Firestore with security rules
-│   ├── Update Local Cache (IndexedDB)
+│   ├── Update Local Cache (SQLite)
 │   └── Update UI Signals (reactive)
 │
 ├── Update Document:
 │   ├── Add updatedAt timestamp
 │   ├── Add updatedBy UID
 │   ├── Update Firestore document
-│   ├── Sync to IndexedDB cache
+│   ├── Sync to SQLite cache
 │   └── Refresh UI state
 │
 └── Real-time Sync:
@@ -598,7 +598,7 @@ Offline Action → Queue for Sync → Local Storage
 ├── Network Detection: navigator.onLine = false
 ├── Generate Temporary ID: temp_COLLECTION_TIMESTAMP
 ├── Add Offline Flags: { isOffline: true, synced: false }
-├── Store in IndexedDB Queue:
+├── Store in SQLite Queue:
 │   ├── Collection: 'offlineDocuments'
 │   ├── Operation: 'create' | 'update' | 'delete'
 │   ├── Data: original document data
@@ -615,28 +615,18 @@ Offline Action → Queue for Sync → Local Storage
     └── Sync Complete
 ```
 
-#### **3. IndexedDB Schema Structure**
+#### **3. SQLite Schema Structure**
 ```
-IndexedDB Database: "PosSystem"
-├── Store: "userSessions"
-│   ├── Key: userId
-│   └── Data: { uid, email, permissions, currentStoreId }
-│
-├── Store: "offlineAuth_[uid]"
-│   ├── Key: userId
-│   └── Data: { hashedPassword, salt, sessionExpiry }
-│
-├── Store: "offlineDocuments"
-│   ├── Key: tempId
-│   └── Data: { collection, operation, data, synced }
-│
-├── Store: "cachedProducts"
-│   ├── Key: productId
-│   └── Data: Product interface
-│
-├── Store: "cachedStores"
-│   ├── Key: storeId
-│   └── Data: Store interface
+SQLite database (sql.js, exported to localStorage key `tovrika_sqlite_database`)
+├── settings
+├── users
+├── products
+├── orders
+├── companies
+├── stores
+├── notifications
+├── product_inventory
+└── offline_documents
 │
 └── Store: "appSettings"
     ├── Key: settingName
@@ -800,33 +790,14 @@ Network Interruption Detection → Graceful Degradation
     └── Log sync issues for review
 ```
 
-#### **2. IndexedDB Corruption Handling**
+#### **2. SQLite Persistence Considerations**
 ```
-Database Corruption Detection → Recovery Strategy
+SQLite database lifecycle
 │
-├── Corruption Detection:
-│   ├── Failed IndexedDB operations
-│   ├── Data consistency checks
-│   ├── Performance degradation
-│   └── User-reported issues
-│
-├── Graceful Degradation:
-│   ├── Set isPermanentlyBroken flag
-│   ├── Disable offline storage features
-│   ├── Continue with online-only mode
-│   └── Show user notification
-│
-├── Data Recovery Attempts:
-│   ├── Try alternative IndexedDB operations
-│   ├── Backup critical data to localStorage
-│   ├── Reload from Firestore cache
-│   └── Preserve user session
-│
-└── Complete Recovery:
-    ├── Clear corrupted database
-    ├── Reinitialize IndexedDB schema
-    ├── Restore from cloud backup
-    └── Re-enable offline features
+├── Load exported database bytes from localStorage
+├── Open the database with sql.js
+├── Run schema creation and legacy queue migration
+└── Export database bytes back to localStorage after writes
 ```
 
 ### **🚀 Performance Optimization Strategies**
@@ -869,7 +840,7 @@ Application Start → Optimized Loading → User Ready
 - **Database-Level Protection** - Firestore security rules prevent unauthorized access
 - **Encrypted Local Storage** - Secure offline credential and data storage
 - **Complete Audit Trail** - Track who created/modified every piece of data
-- **Corruption Recovery** - Graceful handling of IndexedDB corruption with permanent failure detection
+- **Local Persistence** - App-managed SQLite database image is stored in browser `localStorage`
 - **Signal-First Pattern** - In-memory state updates ensure app continues functioning
 
 **Perfect for businesses requiring secure, scalable, and reliable POS operations with full offline capabilities.**
@@ -932,7 +903,7 @@ Application Start → Optimized Loading → User Ready
 
 - ✅ **Real-time Sync** - Cloud synchronization with offline capabilities- 🔒 **Secure Offline Credentials** - SHA-256 hashed password storage with salt encryption
 
-- 💿 **IndexedDB Integration** - Local database for offline data and session management
+- 💿 **SQLite Integration** - Local database for offline data and session management
 
 ## 🛠️ Technology Stack
 
@@ -942,7 +913,7 @@ Application Start → Optimized Loading → User Ready
 
 - **Backend**: Firebase, Firestore, Firebase Auth- 🧾 **Professional Receipts** - Sales invoice template with store branding
 
-- **Offline Storage**: IndexedDB, Web Crypto API- �️ **Thermal Printer Support** - ESC/POS commands for receipt printers
+- **Offline Storage**: SQLite, Web Crypto API- �️ **Thermal Printer Support** - ESC/POS commands for receipt printers
 
 - **Printing**: ESC/POS thermal printers, Web Serial API- �📋 **Store Settings** - Configurable store parameters and BIR information
 
@@ -968,7 +939,7 @@ Application Start → Optimized Loading → User Ready
 
 └── ...- **🔒 Secure Credential Storage** - SHA-256 password hashing with random salt generation
 
-```- **💾 Local Session Management** - IndexedDB-based storage for encrypted user credentials
+```- **💾 Local Session Management** - SQLite-based storage for encrypted user credentials
 
 - **⏰ Configurable Session Duration** - 1 day default, 30 days with "Remember Me" option
 
@@ -991,7 +962,7 @@ For complete project structure and detailed documentation, see [docs/README.md](
 
 // Session Management  
 - Email-to-UID mapping for efficient user lookup
-- Encrypted credential storage in IndexedDB
+- Encrypted credential storage in SQLite
 - Automatic session expiry and cleanup
 - "Remember Me" extends session to 30 days
 ```
@@ -1071,7 +1042,7 @@ await printService.printReceipt(receiptData, 'thermal');
 - **AngularFire v17+** - Official Angular library for Firebase integration
 
 ### Offline & Local Storage
-- **IndexedDB API** - Browser database for offline data persistence
+- **SQLite API** - Browser database for offline data persistence
 - **Web Crypto API** - Secure password hashing with SHA-256 and salt
 - **Local Storage** - Browser storage for user preferences
 - **Service Workers** - Background sync and caching strategies
@@ -1326,8 +1297,8 @@ The POS system includes dedicated mobile components optimized for mobile browser
 
 ### Service Layer
 - **AuthService** - Hybrid authentication system with online/offline capabilities, secure credential storage, and session management
-- **OfflineStorageService** - IndexedDB management for offline data persistence and user session storage
-- **IndexedDBService** - Low-level database operations for offline functionality and data synchronization
+- **OfflineStorageService** - SQLite management for offline data persistence and user session storage
+- **SqliteStorageService** - Low-level database operations for offline functionality and data synchronization
 - **NetworkService** - Network connectivity monitoring and online/offline state management
 - **PosService** - Core POS functionality and cart management
 - **ProductService** - Product catalog operations
@@ -1653,7 +1624,7 @@ Impact:
 #### �🔄 Offline Authentication System Implementation (October 8, 2025)
 - **Hybrid Authentication Architecture** - Seamless online/offline authentication with automatic fallback mechanisms
 - **Secure Credential Storage** - SHA-256 password hashing with cryptographically secure salt generation using Web Crypto API
-- **IndexedDB Integration** - Local database storage for encrypted user credentials and session management
+- **SQLite Integration** - Local database storage for encrypted user credentials and session management
 - **Session Management** - Configurable session duration (1 day default, 30 days with "Remember Me" functionality)
 - **Network State Detection** - Real-time connectivity monitoring with smart authentication routing
 - **Policy Agreement Integration** - Offline users maintain policy compliance state and agreement status
@@ -1765,7 +1736,7 @@ For support and questions:
 
 ### Completed ✅
 - **Offline Authentication System** - Complete hybrid authentication with secure credential storage and session management
-- **IndexedDB Integration** - Local database for offline data persistence and synchronization
+- **SQLite Integration** - Local database for offline data persistence and synchronization
 - **Network State Management** - Real-time connectivity monitoring with smart fallback mechanisms
 - **Security Architecture** - SHA-256 password hashing, salt encryption, and secure session management
 - Multi-store POS system with standalone cashier interface

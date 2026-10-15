@@ -149,7 +149,7 @@ console.error('🔐 Error details:', {
 **Cause**: 
 - No cached credentials from previous login
 - Password doesn't match cached hash
-- IndexedDB/localStorage cleared
+- The app-managed SQLite cache (`tovrika_sqlite_database`) was cleared from localStorage
 
 **Solutions**:
 - ✅ Must login online at least once first
@@ -360,14 +360,14 @@ Expected Error: "Too many failed attempts. Please try again later."
 
 ## Advanced Debugging
 
-### Check IndexedDB (Offline Storage)
+### Check app-managed SQLite storage
 
 1. DevTools → **Application** tab
-2. Expand **IndexedDB**
-3. Look for:
-   - `posDatabase` → `users` → Check if user cached
-   - `posDatabase` → `offlineAuth` → Check credentials
-4. If corrupted, delete databases and try online login
+2. Expand **Local Storage** for the app origin
+3. Check for the `tovrika_sqlite_database` entry
+4. If the cache is missing or unusable, log in online to repopulate it
+
+Firebase Auth and Firestore may separately use IndexedDB for SDK-managed browser persistence; this is not the app-managed SQLite cache.
 
 ### Check localStorage
 

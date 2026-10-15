@@ -20,7 +20,7 @@ import { Store } from '../interfaces/store.interface';
 import { AuthService } from './auth.service';
 import { FirestoreSecurityService } from '../core/services/firestore-security.service';
 import { OfflineDocumentService } from '../core/services/offline-document.service';
-import { IndexedDBService } from '../core/services/indexeddb.service';
+import { SqliteStorageService } from '../core/services/sqlite-storage.service';
 
 @Injectable({
   providedIn: 'root'
@@ -37,7 +37,7 @@ export class CompanyService {
     private authService: AuthService,
     private firestoreSecurityService: FirestoreSecurityService,
     private offlineDocService: OfflineDocumentService,
-    private indexedDBService: IndexedDBService,
+    private sqliteService: SqliteStorageService,
     private injector: Injector
   ) {}
 
@@ -228,17 +228,17 @@ export class CompanyService {
                 updatedAt: company.updatedAt || new Date(),
                 lastSync: new Date()
               } as any;
-              await this.indexedDBService.saveCompanies([offlineCompany]);
+              await this.sqliteService.saveCompanies([offlineCompany]);
             } catch (saveErr) {
-              console.warn('💾 CompanyService: Failed to save company snapshot to IndexedDB.companies:', saveErr);
+              console.warn('💾 CompanyService: Failed to save company snapshot to SQLite.companies:', saveErr);
             }
           }
         } catch (fireErr) {
           console.warn('🌐 CompanyService: Firestore unavailable or failed to load company, attempting offline snapshot...', fireErr);
 
-          // Try to load snapshot from IndexedDB
+          // Try to load snapshot from SQLite
           try {
-            const snapshot = await this.indexedDBService.getSetting(`company_${primaryCompanyId}`);
+            const snapshot = await this.sqliteService.getSetting(`company_${primaryCompanyId}`);
             if (snapshot) {
               // Snapshot may already be a Company object
               const company: Company = {
@@ -247,12 +247,12 @@ export class CompanyService {
                 createdAt: snapshot.createdAt ? new Date(snapshot.createdAt) : new Date()
               };
               companies.push(company);
-              console.log('💾 CompanyService: Loaded company snapshot from IndexedDB for offline use:', primaryCompanyId);
+              console.log('💾 CompanyService: Loaded company snapshot from SQLite for offline use:', primaryCompanyId);
             } else {
               console.warn('💾 CompanyService: No offline snapshot found for company:', primaryCompanyId);
             }
           } catch (snapErr) {
-            console.error('💾 CompanyService: Failed to read company snapshot from IndexedDB:', snapErr);
+            console.error('💾 CompanyService: Failed to read company snapshot from SQLite:', snapErr);
           }
         }
       }
@@ -323,9 +323,9 @@ export class CompanyService {
           updatedAt: company.updatedAt || new Date(),
           lastSync: new Date()
         } as any;
-        await this.indexedDBService.saveCompanies([offlineCompany]);
+        await this.sqliteService.saveCompanies([offlineCompany]);
       } catch (saveErr) {
-        console.warn('💾 CompanyService: Failed to save company snapshot to IndexedDB.companies (getCompanyById):', saveErr);
+        console.warn('💾 CompanyService: Failed to save company snapshot to SQLite.companies (getCompanyById):', saveErr);
       }
 
       return company;

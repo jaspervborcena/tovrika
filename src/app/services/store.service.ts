@@ -19,7 +19,7 @@ import { AuthService } from './auth.service';
 import { toDateValue } from '../core/utils/date-utils';
 import { FirestoreSecurityService } from '../core/services/firestore-security.service';
 import { OfflineDocumentService } from '../core/services/offline-document.service';
-import { IndexedDBService } from '../core/services/indexeddb.service';
+import { SqliteStorageService } from '../core/services/sqlite-storage.service';
 import { Store } from '../interfaces/store.interface';
 import { FEATURE_FLAGS } from '../shared/config/feature-flags';
 
@@ -104,7 +104,7 @@ export class StoreService {
     private firestoreSecurityService: FirestoreSecurityService,
     private offlineDocService: OfflineDocumentService
     ,
-    private indexedDb: IndexedDBService
+    private sqlite: SqliteStorageService
   ) {}
 
   async loadStores(storeIds: string[]) {
@@ -169,14 +169,14 @@ export class StoreService {
       
       this.storesSignal.set(dedupeStoresForDropdown(stores));
       this.loadTimestamp = Date.now();
-      // Persist snapshot per-company to IndexedDB settings for offline use
+      // Persist snapshot per-company to SQLite settings for offline use
       try {
         const companyId = stores[0]?.companyId;
         if (companyId) {
-          await this.indexedDb.saveSetting(`stores_${companyId}`, stores);
+          await this.sqlite.saveSetting(`stores_${companyId}`, stores);
         }
       } catch (e) {
-        console.warn('Failed to persist stores snapshot to IndexedDB:', e);
+        console.warn('Failed to persist stores snapshot to SQLite:', e);
       }
       
       
@@ -188,7 +188,7 @@ export class StoreService {
         const currentUser = this.authService.getCurrentUser();
         const currentCompanyId = currentUser?.currentCompanyId as string | undefined;
         if (currentCompanyId) {
-          const saved = await this.indexedDb.getSetting(`stores_${currentCompanyId}`);
+          const saved = await this.sqlite.getSetting(`stores_${currentCompanyId}`);
           if (saved && Array.isArray(saved)) {
             const normalized = saved.map((s: any) => ({
               ...s,
@@ -274,11 +274,11 @@ export class StoreService {
       this.storesSignal.set(stores);
       this.loadTimestamp = Date.now();
       
-      // Persist snapshot to IndexedDB for offline use
+      // Persist snapshot to SQLite for offline use
       try {
-        await this.indexedDb.saveSetting(`stores_${companyId}`, stores);
+        await this.sqlite.saveSetting(`stores_${companyId}`, stores);
       } catch (e) {
-        console.warn('Failed to persist stores snapshot to IndexedDB:', e);
+        console.warn('Failed to persist stores snapshot to SQLite:', e);
       }
       
       
@@ -341,9 +341,9 @@ export class StoreService {
           this.storesSignal.set(stores);
           this.loadTimestamp = Date.now();
           try {
-            await this.indexedDb.saveSetting(`stores_${companyId}`, stores);
+            await this.sqlite.saveSetting(`stores_${companyId}`, stores);
           } catch (e) {
-            console.warn('Failed to persist stores snapshot to IndexedDB after retry:', e);
+            console.warn('Failed to persist stores snapshot to SQLite after retry:', e);
           }
           return;
         } catch (retryErr) {
@@ -352,7 +352,7 @@ export class StoreService {
       }
       // Offline fallback: try to read saved snapshot
       try {
-        const saved = await this.indexedDb.getSetting(`stores_${companyId}`);
+        const saved = await this.sqlite.getSetting(`stores_${companyId}`);
         if (saved && Array.isArray(saved)) {
           const normalized = saved.map((s: any) => ({
             ...s,
@@ -364,7 +364,7 @@ export class StoreService {
           return;
         }
       } catch (e) {
-        console.warn('Failed to read stores snapshot from IndexedDB:', e);
+        console.warn('Failed to read stores snapshot from SQLite:', e);
       }
       throw error;
     } finally {

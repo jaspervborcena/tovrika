@@ -1,6 +1,6 @@
 import { Injectable, inject } from '@angular/core';
 import { Firestore, collection, addDoc, doc, setDoc, deleteDoc, DocumentReference } from '@angular/fire/firestore';
-import { IndexedDBService } from './indexeddb.service';
+import { SqliteStorageService } from './sqlite-storage.service';
 import { FirestoreSecurityService } from './firestore-security.service';
 import { LoggerService } from './logger.service';
 import { logFirestore } from '../utils/firestore-logger';
@@ -15,6 +15,7 @@ export interface OfflineDocument {
   synced: boolean;
   createdAt: Date;
   uid: string;
+  syncId?: string;
   operation?: 'create' | 'update' | 'delete';
 }
 
@@ -23,9 +24,28 @@ export interface OfflineDocument {
 })
 export class OfflineDocumentService {
   private firestore = inject(Firestore);
-  private indexedDBService = inject(IndexedDBService);
+  private sqliteService = inject(SqliteStorageService);
   private securityService = inject(FirestoreSecurityService);
   private logger = inject(LoggerService);
+  private syncPromise: Promise<{ synced: number; failed: number }> | null = null;
+
+  constructor() {
+    if (typeof window !== 'undefined') {
+      window.addEventListener('online', () => {
+        void this.syncOfflineDocuments().catch(error => {
+          this.logger.error('Automatic offline sync failed', { area: 'offline' }, error);
+        });
+      });
+
+      if (navigator.onLine) {
+        window.setTimeout(() => {
+          void this.syncOfflineDocuments().catch(error => {
+            this.logger.error('Startup offline sync failed', { area: 'offline' }, error);
+          });
+        }, 0);
+      }
+    }
+  }
 
   /**
    * Create document with offline/online hybrid approach - ALWAYS pre-generate ID
@@ -38,7 +58,7 @@ export class OfflineDocumentService {
       console.log('🔄 OfflineDocumentService.createDocument starting for:', collectionName);
       console.log('📦 Input data:', data);
       
-      // Add security fields (works online/offline with IndexedDB)
+      // Add security fields (works online/offline with SQLite)
       let secureData;
       try {
         secureData = await this.securityService.addSecurityFields(data);
@@ -201,7 +221,7 @@ export class OfflineDocumentService {
         uid: data.uid || 'unknown'
       };
 
-      // Store in IndexedDB for later sync
+      // Store in SQLite for later sync
       await this.storeOfflineDocument(offlineDoc);
       
       this.logger.info('Offline document created', { area: collectionName, payload: { docId: documentId } });
@@ -234,20 +254,13 @@ export class OfflineDocumentService {
   }
 
   /**
-   * Store offline document in IndexedDB
+   * Store offline document in SQLite
    */
   private async storeOfflineDocument(offlineDoc: OfflineDocument): Promise<void> {
-  this.logger.debug('Storing offline document', { area: offlineDoc.collectionName, payload: { docId: offlineDoc.id } });
-    
+    this.logger.debug('Storing offline document', { area: offlineDoc.collectionName, payload: { docId: offlineDoc.id } });
+
     try {
-      // Store in IndexedDB using existing service
-      // For now, we'll use a simple localStorage approach as fallback
-      // TODO: Extend IndexedDBService with pendingDocuments object store
-      
-      const pendingDocs = this.getPendingDocumentsFromStorage();
-      pendingDocs.push(offlineDoc);
-      localStorage.setItem('pendingDocuments', JSON.stringify(pendingDocs));
-      
+      await this.sqliteService.saveOfflineDocument(offlineDoc);
       this.logger.dbSuccess('Offline document stored locally', { api: 'offline.store', area: offlineDoc.collectionName, collectionPath: offlineDoc.collectionName, docId: offlineDoc.id, payload: offlineDoc.data });
     } catch (error) {
       this.logger.error('Failed to store offline document', { area: offlineDoc.collectionName, payload: { docId: offlineDoc.id } }, error);
@@ -256,12 +269,11 @@ export class OfflineDocumentService {
   }
 
   /**
-   * Get pending documents from localStorage (temporary solution)
+   * Get pending documents from the app's queued offline storage.
    */
-  private getPendingDocumentsFromStorage(): OfflineDocument[] {
+  private async getPendingDocumentsFromStorage(): Promise<OfflineDocument[]> {
     try {
-      const stored = localStorage.getItem('pendingDocuments');
-      return stored ? JSON.parse(stored) : [];
+      return await this.sqliteService.getPendingDocuments();
     } catch (error) {
       this.logger.error('Failed to get pending documents', { area: 'offline' }, error);
       return [];
@@ -300,10 +312,7 @@ export class OfflineDocumentService {
   async deleteDocument(collectionName: string, documentId: string): Promise<void> {
     try {
       if (this.isTempId(documentId)) {
-        // Remove from pending offline documents if exists
-        const pendingDocs = this.getPendingDocumentsFromStorage();
-        const next = pendingDocs.filter(d => !(d.id === documentId && d.collectionName === collectionName));
-        localStorage.setItem('pendingDocuments', JSON.stringify(next));
+        await this.sqliteService.deleteOfflineDocument(documentId, collectionName);
         this.logger.dbSuccess('Removed pending offline document (delete temp)', {
           api: 'offline.queue.delete',
           area: collectionName,
@@ -430,13 +439,13 @@ export class OfflineDocumentService {
   this.logger.debug('Updating document offline', { area: collectionName, payload: { docId: documentId } });
     
     try {
-      const pendingDocs = this.getPendingDocumentsFromStorage();
+      const pendingDocs = await this.getPendingDocumentsFromStorage();
       const docIndex = pendingDocs.findIndex(doc => doc.id === documentId && doc.collectionName === collectionName);
       
       if (docIndex >= 0) {
         // Ensure offline updates contain an ISO updatedAt so UI can show recency
         pendingDocs[docIndex].data = { ...pendingDocs[docIndex].data, ...updates };
-        localStorage.setItem('pendingDocuments', JSON.stringify(pendingDocs));
+        await this.sqliteService.saveOfflineDocument(pendingDocs[docIndex]);
         this.logger.dbSuccess('Queued offline document update', {
           api: 'offline.queue.update',
           area: collectionName,
@@ -476,14 +485,30 @@ export class OfflineDocumentService {
       return { synced: 0, failed: 0 };
     }
 
+    if (this.syncPromise) {
+      return this.syncPromise;
+    }
+
+    this.syncPromise = this.performOfflineDocumentSync();
+    try {
+      return await this.syncPromise;
+    } finally {
+      this.syncPromise = null;
+    }
+  }
+
+  private async performOfflineDocumentSync(): Promise<{ synced: number; failed: number }> {
+
     this.logger.info('Starting offline document sync', { area: 'offline' });
     
   let synced = 0;
   let failed = 0;
 
     try {
-  const pendingDocs = this.getPendingDocumentsFromStorage();
-  const unsyncedDocs = pendingDocs.filter(doc => !doc.synced);
+  const pendingDocs = await this.getPendingDocumentsFromStorage();
+  const unsyncedDocs = pendingDocs
+    .filter(doc => !doc.synced)
+    .sort((left, right) => Number(right.collectionName === 'orders') - Number(left.collectionName === 'orders'));
 
       for (const offlineDoc of unsyncedDocs) {
         try {
@@ -495,12 +520,31 @@ export class OfflineDocumentService {
             (offlineDoc.data as any)['createdAt'] = new Date();
             (offlineDoc.data as any)['updatedAt'] = new Date();
           } catch {}
-          // Create document online with real Firestore ID
-          const realDocId = await this.createOnlineDocument(offlineDoc.collectionName, offlineDoc.data);
+          const queuedId = offlineDoc.id;
+          offlineDoc.syncId ||= this.generateFirestoreCompatibleId();
+          const realDocId = offlineDoc.syncId;
+          await this.sqliteService.saveOfflineDocument(offlineDoc);
+          await this.createOnlineDocumentWithId(offlineDoc.collectionName, realDocId, offlineDoc.data);
           
           // Mark as synced
           offlineDoc.synced = true;
-          offlineDoc.id = realDocId; // Update with real ID
+          if (offlineDoc.collectionName === 'orders') {
+            offlineDoc.data._offlineId = queuedId;
+          }
+          offlineDoc.id = realDocId;
+          await this.sqliteService.saveOfflineDocument(offlineDoc);
+          if (queuedId !== realDocId) {
+            await this.sqliteService.deleteOfflineDocument(queuedId, offlineDoc.collectionName);
+          }
+
+          if (offlineDoc.collectionName === 'orders') {
+            for (const relatedDoc of pendingDocs) {
+              if (relatedDoc.data?.orderId === queuedId) {
+                relatedDoc.data.orderId = realDocId;
+                await this.sqliteService.saveOfflineDocument(relatedDoc);
+              }
+            }
+          }
           
           synced++;
           this.logger.info('Document synced', { area: offlineDoc.collectionName, payload: { tempId: offlineDoc.tempId, realId: realDocId } });
@@ -509,9 +553,6 @@ export class OfflineDocumentService {
           failed++;
         }
       }
-
-      // Update storage with synced documents
-      localStorage.setItem('pendingDocuments', JSON.stringify(pendingDocs));
 
       // Process pending deletes
       const pendingDeletes = this.getPendingDeletesFromStorage();
@@ -565,15 +606,15 @@ export class OfflineDocumentService {
   /**
    * Get all pending offline documents (for debugging)
    */
-  getPendingDocuments(): OfflineDocument[] {
+  async getPendingDocuments(): Promise<OfflineDocument[]> {
     return this.getPendingDocumentsFromStorage();
   }
 
   /**
    * Clear all pending documents (for testing)
    */
-  clearPendingDocuments(): void {
-    localStorage.removeItem('pendingDocuments');
+  async clearPendingDocuments(): Promise<void> {
+    await this.sqliteService.clearOfflineDocuments();
     this.logger.info('All pending documents cleared', { area: 'offline' });
   }
 

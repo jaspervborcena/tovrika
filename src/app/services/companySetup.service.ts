@@ -15,7 +15,7 @@ import {
 import { DocumentSnapshot, DocumentData } from 'firebase/firestore';
 import { AuthService } from './auth.service';
 import { OfflineDocumentService } from '../core/services/offline-document.service';
-import { IndexedDBService, OfflineCompany } from '../core/services/indexeddb.service';
+import { SqliteStorageService, OfflineCompany } from '../core/services/sqlite-storage.service';
 import { Company } from '../interfaces/company.interface';
 
 @Injectable({
@@ -38,7 +38,7 @@ export class CompanySetupService {
     private firestore: Firestore,
     private authService: AuthService,
     private offlineDocService: OfflineDocumentService,
-    private indexedDBService: IndexedDBService,
+    private sqliteService: SqliteStorageService,
     private injector: Injector
   ) {
   // Only load companies if user has permissions
@@ -73,9 +73,9 @@ export class CompanySetupService {
             lastSync: new Date()
           } as OfflineCompany;
         });
-        await this.indexedDBService.saveCompanies(offlineCompanies);
+        await this.sqliteService.saveCompanies(offlineCompanies);
       } catch (saveErr) {
-        console.warn('CompanySetupService: Failed to save companies to IndexedDB:', saveErr);
+        console.warn('CompanySetupService: Failed to save companies to SQLite:', saveErr);
       }
     } catch (error) {
       console.error('Error loading companies by ids:', error);

@@ -37,6 +37,38 @@ export function convertLocalToUtc(dateStr: string): Date {
   return localDate;
 }
 
+export function formatLocalDateString(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+export function normalizeLocalDateRange(fromDateStr: string | null | undefined, toDateStr: string | null | undefined): { from: string; to: string } {
+  const normalize = (value: string | null | undefined): string | null => {
+    if (!value || typeof value !== 'string') return null;
+    const trimmed = value.trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return null;
+
+    const date = new Date(`${trimmed}T00:00:00`);
+    if (Number.isNaN(date.getTime())) return null;
+
+    return formatLocalDateString(date);
+  };
+
+  const from = normalize(fromDateStr) ?? normalize(toDateStr) ?? formatLocalDateString(new Date());
+  const to = normalize(toDateStr) ?? from;
+
+  const fromDate = new Date(`${from}T00:00:00`);
+  const toDate = new Date(`${to}T23:59:59.999`);
+
+  if (fromDate.getTime() > toDate.getTime()) {
+    return { from: to, to: from };
+  }
+
+  return { from, to };
+}
+
 /**
  * Converts a date range from device's LOCAL time to UTC
  * Works automatically for any timezone (Philippines UTC+8, US UTC-5, UK UTC+0, etc.)
@@ -45,20 +77,21 @@ export function convertLocalToUtc(dateStr: string): Date {
  * @returns Object with start and end dates in UTC
  */
 export function convertPhilippineDateRangeToUtc(fromDateStr: string, toDateStr: string): { start: Date; end: Date } {
-  const fromParts = fromDateStr.split('-').map(Number);
-  const toParts = toDateStr.split('-').map(Number);
-  
+  const { from, to } = normalizeLocalDateRange(fromDateStr, toDateStr);
+  const fromParts = from.split('-').map(Number);
+  const toParts = to.split('-').map(Number);
+
   // Create dates in device's LOCAL time
   // The Date constructor automatically handles timezone conversion internally
   const start = new Date(fromParts[0], fromParts[1] - 1, fromParts[2], 0, 0, 0, 0);
   const end = new Date(toParts[0], toParts[1] - 1, toParts[2], 23, 59, 59, 999);
-  
+
   // Console log for debugging
   const tzInfo = getDeviceTimezoneInfo();
   console.log(`🌍 Device Timezone: ${tzInfo.name} (UTC${tzInfo.offsetHours >= 0 ? '+' : ''}${tzInfo.offsetHours})`);
-  console.log(`📅 Local dates: ${fromDateStr} to ${toDateStr}`);
+  console.log(`📅 Local dates: ${from} to ${to}`);
   console.log(`🔄 UTC conversion: ${start.toISOString()} to ${end.toISOString()}`);
-  
+
   return { start, end };
 }
 
@@ -98,6 +131,14 @@ export interface SalesSummaryTotals extends SalesOrdersSummary {
   statusBreakdown: Array<{ status: string; count: number; amount: number; totalItems?: number; totalCustomers?: number }>;
   revenue?: { status: string; count: number; amount: number; totalItems?: number; totalCustomers?: number };
   netTotals?: { status: string; count: number; amount: number; totalItems?: number; totalCustomers?: number };
+}
+
+export interface SalesSummaryDetailsPage {
+  orders: Order[];
+  count: number;
+  pageSize: number;
+  pageNumber: number;
+  hasMore: boolean;
 }
 
 const productionSalesOrdersApi = 'https://asia-east1-jasperpos-1dfd5.cloudfunctions.net/get_sales_orders_bq';
@@ -301,6 +342,79 @@ export class BigQueryService {
     const orders = (rows || []).map((order: any) => this.transformApiOrder(order));
     console.log('✅ [Orders API Response] Received', orders.length, 'orders');
     return orders;
+  }
+
+  async getSalesSummaryDetails(
+    storeId: string,
+    from: string,
+    to: string,
+    pageNumber = 1,
+    pageSize = 50
+  ): Promise<SalesSummaryDetailsPage> {
+    const endpoint = environment.api?.salesSummaryDetailsApi;
+    await this.authService.waitForAuth();
+    const token = await this.authService.getFirebaseIdToken(true);
+    if (!token) throw new Error('Sign in before loading sales details');
+    if (!endpoint) throw new Error('Sales summary details API is not configured');
+    if (!storeId || storeId === 'all') throw new Error('A specific store is required');
+
+    const params = new URLSearchParams({
+      storeId,
+      from: from.replace(/-/g, ''),
+      to: to.replace(/-/g, ''),
+      page_number: String(pageNumber),
+      page_size: String(Math.min(pageSize, 100))
+    });
+    const response = await fetch(`${endpoint}?${params.toString()}`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (!response.ok) {
+      throw new Error(`Sales summary details request failed: ${response.status}`);
+    }
+
+    const payload = await response.json();
+    const rows = Array.isArray(payload?.orders) ? payload.orders : [];
+    return {
+      orders: rows.map((order: any) => this.transformApiOrder(order)),
+      count: Number(payload?.count ?? rows.length),
+      pageSize: Number(payload?.page_size ?? Math.min(pageSize, 100)),
+      pageNumber: Number(payload?.page_number ?? pageNumber),
+      hasMore: Boolean(payload?.has_more)
+    };
+  }
+
+  async getSalesSummaryOrderDetails(identifier: { orderId: string } | { invoiceNumber: string }): Promise<Order['items']> {
+    const endpoint = environment.api?.salesSummaryOrderDetailsApi;
+    await this.authService.waitForAuth();
+    const token = await this.authService.getFirebaseIdToken(true);
+    if (!token) throw new Error('Sign in before loading order details');
+    if (!endpoint) throw new Error('Sales summary order details API is not configured');
+
+    const params = new URLSearchParams(
+      'orderId' in identifier
+        ? { orderId: identifier.orderId }
+        : { invoiceNumber: identifier.invoiceNumber }
+    );
+    const response = await fetch(`${endpoint}?${params.toString()}`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (!response.ok) {
+      throw new Error(`Sales summary order details request failed: ${response.status}`);
+    }
+
+    const payload = await response.json();
+    const details = Array.isArray(payload?.details) ? payload.details : [];
+    return details.map((row: any) => ({
+      productId: row.product_id ?? row.productId ?? '',
+      itemCode: row.item_code ?? row.itemCode,
+      productName: row.product_name ?? row.productName ?? row.product ?? '',
+      quantity: Number(row.quantity ?? row.qty ?? 0),
+      price: Number(row.price ?? row.unit_price ?? row.unitPrice ?? 0),
+      total: Number(row.total ?? row.total_amount ?? row.totalAmount ?? 0),
+      vat: Number(row.vat ?? row.vat_amount ?? row.vatAmount ?? 0),
+      discount: Number(row.discount ?? row.discount_amount ?? row.discountAmount ?? 0),
+      isVatExempt: Boolean(row.is_vat_exempt ?? row.isVatExempt ?? row.isVatExempted)
+    }));
   }
 
   async getSalesDashboardAdjustments(storeId: string, from: Date, to: Date, includeAllStatus = false): Promise<any[]> {
@@ -510,8 +624,8 @@ export class BigQueryService {
     const id = apiOrder.order_id || apiOrder.orderId || apiOrder.id || '';
     const dateRaw = apiOrder.updated_at || apiOrder.updatedAt || apiOrder.created_at || apiOrder.createdAt;
     const date = dateRaw ? new Date(dateRaw) : new Date();
-    const gross = Number(apiOrder.gross_amount ?? apiOrder.grossAmount ?? apiOrder.total_amount ?? 0);
-    const net = Number(apiOrder.net_amount ?? apiOrder.netAmount ?? apiOrder.total_amount ?? gross);
+    const gross = Number(apiOrder.gross_amount ?? apiOrder.grossAmount ?? apiOrder.total ?? apiOrder.total_amount ?? 0);
+    const net = Number(apiOrder.net_amount ?? apiOrder.netAmount ?? apiOrder.total ?? apiOrder.total_amount ?? gross);
     const paymentMethod = apiOrder.payment || apiOrder.payment_method || apiOrder.paymentMethod || 'cash';
     const customerInfo = apiOrder.customerInfo || apiOrder.customer_info || {};
     const customerName = customerInfo.fullName || apiOrder.soldTo || apiOrder.customerName || apiOrder.customer_name || 'Walk-in Customer';
@@ -548,13 +662,13 @@ export class BigQueryService {
       logoUrl: apiOrder.logoUrl || '',
       date,
       vatableSales: Number(apiOrder.vatable_sales ?? apiOrder.vatableSales ?? 0),
-      vatAmount: Number(apiOrder.vat_amount ?? apiOrder.vatAmount ?? 0),
+      vatAmount: Number(apiOrder.vat_amount ?? apiOrder.vatAmount ?? apiOrder.vat ?? 0),
       zeroRatedSales: Number(apiOrder.zero_rated_sales ?? apiOrder.zeroRatedSales ?? 0),
       vatExemptAmount: Number(apiOrder.vat_exempt_amount ?? apiOrder.vatExemptAmount ?? 0),
-      discountAmount: Number(apiOrder.discount_amount ?? apiOrder.discountAmount ?? 0),
+      discountAmount: Number(apiOrder.discount_amount ?? apiOrder.discountAmount ?? apiOrder.discount ?? 0),
       grossAmount: gross,
       netAmount: net,
-      totalAmount: Number(apiOrder.total_amount ?? apiOrder.totalAmount ?? net ?? gross),
+      totalAmount: Number(apiOrder.total_amount ?? apiOrder.totalAmount ?? apiOrder.total ?? net ?? gross),
       itemCount,
       items,
       exemptionId: apiOrder.exemptionId || '',
