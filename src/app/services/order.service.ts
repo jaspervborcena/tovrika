@@ -9,7 +9,7 @@ import { AuthService } from './auth.service';
 import { OrdersSellingTrackingService } from './orders-selling-tracking.service';
 import { LoggerService } from '../core/services/logger.service';
 import { FirestoreSecurityService } from '../core/services/firestore-security.service';
-import { IndexedDBService } from '../core/services/indexeddb.service';
+import { SqliteStorageService } from '../core/services/sqlite-storage.service';
 import { toDateValue } from '../core/utils/date-utils';
 import { OrdersSellingTrackingDoc } from '../interfaces/orders-selling-tracking.interface';
 
@@ -28,7 +28,7 @@ export class OrderService {
     private firestore: Firestore,
     private http: HttpClient,
     private securityService: FirestoreSecurityService,
-    private indexedDb: IndexedDBService,
+    private sqlite: SqliteStorageService,
     private ordersSellingTrackingService: OrdersSellingTrackingService,
   ) {}
 
@@ -1031,9 +1031,9 @@ public async restockOrderAndInventoryTransactional(orderId: string, performedBy 
         );
         // Persist a snapshot for offline fallback (include items)
         try {
-          await this.indexedDb.saveSetting(`orders_snapshot_${storeId}`, orders);
+          await this.sqlite.saveSetting(`orders_snapshot_${storeId}`, orders);
         } catch (e) {
-          this.logger.warn('Failed to persist orders snapshot to IndexedDB', { area: 'orders', storeId, payload: { error: String(e) } });
+          this.logger.warn('Failed to persist orders snapshot to SQLite', { area: 'orders', storeId, payload: { error: String(e) } });
         }
         
         // Filter by date range on client side as fallback
@@ -1062,9 +1062,9 @@ public async restockOrderAndInventoryTransactional(orderId: string, performedBy 
   ): Promise<Order[]> {
     try {
       const [queuedOrders, queuedDetails, savedOrders] = await Promise.all([
-        this.indexedDb.getOfflineDocumentsByCollection('orders'),
-        this.indexedDb.getOfflineDocumentsByCollection('orderDetails'),
-        storeId ? this.indexedDb.getSetting(`orders_snapshot_${storeId}`) : Promise.resolve([])
+        this.sqlite.getOfflineDocumentsByCollection('orders'),
+        this.sqlite.getOfflineDocumentsByCollection('orderDetails'),
+        storeId ? this.sqlite.getSetting(`orders_snapshot_${storeId}`) : Promise.resolve([])
       ]);
 
       const itemsByOrderId = new Map<string, any[]>();
@@ -1120,7 +1120,7 @@ public async restockOrderAndInventoryTransactional(orderId: string, performedBy 
     const mergedOrders = this.mergeOrderLists(remoteOrders, localOrders);
     if (storeId && mergedOrders.length > 0) {
       try {
-        await this.indexedDb.saveSetting(`orders_snapshot_${storeId}`, mergedOrders);
+        await this.sqlite.saveSetting(`orders_snapshot_${storeId}`, mergedOrders);
       } catch (error) {
         this.logger.warn('Failed to persist transaction history snapshot', {
           area: 'orders',

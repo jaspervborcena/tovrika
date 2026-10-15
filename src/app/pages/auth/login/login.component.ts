@@ -106,7 +106,7 @@ export class LoginComponent implements OnInit {
           // Online mode - check if user already agreed to policy
           console.log('🔐 Login: Online mode - checking policy agreement status...');
           
-          // Check if user already agreed to policy (from localStorage or IndexedDB)
+          // Check if user already agreed to policy (from localStorage or SQLite)
           const hasAgreedToPolicy = user.isAgreedToPolicy || false;
           console.log('🔐 Login: User policy agreement status:', hasAgreedToPolicy);
           

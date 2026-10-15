@@ -1301,7 +1301,7 @@ export class CompanyProfileComponent {
     const hasAnyCompany = (this.companyService.companies() || []).length > 0;
     if (hasAnyCompany) return false;
 
-    // Fallback safety for edge cases before companies load: check both permission and IndexedDB-backed currentCompanyId
+    // Fallback safety for edge cases before companies load: check both permission and SQLite-backed currentCompanyId
     const permCompanyId = this.getPrimaryCompanyId();
     const userCompanyId = this.authService.getCurrentUser()?.currentCompanyId?.trim();
     const hasCompanyFromPerm = !!(permCompanyId && permCompanyId !== '');

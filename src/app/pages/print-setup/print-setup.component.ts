@@ -3,7 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HeaderComponent } from '../../shared/components/header/header.component';
 import { ContentLayoutComponent } from '../../shared/components/content-layout/content-layout.component';
-import { IndexedDBService } from '../../core/services/indexeddb.service';
+import { SqliteStorageService } from '../../core/services/sqlite-storage.service';
 import { PrintService, PrinterConfig } from '../../services/print.service';
 
 // Re-export PrinterConfig type for components that import from here
@@ -17,7 +17,7 @@ export type { PrinterConfig } from '../../services/print.service';
   styleUrls: ['./print-setup.component.css']
 })
 export class PrintSetupComponent implements OnInit {
-  private indexedDBService = inject(IndexedDBService);
+  private sqliteService = inject(SqliteStorageService);
   private printService = inject(PrintService);
   
   // Printer configurations
@@ -56,12 +56,12 @@ export class PrintSetupComponent implements OnInit {
   async loadPrinters() {
     this.isLoading.set(true);
     try {
-      const savedPrinters = await this.indexedDBService.getSetting('printerConfigs');
+      const savedPrinters = await this.sqliteService.getSetting('printerConfigs');
       if (savedPrinters && Array.isArray(savedPrinters)) {
         this.printers.set(savedPrinters);
       }
     } catch (error) {
-      console.error('Failed to load printers from IndexedDB:', error);
+      console.error('Failed to load printers from SQLite:', error);
       // Try to continue with empty printers array instead of failing completely
       this.printers.set([]);
       
@@ -74,13 +74,13 @@ export class PrintSetupComponent implements OnInit {
 
   async savePrinters() {
     try {
-      await this.indexedDBService.saveSetting('printerConfigs', this.printers());
+      await this.sqliteService.saveSetting('printerConfigs', this.printers());
       // Refresh the print service with the new config
       await this.printService.refreshPrinterConfig();
       
       this.showNotification('Printer settings saved successfully!', 'success');
     } catch (error) {
-      console.error('Failed to save printers to IndexedDB:', error);
+      console.error('Failed to save printers to SQLite:', error);
       
       // Check if it's a storage quota error
       const errorMessage = error instanceof Error ? error.message : String(error);

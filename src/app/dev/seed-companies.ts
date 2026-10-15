@@ -1,10 +1,10 @@
 // Dev-only helper: fetch companies from Firestore using the provided `firestore` instance
-// and write them into IndexedDB via the provided `indexedDBService`.
+// and write them into SQLite via the provided `sqliteService`.
 // This is safe to call only in development and should be invoked after the user
 // has successfully logged in so client auth tokens are available.
 
 import { Firestore, collection, getDocs } from '@angular/fire/firestore';
-import { IndexedDBService } from '../core/services/indexeddb.service';
+import { SqliteStorageService } from '../core/services/sqlite-storage.service';
 import { CompanyService } from '../services/company.service';
 import { AuthService } from '../services/auth.service';
 import { environment } from '../../environments/environment';
@@ -12,13 +12,13 @@ import { Injector, runInInjectionContext } from '@angular/core';
 
 // Accept an optional Injector so callers can run Firestore SDK calls inside
 // Angular's injection context to avoid AngularFire warnings.
-export async function seedCompaniesFromFirestoreIfEmpty(firestore: Firestore, indexedDBService: IndexedDBService, injector?: Injector) {
+export async function seedCompaniesFromFirestoreIfEmpty(firestore: Firestore, sqliteService: SqliteStorageService, injector?: Injector) {
   if (environment.production) return;
   try {
-    console.log('🧪 Dev seeder: checking IndexedDB via IndexedDBService...');
-    const existing = await indexedDBService.getAllCompanies();
+    console.log('🧪 Dev seeder: checking SQLite via SqliteStorageService...');
+    const existing = await sqliteService.getAllCompanies();
     if (existing && existing.length > 0) {
-      console.log('🧪 Dev seeder: companies already present in IndexedDB, skipping seeding.');
+      console.log('🧪 Dev seeder: companies already present in SQLite, skipping seeding.');
       return;
     }
 
@@ -53,7 +53,7 @@ export async function seedCompaniesFromFirestoreIfEmpty(firestore: Firestore, in
                 console.warn('🧪 Dev seeder: CompanyService.getCompanyById failed for id', id, cErr);
               }
             }
-            console.log(`🧪 Dev seeder: fetched ${companies.length} companies via CompanyService. IndexedDB persistence handled by the service.`);
+            console.log(`🧪 Dev seeder: fetched ${companies.length} companies via CompanyService. SQLite persistence handled by the service.`);
             return;
           }
         } catch (svcErr) {
@@ -81,11 +81,11 @@ export async function seedCompaniesFromFirestoreIfEmpty(firestore: Firestore, in
         };
       });
 
-      console.log(`🧪 Dev seeder: fetched ${companies.length} companies. Saving to IndexedDB via IndexedDBService...`);
-      await indexedDBService.initDB();
-      await indexedDBService.saveCompanies(companies);
-      const saved = await indexedDBService.getAllCompanies();
-      console.log(`🧪 Dev seeder: saved ${saved.length} companies to IndexedDB`);
+      console.log(`🧪 Dev seeder: fetched ${companies.length} companies. Saving to SQLite via SqliteStorageService...`);
+      await sqliteService.initDB();
+      await sqliteService.saveCompanies(companies);
+      const saved = await sqliteService.getAllCompanies();
+      console.log(`🧪 Dev seeder: saved ${saved.length} companies to SQLite`);
     } catch (err: any) {
       // Log rich error details to help diagnose permission/token issues
       try {

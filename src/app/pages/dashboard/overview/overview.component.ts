@@ -1,4 +1,4 @@
-﻿import { Component, inject, signal, computed, OnInit, effect } from '@angular/core';
+import { Component, inject, signal, computed, OnInit, effect } from '@angular/core';
 import { environment } from '../../../../environments/environment';
 import { CommonModule } from '@angular/common';
 import { StoreService, Store, dedupeStoresForDropdown, formatStoreDisplayName } from '../../../services/store.service';
@@ -8,7 +8,7 @@ import { Order } from '../../../interfaces/pos.interface';
 import { OrderService } from '../../../services/order.service';
 import { BigQueryService, convertPhilippineDateRangeToUtc, formatLocalDateString, normalizeLocalDateRange } from '../../../services/bigquery.service';
 import { AuthService } from '../../../services/auth.service';
-import { IndexedDBService } from '@app/core/services/indexeddb.service';
+import { SqliteStorageService } from '@app/core/services/sqlite-storage.service';
 import { ExpenseService } from '../../../services/expense.service';
 import { ExpenseLog } from '../../../interfaces/expense-log.interface';
 import { OrdersSellingTrackingService } from '../../../services/orders-selling-tracking.service';
@@ -1569,7 +1569,7 @@ export class OverviewComponent implements OnInit {
   private orderService = inject(OrderService);
   private bigQueryService = inject(BigQueryService);
   private authService = inject(AuthService);
-  private indexedDb = inject(IndexedDBService);
+  private sqlite = inject(SqliteStorageService);
   private expenseService = inject(ExpenseService);
   private ordersSellingTrackingService = inject(OrdersSellingTrackingService);
   private firestore = inject(Firestore);

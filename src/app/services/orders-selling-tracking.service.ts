@@ -5,7 +5,7 @@ import { getDocs, getDoc, doc, setDoc, updateDoc, runTransaction, orderBy, limit
 import { toDateValue } from '../core/utils/date-utils';
 import { OfflineDocumentService } from '../core/services/offline-document.service';
 import { NetworkService } from '../core/services/network.service';
-import { IndexedDBService } from '../core/services/indexeddb.service';
+import { SqliteStorageService } from '../core/services/sqlite-storage.service';
 import { OrdersSellingTrackingDoc } from '../interfaces/orders-selling-tracking.interface';
 import { ProductService } from './product.service';
 
@@ -67,7 +67,7 @@ export class OrdersSellingTrackingService {
     private firestore: Firestore,
     private productService: ProductService,
     private networkService: NetworkService,
-    private indexedDBService: IndexedDBService
+    private sqliteService: SqliteStorageService
   ) {}
 
   private async hasTrackingStatus(orderId: string, status: string): Promise<boolean> {

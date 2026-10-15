@@ -230,10 +230,11 @@ Ctrl + Shift + R (Windows)
 Cmd + Shift + R (Mac)
 ```
 
-### Fix 3: Check IndexedDB
+### Fix 3: Check Firebase SDK persistence
 ```
 DevTools → Application → IndexedDB → firebase-*
-Clear all IndexedDB databases if needed
+This is Firebase SDK persistence, separate from the app-managed SQLite cache.
+Only clear Firebase's database when troubleshooting Firestore's cached reads; it does not reset the SQLite cache.
 ```
 
 ### Fix 4: Re-authenticate

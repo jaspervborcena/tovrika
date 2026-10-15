@@ -19,7 +19,7 @@ import { ProductService } from './product.service';
 import { InvoiceService } from './invoice.service';
 import { StoreService } from './store.service';
 import { DeviceService } from './device.service';
-import { IndexedDBService } from '../core/services/indexeddb.service';
+import { SqliteStorageService } from '../core/services/sqlite-storage.service';
 import { FirestoreSecurityService } from '../core/services/firestore-security.service';
 import { OfflineDocumentService } from '../core/services/offline-document.service';
 import { NetworkService } from '../core/services/network.service';
@@ -175,7 +175,7 @@ export class PosService {
     private authService: AuthService,
     private companyService: CompanyService,
     private productService: ProductService,
-    private indexedDBService: IndexedDBService,
+    private sqliteService: SqliteStorageService,
     private securityService: FirestoreSecurityService,
     private ordersSellingTrackingService: OrdersSellingTrackingService,
     private tagsService: TagsService
@@ -185,43 +185,42 @@ export class PosService {
   }
 
   /**
-   * Helper method to get user and company data, with offline fallback to IndexedDB
+   * Helper method to get user and company data, with offline fallback to SQLite
    */
   private async getUserAndCompanyData(): Promise<{ user: any; company: any } | null> {
     let user = this.authService.getCurrentUser();
     let company = await this.companyService.getActiveCompany();
     
-    // If offline or data not available, try IndexedDB
+    // If offline or data not available, try SQLite
     if (!user || !company) {
-      console.log('📱 POS: User or company not in memory, checking IndexedDB...');
+      console.log('📱 POS: User or company not in memory, checking SQLite...');
       
-      // Try to get user from IndexedDB
+      // Try to get user from SQLite
       if (!user) {
-        // Get logged in user from userData store
-        const allUsers = await this.getAllUsersFromIndexedDB();
+        const allUsers = await this.getAllUsersFromSQLite();
         const loggedInUser = allUsers.find((u: any) => u.isLoggedIn === true);
         if (loggedInUser) {
           user = loggedInUser;
-          console.log('📱 POS: Loaded user from IndexedDB:', user?.email);
+          console.log('📱 POS: Loaded user from SQLite:', user?.email);
         }
       }
       
-      // Try to get company from IndexedDB using currentCompanyId
+      // Try to get company from SQLite using currentCompanyId
       if (!company && user) {
         const companyId = user.currentCompanyId || user.permissions?.[0]?.companyId;
         if (companyId) {
-          const companies = await this.indexedDBService.getAllCompanies();
+          const companies = await this.sqliteService.getAllCompanies();
           const foundCompany = companies.find((c: any) => c.id === companyId);
           if (foundCompany) {
             company = foundCompany as any;
-            console.log('📱 POS: Loaded company from IndexedDB:', (company as any)?.companyName || (company as any)?.name);
+            console.log('📱 POS: Loaded company from SQLite:', (company as any)?.companyName || (company as any)?.name);
           }
         }
       }
     }
     
     if (!user || !company) {
-      console.error('❌ POS: User or company not found in memory or IndexedDB');
+      console.error('❌ POS: User or company not found in memory or SQLite');
       return null;
     }
     
@@ -229,25 +228,13 @@ export class PosService {
   }
 
   /**
-   * Helper to get all users from IndexedDB userData store
+   * Get cached users for offline POS recovery.
    */
-  private async getAllUsersFromIndexedDB(): Promise<any[]> {
+  private async getAllUsersFromSQLite(): Promise<any[]> {
     try {
-      const db = (this.indexedDBService as any).db;
-      if (!db) {
-        await this.indexedDBService.initDB();
-      }
-      
-      return new Promise((resolve) => {
-        const transaction = (this.indexedDBService as any).db.transaction(['userData'], 'readonly');
-        const store = transaction.objectStore('userData');
-        const request = store.getAll();
-        
-        request.onsuccess = () => resolve(request.result || []);
-        request.onerror = () => resolve([]);
-      });
+      return await this.sqliteService.getAllUsers();
     } catch (error) {
-      console.error('Error getting users from IndexedDB:', error);
+      console.error('Error getting cached users from SQLite:', error);
       return [];
     }
   }
@@ -387,19 +374,19 @@ export class PosService {
     // Load product tags for the selected store
     await this.loadProductTags(storeId);
     
-    // Save to IndexedDB for persistence
+    // Save to SQLite for persistence
     try {
       const currentUser = this.authService.getCurrentUser();
       if (currentUser?.uid) {
         // Get existing user data and update currentStoreId
-        const existingUserData = await this.indexedDBService.getUserData(currentUser.uid);
+        const existingUserData = await this.sqliteService.getUserData(currentUser.uid);
         if (existingUserData) {
           existingUserData.currentStoreId = storeId;
-          await this.indexedDBService.saveUserData(existingUserData);
+          await this.sqliteService.saveUserData(existingUserData);
         }
       }
     } catch (error) {
-      console.error('⚠️ Failed to save store selection to IndexedDB:', error);
+      console.error('⚠️ Failed to save store selection to SQLite:', error);
     }
     
     // Only clear cart if explicitly requested or if cart is empty
@@ -410,18 +397,18 @@ export class PosService {
     }
   }
 
-  // Load selected store from IndexedDB on service initialization
+  // Load selected store from SQLite on service initialization
   private async loadPersistedStoreSelection(): Promise<void> {
     try {
       const currentUser = this.authService.getCurrentUser();
       if (currentUser?.uid) {
-        const offlineUserData = await this.indexedDBService.getUserData(currentUser.uid);
+        const offlineUserData = await this.sqliteService.getUserData(currentUser.uid);
         if (offlineUserData?.currentStoreId) {
           this.selectedStoreIdSignal.set(offlineUserData.currentStoreId);
         }
       }
     } catch (error) {
-      console.error('⚠️ Failed to load store selection from IndexedDB:', error);
+      console.error('⚠️ Failed to load store selection from SQLite:', error);
     }
   }
 

@@ -1,5 +1,70 @@
 import { Injectable } from '@angular/core';
 import initSqlJs, { Database } from 'sql.js';
+import type { User } from '../../services/auth.service';
+import type { Company } from '../../interfaces/company.interface';
+import type { Store } from '../../interfaces/store.interface';
+
+export interface UserPermission {
+  companyId: string;
+  roleId: string;
+  storeId?: string;
+  status?: 'active' | 'inactive';
+}
+
+export interface OfflineUserData extends User {
+  isLoggedIn: boolean;
+  isAgreedToPolicy: boolean;
+  currentStoreId?: string;
+  permissions: UserPermission[];
+  lastSync: Date;
+}
+
+export interface OfflineProduct {
+  id: string;
+  uid: string;
+  productName: string;
+  description?: string;
+  skuId: string;
+  productCode?: string;
+  unitType: string;
+  category: string;
+  totalStock: number;
+  originalPrice: number;
+  sellingPrice: number;
+  companyId: string;
+  storeId: string;
+  barcodeId?: string;
+  imageUrl?: string;
+  tags?: string[];
+  tagLabels?: string[];
+  isFavorite?: boolean;
+  isVatApplicable: boolean;
+  vatRate?: number;
+  hasDiscount: boolean;
+  discountType: 'percentage' | 'fixed';
+  discountValue: number;
+  status?: string;
+  createdAt?: Date;
+  updatedAt?: Date;
+  lastUpdated: Date;
+}
+
+export interface OfflineOrder {
+  id: string;
+  items: Array<{ productId: string; name: string; price: number; quantity: number }>;
+  total: number;
+  timestamp: Date;
+  storeId: string;
+  synced: boolean;
+}
+
+export interface OfflineCompany extends Omit<Company, 'stores'> {
+  lastSync?: Date;
+}
+
+export interface OfflineStore extends Store {
+  lastSync?: Date;
+}
 
 @Injectable({
   providedIn: 'root'
@@ -39,8 +104,21 @@ export class SqliteStorageService {
     await this.initPromise;
   }
 
+  async initDB(): Promise<void> {
+    await this.init();
+  }
+
   isReady(): boolean {
     return !!this.db;
+  }
+
+  isAvailable(): boolean {
+    return this.isReady();
+  }
+
+  getStatus(): { available: boolean; reason?: string } {
+    const available = this.isReady();
+    return { available, reason: available ? undefined : 'SQLite storage not initialized' };
   }
 
   async saveSetting(key: string, value: any): Promise<void> {
@@ -58,9 +136,21 @@ export class SqliteStorageService {
     return result && 'value' in result ? this.parseJson(String((result as Record<string, unknown>)['value'])) : null;
   }
 
+  async saveLastSync(key: string, isoTimestamp: string): Promise<void> {
+    await this.saveSetting(key, isoTimestamp);
+  }
+
+  async getLastSync(key: string): Promise<string | null> {
+    const value = await this.getSetting(key);
+    return value ? String(value) : null;
+  }
+
   async saveUserData(userData: any): Promise<void> {
     const db = await this.ensureDb();
-    db.run('INSERT OR REPLACE INTO users (uid, data) VALUES (?, ?)', [userData.uid, JSON.stringify(userData)]);
+    await this.setAllUsersInactive();
+    const activeUserData = { ...userData, isLoggedIn: true };
+    db.run('INSERT OR REPLACE INTO users (uid, data) VALUES (?, ?)', [activeUserData.uid, JSON.stringify(activeUserData)]);
+    this.persistDatabase();
   }
 
   async getUserData(uid: string): Promise<any | null> {
@@ -89,9 +179,49 @@ export class SqliteStorageService {
     return users.find((user: any) => user?.isLoggedIn === true) ?? null;
   }
 
+  async getAllUsers(): Promise<any[]> {
+    const db = await this.ensureDb();
+    const users: any[] = [];
+    const stmt = db.prepare('SELECT data FROM users');
+    while (stmt.step()) {
+      const row = stmt.getAsObject();
+      if (row && 'data' in row) {
+        const user = this.parseJson(String((row as Record<string, unknown>)['data']));
+        if (user) users.push(user);
+      }
+    }
+    stmt.free();
+    return users;
+  }
+
+  async setAllUsersInactive(): Promise<void> {
+    const db = await this.ensureDb();
+    for (const user of await this.getAllUsers()) {
+      db.run('UPDATE users SET data = ? WHERE uid = ?', [JSON.stringify({ ...user, isLoggedIn: false }), user.uid]);
+    }
+    this.persistDatabase();
+  }
+
+  async setActiveUser(uid: string): Promise<void> {
+    const db = await this.ensureDb();
+    for (const user of await this.getAllUsers()) {
+      db.run('UPDATE users SET data = ? WHERE uid = ?', [JSON.stringify({ ...user, isLoggedIn: user.uid === uid }), user.uid]);
+    }
+    this.persistDatabase();
+  }
+
+  async saveUserDataAsOnlyUser(userData: OfflineUserData): Promise<void> {
+    const db = await this.ensureDb();
+    db.run('DELETE FROM users');
+    const activeUserData = { ...userData, isLoggedIn: true };
+    db.run('INSERT OR REPLACE INTO users (uid, data) VALUES (?, ?)', [activeUserData.uid, JSON.stringify(activeUserData)]);
+    this.persistDatabase();
+  }
+
   async clearAllUserData(): Promise<void> {
     const db = await this.ensureDb();
     db.run('DELETE FROM users');
+    this.persistDatabase();
   }
 
   async saveOfflineDocument(doc: any): Promise<void> {
@@ -170,6 +300,7 @@ export class SqliteStorageService {
       if (!product?.id) continue;
       db.run('INSERT OR REPLACE INTO products (id, data) VALUES (?, ?)', [product.id, JSON.stringify(product)]);
     }
+    this.persistDatabase();
   }
 
   async getProductsByStore(storeId: string): Promise<any[]> {
@@ -189,9 +320,69 @@ export class SqliteStorageService {
     return products;
   }
 
+  async updateProduct(productId: string, updates: Partial<OfflineProduct>): Promise<void> {
+    const db = await this.ensureDb();
+    const stmt = db.prepare('SELECT data FROM products WHERE id = ?');
+    stmt.bind([productId]);
+    const row = stmt.step() ? stmt.getAsObject() : null;
+    stmt.free();
+    if (!row || !('data' in row)) return;
+    const product = this.parseJson<Record<string, any>>(String((row as Record<string, unknown>)['data']));
+    if (!product) return;
+    db.run('UPDATE products SET data = ? WHERE id = ?', [JSON.stringify({ ...product, ...updates }), productId]);
+    this.persistDatabase();
+  }
+
+  async saveNotification(notification: any): Promise<void> {
+    const db = await this.ensureDb();
+    db.run('INSERT OR REPLACE INTO notifications (id, storeId, data) VALUES (?, ?, ?)', [notification.id, notification.storeId || '', JSON.stringify(notification)]);
+    this.persistDatabase();
+  }
+
+  async getUnreadNotificationsCount(storeId?: string): Promise<number> {
+    return (await this.getNotifications(storeId)).filter(notification => notification.read === false).length;
+  }
+
+  async markNotificationRead(notificationId: string): Promise<void> {
+    const db = await this.ensureDb();
+    const stmt = db.prepare('SELECT data FROM notifications WHERE id = ?');
+    stmt.bind([notificationId]);
+    const row = stmt.step() ? stmt.getAsObject() : null;
+    stmt.free();
+    if (!row || !('data' in row)) return;
+    const notification = this.parseJson<Record<string, any>>(String((row as Record<string, unknown>)['data']));
+    if (!notification) return;
+    const updated = { ...notification, read: true, readAt: new Date() };
+    db.run('UPDATE notifications SET data = ? WHERE id = ?', [JSON.stringify(updated), notificationId]);
+    this.persistDatabase();
+  }
+
+  async getNotificationsByStore(storeId: string): Promise<any[]> {
+    return this.getNotifications(storeId);
+  }
+
+  private async getNotifications(storeId?: string): Promise<any[]> {
+    const db = await this.ensureDb();
+    const notifications: any[] = [];
+    const stmt = storeId
+      ? db.prepare('SELECT data FROM notifications WHERE storeId = ?')
+      : db.prepare('SELECT data FROM notifications');
+    if (storeId) stmt.bind([storeId]);
+    while (stmt.step()) {
+      const row = stmt.getAsObject();
+      if (row && 'data' in row) {
+        const notification = this.parseJson(String((row as Record<string, unknown>)['data']));
+        if (notification) notifications.push(notification);
+      }
+    }
+    stmt.free();
+    return notifications;
+  }
+
   async saveOrder(order: any): Promise<void> {
     const db = await this.ensureDb();
     db.run('INSERT OR REPLACE INTO orders (id, data) VALUES (?, ?)', [order.id, JSON.stringify(order)]);
+    this.persistDatabase();
   }
 
   async getPendingOrders(storeId: string): Promise<any[]> {
@@ -220,6 +411,7 @@ export class SqliteStorageService {
     for (const company of companies) {
       db.run('INSERT OR REPLACE INTO companies (id, data) VALUES (?, ?)', [company.id, JSON.stringify(company)]);
     }
+    this.persistDatabase();
   }
 
   async getAllCompanies(): Promise<any[]> {
@@ -246,8 +438,10 @@ export class SqliteStorageService {
 
     const db = await this.ensureDb();
     for (const store of stores) {
-      db.run('INSERT OR REPLACE INTO stores (id, data) VALUES (?, ?)', [store.id, JSON.stringify(store)]);
+      const storedStore = { ...store, lastSync: new Date() };
+      db.run('INSERT OR REPLACE INTO stores (id, data) VALUES (?, ?)', [store.id, JSON.stringify(storedStore)]);
     }
+    this.persistDatabase();
   }
 
   async getAllStores(): Promise<any[]> {
@@ -267,6 +461,83 @@ export class SqliteStorageService {
     return stores;
   }
 
+  async getStoresByCompanyId(companyId: string): Promise<any[]> {
+    return (await this.getAllStores()).filter(store => store.companyId === companyId);
+  }
+
+  async normalizeExistingCompanies(): Promise<number> {
+    const db = await this.ensureDb();
+    const companies = await this.getAllCompanies();
+    for (const company of companies) {
+      const name = (company as any).name || (company as any).companyName || company.id;
+      const normalized = {
+        ...company,
+        name,
+        slug: (company as any).slug || String(name).toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+        ownerUid: (company as any).ownerUid || (company as any).owner || '',
+        createdAt: this.normalizeDate((company as any).createdAt) || new Date(),
+        updatedAt: this.normalizeDate((company as any).updatedAt) || new Date(),
+        lastSync: new Date()
+      };
+      db.run('UPDATE companies SET data = ? WHERE id = ?', [JSON.stringify(normalized), company.id]);
+    }
+    if (companies.length) this.persistDatabase();
+    return companies.length;
+  }
+
+  async exportAllCompanies(): Promise<any[]> {
+    return (await this.getAllCompanies()).map(company => JSON.parse(JSON.stringify(company)));
+  }
+
+  async getDatabaseSize(): Promise<number> {
+    const db = await this.ensureDb();
+    return db.export().byteLength;
+  }
+
+  async saveProductInventoryBatches(batches: any[]): Promise<void> {
+    const db = await this.ensureDb();
+    for (const batch of batches) {
+      db.run('INSERT OR REPLACE INTO product_inventory (id, productId, storeId, companyId, data) VALUES (?, ?, ?, ?, ?)', [batch.id, batch.productId, batch.storeId, batch.companyId, JSON.stringify(batch)]);
+    }
+    if (batches.length) this.persistDatabase();
+  }
+
+  async getProductInventoryBatches(productId: string, storeId: string, companyId: string): Promise<any[]> {
+    const db = await this.ensureDb();
+    const batches: any[] = [];
+    const stmt = db.prepare('SELECT data FROM product_inventory WHERE productId = ? AND storeId = ? AND companyId = ?');
+    stmt.bind([productId, storeId, companyId]);
+    while (stmt.step()) {
+      const row = stmt.getAsObject();
+      if (row && 'data' in row) {
+        const batch = this.parseJson<any>(String((row as Record<string, unknown>)['data']));
+        if (batch && batch.status === 'active' && batch.quantity > 0) batches.push(batch);
+      }
+    }
+    stmt.free();
+    return batches.sort((a, b) => this.toTimestamp(a.createdAt) - this.toTimestamp(b.createdAt));
+  }
+
+  async updateProductInventoryBatch(batchId: string, updates: Record<string, unknown>): Promise<void> {
+    const db = await this.ensureDb();
+    const stmt = db.prepare('SELECT data FROM product_inventory WHERE id = ?');
+    stmt.bind([batchId]);
+    const row = stmt.step() ? stmt.getAsObject() : null;
+    stmt.free();
+    if (!row || !('data' in row)) return;
+    const batch = this.parseJson<Record<string, any>>(String((row as Record<string, unknown>)['data']));
+    if (!batch) return;
+    const updated = { ...batch, ...updates };
+    db.run('UPDATE product_inventory SET productId = ?, storeId = ?, companyId = ?, data = ? WHERE id = ?', [updated['productId'], updated['storeId'], updated['companyId'], JSON.stringify(updated), batchId]);
+    this.persistDatabase();
+  }
+
+  async clearProductInventory(): Promise<void> {
+    const db = await this.ensureDb();
+    db.run('DELETE FROM product_inventory');
+    this.persistDatabase();
+  }
+
   async getStoreById(id: string): Promise<any | null> {
     const db = await this.ensureDb();
     const stmt = db.prepare('SELECT data FROM stores WHERE id = ?');
@@ -278,7 +549,7 @@ export class SqliteStorageService {
 
   async clearAllData(): Promise<void> {
     const db = await this.ensureDb();
-    for (const table of ['users', 'products', 'orders', 'settings', 'companies', 'stores', 'offline_documents']) {
+    for (const table of ['users', 'products', 'orders', 'settings', 'companies', 'stores', 'notifications', 'product_inventory', 'offline_documents']) {
       db.run(`DELETE FROM ${table}`);
     }
     this.persistDatabase();
@@ -308,6 +579,7 @@ export class SqliteStorageService {
         db.run('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)', [row.key, row.value]);
       }
     }
+    this.persistDatabase();
   }
 
   private ensureSchema(): void {
@@ -322,12 +594,30 @@ export class SqliteStorageService {
       'CREATE TABLE IF NOT EXISTS orders (id TEXT PRIMARY KEY, data TEXT NOT NULL)',
       'CREATE TABLE IF NOT EXISTS companies (id TEXT PRIMARY KEY, data TEXT NOT NULL)',
       'CREATE TABLE IF NOT EXISTS stores (id TEXT PRIMARY KEY, data TEXT NOT NULL)',
+      'CREATE TABLE IF NOT EXISTS notifications (id TEXT PRIMARY KEY, storeId TEXT NOT NULL, data TEXT NOT NULL)',
+      'CREATE TABLE IF NOT EXISTS product_inventory (id TEXT PRIMARY KEY, productId TEXT NOT NULL, storeId TEXT NOT NULL, companyId TEXT NOT NULL, data TEXT NOT NULL)',
       'CREATE TABLE IF NOT EXISTS offline_documents (id TEXT NOT NULL, collectionName TEXT NOT NULL, data TEXT NOT NULL, uid TEXT, synced INTEGER NOT NULL DEFAULT 0, createdAt TEXT, isOffline INTEGER NOT NULL DEFAULT 0, operation TEXT, PRIMARY KEY(id, collectionName))'
     ];
 
     for (const statement of schema) {
       this.db.run(statement);
     }
+  }
+
+  private normalizeDate(value: any): Date | undefined {
+    if (!value && value !== 0) return undefined;
+    if (value instanceof Date) return value;
+    if (typeof value?.toDate === 'function') return value.toDate();
+    if (typeof value === 'object' && typeof value.seconds === 'number') {
+      return new Date(value.seconds * 1000 + Math.floor((value.nanoseconds || 0) / 1_000_000));
+    }
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? undefined : date;
+  }
+
+  private toTimestamp(value: any): number {
+    const date = this.normalizeDate(value);
+    return date?.getTime() ?? 0;
   }
 
   private migrateLegacyOfflineDocuments(): void {

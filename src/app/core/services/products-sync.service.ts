@@ -1,13 +1,13 @@
 import { Injectable, inject, Injector, runInInjectionContext } from '@angular/core';
 import { Firestore, collection, query, where, getDocs, onSnapshot, Timestamp } from '@angular/fire/firestore';
-import { IndexedDBService, OfflineProduct } from './indexeddb.service';
+import { SqliteStorageService, OfflineProduct } from './sqlite-storage.service';
 import { LoggerService } from './logger.service';
 // Client-side logging disabled for products sync. Server-side logging should be handled in Cloud Functions.
 
 @Injectable({ providedIn: 'root' })
 export class ProductsSyncService {
   private firestore = inject(Firestore);
-  private indexedDb = inject(IndexedDBService);
+  private sqlite = inject(SqliteStorageService);
   private injector = inject(Injector);
   // Use centralized LoggerService so logs include authenticated uid/company/store via context provider
   private logger = inject(LoggerService);
@@ -81,12 +81,12 @@ export class ProductsSyncService {
           });
 
           if (toSave.length > 0) {
-            await this.indexedDb.saveProducts(toSave);
+            await this.sqlite.saveProducts(toSave);
             // update last sync
             const key = this.lastSyncKey(storeId, companyId);
-            await this.indexedDb.saveLastSync(key, new Date().toISOString());
+            await this.sqlite.saveLastSync(key, new Date().toISOString());
             // Optionally trigger a lightweight UI refresh; productService currently uses its own sources.
-            // We'll log the event and leave UI update to components reading from IndexedDB.
+            // We'll log the event and leave UI update to components reading from SQLite.
             this.logger.dbSuccess('ProductsSyncService: saved products snapshot', { storeId, companyId, payload: { saved: toSave.length } });
           }
         } catch (e) {
@@ -112,7 +112,7 @@ export class ProductsSyncService {
     const runner = async () => {
       try {
         const key = this.lastSyncKey(storeId, companyId);
-        const lastIso = await this.indexedDb.getLastSync(key);
+        const lastIso = await this.sqlite.getLastSync(key);
         const lastTs = lastIso ? Timestamp.fromDate(new Date(lastIso)) : Timestamp.fromDate(new Date(0));
 
         const productsRef = collection(this.firestore as any, 'products');
@@ -158,13 +158,13 @@ export class ProductsSyncService {
           });
 
           if (toSave.length > 0) {
-            await this.indexedDb.saveProducts(toSave);
+            await this.sqlite.saveProducts(toSave);
             const key = this.lastSyncKey(storeId, companyId);
-            await this.indexedDb.saveLastSync(key, new Date().toISOString());
+            await this.sqlite.saveLastSync(key, new Date().toISOString());
             this.logger.dbSuccess('ProductsSyncService: polled and saved products', { companyId, storeId, payload: { saved: toSave.length } });
             // Create a technical notification for background sync (persisted locally)
             try {
-              await this.indexedDb.saveNotification({
+              await this.sqlite.saveNotification({
                 id: `tech-${Date.now()}-${Math.random().toString(36).slice(2,7)}`,
                 type: 'technical',
                 title: 'Products updated',

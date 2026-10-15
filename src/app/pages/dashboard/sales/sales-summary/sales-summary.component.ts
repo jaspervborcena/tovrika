@@ -6,7 +6,7 @@ import { BigQueryService, convertPhilippineDateRangeToUtc } from '../../../../se
 import { AuthService } from '../../../../services/auth.service';
 import { StoreService, Store, dedupeStoresForDropdown, formatStoreDisplayName } from '../../../../services/store.service';
 import { Order as PosOrder, OrderItem } from '../../../../interfaces/pos.interface';
-import { IndexedDBService } from '../../../../core/services/indexeddb.service';
+import { SqliteStorageService } from '../../../../core/services/sqlite-storage.service';
 import { OrdersSellingTrackingService } from '../../../../services/orders-selling-tracking.service';
 import { ProductService } from '../../../../services/product.service';
 import { CategoryService } from '../../../../services/category.service';
@@ -1969,7 +1969,7 @@ export class SalesSummaryComponent implements OnInit {
   private bigQueryService = inject(BigQueryService);
   private authService = inject(AuthService);
   private storeService = inject(StoreService);
-  private indexedDb = inject(IndexedDBService);
+  private sqlite = inject(SqliteStorageService);
   private ordersSellingTrackingService = inject(OrdersSellingTrackingService);
   private productService = inject(ProductService);
   private categoryService = inject(CategoryService);
@@ -2269,7 +2269,7 @@ export class SalesSummaryComponent implements OnInit {
     this.ensureDateOrder();
     console.log('📌 Dates ensured, calling loadSalesData()');
 
-    // Always use API for sales summary (BigQuery-backed). Save snapshot to IndexedDB after fetch.
+    // Always use API for sales summary (BigQuery-backed). Save snapshot to SQLite after fetch.
     this.dataSource.set('api');
     await this.loadSalesData();
   }
@@ -2401,14 +2401,14 @@ export class SalesSummaryComponent implements OnInit {
       this.apiHasMore.set(hasMoreApiOrders);
       try {
         if (orders && orders.length > 0) {
-          await this.indexedDb.saveSetting(`orders_snapshot_${storeId}`, orders);
+          await this.sqlite.saveSetting(`orders_snapshot_${storeId}`, orders);
         }
       } catch (saveErr) {
-        console.warn('Failed to save orders snapshot to IndexedDB', saveErr);
+        console.warn('Failed to save orders snapshot to SQLite', saveErr);
       }
       if (!orders || orders.length === 0) {
         try {
-          const saved: any[] = await this.indexedDb.getSetting(`orders_snapshot_${storeId}`);
+          const saved: any[] = await this.sqlite.getSetting(`orders_snapshot_${storeId}`);
           if (saved && Array.isArray(saved) && saved.length > 0) {
             orders = saved.filter((o: any) => {
               const created = o.createdAt ? new Date(o.createdAt) : null;
@@ -2417,7 +2417,7 @@ export class SalesSummaryComponent implements OnInit {
             }) as Order[];
           }
         } catch (dbErr) {
-          console.warn('📦 Failed to read orders snapshot from IndexedDB:', dbErr);
+          console.warn('📦 Failed to read orders snapshot from SQLite:', dbErr);
         }
       }
       const filteredOrders = orders || [];

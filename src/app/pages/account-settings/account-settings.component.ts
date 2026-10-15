@@ -5,7 +5,7 @@ import { HeaderComponent } from '../../shared/components/header/header.component
 import { ContentLayoutComponent } from '../../shared/components/content-layout/content-layout.component';
 import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../shared/components/confirmation-dialog/confirmation-dialog.component';
 import { AuthService, User } from '../../services/auth.service';
-import { IndexedDBService } from '../../core/services/indexeddb.service';
+import { SqliteStorageService } from '../../core/services/sqlite-storage.service';
 import { CompanyService } from '../../services/company.service';
 import { environment } from '../../../environments/environment';
 
@@ -26,7 +26,7 @@ interface PermissionDisplay {
 })
 export class AccountSettingsComponent implements OnInit {
   private authService = inject(AuthService);
-  private indexedDBService = inject(IndexedDBService);
+  private sqliteService = inject(SqliteStorageService);
   private companyService = inject(CompanyService);
   
   // App version from environment
@@ -75,29 +75,29 @@ export class AccountSettingsComponent implements OnInit {
       console.log('🔄 Processing permission:', permission);
       
       try {
-        // Fetch company details via CompanyService (will persist snapshot to IndexedDB)
+        // Fetch company details via CompanyService (will persist snapshot to SQLite)
         console.log('🏢 Fetching company via CompanyService:', permission.companyId);
         const company = await this.companyService.getCompanyById(permission.companyId);
         console.log('🏢 Company data (from CompanyService):', company);
         const companyName = company?.name || permission.companyId;
         console.log('🏢 Company name:', companyName);
 
-        // Fetch store name from IndexedDB if storeId exists
+        // Fetch store name from SQLite if storeId exists
         let storeName: string | undefined;
         if (permission.storeId) {
-          console.log('🏪 Fetching store from IndexedDB:', permission.storeId);
+          console.log('🏪 Fetching store from SQLite:', permission.storeId);
           try {
-            const store = await this.indexedDBService.getStoreById(permission.storeId);
+            const store = await this.sqliteService.getStoreById(permission.storeId);
             console.log('🏪 Store data:', store);
             if (store) {
               storeName = store.storeName;
               console.log('🏪 Store name:', storeName);
             } else {
-              console.warn('⚠️ Store not found in IndexedDB:', permission.storeId);
+              console.warn('⚠️ Store not found in SQLite:', permission.storeId);
               storeName = 'Store not found';
             }
-          } catch (indexedDBError) {
-            console.error('❌ Failed to fetch store from IndexedDB:', indexedDBError);
+          } catch (sqliteError) {
+            console.error('❌ Failed to fetch store from SQLite:', sqliteError);
             storeName = 'Error loading store';
             // Continue with the flow instead of breaking
           }

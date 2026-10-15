@@ -1,23 +1,23 @@
 import { Injectable, inject } from '@angular/core';
 import { FirestoreSecurityService } from './firestore-security.service';
-import { IndexedDBService } from './indexeddb.service';
+import { SqliteStorageService } from './sqlite-storage.service';
 
 @Injectable({
   providedIn: 'root'
 })
 export class UidIntegrationTestService {
   private securityService = inject(FirestoreSecurityService);
-  private indexedDBService = inject(IndexedDBService);
+  private sqliteService = inject(SqliteStorageService);
 
   /**
-   * Test the IndexedDB UID integration functionality
+   * Test the SQLite UID integration functionality
    */
   async testUidIntegration(): Promise<void> {
     console.log('🧪 Starting UID Integration Test...');
 
     try {
       // Test 1: Check if we can get UID
-      console.log('📋 Test 1: Getting UID from IndexedDB userData...');
+      console.log('📋 Test 1: Getting UID from SQLite userData...');
       const uid = await this.securityService.getCurrentUserUID();
       console.log('✅ UID retrieved:', uid);
 
@@ -26,10 +26,10 @@ export class UidIntegrationTestService {
         return;
       }
 
-      // Test 2: Check IndexedDB userData directly
-      console.log('📋 Test 2: Checking IndexedDB userData directly...');
-      const userData = await this.indexedDBService.getCurrentUser();
-      console.log('✅ UserData from IndexedDB:', {
+      // Test 2: Check SQLite userData directly
+      console.log('📋 Test 2: Checking SQLite userData directly...');
+      const userData = await this.sqliteService.getCurrentUser();
+      console.log('✅ UserData from SQLite:', {
         uid: userData?.uid,
         email: userData?.email,
         hasPermissions: !!userData?.permissions?.length

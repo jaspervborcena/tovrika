@@ -50,6 +50,33 @@ describe('SqliteStorageService', () => {
     expect(user?.email).toBe('test@example.com');
   });
 
+  it('updates active user state in SQLite', async () => {
+    await service.saveUserData({ uid: 'u-1', isLoggedIn: true } as any);
+    await service.saveUserData({ uid: 'u-2', isLoggedIn: true } as any);
+
+    expect((await service.getAllUsers()).find(user => user.uid === 'u-1')?.isLoggedIn).toBeFalse();
+    expect((await service.getAllUsers()).find(user => user.uid === 'u-2')?.isLoggedIn).toBeTrue();
+
+    await service.setActiveUser('u-1');
+
+    expect((await service.getAllUsers()).find(user => user.uid === 'u-1')?.isLoggedIn).toBeTrue();
+    expect((await service.getAllUsers()).find(user => user.uid === 'u-2')?.isLoggedIn).toBeFalse();
+  });
+
+  it('persists notification and product inventory cache operations in SQLite', async () => {
+    await service.saveNotification({ id: 'notice-1', storeId: 'store-1', read: false });
+    await service.saveProductInventoryBatches([
+      { id: 'batch-1', productId: 'product-1', storeId: 'store-1', companyId: 'company-1', status: 'active', quantity: 3, createdAt: '2026-01-02T00:00:00.000Z' },
+      { id: 'batch-2', productId: 'product-1', storeId: 'store-1', companyId: 'company-1', status: 'active', quantity: 2, createdAt: '2026-01-01T00:00:00.000Z' }
+    ]);
+
+    expect(await service.getUnreadNotificationsCount('store-1')).toBe(1);
+    expect((await service.getProductInventoryBatches('product-1', 'store-1', 'company-1')).map(batch => batch.id)).toEqual(['batch-2', 'batch-1']);
+
+    await service.markNotificationRead('notice-1');
+    expect(await service.getUnreadNotificationsCount('store-1')).toBe(0);
+  });
+
   it('queues offline order-related documents for later sync', async () => {
     const queuedDocs = [
       { id: 'order-1', collectionName: 'orders', data: { id: 'order-1', total: 100 }, uid: 'u-1', synced: false, createdAt: new Date(), isOffline: true },

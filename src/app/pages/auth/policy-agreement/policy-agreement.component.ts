@@ -3,7 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router, NavigationEnd, NavigationError, NavigationCancel } from '@angular/router';
 import { OfflineStorageService } from '../../../core/services/offline-storage.service';
-import { IndexedDBService } from '../../../core/services/indexeddb.service';
+import { SqliteStorageService } from '../../../core/services/sqlite-storage.service';
 import { AuthService } from '../../../services/auth.service';
 import { AppConstants } from '../../../shared/enums';
 import { LogoComponent } from '../../../shared/components/logo/logo.component';
@@ -20,7 +20,7 @@ export class PolicyAgreementComponent implements OnInit {
   private offlineStorageService = inject(OfflineStorageService);
   private authService = inject(AuthService);
   private router = inject(Router);
-  private indexedDBService = inject(IndexedDBService);
+  private sqliteService = inject(SqliteStorageService);
 
   // App constants
   readonly appName = AppConstants.APP_NAME;
@@ -171,7 +171,7 @@ export class PolicyAgreementComponent implements OnInit {
     
     console.log('🚀 POLICY AGREEMENT: User authenticated:', currentAuthUser.email);
 
-    // User is authenticated, now ensure IndexedDB is synchronized
+    // User is authenticated, now ensure SQLite is synchronized
     try {
       console.log('📝 Policy Agreement: Ensuring offline storage is synchronized...');
       console.log('📝 Policy Agreement: Current auth user:', currentAuthUser.email);
@@ -188,7 +188,7 @@ export class PolicyAgreementComponent implements OnInit {
       console.log('📝 Policy Agreement: Saved offline user:', offlineUser?.email);
       
       if (!offlineUser) {
-        throw new Error('Failed to save user data to IndexedDB');
+        throw new Error('Failed to save user data to SQLite');
       }
       
       if (offlineUser.uid !== currentAuthUser.uid) {
@@ -256,15 +256,15 @@ export class PolicyAgreementComponent implements OnInit {
         throw new Error('Policy agreement was not saved properly');
       }
 
-      // Persist acceptance flags in IndexedDB settings so the guard can bypass next time
+      // Persist acceptance flags in SQLite settings so the guard can bypass next time
       try {
         const uid = currentAuthUser.uid;
         // Save both flags under settings (TovrikaOfflineDB.settings)
-        await this.indexedDBService.saveSetting(`isPolicyAgree_${uid}`, true);
-        await this.indexedDBService.saveSetting(`isTermsAgree_${uid}`, true);
-        console.log('📝 Policy Agreement: Persisted isPolicyAgree and isTermsAgree in IndexedDB');
+        await this.sqliteService.saveSetting(`isPolicyAgree_${uid}`, true);
+        await this.sqliteService.saveSetting(`isTermsAgree_${uid}`, true);
+        console.log('📝 Policy Agreement: Persisted isPolicyAgree and isTermsAgree in SQLite');
       } catch (flagErr) {
-        console.warn('📝 Policy Agreement: Failed to persist acceptance flags to IndexedDB', flagErr);
+        console.warn('📝 Policy Agreement: Failed to persist acceptance flags to SQLite', flagErr);
       }
       
       // Determine where to redirect based on user status
@@ -380,7 +380,7 @@ export class PolicyAgreementComponent implements OnInit {
           // Set policy agreement to false
           await this.offlineStorageService.updatePolicyAgreement(false);
           
-          console.log('📝 Policy Agreement: Policy agreement set to false in IndexedDB');
+          console.log('📝 Policy Agreement: Policy agreement set to false in SQLite');
         }
         
         // For visitors, navigate to onboarding (their home)
@@ -388,7 +388,7 @@ export class PolicyAgreementComponent implements OnInit {
       } else {
         console.log('🏠 Policy Agreement: User has company access - navigating to public home');
         
-        // If user hasn't agreed to policies, set policy agreement to false in IndexedDB
+        // If user hasn't agreed to policies, set policy agreement to false in SQLite
         if (!this.agreedToTerms() || !this.agreedToPrivacy()) {
           console.log('📝 Policy Agreement: User has not agreed to policies, setting policy agreement to false');
           
@@ -398,7 +398,7 @@ export class PolicyAgreementComponent implements OnInit {
           // Set policy agreement to false
           await this.offlineStorageService.updatePolicyAgreement(false);
           
-          console.log('📝 Policy Agreement: Policy agreement set to false in IndexedDB');
+          console.log('📝 Policy Agreement: Policy agreement set to false in SQLite');
         }
         
         // Navigate to home page
