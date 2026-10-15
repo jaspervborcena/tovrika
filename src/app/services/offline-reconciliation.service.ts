@@ -704,7 +704,9 @@ export class OfflineReconciliationService {
           .filter((line: any) => line.data.batchReconciliationStatus === 'pending');
         if (currentPendingLines.length === 0) return;
 
-        const productIds = Array.from(new Set(currentPendingLines.map((line: any) => String(line.data.productId || ''))));
+        const productIds = Array.from(new Set(currentPendingLines
+          .filter((line: any) => line.data.isStockTracked === true && Number(line.data.quantity || 0) > 0)
+          .map((line: any) => String(line.data.productId || ''))));
         const productSnapshots = new Map<string, any>();
         const batchSnapshots = new Map<string, any>();
         for (const productId of productIds) {
@@ -720,15 +722,29 @@ export class OfflineReconciliationService {
 
         const plannedBatchQuantities = new Map<string, number>();
         const batchWrites = new Map<string, any>();
-        const linePlans: Array<{ ref: any; data: any; allocations: any[] }> = [];
+        const linePlans: Array<{ ref: any; data: any; allocations: any[]; notRequired?: boolean; inventoryTrackingRef?: any }> = [];
         const reservedByProduct = new Map<string, number>();
 
         for (const line of currentPendingLines) {
           const productId = String(line.data.productId || '');
           const quantity = Math.max(0, Number(line.data.quantity || 0));
+          if (line.data.isStockTracked !== true) {
+            linePlans.push({
+              ref: line.ref,
+              data: line.data,
+              allocations: [],
+              notRequired: true,
+              ...(quantity > 0 ? { inventoryTrackingRef: doc(collection(this.firestore, 'inventoryTracking')) } : {})
+            });
+            continue;
+          }
+          if (quantity <= 0) {
+            linePlans.push({ ref: line.ref, data: line.data, allocations: [], notRequired: true });
+            continue;
+          }
+
           const productSnapshot = productSnapshots.get(productId);
           if (!productSnapshot?.exists()) throw new Error(`Product ${productId} not found`);
-          if (quantity <= 0) continue;
 
           reservedByProduct.set(productId, (reservedByProduct.get(productId) || 0) + quantity);
           const batchSnapshot = batchSnapshots.get(productId);
@@ -737,7 +753,11 @@ export class OfflineReconciliationService {
             .filter((batch: any) => batch.data.companyId === line.data.companyId &&
               String(batch.data.status || '').toLowerCase() === 'active' &&
               Number(batch.data.quantity || 0) > 0)
-            .sort((a: any, b: any) => String(a.data.batchId || a.id).localeCompare(String(b.data.batchId || b.id)));
+            .sort((a: any, b: any) => {
+              const receivedAtA = a.data.receivedAt?.toDate?.() ?? new Date(a.data.receivedAt || a.data.createdAt || 0);
+              const receivedAtB = b.data.receivedAt?.toDate?.() ?? new Date(b.data.receivedAt || b.data.createdAt || 0);
+              return receivedAtA.getTime() - receivedAtB.getTime();
+            });
 
           let remaining = quantity;
           const allocations: any[] = [];
@@ -765,7 +785,7 @@ export class OfflineReconciliationService {
             remaining -= deductedQty;
           }
 
-          if (batches.length > 0 && remaining > 0) {
+          if (remaining > 0) {
             throw new Error(`Insufficient batch stock for ${line.data.productName || productId}: short ${remaining}`);
           }
           linePlans.push({ ref: line.ref, data: line.data, allocations });
@@ -782,6 +802,37 @@ export class OfflineReconciliationService {
         }
 
         for (const line of linePlans) {
+          if (line.notRequired) {
+            if (line.inventoryTrackingRef) {
+              transaction.set(line.inventoryTrackingRef as any, {
+                eventType: 'completed',
+                companyId: line.data.companyId,
+                storeId: line.data.storeId,
+                orderId,
+                invoiceNumber: line.data.invoiceNumber || '',
+                productId: line.data.productId,
+                productName: line.data.productName || '',
+                productCode: line.data.productCode || '',
+                skuId: line.data.skuId || '',
+                batchId: null,
+                refId: null,
+                costPrice: Number(line.data.cost || 0),
+                quantity: Number(line.data.quantity || 0),
+                runningBalanceTotalStock: Number(line.data.runningBalanceTotalStock || 0),
+                deductedAt: now,
+                deductedBy: cashierId,
+                createdBy: cashierId,
+                createdAt: now,
+                note: 'Non-stock-tracked sale - no inventory deduction'
+              } as any);
+            }
+            transaction.update(line.ref as any, {
+              batchReconciliationStatus: 'not_required',
+              batchReconciledAt: now
+            } as any);
+            continue;
+          }
+
           const weightedCost = line.allocations.reduce((sum, allocation) => sum + allocation.costPrice * allocation.quantity, 0);
           const allocatedQuantity = line.allocations.reduce((sum, allocation) => sum + allocation.quantity, 0);
           if (line.allocations.length === 0) {

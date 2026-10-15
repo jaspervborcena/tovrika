@@ -1536,7 +1536,8 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
             fulfilledQty,
             actualCost,
             now,
-            trackingRef: doc(collection(this.firestore, 'ordersSellingTracking'))
+            trackingRef: doc(collection(this.firestore, 'ordersSellingTracking')),
+            inventoryTrackingRef: isStockTracked ? null : doc(collection(this.firestore, 'inventoryTracking'))
           });
         }
 
@@ -1605,6 +1606,29 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
             version: environment.version,
             number: (item as any).number
           }) as any);
+          if (!isStockTracked && plan.inventoryTrackingRef) {
+            transaction.set(plan.inventoryTrackingRef as any, this.removeUndefinedFields({
+              eventType: 'completed',
+              companyId: ctx.companyId,
+              storeId: ctx.storeId,
+              orderId: ctx.orderId,
+              invoiceNumber: ctx.invoiceNumber || '',
+              productId: item.productId,
+              productName: item.productName || '',
+              productCode: (item as any).productCode || '',
+              skuId: item.skuId || (item as any).sku || '',
+              batchId: null,
+              refId: null,
+              costPrice: plan.actualCost,
+              quantity: plan.fulfilledQty,
+              runningBalanceTotalStock: plan.previousTotalStock,
+              deductedAt: now,
+              deductedBy: ctx.cashierId,
+              createdBy: ctx.cashierId,
+              createdAt: now,
+              note: 'Non-stock-tracked sale - no inventory deduction'
+            }) as any);
+          }
           transaction.set(plan.lockRef as any, {
             orderId: ctx.orderId,
             itemIndex: plans.indexOf(plan),
