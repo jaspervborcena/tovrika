@@ -30,7 +30,7 @@ import { AuthService } from './auth.service';
 import { ProductSummaryService } from './product-summary.service';
 import { LoggerService } from '../core/services/logger.service';
 import { OfflineDocumentService } from '../core/services/offline-document.service';
-import { IndexedDBService, OfflineProduct } from '../core/services/indexeddb.service';
+import { SqliteStorageService, OfflineProduct } from '../core/services/sqlite-storage.service';
 import { environment } from '../../environments/environment';
 import { BehaviorSubject, Observable } from 'rxjs';
 
@@ -123,7 +123,7 @@ export class ProductService implements OnDestroy {
     private authService: AuthService,
     private http: HttpClient,
     private productSummaryService: ProductSummaryService,
-    private indexedDBService: IndexedDBService
+    private sqliteService: SqliteStorageService
   ) {
     this.initializeNetworkMonitoring();
     this.initializeFirestorePersistence();
@@ -378,14 +378,14 @@ export class ProductService implements OnDestroy {
     } catch (error) {
       console.error('❌ Direct load failed:', error);
       
-      // Only try IndexedDB fallback when actually offline
+      // Only try SQLite fallback when actually offline
       if (!navigator.onLine) {
-        console.log('🔄 Offline detected - attempting IndexedDB fallback after direct load failure...');
+        console.log('🔄 Offline detected - attempting SQLite fallback after direct load failure...');
         try {
-          const offlineProducts = await this.loadProductsFromIndexedDB(storeId);
+          const offlineProducts = await this.loadProductsFromSQLite(storeId);
           
           if (offlineProducts.length > 0) {
-            console.log('✅ IndexedDB fallback successful in direct load:', offlineProducts.length);
+            console.log('✅ SQLite fallback successful in direct load:', offlineProducts.length);
             this.updateCacheState({
               products: offlineProducts,
               isLoading: false,
@@ -395,11 +395,11 @@ export class ProductService implements OnDestroy {
             });
             return; // Success - don't throw
           }
-        } catch (indexedDBError) {
-          console.error('❌ IndexedDB fallback in direct load failed:', indexedDBError);
+        } catch (sqliteError) {
+          console.error('❌ SQLite fallback in direct load failed:', sqliteError);
         }
       } else {
-        console.log('❌ Direct load failed while online - not falling back to IndexedDB');
+        console.log('❌ Direct load failed while online - not falling back to SQLite');
       }
       
       throw error;
@@ -417,16 +417,16 @@ export class ProductService implements OnDestroy {
         throw new Error('storeId is required for loading products');
       }
 
-      // Check if offline - load from IndexedDB instead of Firestore
+      // Check if offline - load from SQLite instead of Firestore
       if (!navigator.onLine) {
-        console.log('📴 Offline mode detected - loading products from IndexedDB...');
+        console.log('📴 Offline mode detected - loading products from SQLite...');
         this.updateCacheState({ isLoading: true, error: null });
         
         try {
-          const offlineProducts = await this.loadProductsFromIndexedDB(storeId);
+          const offlineProducts = await this.loadProductsFromSQLite(storeId);
           
           if (offlineProducts.length > 0) {
-            console.log('✅ Loaded products from IndexedDB in offline mode:', offlineProducts.length);
+            console.log('✅ Loaded products from SQLite in offline mode:', offlineProducts.length);
             this.updateCacheState({
               products: offlineProducts,
               isLoading: false,
@@ -435,7 +435,7 @@ export class ProductService implements OnDestroy {
               hasInitialLoad: true
             });
           } else {
-            console.log('📭 No products found in IndexedDB for store:', storeId);
+            console.log('📭 No products found in SQLite for store:', storeId);
             this.updateCacheState({
               products: [],
               isLoading: false,
@@ -447,7 +447,7 @@ export class ProductService implements OnDestroy {
           this.currentStoreId = storeId;
           return;
         } catch (error) {
-          console.error('❌ Failed to load products from IndexedDB:', error);
+          console.error('❌ Failed to load products from SQLite:', error);
           this.updateCacheState({
             isLoading: false,
             error: 'Failed to load offline products: ' + String(error)
@@ -525,19 +525,19 @@ export class ProductService implements OnDestroy {
           console.log('🔄 Firestore assertion failure detected, using direct load fallback');
           await this.loadProductsDirectly(companyId, storeId);
         } else {
-          // When online, don't fallback to IndexedDB - let Firestore handle it
+          // When online, don't fallback to SQLite - let Firestore handle it
           if (navigator.onLine) {
             console.error('❌ Real-time listener error while online - relying on Firestore offline persistence');
             throw listenerError;
           } else {
-            // Only use IndexedDB fallback when actually offline
-            console.error('❌ Real-time listener error while offline, attempting IndexedDB fallback:', listenerError);
+            // Only use SQLite fallback when actually offline
+            console.error('❌ Real-time listener error while offline, attempting SQLite fallback:', listenerError);
             try {
-              console.log('🔄 Loading products from IndexedDB as fallback...');
-              const offlineProducts = await this.loadProductsFromIndexedDB(storeId);
+              console.log('🔄 Loading products from SQLite as fallback...');
+              const offlineProducts = await this.loadProductsFromSQLite(storeId);
               
               if (offlineProducts.length > 0) {
-                console.log('✅ Successfully loaded products from IndexedDB:', offlineProducts.length);
+                console.log('✅ Successfully loaded products from SQLite:', offlineProducts.length);
                 this.updateCacheState({
                   products: offlineProducts,
                   isLoading: false,
@@ -548,11 +548,11 @@ export class ProductService implements OnDestroy {
                 this.currentStoreId = storeId;
                 return; // Success - exit the function
               } else {
-                console.log('📭 No products found in IndexedDB for store:', storeId);
-                throw listenerError; // Re-throw original error if no IndexedDB data
+                console.log('📭 No products found in SQLite for store:', storeId);
+                throw listenerError; // Re-throw original error if no SQLite data
               }
-            } catch (indexedDBError) {
-              console.error('❌ IndexedDB fallback failed:', indexedDBError);
+            } catch (sqliteError) {
+              console.error('❌ SQLite fallback failed:', sqliteError);
               throw listenerError; // Re-throw original listener error
             }
           }
@@ -562,14 +562,14 @@ export class ProductService implements OnDestroy {
     } catch (error) {
       this.logger.dbFailure('Failed to setup real-time product loading', { area: 'products', storeId }, error);
       
-      // Only try IndexedDB fallback when actually offline
+      // Only try SQLite fallback when actually offline
       if (!navigator.onLine) {
-        console.log('❌ All Firestore methods failed while offline, attempting final IndexedDB fallback...');
+        console.log('❌ All Firestore methods failed while offline, attempting final SQLite fallback...');
         try {
-          const offlineProducts = await this.loadProductsFromIndexedDB(storeId);
+          const offlineProducts = await this.loadProductsFromSQLite(storeId);
           
           if (offlineProducts.length > 0) {
-            console.log('✅ Final IndexedDB fallback successful:', offlineProducts.length, 'products loaded');
+            console.log('✅ Final SQLite fallback successful:', offlineProducts.length, 'products loaded');
             this.updateCacheState({
               products: offlineProducts,
               isLoading: false,
@@ -580,11 +580,11 @@ export class ProductService implements OnDestroy {
             this.currentStoreId = storeId;
             return; // Success!
           }
-        } catch (indexedDBError) {
-          console.error('❌ Final IndexedDB fallback also failed:', indexedDBError);
+        } catch (sqliteError) {
+          console.error('❌ Final SQLite fallback also failed:', sqliteError);
         }
       } else {
-        console.log('❌ Product loading failed while online - not falling back to IndexedDB, letting Firestore handle it');
+        console.log('❌ Product loading failed while online - not falling back to SQLite, letting Firestore handle it');
       }
       
       // If we get here, everything failed
@@ -760,7 +760,7 @@ export class ProductService implements OnDestroy {
       });
 
       // Firestore snapshot with includeMetadataChanges automatically handles caching
-      // No need for custom IndexedDB - Firestore manages its own cache
+      // No need for custom SQLite - Firestore manages its own cache
 
       this.logger.dbSuccess('Products cache updated', { 
         area: 'products', 
@@ -1654,9 +1654,9 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
   }
 
   /**
-   * Save products to IndexedDB for offline access
+   * Save products to SQLite for offline access
    */
-  private async saveProductsToIndexedDB(products: Product[]): Promise<void> {
+  private async saveProductsToSQLite(products: Product[]): Promise<void> {
     try {
       const offlineProducts: OfflineProduct[] = products.map(p => ({
         id: p.id || '',
@@ -1688,21 +1688,21 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
         lastUpdated: p.lastUpdated || p.updatedAt || new Date()
       }));
 
-      await this.indexedDBService.saveProducts(offlineProducts);
-      console.log('✅ Saved products to IndexedDB:', offlineProducts.length);
+      await this.sqliteService.saveProducts(offlineProducts);
+      console.log('✅ Saved products to SQLite:', offlineProducts.length);
     } catch (error) {
-      console.error('❌ Error saving products to IndexedDB:', error);
+      console.error('❌ Error saving products to SQLite:', error);
       throw error;
     }
   }
 
   /**
-   * Load products from IndexedDB when offline
+   * Load products from SQLite when offline
    */
-  private async loadProductsFromIndexedDB(storeId: string): Promise<Product[]> {
+  private async loadProductsFromSQLite(storeId: string): Promise<Product[]> {
     try {
-      console.log('📦 Loading products from IndexedDB for store:', storeId);
-      const offlineProducts = await this.indexedDBService.getProductsByStore(storeId);
+      console.log('📦 Loading products from SQLite for store:', storeId);
+      const offlineProducts = await this.sqliteService.getProductsByStore(storeId);
       
       const products: Product[] = offlineProducts.map((p: any) => {
         // Handle both field name formats:
@@ -1742,10 +1742,10 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
         return mapped;
       });
 
-      console.log('✅ Loaded products from IndexedDB:', products.length);
+      console.log('✅ Loaded products from SQLite:', products.length);
       return products;
     } catch (error) {
-      console.error('❌ Error loading products from IndexedDB:', error);
+      console.error('❌ Error loading products from SQLite:', error);
       return [];
     }
   }

@@ -12,7 +12,7 @@ import { Injectable, computed, signal, inject, runInInjectionContext } from '@an
 import { Router } from '@angular/router';
 import { AccessService } from '../core/services/access.service';
 import { OfflineStorageService } from '../core/services/offline-storage.service';
-import { IndexedDBService } from '../core/services/indexeddb.service';
+import { SqliteStorageService } from '../core/services/sqlite-storage.service';
 import { NetworkService } from '../core/services/network.service';
 import { DataPrefetchService } from '../core/services/data-prefetch.service';
 import { Injector } from '@angular/core';
@@ -98,7 +98,7 @@ export class AuthService {
   private router = inject(Router);
   private accessService = inject(AccessService);
   private offlineStorageService = inject(OfflineStorageService);
-  private indexedDBService = inject(IndexedDBService);
+  private sqliteService = inject(SqliteStorageService);
   private networkService = inject(NetworkService);
   private offlineDocService = inject(OfflineDocumentService);
   // Use Injector to lazily resolve DataPrefetchService at runtime to avoid circular DI
@@ -128,21 +128,21 @@ export class AuthService {
   }
 
   /**
-   * Fetch company documents for the current user and persist them into IndexedDB.
+   * Fetch company documents for the current user and persist them into SQLite.
    * This is a best-effort, non-blocking helper to ensure `TovrikaOfflineDB.companies` is populated.
    */
-  async saveAllCompaniesToIndexedDB(): Promise<void> {
+  async saveAllCompaniesToSQLite(): Promise<void> {
     try {
       const user = this.getCurrentUser();
       if (!user) {
-        this.logger.warn('No authenticated user found when saving companies to IndexedDB', { area: 'auth' });
+        this.logger.warn('No authenticated user found when saving companies to SQLite', { area: 'auth' });
         return;
       }
 
       const permissionList = this.getUserCompanies();
       const companyIds = (permissionList || []).map(p => p.companyId).filter(Boolean);
       if (!companyIds || companyIds.length === 0) {
-        this.logger.debug('No company IDs found for current user; skipping saveAllCompaniesToIndexedDB', { area: 'auth' });
+        this.logger.debug('No company IDs found for current user; skipping saveAllCompaniesToSQLite', { area: 'auth' });
         return;
       }
 
@@ -166,22 +166,22 @@ export class AuthService {
             ownerUid: companyData?.ownerUid || companyData?.uid || user.uid
           });
         } catch (err: any) {
-          this.logger.warn(`Failed to fetch company ${companyId} for IndexedDB save`, { area: 'auth', payload: { error: String(err) } });
+          this.logger.warn(`Failed to fetch company ${companyId} for SQLite save`, { area: 'auth', payload: { error: String(err) } });
         }
       }
 
       if (companies.length > 0) {
         try {
-          await this.indexedDBService.saveCompanies(companies);
-          this.logger.info(`Saved ${companies.length} companies to IndexedDB`, { area: 'auth' });
+          await this.sqliteService.saveCompanies(companies);
+          this.logger.info(`Saved ${companies.length} companies to SQLite`, { area: 'auth' });
         } catch (saveErr) {
-          this.logger.warn('Failed to save companies to IndexedDB', { area: 'auth', payload: { error: String(saveErr) } });
+          this.logger.warn('Failed to save companies to SQLite', { area: 'auth', payload: { error: String(saveErr) } });
         }
       } else {
-        this.logger.debug('No companies fetched to save to IndexedDB', { area: 'auth' });
+        this.logger.debug('No companies fetched to save to SQLite', { area: 'auth' });
       }
     } catch (e) {
-      this.logger.warn('Unexpected error in saveAllCompaniesToIndexedDB', { area: 'auth', payload: { error: String(e) } });
+      this.logger.warn('Unexpected error in saveAllCompaniesToSQLite', { area: 'auth', payload: { error: String(e) } });
     }
   }
 
@@ -325,13 +325,13 @@ export class AuthService {
           this.currentUserSignal.set(userData);
           await this.fetchAndSetUserRoleId(userData);
           
-          // Update IndexedDB with latest user data (including updated permissions/role)
+          // Update SQLite with latest user data (including updated permissions/role)
           if (userData) {
             try {
               await this.offlineStorageService.saveUserSession(userData);
-              this.logger.info('IndexedDB updated with latest user permissions', { area: 'auth', payload: { roleId: userData.roleId, permissions: userData.permissions } });
+              this.logger.info('SQLite updated with latest user permissions', { area: 'auth', payload: { roleId: userData.roleId, permissions: userData.permissions } });
             } catch (offlineErr) {
-              this.logger.warn('Failed to update IndexedDB with latest user data', { area: 'auth', payload: { error: String(offlineErr) } });
+              this.logger.warn('Failed to update SQLite with latest user data', { area: 'auth', payload: { error: String(offlineErr) } });
             }
           }
           
@@ -370,7 +370,7 @@ export class AuthService {
         try {
           const offlineUser = this.offlineStorageService.currentUser();
           if (offlineUser) {
-            this.logger.info('Auth state cleared - preserving IndexedDB offline data (offline-first)', { area: 'auth' });
+            this.logger.info('Auth state cleared - preserving SQLite offline data (offline-first)', { area: 'auth' });
             // Mark user as logged out in the offline store but keep cached data
             try {
               await this.offlineStorageService.logoutUser();
@@ -431,12 +431,12 @@ export class AuthService {
               currentStoreId: this.getCurrentPermission()?.storeId
             };
             
-            this.logger.debug('Login: User session data being saved to IndexedDB', { area: 'auth', payload: { email: userSessionData.email, roleId: userSessionData.roleId, permissions: userSessionData.permissions } });
+            this.logger.debug('Login: User session data being saved to SQLite', { area: 'auth', payload: { email: userSessionData.email, roleId: userSessionData.roleId, permissions: userSessionData.permissions } });
 
             await this.offlineStorageService.saveUserSession(userSessionData);
             this.logger.info('User session saved to offline storage', { area: 'auth' });
 
-            // Dev-only: seed local IndexedDB companies after a successful online login
+            // Dev-only: seed local SQLite companies after a successful online login
               // Diagnostic: log Firebase ID token and claims to help debug Firestore permission errors
               try {
                 const firebaseUser = this.auth.currentUser as any;
@@ -486,7 +486,7 @@ export class AuthService {
                       // "Firebase API called outside injection context" warnings
                       return runInInjectionContext(this.injector, async () => {
                         try {
-                          return (fn as any)(this.firestore, this.indexedDBService, this.injector);
+                          return (fn as any)(this.firestore, this.sqliteService, this.injector);
                         } catch (err) {
                           // If the seeder expects no args, call without parameters
                           try { return (fn as any)(); } catch (e) { return Promise.resolve(); }
@@ -494,7 +494,7 @@ export class AuthService {
                       });
                     } catch (err) {
                       // Fallback: attempt to call without injection context
-                      try { return (fn as any)(this.firestore, this.indexedDBService); } catch { try { return (fn as any)(); } catch { return Promise.resolve(); } }
+                      try { return (fn as any)(this.firestore, this.sqliteService); } catch { try { return (fn as any)(); } catch { return Promise.resolve(); } }
                     }
                   }
                   return Promise.resolve();
@@ -732,7 +732,7 @@ export class AuthService {
   this.logger.info('User signed out, navigating to login', { area: 'auth' });
       // Always navigate to the login page after logout so user can re-authenticate.
       // Do not block navigation based on network status - allow the UI to handle
-      // offline behaviour gracefully and let components use IndexedDB fallbacks.
+      // offline behaviour gracefully and let components use SQLite fallbacks.
       try {
         await this.router.navigate(['/login']);
       } catch (navError) {
@@ -806,7 +806,7 @@ export class AuthService {
       
       await this.offlineDocService.updateDocument('users', currentUser.uid, updateData);
       this.currentUserSignal.set({ ...currentUser, ...updateData });
-      // Also update offline storage so IndexedDB stays in sync with latest user data
+      // Also update offline storage so SQLite stays in sync with latest user data
       try {
         const merged = { ...currentUser, ...updateData } as User & { isAgreedToPolicy?: boolean; currentStoreId?: string };
         // Pass currentStoreId if available from permissions
@@ -921,7 +921,7 @@ export class AuthService {
 
       // Avoid rewriting the offline credential when a successful login uses
       // the same password that is already stored.
-      if (this.indexedDBService.isAvailable()) {
+      if (this.sqliteService.isAvailable()) {
         const existingAuthData = await this.getOfflineAuthByEmail(user.email);
         if (existingAuthData) {
           const existingHash = await this.hashPassword(password, existingAuthData.salt);
@@ -947,11 +947,11 @@ export class AuthService {
       };
 
       // Save the auth data by UID
-      if (this.indexedDBService.isAvailable()) {
-        await this.indexedDBService.saveSetting(`offlineAuth_${user.uid}`, offlineAuthData);
+      if (this.sqliteService.isAvailable()) {
+        await this.sqliteService.saveSetting(`offlineAuth_${user.uid}`, offlineAuthData);
 
         // Save email-to-UID mapping for lookup
-        await this.indexedDBService.saveSetting(`offlineAuth_email_${user.email.toLowerCase()}`, { uid: user.uid });
+        await this.sqliteService.saveSetting(`offlineAuth_email_${user.email.toLowerCase()}`, { uid: user.uid });
 
         // DO NOT automatically set policy flags during login
         // Policy agreement should only be set when user actually agrees in policy-agreement component
@@ -959,7 +959,7 @@ export class AuthService {
 
         this.logger.info('Offline authentication data saved successfully', { area: 'auth' });
       } else {
-        this.logger.warn('IndexedDB unavailable, skipping offline auth save', { area: 'auth' });
+        this.logger.warn('SQLite unavailable, skipping offline auth save', { area: 'auth' });
       }
     } catch (error: any) {
       this.logger.error('Failed to save offline auth data', { area: 'auth' }, error);
@@ -972,7 +972,7 @@ export class AuthService {
   }
 
   /**
-   * Prefetch companies and stores to IndexedDB for offline use
+   * Prefetch companies and stores to SQLite for offline use
    */
   private async prefetchCompaniesAndStores(user: User): Promise<void> {
     try {
@@ -1057,30 +1057,30 @@ export class AuthService {
         console.warn('⚠️ No companies were fetched via Firestore and no getCompaniesForUser cloud function is available; skipping callable fallback.');
       }
 
-      // Save companies to IndexedDB
-      if (companies.length > 0 && this.indexedDBService.isAvailable()) {
-        console.log('💾 Saving companies to IndexedDB...');
+      // Save companies to SQLite
+      if (companies.length > 0 && this.sqliteService.isAvailable()) {
+        console.log('💾 Saving companies to SQLite...');
         try {
-          await this.indexedDBService.saveCompanies(companies);
+          await this.sqliteService.saveCompanies(companies);
         } catch (saveErr) {
-          console.warn('⚠️ Error while saving companies to IndexedDB', saveErr);
+          console.warn('⚠️ Error while saving companies to SQLite', saveErr);
         }
         
         // Verify save and log contents (helpful for debugging empty records)
-        const savedCompanies = this.indexedDBService.isAvailable() ? await this.indexedDBService.getAllCompanies() : [];
+        const savedCompanies = this.sqliteService.isAvailable() ? await this.sqliteService.getAllCompanies() : [];
         if ((savedCompanies?.length || 0) === 0) {
           try {
-            const status = this.indexedDBService.getStatus();
-            console.warn('⚠️ IndexedDB appears empty after save. Status:', status);
+            const status = this.sqliteService.getStatus();
+            console.warn('⚠️ SQLite appears empty after save. Status:', status);
             // Attempt a normalization pass and re-read
-            try { const migrated = await this.indexedDBService.normalizeExistingCompanies(); } catch (migErr) { console.warn('⚠️ normalizeExistingCompanies failed', migErr); }
-            const recheck = await this.indexedDBService.getAllCompanies();
+            try { const migrated = await this.sqliteService.normalizeExistingCompanies(); } catch (migErr) { console.warn('⚠️ normalizeExistingCompanies failed', migErr); }
+            const recheck = await this.sqliteService.getAllCompanies();
           } catch (diagErr) {
             console.warn('⚠️ Diagnostics after saveCompanies failed', diagErr);
           }
         }
         try {
-          const exported = await this.indexedDBService.exportAllCompanies();
+          const exported = await this.sqliteService.exportAllCompanies();
         } catch (err) {
           console.warn('⚠️ Could not export saved companies for debug', err);
         }
@@ -1140,13 +1140,13 @@ export class AuthService {
         }
       }
 
-      // Save stores to IndexedDB
+      // Save stores to SQLite
       if (stores.length > 0) {
-        if (this.indexedDBService.isAvailable()) {
-          await this.indexedDBService.saveStores(stores);
+        if (this.sqliteService.isAvailable()) {
+          await this.sqliteService.saveStores(stores);
           
           // Verify save
-          const savedStores = await this.indexedDBService.getAllStores();
+          const savedStores = await this.sqliteService.getAllStores();
         } else {
         }
       } else {
@@ -1169,19 +1169,19 @@ export class AuthService {
     try {
       // Try to get stored offline auth data by email key
       const emailKey = `offlineAuth_email_${email.toLowerCase()}`;
-      const uidData = await this.indexedDBService.getSetting(emailKey);
+      const uidData = await this.sqliteService.getSetting(emailKey);
       
       if (uidData && uidData.uid) {
         // Get the actual auth data using the UID
-        const authData = await this.indexedDBService.getSetting(`offlineAuth_${uidData.uid}`);
+        const authData = await this.sqliteService.getSetting(`offlineAuth_${uidData.uid}`);
         return authData || null;
       }
       
       return null;
     } catch (error: any) {
-      // Check if IndexedDB is permanently broken
+      // Check if SQLite is permanently broken
       if (error.message?.includes('permanently unavailable')) {
-        this.logger.warn('IndexedDB permanently unavailable - offline login disabled', { area: 'auth' });
+        this.logger.warn('SQLite permanently unavailable - offline login disabled', { area: 'auth' });
         return null;
       }
       this.logger.error('Error getting offline auth by email', { area: 'auth' }, error);
@@ -1249,7 +1249,7 @@ export class AuthService {
       offlineAuthData.lastLogin = new Date();
       offlineAuthData.isOfflineAuthenticated = true;
       
-      await this.indexedDBService.saveSetting(`offlineAuth_${offlineAuthData.userProfile.uid}`, offlineAuthData);
+      await this.sqliteService.saveSetting(`offlineAuth_${offlineAuthData.userProfile.uid}`, offlineAuthData);
 
       // Set current user (simulating Firebase auth state)
       this.currentUserSignal.set(offlineAuthData.userProfile);
@@ -1369,20 +1369,20 @@ export class AuthService {
                 
                 // Prefetch companies and stores for offline use
                 await this.prefetchCompaniesAndStores(user);
-                // Ensure any pre-existing company entries in IndexedDB are normalized
+                // Ensure any pre-existing company entries in SQLite are normalized
                 try {
-                  const migrated = await this.indexedDBService.normalizeExistingCompanies();
-                  console.log(`🚀 LOGIN: Normalized ${migrated} existing companies in IndexedDB`);
+                  const migrated = await this.sqliteService.normalizeExistingCompanies();
+                  console.log(`🚀 LOGIN: Normalized ${migrated} existing companies in SQLite`);
                 } catch (migrateErr) {
-                  this.logger.warn('Failed to normalize existing companies in IndexedDB (non-blocking)', { area: 'auth', payload: { error: String(migrateErr) } });
+                  this.logger.warn('Failed to normalize existing companies in SQLite (non-blocking)', { area: 'auth', payload: { error: String(migrateErr) } });
                 }
 
                 // Ensure companies are explicitly saved into TovrikaOfflineDB (best-effort)
                 try {
-                  await this.saveAllCompaniesToIndexedDB();
-                  this.logger.debug('Ensured companies saved to IndexedDB after login', { area: 'auth' });
+                  await this.saveAllCompaniesToSQLite();
+                  this.logger.debug('Ensured companies saved to SQLite after login', { area: 'auth' });
                 } catch (err) {
-                  this.logger.warn('Failed to ensure companies saved to IndexedDB (non-blocking)', { area: 'auth', payload: { error: String(err) } });
+                  this.logger.warn('Failed to ensure companies saved to SQLite (non-blocking)', { area: 'auth', payload: { error: String(err) } });
                 }
                 
                 this.logger.info('Online login successful, offline data saved', { area: 'auth' });
@@ -1394,12 +1394,12 @@ export class AuthService {
                   this.logger.warn('Prefetch scheduling failed (non-blocking)', { area: 'auth', payload: { error: String(prefetchErr) } });
                 }
 
-                // Dev-only: seed IndexedDB from Firestore after login so client token is available.
+                // Dev-only: seed SQLite from Firestore after login so client token is available.
                 if (!environment.production) {
                   try {
                     const mod = await import('../dev/seed-companies');
                     if (mod?.seedCompaniesFromFirestoreIfEmpty) {
-                      await mod.seedCompaniesFromFirestoreIfEmpty(this.firestore, this.indexedDBService, this.injector);
+                      await mod.seedCompaniesFromFirestoreIfEmpty(this.firestore, this.sqliteService, this.injector);
                     }
                   } catch (seedErr) {
                     this.logger.warn('Dev seeder failed post-login (non-blocking)', { area: 'auth', payload: { error: String(seedErr) } });
@@ -1420,7 +1420,7 @@ export class AuthService {
                   this.logger.warn('Company load (non-blocking) failed', { area: 'auth', payload: { error: String(companyLoadErr) } });
                 }
 
-                // Best-effort: start product sync (realtime + polling) so products are kept in IndexedDB
+                // Best-effort: start product sync (realtime + polling) so products are kept in SQLite
                 try {
                   // Lazily resolve to avoid circular DI
                   const ProductsSyncService = await import('../core/services/products-sync.service').then(m => m.ProductsSyncService as any);
@@ -1433,9 +1433,9 @@ export class AuthService {
                   this.logger.warn('Products sync initialization failed (non-blocking)', { area: 'auth', payload: { error: String(syncErr) } });
                 }
               } catch (offlineSaveError: any) {
-                // Check if IndexedDB is permanently broken
+                // Check if SQLite is permanently broken
                 if (offlineSaveError.message?.includes('permanently unavailable')) {
-                  this.logger.warn('IndexedDB unavailable - continuing without offline storage', { area: 'auth' });
+                  this.logger.warn('SQLite unavailable - continuing without offline storage', { area: 'auth' });
                 } else {
                   this.logger.warn('Failed to save offline credentials', { area: 'auth', payload: { error: String(offlineSaveError) } });
                 }
@@ -1561,21 +1561,21 @@ export class AuthService {
   // Clear offline authentication data
   async clearOfflineAuthData(uid?: string): Promise<void> {
     try {
-      if (uid && this.indexedDBService.isAvailable()) {
+      if (uid && this.sqliteService.isAvailable()) {
         // Clear specific user's auth data
-        const authData = await this.indexedDBService.getSetting(`offlineAuth_${uid}`);
+        const authData = await this.sqliteService.getSetting(`offlineAuth_${uid}`);
         if (authData && authData.email) {
           // Remove email mapping
-          await this.indexedDBService.saveSetting(`offlineAuth_email_${authData.email.toLowerCase()}`, null);
+          await this.sqliteService.saveSetting(`offlineAuth_email_${authData.email.toLowerCase()}`, null);
         }
         // Remove auth data
-        await this.indexedDBService.saveSetting(`offlineAuth_${uid}`, null);
+        await this.sqliteService.saveSetting(`offlineAuth_${uid}`, null);
         // Remove policy/terms flags (cleanup)
         try {
-          await this.indexedDBService.saveSetting(`isPolicyAgree_${uid}`, null);
-          await this.indexedDBService.saveSetting(`isTermsAgree_${uid}`, null);
+          await this.sqliteService.saveSetting(`isPolicyAgree_${uid}`, null);
+          await this.sqliteService.saveSetting(`isTermsAgree_${uid}`, null);
         } catch (flagClearErr) {
-          this.logger.warn('Failed to clear policy/terms flags from IndexedDB', { area: 'auth', payload: { error: String(flagClearErr) } });
+          this.logger.warn('Failed to clear policy/terms flags from SQLite', { area: 'auth', payload: { error: String(flagClearErr) } });
         }
       } else {
         // For clearing all, we would need to implement a different approach
@@ -1589,18 +1589,18 @@ export class AuthService {
   }
 
   /**
-   * Check whether policy and terms flags are accepted for a user (IndexedDB)
+   * Check whether policy and terms flags are accepted for a user (SQLite)
    * If `uid` is omitted, uses currently signed-in user if available.
    */
   async hasAcceptedPolicyAndTerms(uid?: string): Promise<boolean> {
     try {
       const theUid = uid || this.getCurrentUser()?.uid;
       if (!theUid) return false;
-      const policy = await this.indexedDBService.getSetting(`isPolicyAgree_${theUid}`);
-      const terms = await this.indexedDBService.getSetting(`isTermsAgree_${theUid}`);
+      const policy = await this.sqliteService.getSetting(`isPolicyAgree_${theUid}`);
+      const terms = await this.sqliteService.getSetting(`isTermsAgree_${theUid}`);
       return !!policy && !!terms;
     } catch (error) {
-      this.logger.warn('Error reading policy/terms flags from IndexedDB', { area: 'auth', payload: { error: String(error) } });
+      this.logger.warn('Error reading policy/terms flags from SQLite', { area: 'auth', payload: { error: String(error) } });
       return false;
     }
   }

@@ -29,7 +29,7 @@ Your comprehensive online/offline POS system with FIFO inventory management and 
 
 ### **4. Offline Order Management** ✅
 - **OfflineOrderService**: Complete offline order creation and management
-- **Local Storage**: IndexedDB-style local caching with size limits
+- **Local Storage**: SQLite via `sql.js`, persisted as a database image in localStorage
 - **No Inventory Mutation**: Offline orders don't modify inventory
 - **Batch Planning**: FIFO planning for future sync execution
 

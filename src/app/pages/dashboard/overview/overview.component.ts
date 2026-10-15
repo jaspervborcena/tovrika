@@ -1,4 +1,4 @@
-﻿import { Component, inject, signal, computed, OnInit, effect } from '@angular/core';
+import { Component, inject, signal, computed, OnInit, effect } from '@angular/core';
 import { environment } from '../../../../environments/environment';
 import { CommonModule } from '@angular/common';
 import { StoreService, Store, dedupeStoresForDropdown, formatStoreDisplayName } from '../../../services/store.service';
@@ -6,9 +6,9 @@ import { ProductService } from '../../../services/product.service';
 import { Product } from '../../../interfaces/product.interface';
 import { Order } from '../../../interfaces/pos.interface';
 import { OrderService } from '../../../services/order.service';
-import { BigQueryService, convertPhilippineDateRangeToUtc } from '../../../services/bigquery.service';
+import { BigQueryService, convertPhilippineDateRangeToUtc, formatLocalDateString, normalizeLocalDateRange } from '../../../services/bigquery.service';
 import { AuthService } from '../../../services/auth.service';
-import { IndexedDBService } from '@app/core/services/indexeddb.service';
+import { SqliteStorageService } from '@app/core/services/sqlite-storage.service';
 import { ExpenseService } from '../../../services/expense.service';
 import { ExpenseLog } from '../../../interfaces/expense-log.interface';
 import { OrdersSellingTrackingService } from '../../../services/orders-selling-tracking.service';
@@ -1569,7 +1569,7 @@ export class OverviewComponent implements OnInit {
   private orderService = inject(OrderService);
   private bigQueryService = inject(BigQueryService);
   private authService = inject(AuthService);
-  private indexedDb = inject(IndexedDBService);
+  private sqlite = inject(SqliteStorageService);
   private expenseService = inject(ExpenseService);
   private ordersSellingTrackingService = inject(OrdersSellingTrackingService);
   private firestore = inject(Firestore);
@@ -2194,13 +2194,14 @@ export class OverviewComponent implements OnInit {
     if (v === 'date_range') {
       // default dateTo = today, dateFrom = today - 30 days
       const now = new Date();
-      const toIso = now.toISOString().slice(0,10);
+      const toIso = formatLocalDateString(now);
       const from = new Date(now);
       from.setDate(from.getDate() - 30);
-      const fromIso = from.toISOString().slice(0,10);
+      const fromIso = formatLocalDateString(from);
+      const normalized = normalizeLocalDateRange(fromIso, toIso);
       // Only set defaults if not already set by the user
-      if (!this.dateFrom()) this.dateFrom.set(fromIso);
-      if (!this.dateTo()) this.dateTo.set(toIso);
+      if (!this.dateFrom()) this.dateFrom.set(normalized.from);
+      if (!this.dateTo()) this.dateTo.set(normalized.to);
       this.applyPeriodAndLoad();
     } else {
       this.dateFrom.set(null);
@@ -2214,8 +2215,9 @@ export class OverviewComponent implements OnInit {
     const to = this.dateTo();
     if (!from || !to) return;
 
-    const fromIso = from.slice(0, 10);
-    const toIso = to.slice(0, 10);
+    const normalized = normalizeLocalDateRange(from, to);
+    const fromIso = normalized.from;
+    const toIso = normalized.to;
     this.dateFrom.set(fromIso);
     this.dateTo.set(toIso);
     

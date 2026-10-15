@@ -175,7 +175,7 @@ export class HeaderComponent implements OnInit {
         
         // NOTE: Loading products from BigQuery is deferred to product pages/components to
         // avoid background API calls from the header which can trigger Cloud Run 403s.
-        // If you need a products count here, rely on cached/IndexedDB data or the
+        // If you need a products count here, rely on cached/SQLite data or the
         // ProductService signal which is kept in sync by product pages.
         // (this.productService.loadProducts(currentPermission.storeId) intentionally omitted)
         

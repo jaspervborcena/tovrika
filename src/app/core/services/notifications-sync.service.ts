@@ -1,12 +1,12 @@
 import { Injectable, inject } from '@angular/core';
 import { Firestore, collection, query, where, onSnapshot, Timestamp } from '@angular/fire/firestore';
-import { IndexedDBService } from './indexeddb.service';
+import { SqliteStorageService } from './sqlite-storage.service';
 import { AuthService } from '../../services/auth.service';
 
 @Injectable({ providedIn: 'root' })
 export class NotificationsSyncService {
   private firestore = inject(Firestore);
-  private indexedDb = inject(IndexedDBService);
+  private sqlite = inject(SqliteStorageService);
   // Lazily resolve auth to avoid potential circular DI
   private authService = inject(AuthService);
 
@@ -16,7 +16,7 @@ export class NotificationsSyncService {
 
   /**
    * Start listening to Firestore notifications for a specific store.
-   * This will persist notifications to IndexedDB (best-effort).
+   * This will persist notifications to SQLite (best-effort).
    */
   startListening(storeId: string): void {
     try {
@@ -45,9 +45,9 @@ export class NotificationsSyncService {
               metadata: data.metadata || null
             };
 
-            // Persist to IndexedDB (best-effort)
-            this.indexedDb.saveNotification(record).catch((e) => {
-              console.warn('NotificationsSyncService: Failed to save notification to IndexedDB', e);
+            // Persist to SQLite (best-effort)
+            this.sqlite.saveNotification(record).catch((e) => {
+              console.warn('NotificationsSyncService: Failed to save notification to SQLite', e);
             });
           } catch (err) {
             console.warn('NotificationsSyncService: Error processing notification change', err);
@@ -72,7 +72,7 @@ export class NotificationsSyncService {
 
   async getUnreadCount(storeId?: string): Promise<number> {
     try {
-      return await this.indexedDb.getUnreadNotificationsCount(storeId);
+      return await this.sqlite.getUnreadNotificationsCount(storeId);
     } catch (e) {
       console.warn('NotificationsSyncService: getUnreadCount failed', e);
       return 0;
@@ -81,7 +81,7 @@ export class NotificationsSyncService {
 
   async markAsRead(notificationId: string): Promise<void> {
     try {
-      await this.indexedDb.markNotificationRead(notificationId);
+      await this.sqlite.markNotificationRead(notificationId);
     } catch (e) {
       console.warn('NotificationsSyncService: markAsRead failed', e);
     }
@@ -89,7 +89,7 @@ export class NotificationsSyncService {
 
   async getNotificationsForStore(storeId: string) {
     try {
-      return await this.indexedDb.getNotificationsByStore(storeId);
+      return await this.sqlite.getNotificationsByStore(storeId);
     } catch (e) {
       console.warn('NotificationsSyncService: getNotificationsForStore failed', e);
       return [];

@@ -120,8 +120,8 @@ export class OfflineTestComponent {
     this.isLoading = false;
   }
 
-  checkPendingDocuments() {
-    const pending = this.offlineDocService.getPendingDocuments();
+  async checkPendingDocuments() {
+    const pending = await this.offlineDocService.getPendingDocuments();
     this.pendingCount = pending.filter(doc => !doc.synced).length;
     console.log('📋 Pending documents:', pending);
   }
@@ -141,9 +141,9 @@ export class OfflineTestComponent {
     }
   }
 
-  clearPending() {
-    this.offlineDocService.clearPendingDocuments();
-    this.checkPendingDocuments();
+  async clearPending() {
+    await this.offlineDocService.clearPendingDocuments();
+    await this.checkPendingDocuments();
     this.syncResult = 'All pending documents cleared';
   }
 }

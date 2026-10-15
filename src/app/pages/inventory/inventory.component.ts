@@ -13,6 +13,7 @@ import { InventoryService as AppInventoryService } from '../../services/inventor
 import { StoreService, Store, dedupeStoresForDropdown, formatStoreDisplayName } from '../../services/store.service';
 import { AuthService } from '../../services/auth.service';
 import { OrderService } from '../../services/order.service';
+import { formatLocalDateString, normalizeLocalDateRange } from '../../services/bigquery.service';
 
 export interface InventoryRow {
   orderId?: string;
@@ -704,12 +705,21 @@ export class InventoryComponent implements OnInit {
     });
   }
 
+  private applyTodayDefaultRange(): void {
+    const today = formatLocalDateString(new Date());
+    const range = normalizeLocalDateRange(today, today);
+    this.dateFrom = range.from;
+    this.dateTo = range.to;
+  }
+
   async ngOnInit(): Promise<void> {
+    this.selectedPeriod = 'today';
+    this.applyTodayDefaultRange();
     await this.loadStores();
     const currentPermission = this.authService.getCurrentPermission();
     await this.inventoryService.loadRowsForPeriod(
-      this.selectedPeriod, 
-      1, 
+      this.selectedPeriod,
+      1,
       this.selectedStoreId(),
       currentPermission?.companyId,
       this.parseDate(this.dateFrom),
@@ -786,22 +796,22 @@ export class InventoryComponent implements OnInit {
     if (this.selectedPeriod === 'date_range') {
       // default dateTo = today, dateFrom = today - 30 days
       const now = new Date();
-      const toIso = now.toISOString().slice(0, 10);
+      const toIso = formatLocalDateString(now);
       const from = new Date(now);
       from.setDate(from.getDate() - 30);
-      const fromIso = from.toISOString().slice(0, 10);
+      const fromIso = formatLocalDateString(from);
+      const normalized = normalizeLocalDateRange(fromIso, toIso);
       // Only set defaults if not already set by the user
-      if (!this.dateFrom) this.dateFrom = fromIso;
-      if (!this.dateTo) this.dateTo = toIso;
+      if (!this.dateFrom) this.dateFrom = normalized.from;
+      if (!this.dateTo) this.dateTo = normalized.to;
     } else {
-      this.dateFrom = null;
-      this.dateTo = null;
+      this.applyTodayDefaultRange();
     }
     // trigger reload/filter for page 1
     const currentPermission = this.authService.getCurrentPermission();
     this.inventoryService.loadRowsForPeriod(
-      this.selectedPeriod, 
-      1, 
+      this.selectedPeriod,
+      1,
       this.selectedStoreId(),
       currentPermission?.companyId,
       this.parseDate(this.dateFrom),

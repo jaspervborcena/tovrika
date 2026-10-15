@@ -25,7 +25,7 @@ export const policyGuard: CanActivateFn = async (route, state) => {
     return false;
   }
 
-  // If user has previously accepted policy & terms (persisted via IndexedDB), allow.
+  // If user has previously accepted policy & terms (persisted via SQLite), allow.
   try {
     const accepted = await authService.hasAcceptedPolicyAndTerms(currentUser.uid);
     if (accepted) {
@@ -60,12 +60,12 @@ export const policyGuard: CanActivateFn = async (route, state) => {
   }
 
   try {
-    // Fast-path: trust in-memory acceptance first to avoid race with IndexedDB reload
+    // Fast-path: trust in-memory acceptance first to avoid race with SQLite reload
     let userData = offlineStorageService.currentUser();
     let hasAgreedToPolicy = userData?.isAgreedToPolicy ?? false;
 
     if (!hasAgreedToPolicy) {
-      // Slow-path: reload from IndexedDB only if needed
+      // Slow-path: reload from SQLite only if needed
       await offlineStorageService.loadOfflineData();
       userData = offlineStorageService.currentUser();
       hasAgreedToPolicy = userData?.isAgreedToPolicy ?? false;

@@ -486,9 +486,6 @@ export class InvoiceService {
       // Update cache with the generated invoice number
       this.updateStoreCache(storeId, nextInvoiceNo);
       
-      // Generate temporary order ID for offline mode
-      const tempOrderId = `offline-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-      
       // Prepare complete order data
       const currentUser = this.authService.getCurrentUser();
       const currentUserId = currentUser?.uid || 'system';
@@ -535,32 +532,21 @@ export class InvoiceService {
         },
         tableNumber: tableNumber || '', // Add table number at root level
         version: environment.version,
-        _offlineId: tempOrderId,
         _offlineCreated: true
       };
       
-      console.log('📱 Saving offline order to Firestore cache:', tempOrderId);
+      console.log('📱 Saving offline order to local queue');
       console.log('📱 Generated unique invoice number:', nextInvoiceNo);
       
-      // Save to Firestore with offline persistence enabled
-      // Firestore will automatically queue this write and sync when online
-      const ordersRef = collection(this.firestore, 'orders');
-      const orderDocRef = doc(ordersRef); // Pre-generate ID
-      
-      // Fire-and-forget: Queue writes without waiting
-      // Firestore offline persistence handles queuing and sync automatically
-      setDoc(orderDocRef, completeOrderData).catch((error: any) => {
-        console.warn('⚠️ Order save queued (will sync when online):', error);
-      });
-      
-      console.log('✅ Order queued for sync:', orderDocRef.id);
+      const orderId = await this.offlineDocService.createDocument('orders', completeOrderData);
+      console.log('✅ Order queued for sync:', orderId);
       
       // Also save order details if there are items
       if (orderData.items && orderData.items.length > 0) {
         const batches = this.createOrderDetailsBatches(orderData.items, 50);
         for (const batch of batches) {
           const orderDetailsData = {
-            orderId: orderDocRef.id,
+            orderId,
             companyId: orderData.companyId,
             storeId: storeId,
             batchNumber: batch.batchNumber,
@@ -573,12 +559,7 @@ export class InvoiceService {
             _offlineCreated: true
           };
           
-          const orderDetailsRef = collection(this.firestore, 'orderDetails');
-          
-          // Fire-and-forget: Queue writes without waiting
-          addDoc(orderDetailsRef, orderDetailsData).catch((error: any) => {
-            console.warn('⚠️ OrderDetails queued (will sync when online):', error);
-          });
+          await this.offlineDocService.createDocument('orderDetails', orderDetailsData);
         }
         console.log(`✅ ${batches.length} orderDetails batches queued for sync`);
       }
@@ -587,7 +568,7 @@ export class InvoiceService {
       
       return {
         invoiceNumber: nextInvoiceNo,
-        orderId: orderDocRef.id,
+        orderId,
         success: true
       };
       

@@ -1,5 +1,5 @@
-﻿import { Injectable, inject } from '@angular/core';
-import { IndexedDBService } from '../core/services/indexeddb.service';
+import { Injectable, inject } from '@angular/core';
+import { SqliteStorageService } from '../core/services/sqlite-storage.service';
 import { generateESCPOSCommands, encodeEscposStringToBytes } from './escpos-utils';
 
 // Web Bluetooth API types (simplified)
@@ -31,7 +31,7 @@ export interface PaperSizeConfig {
   providedIn: 'root'
 })
 export class PrintServiceWeb {
-  private indexedDBService = inject(IndexedDBService);
+  private sqliteService = inject(SqliteStorageService);
   
   // Bluetooth printer connection state
   private bluetoothDevice: any = null;
@@ -42,7 +42,7 @@ export class PrintServiceWeb {
   private usbPort: any = null;
   private usbConnected = false;
   
-  // Current printer configuration (loaded from IndexedDB)
+  // Current printer configuration (loaded from SQLite)
   private currentPrinterConfig: PrinterConfig | null = null;
   
   // Paper size configurations
@@ -76,11 +76,11 @@ export class PrintServiceWeb {
   }
   
   /**
-   * ≡ƒöº Load default printer configuration from IndexedDB
+   * ≡ƒöº Load default printer configuration from SQLite
    */
   async loadPrinterConfig(): Promise<PrinterConfig | null> {
     try {
-      const printers = await this.indexedDBService.getSetting('printerConfigs') as PrinterConfig[] | null;
+      const printers = await this.sqliteService.getSetting('printerConfigs') as PrinterConfig[] | null;
       if (printers && Array.isArray(printers) && printers.length > 0) {
         // Find default printer or first active printer
         const defaultPrinter = printers.find(p => p.isDefault && p.status === 'active');
@@ -118,7 +118,7 @@ export class PrintServiceWeb {
   }
   
   /**
-   * ≡ƒöä Refresh printer config from IndexedDB
+   * ≡ƒöä Refresh printer config from SQLite
    */
   async refreshPrinterConfig(): Promise<PrinterConfig | null> {
     return this.loadPrinterConfig();

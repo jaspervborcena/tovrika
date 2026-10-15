@@ -4,7 +4,7 @@
 
 The `ProductService` has been completely rewritten to provide:
 - **Real-time updates** using Firestore `onSnapshot()`
-- **Offline support** with IndexedDB persistence
+- **Offline support** with an app-managed SQLite product cache
 - **Signal-based reactive cache** for optimal performance
 - **Automatic synchronization** across all components
 - **Single source of truth** for product data
@@ -17,7 +17,7 @@ The `ProductService` has been completely rewritten to provide:
 - Handles both online and offline state changes
 
 ### ✅ Offline Support
-- Enables Firestore persistence with IndexedDB
+- Firestore uses Firebase SDK persistence separately from the app-managed SQLite cache
 - Falls back to cached data when offline
 - Automatically syncs when connection is restored
 
@@ -187,7 +187,7 @@ export class POSComponent implements OnInit {
 ### ✅ Test Offline Functionality
 - [ ] Test app works offline
 - [ ] Verify data syncs when coming back online
-- [ ] Check IndexedDB persistence
+- [ ] Check the SQLite product cache and Firebase Firestore persistence separately
 
 ### ✅ Remove Deprecated Code
 - [ ] Remove BigQuery-related environment variables in production
@@ -209,14 +209,14 @@ export class POSComponent implements OnInit {
 4. Check browser console for errors
 
 ### Offline mode issues
-1. Verify IndexedDB is enabled in browser
-2. Check if initial data was cached
-3. Test online → offline → online transition
+1. Verify `/assets/sql-wasm.wasm` loads and browser localStorage is available
+2. Check whether the SQLite product snapshot was populated while online
+3. Test online → offline → online transition and confirm Firestore SDK persistence separately
 
 ## Performance Notes
 
 - Service loads maximum 100 products per store
-- Products are cached in memory and IndexedDB
+- Products are cached in memory and the app-managed SQLite database
 - Real-time listener automatically handles additions/updates/deletions
 - Optimistic updates provide immediate UI feedback
 - Network requests are minimized through caching

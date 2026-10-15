@@ -21,7 +21,7 @@ import { CompanyService } from '../../../../services/company.service';
 import { CustomerService } from '../../../../services/customer.service';
 import { ToastService } from '../../../../shared/services/toast.service';
 import { NetworkService } from '../../../../core/services/network.service';
-import { IndexedDBService } from '../../../../core/services/indexeddb.service';
+import { SqliteStorageService } from '../../../../core/services/sqlite-storage.service';
 import { PosUtilsService } from '../../../../services/pos-utils.service';
 import { ErrorMessages, WarningMessages } from '../../../../shared/enums';
 import { OrderService } from '../../../../services/order.service';
@@ -57,7 +57,7 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
   public currencyService = inject(CurrencyService);
   private toastService = inject(ToastService);
   private networkService = inject(NetworkService);
-  private indexedDBService = inject(IndexedDBService);
+  private sqliteService = inject(SqliteStorageService);
   private router = inject(Router);
   private posUtilsService = inject(PosUtilsService);
   private translationService = inject(TranslationService);
@@ -587,14 +587,14 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
           return;
         }
         
-        // Try IndexedDB first as most reliable source
-        const offlineUserData = await this.indexedDBService.getUserData(currentUser.uid);
+        // Try SQLite first as most reliable source
+        const offlineUserData = await this.sqliteService.getUserData(currentUser.uid);
         if (offlineUserData?.permissions && offlineUserData.permissions.length > 0) {
-          console.log('💾 Mobile Found IndexedDB permissions, attempting store recovery...');
+          console.log('💾 Mobile Found SQLite permissions, attempting store recovery...');
           
           const permission = this.getActivePermission(offlineUserData);
           if (permission?.storeId) {
-            console.log('🔄 Mobile Reloading store from IndexedDB permission:', permission.storeId);
+            console.log('🔄 Mobile Reloading store from SQLite permission:', permission.storeId);
             await this.storeService.loadStores([permission.storeId]);
             
             // Verify recovery worked
@@ -645,19 +645,19 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
       // Try multiple recovery methods
       let recovered = false;
       
-      // Method 1: IndexedDB
+      // Method 1: SQLite
       try {
-        const offlineUserData = await this.indexedDBService.getUserData(currentUser.uid);
+        const offlineUserData = await this.sqliteService.getUserData(currentUser.uid);
         if (offlineUserData?.permissions && offlineUserData.permissions.length > 0) {
           const permission = this.getActivePermission(offlineUserData);
           if (permission?.storeId) {
             await this.storeService.loadStores([permission.storeId]);
             recovered = true;
-            console.log('✅ Mobile Stores recovered via IndexedDB method');
+            console.log('✅ Mobile Stores recovered via SQLite method');
           }
         }
       } catch (error) {
-        console.log('⚠️ Mobile IndexedDB recovery method failed:', error);
+        console.log('⚠️ Mobile SQLite recovery method failed:', error);
       }
       
       // Method 2: User roles
@@ -844,9 +844,9 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
           if (userRole?.email) {
             cashierName = userRole.email;
           } else {
-            // Try to get user info from IndexedDB as last resort
+            // Try to get user info from SQLite as last resort
             try {
-              const userData = await this.indexedDBService.getUserData(order.assignedCashierId);
+              const userData = await this.sqliteService.getUserData(order.assignedCashierId);
               cashierName = userData?.email || `Cashier ${order.assignedCashierId.slice(0, 8)}...`;
             } catch {
               cashierName = `Cashier ${order.assignedCashierId.slice(0, 8)}...`;
@@ -1411,7 +1411,7 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
       // Load next invoice number preview
       await this.loadNextInvoicePreview();
       
-      // Initialize store (this will handle IndexedDB priority and product loading)
+      // Initialize store (this will handle SQLite priority and product loading)
       await this.initializeStore();
       
       // Debug: log current user and stores to ensure user.storeIds and stores list are correct
@@ -1578,44 +1578,44 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
       console.log('✅ Mobile Stores already available, count:', availableStores.length);
     }
 
-    // PRIORITY: Use IndexedDB as primary source for all user data (uid, companyId, storeId, roleId)
+    // PRIORITY: Use SQLite as primary source for all user data (uid, companyId, storeId, roleId)
     try {
-      const offlineUserData = await this.indexedDBService.getUserData(currentUser?.uid || '');
+      const offlineUserData = await this.sqliteService.getUserData(currentUser?.uid || '');
       
       if (offlineUserData?.currentStoreId) {
-        console.log('💾 PRIORITY: Mobile using IndexedDB data - uid:', offlineUserData.uid, 'storeId:', offlineUserData.currentStoreId);
+        console.log('💾 PRIORITY: Mobile using SQLite data - uid:', offlineUserData.uid, 'storeId:', offlineUserData.currentStoreId);
         
         // Verify the store exists in availableStores before selecting
         availableStores = this.availableStores(); // Refresh after potential loading
         const storeExists = availableStores.find(store => store.id === offlineUserData.currentStoreId);
         
         if (storeExists) {
-          console.log('✅ Mobile IndexedDB store verified, selecting store');
+          console.log('✅ Mobile SQLite store verified, selecting store');
           await this.selectStore(offlineUserData.currentStoreId);
-          console.log('✅ Mobile Store selection from IndexedDB completed');
+          console.log('✅ Mobile Store selection from SQLite completed');
           return; // Success - exit early
         } else {
-          console.warn('⚠️ Mobile IndexedDB store not found in available stores');
+          console.warn('⚠️ Mobile SQLite store not found in available stores');
         }
       }
       
-      // If no currentStoreId, try to get from permissions in IndexedDB
+      // If no currentStoreId, try to get from permissions in SQLite
       if (offlineUserData?.permissions && offlineUserData.permissions.length > 0) {
         const permission = this.getActivePermission(offlineUserData);
         if (permission?.storeId) {
-          console.log('💾 Mobile Using storeId from IndexedDB permissions:', permission.storeId);
+          console.log('💾 Mobile Using storeId from SQLite permissions:', permission.storeId);
           availableStores = this.availableStores(); // Refresh after potential loading
           const storeExists = availableStores.find(store => store.id === permission.storeId);
           
           if (storeExists) {
             await this.selectStore(permission.storeId);
-            console.log('✅ Mobile Store selection from IndexedDB permissions completed');
+            console.log('✅ Mobile Store selection from SQLite permissions completed');
             return;
           }
         }
       }
     } catch (error) {
-      console.log('⚠️ Mobile Could not retrieve userData from IndexedDB:', error);
+      console.log('⚠️ Mobile Could not retrieve userData from SQLite:', error);
     }
 
     // FALLBACK: Use current database process
@@ -1655,29 +1655,29 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
         if (!currentlySelected || !selectedStore) {
           let storeIdToSelect: string | null = null;
           
-          // First, try to get storeId from IndexedDB user permissions
+          // First, try to get storeId from SQLite user permissions
           try {
             const currentUser = this.authService.getCurrentUser();
             if (currentUser?.uid) {
-              const offlineUserData = await this.indexedDBService.getUserData(currentUser.uid);
+              const offlineUserData = await this.sqliteService.getUserData(currentUser.uid);
               if (offlineUserData?.permissions && offlineUserData.permissions.length > 0) {
                 const permission = this.getActivePermission(offlineUserData, offlineUserData.currentStoreId);
                 if (permission) {
-                  const indexedDbStoreId = offlineUserData.currentStoreId || permission.storeId;
-                  const indexedDbStore = stores.find(store => store.id === indexedDbStoreId);
-                  if (indexedDbStore && indexedDbStoreId) {
-                    storeIdToSelect = indexedDbStoreId;
-                    console.log('💾 Mobile PRIORITY: Using storeId from IndexedDB permissions:', storeIdToSelect);
+                  const sqliteStoreId = offlineUserData.currentStoreId || permission.storeId;
+                  const sqliteStore = stores.find(store => store.id === sqliteStoreId);
+                  if (sqliteStore && sqliteStoreId) {
+                    storeIdToSelect = sqliteStoreId;
+                    console.log('💾 Mobile PRIORITY: Using storeId from SQLite permissions:', storeIdToSelect);
                     console.log('💾 Mobile Selected from', offlineUserData.permissions.length, 'available permissions');
                   }
                 }
               }
             }
           } catch (error) {
-            console.log('⚠️ Mobile Could not get storeId from IndexedDB permissions:', error);
+            console.log('⚠️ Mobile Could not get storeId from SQLite permissions:', error);
           }
           
-          // Fallback to first available store if no IndexedDB store found
+          // Fallback to first available store if no SQLite store found
           if (!storeIdToSelect) {
             storeIdToSelect = stores[0]?.id || null;
             console.log('🗄️ Mobile FALLBACK: Using first available store:', storeIdToSelect);
@@ -1762,22 +1762,22 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
     // Set the selected store first - preserve cart to prevent disappearing
     await this.posService.setSelectedStore(storeId, { preserveCart: true });
     
-    // PRIORITY: Get companyId from IndexedDB first, then fallback to database
+    // PRIORITY: Get companyId from SQLite first, then fallback to database
     let companyId: string | undefined;
     
     try {
       const currentUser = this.authService.getCurrentUser();
-      const offlineUserData = await this.indexedDBService.getUserData(currentUser?.uid || '');
+      const offlineUserData = await this.sqliteService.getUserData(currentUser?.uid || '');
       
       if (offlineUserData?.permissions) {
         const permission = this.getActivePermission(offlineUserData, storeId);
         if (permission?.companyId) {
           companyId = permission.companyId;
-          console.log('💾 Mobile Using companyId from IndexedDB:', companyId);
+          console.log('💾 Mobile Using companyId from SQLite:', companyId);
         }
       }
     } catch (error) {
-      console.log('⚠️ Mobile Could not get companyId from IndexedDB:', error);
+      console.log('⚠️ Mobile Could not get companyId from SQLite:', error);
     }
     
     // Fallback: Get companyId from availableStores (database data)
@@ -2196,7 +2196,7 @@ export class PosMobileComponent implements OnInit, AfterViewInit, OnDestroy {
       // Load next invoice number preview
       await this.loadNextInvoicePreview();
       
-      // Initialize store (this will handle IndexedDB priority and product loading)
+      // Initialize store (this will handle SQLite priority and product loading)
       await this.initializeStore();
       
       console.log('🔄 POS MOBILE COMPONENT: Reinitialization completed');
