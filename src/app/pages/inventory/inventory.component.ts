@@ -1,4 +1,4 @@
-import { Component, OnInit, effect, signal, computed } from '@angular/core';
+import { Component, OnInit, effect, signal, computed, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { MatTableModule } from '@angular/material/table';
@@ -11,6 +11,7 @@ import { MatCardModule } from '@angular/material/card';
 import { MatTableDataSource } from '@angular/material/table';
 import { InventoryService as AppInventoryService } from '../../services/inventory.service';
 import { StoreService, Store, dedupeStoresForDropdown, formatStoreDisplayName } from '../../services/store.service';
+import { ReportPeriod, StoreSelectionService } from '../../services/store-selection.service';
 import { AuthService } from '../../services/auth.service';
 import { OrderService } from '../../services/order.service';
 import { formatLocalDateString, normalizeLocalDateRange } from '../../services/bigquery.service';
@@ -590,12 +591,13 @@ export class InventoryComponent implements OnInit {
   ];
 
   protected readonly formatStoreDisplayName = formatStoreDisplayName;
+  private reportFilters = inject(StoreSelectionService);
 
   dataSource = new MatTableDataSource<AggregatedInventoryRow>([]);
 
   // Store management
   stores = signal<Store[]>([]);
-  selectedStoreId = signal<string>('');
+  selectedStoreId = this.reportFilters.selectedStoreId;
   hasMultipleStores = computed(() => this.stores().length > 1);
 
   // Details modal
@@ -713,7 +715,6 @@ export class InventoryComponent implements OnInit {
   }
 
   async ngOnInit(): Promise<void> {
-    this.selectedPeriod = 'today';
     this.applyTodayDefaultRange();
     await this.loadStores();
     const currentPermission = this.authService.getCurrentPermission();
@@ -736,18 +737,12 @@ export class InventoryComponent implements OnInit {
       }
 
       await this.storeService.loadStoresByCompany(currentPermission.companyId);
-      const stores = dedupeStoresForDropdown(
+      const stores = this.reportFilters.getActiveStores(
         this.storeService.getStoresByCompany(currentPermission.companyId)
-          .filter(store => store.status === 'active')
       );
       this.stores.set(stores);
 
-      // Set selected store
-      if (currentPermission?.storeId) {
-        this.selectedStoreId.set(currentPermission.storeId);
-      } else if (stores.length > 0 && stores[0].id) {
-        this.selectedStoreId.set(stores[0].id);
-      }
+      this.reportFilters.initializeStoreSelection(stores, currentPermission.storeId);
     } catch (error) {
       console.error('Error loading stores:', error);
       this.stores.set([]);
@@ -757,7 +752,7 @@ export class InventoryComponent implements OnInit {
   onStoreChange(event: Event): void {
     const target = event.target as HTMLSelectElement;
     if (target && target.value) {
-      this.selectedStoreId.set(target.value);
+      this.reportFilters.setSelectedStore(target.value);
       const currentPermission = this.authService.getCurrentPermission();
       // Reload inventory data for selected store
       this.inventoryService.loadRowsForPeriod(
@@ -777,22 +772,19 @@ export class InventoryComponent implements OnInit {
   }
 
   // UI controls - Daily summary optimized (Today/Yesterday recommended)
-  periodOptions = [
-    { key: 'today', label: 'Today' },
-    { key: 'yesterday', label: 'Yesterday' },
-    { key: 'this_week', label: 'This Week' },
-    { key: 'previous_week', label: 'Previous Week' },
-    { key: 'this_month', label: 'This Month' },
-    { key: 'previous_month', label: 'Previous Month' },
-    { key: 'date_range', label: 'Date Range' }
-  ];
-  selectedPeriod: 'today' | 'yesterday' | 'this_week' | 'previous_week' | 'this_month' | 'previous_month' | 'date_range' = 'today';
+  periodOptions = this.reportFilters.periodOptions;
+  get selectedPeriod(): ReportPeriod {
+    return this.reportFilters.selectedPeriod();
+  }
+  set selectedPeriod(period: ReportPeriod) {
+    this.reportFilters.setSelectedPeriod(period);
+  }
   dateFrom: string | null = null; // YYYY-MM-DD
   dateTo: string | null = null;
 
   onPeriodChange(event: Event) {
     const t = event.target as HTMLSelectElement;
-    this.selectedPeriod = t.value as 'today' | 'yesterday' | 'this_week' | 'previous_week' | 'this_month' | 'previous_month' | 'date_range';
+    this.selectedPeriod = t.value as ReportPeriod;
     if (this.selectedPeriod === 'date_range') {
       // default dateTo = today, dateFrom = today - 30 days
       const now = new Date();
