@@ -22,7 +22,8 @@ import { AppConstants } from '../../../shared/enums/app-constants.enum';
 
 import { OrderService } from '../../../services/order.service';
 import { OrdersSellingTrackingService } from '../../../services/orders-selling-tracking.service';
-import { StoreService, formatStoreDisplayName, dedupeStoresForDropdown } from '../../../services/store.service';
+import { StoreService, formatStoreDisplayName } from '../../../services/store.service';
+import { StoreSelectionService } from '../../../services/store-selection.service';
 import { InvoiceService } from '../../../services/invoice.service';
 import { UserRoleService } from '../../../services/user-role.service';
 import { CustomerService } from '../../../services/customer.service';
@@ -65,6 +66,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   private networkService = inject(NetworkService);
   private sqliteService = inject(SqliteStorageService);
   private storeService = inject(StoreService);
+  private storeSelectionService = inject(StoreSelectionService);
   private invoiceService = inject(InvoiceService);
   private orderService = inject(OrderService);
   private ordersSellingTrackingService = inject(OrdersSellingTrackingService);
@@ -5653,9 +5655,8 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
         await this.storeService.loadStoresByCompany(currentPermission.companyId);
         
         // Use full company store list (no userRoles filtering), but keep distinct store/branch combinations
-        const stores = dedupeStoresForDropdown(
+        const stores = this.storeSelectionService.getActiveStores(
           this.storeService.getStoresByCompany(currentPermission.companyId)
-            .filter(store => store.status === 'active')
         );
         this.storesSignal.set(stores);
       } else {

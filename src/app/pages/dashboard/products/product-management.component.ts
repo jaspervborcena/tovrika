@@ -4,7 +4,7 @@ import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, Validators } 
 import { Product, ProductInventory, ProductStatus } from '../../../interfaces/product.interface';
 import { ProductInventoryEntry } from '../../../interfaces/product-inventory-entry.interface';
 import { ProductService } from '../../../services/product.service';
-import { StoreService, dedupeStoresForDropdown, formatStoreDisplayName } from '../../../services/store.service';
+import { StoreService, formatStoreDisplayName } from '../../../services/store.service';
 import { StoreSelectionService } from '../../../services/store-selection.service';
 
 import { AuthService } from '../../../services/auth.service';
@@ -2533,7 +2533,7 @@ export class ProductManagementComponent implements OnInit {
 
   // Signals
   readonly products = computed(() => this.productService.getProducts());
-  readonly stores = computed(() => dedupeStoresForDropdown(this.storeService.getStores().filter(store => store.status === 'active')));
+  readonly stores = computed(() => this.storeSelectionService.getActiveStores(this.storeService.getStores()));
   // Get categories from category service
   readonly categories = computed(() => {
     const categoryObjects = this.categoryService.getCategories();

@@ -2,7 +2,8 @@ import { Component, inject, OnInit, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { OfflineReconciliationService } from '../../../services/offline-reconciliation.service';
-import { StoreService, dedupeStoresForDropdown, formatStoreDisplayName } from '../../../services/store.service';
+import { StoreService, formatStoreDisplayName } from '../../../services/store.service';
+import { StoreSelectionService } from '../../../services/store-selection.service';
 import { NetworkService } from '../../../core/services/network.service';
 import { ReconciliationDiscrepancy, ReconciliationSummary } from '../../../interfaces/reconciliation.interface';
 import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../shared/components/confirmation-dialog/confirmation-dialog.component';
@@ -17,6 +18,7 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
 export class OfflineOrderReconciliationComponent implements OnInit {
   private reconciliationService = inject(OfflineReconciliationService);
   private storeService = inject(StoreService);
+  private storeSelectionService = inject(StoreSelectionService);
   private networkService = inject(NetworkService);
 
   // Expose Math for template
@@ -57,7 +59,7 @@ export class OfflineOrderReconciliationComponent implements OnInit {
 
   private async loadStores() {
     try {
-      this.stores = dedupeStoresForDropdown(await this.storeService.getStores());
+      this.stores = this.storeSelectionService.getActiveStores(await this.storeService.getStores());
       if (this.stores.length > 0) {
         this.selectedStoreId = this.stores[0].id;
       }

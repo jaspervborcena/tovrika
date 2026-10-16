@@ -2,6 +2,7 @@ import { Component, inject, signal, computed, OnInit, effect } from '@angular/co
 import { environment } from '../../../../environments/environment';
 import { CommonModule } from '@angular/common';
 import { StoreService, Store, dedupeStoresForDropdown, formatStoreDisplayName } from '../../../services/store.service';
+import { ReportPeriod, StoreSelectionService } from '../../../services/store-selection.service';
 import { ProductService } from '../../../services/product.service';
 import { Product } from '../../../interfaces/product.interface';
 import { Order } from '../../../interfaces/pos.interface';
@@ -1625,22 +1626,15 @@ export class OverviewComponent implements OnInit {
   protected netItemsQty = computed(() => Math.max(0, this.ledgerItemsQty() - this.ledgerCancelQty()));
   protected ledgerCompletedQty = signal<number>(0);
   protected topProductsList = signal<any[]>([]);
-  protected selectedStoreId = signal<string>('all');
+  private reportFilters = inject(StoreSelectionService);
+  protected selectedStoreId = this.reportFilters.selectedStoreId;
   protected isLoading = signal<boolean>(true);
   private analyticsLoadInProgress = false;
   private overviewLoadSequence = 0;
 
   // UI controls for overview filtering
-  protected periodOptions = [
-    { key: 'today', label: 'Today' },
-    { key: 'yesterday', label: 'Yesterday' },
-    { key: 'this_week', label: 'This Week' },
-    { key: 'previous_week', label: 'Previous Week' },
-    { key: 'this_month', label: 'This Month' },
-    { key: 'previous_month', label: 'Previous Month' },
-    { key: 'date_range', label: 'Date Range' }
-  ];
-  protected selectedPeriod = signal<'today' | 'yesterday' | 'this_week' | 'previous_week' | 'this_month' | 'previous_month' | 'date_range'>('today');
+  protected periodOptions = this.reportFilters.periodOptions;
+  protected selectedPeriod = this.reportFilters.selectedPeriod;
   protected dateFrom = signal<string | null>(null); // YYYY-MM-DD
   protected dateTo = signal<string | null>(null);
   protected dateRangeRevenue = signal<number>(0);
@@ -1674,6 +1668,7 @@ export class OverviewComponent implements OnInit {
   protected filteredOrders = computed(() => {
     const allOrders = this.orders();
     const period = this.selectedPeriod();
+    if (period === 'all') return allOrders;
     const now = new Date();
     
     let dateFromStr: string;
@@ -1772,7 +1767,7 @@ export class OverviewComponent implements OnInit {
   // For date-range mode, use the explicit range total; otherwise keep the
   // month-scoped aggregate used by the standard period selectors.
   protected totalExpenses = computed(() => {
-    if (this.selectedPeriod() === 'date_range') {
+    if (this.selectedPeriod() === 'date_range' || this.selectedPeriod() === 'all') {
       return (this.expenses() || []).reduce((s, e) => s + (Number((e as any).amount || 0) / 100), 0);
     }
     return this.monthExpensesTotal();
@@ -2159,7 +2154,7 @@ export class OverviewComponent implements OnInit {
   protected onOverviewStoreChange(event: Event) {
     const target = event.target as HTMLSelectElement;
     if (target && target.value) {
-      this.selectedStoreId.set(target.value);
+      this.reportFilters.setSelectedStore(target.value);
       this.applyPeriodAndLoad();
     }
   }
@@ -2168,7 +2163,7 @@ export class OverviewComponent implements OnInit {
   protected onOverviewPeriodChange(event: Event) {
     const target = event.target as HTMLSelectElement;
     if (!target) return;
-    const v = target.value as 'today' | 'yesterday' | 'this_week' | 'previous_week' | 'this_month' | 'previous_month' | 'date_range';
+    const v = target.value as ReportPeriod;
     
     // Reset all ledger signals to 0 when period changes to prevent stale data
     this.ledgerReturnAmount.set(0);
@@ -2190,7 +2185,7 @@ export class OverviewComponent implements OnInit {
     this.ledgerTotalRevenue.set(0);
     this.ledgerTotalOrders.set(0);
     
-    this.selectedPeriod.set(v);
+    this.reportFilters.setSelectedPeriod(v);
     if (v === 'date_range') {
       // default dateTo = today, dateFrom = today - 30 days
       const now = new Date();
@@ -2249,7 +2244,7 @@ export class OverviewComponent implements OnInit {
       return;
     }
 
-    this.selectedPeriod.set('date_range');
+    this.reportFilters.setSelectedPeriod('date_range');
     this.loadAnalyticsData(start, end);
     // Fetch date range comparison data
     this.fetchDateRangeComparison().catch(err => console.error('Failed to fetch date range comparison:', err));
@@ -2274,7 +2269,10 @@ export class OverviewComponent implements OnInit {
     let dateFromStr: string | undefined;
     let dateToStr: string | undefined;
     
-    if (period === 'today') {
+    if (period === 'all') {
+      dateFromStr = '1970-01-01';
+      dateToStr = this.formatDateAsString(now);
+    } else if (period === 'today') {
       dateFromStr = this.getOverviewDayDate();
       dateToStr = dateFromStr;
     } else if (period === 'yesterday') {
@@ -2520,17 +2518,14 @@ export class OverviewComponent implements OnInit {
       await this.storeService.loadStoresByCompany(currentPermission.companyId);
       
       // Use full company store list (no userRoles filtering)
-      const stores = this.storeService.getStoresByCompany(currentPermission.companyId)
-        .filter(store => store.status === 'active');
+      const stores = this.reportFilters.getActiveStores(
+        this.storeService.getStoresByCompany(currentPermission.companyId)
+      );
       
       this.stores.set(stores);
 
-      // Set selected store after stores are loaded
-      if (currentPermission?.storeId) {
-        this.selectedStoreId.set(currentPermission.storeId);
-      } else if (stores.length > 0 && stores[0].id) {
-        this.selectedStoreId.set(stores[0].id);
-      } else {
+      this.reportFilters.initializeStoreSelection(stores, currentPermission.storeId);
+      if (!this.selectedStoreId()) {
         console.warn('âš ï¸ Overview: No stores available to select');
       }
     } catch (error) {
@@ -2539,7 +2534,7 @@ export class OverviewComponent implements OnInit {
       // Try to set selectedStoreId from permission even if store load failed
       const currentPermission = this.authService.getCurrentPermission();
       if (currentPermission?.storeId) {
-        this.selectedStoreId.set(currentPermission.storeId);
+        this.reportFilters.initializeStoreSelection([], currentPermission.storeId);
       }
     }
   }

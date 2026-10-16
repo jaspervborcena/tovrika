@@ -324,37 +324,6 @@ export const routes: Routes = [
     data: { roles: ['creator', 'store_manager', 'cashier', 'admin'] }
   },
 
-  // Mobile POS Route - Accessible by creator, store_manager, and cashier
-  {
-    path: 'pos/mobile',
-    loadComponent: () => import('./pages/dashboard/pos/mobile/pos-mobile.component').then(m => m.PosMobileComponent),
-    canActivate: [authGuard, policyGuard, onboardingGuard, roleGuard],
-    data: { roles: ['creator', 'store_manager', 'cashier', 'admin'] }
-  },
-
-  // Mobile Receipt Preview Route - Accessible by creator, store_manager, and cashier
-  {
-    path: 'pos/mobile/receipt-preview',
-    loadComponent: () => import('./pages/dashboard/pos/mobile/mobile-receipt-preview.component').then(m => m.MobileReceiptPreviewComponent),
-    canActivate: [authGuard, policyGuard, onboardingGuard, roleGuard],
-    data: { roles: ['creator', 'store_manager', 'cashier', 'admin'] }
-  },
-
-  // BACKUP Mobile POS Route for Testing - Uses print.service.bak.ts
-  {
-    path: 'pos/mobile-bak',
-    loadComponent: () => import('./pages/dashboard/pos/mobile_bak/pos-mobile.component').then(m => m.PosMobileBakComponent),
-    canActivate: [authGuard, policyGuard, onboardingGuard, roleGuard],
-    data: { roles: ['creator', 'store_manager', 'cashier', 'admin'] }
-  },
-
-  // BACKUP Mobile Receipt Preview Route for Testing
-  {
-    path: 'pos/mobile-bak/receipt-preview',
-    loadComponent: () => import('./pages/dashboard/pos/mobile_bak/mobile-receipt-preview.component').then(m => m.MobileReceiptPreviewBakComponent),
-    canActivate: [authGuard, policyGuard, onboardingGuard, roleGuard],
-    data: { roles: ['creator', 'store_manager', 'cashier', 'admin'] }
-  },
   {
     path: 'qr/:companySlug',
     loadComponent: () => import('./pages/qr/company-qr.component').then(m => m.CompanyQrComponent)

@@ -3,7 +3,8 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { UserRoleService } from '../../../services/user-role.service';
 import { RoleDefinitionService, RoleDefinition } from '../../../services/role-definition.service';
-import { StoreService, Store, dedupeStoresForDropdown, formatStoreDisplayName } from '../../../services/store.service';
+import { StoreService, Store, formatStoreDisplayName } from '../../../services/store.service';
+import { StoreSelectionService } from '../../../services/store-selection.service';
 import { AuthService } from '../../../services/auth.service';
 import { UserRole } from '../../../interfaces/user-role.interface';
 import { AccessRequest } from '../../../interfaces/access-request.interface';
@@ -1136,6 +1137,7 @@ export class UserRolesComponent implements OnInit {
     private userRoleService: UserRoleService,
     private roleDefinitionService: RoleDefinitionService,
     private storeService: StoreService,
+    private storeSelectionService: StoreSelectionService,
     private authService: AuthService,
     private toastService: ToastService
   ) {}
@@ -1164,9 +1166,8 @@ export class UserRolesComponent implements OnInit {
       const currentPermission = this.authService.getCurrentPermission();
       if (currentPermission?.companyId) {
         await this.storeService.loadStoresByCompany(currentPermission.companyId);
-        this.availableStores = dedupeStoresForDropdown(
+        this.availableStores = this.storeSelectionService.getActiveStores(
           this.storeService.getStoresByCompany(currentPermission.companyId)
-            .filter(store => store.status === 'active')
         );
       } else {
         this.availableStores = [];

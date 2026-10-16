@@ -1,7 +1,8 @@
 import { Component, OnInit, signal, computed, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { StoreService, Store, dedupeStoresForDropdown, formatStoreDisplayName } from '../../../services/store.service';
+import { StoreService, Store, formatStoreDisplayName } from '../../../services/store.service';
+import { StoreSelectionService } from '../../../services/store-selection.service';
 import { AuthService } from '../../../services/auth.service';
 
 @Component({
@@ -234,6 +235,7 @@ import { AuthService } from '../../../services/auth.service';
 })
 export class InventoryComponent implements OnInit {
   private storeService = inject(StoreService);
+  private storeSelectionService = inject(StoreSelectionService);
   private authService = inject(AuthService);
 
   protected readonly formatStoreDisplayName = formatStoreDisplayName;
@@ -261,9 +263,8 @@ export class InventoryComponent implements OnInit {
 
       // Match sales summary: load the full active company store list so branch labels appear consistently
       await this.storeService.loadStoresByCompany(currentPermission.companyId);
-      const stores = dedupeStoresForDropdown(
+      const stores = this.storeSelectionService.getActiveStores(
         this.storeService.getStoresByCompany(currentPermission.companyId)
-          .filter(store => store.status === 'active')
       );
 
       this.stores.set(stores);

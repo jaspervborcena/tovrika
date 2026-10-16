@@ -22,39 +22,6 @@
       <div class="header-right">
         <div class="header-actions">
           
-          <!-- Device View Toggle (show single opposite-view icon only; tooltip contains label) -->
-          @if (isPosPage()) {
-            @if (isMobilePosPage()) {
-              <button
-                type="button"
-                class="header-btn view-toggle"
-                (click)="switchToDesktop()"
-                [title]="'common.switchToDesktopView' | translate"
-                [attr.aria-label]="'common.switchToDesktopView' | translate"
-              >
-                <svg class="view-icon" width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17h4.5" />
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 21h8" />
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4h16v11H4z" />
-                </svg>
-              </button>
-            } @else {
-              <button
-                type="button"
-                class="header-btn view-toggle"
-                (click)="switchToMobile()"
-                [title]="'common.switchToMobileView' | translate"
-                [attr.aria-label]="'common.switchToMobileView' | translate"
-                style="display: none;"
-              >
-                <svg class="view-icon" width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 4h10v16H7z" />
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 18h2" />
-                </svg>
-              </button>
-            }
-          }
-          
           <!-- Dashboard Icon (only show when in POS pages) -->
           @if (isPosPage()) {
             <a routerLink="/dashboard" class="header-btn dashboard-btn" title="Go to Dashboard">
