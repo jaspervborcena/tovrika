@@ -1,7 +1,7 @@
 import { Injectable, signal, computed } from '@angular/core';
 import { dedupeStoresForDropdown, formatStoreDisplayName, type Store } from './store.service';
 
-export type ReportPeriod = 'all' | 'today' | 'yesterday' | 'this_week' | 'previous_week' | 'this_month' | 'previous_month' | 'date_range';
+export type ReportPeriod = 'today' | 'yesterday' | 'this_week' | 'previous_week' | 'this_month' | 'previous_month' | 'date_range';
 
 /**
  * Service to manage global store selection state across dashboard and child components
@@ -14,13 +14,12 @@ export type ReportPeriod = 'all' | 'today' | 'yesterday' | 'this_week' | 'previo
 export class StoreSelectionService {
   // Global selected store ID
   private _selectedStoreId = signal<string>('');
-  private _selectedPeriod = signal<ReportPeriod>('all');
+  private _selectedPeriod = signal<ReportPeriod>('today');
   
   // Public read-only access to selected store ID
   readonly selectedStoreId = computed(() => this._selectedStoreId());
   readonly selectedPeriod = computed(() => this._selectedPeriod());
   readonly periodOptions = [
-    { key: 'all', label: 'All Time' },
     { key: 'today', label: 'Today' },
     { key: 'yesterday', label: 'Yesterday' },
     { key: 'this_week', label: 'This Week' },

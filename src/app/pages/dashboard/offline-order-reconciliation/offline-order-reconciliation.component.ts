@@ -1,7 +1,7 @@
 import { Component, inject, OnInit, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { OfflineReconciliationService } from '../../../services/offline-reconciliation.service';
+import { OfflineReconciliationService, ReconSummaryApiError } from '../../../services/offline-reconciliation.service';
 import { StoreService, formatStoreDisplayName } from '../../../services/store.service';
 import { StoreSelectionService } from '../../../services/store-selection.service';
 import { NetworkService } from '../../../core/services/network.service';
@@ -36,6 +36,7 @@ export class OfflineOrderReconciliationComponent implements OnInit {
   summary: ReconciliationSummary | null = null;
   
   loading = false;
+  errorMessage: string | null = null;
   selectedDiscrepancy: ReconciliationDiscrepancy | null = null;
   showDetailModal = false;
   
@@ -78,44 +79,72 @@ export class OfflineOrderReconciliationComponent implements OnInit {
   }
 
   private formatDateForInput(date: Date): string {
-    return date.toISOString().split('T')[0];
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
   }
 
   async searchDiscrepancies() {
     if (!this.selectedStoreId || !this.startDate || !this.endDate) {
-      alert('Please select store and date range');
+      this.errorMessage = 'Please select a store and date range.';
+      this.summary = null;
+      return;
+    }
+
+    if (this.startDate > this.endDate) {
+      this.errorMessage = 'From date must be on or before To date.';
+      this.summary = null;
       return;
     }
 
     if (!this.networkService.isOnline) {
-      alert('⚠️ Cannot search for discrepancies while offline. Please connect to the internet.');
+      this.errorMessage = 'You are offline. Connect to the internet and retry.';
+      this.summary = null;
       return;
     }
 
     this.loading = true;
+    this.errorMessage = null;
+    this.discrepancies = [];
+    this.summary = null;
     try {
-      const start = new Date(this.startDate);
-      const end = new Date(this.endDate);
-      end.setHours(23, 59, 59, 999); // End of day
-
       this.discrepancies = await this.reconciliationService.findDiscrepancies(
         this.selectedStoreId,
-        start,
-        end
+        this.startDate,
+        this.endDate
       );
 
       this.summary = await this.reconciliationService.getReconciliationSummary(
         this.selectedStoreId,
-        start,
-        end
+        this.startDate,
+        this.endDate,
+        this.discrepancies
       );
     } catch (error) {
       console.error('Error searching discrepancies:', error);
-      // Show no data found instead of error
       this.discrepancies = [];
       this.summary = null;
+      this.errorMessage = this.getSearchErrorMessage(error);
     } finally {
       this.loading = false;
+    }
+  }
+
+  private getSearchErrorMessage(error: unknown): string {
+    if (!(error instanceof ReconSummaryApiError)) {
+      return 'Could not load reconciliation data. Please try again.';
+    }
+
+    switch (error.status) {
+      case 400:
+        return 'The selected store or date range is invalid. Check the filters and try again.';
+      case 401:
+        return 'Your session has expired. Sign in again, then retry.';
+      case 403:
+        return 'You do not have access to reconciliation data for this store.';
+      default:
+        return 'Could not load reconciliation data. Please try again.';
     }
   }
 

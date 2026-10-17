@@ -1668,7 +1668,6 @@ export class OverviewComponent implements OnInit {
   protected filteredOrders = computed(() => {
     const allOrders = this.orders();
     const period = this.selectedPeriod();
-    if (period === 'all') return allOrders;
     const now = new Date();
     
     let dateFromStr: string;
@@ -1767,7 +1766,7 @@ export class OverviewComponent implements OnInit {
   // For date-range mode, use the explicit range total; otherwise keep the
   // month-scoped aggregate used by the standard period selectors.
   protected totalExpenses = computed(() => {
-    if (this.selectedPeriod() === 'date_range' || this.selectedPeriod() === 'all') {
+    if (this.selectedPeriod() === 'date_range') {
       return (this.expenses() || []).reduce((s, e) => s + (Number((e as any).amount || 0) / 100), 0);
     }
     return this.monthExpensesTotal();
@@ -2269,10 +2268,7 @@ export class OverviewComponent implements OnInit {
     let dateFromStr: string | undefined;
     let dateToStr: string | undefined;
     
-    if (period === 'all') {
-      dateFromStr = '1970-01-01';
-      dateToStr = this.formatDateAsString(now);
-    } else if (period === 'today') {
+    if (period === 'today') {
       dateFromStr = this.getOverviewDayDate();
       dateToStr = dateFromStr;
     } else if (period === 'yesterday') {

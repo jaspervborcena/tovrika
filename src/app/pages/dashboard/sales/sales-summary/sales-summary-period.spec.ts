@@ -1,7 +1,31 @@
 import { resolvePeriodDateRange } from './sales-summary.component';
 import { buildBigQueryRequestParams } from '../../../../services/bigquery.service';
+import { StoreSelectionService } from '../../../../services/store-selection.service';
 
 describe('SalesSummary period helper', () => {
+  it('should default to Today and omit All Time', () => {
+    const reportFilters = new StoreSelectionService();
+
+    expect(reportFilters.selectedPeriod()).toBe('today');
+    expect(reportFilters.periodOptions.map(option => option.key)).toEqual([
+      'today',
+      'yesterday',
+      'this_week',
+      'previous_week',
+      'this_month',
+      'previous_month',
+      'date_range'
+    ]);
+  });
+
+  it('should resolve today to a single local day', () => {
+    const ref = new Date('2026-08-31T12:00:00');
+    const { from, to } = resolvePeriodDateRange('today', ref);
+
+    expect(from).toBe('2026-08-31');
+    expect(to).toBe('2026-08-31');
+  });
+
   it('should resolve this week from a reference date', () => {
     const ref = new Date('2026-08-31T12:00:00');
     const { from, to } = resolvePeriodDateRange('this_week', ref);

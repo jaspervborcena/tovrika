@@ -632,7 +632,7 @@ async loadRowsForPeriod(period: string, page: number = 1, storeId?: string, comp
         salesFilters.push(where('createdAt', '>=', updatedAtRange.start));
         salesFilters.push(where('createdAt', '<=', updatedAtRange.end));
       }
-    } else if (period && period !== 'all') {
+    } else if (period) {
       // For month/year periods, create date range
       let start: Date | null = null;
       let end: Date | null = null;
