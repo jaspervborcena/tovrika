@@ -3,7 +3,8 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 
 import { RoleDefinitionService, RoleDefinition, RolePermissions } from '../../../services/role-definition.service';
-import { StoreService, Store, dedupeStoresForDropdown, formatStoreDisplayName } from '../../../services/store.service';
+import { StoreService, Store, formatStoreDisplayName } from '../../../services/store.service';
+import { StoreSelectionService } from '../../../services/store-selection.service';
 import { AuthService } from '../../../services/auth.service';
 import { ToastService } from '../../../shared/services/toast.service';
 import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../shared/components/confirmation-dialog/confirmation-dialog.component';
@@ -298,6 +299,7 @@ export class AccessComponent implements OnInit {
   constructor(
     private roleDefinitionService: RoleDefinitionService,
     private storeService: StoreService,
+    private storeSelectionService: StoreSelectionService,
     private authService: AuthService,
     private toastService: ToastService
   ) {}
@@ -363,9 +365,8 @@ export class AccessComponent implements OnInit {
       if (currentPermission?.companyId) {
         // Match Overview: use active company stores and deduplicate display names.
         await this.storeService.loadStoresByCompany(currentPermission.companyId);
-        this.stores = dedupeStoresForDropdown(
+        this.stores = this.storeSelectionService.getActiveStores(
           this.storeService.getStoresByCompany(currentPermission.companyId)
-            .filter(store => store.status === 'active')
         );
         
         // If the current permission includes a storeId, prefer it as the default selected store

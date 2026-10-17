@@ -5,6 +5,7 @@ import { OrderService } from '../../../../services/order.service';
 import { BigQueryService, convertPhilippineDateRangeToUtc } from '../../../../services/bigquery.service';
 import { AuthService } from '../../../../services/auth.service';
 import { StoreService, Store, dedupeStoresForDropdown, formatStoreDisplayName } from '../../../../services/store.service';
+import { ReportPeriod, StoreSelectionService } from '../../../../services/store-selection.service';
 import { Order as PosOrder, OrderItem } from '../../../../interfaces/pos.interface';
 import { SqliteStorageService } from '../../../../core/services/sqlite-storage.service';
 import { OrdersSellingTrackingService } from '../../../../services/orders-selling-tracking.service';
@@ -13,7 +14,7 @@ import { CategoryService } from '../../../../services/category.service';
 import { ToastService } from '../../../../shared/services/toast.service';
 import { environment } from '../../../../../environments/environment';
 
-export type SalesSummaryPeriod = 'today' | 'yesterday' | 'this_week' | 'previous_week' | 'this_month' | 'previous_month' | 'date_range';
+export type SalesSummaryPeriod = ReportPeriod;
 
 export function resolvePeriodDateRange(
   period: SalesSummaryPeriod,
@@ -31,7 +32,10 @@ export function resolvePeriodDateRange(
   let start: Date;
   let end: Date;
 
-  if (period === 'today') {
+  if (period === 'all') {
+    start = new Date(1970, 0, 1, 0, 0, 0, 0);
+    end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+  } else if (period === 'today') {
     start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
     end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
   } else if (period === 'yesterday') {
@@ -1969,6 +1973,7 @@ export class SalesSummaryComponent implements OnInit {
   private bigQueryService = inject(BigQueryService);
   private authService = inject(AuthService);
   private storeService = inject(StoreService);
+  private reportFilters = inject(StoreSelectionService);
   private sqlite = inject(SqliteStorageService);
   private ordersSellingTrackingService = inject(OrdersSellingTrackingService);
   private productService = inject(ProductService);
@@ -1979,7 +1984,13 @@ export class SalesSummaryComponent implements OnInit {
   protected readonly formatStoreDisplayName = formatStoreDisplayName;
   orders = signal<Order[]>([]);
   stores = signal<Store[]>([]);
-  selectedStoreId = signal<string>('');
+  get selectedStoreId(): string {
+    return this.reportFilters.selectedStoreId();
+  }
+
+  set selectedStoreId(storeId: string) {
+    this.reportFilters.setSelectedStore(storeId);
+  }
   isLoading = signal(false);
   isOrderDetailsLoading = signal(false);
   showOrderDetails = signal(false);
@@ -2001,22 +2012,14 @@ export class SalesSummaryComponent implements OnInit {
   includeAllStatuses = signal<boolean>(false);
 
   // Date and period properties
-  periodOptions = [
-    { key: 'today', label: 'Today' },
-    { key: 'yesterday', label: 'Yesterday' },
-    { key: 'this_week', label: 'This Week' },
-    { key: 'previous_week', label: 'Previous Week' },
-    { key: 'this_month', label: 'This Month' },
-    { key: 'previous_month', label: 'Previous Month' },
-    { key: 'date_range', label: 'Date Range' }
-  ] as const;
-  selectedPeriod = signal<SalesSummaryPeriod>('today');
+  periodOptions = this.reportFilters.periodOptions;
+  selectedPeriod = this.reportFilters.selectedPeriod;
   fromDate: string = '';
   toDate: string = '';
 
   // Computed for store display
   selectedStore = computed(() => {
-    const storeId = this.selectedStoreId();
+    const storeId = this.selectedStoreId;
     return this.stores().find(store => store.id === storeId);
   });
 
@@ -2128,24 +2131,22 @@ export class SalesSummaryComponent implements OnInit {
   });
 
   constructor() {
-    // Initialize default range to today
+    // Initialize default range to all time
     const today = new Date();
-    const { from, to } = resolvePeriodDateRange('today', today);
+    const { from, to } = resolvePeriodDateRange(this.reportFilters.selectedPeriod(), today);
     this.fromDate = from;
     this.toDate = to;
   }
 
   async ngOnInit(): Promise<void> {
-    // Default to today so the report loads immediately on first open.
-    this.selectedPeriod.set('today');
-    const { from, to } = resolvePeriodDateRange('today', new Date());
+    const { from, to } = resolvePeriodDateRange(this.reportFilters.selectedPeriod(), new Date());
     this.fromDate = from;
     this.toDate = to;
 
     this.ensureDateOrder();
     await this.loadStores();
 
-    if (this.selectedStoreId()) {
+    if (this.selectedStoreId) {
       await this.loadSalesData();
     }
   }
@@ -2160,18 +2161,12 @@ export class SalesSummaryComponent implements OnInit {
 
       // Load stores into StoreService and use full company list (no userRoles filtering)
       await this.storeService.loadStoresByCompany(currentPermission.companyId);
-      const stores = dedupeStoresForDropdown(
+      const stores = this.reportFilters.getActiveStores(
         this.storeService.getStoresByCompany(currentPermission.companyId)
-          .filter(store => store.status === 'active')
       );
       this.stores.set(stores);
 
-      // Set selected store - if user has storeId, use it, otherwise use first store
-      if (currentPermission?.storeId) {
-        this.selectedStoreId.set(currentPermission.storeId);
-      } else if (stores.length > 0 && stores[0].id) {
-        this.selectedStoreId.set(stores[0].id);
-      }
+      this.reportFilters.initializeStoreSelection(stores, currentPermission.storeId);
     } catch (error) {
       console.error('Error loading stores:', error);
       this.stores.set([]);
@@ -2214,7 +2209,7 @@ export class SalesSummaryComponent implements OnInit {
     this.dataSource.set('firebase');
     
     // Check if we have any stores and data first
-    const storeId = this.selectedStoreId() || this.authService.getCurrentPermission()?.storeId;
+    const storeId = this.selectedStoreId || this.authService.getCurrentPermission()?.storeId;
     
     await this.loadSalesData();
   }
@@ -2223,7 +2218,7 @@ export class SalesSummaryComponent implements OnInit {
    * Manual load triggered by Go button - uses hybrid logic
    */
   onPeriodChange(period: SalesSummaryPeriod): void {
-    this.selectedPeriod.set(period);
+    this.reportFilters.setSelectedPeriod(period);
 
     if (period === 'date_range') {
       const defaults = resolvePeriodDateRange('date_range', new Date());
@@ -2319,7 +2314,7 @@ export class SalesSummaryComponent implements OnInit {
 
     try {
       // Use selected store ID or get from permission
-      const storeId = this.selectedStoreId() || this.authService.getCurrentPermission()?.storeId;
+      const storeId = this.selectedStoreId || this.authService.getCurrentPermission()?.storeId;
       const companyId = this.authService.getCurrentPermission()?.companyId;
       console.log('📊 [SalesSummary] Store ID:', storeId, '| Company ID:', companyId);
       if (!storeId || !companyId) {
@@ -2471,7 +2466,7 @@ export class SalesSummaryComponent implements OnInit {
     if (this.apiLoadingMore()) return;
     this.apiLoadingMore.set(true);
     try {
-      const storeId = this.selectedStoreId() || this.authService.getCurrentPermission()?.storeId;
+      const storeId = this.selectedStoreId || this.authService.getCurrentPermission()?.storeId;
       if (!storeId) return;
       const nextPage = this.apiCurrentPage() + 1;
       let page: Order[];

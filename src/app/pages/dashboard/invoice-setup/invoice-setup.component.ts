@@ -2,6 +2,7 @@ import { Component, inject, OnInit, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { StoreService, formatStoreDisplayName } from '../../../services/store.service';
+import { StoreSelectionService } from '../../../services/store-selection.service';
 import { InvoiceService } from '../../../services/invoice.service';
 import { AuthService } from '../../../services/auth.service';
 
@@ -398,6 +399,7 @@ import { AuthService } from '../../../services/auth.service';
 })
 export class InvoiceSetupComponent implements OnInit {
   private storeService = inject(StoreService);
+    private storeSelectionService = inject(StoreSelectionService);
   private invoiceService = inject(InvoiceService);
   private authService = inject(AuthService);
 
@@ -419,7 +421,7 @@ export class InvoiceSetupComponent implements OnInit {
       const currentPermission = this.authService.getCurrentPermission();
       if (currentPermission?.companyId) {
         await this.storeService.loadStoresByCompany(currentPermission.companyId);
-        this.stores = this.storeService.getStores();
+        this.stores = this.storeSelectionService.getActiveStores(this.storeService.getStores());
       }
     } catch (error) {
       console.error('Error loading stores:', error);

@@ -78,11 +78,6 @@ export class HeaderComponent implements OnInit {
     return url.includes('/pos') || url.includes('/dashboard/pos');
   });
   
-  protected isMobilePosPage = computed(() => {
-    const url = this.router.url;
-    return url.includes('/pos/mobile');
-  });
-  
   // Computed properties
   protected userInitial = computed(() => {
     const user = this.currentUser();
@@ -199,14 +194,6 @@ export class HeaderComponent implements OnInit {
   }
 
   // Device toggle methods for POS pages
-  switchToMobile(): void {
-    this.router.navigate(['/pos/mobile']);
-  }
-
-  switchToDesktop(): void {
-    this.router.navigate(['/pos']);
-  }
-
   // Language selection methods
   toggleLanguageMenu(): void {
     // Only one dropdown at a time

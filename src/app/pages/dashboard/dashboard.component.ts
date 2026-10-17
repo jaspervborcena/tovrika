@@ -331,26 +331,23 @@ export class DashboardComponent implements OnInit {
         // Load company-specific data with offline support
         try {
           await this.storeService.loadStoresByCompany(currentPermission.companyId);
-          this.stores.set(this.storeService.getStores().filter(store => store.status === 'active'));
+          this.stores.set(this.storeSelectionService.getActiveStores(this.storeService.getStores()));
           this.totalStores.set(this.stores().length);
           
-          // Set initial selected store from current permission or first store
-          const initialStoreId = currentPermission.storeId || this.stores()[0]?.id;
-          if (initialStoreId) {
-            this.storeSelectionService.setSelectedStore(initialStoreId);
-          }
+          this.storeSelectionService.initializeStoreSelection(this.stores(), currentPermission.storeId);
         } catch (storeError) {
           console.warn('⚠️ Dashboard: Failed to load stores (will use cached data):', storeError);
           // Still set the stores from service in case there's cached data
-          this.stores.set(this.storeService.getStores().filter(store => store.status === 'active'));
+          this.stores.set(this.storeSelectionService.getActiveStores(this.storeService.getStores()));
           this.totalStores.set(this.stores().length);
+          this.storeSelectionService.initializeStoreSelection(this.stores(), currentPermission.storeId);
         }
         
         try {
           // NOTE: productService.loadProducts expects a storeId for the BigQuery endpoint.
           // Passing companyId caused the Cloud Run BigQuery endpoint to receive an incorrect
           // storeId and return 403 when the token's store doesn't match the requested store.
-          const targetStoreId = currentPermission.storeId || this.storeService.getStores()?.[0]?.id;
+          const targetStoreId = this.storeSelectionService.getCurrentStoreId() || this.stores()[0]?.id;
           if (targetStoreId) {
             await this.productService.loadProducts(targetStoreId as string);
             this.totalProducts.set(this.productService.totalProducts());
