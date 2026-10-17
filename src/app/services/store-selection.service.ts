@@ -45,11 +45,11 @@ export class StoreSelectionService {
     const currentStoreId = this._selectedStoreId();
     if (currentStoreId && stores.some(store => store.id === currentStoreId)) return;
 
+    const fallbackStore = stores.find(store => store.id === fallbackStoreId);
     const defaultStore = stores.find(
       store => formatStoreDisplayName(store).trim().toLowerCase() === 'tovrika - pasig branch'
     );
-    const fallbackStore = stores.find(store => store.id === fallbackStoreId);
-    this._selectedStoreId.set(defaultStore?.id || fallbackStore?.id || stores[0]?.id || '');
+    this._selectedStoreId.set(fallbackStore?.id || defaultStore?.id || stores[0]?.id || '');
   }
 
   setSelectedPeriod(period: ReportPeriod): void {

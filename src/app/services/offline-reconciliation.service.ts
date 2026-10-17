@@ -31,9 +31,7 @@ interface ReconSummaryResponse {
   rows: Array<Record<string, unknown>>;
 }
 
-@Injectable({
-  providedIn: 'root'
-})
+@Injectable()
 export class OfflineReconciliationService {
   private firestore = inject(Firestore);
   private authService = inject(AuthService);
@@ -335,7 +333,7 @@ export class OfflineReconciliationService {
   /**
    * Validate if order can be reprocessed
    */
-  async validateReprocessing(orderId: string): Promise<ReconciliationValidation> {
+  protected async validateReprocessing(orderId: string): Promise<ReconciliationValidation> {
     const warnings: string[] = [];
     const errors: string[] = [];
 
@@ -485,7 +483,7 @@ export class OfflineReconciliationService {
   /**
    * Reprocess inventory for an order using existing FIFO logic
    */
-  async reprocessInventory(orderId: string): Promise<{ success: boolean; message: string; error?: any }> {
+  protected async reprocessInventory(orderId: string): Promise<{ success: boolean; message: string; error?: any }> {
     try {
       console.log('🔄 Reprocessing inventory for order:', orderId);
 
