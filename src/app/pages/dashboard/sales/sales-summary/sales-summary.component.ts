@@ -32,10 +32,7 @@ export function resolvePeriodDateRange(
   let start: Date;
   let end: Date;
 
-  if (period === 'all') {
-    start = new Date(1970, 0, 1, 0, 0, 0, 0);
-    end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
-  } else if (period === 'today') {
+  if (period === 'today') {
     start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
     end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
   } else if (period === 'yesterday') {
@@ -2131,7 +2128,7 @@ export class SalesSummaryComponent implements OnInit {
   });
 
   constructor() {
-    // Initialize default range to all time
+    // Initialize the displayed range from the selected period.
     const today = new Date();
     const { from, to } = resolvePeriodDateRange(this.reportFilters.selectedPeriod(), today);
     this.fromDate = from;

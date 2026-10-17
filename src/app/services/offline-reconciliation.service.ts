@@ -1,5 +1,5 @@
 import { Injectable, inject } from '@angular/core';
-import { Firestore, collection, query, where, getDocs, doc, updateDoc, getDoc, Timestamp, orderBy, limit, addDoc, runTransaction } from '@angular/fire/firestore';
+import { Firestore, collection, query, where, getDocs, doc, updateDoc, getDoc, Timestamp, limit, addDoc, runTransaction } from '@angular/fire/firestore';
 import { 
   ReconciliationDiscrepancy, 
   ReconciliationAction, 
@@ -13,6 +13,23 @@ import { StoreService } from './store.service';
 import { NetworkService } from './network.service';
 import { OrdersSellingTrackingService } from './orders-selling-tracking.service';
 import { CartItem } from '../interfaces/cart.interface';
+import { environment } from '../../environments/environment';
+
+export class ReconSummaryApiError extends Error {
+  constructor(readonly status: number, message: string) {
+    super(message);
+    this.name = 'ReconSummaryApiError';
+  }
+}
+
+interface ReconSummaryResponse {
+  success: boolean;
+  store_id: string;
+  from: string;
+  to: string;
+  count: number;
+  rows: Array<Record<string, unknown>>;
+}
 
 @Injectable({
   providedIn: 'root'
@@ -29,8 +46,8 @@ export class OfflineReconciliationService {
    */
   async findDiscrepancies(
     storeId: string,
-    startDate: Date,
-    endDate: Date
+    startDate: string,
+    endDate: string
   ): Promise<ReconciliationDiscrepancy[]> {
     try {
       console.log('🔍 Finding discrepancies for store:', storeId, 'from', startDate, 'to', endDate);
@@ -39,19 +56,8 @@ export class OfflineReconciliationService {
       const store = await this.storeService.getStore(storeId);
       const storeName = store?.storeName || 'Unknown Store';
 
-      // Query ordersSellingTracking as primary source (has invoiceNumber and product details)
-      // Note: Can't filter by isStockTracked in query yet (new field, needs composite index)
-      // Will filter by checking products individually
-      const trackingQuery = query(
-        collection(this.firestore, 'ordersSellingTracking'),
-        where('storeId', '==', storeId),
-        where('createdAt', '>=', startDate),
-        where('createdAt', '<=', endDate),
-        orderBy('createdAt', 'desc')
-      );
-
-      const trackingSnap = await getDocs(trackingQuery);
-      console.log(`📦 Found ${trackingSnap.docs.length} tracking entries in date range`);
+      const trackingRows = await this.fetchReconSummaryRows(storeId, startDate, endDate);
+      console.log(`📦 Found ${trackingRows.length} stock-tracked rows in date range`);
 
       const getDateKey = (dateVal: any): string => {
         const d = dateVal?.toDate ? dateVal.toDate() : new Date(dateVal);
@@ -62,8 +68,7 @@ export class OfflineReconciliationService {
       const trackingTotalsByDate = new Map<string, { amount: number; quantity: number }>();
 
       // Build daily tracking totals first (open/completed status for offline)
-      for (const trackingDoc of trackingSnap.docs) {
-        const trackingData = trackingDoc.data() as any;
+      for (const trackingData of trackingRows) {
         const status = String(trackingData.status || '').toLowerCase();
         if (status !== 'completed' && status !== 'open') continue;
 
@@ -89,38 +94,16 @@ export class OfflineReconciliationService {
         hasDeferredInventory: boolean;
       }>();
 
-      for (const trackingDoc of trackingSnap.docs) {
-        const trackingData = trackingDoc.data() as any;
+      for (const trackingData of trackingRows) {
         const orderId = trackingData.orderId;
         const productId = trackingData.productId;
+
+        if (!orderId || !productId) continue;
 
         // Only include orders captured offline
         const isOfflineCapture = trackingData._offlineCreated ?? trackingData.isOffline ?? false;
         const hasDeferredInventory = trackingData.batchReconciliationStatus === 'pending';
         if (!isOfflineCapture && !hasDeferredInventory) continue;
-
-        // Check if product should be tracked
-        // First try using the denormalized isStockTracked field (for new entries)
-        let isStockTracked = trackingData.isStockTracked;
-        
-        // If field doesn't exist (old entries), check the product document
-        if (isStockTracked === undefined) {
-          try {
-            const productRef = doc(this.firestore, 'products', productId);
-            const productSnap = await getDoc(productRef);
-            
-            if (!productSnap.exists()) continue;
-            
-            const productData = productSnap.data() as any;
-            isStockTracked = productData.isStockTracked ?? false;
-          } catch (err) {
-            console.warn(`Could not fetch product ${productId}:`, err);
-            continue;
-          }
-        }
-        
-        // Only process products that are stock tracked
-        if (!isStockTracked) continue;
 
         if (!orderMap.has(orderId)) {
           // Get invoice number from orders collection for accuracy
@@ -284,10 +267,11 @@ export class OfflineReconciliationService {
    */
   async getReconciliationSummary(
     storeId: string,
-    startDate: Date,
-    endDate: Date
+    startDate: string,
+    endDate: string,
+    existingDiscrepancies?: ReconciliationDiscrepancy[]
   ): Promise<ReconciliationSummary> {
-    const discrepancies = await this.findDiscrepancies(storeId, startDate, endDate);
+    const discrepancies = existingDiscrepancies ?? await this.findDiscrepancies(storeId, startDate, endDate);
 
     return {
       totalOrders: discrepancies.length,
@@ -297,6 +281,55 @@ export class OfflineReconciliationService {
       offlineOrders: discrepancies.filter(d => d.isOfflineOrder).length,
       unreconciledOrders: discrepancies.filter(d => d.needsInventoryReprocess).length
     };
+  }
+
+  private async fetchReconSummaryRows(
+    storeId: string,
+    from: string,
+    to: string
+  ): Promise<any[]> {
+    const endpoint = environment.api?.reconciliationSummaryApi;
+    if (!endpoint) {
+      throw new ReconSummaryApiError(500, 'Reconciliation summary endpoint is not configured.');
+    }
+
+    await this.authService.waitForAuth();
+    const token = await this.authService.getFirebaseIdToken(true);
+    if (!token) {
+      throw new ReconSummaryApiError(401, 'Sign in before loading reconciliation data.');
+    }
+
+    const params = new URLSearchParams({ storeId, from, to });
+    const response = await fetch(`${endpoint}?${params.toString()}`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+
+    if (!response.ok) {
+      throw new ReconSummaryApiError(response.status, `Reconciliation summary request failed: ${response.status}`);
+    }
+
+    const payload = await response.json() as ReconSummaryResponse;
+    if (!payload.success || !Array.isArray(payload.rows)) {
+      throw new ReconSummaryApiError(500, 'Reconciliation summary response was invalid.');
+    }
+
+    return payload.rows.map(row => ({
+      ...row,
+      orderId: row['orderId'] ?? row['order_id'],
+      productId: row['productId'] ?? row['product_id'],
+      createdAt: row['createdAt'] ?? row['created_at'],
+      updatedAt: row['updatedAt'] ?? row['updated_at'],
+      storeId: row['storeId'] ?? row['store_id'],
+      invoiceNumber: row['invoiceNumber'] ?? row['invoice_number'],
+      cashierName: row['cashierName'] ?? row['cashier_name'],
+      userName: row['userName'] ?? row['user_name'],
+      isStockTracked: row['isStockTracked'] ?? row['is_stock_tracked'],
+      quantity: row['quantity'] ?? row['soldQuantity'] ?? row['sold_quantity'],
+      total: row['total'] ?? row['totalAmount'] ?? row['total_amount'],
+      _offlineCreated: row['_offlineCreated'] ?? row['_offline_created'],
+      isOffline: row['isOffline'] ?? row['is_offline'],
+      batchReconciliationStatus: row['batchReconciliationStatus'] ?? row['batch_reconciliation_status']
+    }));
   }
 
   /**

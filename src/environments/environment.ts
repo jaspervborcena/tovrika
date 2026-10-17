@@ -40,6 +40,7 @@ export const environment = {
     salesRevenueApi: "https://asia-east1-jasperpos-dev.cloudfunctions.net/get_sales_revenue_bq",
     salesAdjustmentsApi: "https://asia-east1-jasperpos-dev.cloudfunctions.net/get_sales_adjustments_bq",
     salesCustomersApi: "https://asia-east1-jasperpos-dev.cloudfunctions.net/get_sales_customers_bq",
+    reconciliationSummaryApi: "https://asia-east1-jasperpos-dev.cloudfunctions.net/get_recon_summary_bq",
     salesSummaryDetailsApi: "https://get-sales-summary-details-bq-3ao45uhsoq-de.a.run.app",
     salesSummaryOrderDetailsApi: "https://get-sales-summary-order-details-bq-3ao45uhsoq-de.a.run.app",
   },

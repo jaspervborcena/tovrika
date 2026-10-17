@@ -84,6 +84,15 @@
     </div>
   </div>
 
+  <div *ngIf="errorMessage" class="error-state" role="alert">
+    <p>{{ errorMessage }}</p>
+    <button (click)="searchDiscrepancies()" [disabled]="loading" class="go-button">Retry</button>
+  </div>
+
+  <div *ngIf="loading" class="loading-state" role="status" aria-live="polite">
+    Loading reconciliation data...
+  </div>
+
   <!-- Summary Cards -->
   <div *ngIf="summary" class="summary-cards">
     <div class="summary-cards-grid">
