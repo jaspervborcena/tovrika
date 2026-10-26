@@ -4,6 +4,17 @@ All notable changes to this project are documented in this file.
 
 ---
 
+## [Unreleased] — 2026-10-21
+
+### Dashboard, Reporting, and Inventory Reconciliation
+- **Offline reconciliation summaries** — Reconciliation searches use the configured summary API with the selected store and date range, and display summary counts alongside detected discrepancies.
+- **FIFO inventory processing** — Completed online payments deduct stock from the oldest eligible inventory batches in the sale transaction. Offline payments skip batch writes and remain pending for later reconciliation; products with `isStockTracked` set to `false` are not deducted.
+- **FIFO inventory repair** — Deferred inventory deductions can be reprocessed against FIFO batches, with inventory tracking and reconciliation state refreshed afterward.
+- **Consistent report periods** — Dashboard and sales summary filters share the same period options, including today, yesterday, this/previous week, this/previous month, and a custom date range.
+- **Store filter consistency** — Dashboard filters use active, deduplicated stores and keep store selection synchronized across reporting screens.
+- **Dashboard and inventory fixes** — Corrected dashboard summary calculations and inventory reconciliation behavior for tracked orders.
+- **Mobile POS removal** — Removed the separate mobile POS route and its dedicated components; the standalone POS remains available at `/pos` and uses the responsive POS experience.
+
 ## [1.0.3] — 2026-08-01
 
 ### Overview

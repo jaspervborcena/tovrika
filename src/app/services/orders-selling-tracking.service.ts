@@ -1446,6 +1446,7 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
   ): Promise<{ success: boolean; tracked: number; adjusted: number; errors: Array<{ productId: string; error: any }> }> {
     const trackingStatus = String(ctx.status || 'open').trim().toLowerCase();
     const isCompletedSale = trackingStatus === 'completed';
+    const applyFifoNow = isCompletedSale && this.networkService.isOnline();
     const plans: any[] = [];
     const orderLockKey = ctx.orderId ? `order:${ctx.orderId}` : `order:${Date.now()}`;
     const orderLockRef = ctx.orderId ? doc(this.firestore, 'inventorySaleLocks', orderLockKey) : null;
@@ -1458,6 +1459,14 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
         plans.length = 0;
         const plannedLockKeys = new Set<string>();
         const plannedProductQuantities = new Map<string, number>();
+        const plannedBatchQuantities = new Map<string, number>();
+        const plannedBatchWrites = new Map<string, {
+          ref: any;
+          quantity: number;
+          totalDeducted: number;
+          status: string;
+        }>();
+        const pendingBatchReservations = new Map<string, number>();
         const orderSnapshot = orderRef ? await transaction.get(orderRef as any) : null;
 
         if (orderLockRef) {
@@ -1499,9 +1508,7 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
           const requestedQty = Math.max(0, Number(item.quantity || 0));
           let actualCost = Number(item.costPrice || 0);
 
-          // Reserve the aggregate stock now; batch FIFO is applied during shift reconciliation.
-          const hasLiveStock = previousTotalStock > 0;
-          const isStockTracked = item.isStockTracked === true || hasLiveStock;
+          const isStockTracked = item.isStockTracked === true;
           const priorProductQuantity = isStockTracked
             ? plannedProductQuantities.get(item.productId) || 0
             : 0;
@@ -1522,6 +1529,84 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
           if (isStockTracked) {
             plannedProductQuantities.set(item.productId, totalProductQuantity);
           }
+
+          const allocations: Array<{
+            batchId: string;
+            refId: string;
+            costPrice: number;
+            quantity: number;
+            ref: any;
+          }> = [];
+          if (applyFifoNow && isStockTracked && fulfilledQty > 0) {
+            const batchesQuery = query(
+              collection(this.firestore, 'productInventory'),
+              where('productId', '==', item.productId),
+              where('storeId', '==', ctx.storeId)
+            );
+            const batchesSnapshot = await transaction.get(batchesQuery as any) as any;
+            const batches = batchesSnapshot.docs
+              .map((batchDoc: any) => ({
+                id: batchDoc.id,
+                ref: batchDoc.ref,
+                data: batchDoc.data()
+              }))
+              .filter((batch: any) =>
+                batch.data.companyId === ctx.companyId &&
+                String(batch.data.status || '').toLowerCase() === 'active' &&
+                Number(batch.data.quantity || 0) > 0
+              )
+              .sort((a: any, b: any) => {
+                const receivedAtA = a.data.receivedAt?.toDate?.() ??
+                  new Date(a.data.receivedAt || a.data.createdAt || 0);
+                const receivedAtB = b.data.receivedAt?.toDate?.() ??
+                  new Date(b.data.receivedAt || b.data.createdAt || 0);
+                return receivedAtA.getTime() - receivedAtB.getTime() || a.id.localeCompare(b.id);
+              });
+
+            let pendingToReserve = pendingBatchReservations.get(item.productId);
+            if (pendingToReserve === undefined) {
+              pendingToReserve = Number(productData.pendingBatchDeductionQty || 0);
+            }
+            let remainingQty = fulfilledQty;
+            for (const batch of batches) {
+              const alreadyPlanned = plannedBatchQuantities.get(batch.id) || 0;
+              const availableQty = Math.max(0, Number(batch.data.quantity || 0) - alreadyPlanned);
+              const reservedQty = Math.min(pendingToReserve, availableQty);
+              pendingToReserve -= reservedQty;
+              const deductQty = Math.min(remainingQty, availableQty - reservedQty);
+              if (deductQty <= 0) continue;
+
+              const batchCost = Number(batch.data.costPrice || batch.data.unitPrice || actualCost || 0);
+              plannedBatchQuantities.set(batch.id, alreadyPlanned + deductQty);
+              const newBatchQuantity = Number(batch.data.quantity || 0) - alreadyPlanned - deductQty;
+              plannedBatchWrites.set(batch.id, {
+                ref: batch.ref,
+                quantity: newBatchQuantity,
+                totalDeducted: Number(batch.data.totalDeducted || 0) + alreadyPlanned + deductQty,
+                status: newBatchQuantity === 0 ? 'depleted' : 'active'
+              });
+              allocations.push({
+                batchId: batch.data.batchId || batch.id,
+                refId: batch.id,
+                costPrice: batchCost,
+                quantity: deductQty,
+                ref: batch.ref
+              });
+              remainingQty -= deductQty;
+              if (remainingQty <= 0) break;
+            }
+            pendingBatchReservations.set(item.productId, pendingToReserve);
+            if (remainingQty > 0) {
+              throw new Error(`Insufficient FIFO batch stock for product ${item.productId}. Short ${remainingQty}.`);
+            }
+            const allocatedQty = allocations.reduce((sum, allocation) => sum + allocation.quantity, 0);
+            const allocatedCost = allocations.reduce(
+              (sum, allocation) => sum + allocation.costPrice * allocation.quantity,
+              0
+            );
+            if (allocatedQty > 0) actualCost = allocatedCost / allocatedQty;
+          }
+
           plans.push({
             item,
             itemCode,
@@ -1535,6 +1620,7 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
             previousPendingBatchDeductionQty: Number(productData.pendingBatchDeductionQty || 0),
             fulfilledQty,
             actualCost,
+            allocations,
             now,
             trackingRef: doc(collection(this.firestore, 'ordersSellingTracking')),
             inventoryTrackingRef: isStockTracked ? null : doc(collection(this.firestore, 'inventoryTracking'))
@@ -1554,10 +1640,11 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
         for (const plan of plans) {
           const { item, isStockTracked, productRef, now } = plan;
           if (isStockTracked) {
+            const pendingQty = plan.previousPendingBatchDeductionQty +
+              (applyFifoNow ? 0 : plannedProductQuantities.get(item.productId) || 0);
             transaction.update(productRef as any, {
               totalStock: plan.updatedTotalStock,
-              pendingBatchDeductionQty: plan.previousPendingBatchDeductionQty +
-                (plannedProductQuantities.get(item.productId) || 0),
+              pendingBatchDeductionQty: pendingQty,
               lastUpdated: now,
               updatedAt: now,
               updatedBy: ctx.cashierId
@@ -1596,7 +1683,6 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
             isVatExempt: !!item.isVatExempt,
             runningBalanceTotalStock: plan.updatedTotalStock,
             isStockTracked,
-            batchReconciliationStatus: isStockTracked ? 'pending' : 'not_required',
             category: plan.product?.category,
             tagLabels: item.tagLabels ?? plan.product?.tagLabels,
             tags: item.tags ?? plan.product?.tags,
@@ -1604,8 +1690,39 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
             cashierEmail: ctx.cashierEmail,
             cashierName: ctx.cashierName,
             version: environment.version,
-            number: (item as any).number
+            number: (item as any).number,
+            batchReconciliationStatus: !isStockTracked
+              ? 'not_required'
+              : applyFifoNow
+                ? 'applied'
+                : 'pending',
+            ...(applyFifoNow && isStockTracked ? { batchReconciledAt: now } : {})
           }) as any);
+
+          for (const allocation of plan.allocations) {
+            transaction.set(doc(collection(this.firestore, 'inventoryTracking')) as any, this.removeUndefinedFields({
+              eventType: 'completed',
+              companyId: ctx.companyId,
+              storeId: ctx.storeId,
+              orderId: ctx.orderId,
+              invoiceNumber: ctx.invoiceNumber || '',
+              productId: item.productId,
+              productName: item.productName || '',
+              productCode: (item as any).productCode || '',
+              skuId: item.skuId || (item as any).sku || '',
+              batchId: allocation.batchId,
+              refId: allocation.refId,
+              costPrice: allocation.costPrice,
+              quantity: allocation.quantity,
+              runningBalanceTotalStock: plan.updatedTotalStock,
+              deductedAt: now,
+              deductedBy: ctx.cashierId,
+              createdBy: ctx.cashierId,
+              createdAt: now,
+              note: 'Online checkout - FIFO batch deduction'
+            }) as any);
+          }
+
           if (!isStockTracked && plan.inventoryTrackingRef) {
             transaction.set(plan.inventoryTrackingRef as any, this.removeUndefinedFields({
               eventType: 'completed',
@@ -1640,8 +1757,18 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
           } as any);
         }
 
+        for (const write of plannedBatchWrites.values()) {
+          transaction.update(write.ref as any, {
+            quantity: write.quantity,
+            totalDeducted: write.totalDeducted,
+            status: write.status,
+            updatedAt: new Date(),
+            updatedBy: ctx.cashierId
+          } as any);
+        }
+
         if (orderRef && orderSnapshot?.exists()) {
-          const hasPendingBatchReconciliation = plans.some(plan =>
+          const hasPendingBatchReconciliation = !applyFifoNow && plans.some(plan =>
             plan.isStockTracked && plan.fulfilledQty > 0
           );
           transaction.update(orderRef as any, {
@@ -1657,7 +1784,8 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
           this.productService.applyLocalPatch(plan.item.productId, {
             totalStock: plan.updatedTotalStock,
             pendingBatchDeductionQty: plan.previousPendingBatchDeductionQty +
-              (plans.filter(otherPlan => otherPlan.isStockTracked && otherPlan.item.productId === plan.item.productId)
+              (applyFifoNow ? 0 : plans
+                .filter(otherPlan => otherPlan.isStockTracked && otherPlan.item.productId === plan.item.productId)
                 .reduce((sum, otherPlan) => sum + otherPlan.fulfilledQty, 0)),
             lastUpdated: plan.now,
             updatedAt: plan.now,

@@ -55,6 +55,13 @@ The repository has a solid feature set and the current build is successful. The 
 
 ## 🌟 Latest Features & Updates
 
+### ✨ **Dashboard & Inventory Update (October 21, 2026)**
+- **Offline reconciliation summaries** - Reconciliation searches load authenticated summary data for the selected store and date range, with discrepancy counts shown in the dashboard.
+- **FIFO inventory processing** - Completed online payments deduct stock from the oldest eligible batches; offline payments defer batch deductions for reconciliation. Products with `isStockTracked` set to `false` are not deducted.
+- **FIFO inventory repair** - Eligible deferred deductions can be reprocessed against inventory batches and refreshed in the reconciliation view.
+- **Consistent reporting filters** - Dashboard and sales summary screens share standard date periods and active-store selection.
+- **Simplified POS routes** - The separate mobile POS route and dedicated components have been removed; the standalone responsive POS remains available at `/pos`.
+
 ### ✨ **Recent POS Update (July 2026)**
 - **Item-level adjustment tracking** - Return and refund actions now record against the correct order line in the tracking layer.
 - **Line-based summary consistency** - The adjustment event is tied to the selected item’s actual quantity and amount, improving invoice summary accuracy.
@@ -136,7 +143,7 @@ The repository has a solid feature set and the current build is successful. The 
 
 ### 📱 **Interface & User Experience**
 - ✅ **Standalone POS Interface** - Dedicated cashier interface accessible at `/pos`
-- ✅ **Mobile POS Interface** - Dedicated mobile interface for cashiers
+- ✅ **Responsive POS Interface** - The standalone POS adapts to supported screen sizes
 - ✅ **Professional UI Design** - Modern gradient headers and consistent styling
 - ✅ **Responsive Design** - Desktop and mobile-optimized interface
 - ✅ **Customer View Display** - Customer-facing display capabilities

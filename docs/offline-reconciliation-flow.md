@@ -1,6 +1,6 @@
 # Offline Reconciliation Flow
 
-This flowchart documents how manual offline reconciliation works in the current app implementation.
+This flowchart documents the current manual offline reconciliation workflow. Completed online payments deduct FIFO batches during checkout. Offline sales skip batch writes and mark tracked lines pending for later reconciliation. Searches require connectivity and retrieve tracking summary rows through the configured reconciliation summary API.
 
 ```mermaid
 flowchart TD
@@ -11,13 +11,11 @@ flowchart TD
     D --> E[Select Store + Date Range]
     E --> F[OfflineReconciliationService.findDiscrepancies]
 
-    F --> G[Load tracking entries\nordersSellingTracking]
-    F --> H[Load accounting entries\norderAccountingLedger]
-    F --> I[Check inventory deductions\ninventoryTracking]
+    F --> G[Request authenticated summary rows\nfor store and date range]
+    G --> H[Inspect offline and deferred-FIFO tracking rows]
+    H --> I[Check inventory deductions\ninventoryTracking]
 
-    G --> J{Per order: issues found?}
-    H --> J
-    I --> J
+    I --> J{Per order: inventory issue found?}
 
     J -- No --> K[Not shown in discrepancy list]
     J -- Yes --> L[Build discrepancy record\nseverity + recommended actions]
@@ -38,7 +36,7 @@ flowchart TD
     S --> U
     T --> U
 
-    U --> V[Refresh discrepancies + summary in UI]
+    U --> V[Refresh discrepancies + summary counts in UI]
 ```
 
 ## Key collections involved
@@ -51,4 +49,6 @@ flowchart TD
 
 ## Notes
 - The reconciliation screen is a **manual repair workflow** for offline-captured discrepancies.
+- Summary requests use the configured `reconciliationSummaryApi` and a Firebase ID token; a missing token or unsuccessful API response is reported to the user.
+- The selected store and date range scope the summary request. Reprocessing uses FIFO inventory batches and refreshes the discrepancy list and summary counts afterward.
 - Current UI/actions require connectivity to query and apply reconciliation updates.

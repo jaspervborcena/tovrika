@@ -6,6 +6,15 @@ A comprehensive Point of Sale (POS) system built with Angular 19 and Firebase, d
 
 The app-managed offline cache uses SQLite via `sql.js`; Firebase Auth and Firestore may maintain separate SDK-managed browser persistence. See [SQLite Offline Storage](sqlite-offline-storage.md) for the schema, legacy queue migration, and troubleshooting.
 
+## Latest Application Updates
+
+As of October 21, 2026:
+- Offline reconciliation loads authenticated summary data for a selected store and date range, then shows discrepancy counts and records.
+- Completed online payments deduct stock from FIFO batches immediately; offline payments defer batch deductions for reconciliation. Products with `isStockTracked` set to `false` are not deducted.
+- Deferred inventory deductions can be reprocessed against FIFO batches from the reconciliation workflow.
+- Dashboard and sales summary filters share standard reporting periods and active-store selection.
+- The dedicated mobile POS route and components have been removed. The standalone POS remains at `/pos` and uses the responsive POS experience.
+
 ## 🚀 Features
 
 ### Core Functionality
@@ -27,7 +36,7 @@ The app-managed offline cache uses SQLite via `sql.js`; Firebase Auth and Firest
 ### Advanced Features
 - 🔐 **Hybrid Authentication System** - Online/offline authentication with seamless fallback
 - 💾 **Cloud Sync** - Real-time data synchronization with offline capabilities
-- 📱 **Mobile POS** - Dedicated mobile interface for cashiers
+- 📱 **Responsive POS** - Standalone cashier POS experience for supported screen sizes
 - 🧾 **VAT Management** - Automated VAT calculations and exemptions
 - 📊 **Analytics Ready** - Built-in analytics infrastructure
 - 🎯 **Customer View** - Customer-facing display capabilities
