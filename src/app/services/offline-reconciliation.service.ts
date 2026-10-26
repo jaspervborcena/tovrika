@@ -745,6 +745,7 @@ export class OfflineReconciliationService {
               batchId: allocation.batchId,
               refId: allocation.refId,
               costPrice: allocation.costPrice,
+              sellingPrice: Number(line.data.price || 0),
               quantity: allocation.quantity,
               runningBalanceTotalStock: Number(line.data.runningBalanceTotalStock || 0),
               deductedAt: now,

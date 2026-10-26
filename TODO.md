@@ -29,7 +29,7 @@ This file tracks recently completed work and the next development tasks. Update 
 - [ ] Fix or explain why the Karma process does not exit after reporting all tests passed.
 - [x] Map the 36 existing specs to the roadmap and identify missing or brittle coverage: [Existing spec map](docs/testing-roadmap.md#existing-spec-map).
 - [x] Add unit tests for checkout totals/payment validation and FIFO allocation planning.
-- [x] Test FIFO transaction callback writes, repeated-processing locks, insufficient stock, and offline reconnect ID remapping.
+- [x] Test FIFO transaction callback writes, repeated-processing locks, insufficient stock, offline reconnect ID remapping, and untracked sale price snapshots without stock movement.
 - [x] Bound online checkout inventory waits and add an inventory-only retry notice; keep offline checkout to local sale-line queueing without inventory queries.
 - [ ] Test checkout/invoice transaction outcomes and emulator-backed Firestore writes/concurrency.
 - [ ] Add P0 tests for adjustments, offline durability/sync, and tenant isolation.

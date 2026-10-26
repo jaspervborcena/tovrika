@@ -189,6 +189,48 @@ describe('OrdersSellingTrackingService inventory transaction', () => {
     }]);
     expect(writes).toEqual([]);
   });
+
+  it('writes a price snapshot from the product without FIFO or stock updates for untracked sales', async () => {
+    const result = await (service as any).logSaleAndAdjustStockAtomic({
+      companyId: 'company-1',
+      storeId: 'store-1',
+      orderId: 'order-1',
+      invoiceNumber: 'INV-1',
+      status: 'completed',
+      cashierId: 'cashier-1'
+    }, [{
+      productId: 'product-1',
+      itemCode: 'SERVICE-1',
+      productName: 'Service',
+      quantity: 2,
+      unitPrice: 55,
+      lineTotal: 110,
+      isStockTracked: false
+    }]);
+
+    expect(result.success).toBeTrue();
+    expect(result.adjusted).toBe(0);
+    expect((service as any).createInventoryBatchQuery).not.toHaveBeenCalled();
+    expect(writes.some(write => write.operation === 'update' && (
+      write.ref.collectionName === 'products' || write.ref.collectionName === 'productInventory'
+    ))).toBeFalse();
+
+    const saleSnapshot = writes.find(write =>
+      write.operation === 'set' &&
+      write.ref.collectionName === 'inventoryTracking' &&
+      write.data.eventType === 'sale'
+    )?.data;
+    expect(saleSnapshot).toEqual(jasmine.objectContaining({
+      stockMovement: false,
+      isStockTracked: false,
+      quantity: 2,
+      costPrice: 18,
+      sellingPrice: 60,
+      orderId: 'order-1',
+      invoiceNumber: 'INV-1',
+      itemCode: 'SERVICE-1'
+    }));
+  });
 });
 
 const emptySnapshot = {
@@ -198,7 +240,7 @@ const emptySnapshot = {
 
 const productSnapshot = {
   exists: () => true,
-  data: () => ({ totalStock: 3, pendingBatchDeductionQty: 0 })
+  data: () => ({ totalStock: 3, pendingBatchDeductionQty: 0, costPrice: 18, sellingPrice: 60 })
 };
 
 const makeBatch = (id: string, quantity: number, costPrice: number, receivedAt: string) => ({

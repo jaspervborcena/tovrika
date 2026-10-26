@@ -1,7 +1,7 @@
 /**
  * Event types for inventory tracking records
  */
-export type InventoryEventType = 'completed' | 'damage' | 'restock' | 'update';
+export type InventoryEventType = 'completed' | 'sale' | 'damage' | 'restock' | 'update';
 
 /**
  * Old data structure for tracking changes during updates
@@ -48,7 +48,8 @@ export interface InventoryTracking {
   saleLineIndex?: number;
   
   // Quantity and stock tracking
-  quantity: number; // Quantity deducted/damaged/added
+  quantity: number; // Quantity moved, or sold quantity for a no-movement sale snapshot
+  stockMovement?: boolean; // False for sale snapshots that do not change stock
   totalStock?: number; // Product's totalStock at time of event (deprecated)
   runningBalanceTotalStock?: number; // Product's totalStock at time of event
   
@@ -61,7 +62,7 @@ export interface InventoryTracking {
   oldData?: InventoryOldData;
   
   // Timestamps
-  deductedAt?: Date; // For completed/damage events
+  deductedAt?: Date; // Inventory event time, including sale snapshots for history queries
   createdAt: Date;
   
   // Audit trail

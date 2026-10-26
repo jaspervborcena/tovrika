@@ -93,7 +93,7 @@ export class OrdersSellingTrackingService {
     this.offlineDocService.onDocumentSynced(async document => {
       if (document.collectionName !== 'ordersSellingTracking' ||
           String(document.data?.status || '').toLowerCase() !== 'completed' ||
-          document.data?.isStockTracked !== true) {
+          typeof document.data?.isStockTracked !== 'boolean') {
         return;
       }
       const orderId = String(document.data?.orderId || '');
@@ -129,7 +129,7 @@ export class OrdersSellingTrackingService {
       }))
       .filter(line =>
         String(line.data.status || '').toLowerCase() === 'completed' &&
-        line.data.isStockTracked === true
+        typeof line.data.isStockTracked === 'boolean'
       )
       .sort((left, right) => {
         const leftDate = left.data.createdAt?.toDate?.() ?? new Date(left.data.createdAt || 0);
@@ -168,7 +168,7 @@ export class OrdersSellingTrackingService {
         vat: Number(line.data.vat || 0),
         isVatExempt: line.data.isVatExempt === true,
         batchNumber: Number(line.data.batchNumber || 1),
-        isStockTracked: true
+        isStockTracked: line.data.isStockTracked === true
       }], {
         ref: line.ref,
         id: line.id,
@@ -1632,7 +1632,7 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
           }
           const currentLine = currentLineSnapshot.data() as any;
           if (String(currentLine.status || '').toLowerCase() !== 'completed' ||
-              currentLine.isStockTracked !== true ||
+              currentLine.isStockTracked !== (items[0]?.isStockTracked === true) ||
               String(currentLine.productId || '') !== String(items[0]?.productId || '') ||
               String(currentLine.itemCode || '') !== String(items[0]?.itemCode || '')) {
             throw new Error(`Sale line ${existingTrackingLine.id} changed before inventory processing`);
@@ -1643,7 +1643,7 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
         for (let itemIndex = 0; itemIndex < items.length; itemIndex++) {
           const item = items[itemIndex];
           const itemCode = String(item.itemCode || '').trim();
-          if (isCompletedSale && !itemCode) {
+          if (isCompletedSale && item.isStockTracked === true && !itemCode) {
             throw new Error(`Missing itemCode for completed sale item ${item.productId}`);
           }
 
@@ -1758,6 +1758,7 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
             lockRef,
             productRef,
             product,
+            productData,
             previousTotalStock,
             updatedTotalStock: isInventoryDeduction ? Math.max(0, previousTotalStock - totalProductQuantity) : previousTotalStock,
             previousPendingBatchDeductionQty: Number(productData.pendingBatchDeductionQty || 0),
@@ -1841,6 +1842,7 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
               batchId: allocation.batchId,
               refId: allocation.refId,
               costPrice: allocation.costPrice,
+              sellingPrice: Number(item.unitPrice || 0),
               quantity: allocation.quantity,
               runningBalanceTotalStock: plan.updatedTotalStock,
               deductedAt: now,
@@ -1848,6 +1850,38 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
               createdBy: ctx.cashierId,
               createdAt: now,
               note: 'Online checkout - FIFO batch deduction'
+            }) as any);
+          }
+
+          if (isCompletedSale && !isStockTracked) {
+            const saleSnapshotRef = this.createInventoryDocumentReference(
+              'inventoryTracking',
+              `sale-${createInventorySaleLockId(ctx.orderId, plan.saleLineIndex, item.productId, plan.itemCode)}`
+            );
+            transaction.set(saleSnapshotRef as any, this.removeUndefinedFields({
+              eventType: 'sale',
+              stockMovement: false,
+              isStockTracked: false,
+              companyId: ctx.companyId,
+              storeId: ctx.storeId,
+              orderId: ctx.orderId,
+              saleTrackingId: plan.trackingRef.id,
+              saleLineIndex: plan.saleLineIndex,
+              invoiceNumber: ctx.invoiceNumber || '',
+              productId: item.productId,
+              itemCode: plan.itemCode,
+              productName: item.productName || '',
+              productCode: (item as any).productCode || '',
+              skuId: item.skuId || (item as any).sku || '',
+              quantity: plan.fulfilledQty,
+              costPrice: Number(plan.productData?.costPrice ?? item.costPrice ?? 0),
+              sellingPrice: Number(plan.productData?.sellingPrice ?? item.unitPrice ?? 0),
+              runningBalanceTotalStock: plan.previousTotalStock,
+              deductedAt: now,
+              createdAt: now,
+              deductedBy: ctx.cashierId,
+              createdBy: ctx.cashierId,
+              note: 'Sale price snapshot for non-stock-tracked product; no stock movement'
             }) as any);
           }
 

@@ -28,7 +28,8 @@ export interface InventoryRow {
   totalProfit: number;
   runningBalanceTotalStock: number;  // Product stock at transaction time
   productId?: string;  // Product ID for querying max stock
-  source?: 'deduction' | 'orderTracking';  // Source collection identifier
+  saleTrackingId?: string;
+  source?: 'deduction' | 'saleSnapshot' | 'orderTracking';  // Source collection identifier
 }
 
 export interface InventoryItem {
@@ -187,7 +188,7 @@ export class InventoryService {
       
       const batchId: string | null = data.batchId ? String(data.batchId) : null;
 
-      const sellingPrice = Number(product?.sellingPrice ?? data.price ?? 0) || 0;
+      const sellingPrice = Number(data.sellingPrice ?? data.price ?? product?.sellingPrice ?? 0) || 0;
       const profitPerUnit = +(sellingPrice - costPrice);
       const totalGross = +(sellingPrice * quantity);
       const totalProfit = +(profitPerUnit * quantity);
@@ -217,6 +218,7 @@ export class InventoryService {
       
       out.push({
         invoiceNo: data.invoiceNumber || data.orderId || '',
+        saleTrackingId: data.saleTrackingId,
         batchId,
         date: deductionDate,
         performedBy,
@@ -231,7 +233,7 @@ export class InventoryService {
         totalProfit,
         runningBalanceTotalStock: stockValue,  // Read from Firestore
         productId: productId || '',
-        source: 'deduction' as any  // Identify source
+        source: data.eventType === 'sale' ? 'saleSnapshot' : 'deduction'
       });
       }
       return out;
@@ -269,7 +271,7 @@ export class InventoryService {
         
         const batchId: string | null = data.batchId ? String(data.batchId) : null;
 
-        const sellingPrice = Number(product?.sellingPrice ?? data.price ?? 0) || 0;
+        const sellingPrice = Number(data.sellingPrice ?? data.price ?? product?.sellingPrice ?? 0) || 0;
         const profitPerUnit = +(sellingPrice - costPrice);
         const totalGross = +(sellingPrice * quantity);
         const totalProfit = +(profitPerUnit * quantity);
@@ -299,6 +301,7 @@ export class InventoryService {
         
         out.push({
           invoiceNo: data.invoiceNumber || data.orderId || '',
+          saleTrackingId: data.saleTrackingId,
           batchId,
           date: deductionDate,
           performedBy,
@@ -313,7 +316,7 @@ export class InventoryService {
           totalProfit,
           runningBalanceTotalStock: stockValue,  // Read from Firestore
           productId: productId || '',
-          source: 'deduction' as any  // Identify source
+          source: data.eventType === 'sale' ? 'saleSnapshot' : 'deduction'
         });
       }
       return out;
@@ -410,7 +413,8 @@ export class InventoryService {
         console.log('💾 Pushing to out array with stock:', finalStock, 'for skuId:', outSkuId);
 
         out.push({
-          invoiceNo: data.orderId || '',
+          invoiceNo: data.invoiceNumber || data.orderId || '',
+          saleTrackingId: s.id,
           batchId,
           date: saleDate,
           performedBy,
@@ -487,7 +491,8 @@ export class InventoryService {
         const performedBy = await this.getUserDisplayName(data.createdBy) || data.createdBy || '';
 
         out.push({
-          invoiceNo: data.orderId || '',
+          invoiceNo: data.invoiceNumber || data.orderId || '',
+          saleTrackingId: s.id,
           batchId,
           date: saleDate,
           performedBy,
@@ -695,7 +700,15 @@ async loadRowsForPeriod(period: string, page: number = 1, storeId?: string, comp
     });
 
     // Combine both arrays
-    const allRows = [...deductionRows, ...salesRows];
+    const inventoryBackedSaleIds = new Set(
+      deductionRows
+        .map(row => row.saleTrackingId)
+        .filter((saleTrackingId): saleTrackingId is string => !!saleTrackingId)
+    );
+    const unallocatedSalesRows = salesRows.filter(row =>
+      !row.saleTrackingId || !inventoryBackedSaleIds.has(row.saleTrackingId)
+    );
+    const allRows = [...deductionRows, ...unallocatedSalesRows];
     
     // Sort by date descending
     allRows.sort((a, b) => {
