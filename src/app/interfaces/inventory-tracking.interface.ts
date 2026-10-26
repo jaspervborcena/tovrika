@@ -27,6 +27,7 @@ export interface InventoryTracking {
   
   // Product information
   productId: string;
+  itemCode?: string;
   productName?: string;
   productCode?: string;
   skuId?: string;
@@ -43,6 +44,8 @@ export interface InventoryTracking {
   orderId?: string;
   orderDetailId?: string;
   invoiceNumber?: string;
+  saleTrackingId?: string;
+  saleLineIndex?: number;
   
   // Quantity and stock tracking
   quantity: number; // Quantity deducted/damaged/added

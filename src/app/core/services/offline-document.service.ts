@@ -5,6 +5,7 @@ import { FirestoreSecurityService } from './firestore-security.service';
 import { LoggerService } from './logger.service';
 import { logFirestore } from '../utils/firestore-logger';
 import { applyCreateTimestamps, applyUpdateTimestamp } from '../utils/firestore-timestamps';
+import { createInventorySaleLockId } from '../../interfaces/inventory-sale-lock.interface';
 
 export interface OfflineDocument {
   id: string;
@@ -28,6 +29,7 @@ export class OfflineDocumentService {
   private securityService = inject(FirestoreSecurityService);
   private logger = inject(LoggerService);
   private syncPromise: Promise<{ synced: number; failed: number }> | null = null;
+  private readonly documentSyncedListeners = new Set<(document: OfflineDocument) => void | Promise<void>>();
 
   constructor() {
     if (typeof window !== 'undefined') {
@@ -67,7 +69,7 @@ export class OfflineDocumentService {
         console.error('❌ Failed to add security fields:', securityError);
         throw new Error(`Authentication failed: ${securityError instanceof Error ? securityError.message : 'Unknown auth error'}`);
       }
-      
+
       // Ensure create timestamps are applied. Use serverTimestamp when online; fallback to ISO when offline.
       const timestampedData = applyCreateTimestamps(secureData, navigator.onLine as boolean);
       console.log('⏰ Timestamps applied, final data:', timestampedData);
@@ -132,6 +134,58 @@ export class OfflineDocumentService {
       }
       
       throw error;
+    }
+  }
+
+  async createDocumentWithId(
+    collectionName: string,
+    documentId: string,
+    data: any,
+    forceOffline = false
+  ): Promise<string> {
+    if (!documentId || documentId.includes('/')) {
+      throw new Error(`Invalid document ID for ${collectionName}`);
+    }
+
+    const secureData = await this.securityService.addSecurityFields(data);
+    const online = navigator.onLine && !forceOffline;
+    const timestampedData = applyCreateTimestamps(secureData, online);
+    if (!online) {
+      const tempId = `temp_${collectionName}_${encodeURIComponent(documentId)}`;
+      await this.createOfflineDocument(collectionName, tempId, timestampedData, documentId);
+      this.logger.dbSuccess('Queued offline document creation with stable sync ID', {
+        api: 'offline.queue.add',
+        area: collectionName,
+        collectionPath: collectionName,
+        docId: tempId
+      });
+      return tempId;
+    }
+
+    try {
+      await logFirestore(this.logger, {
+        api: 'firestore.set',
+        area: collectionName,
+        collectionPath: collectionName,
+        docId: documentId
+      }, secureData, async () => {
+        await this.createOnlineDocumentWithId(collectionName, documentId, timestampedData);
+        return documentId;
+      });
+      return documentId;
+    } catch (error) {
+      if (navigator.onLine && !this.isConnectivityFailure(error)) {
+        throw error;
+      }
+      this.logger.error('Online deterministic document write failed; queueing locally', { area: collectionName }, error);
+      const tempId = `temp_${collectionName}_${encodeURIComponent(documentId)}`;
+      await this.createOfflineDocument(
+        collectionName,
+        tempId,
+        applyCreateTimestamps({ ...secureData, _offlineCreated: true }, false),
+        documentId
+      );
+      return tempId;
     }
   }
 
@@ -205,7 +259,12 @@ export class OfflineDocumentService {
   /**
    * Create document offline with pre-generated ID
    */
-  private async createOfflineDocument(collectionName: string, documentId: string, data: any): Promise<void> {
+  private async createOfflineDocument(
+    collectionName: string,
+    documentId: string,
+    data: any,
+    syncId?: string
+  ): Promise<void> {
     try {
   this.logger.debug('Creating document offline with ID', { area: collectionName, payload: { docId: documentId } });
       
@@ -218,7 +277,8 @@ export class OfflineDocumentService {
         tempId: documentId, // Same as ID for offline docs
         synced: false,
         createdAt: new Date(),
-        uid: data.uid || 'unknown'
+        uid: data.uid || 'unknown',
+        ...(syncId ? { syncId } : {})
       };
 
       // Store in SQLite for later sync
@@ -476,6 +536,14 @@ export class OfflineDocumentService {
     return documentId.startsWith('temp_');
   }
 
+  private isConnectivityFailure(error: unknown): boolean {
+    const code = typeof error === 'object' && error !== null && 'code' in error
+      ? String((error as { code?: unknown }).code || '').toLowerCase()
+      : '';
+    return !navigator.onLine ||
+      ['unavailable', 'deadline-exceeded', 'network-request-failed', 'cancelled'].some(value => code.endsWith(value));
+  }
+
   /**
    * Sync pending offline documents when online
    */
@@ -503,6 +571,7 @@ export class OfflineDocumentService {
     
   let synced = 0;
   let failed = 0;
+  const syncedDocuments: OfflineDocument[] = [];
 
     try {
   const pendingDocs = await this.getPendingDocumentsFromStorage();
@@ -521,6 +590,18 @@ export class OfflineDocumentService {
             (offlineDoc.data as any)['updatedAt'] = new Date();
           } catch {}
           const queuedId = offlineDoc.id;
+          if (offlineDoc.collectionName === 'ordersSellingTracking' && offlineDoc.syncId) {
+            const { orderId, itemIndex, productId, itemCode } = offlineDoc.data || {};
+            const normalizedIndex = Number(itemIndex);
+            if (orderId && productId && Number.isInteger(normalizedIndex)) {
+              offlineDoc.syncId = createInventorySaleLockId(
+                String(orderId),
+                normalizedIndex,
+                String(productId),
+                String(itemCode || '')
+              );
+            }
+          }
           offlineDoc.syncId ||= this.generateFirestoreCompatibleId();
           const realDocId = offlineDoc.syncId;
           await this.sqliteService.saveOfflineDocument(offlineDoc);
@@ -546,6 +627,7 @@ export class OfflineDocumentService {
             }
           }
           
+          syncedDocuments.push(offlineDoc);
           synced++;
           this.logger.info('Document synced', { area: offlineDoc.collectionName, payload: { tempId: offlineDoc.tempId, realId: realDocId } });
         } catch (error) {
@@ -588,6 +670,19 @@ export class OfflineDocumentService {
       this.logger.error('Sync process failed', { area: 'offline' }, error);
     }
 
+    for (const syncedDocument of syncedDocuments) {
+      for (const listener of this.documentSyncedListeners) {
+        try {
+          await listener(syncedDocument);
+        } catch (error) {
+          this.logger.error('Post-sync processing failed', {
+            area: syncedDocument.collectionName,
+            payload: { docId: syncedDocument.id }
+          }, error);
+        }
+      }
+    }
+
     this.logger.info('Sync completed', { area: 'offline', payload: { synced, failed } });
     return { synced, failed };
   }
@@ -608,6 +703,11 @@ export class OfflineDocumentService {
    */
   async getPendingDocuments(): Promise<OfflineDocument[]> {
     return this.getPendingDocumentsFromStorage();
+  }
+
+  onDocumentSynced(listener: (document: OfflineDocument) => void | Promise<void>): () => void {
+    this.documentSyncedListeners.add(listener);
+    return () => this.documentSyncedListeners.delete(listener);
   }
 
   /**
