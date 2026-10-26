@@ -23,13 +23,14 @@ import { SqliteStorageService } from '../core/services/sqlite-storage.service';
 import { FirestoreSecurityService } from '../core/services/firestore-security.service';
 import { OfflineDocumentService } from '../core/services/offline-document.service';
 import { NetworkService } from '../core/services/network.service';
-import { Order, OrderDetail, OrderItem, CartItem, ReceiptData, OrderDiscount, CartSummary, ReceiptValidityNotice } from '../interfaces/pos.interface';
+import { Order, OrderDetail, OrderItem, CartItem, ReceiptData, OrderDiscount, ReceiptValidityNotice } from '../interfaces/pos.interface';
 import { Product } from '../interfaces/product.interface';
 import { Store } from '../interfaces/store.interface';
 import { Device } from '../interfaces/device.interface';
 import { OrdersSellingTrackingService } from './orders-selling-tracking.service';
 import { TagsService } from './tags.service';
 import { ItemCodeService } from './item-code.service';
+import { calculateCartSummary } from './pos-checkout.utils';
 import { environment } from '../../environments/environment';
 
 @Injectable({
@@ -42,6 +43,7 @@ export class PosService {
   private readonly orderDiscountSignal = signal<OrderDiscount | null>(null);
   private readonly isOrderActiveSignal = signal<boolean>(false); // Shared order state
   private readonly isOrderCompletedSignal = signal<boolean>(false); // Shared completion state
+  private readonly inventoryProcessingTimeoutMs = 15_000;
   private readonly offlineDocService = inject(OfflineDocumentService);
   private readonly itemCodeService = inject(ItemCodeService);
   private readonly injector = inject(Injector);
@@ -54,80 +56,13 @@ export class PosService {
   readonly isOrderActive = computed(() => this.isOrderActiveSignal());
   readonly isOrderCompleted = computed(() => this.isOrderCompletedSignal());
 
-  readonly cartSummary = computed((): CartSummary => {
-    const items = this.cartItems();
-    const orderDiscount = this.orderDiscount();
-    
-    // Calculate base amounts
-    const grossAmount = items.reduce((sum, item) => sum + (item.sellingPrice * item.quantity), 0);
-    const productDiscountAmount = items.reduce((sum, item) => sum + item.discountAmount, 0);
-    const subtotalAfterProductDiscounts = grossAmount - productDiscountAmount;
-    
-    // Calculate VAT amounts (derive applicability and rate from latest product data when available)
-    const zeroRatedSales = 0; // Placeholder for future use
-
-    // Helper to get effective VAT flags from product cache when possible
-    const effectiveForItem = (item: CartItem) => {
-      try {
-        const prod = this.productService.getProduct(item.productId);
-        const isVatApplicable = prod?.isVatApplicable ?? item.isVatApplicable;
-        const vatRate = Number(prod?.vatRate ?? item.vatRate ?? 0);
-        const originalPrice = Number(prod?.originalPrice ?? prod?.sellingPrice ?? item.originalPrice ?? item.sellingPrice ?? 0);
-        return { isVatApplicable, vatRate, originalPrice };
-      } catch (e) {
-        return { isVatApplicable: item.isVatApplicable, vatRate: Number(item.vatRate || 0), originalPrice: Number(item.originalPrice ?? item.sellingPrice ?? 0) };
-      }
-    };
-
-    const vatableSales = items.reduce((sum, item) => {
-      const eff = effectiveForItem(item);
-      if (!eff.isVatApplicable) return sum;
-      const baseTotal = (eff.originalPrice * Number(item.quantity || 0)) - Number(item.discountAmount || 0);
-      return sum + Math.max(0, baseTotal);
-    }, 0);
-
-    const vatExemptSales = items.reduce((sum, item) => {
-      const eff = effectiveForItem(item);
-      if (eff.isVatApplicable) return sum;
-      const baseTotal = (eff.originalPrice * Number(item.quantity || 0)) - Number(item.discountAmount || 0);
-      return sum + Math.max(0, baseTotal);
-    }, 0);
-
-    // Compute VAT amount per item at runtime (do not rely on stored item.vatAmount which can be stale)
-    const vatAmount = items.reduce((sum, item) => {
-      const eff = effectiveForItem(item);
-      if (!eff.isVatApplicable || eff.vatRate <= 0) return sum;
-      const qty = Number(item.quantity || 0);
-      const subtotal = Math.max(0, (eff.originalPrice * qty) - Number(item.discountAmount || 0));
-      const itemVat = (subtotal * eff.vatRate) / 100;
-      return sum + itemVat;
-    }, 0);
-    
-    // Calculate order-level discount
-    let orderDiscountAmount = 0;
-    if (orderDiscount) {
-      if (orderDiscount.percentage) {
-        orderDiscountAmount = (subtotalAfterProductDiscounts * orderDiscount.percentage) / 100;
-      } else if (orderDiscount.fixedAmount) {
-        orderDiscountAmount = orderDiscount.fixedAmount;
-      }
-    }
-    
-    const netAmount = subtotalAfterProductDiscounts - orderDiscountAmount;
-
-    return {
-      itemCount: items.length,
-      totalQuantity: items.reduce((sum, item) => sum + item.quantity, 0),
-      vatableSales,
-      vatAmount,
-      zeroRatedSales,
-      vatExemptSales,
-      productDiscountAmount,
-      orderDiscountAmount,
-      grossAmount,
-      netAmount
-    };
-  });
+  readonly cartSummary = computed(() =>
+    calculateCartSummary(
+      this.cartItems(),
+      this.orderDiscount(),
+      productId => this.productService.getProduct(productId)
+    )
+  );
 
   // Shared payment type signals so different POS components/dialogs can stay in sync
   private readonly salesTypeCashSignal = signal<boolean>(true);
@@ -586,7 +521,13 @@ export class PosService {
     payments: { amountTendered: number; changeAmount: number; paymentDescription: string; paymentType: string },
     saveAsOpen: boolean = false,
     tableNumber: string = ''
-  ): Promise<{ orderId: string; invoiceNumber: string } | null> {
+  ): Promise<{
+    orderId: string;
+    invoiceNumber: string;
+    inventoryPending?: boolean;
+    inventoryPendingReason?: 'offline' | 'timeout' | 'failed';
+    inventoryPendingMessage?: string;
+  } | null> {
     try {
       this.isProcessingSignal.set(true);
       console.log('🧾 Starting NEW order processing with customerInfo and payments...');
@@ -763,16 +704,21 @@ export class PosService {
       });
 
       // Return order info immediately so receipt can be shown
-      const orderResult = {
+      const orderResult: {
+        orderId: string;
+        invoiceNumber: string;
+        inventoryPending?: boolean;
+        inventoryPendingReason?: 'offline' | 'timeout' | 'failed';
+        inventoryPendingMessage?: string;
+      } = {
         orderId: invoiceResult.orderId!,
         invoiceNumber: invoiceResult.invoiceNumber!
       };
 
-      // Fire all background operations without blocking receipt display
+      // Wait up to 15 seconds for FIFO; keep payment final and expose a separate inventory retry on timeout.
       // Skip background operations for OPEN orders (no tracking/inventory/ledger)
       if (!saveAsOpen) {
-        // Wait for stock updates so the POS product cards reflect the completed sale.
-        await this.executeBackgroundOrderOperations(
+        const backgroundOperations = this.executeBackgroundOrderOperations(
           company.id!,
           storeId,
           invoiceResult.orderId!,
@@ -782,6 +728,42 @@ export class PosService {
           user.uid,
            orderData.status || 'completed'
         );
+        if (!this.networkService.isOnline()) {
+          const result = await backgroundOperations;
+          if (result.pending) {
+            orderResult.inventoryPending = true;
+            orderResult.inventoryPendingReason = result.reason || 'offline';
+            orderResult.inventoryPendingMessage = result.message;
+          }
+        } else {
+          let timeoutId: ReturnType<typeof setTimeout> | undefined;
+          try {
+            const result = await Promise.race([
+              backgroundOperations,
+              new Promise<never>((_, reject) => {
+                timeoutId = setTimeout(
+                  () => reject(new Error('Inventory processing timed out after 15 seconds.')),
+                  this.inventoryProcessingTimeoutMs
+                );
+              })
+            ]);
+            if (result.pending) {
+              orderResult.inventoryPending = true;
+              orderResult.inventoryPendingReason = result.reason || 'failed';
+              orderResult.inventoryPendingMessage = result.message;
+            }
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            orderResult.inventoryPending = true;
+            orderResult.inventoryPendingReason = message.includes('timed out') ? 'timeout' : 'failed';
+            orderResult.inventoryPendingMessage = message;
+            void backgroundOperations.catch(backgroundError => {
+              console.error('Inventory processing continued after the checkout wait ended:', backgroundError);
+            });
+          } finally {
+            if (timeoutId) clearTimeout(timeoutId);
+          }
+        }
       } else {
         console.log('💼 OPEN order: Skipping background operations (tracking/inventory/ledger)');
       }
@@ -889,13 +871,22 @@ export class PosService {
     userId: string,
     status: string,
     customerId?: string
-  ): Promise<void> {
+  ): Promise<{ pending: boolean; reason?: 'offline' | 'failed'; message?: string }> {
     console.log('🔄 Starting background operations for order:', orderId);
 
+    let inventoryPendingOffline = false;
     try {
-      await this.updateProductInventory(cartItems, { orderId, invoiceNumber, customerId, status });
+      inventoryPendingOffline = await this.updateProductInventory(cartItems, { orderId, invoiceNumber, customerId, status });
     } catch (err) {
       const inventoryError = err instanceof Error ? err.message : String(err);
+      if (!this.networkService.isOnline()) {
+        console.error('Offline inventory sale-line queueing failed:', inventoryError);
+        return {
+          pending: true,
+          reason: 'failed',
+          message: `Inventory could not be queued while offline: ${inventoryError}`
+        };
+      }
       try {
         const orderRef = doc(this.firestore, 'orders', orderId);
         const orderSnapshot = await getDoc(orderRef as any);
@@ -910,16 +901,49 @@ export class PosService {
         console.warn('⚠️ Could not persist pending inventory status:', statusError);
       }
       console.warn('⚠️ Inventory update failed; order requires inventory reconciliation:', inventoryError);
-      return;
+      return { pending: true, reason: 'failed', message: inventoryError };
     }
 
+    if (!this.networkService.isOnline()) {
+      console.info('📱 Offline sale lines queued; skipping tracking-completion Firestore queries.');
+      return {
+        pending: inventoryPendingOffline,
+        reason: 'offline',
+        message: inventoryPendingOffline
+          ? 'Sale saved. Stock-tracked inventory will be processed when the device reconnects.'
+          : 'Sale saved offline. This order has no stock-tracked inventory to process.'
+      };
+    }
+
+    console.log('✅ Sale-line inventory processing finished for order:', orderId);
+    return { pending: false };
+  }
+
+  async retryInventoryForOrder(orderId: string): Promise<{ success: boolean; errors: string[] }> {
+    if (!this.networkService.isOnline()) {
+      return { success: false, errors: ['Reconnect to the internet before retrying inventory.'] };
+    }
+
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
     try {
-      await this.markTrackingCompleted(orderId, userId);
-    } catch (err) {
-      console.warn('⚠️ Tracking completion failed after inventory was applied:', err);
+      const result = await Promise.race([
+        this.ordersSellingTrackingService.processPendingInventoryForOrder(orderId),
+        new Promise<never>((_, reject) => {
+          timeoutId = setTimeout(
+            () => reject(new Error('Inventory retry timed out after 15 seconds.')),
+            this.inventoryProcessingTimeoutMs
+          );
+        })
+      ]);
+      return {
+        success: result.errors.length === 0,
+        errors: result.errors.map(entry => entry.error)
+      };
+    } catch (error) {
+      return { success: false, errors: [error instanceof Error ? error.message : String(error)] };
+    } finally {
+      if (timeoutId) clearTimeout(timeoutId);
     }
-
-    console.log('✅ Background operations initiated for order:', orderId);
   }
 
 
@@ -1301,7 +1325,7 @@ export class PosService {
   private async updateProductInventory(
     cartItems: CartItem[],
     context?: { orderId?: string; invoiceNumber?: string; customerId?: string; status?: string }
-  ): Promise<void> {
+  ): Promise<boolean> {
     const mode = environment.inventory?.reconciliationMode || 'legacy';
 
     if (mode === 'recon' || mode === 'legacy') {
@@ -1317,21 +1341,24 @@ export class PosService {
 
       // Resolve isStockTracked for every item in one pass
       const items = await Promise.all(cartItems.map(async ci => {
-        let isStockTracked = false;
-        try {
-          const productDoc = await getDoc(doc(this.firestore, 'products', ci.productId) as any);
-          if (productDoc.exists()) {
-            const data = productDoc.data() as any;
-            isStockTracked = data.isStockTracked === true;
-          }
-        } catch (error) {
-          if (this.networkService.isOnline()) {
+        const cachedProduct = this.productService.getProduct(ci.productId);
+        if (!this.networkService.isOnline() && !cachedProduct) {
+          throw new Error(`Cannot queue inventory for ${ci.productName}: product stock-tracking status is unavailable offline.`);
+        }
+        let isStockTracked = cachedProduct?.isStockTracked === true;
+        if (this.networkService.isOnline()) {
+          try {
+            const productDoc = await getDoc(doc(this.firestore, 'products', ci.productId) as any);
+            if (productDoc.exists()) {
+              const data = productDoc.data() as any;
+              isStockTracked = data.isStockTracked === true;
+            }
+          } catch (error) {
             throw new Error(`Could not determine stock tracking for ${ci.productName}: ${error instanceof Error ? error.message : String(error)}`);
           }
-          console.warn(`Could not confirm stock tracking for ${ci.productName} while offline; skipping FIFO.`);
         }
         if (!isStockTracked) {
-          console.log(`⏭️ ${ci.productName} isStockTracked is false — tracking record only, no inventory deduction`);
+          console.log(`⏭️ ${ci.productName} isStockTracked is false or unavailable in the offline product cache — tracking record only`);
         }
         return {
           productId: ci.productId,
@@ -1368,7 +1395,7 @@ export class PosService {
         const details = res.errors.map(error => `${error.productId}: ${error.error instanceof Error ? error.error.message : String(error.error)}`).join('; ');
         throw new Error(`Inventory transaction failed: ${details}`);
       }
-      return;
+      return items.some(item => item.isStockTracked);
     }
 
     // Legacy: client-side FIFO deduction — only process tracked items
@@ -1401,7 +1428,7 @@ export class PosService {
           inventoryLastError: null
         } as any, { merge: true } as any);
       }
-      return;
+      return false;
     }
 
     // Legacy: client-side FIFO deduction
@@ -1411,7 +1438,7 @@ export class PosService {
     const inventoryErrors: string[] = [];
     for (const cartItem of trackedItems) {
       try {
-        await this.deductInventoryFifo(cartItem.productId, cartItem.quantity, inventoryService);
+        await this.deductInventoryFifo(cartItem.productId, cartItem.quantity, inventoryService, cartItem.itemCode);
         console.log(`✅ Inventory deducted for ${cartItem.productName}: ${cartItem.quantity} units`);
       } catch (error) {
         console.error(`❌ Failed to deduct inventory for ${cartItem.productName}:`, error);
@@ -1429,6 +1456,7 @@ export class PosService {
       } as any, { merge: true } as any);
     }
     console.log('✅ FIFO inventory deduction completed for all items');
+    return true;
   }
 
   /**
@@ -1460,7 +1488,12 @@ export class PosService {
    * Deduct inventory using FIFO (First In, First Out) method
    * Oldest batches are depleted first
    */
-  private async deductInventoryFifo(productId: string, quantityToDeduct: number, inventoryService: any): Promise<void> {
+  private async deductInventoryFifo(
+    productId: string,
+    quantityToDeduct: number,
+    inventoryService: any,
+    itemCode?: string
+  ): Promise<void> {
     if (quantityToDeduct <= 0) return;
 
     console.log(`🔄 FIFO deduction for product ${productId}: ${quantityToDeduct} units`);
@@ -1615,6 +1648,7 @@ export class PosService {
     const dedRecord = {
       eventType: 'completed' as const,
       productId,
+      itemCode: itemCode || '',
       batchId: p.batchId,
       quantity: p.deduct,
       deductedAt: new Date(),

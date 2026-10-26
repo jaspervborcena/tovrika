@@ -12,8 +12,8 @@ import { AuthService } from './auth.service';
 import { StoreService } from './store.service';
 import { NetworkService } from './network.service';
 import { OrdersSellingTrackingService } from './orders-selling-tracking.service';
-import { CartItem } from '../interfaces/cart.interface';
 import { environment } from '../../environments/environment';
+import { createInventorySaleLockId } from '../interfaces/inventory-sale-lock.interface';
 
 export class ReconSummaryApiError extends Error {
   constructor(readonly status: number, message: string) {
@@ -98,9 +98,19 @@ export class OfflineReconciliationService {
 
         if (!orderId || !productId) continue;
 
-        // Only include orders captured offline
+        // Show offline captures and any completed tracked line without its processed lock.
         const isOfflineCapture = trackingData._offlineCreated ?? trackingData.isOffline ?? false;
-        const hasDeferredInventory = trackingData.batchReconciliationStatus === 'pending';
+        let hasDeferredInventory = false;
+        if (trackingData.isStockTracked === true && String(trackingData.status || '').toLowerCase() === 'completed') {
+          const lockId = createInventorySaleLockId(
+            orderId,
+            Number(trackingData.itemIndex ?? 0),
+            String(productId),
+            String(trackingData.itemCode || '')
+          );
+          const lockSnapshot = await getDoc(doc(this.firestore, 'inventorySaleLocks', lockId) as any);
+          hasDeferredInventory = !lockSnapshot.exists();
+        }
         if (!isOfflineCapture && !hasDeferredInventory) continue;
 
         if (!orderMap.has(orderId)) {
@@ -314,7 +324,9 @@ export class OfflineReconciliationService {
     return payload.rows.map(row => ({
       ...row,
       orderId: row['orderId'] ?? row['order_id'],
+      itemIndex: row['itemIndex'] ?? row['item_index'],
       productId: row['productId'] ?? row['product_id'],
+      itemCode: row['itemCode'] ?? row['item_code'],
       createdAt: row['createdAt'] ?? row['created_at'],
       updatedAt: row['updatedAt'] ?? row['updated_at'],
       storeId: row['storeId'] ?? row['store_id'],
@@ -355,7 +367,7 @@ export class OfflineReconciliationService {
 
       // Check if already processed
       if (orderDetails.inventoryProcessed) {
-        warnings.push('Inventory already processed - reprocessing will deduct stock again');
+        warnings.push('Inventory processing has run before; per-sale-line locks will skip completed deductions.');
       }
 
       // Check if order was captured offline
@@ -367,12 +379,22 @@ export class OfflineReconciliationService {
       const deferredQuantitiesByProduct = new Map<string, number>();
       for (const trackingDoc of trackingSnap.docs) {
         const trackingData = trackingDoc.data() as any;
-        if (trackingData.batchReconciliationStatus === 'pending') {
+        if (trackingData.isStockTracked === true &&
+            String(trackingData.status || '').toLowerCase() === 'completed') {
           const productId = String(trackingData.productId || '');
-          deferredQuantitiesByProduct.set(
+          const lockId = createInventorySaleLockId(
+            orderId,
+            Number(trackingData.itemIndex ?? 0),
             productId,
-            (deferredQuantitiesByProduct.get(productId) || 0) + Number(trackingData.quantity || 0)
+            String(trackingData.itemCode || '')
           );
+          const lockSnapshot = await getDoc(doc(this.firestore, 'inventorySaleLocks', lockId) as any);
+          if (!lockSnapshot.exists()) {
+            deferredQuantitiesByProduct.set(
+              productId,
+              (deferredQuantitiesByProduct.get(productId) || 0) + Number(trackingData.quantity || 0)
+            );
+          }
         }
         if (trackingData._offlineCreated || trackingData.isOffline) {
           warnings.push('Order was captured offline - verify data before reprocessing');
@@ -461,7 +483,7 @@ export class OfflineReconciliationService {
 
       // Check network status AFTER checking for actual issues
       // This way users can see the real problems even if offline
-      if (!this.networkService.isOnline) {
+      if (!this.networkService.isOnline()) {
         errors.push('Network is offline - connect to network to proceed');
       }
 
@@ -486,19 +508,6 @@ export class OfflineReconciliationService {
   protected async reprocessInventory(orderId: string): Promise<{ success: boolean; message: string; error?: any }> {
     try {
       console.log('🔄 Reprocessing inventory for order:', orderId);
-
-      const pendingTrackingQuery = query(
-        collection(this.firestore, 'ordersSellingTracking'),
-        where('orderId', '==', orderId)
-      );
-      const pendingTrackingSnapshot = await getDocs(pendingTrackingQuery);
-      if (pendingTrackingSnapshot.docs.some(docSnap =>
-        (docSnap.data() as any).batchReconciliationStatus === 'pending'
-      )) {
-        return await this.reconcileDeferredInventory(orderId);
-      }
-
-      // Validate first
       const validation = await this.validateReprocessing(orderId);
       if (!validation.canProcess) {
         return {
@@ -507,176 +516,15 @@ export class OfflineReconciliationService {
           error: validation.errors
         };
       }
-
-      // Get order details
-      const orderDetailsQuery = query(
-        collection(this.firestore, 'orderDetails'),
-        where('orderId', '==', orderId),
-        limit(1)
-      );
-
-      const orderDetailsSnap = await getDocs(orderDetailsQuery);
-      if (orderDetailsSnap.empty) {
-        return { success: false, message: 'Order details not found' };
-      }
-
-      const orderDetails = orderDetailsSnap.docs[0].data() as OrderDetails;
-      const orderDetailsDocId = orderDetailsSnap.docs[0].id;
-
-      // Get order data for invoice number
-      const orderRef = doc(this.firestore, 'orders', orderId);
-      const orderSnap = await getDoc(orderRef);
-      const invoiceNumber = orderSnap.exists() ? (orderSnap.data() as any).invoiceNumber || orderId : orderId;
-
-      // Convert order items to cart items format (only valid CartItem properties)
-      const cartItems: CartItem[] = orderDetails.items.map(item => ({
-        productId: item.productId,
-        name: item.productName,
-        price: item.price,
-        quantity: item.quantity,
-        subtotal: item.total,
-        discount: item.discount || 0,
-        discountType: 'fixed' as const,
-        isVatExempt: item.isVatExempt,
-        vatAmount: item.vat
-      }));
-
-      // Process FIFO inventory deductions for each item
-      console.log('🔄 Processing FIFO deductions for', orderDetails.items.length, 'items');
-      
-      for (const item of orderDetails.items) {
-        // Only process stock-tracked products
-        const productRef = doc(this.firestore, 'products', item.productId);
-        const productSnap = await getDoc(productRef);
-        
-        if (!productSnap.exists()) {
-          console.warn(`⚠️ Product ${item.productId} not found, skipping`);
-          continue;
-        }
-        
-        const productData = productSnap.data() as any;
-        const isStockTracked = productData.isStockTracked ?? false;
-        
-        if (!isStockTracked) {
-          console.log(`⏭️ Product ${item.productName} is not stock tracked, skipping FIFO`);
-          continue;
-        }
-        
-        console.log(`📦 Processing FIFO for ${item.productName} (qty: ${item.quantity})`);
-        
-        // Get active batches for this product using FIFO (oldest first)
-        const batchesQuery = query(
-          collection(this.firestore, 'productInventory'),
-          where('productId', '==', item.productId),
-          where('storeId', '==', orderDetails.storeId),
-          where('companyId', '==', orderDetails.companyId),
-          where('status', '==', 'active')
-        );
-        
-        const batchesSnap = await getDocs(batchesQuery);
-        const batches = batchesSnap.docs
-          .map(doc => ({ id: doc.id, ...doc.data() as any }))
-          .filter(b => (b.quantity || 0) > 0)
-          .sort((a, b) => {
-            // Sort by batchId (contains timestamp) for FIFO
-            const aBatchId = String(a.batchId || '');
-            const bBatchId = String(b.batchId || '');
-            if (aBatchId && bBatchId) return aBatchId.localeCompare(bBatchId);
-            // Fallback to receivedAt
-            const aTime = a.receivedAt?.toDate?.()?.getTime() || 0;
-            const bTime = b.receivedAt?.toDate?.()?.getTime() || 0;
-            return aTime - bTime;
-          });
-        
-        console.log(`📊 Found ${batches.length} active batches with stock`);
-        
-        if (batches.length === 0) {
-          console.warn(`⚠️ No batches available for ${item.productName}`);
-          continue;
-        }
-        
-        // Deduct from batches using FIFO
-        let remainingQty = item.quantity;
-        const deductions: Array<{ batchId: string; refId: string; costPrice: number; deductedQty: number }> = [];
-        
-        for (const batch of batches) {
-          if (remainingQty <= 0) break;
-          
-          const availableQty = batch.quantity || 0;
-          const deductQty = Math.min(remainingQty, availableQty);
-          const newQty = availableQty - deductQty;
-          const newTotalDeducted = (batch.totalDeducted || 0) + deductQty;
-          const newStatus = newQty === 0 ? 'depleted' : 'active';
-          
-          // Update batch in productInventory
-          const batchRef = doc(this.firestore, 'productInventory', batch.id);
-          await updateDoc(batchRef, {
-            quantity: newQty,
-            totalDeducted: newTotalDeducted,
-            status: newStatus,
-            updatedAt: Timestamp.now(),
-            updatedBy: this.authService.getCurrentUser()?.uid || 'system'
-          });
-          
-          deductions.push({
-            batchId: batch.batchId || batch.id,
-            refId: batch.id,
-            costPrice: batch.costPrice || 0,
-            deductedQty: deductQty
-          });
-          
-          remainingQty -= deductQty;
-          console.log(`✅ Deducted ${deductQty} from batch ${batch.batchId}, remaining: ${newQty}`);
-        }
-        
-        // Create inventoryTracking records for each deduction
-        for (const deduction of deductions) {
-          await addDoc(collection(this.firestore, 'inventoryTracking'), {
-            eventType: 'completed',
-            companyId: orderDetails.companyId,
-            storeId: orderDetails.storeId,
-            orderId: orderId,
-            invoiceNumber: invoiceNumber,
-            productId: item.productId,
-            productName: item.productName,
-            productCode: '',
-            skuId: item.productSku || '',
-            batchId: deduction.batchId,
-            refId: deduction.refId,
-            costPrice: deduction.costPrice,
-            quantity: deduction.deductedQty,
-            deductedAt: Timestamp.now(),
-            deductedBy: this.authService.getCurrentUser()?.uid || 'system',
-            createdBy: this.authService.getCurrentUser()?.uid || 'system',
-            createdAt: Timestamp.now(),
-            note: 'Reconciliation - FIFO reprocessed',
-            updatedAt: Timestamp.now()
-          });
-        }
-        
-        console.log(`✅ Created ${deductions.length} inventoryTracking entries for ${item.productName}`);
-      }
-
-      // Update flags in orderDetails
-      const orderDetailsRef = doc(this.firestore, 'orderDetails', orderDetailsDocId);
-      await updateDoc(orderDetailsRef, {
-        inventoryProcessed: true,
-        'offlineMetadata.fifoSkipped': false,
-        reconciledAt: Timestamp.now(),
-        reconciledBy: this.authService.getCurrentUser()?.uid || 'system',
-        updatedAt: Timestamp.now()
-      });
-
-      // Log audit trail
-      await this.logReconciliationAction(orderId, invoiceNumber, orderDetails.storeId, 'inventory_reprocess', {
+      const result = await this.reconcileDeferredInventory(orderId);
+      if (!result.success) return result;
+      await this.logReconciliationAction(orderId, '', '', 'inventory_reprocess', {
         inventoryProcessed: false,
         needsReconciliation: true
       }, {
         inventoryProcessed: true,
         needsReconciliation: false
       }, true);
-
-      console.log('✅ Inventory reprocessed successfully');
       return { success: true, message: 'Inventory reprocessed successfully' };
 
     } catch (error) {
@@ -697,10 +545,11 @@ export class OfflineReconciliationService {
       );
       const pendingSnapshot = await getDocs(pendingQuery);
       const pendingDocs = pendingSnapshot.docs.filter(docSnap =>
-        (docSnap.data() as any).batchReconciliationStatus === 'pending'
+        String((docSnap.data() as any).status || '').toLowerCase() === 'completed' &&
+        (docSnap.data() as any).isStockTracked === true
       );
       if (pendingDocs.length === 0) {
-        return { success: true, message: 'No pending batch deductions for this order' };
+        return { success: true, message: 'No completed tracked sale lines for this order' };
       }
 
       const orderDetailsQuery = query(
@@ -715,14 +564,10 @@ export class OfflineReconciliationService {
 
       const orderDetailsRef = doc(this.firestore, 'orderDetails', orderDetailsSnapshot.docs[0].id);
       const orderRef = doc(this.firestore, 'orders', orderId);
-      const lockRef = doc(this.firestore, 'inventoryBatchReconciliationLocks', `order:${orderId}`);
       const cashierId = this.authService.getCurrentUser()?.uid || 'system';
       const now = Timestamp.now();
 
       await runTransaction(this.firestore, async transaction => {
-        const lockSnapshot = await transaction.get(lockRef as any);
-        if (lockSnapshot.exists() && (lockSnapshot.data() as any).status === 'processed') return;
-
         const orderSnapshot = await transaction.get(orderRef as any);
         const orderDetailsDocSnapshot = await transaction.get(orderDetailsRef as any);
         const trackingSnapshots = [];
@@ -731,11 +576,38 @@ export class OfflineReconciliationService {
         }
 
         const currentPendingLines = trackingSnapshots
-          .map((snapshot: any) => ({ ref: snapshot.ref, data: snapshot.data() || {} }))
-          .filter((line: any) => line.data.batchReconciliationStatus === 'pending');
+          .map((snapshot: any, index: number) => ({
+            ref: snapshot.ref,
+            id: pendingDocs[index].id,
+            itemIndex: Number(snapshot.data()?.itemIndex ?? index),
+            data: snapshot.data() || {}
+          }))
+          .filter((line: any) =>
+            String(line.data.status || '').toLowerCase() === 'completed' &&
+            line.data.isStockTracked === true
+          )
+          .sort((left: any, right: any) => {
+            const leftDate = left.data.createdAt?.toDate?.() ?? new Date(left.data.createdAt || 0);
+            const rightDate = right.data.createdAt?.toDate?.() ?? new Date(right.data.createdAt || 0);
+            return leftDate.getTime() - rightDate.getTime() || left.itemIndex - right.itemIndex;
+          });
         if (currentPendingLines.length === 0) return;
 
-        const productIds = Array.from(new Set(currentPendingLines
+        const lineLockRefs = new Map<any, any>();
+        for (const line of currentPendingLines) {
+          const itemIndex = line.itemIndex;
+          const itemCode = String(line.data.itemCode || '');
+          const lockId = createInventorySaleLockId(orderId, itemIndex, String(line.data.productId || ''), itemCode);
+          lineLockRefs.set(line.ref, doc(this.firestore, 'inventorySaleLocks', lockId));
+        }
+        const lineLockSnapshots = new Map<any, any>();
+        for (const line of currentPendingLines) {
+          lineLockSnapshots.set(line.ref, await transaction.get(lineLockRefs.get(line.ref) as any));
+        }
+        const unprocessedLines = currentPendingLines.filter((line: any) => !lineLockSnapshots.get(line.ref).exists());
+        if (unprocessedLines.length === 0) return;
+
+        const productIds = Array.from(new Set(unprocessedLines
           .filter((line: any) => line.data.isStockTracked === true && Number(line.data.quantity || 0) > 0)
           .map((line: any) => String(line.data.productId || ''))));
         const productSnapshots = new Map<string, any>();
@@ -746,38 +618,52 @@ export class OfflineReconciliationService {
           const batchQuery = query(
             collection(this.firestore, 'productInventory'),
             where('productId', '==', productId),
-            where('storeId', '==', String(currentPendingLines.find((line: any) => line.data.productId === productId)?.data.storeId || ''))
+            where('storeId', '==', String(unprocessedLines.find((line: any) => line.data.productId === productId)?.data.storeId || ''))
           );
           batchSnapshots.set(productId, await transaction.get(batchQuery as any));
         }
 
         const plannedBatchQuantities = new Map<string, number>();
         const batchWrites = new Map<string, any>();
-        const linePlans: Array<{ ref: any; data: any; allocations: any[]; notRequired?: boolean; inventoryTrackingRef?: any }> = [];
+        const linePlans: Array<{
+          ref: any;
+          data: any;
+          allocations: any[];
+          notRequired?: boolean;
+          inventoryTrackingRef?: any;
+          lockRef: any;
+          itemIndex: number;
+        }> = [];
         const reservedByProduct = new Map<string, number>();
+        const stockDeductedByProduct = new Map<string, number>();
 
-        for (const line of currentPendingLines) {
+        for (const line of unprocessedLines) {
           const productId = String(line.data.productId || '');
           const quantity = Math.max(0, Number(line.data.quantity || 0));
-          if (line.data.isStockTracked !== true) {
-            linePlans.push({
-              ref: line.ref,
-              data: line.data,
-              allocations: [],
-              notRequired: true,
-              ...(quantity > 0 ? { inventoryTrackingRef: doc(collection(this.firestore, 'inventoryTracking')) } : {})
-            });
-            continue;
-          }
           if (quantity <= 0) {
-            linePlans.push({ ref: line.ref, data: line.data, allocations: [], notRequired: true });
-            continue;
+            throw new Error(`Invalid sale quantity for ${line.data.productName || productId}`);
           }
-
+          const isLegacyReservedLine = line.data.batchReconciliationStatus === 'pending';
+          if (isLegacyReservedLine) {
+            reservedByProduct.set(productId, (reservedByProduct.get(productId) || 0) + quantity);
+          } else {
+            stockDeductedByProduct.set(productId, (stockDeductedByProduct.get(productId) || 0) + quantity);
+          }
+          if (line.data.isStockTracked !== true) {
+            throw new Error(`Sale line ${line.id} is not stock tracked`);
+          }
+          if (!line.data.itemCode) {
+            throw new Error(`Sale line ${line.id} has no itemCode`);
+          }
+          if (!line.data.productId) {
+            throw new Error(`Sale line ${line.id} has no productId`);
+          }
+          if (String(line.data.status || '').toLowerCase() !== 'completed') {
+            throw new Error(`Sale line ${line.id} is not completed`);
+          }
           const productSnapshot = productSnapshots.get(productId);
           if (!productSnapshot?.exists()) throw new Error(`Product ${productId} not found`);
 
-          reservedByProduct.set(productId, (reservedByProduct.get(productId) || 0) + quantity);
           const batchSnapshot = batchSnapshots.get(productId);
           const batches = (batchSnapshot?.docs || [])
             .map((batchDoc: any) => ({ id: batchDoc.id, ref: batchDoc.ref, data: batchDoc.data() }))
@@ -819,7 +705,13 @@ export class OfflineReconciliationService {
           if (remaining > 0) {
             throw new Error(`Insufficient batch stock for ${line.data.productName || productId}: short ${remaining}`);
           }
-          linePlans.push({ ref: line.ref, data: line.data, allocations });
+          linePlans.push({
+            ref: line.ref,
+            data: line.data,
+            allocations,
+            lockRef: lineLockRefs.get(line.ref),
+            itemIndex: line.itemIndex
+          });
         }
 
         for (const [batchId, write] of batchWrites) {
@@ -833,96 +725,64 @@ export class OfflineReconciliationService {
         }
 
         for (const line of linePlans) {
-          if (line.notRequired) {
-            if (line.inventoryTrackingRef) {
-              transaction.set(line.inventoryTrackingRef as any, {
-                eventType: 'completed',
-                companyId: line.data.companyId,
-                storeId: line.data.storeId,
-                orderId,
-                invoiceNumber: line.data.invoiceNumber || '',
-                productId: line.data.productId,
-                productName: line.data.productName || '',
-                productCode: line.data.productCode || '',
-                skuId: line.data.skuId || '',
-                batchId: null,
-                refId: null,
-                costPrice: Number(line.data.cost || 0),
-                quantity: Number(line.data.quantity || 0),
-                runningBalanceTotalStock: Number(line.data.runningBalanceTotalStock || 0),
-                deductedAt: now,
-                deductedBy: cashierId,
-                createdBy: cashierId,
-                createdAt: now,
-                note: 'Non-stock-tracked sale - no inventory deduction'
-              } as any);
-            }
-            transaction.update(line.ref as any, {
-              batchReconciliationStatus: 'not_required',
-              batchReconciledAt: now
-            } as any);
-            continue;
-          }
-
           const weightedCost = line.allocations.reduce((sum, allocation) => sum + allocation.costPrice * allocation.quantity, 0);
           const allocatedQuantity = line.allocations.reduce((sum, allocation) => sum + allocation.quantity, 0);
-          if (line.allocations.length === 0) {
+          for (const allocation of line.allocations) {
             const deductionRef = doc(collection(this.firestore, 'inventoryTracking'));
             transaction.set(deductionRef as any, {
               eventType: 'completed',
               companyId: line.data.companyId,
               storeId: line.data.storeId,
               orderId,
+              saleTrackingId: line.ref.id,
+              saleLineIndex: line.itemIndex,
               invoiceNumber: line.data.invoiceNumber || '',
               productId: line.data.productId,
+              itemCode: line.data.itemCode || '',
               productName: line.data.productName || '',
-              quantity: Number(line.data.quantity || 0),
-              costPrice: Number(line.data.cost || 0),
-              batchId: null,
-              refId: null,
+              productCode: line.data.productCode || '',
+              skuId: line.data.skuId || '',
+              batchId: allocation.batchId,
+              refId: allocation.refId,
+              costPrice: allocation.costPrice,
+              quantity: allocation.quantity,
+              runningBalanceTotalStock: Number(line.data.runningBalanceTotalStock || 0),
               deductedAt: now,
               deductedBy: cashierId,
+              createdBy: cashierId,
               createdAt: now,
-              note: 'Deferred non-batch sale reconciliation'
+              note: 'Deferred FIFO sale reconciliation'
             } as any);
-          } else {
-            for (const allocation of line.allocations) {
-              const deductionRef = doc(collection(this.firestore, 'inventoryTracking'));
-              transaction.set(deductionRef as any, {
-                eventType: 'completed',
-                companyId: line.data.companyId,
-                storeId: line.data.storeId,
-                orderId,
-                invoiceNumber: line.data.invoiceNumber || '',
-                productId: line.data.productId,
-                productName: line.data.productName || '',
-                productCode: line.data.productCode || '',
-                skuId: line.data.skuId || '',
-                batchId: allocation.batchId,
-                refId: allocation.refId,
-                costPrice: allocation.costPrice,
-                quantity: allocation.quantity,
-                runningBalanceTotalStock: Number(line.data.runningBalanceTotalStock || 0),
-                deductedAt: now,
-                deductedBy: cashierId,
-                createdAt: now,
-                note: 'Deferred shift-close FIFO reconciliation'
-              } as any);
-            }
           }
 
-          transaction.update(line.ref as any, {
-            batchReconciliationStatus: 'applied',
-            batchReconciledAt: now,
-            ...(allocatedQuantity > 0 && weightedCost > 0 ? { cost: weightedCost / allocatedQuantity } : {})
+          if (allocatedQuantity > 0 && weightedCost > 0) {
+            transaction.update(line.ref as any, { cost: weightedCost / allocatedQuantity } as any);
+          }
+          transaction.set(line.lockRef as any, {
+            orderId,
+            itemIndex: line.itemIndex,
+            productId: line.data.productId,
+            itemCode: line.data.itemCode,
+            quantity: allocatedQuantity,
+            trackingId: line.ref.id,
+            processedAt: now,
+            processedBy: cashierId
           } as any);
         }
 
-        for (const [productId, reservedQuantity] of reservedByProduct) {
+        const updatedProductIds = new Set([...reservedByProduct.keys(), ...stockDeductedByProduct.keys()]);
+        for (const productId of updatedProductIds) {
           const productSnapshot = productSnapshots.get(productId);
           const productData = productSnapshot.data() as any;
           transaction.update(doc(this.firestore, 'products', productId) as any, {
-            pendingBatchDeductionQty: Math.max(0, Number(productData.pendingBatchDeductionQty || 0) - reservedQuantity),
+            totalStock: Math.max(
+              0,
+              Number(productData.totalStock || 0) - (stockDeductedByProduct.get(productId) || 0)
+            ),
+            pendingBatchDeductionQty: Math.max(
+              0,
+              Number(productData.pendingBatchDeductionQty || 0) - (reservedByProduct.get(productId) || 0)
+            ),
             updatedAt: now,
             updatedBy: cashierId
           } as any);
@@ -944,12 +804,6 @@ export class OfflineReconciliationService {
             inventoryLastError: null
           } as any);
         }
-        transaction.set(lockRef as any, {
-          orderId,
-          status: 'processed',
-          processedAt: now,
-          processedBy: cashierId
-        } as any);
       });
 
       return { success: true, message: 'Deferred inventory reconciled successfully' };
