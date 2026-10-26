@@ -1342,8 +1342,9 @@ export class PosService {
       // Resolve isStockTracked for every item in one pass
       const items = await Promise.all(cartItems.map(async ci => {
         const cachedProduct = this.productService.getProduct(ci.productId);
-        if (!this.networkService.isOnline() && !cachedProduct) {
-          throw new Error(`Cannot queue inventory for ${ci.productName}: product stock-tracking status is unavailable offline.`);
+        if (!this.networkService.isOnline() &&
+            (!cachedProduct || typeof cachedProduct.isStockTracked !== 'boolean')) {
+          throw new Error(`Cannot queue inventory for ${ci.productName}: stock-tracking status is missing from the offline product cache. Sync products before processing this sale offline.`);
         }
         let isStockTracked = cachedProduct?.isStockTracked === true;
         if (this.networkService.isOnline()) {

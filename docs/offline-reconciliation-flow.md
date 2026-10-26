@@ -1,12 +1,12 @@
 # Offline Reconciliation Flow
 
-This flow documents the intended sale-line inventory workflow. A completed sale line in `ordersSellingTracking` is the inventory work source for stock-tracked products. It is not given a separate inventory status or copied to a separate request collection. A deterministic `inventorySaleLocks` record means that line's FIFO deduction and audit writes committed successfully. `inventoryTracking` remains the audit of actual movements, with one row per batch allocation.
+This flow documents the intended sale-line inventory workflow. A completed sale line in `ordersSellingTracking` is the inventory work source. It is not given a separate inventory status or copied to a separate request collection. For stock-tracked products, a deterministic `inventorySaleLocks` record means that line's FIFO deduction and batch audit writes committed successfully. For non-stock-tracked products, `inventoryTracking` stores a deterministic sale-price snapshot read from the product document, explicitly marked as not changing stock.
 
 ```mermaid
 flowchart TD
     A[Cashier completes and pays order] --> B[Persist sale lines in ordersSellingTracking]
     B --> C{Line isStockTracked?}
-    C -- No --> D[Keep sales record; skip inventory deduction and inventory lock]
+    C -- No --> D[Read product cost/selling price; write no-stock-movement sale snapshot]
     C -- Yes --> E{Online?}
     E -- Yes --> F[Read completed sale lines oldest-first]
     E -- No --> G[Queue sale lines in SQLite offline document storage]
@@ -31,16 +31,17 @@ flowchart TD
 ## Key collections involved
 - `ordersSellingTracking` (completed sale lines and source work records; no inventory-status field is required)
 - `inventorySaleLocks` (idempotency/completion marker per tracked sale line; created in the same transaction as the deduction and audit rows)
-- `inventoryTracking` (actual stock-movement audit, one row per allocated batch, linked to order and item code)
+- `inventoryTracking` (actual stock-movement audit, one row per allocated FIFO batch; also stores one idempotent price snapshot for a non-stock-tracked sale, marked `stockMovement: false`)
 - `productInventory` (batch stock source of truth and FIFO deduction target)
 - SQLite `offline_documents` (durable local copy of sale-line documents waiting to sync)
 - `orderAccountingLedger`, `orderDetails`, and `reconciliationAuditLog` (accounting and broader reconciliation workflow)
 
 ## Notes
-- Inventory work applies only when `isStockTracked === true`. Non-stock-tracked sale lines remain sales records and do not create batch deductions or inventory-sale locks.
+- FIFO deductions and inventory-sale locks apply only when `isStockTracked === true`. For completed non-stock-tracked sale lines, read `costPrice` and `sellingPrice` from the product document and write one deterministic `eventType: 'sale'` snapshot to `inventoryTracking`; set `stockMovement: false` and do not change product or batch quantities.
 - `itemCode` identifies the product. A particular sale line is identified by its order and line index; locks and audit entries must not be keyed only by item code, because one product can be sold repeatedly.
 - A line is processed only if its exact lock exists. The lock must be written atomically with all batch quantity updates and `inventoryTracking` allocation rows, so a failed transaction leaves the line retryable and a successful retry cannot deduct twice.
-- FIFO can split a sale line across several batches. Each allocation records that batch's `batchId`, document `refId`, quantity, and unit cost. Summing those allocation quantities for the exact sale line should equal the sold quantity.
+- FIFO can split a tracked sale line across several batches. Each allocation records that batch's `batchId`, document `refId`, quantity, unit cost, and sale-time selling price. Summing those allocation quantities for the exact sale line should equal the sold quantity.
+- Inventory history reads non-stock-tracked sales from their `inventoryTracking` price snapshots. It suppresses the matching `ordersSellingTracking` row when an inventory-tracking record already represents that sale line, preventing duplicate report totals.
 - Offline sales must first be durably saved as completed sale-line documents in SQLite. After sync, processing can read completed tracked lines oldest-first and skip lines with an existing lock. If inventory cannot be processed, leave the line unlocked and report it for shift-close or next-shift reconciliation.
 - Offline checkout queues sale-line records but does not read or deduct inventory. The reconnect sync triggers FIFO processing after those lines reach Firestore.
 - Online checkout waits up to 15 seconds for inventory processing. A timeout does not undo or repeat payment: it shows a pending notice with a manual inventory-only retry action. Deterministic locks make retry safe if the original transaction finishes late.

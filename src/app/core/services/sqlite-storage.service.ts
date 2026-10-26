@@ -29,8 +29,10 @@ export interface OfflineProduct {
   unitType: string;
   category: string;
   totalStock: number;
+  costPrice?: number;
   originalPrice: number;
   sellingPrice: number;
+  isStockTracked?: boolean;
   companyId: string;
   storeId: string;
   barcodeId?: string;
