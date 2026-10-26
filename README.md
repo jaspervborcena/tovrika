@@ -312,6 +312,7 @@ npm start
 - **[Financial Calculations](docs/FINANCIAL_CALCULATIONS.md)** - Dashboard revenue, profit, and refund/return/damage logic
 - **[SQLite Offline Storage](docs/sqlite-offline-storage.md)** - App-managed cache, schema, and migration details
 - **[Offline Mode Guide](docs/offline-mode-fixes-summary.md)** - Offline functionality overview
+- **[Testing Roadmap](docs/testing-roadmap.md)** - Cross-feature test plan, priorities, acceptance criteria, and run record
 - **[Testing Checklist](docs/TESTING-CHECKLIST.md)** - Comprehensive testing guide
 - **[Company Profile Integration](docs/company-profile-subscription-integration.md)** - Subscription management UI
 

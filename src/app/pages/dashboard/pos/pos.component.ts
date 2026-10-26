@@ -43,6 +43,7 @@ import JsBarcode from 'jsbarcode';
 import { DomSanitizer, SafeUrl } from '@angular/platform-browser';
 import { Html5Qrcode } from 'html5-qrcode';
 import { extractCustomerIdentifierFromQrValue } from './qr-scan.utils';
+import { isPaymentSufficient } from '../../../services/pos-checkout.utils';
 
 @Component({
   selector: 'app-pos',
@@ -1890,7 +1891,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       const tendered = this.paymentAmountTendered || 0;
 
       // Validate payment amount (use rounded total)
-      if (tendered < totalAmount) {
+      if (!isPaymentSufficient(tendered, totalAmount)) {
         console.warn('⚠️ Insufficient amount tendered');
         await this.showConfirmationDialog({
           title: 'Insufficient Amount',
@@ -4693,7 +4694,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       const tendered = this.paymentAmountTendered || 0;
       
       // Validate payment amount (compare against rounded total)
-      if (tendered < totalAmount) {
+      if (!isPaymentSufficient(tendered, totalAmount)) {
         console.warn('⚠️ Insufficient amount tendered');
         // You can add a notification here later
         return;
@@ -4981,6 +4982,34 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       // IMPORTANT: Clear processing state
       this.posService['isProcessingSignal']?.set(false);
       console.log('✅ Processing state cleared');
+
+      if (result.inventoryPending) {
+        const isOffline = result.inventoryPendingReason === 'offline';
+        const retryRequested = await this.showConfirmationDialog({
+          title: isOffline ? 'Inventory Queued Offline' : 'Inventory Still Pending',
+          message: isOffline
+            ? `${result.inventoryPendingMessage || 'The sale was saved offline.'}\n\nDo not process payment again. Inventory will be handled after reconnect.`
+            : `Payment and the order are already saved, but inventory has not been confirmed. Do not process payment again.${result.inventoryPendingMessage ? `\n\n${result.inventoryPendingMessage}` : ''}`,
+          confirmText: isOffline ? 'OK' : 'Retry Inventory',
+          cancelText: isOffline ? '' : 'Later',
+          type: isOffline ? 'info' : 'warning'
+        });
+
+        if (!isOffline && retryRequested) {
+          this.posService['isProcessingSignal']?.set(true);
+          const retryResult = await this.posService.retryInventoryForOrder(result.orderId);
+          this.posService['isProcessingSignal']?.set(false);
+          await this.showConfirmationDialog({
+            title: retryResult.success ? 'Inventory Processed' : 'Inventory Still Pending',
+            message: retryResult.success
+              ? 'Inventory processing completed. The payment was not repeated.'
+              : `Inventory could not be confirmed. The order remains available for reconciliation.\n\n${retryResult.errors.join('\n')}`,
+            confirmText: 'OK',
+            cancelText: '',
+            type: retryResult.success ? 'info' : 'warning'
+          });
+        }
+      }
       
       // If this is an OPEN order, show simple success message instead of receipt
       if (saveAsOpen) {

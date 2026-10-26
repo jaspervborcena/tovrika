@@ -287,6 +287,7 @@ export class InventoryTransactionService {
           isOffline: false,
           syncStatus: 'SYNCED' as const,
           productId: item.productId,
+          itemCode: item.itemCode || '',
           batchId: allocation.batchId,
           // Additional fields for inventory tracking
           storeId: batchData.storeId || permission.storeId || '',
