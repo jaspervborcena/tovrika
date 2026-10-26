@@ -1609,9 +1609,8 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
         throw new Error('Inventory processing requires connectivity; persist the sale line before processing it');
       }
 
-      if (isCompletedSale && items.some(item => item.isStockTracked === true) &&
-          (!ctx.orderId || ctx.orderId === 'unknown-order')) {
-        throw new Error('A completed tracked sale requires a stable orderId for inventory idempotency');
+      if (isCompletedSale && (!ctx.orderId || ctx.orderId === 'unknown-order')) {
+        throw new Error('A completed sale requires a stable orderId for inventory idempotency');
       }
 
       await this.runInventoryTransaction(async transaction => {
@@ -1648,7 +1647,7 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
           }
 
           const saleLineIndex = existingTrackingLine?.itemIndex ?? itemIndex;
-          const lockRef = isCompletedSale && item.isStockTracked === true
+          const lockRef = isCompletedSale
             ? this.createInventoryDocumentReference('inventorySaleLocks', createInventorySaleLockId(
               ctx.orderId,
               saleLineIndex,
@@ -1676,14 +1675,15 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
           let actualCost = Number(item.costPrice || 0);
 
           const isStockTracked = item.isStockTracked === true;
-          const isInventoryDeduction = isCompletedSale && isStockTracked;
-          const priorProductQuantity = isInventoryDeduction
+          const shouldDeductProductStock = isCompletedSale;
+          const isFifoDeduction = shouldDeductProductStock && isStockTracked;
+          const priorProductQuantity = shouldDeductProductStock
             ? plannedProductQuantities.get(item.productId) || 0
             : 0;
-          const fulfilledQty = isInventoryDeduction
+          const fulfilledQty = isFifoDeduction
             ? Math.min(requestedQty, Math.max(0, previousTotalStock - priorProductQuantity))
             : requestedQty;
-          if (isInventoryDeduction && fulfilledQty < requestedQty) {
+          if (isFifoDeduction && fulfilledQty < requestedQty) {
             throw new Error(`Insufficient stock for product ${item.productId}. Fulfilled ${fulfilledQty} of ${requestedQty}.`);
           }
           if (fulfilledQty <= 0 && requestedQty > 0) {
@@ -1694,7 +1694,7 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
           }
 
           const totalProductQuantity = priorProductQuantity + fulfilledQty;
-          if (isInventoryDeduction) {
+          if (shouldDeductProductStock) {
             plannedProductQuantities.set(item.productId, totalProductQuantity);
           }
 
@@ -1705,7 +1705,7 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
             quantity: number;
             ref: any;
           }> = [];
-          if (applyFifoNow && isInventoryDeduction && fulfilledQty > 0) {
+          if (applyFifoNow && isFifoDeduction && fulfilledQty > 0) {
             const batchesQuery = this.createInventoryBatchQuery(item.productId, ctx.storeId);
             const batchesSnapshot = await transaction.get(batchesQuery as any) as any;
             const batches = batchesSnapshot.docs
@@ -1760,7 +1760,8 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
             product,
             productData,
             previousTotalStock,
-            updatedTotalStock: isInventoryDeduction ? Math.max(0, previousTotalStock - totalProductQuantity) : previousTotalStock,
+            updatedTotalStock: shouldDeductProductStock ? previousTotalStock - totalProductQuantity : previousTotalStock,
+            shouldDeductProductStock,
             previousPendingBatchDeductionQty: Number(productData.pendingBatchDeductionQty || 0),
             fulfilledQty,
             actualCost,
@@ -1773,14 +1774,17 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
 
         for (const plan of plans) {
           const { item, isStockTracked, productRef, now } = plan;
-          if (isStockTracked && isCompletedSale) {
-            transaction.update(productRef as any, {
+          if (plan.shouldDeductProductStock) {
+            const productUpdates: Record<string, unknown> = {
               totalStock: plan.updatedTotalStock,
-              pendingBatchDeductionQty: plan.previousPendingBatchDeductionQty,
               lastUpdated: now,
               updatedAt: now,
               updatedBy: ctx.cashierId
-            } as any);
+            };
+            if (isStockTracked) {
+              productUpdates['pendingBatchDeductionQty'] = plan.previousPendingBatchDeductionQty;
+            }
+            transaction.update(productRef as any, productUpdates as any);
           }
 
           const trackedTotal = Number(item.quantity || 0) > 0
@@ -1860,7 +1864,7 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
             );
             transaction.set(saleSnapshotRef as any, this.removeUndefinedFields({
               eventType: 'sale',
-              stockMovement: false,
+              stockMovement: true,
               isStockTracked: false,
               companyId: ctx.companyId,
               storeId: ctx.storeId,
@@ -1876,12 +1880,12 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
               quantity: plan.fulfilledQty,
               costPrice: Number(plan.productData?.costPrice ?? item.costPrice ?? 0),
               sellingPrice: Number(plan.productData?.sellingPrice ?? item.unitPrice ?? 0),
-              runningBalanceTotalStock: plan.previousTotalStock,
+              runningBalanceTotalStock: plan.updatedTotalStock,
               deductedAt: now,
               createdAt: now,
               deductedBy: ctx.cashierId,
               createdBy: ctx.cashierId,
-              note: 'Sale price snapshot for non-stock-tracked product; no stock movement'
+              note: 'Product stock deducted for non-stock-tracked sale; no FIFO batch movement'
             }) as any);
           }
 
@@ -1918,10 +1922,12 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
       });
 
       for (const plan of plans) {
-        if (plan.isStockTracked && isCompletedSale && applyFifoNow) {
+        if (plan.shouldDeductProductStock && applyFifoNow) {
           this.productService.applyLocalPatch(plan.item.productId, {
             totalStock: plan.updatedTotalStock,
-            pendingBatchDeductionQty: plan.previousPendingBatchDeductionQty,
+            ...(plan.isStockTracked
+              ? { pendingBatchDeductionQty: plan.previousPendingBatchDeductionQty }
+              : {}),
             lastUpdated: plan.now,
             updatedAt: plan.now,
             updatedBy: ctx.cashierId
@@ -1938,7 +1944,7 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
       return {
         success: errors.length === 0,
         tracked: plans.length,
-        adjusted: plans.filter(plan => plan.isStockTracked).length,
+        adjusted: plans.filter(plan => plan.shouldDeductProductStock).length,
         errors
       };
     } catch (error) {

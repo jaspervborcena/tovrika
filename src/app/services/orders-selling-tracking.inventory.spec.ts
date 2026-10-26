@@ -190,7 +190,11 @@ describe('OrdersSellingTrackingService inventory transaction', () => {
     expect(writes).toEqual([]);
   });
 
-  it('writes a price snapshot from the product without FIFO or stock updates for untracked sales', async () => {
+  it('deducts product stock below zero and writes a sale audit for untracked sales without FIFO', async () => {
+    const applyLocalPatch = spyOn(TestBed.inject(ProductService), 'applyLocalPatch');
+    reads = reads.map(entry => entry.ref === (service as any).createInventoryDocumentReference('products', 'product-1')
+      ? { ...entry, snapshot: { exists: () => true, data: () => ({ ...productSnapshot.data(), totalStock: 1 }) } }
+      : entry);
     const result = await (service as any).logSaleAndAdjustStockAtomic({
       companyId: 'company-1',
       storeId: 'store-1',
@@ -209,11 +213,19 @@ describe('OrdersSellingTrackingService inventory transaction', () => {
     }]);
 
     expect(result.success).toBeTrue();
-    expect(result.adjusted).toBe(0);
+    expect(result.adjusted).toBe(1);
     expect((service as any).createInventoryBatchQuery).not.toHaveBeenCalled();
-    expect(writes.some(write => write.operation === 'update' && (
-      write.ref.collectionName === 'products' || write.ref.collectionName === 'productInventory'
-    ))).toBeFalse();
+    const productUpdate = writes.find(write =>
+      write.operation === 'update' && write.ref.collectionName === 'products'
+    );
+    expect(productUpdate?.data.totalStock).toBe(-1);
+    expect(applyLocalPatch).toHaveBeenCalledWith('product-1', jasmine.objectContaining({ totalStock: -1 }));
+    expect(writes.some(write =>
+      write.operation === 'update' && write.ref.collectionName === 'productInventory'
+    )).toBeFalse();
+    expect(writes.some(write =>
+      write.operation === 'set' && write.ref.collectionName === 'inventorySaleLocks'
+    )).toBeTrue();
 
     const saleSnapshot = writes.find(write =>
       write.operation === 'set' &&
@@ -221,11 +233,12 @@ describe('OrdersSellingTrackingService inventory transaction', () => {
       write.data.eventType === 'sale'
     )?.data;
     expect(saleSnapshot).toEqual(jasmine.objectContaining({
-      stockMovement: false,
+      stockMovement: true,
       isStockTracked: false,
       quantity: 2,
       costPrice: 18,
       sellingPrice: 60,
+      runningBalanceTotalStock: -1,
       orderId: 'order-1',
       invoiceNumber: 'INV-1',
       itemCode: 'SERVICE-1'

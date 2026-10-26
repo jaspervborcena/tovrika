@@ -190,7 +190,7 @@ At initial mapping, the suite contained **36 cases across 9 spec files**. The cu
 | [pos-checkout.utils.spec.ts](../src/app/services/pos-checkout.utils.spec.ts) | Cart totals across taxable/exempt lines, product/order discounts, cache lookup fallback, and exact/insufficient/invalid payment amounts. | POS calculations and payment validation | New P0 unit coverage. Does not exercise invoice transactions, UI payment workflow, or persisted payment records. |
 | [inventory-fifo.utils.spec.ts](../src/app/services/inventory-fifo.utils.spec.ts) | Oldest-first multi-batch allocation, exact per-batch costs/COGS, pending batch reservations, planned deductions, depleted status, and insufficient batch quantity. | Inventory FIFO | New P0 unit coverage of allocation planning. Does not exercise Firestore transaction atomicity, concurrent checkout, or reconciliation writes. |
 | [inventory-sale-lock.interface.spec.ts](../src/app/interfaces/inventory-sale-lock.interface.spec.ts) | Stable lock IDs for retries and distinct IDs for repeated products across order lines/orders. | Inventory FIFO; idempotency | Pure identity-helper coverage only; does not test transaction contention or persistence. |
-| [orders-selling-tracking.inventory.spec.ts](../src/app/services/orders-selling-tracking.inventory.spec.ts) | Transaction-level write planning for FIFO splits, movement audits, sale-line locks, no writes when batches cannot fulfill the line, and product-price snapshots for untracked sales without stock movement. | Inventory FIFO; audit; atomicity | Runs the real service transaction callback against a transaction test double; does not use Firestore emulator or validate production transaction contention. |
+| [orders-selling-tracking.inventory.spec.ts](../src/app/services/orders-selling-tracking.inventory.spec.ts) | Transaction-level write planning for FIFO splits, product stock deductions for tracked and untracked sales, sale-line locks, movement audits, and rollback when FIFO batches cannot fulfill the line. | Inventory FIFO; audit; atomicity | Runs the real service transaction callback against a transaction test double; does not use Firestore emulator or validate production transaction contention. |
 | [offline-document.inventory-sync.spec.ts](../src/app/core/services/offline-document.inventory-sync.spec.ts) | Queued sale-line sync after offline order-ID remapping and invocation of the inventory processor for a completed tracked line. | Offline storage/sync; Inventory FIFO | Uses in-memory SQLite/Firestore test doubles; does not test browser restart durability or Firestore connectivity. |
 | [bigquery.service.spec.ts](../src/app/services/bigquery.service.spec.ts) | Sales API date normalization, request parameters/auth header, order/detail parsing, and summary/status parsing. | Orders/reports; dashboard | Strongest reporting-focused unit coverage. Does not exercise the actual API/auth failure paths, report UI, aggregation correctness against source orders, or reconciliation API. |
 | [sales-summary-period.spec.ts](../src/app/pages/dashboard/sales/sales-summary/sales-summary-period.spec.ts) | Period defaults, today/week/custom date range resolution, and API date parameters. | Orders/reports; dashboard | Date helper coverage only; limited boundary coverage for yesterday, previous periods, timezone transitions, malformed ranges, and UI filter synchronization. |
@@ -261,16 +261,15 @@ At initial mapping, the suite contained **36 cases across 9 spec files**. The cu
 - Online checkout now waits at most 15 seconds for FIFO; an overrun keeps payment/order final and offers an inventory-only manual retry.
 - Offline checkout persists completed sale lines from the local product cache without querying inventory or running FIFO; reconnect sync starts inventory processing.
 - Offline tracking completion now updates only SQLite-queued open lines and skips Firestore queries.
-- Order-level `inventoryStatus` is set to `applied` only after all tracked sale lines finish without errors.
+- Order-level `inventoryStatus` is set to `applied` only after all sale lines finish without errors.
 - Added a unit test for the offline tracking-query bypass. The full suite/build must be rerun after these safeguards; the checkout timeout and dialog remain candidates for UI integration testing.
 
-### Non-stock-tracked sale price snapshots — 2026-10-26
+### Stock deductions for non-stock-tracked products — 2026-10-26
 
 - Focused inventory transaction suite — **5/5 passing**.
-- Full suite: `npm test -- --watch=false --browsers=ChromeHeadless` — **52/52 passing**. Karma remained active after reporting the completed result and was stopped.
-- Production build: `npm run build:prod` — succeeded.
+- Production build: `npm run build` — succeeded.
 - `git diff --check` — passed.
-- Verified completed untracked sales write an idempotent `eventType: 'sale'` price snapshot from the product document, with `stockMovement: false`, no FIFO batch query, and no stock quantity writes. Inventory history suppresses duplicate tracked sale-line rows already represented by FIFO allocation entries.
+- Verified completed untracked sales decrement product `totalStock`, write an idempotent `eventType: 'sale'` audit using product pricing, and skip FIFO batch queries/updates. Inventory history suppresses duplicate sale-line rows already represented by inventory audit entries.
 
 ## Test run record
 
