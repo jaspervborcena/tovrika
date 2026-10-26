@@ -1305,8 +1305,8 @@ export class PosService {
     const mode = environment.inventory?.reconciliationMode || 'legacy';
 
     if (mode === 'recon' || mode === 'legacy') {
-      // Checkout reserves aggregate stock and defers FIFO batch writes to reconciliation.
-      console.log('📊 Tracking sale for reconciliation mode. Total items:', cartItems.length);
+      // Online completed sales deduct FIFO batches now; offline sales stay pending for reconciliation.
+      console.log('📊 Tracking sale for inventory processing. Total items:', cartItems.length);
       const user = this.authService.getCurrentUser();
       const company = await this.companyService.getActiveCompany();
       const storeId = this.selectedStoreId();
@@ -1322,13 +1322,16 @@ export class PosService {
           const productDoc = await getDoc(doc(this.firestore, 'products', ci.productId) as any);
           if (productDoc.exists()) {
             const data = productDoc.data() as any;
-            isStockTracked = data.isStockTracked === true || Number(data.totalStock || 0) > 0;
+            isStockTracked = data.isStockTracked === true;
           }
-        } catch {
-          // If lookup fails, default to false so we don't create a false-positive deduction.
+        } catch (error) {
+          if (this.networkService.isOnline()) {
+            throw new Error(`Could not determine stock tracking for ${ci.productName}: ${error instanceof Error ? error.message : String(error)}`);
+          }
+          console.warn(`Could not confirm stock tracking for ${ci.productName} while offline; skipping FIFO.`);
         }
         if (!isStockTracked) {
-          console.log(`⏭️ ${ci.productName} is not stock-tracked and has no stock — tracking record will be created but no deduction`);
+          console.log(`⏭️ ${ci.productName} isStockTracked is false — tracking record only, no inventory deduction`);
         }
         return {
           productId: ci.productId,
