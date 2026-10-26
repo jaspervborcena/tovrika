@@ -6,14 +6,12 @@ import { ReportPeriod, StoreSelectionService } from '../../../services/store-sel
 import { ProductService } from '../../../services/product.service';
 import { Product } from '../../../interfaces/product.interface';
 import { Order } from '../../../interfaces/pos.interface';
-import { OrderService } from '../../../services/order.service';
 import { BigQueryService, convertPhilippineDateRangeToUtc, formatLocalDateString, normalizeLocalDateRange } from '../../../services/bigquery.service';
 import { AuthService } from '../../../services/auth.service';
 import { SqliteStorageService } from '@app/core/services/sqlite-storage.service';
 import { ExpenseService } from '../../../services/expense.service';
 import { ExpenseLog } from '../../../interfaces/expense-log.interface';
 import { OrdersSellingTrackingService } from '../../../services/orders-selling-tracking.service';
-import { Firestore, collection, query, where, orderBy, limit, getDocs } from '@angular/fire/firestore';
 import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../shared/components/confirmation-dialog/confirmation-dialog.component';
 
 @Component({
@@ -1567,13 +1565,11 @@ export class OverviewComponent implements OnInit {
     // (Removed duplicate stub methods; real implementations exist later in the class)
   private storeService = inject(StoreService);
   private productService = inject(ProductService);
-  private orderService = inject(OrderService);
   private bigQueryService = inject(BigQueryService);
   private authService = inject(AuthService);
   private sqlite = inject(SqliteStorageService);
   private expenseService = inject(ExpenseService);
   private ordersSellingTrackingService = inject(OrdersSellingTrackingService);
-  private firestore = inject(Firestore);
 
   // Confirmation Dialog
   protected showConfirmDialog = signal<boolean>(false);
@@ -1590,7 +1586,6 @@ export class OverviewComponent implements OnInit {
   protected stores = signal<Store[]>([]);
   protected products = signal<Product[]>([]);
   protected orders = signal<Order[]>([]);
-  protected firestoreCustomerCount = signal<number>(0);
   protected expenses = signal<ExpenseLog[]>([]);
   // Aggregates for expenses: month-to-date and yesterday totals (in PHP, not cents)
   protected monthExpensesTotal = signal<number>(0);
@@ -1789,8 +1784,7 @@ export class OverviewComponent implements OnInit {
     this.netTotalsSummary().totalSales
   );
   protected totalCustomers = computed(() => {
-    const apiCustomers = this.salesSummary().totalCustomers;
-    return apiCustomers > 0 ? apiCustomers : this.firestoreCustomerCount();
+    return this.salesSummary().totalCustomers;
   });
   protected todayOrders = computed(() => {
     // Always use ledgerCompletedQty
@@ -2245,6 +2239,7 @@ export class OverviewComponent implements OnInit {
 
     this.reportFilters.setSelectedPeriod('date_range');
     this.loadAnalyticsData(start, end);
+    void this.loadCurrentDateData(start, end);
     // Fetch date range comparison data
     this.fetchDateRangeComparison().catch(err => console.error('Failed to fetch date range comparison:', err));
   }
@@ -2323,6 +2318,7 @@ export class OverviewComponent implements OnInit {
     const storeId = this.selectedStoreId() || this.authService.getCurrentPermission()?.storeId;
     if (storeId && start && end) {
       await this.loadAnalyticsData(start, end);
+      await this.loadCurrentDateData(start, end);
       // Weekly and monthly periods need extra comparison loads
       if (period === 'this_month' || period === 'previous_month') {
         await this.fetchMonthlyComparison().catch(err => console.error('fetchMonthlyComparison error:', err));
@@ -2558,13 +2554,11 @@ export class OverviewComponent implements OnInit {
       const queryStart = startDate ? new Date(startDate) : localToday.start;
       const queryEnd = endDate ? new Date(endDate) : localToday.end;
 
-      // Load supporting order rows from Firestore; dashboard totals come from sales summary API.
-      const orders = await this.orderService.getOrdersFromFirestoreByRange(storeId, queryStart, queryEnd);
+      const orders = await this.bigQueryService.getSalesDashboardOrders(storeId, queryStart, queryEnd, true);
       if (requestId !== this.overviewLoadSequence) {
         return;
       }
       this.orders.set(orders || []);
-      await this.loadFirestoreCustomerCount(queryStart, queryEnd);
 
       // Load expenses for the requested date range
       const expenses = await this.expenseService.getExpensesByStore(storeId, queryStart, queryEnd);
@@ -2610,64 +2604,6 @@ export class OverviewComponent implements OnInit {
       // This preserves the full-page loader until all dashboard data has finished.
     } catch (error) {
       console.error('âŒ Error loading current date data:', error);
-    }
-  }
-
-  private async loadFirestoreCustomerCount(startDate: Date, endDate: Date): Promise<void> {
-    const permission = this.authService.getCurrentPermission();
-    const storeId = this.selectedStoreId() || permission?.storeId || '';
-    const companyId = permission?.companyId || '';
-
-    if (!companyId || !storeId) {
-      this.firestoreCustomerCount.set(0);
-      return;
-    }
-
-    try {
-      const ordersRef = collection(this.firestore, 'orders');
-      let orderDocs;
-      try {
-        orderDocs = (await getDocs(query(
-          ordersRef,
-          where('companyId', '==', companyId),
-          where('storeId', '==', storeId),
-          where('createdAt', '>=', startDate),
-          where('createdAt', '<=', endDate)
-        ))).docs;
-      } catch (queryError) {
-        console.warn('Overview: date-range customer query failed; using store fallback:', queryError);
-        orderDocs = (await getDocs(query(
-          ordersRef,
-          where('companyId', '==', companyId),
-          where('storeId', '==', storeId)
-        ))).docs;
-      }
-      const customerUids = new Set<string>();
-
-      for (const orderDoc of orderDocs) {
-        const data = orderDoc.data() as any;
-        const createdAt = data.createdAt?.toDate?.() || new Date(data.createdAt || 0);
-        const status = String(data.status || '').toLowerCase();
-        const customerInfo = data.customerInfo || {};
-        const customerUid = String(customerInfo.uid || '').trim();
-        const customerId = String(customerInfo.customerId || '').trim();
-        const customerName = String(customerInfo.fullName || '').trim();
-
-        if (createdAt < startDate || createdAt > endDate) continue;
-        if (!['completed', 'complete', 'paid'].includes(status)) continue;
-        if (customerUid) {
-          customerUids.add(`uid:${customerUid}`);
-        } else if (customerId) {
-          customerUids.add(`customer-id:${customerId}`);
-        } else if (customerName && customerName.toLowerCase() !== 'walk-in customer') {
-          customerUids.add(`name:${customerName.toLowerCase()}`);
-        }
-      }
-
-      this.firestoreCustomerCount.set(customerUids.size);
-    } catch (error) {
-      console.error('Overview: failed to load Firestore customer count:', error);
-      this.firestoreCustomerCount.set(0);
     }
   }
 
