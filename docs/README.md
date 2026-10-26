@@ -10,7 +10,7 @@ The app-managed offline cache uses SQLite via `sql.js`; Firebase Auth and Firest
 
 As of October 21, 2026:
 - Offline reconciliation loads authenticated summary data for a selected store and date range, then shows discrepancy counts and records.
-- Completed online payments deduct stock from FIFO batches immediately; offline payments defer batch deductions for reconciliation. Products with `isStockTracked` set to `false` are not deducted.
+- Completed online payments deduct product stock for all products; FIFO batches are deducted only when `isStockTracked` is `true`. Offline payments defer stock deductions until reconciliation.
 - Deferred inventory deductions can be reprocessed against FIFO batches from the reconciliation workflow.
 - Dashboard and sales summary filters share standard reporting periods and active-store selection.
 - The dedicated mobile POS route and components have been removed. The standalone POS remains at `/pos` and uses the responsive POS experience.
