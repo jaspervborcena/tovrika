@@ -2,6 +2,7 @@ import { Component, inject, OnInit, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { OfflineReconciliationService, ReconSummaryApiError } from '../../../services/offline-reconciliation.service';
+import { OfflineReconciliationFifoService } from './offline-reconciliation-fifo.service';
 import { StoreService, formatStoreDisplayName } from '../../../services/store.service';
 import { StoreSelectionService } from '../../../services/store-selection.service';
 import { NetworkService } from '../../../core/services/network.service';
@@ -13,10 +14,12 @@ import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../sh
   standalone: true,
   imports: [CommonModule, FormsModule, ConfirmationDialogComponent],
   templateUrl: './offline-order-reconciliation.component.html',
-  styleUrl: './offline-order-reconciliation.component.scss'
+  styleUrl: './offline-order-reconciliation.component.scss',
+  providers: [OfflineReconciliationService, OfflineReconciliationFifoService]
 })
 export class OfflineOrderReconciliationComponent implements OnInit {
   private reconciliationService = inject(OfflineReconciliationService);
+  private fifoReconciliationService = inject(OfflineReconciliationFifoService);
   private storeService = inject(StoreService);
   private storeSelectionService = inject(StoreSelectionService);
   private networkService = inject(NetworkService);
@@ -200,7 +203,7 @@ export class OfflineOrderReconciliationComponent implements OnInit {
       this.processingMessage = 'Reprocessing inventory...';
 
       try {
-        const result = await this.reconciliationService.reprocessInventory(discrepancy.orderId);
+        const result = await this.fifoReconciliationService.reprocessOrder(discrepancy.orderId);
         
         if (result.success) {
           await this.searchDiscrepancies(); // Refresh

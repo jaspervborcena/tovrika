@@ -169,9 +169,8 @@ export class InventoryService {
   ): Promise<InventoryRow[]> {
     const col = collection(this.firestore, collectionName);
     const out: InventoryRow[] = [];
+    const dateField = collectionName === 'inventoryTracking' ? 'deductedAt' : 'createdAt';
     try {
-      // Use 'deductedAt' for inventoryTracking, 'createdAt' for others
-      const dateField = collectionName === 'inventoryTracking' ? 'deductedAt' : 'createdAt';
       const q = query(col, ...baseFilters, orderBy(dateField, 'desc'), limit(fetchLimit));
       const snaps = await getDocs(q as any);
       for (const s of snaps.docs) {
@@ -239,23 +238,24 @@ export class InventoryService {
     } catch (err) {
       // Likely index required or other query error — fall back to a simpler query and client-side filter
       console.warn('fetchRowsFromCollection primary query failed, falling back:', err);
-      // Attempt to use the first filter (commonly status equality) and order by createdAt
+      // Keep fallback ordering and client-side date filtering aligned with the collection's date field.
       const fallbackFilters = baseFilters && baseFilters.length > 0 ? [baseFilters[0]] : [];
-      const fallbackQ = query(col, ...fallbackFilters, orderBy('createdAt', 'desc'), limit(fetchLimit));
+      const fallbackQ = query(col, ...fallbackFilters, orderBy(dateField, 'desc'), limit(fetchLimit));
       const snapsFallback = await getDocs(fallbackQ as any);
       for (const s of snapsFallback.docs) {
         const data: any = s.data() || {};
           // if updatedAtRange provided, enforce it client-side
           if (updatedAtRange && (updatedAtRange.start || updatedAtRange.end)) {
-            const ca = data.createdAt;
-            let createdAtDate: Date | null = null;
-            if (!ca) continue;
-            if (typeof ca.toDate === 'function') createdAtDate = ca.toDate();
-            else if (ca instanceof Date) createdAtDate = ca as Date;
-            else createdAtDate = new Date(ca);
-            if (!createdAtDate) continue;
-            if (updatedAtRange.start && createdAtDate < updatedAtRange.start) continue;
-            if (updatedAtRange.end && createdAtDate > updatedAtRange.end) continue;
+            const rawDate = data[dateField];
+            if (!rawDate) continue;
+            const rowDate = typeof rawDate.toDate === 'function'
+              ? rawDate.toDate()
+              : rawDate instanceof Date
+                ? rawDate
+                : new Date(rawDate);
+            if (Number.isNaN(rowDate.getTime())) continue;
+            if (updatedAtRange.start && rowDate < updatedAtRange.start) continue;
+            if (updatedAtRange.end && rowDate > updatedAtRange.end) continue;
           }
         const productId: string = data.productId;
         const quantity: number = Number(data.quantity || 0);
