@@ -20,6 +20,7 @@
           <select 
             id="storeSelect"
             [(ngModel)]="selectedStoreId"
+            (change)="onStoreChange()"
             class="store-select">
             <option *ngFor="let store of stores" [value]="store.id">
               {{ formatStoreDisplayName(store) }}
@@ -30,6 +31,18 @@
       
       <div class="date-inputs">
         <div class="date-input-group">
+          <label for="periodSelect">Period:</label>
+          <select
+            id="periodSelect"
+            class="date-input"
+            [value]="selectedPeriod"
+            (change)="onPeriodChange($event)">
+            <option *ngFor="let period of periodOptions" [value]="period.key">
+              {{ period.label }}
+            </option>
+          </select>
+        </div>
+        <div class="date-input-group" *ngIf="selectedPeriod === 'date_range'">
           <label for="fromDate">From Date:</label>
           <input 
             type="date" 
@@ -37,7 +50,7 @@
             [(ngModel)]="startDate"
             class="date-input">
         </div>
-        <div class="date-input-group">
+        <div class="date-input-group" *ngIf="selectedPeriod === 'date_range'">
           <label for="toDate">To Date:</label>
           <input 
             type="date" 
@@ -45,9 +58,9 @@
             [(ngModel)]="endDate"
             class="date-input">
         </div>
-        <div class="go-button-group">
+        <div class="go-button-group" *ngIf="selectedPeriod === 'date_range'">
           <button 
-            (click)="searchDiscrepancies()"
+            (click)="onApplyDateRange()"
             [disabled]="loading"
             class="go-button">
             <span *ngIf="!loading">Go</span>

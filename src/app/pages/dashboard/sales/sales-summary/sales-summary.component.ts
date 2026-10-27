@@ -6,6 +6,7 @@ import { BigQueryService, convertPhilippineDateRangeToUtc } from '../../../../se
 import { AuthService } from '../../../../services/auth.service';
 import { StoreService, Store, dedupeStoresForDropdown, formatStoreDisplayName } from '../../../../services/store.service';
 import { ReportPeriod, StoreSelectionService } from '../../../../services/store-selection.service';
+import { resolvePeriodDateRange } from '../../../../services/report-period.utils';
 import { Order as PosOrder, OrderItem } from '../../../../interfaces/pos.interface';
 import { SqliteStorageService } from '../../../../core/services/sqlite-storage.service';
 import { OrdersSellingTrackingService } from '../../../../services/orders-selling-tracking.service';
@@ -16,69 +17,7 @@ import { environment } from '../../../../../environments/environment';
 
 export type SalesSummaryPeriod = ReportPeriod;
 
-export function resolvePeriodDateRange(
-  period: SalesSummaryPeriod,
-  referenceDate: Date = new Date(),
-  forcedFrom?: string | null,
-  forcedTo?: string | null
-): { from: string; to: string } {
-  if (period === 'date_range') {
-    const from = forcedFrom || formatDateForInput(new Date(referenceDate.getFullYear(), referenceDate.getMonth(), referenceDate.getDate() - 30));
-    const to = forcedTo || formatDateForInput(referenceDate);
-    return { from, to };
-  }
-
-  const now = new Date(referenceDate);
-  let start: Date;
-  let end: Date;
-
-  if (period === 'today') {
-    start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
-    end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
-  } else if (period === 'yesterday') {
-    const yesterday = new Date(now);
-    yesterday.setDate(now.getDate() - 1);
-    start = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate(), 0, 0, 0, 0);
-    end = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate(), 23, 59, 59, 999);
-  } else if (period === 'this_week') {
-    const nowWeekDay = now.getDay();
-    const mondayOffset = (nowWeekDay + 6) % 7;
-    start = new Date(now);
-    start.setDate(now.getDate() - mondayOffset);
-    start.setHours(0, 0, 0, 0);
-    end = new Date(start);
-    end.setDate(start.getDate() + 6);
-    end.setHours(23, 59, 59, 999);
-  } else if (period === 'previous_week') {
-    const nowWeekDay = now.getDay();
-    const mondayOffset = (nowWeekDay + 6) % 7;
-    const currentWeekStart = new Date(now);
-    currentWeekStart.setDate(now.getDate() - mondayOffset);
-    currentWeekStart.setHours(0, 0, 0, 0);
-    start = new Date(currentWeekStart);
-    start.setDate(currentWeekStart.getDate() - 7);
-    start.setHours(0, 0, 0, 0);
-    end = new Date(start);
-    end.setDate(start.getDate() + 6);
-    end.setHours(23, 59, 59, 999);
-  } else if (period === 'this_month') {
-    start = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
-    end = new Date(now.getFullYear(), now.getMonth(), new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate(), 23, 59, 59, 999);
-  } else {
-    const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    start = new Date(prev.getFullYear(), prev.getMonth(), 1, 0, 0, 0, 0);
-    end = new Date(prev.getFullYear(), prev.getMonth(), new Date(prev.getFullYear(), prev.getMonth() + 1, 0).getDate(), 23, 59, 59, 999);
-  }
-
-  return { from: formatDateForInput(start), to: formatDateForInput(end) };
-}
-
-function formatDateForInput(date: Date): string {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, '0');
-  const d = String(date.getDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
-}
+export { resolvePeriodDateRange };
 
 // Extended interface for display purposes
 interface OrderDisplay extends PosOrder {
@@ -2128,9 +2067,9 @@ export class SalesSummaryComponent implements OnInit {
   });
 
   constructor() {
-    // Initialize the displayed range from the selected period.
+    this.reportFilters.setSelectedPeriod('today');
     const today = new Date();
-    const { from, to } = resolvePeriodDateRange(this.reportFilters.selectedPeriod(), today);
+    const { from, to } = resolvePeriodDateRange('today', today);
     this.fromDate = from;
     this.toDate = to;
   }
