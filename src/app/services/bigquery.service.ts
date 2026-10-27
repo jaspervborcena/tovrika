@@ -115,8 +115,8 @@ export function buildBigQueryRequestParams(
 export function buildSalesSummaryRequestParams(storeId: string, from: Date, to: Date): URLSearchParams {
   return new URLSearchParams({
     storeId,
-    from: formatDateForApi(from),
-    to: formatDateForApi(to)
+    from: formatUtcDateForApi(from),
+    to: formatUtcDateForApi(to)
   });
 }
 
