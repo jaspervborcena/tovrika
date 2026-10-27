@@ -82,6 +82,42 @@ describe('InventoryService summary source', () => {
     })]);
   });
 
+  it('paginates transaction rows ten per page while retaining the complete result set', async () => {
+    const inventory = Array.from({ length: 12 }, (_, index) => ({
+      eventType: 'sale',
+      invoiceNumber: `INV-${index + 1}`,
+      productId: `product-${index + 1}`,
+      productName: `Product ${index + 1}`,
+      productCode: `CODE-${index + 1}`,
+      skuId: `SKU-${index + 1}`,
+      quantity: 1,
+      costPrice: 5,
+      sellingPrice: 10,
+      runningBalanceTotalStock: 20,
+      createdAt: '2026-09-03T08:00:00.000Z'
+    }));
+    spyOn(window, 'fetch').and.callFake(async () => new Response(JSON.stringify({
+      success: true,
+      storeId: 'store-1',
+      from: '',
+      to: '',
+      count: inventory.length,
+      inventory
+    }), { status: 200 }));
+
+    await service.loadRowsForPeriod('today', 1, 'store-1');
+    expect(service.pageSize).toBe(10);
+    expect(service.totalCount()).toBe(12);
+    expect(service.rows()).toHaveSize(10);
+    expect(service.allRows()).toHaveSize(12);
+    expect(service.totalPages()).toBe(2);
+
+    await service.loadRowsForPeriod('today', 2, 'store-1');
+    expect(service.rows()).toHaveSize(2);
+    expect(service.rows()[0].invoiceNo).toBe('INV-11');
+    expect(service.allRows()).toHaveSize(12);
+  });
+
   it('falls back to Firestore for supported short periods when the API fails', async () => {
     spyOn(window, 'fetch').and.rejectWith(new Error('API unavailable'));
     const fallbackRow: InventoryRow = {
@@ -102,7 +138,7 @@ describe('InventoryService summary source', () => {
     expect(service.fetchRowsFromCollection).toHaveBeenCalledWith(
       'inventoryTracking',
       jasmine.any(Array),
-      20,
+      undefined,
       jasmine.any(Object)
     );
     expect(service.rows()).toEqual([fallbackRow]);
@@ -128,6 +164,7 @@ describe('InventoryService summary source', () => {
     expect(apiFetch).not.toHaveBeenCalled();
     expect(firestoreFetch).toHaveBeenCalled();
     expect(service.rows()).toEqual(firestoreRows);
+    expect(service.allRows()).toEqual(firestoreRows);
   });
 });
 
