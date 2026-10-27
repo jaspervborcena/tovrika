@@ -9,7 +9,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatCardModule } from '@angular/material/card';
 import { MatTableDataSource } from '@angular/material/table';
-import { InventoryService as AppInventoryService } from '../../services/inventory.service';
+import { InventoryService as AppInventoryService, summarizeInventoryRows } from '../../services/inventory.service';
 import { StoreService, Store, dedupeStoresForDropdown, formatStoreDisplayName } from '../../services/store.service';
 import { ReportPeriod, StoreSelectionService } from '../../services/store-selection.service';
 import { AuthService } from '../../services/auth.service';
@@ -605,17 +605,7 @@ export class InventoryComponent implements OnInit {
   showDetails = signal<boolean>(false);
   selectedRow = signal<AggregatedInventoryRow | null>(null);
 
-  readonly inventoryPerformance = computed(() => {
-    const allRows = this.inventoryService.allRows();
-    const rows = this.aggregateBySku(this.computeMaxStockForRows(allRows, allRows));
-    return {
-      totalSkus: new Set(allRows.map(row => row.skuId || row.productId || 'unknown')).size,
-      totalQuantity: rows.reduce((sum, row) => sum + (row.quantity || 0), 0),
-      totalGross: rows.reduce((sum, row) => sum + (row.totalGross || 0), 0),
-      totalProfit: rows.reduce((sum, row) => sum + (row.totalProfit || 0), 0),
-      totalRemainingStock: rows.reduce((sum, row) => sum + (row.remainingStock || 0), 0)
-    };
-  });
+  readonly inventoryPerformance = computed(() => summarizeInventoryRows(this.inventoryService.allRows()));
 
   constructor(
     public inventoryService: AppInventoryService,
