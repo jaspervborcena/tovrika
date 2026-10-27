@@ -1,5 +1,5 @@
-import { resolvePeriodDateRange } from './sales-summary.component';
 import { buildBigQueryRequestParams } from '../../../../services/bigquery.service';
+import { resolvePeriodDateRange } from '../../../../services/report-period.utils';
 import { StoreSelectionService } from '../../../../services/store-selection.service';
 
 describe('SalesSummary period helper', () => {

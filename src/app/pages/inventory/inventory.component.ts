@@ -715,6 +715,7 @@ export class InventoryComponent implements OnInit {
   }
 
   async ngOnInit(): Promise<void> {
+    this.selectedPeriod = 'today';
     this.applyTodayDefaultRange();
     await this.loadStores();
     const currentPermission = this.authService.getCurrentPermission();
