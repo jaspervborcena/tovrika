@@ -11,6 +11,48 @@ import {
 import { getDocs, getAggregateFromServer, count, getDoc } from 'firebase/firestore';
 import { ProductService } from './product.service';
 import { OfflineDocumentService } from '../core/services/offline-document.service';
+import { AuthService } from './auth.service';
+import { ReportPeriod } from './store-selection.service';
+import { resolvePeriodDateRange } from './report-period.utils';
+import { environment } from '../../environments/environment';
+
+interface InventorySummaryApiRow {
+  batchId?: string | null;
+  companyId?: string | null;
+  costPrice?: number | null;
+  createdAt?: string | null;
+  createdBy?: string | null;
+  deductedAt?: string | null;
+  deductedBy?: string | null;
+  eventType?: string | null;
+  inventoryTrackingId?: string | null;
+  invoiceNumber?: string | null;
+  itemCode?: string | null;
+  isStockTracked?: boolean | null;
+  note?: string | null;
+  orderId?: string | null;
+  productCode?: string | null;
+  productId?: string | null;
+  productName?: string | null;
+  quantity?: number | null;
+  refId?: string | null;
+  runningBalanceTotalStock?: number | null;
+  saleLineIndex?: number | null;
+  saleTrackingId?: string | null;
+  sellingPrice?: number | null;
+  skuId?: string | null;
+  stockMovement?: boolean | null;
+  storeId?: string | null;
+}
+
+interface InventorySummaryApiResponse {
+  success: boolean;
+  storeId: string;
+  from: string;
+  to: string;
+  count: number;
+  inventory: InventorySummaryApiRow[];
+}
 
 export interface InventoryRow {
   invoiceNo: string;
@@ -49,6 +91,7 @@ export class InventoryService {
   private firestore = inject(Firestore);
   private productService = inject(ProductService);
   private offlineDocService = inject(OfflineDocumentService);
+  private authService = inject(AuthService);
 
   public rows = signal<InventoryRow[]>([]);
   public isLoading = signal<boolean>(false);
@@ -519,12 +562,32 @@ async loadRowsForPeriod(period: string, page: number = 1, storeId?: string, comp
   this.currentPage.set(page);
 
   try {
+    if (storeId && this.supportsInventorySummaryApiPeriod(period)) {
+      try {
+        const apiRows = await this.fetchInventorySummaryFromApi(period, storeId, startDate, endDate);
+        const mappedRows = apiRows.map(row => this.mapInventorySummaryApiRow(row));
+        mappedRows.sort((a, b) => {
+          const dateA = a.date ? new Date(a.date).getTime() : 0;
+          const dateB = b.date ? new Date(b.date).getTime() : 0;
+          return dateB - dateA;
+        });
+
+        this.totalCount.set(mappedRows.length);
+        const startIndex = Math.max(0, (page - 1) * this.pageSize);
+        this.rows.set(mappedRows.slice(startIndex, startIndex + this.pageSize));
+        return;
+      } catch (error) {
+        console.warn(`Inventory summary API failed for ${period}; falling back to Firestore.`, error);
+      }
+    }
+
     const baseFilters: any[] = [];
     
     // Add store/company filters if provided
     if (storeId) {
       baseFilters.push(where('storeId', '==', storeId));
     }
+
     if (companyId) {
       baseFilters.push(where('companyId', '==', companyId));
     }
@@ -730,6 +793,99 @@ async loadRowsForPeriod(period: string, page: number = 1, storeId?: string, comp
     this.isLoading.set(false);
   }
 }
+
+  private supportsInventorySummaryApiPeriod(period: string): boolean {
+    return ['today', 'yesterday', 'this_week', 'previous_week'].includes(period);
+  }
+
+  private async fetchInventorySummaryFromApi(
+    period: string,
+    storeId: string,
+    startDate?: Date,
+    endDate?: Date
+  ): Promise<InventorySummaryApiRow[]> {
+    const endpoint = environment.api?.inventorySummaryApi;
+    if (!endpoint) {
+      throw new Error('Inventory summary API endpoint is not configured.');
+    }
+
+    await this.authService.waitForAuth();
+    const token = await this.authService.getFirebaseIdToken(true);
+    if (!token) {
+      throw new Error('Sign in before loading inventory summary data.');
+    }
+
+    const fromInput = startDate ? this.formatLocalDateInput(startDate) : null;
+    const toInput = endDate ? this.formatLocalDateInput(endDate) : null;
+    const range = resolvePeriodDateRange(
+      period as ReportPeriod,
+      new Date(),
+      fromInput,
+      toInput
+    );
+    const from = this.formatUtcDateTimeForApi(new Date(`${range.from}T00:00:00`));
+    const to = this.formatUtcDateTimeForApi(new Date(`${range.to}T23:59:59`));
+    const params = new URLSearchParams({ storeId, from, to });
+    const response = await fetch(`${endpoint}?${params.toString()}`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+
+    if (!response.ok) {
+      throw new Error(`Inventory summary request failed: ${response.status}`);
+    }
+
+    const payload = await response.json() as InventorySummaryApiResponse;
+    if (!payload.success || !Array.isArray(payload.inventory)) {
+      throw new Error('Inventory summary API returned an invalid response.');
+    }
+    return payload.inventory;
+  }
+
+  private mapInventorySummaryApiRow(data: InventorySummaryApiRow): InventoryRow {
+    const product = data.productId ? this.productService.getProduct(data.productId) : undefined;
+    const quantity = Number(data.quantity || 0);
+    const costPrice = Number(data.costPrice || 0);
+    const sellingPrice = Number(data.sellingPrice ?? product?.sellingPrice ?? 0);
+    const productCode = data.productCode || product?.productCode || '';
+    const skuId = data.skuId || product?.skuId || '';
+
+    return {
+      invoiceNo: data.invoiceNumber || data.orderId || '',
+      batchId: data.batchId || null,
+      date: data.deductedAt || data.createdAt || undefined,
+      performedBy: data.deductedBy || data.createdBy || '',
+      productName: data.productName || '',
+      productCode: productCode || skuId || data.productId || '',
+      skuId,
+      costPrice,
+      sellingPrice,
+      quantity,
+      profitPerUnit: sellingPrice - costPrice,
+      totalGross: sellingPrice * quantity,
+      totalProfit: (sellingPrice - costPrice) * quantity,
+      runningBalanceTotalStock: Number(data.runningBalanceTotalStock || 0),
+      productId: data.productId || '',
+      saleTrackingId: data.saleTrackingId || undefined,
+      source: data.eventType === 'sale' ? 'saleSnapshot' : 'deduction'
+    };
+  }
+
+  private formatLocalDateInput(date: Date): string {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
+  private formatUtcDateTimeForApi(date: Date): string {
+    const year = date.getUTCFullYear();
+    const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(date.getUTCDate()).padStart(2, '0');
+    const hours = String(date.getUTCHours()).padStart(2, '0');
+    const minutes = String(date.getUTCMinutes()).padStart(2, '0');
+    const seconds = String(date.getUTCSeconds()).padStart(2, '0');
+    return `${year}${month}${day}${hours}${minutes}${seconds}`;
+  }
 
   async loadInventory(companyId: string, storeId: string, branchId: string) {
     try {

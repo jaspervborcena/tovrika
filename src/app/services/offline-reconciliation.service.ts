@@ -297,10 +297,29 @@ export class OfflineReconciliationService {
     to: string
   ): Promise<any[]> {
     const endpoint = environment.api?.reconciliationSummaryApi;
+    const fallbackEndpoint = environment.api?.reconciliationSummaryFallbackApi;
     if (!endpoint) {
       throw new ReconSummaryApiError(500, 'Reconciliation summary endpoint is not configured.');
     }
 
+    try {
+      return await this.requestReconSummaryRows(endpoint, storeId, from, to);
+    } catch (primaryError) {
+      if (!fallbackEndpoint || fallbackEndpoint === endpoint) {
+        throw primaryError;
+      }
+
+      console.warn('Primary reconciliation summary API failed; trying fallback endpoint.', primaryError);
+      return this.requestReconSummaryRows(fallbackEndpoint, storeId, from, to);
+    }
+  }
+
+  private async requestReconSummaryRows(
+    endpoint: string,
+    storeId: string,
+    from: string,
+    to: string
+  ): Promise<any[]> {
     await this.authService.waitForAuth();
     const token = await this.authService.getFirebaseIdToken(true);
     if (!token) {
@@ -321,6 +340,7 @@ export class OfflineReconciliationService {
       throw new ReconSummaryApiError(500, 'Reconciliation summary response was invalid.');
     }
 
+    console.log('Reconciliation summary API result:', payload);
     return payload.rows.map(row => ({
       ...row,
       orderId: row['orderId'] ?? row['order_id'],

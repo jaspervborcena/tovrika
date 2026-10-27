@@ -4,7 +4,8 @@ import { FormsModule } from '@angular/forms';
 import { OfflineReconciliationService, ReconSummaryApiError } from '../../../services/offline-reconciliation.service';
 import { OfflineReconciliationFifoService } from './offline-reconciliation-fifo.service';
 import { StoreService, formatStoreDisplayName } from '../../../services/store.service';
-import { StoreSelectionService } from '../../../services/store-selection.service';
+import { ReportPeriod, StoreSelectionService } from '../../../services/store-selection.service';
+import { resolvePeriodDateRange } from '../../../services/report-period.utils';
 import { NetworkService } from '../../../core/services/network.service';
 import { ReconciliationDiscrepancy, ReconciliationSummary } from '../../../interfaces/reconciliation.interface';
 import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../../shared/components/confirmation-dialog/confirmation-dialog.component';
@@ -30,8 +31,17 @@ export class OfflineOrderReconciliationComponent implements OnInit {
 
   stores: any[] = [];
   selectedStoreId: string = '';
+  periodOptions = this.storeSelectionService.periodOptions;
+
+  get selectedPeriod(): ReportPeriod {
+    return this.storeSelectionService.selectedPeriod();
+  }
+
+  set selectedPeriod(period: ReportPeriod) {
+    this.storeSelectionService.setSelectedPeriod(period);
+  }
   
-  // Date range defaults to last 30 days
+  // Date range defaults to today
   startDate: string = '';
   endDate: string = '';
   
@@ -57,8 +67,12 @@ export class OfflineOrderReconciliationComponent implements OnInit {
   private pendingAction: (() => Promise<void>) | null = null;
 
   async ngOnInit() {
+    this.selectedPeriod = 'today';
+    this.updateDateRange('today');
     await this.loadStores();
-    this.initializeDateRange();
+    if (this.selectedStoreId) {
+      await this.searchDiscrepancies();
+    }
   }
 
   private async loadStores() {
@@ -72,20 +86,27 @@ export class OfflineOrderReconciliationComponent implements OnInit {
     }
   }
 
-  private initializeDateRange() {
-    const today = new Date();
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(today.getDate() - 30);
-    
-    this.endDate = this.formatDateForInput(today);
-    this.startDate = this.formatDateForInput(thirtyDaysAgo);
+  private updateDateRange(period: ReportPeriod): void {
+    const range = resolvePeriodDateRange(period);
+    this.startDate = range.from;
+    this.endDate = range.to;
   }
 
-  private formatDateForInput(date: Date): string {
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
+  onStoreChange(): void {
+    void this.searchDiscrepancies();
+  }
+
+  onPeriodChange(event: Event): void {
+    const period = (event.target as HTMLSelectElement).value as ReportPeriod;
+    this.selectedPeriod = period;
+    this.updateDateRange(period);
+    if (period !== 'date_range') {
+      void this.searchDiscrepancies();
+    }
+  }
+
+  onApplyDateRange(): void {
+    void this.searchDiscrepancies();
   }
 
   async searchDiscrepancies() {
