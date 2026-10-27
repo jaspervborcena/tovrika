@@ -62,6 +62,14 @@ The repository has a solid feature set and the current build is successful. The 
 - **Consistent reporting filters** - Dashboard and sales summary screens share standard date periods and active-store selection.
 - **Simplified POS routes** - The separate mobile POS route and dedicated components have been removed; the standalone responsive POS remains available at `/pos`.
 
+### ✨ **Inventory Summary API Update (October 27, 2026)**
+- **API-first inventory summaries** - The Inventory page uses the authenticated `get_inventory_summary_bq` endpoint for Today, Yesterday, This Week, and Previous Week.
+- **Firestore fallback** - If the Inventory Summary API request fails for one of those four periods, the page loads the data using its existing Firestore queries. Other periods continue to use Firestore directly.
+- **UTC date parameters** - Selected local date boundaries are converted to UTC and sent as `YYYYMMDDHHmmss` values in the API's `from` and `to` parameters.
+- **Narrow API date ranges** - The summary endpoint returns all matching records without pagination, so API requests are limited to the four supported short periods.
+- **Transaction grid and totals** - Inventory displays individual transactions with 10 rows per page. Summary metrics use all transactions in the selected period, not only the current page; SKU count is distinct.
+- **Separate reconciliation endpoint** - The reconciliation summary endpoint is used by the Inventory Reconciliation screen, not by the regular Inventory page.
+
 ### ✨ **Recent POS Update (July 2026)**
 - **Item-level adjustment tracking** - Return and refund actions now record against the correct order line in the tracking layer.
 - **Line-based summary consistency** - The adjustment event is tied to the selected item’s actual quantity and amount, improving invoice summary accuracy.

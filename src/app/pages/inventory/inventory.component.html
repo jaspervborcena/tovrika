@@ -46,23 +46,23 @@
   <div class="inventory-metrics-grid">
     <div class="metric-card">
       <div class="metric-label">SKUs</div>
-      <div class="metric-value">{{ inventoryPerformance.totalSkus }}</div>
+      <div class="metric-value">{{ inventoryPerformance().totalSkus }}</div>
     </div>
     <div class="metric-card">
       <div class="metric-label">Total Qty</div>
-      <div class="metric-value">{{ inventoryPerformance.totalQuantity }}</div>
+      <div class="metric-value">{{ inventoryPerformance().totalQuantity }}</div>
     </div>
     <div class="metric-card">
       <div class="metric-label">Total Gross</div>
-      <div class="metric-value">₱{{ inventoryPerformance.totalGross | number:'1.0-0' }}</div>
+      <div class="metric-value">₱{{ inventoryPerformance().totalGross | number:'1.0-0' }}</div>
     </div>
     <div class="metric-card">
       <div class="metric-label">Total Profit</div>
-      <div class="metric-value">₱{{ inventoryPerformance.totalProfit | number:'1.0-0' }}</div>
+      <div class="metric-value">₱{{ inventoryPerformance().totalProfit | number:'1.0-0' }}</div>
     </div>
     <div class="metric-card">
       <div class="metric-label">Remaining Stock</div>
-      <div class="metric-value">{{ inventoryPerformance.totalRemainingStock }}</div>
+      <div class="metric-value">{{ inventoryPerformance().totalRemainingStock }}</div>
     </div>
   </div>
 
