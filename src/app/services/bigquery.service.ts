@@ -373,7 +373,11 @@ export class BigQueryService {
     }
 
     const payload = await response.json();
-    const rows = Array.isArray(payload?.orders) ? payload.orders : [];
+    const rows = this.findNestedArray(payload, ['orders', 'sales', 'details', 'records', 'rows', 'data', 'result']);
+    if (!rows) {
+      throw new Error('Sales summary details response did not contain an orders array.');
+    }
+
     return {
       orders: rows.map((order: any) => this.transformApiOrder(order)),
       count: Number(payload?.count ?? rows.length),

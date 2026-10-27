@@ -94,10 +94,11 @@ export class InventoryService {
   private authService = inject(AuthService);
 
   public rows = signal<InventoryRow[]>([]);
+  public allRows = signal<InventoryRow[]>([]);
   public isLoading = signal<boolean>(false);
   public totalCount = signal<number>(0);
   public currentPage = signal<number>(1);
-  public readonly pageSize = 20;
+  public readonly pageSize = 10;
   public totalPages = computed(() => Math.max(1, Math.ceil(this.totalCount() / this.pageSize)));
 
   private readonly inventory = signal<InventoryItem[]>([]);
@@ -203,19 +204,21 @@ export class InventoryService {
 
   /**
    * Fetch and map rows from any collection with optional filters.
-   * Returns mapped InventoryRow[] ordered by `updatedAt` desc limited by fetchLimit.
+   * Returns mapped InventoryRow[] ordered by the collection's transaction date.
    */
   async fetchRowsFromCollection(
     collectionName: string,
     baseFilters: any[] = [],
-    fetchLimit: number = 1000,
+    fetchLimit?: number,
     updatedAtRange?: { start?: Date | null; end?: Date | null }
   ): Promise<InventoryRow[]> {
     const col = collection(this.firestore, collectionName);
     const out: InventoryRow[] = [];
     const dateField = collectionName === 'inventoryTracking' ? 'deductedAt' : 'createdAt';
     try {
-      const q = query(col, ...baseFilters, orderBy(dateField, 'desc'), limit(fetchLimit));
+      const q = fetchLimit
+        ? query(col, ...baseFilters, orderBy(dateField, 'desc'), limit(fetchLimit))
+        : query(col, ...baseFilters, orderBy(dateField, 'desc'));
       const snaps = await getDocs(q as any);
       for (const s of snaps.docs) {
         const data: any = s.data() || {};
@@ -285,7 +288,9 @@ export class InventoryService {
       console.warn('fetchRowsFromCollection primary query failed, falling back:', err);
       // Keep fallback ordering and client-side date filtering aligned with the collection's date field.
       const fallbackFilters = baseFilters && baseFilters.length > 0 ? [baseFilters[0]] : [];
-      const fallbackQ = query(col, ...fallbackFilters, orderBy(dateField, 'desc'), limit(fetchLimit));
+      const fallbackQ = fetchLimit
+        ? query(col, ...fallbackFilters, orderBy(dateField, 'desc'), limit(fetchLimit))
+        : query(col, ...fallbackFilters, orderBy(dateField, 'desc'));
       const snapsFallback = await getDocs(fallbackQ as any);
       for (const s of snapsFallback.docs) {
         const data: any = s.data() || {};
@@ -371,7 +376,7 @@ export class InventoryService {
    */
   async fetchRowsFromOrdersSellingTracking(
     baseFilters: any[] = [],
-    fetchLimit: number = 1000,
+    fetchLimit?: number,
     updatedAtRange?: { start?: Date | null; end?: Date | null }
   ): Promise<InventoryRow[]> {
     console.log('🟡 fetchRowsFromOrdersSellingTracking:', { filterCount: baseFilters.length, fetchLimit });
@@ -380,7 +385,9 @@ export class InventoryService {
     try {
       // Include completed and open status for sales (open docs are sold items pending completion)
       const statusFilter = where('status', 'in', ['completed', 'open']);
-      const q = query(col, statusFilter, ...baseFilters, orderBy('createdAt', 'desc'), limit(fetchLimit));
+      const q = fetchLimit
+        ? query(col, statusFilter, ...baseFilters, orderBy('createdAt', 'desc'), limit(fetchLimit))
+        : query(col, statusFilter, ...baseFilters, orderBy('createdAt', 'desc'));
       const snaps = await getDocs(q as any);
       
       for (const s of snaps.docs) {
@@ -480,7 +487,9 @@ export class InventoryService {
       console.warn('fetchRowsFromOrdersSellingTracking query failed, trying fallback:', err);
       // Fallback with simplified query - also include processing
       const statusFilter = where('status', 'in', ['completed', 'open']);
-      const fallbackQ = query(col, statusFilter, orderBy('createdAt', 'desc'), limit(fetchLimit));
+      const fallbackQ = fetchLimit
+        ? query(col, statusFilter, orderBy('createdAt', 'desc'), limit(fetchLimit))
+        : query(col, statusFilter, orderBy('createdAt', 'desc'));
       const snapsFallback = await getDocs(fallbackQ as any);
       
       for (const s of snapsFallback.docs) {
@@ -572,6 +581,7 @@ async loadRowsForPeriod(period: string, page: number = 1, storeId?: string, comp
           return dateB - dateA;
         });
 
+        this.allRows.set(mappedRows);
         this.totalCount.set(mappedRows.length);
         const startIndex = Math.max(0, (page - 1) * this.pageSize);
         this.rows.set(mappedRows.slice(startIndex, startIndex + this.pageSize));
@@ -613,9 +623,6 @@ async loadRowsForPeriod(period: string, page: number = 1, storeId?: string, comp
     // Note: we intentionally do not rely on a `yearMonth` field here because historical
     // tracking documents may lack it. Instead we filter by date ranges below.
 
-    const pageSize = this.pageSize;
-    const fetchLimit = Math.max(page * pageSize, pageSize);
-    
     // Create separate filters for each collection since they use different date fields
     // inventoryTracking uses 'deductedAt', ordersSellingTracking uses 'createdAt'
     const deductionFilters = [...baseFilters];
@@ -725,8 +732,8 @@ async loadRowsForPeriod(period: string, page: number = 1, storeId?: string, comp
     
     // Fetch from both collections with their respective filters
     const [deductionRows, salesRows] = await Promise.all([
-      this.fetchRowsFromCollection('inventoryTracking', deductionFilters, fetchLimit, updatedAtRange),
-      this.fetchRowsFromOrdersSellingTracking(salesFilters, fetchLimit, updatedAtRange)
+      this.fetchRowsFromCollection('inventoryTracking', deductionFilters, undefined, updatedAtRange),
+      this.fetchRowsFromOrdersSellingTracking(salesFilters, undefined, updatedAtRange)
     ]);
 
     console.log(`📊 Query results for ${period}:`, {
@@ -780,14 +787,16 @@ async loadRowsForPeriod(period: string, page: number = 1, storeId?: string, comp
       return dateB.getTime() - dateA.getTime();
     });
 
+    this.allRows.set(allRows);
     this.totalCount.set(allRows.length);
 
-    const startIndex = Math.max(0, (page - 1) * pageSize);
-    const pageItems = allRows.slice(startIndex, startIndex + pageSize);
+    const startIndex = Math.max(0, (page - 1) * this.pageSize);
+    const pageItems = allRows.slice(startIndex, startIndex + this.pageSize);
     this.rows.set(pageItems);
   } catch (e) {
     console.error('InventoryService.loadRowsForPeriod failed:', e);
     this.rows.set([]);
+    this.allRows.set([]);
     this.totalCount.set(0);
   } finally {
     this.isLoading.set(false);

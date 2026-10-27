@@ -85,6 +85,40 @@ describe('BigQueryService', () => {
     expect(page.orders[0].customerId).toBe('CUST-77');
   });
 
+  it('should normalize order rows nested under a data wrapper', async () => {
+    spyOn(window, 'fetch').and.callFake(async () => new Response(JSON.stringify({
+      success: true,
+      count: 1,
+      data: {
+        rows: [{
+          order_id: 'ORD-2001',
+          invoice_number: 'INV-2001',
+          created_at: '2026-10-27T02:00:00Z',
+          total_amount: 640
+        }]
+      }
+    }), { status: 200 }));
+
+    const page = await service.getSalesSummaryDetails('store123', '2026-10-27', '2026-10-27');
+
+    expect(page.orders).toHaveSize(1);
+    expect(page.orders[0].id).toBe('ORD-2001');
+    expect(page.orders[0].invoiceNumber).toBe('INV-2001');
+    expect(page.orders[0].totalAmount).toBe(640);
+    expect(page.count).toBe(1);
+  });
+
+  it('should report an invalid sales details response instead of silently showing an empty list', async () => {
+    spyOn(window, 'fetch').and.callFake(async () => new Response(JSON.stringify({
+      success: true,
+      count: 1
+    }), { status: 200 }));
+
+    await expectAsync(
+      service.getSalesSummaryDetails('store123', '2026-10-27', '2026-10-27')
+    ).toBeRejectedWithError('Sales summary details response did not contain an orders array.');
+  });
+
   it('should request order tracking details by orderId and normalize the rows', async () => {
     spyOn(window, 'fetch').and.resolveTo(new Response(JSON.stringify({
       success: true,

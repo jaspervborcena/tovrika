@@ -46,6 +46,7 @@ export interface AggregatedInventoryRow {
   totalGross: number;  // Sum
   totalProfit: number;  // Sum
   transactions: InventoryRow[];  // All transactions for this SKU
+  productId?: string;
 }
 
 @Component({
@@ -604,16 +605,17 @@ export class InventoryComponent implements OnInit {
   showDetails = signal<boolean>(false);
   selectedRow = signal<AggregatedInventoryRow | null>(null);
 
-  get inventoryPerformance() {
-    const rows = this.dataSource.data || [];
+  readonly inventoryPerformance = computed(() => {
+    const allRows = this.inventoryService.allRows();
+    const rows = this.aggregateBySku(this.computeMaxStockForRows(allRows, allRows));
     return {
-      totalSkus: rows.length,
+      totalSkus: new Set(allRows.map(row => row.skuId || row.productId || 'unknown')).size,
       totalQuantity: rows.reduce((sum, row) => sum + (row.quantity || 0), 0),
       totalGross: rows.reduce((sum, row) => sum + (row.totalGross || 0), 0),
       totalProfit: rows.reduce((sum, row) => sum + (row.totalProfit || 0), 0),
       totalRemainingStock: rows.reduce((sum, row) => sum + (row.remainingStock || 0), 0)
     };
-  }
+  });
 
   constructor(
     public inventoryService: AppInventoryService,
@@ -621,71 +623,49 @@ export class InventoryComponent implements OnInit {
     private authService: AuthService,
     private orderService: OrderService
   ) {
-    // reactively update datasource when service rows change
+    // Keep transaction rows in the grid and use the full result set for stock context.
     effect(() => {
       const rows = this.inventoryService.rows();
-      console.log('📥 Raw inventory service rows:', rows);
-      
-      // Check what runningBalanceTotalStock values we have
-      rows.forEach((r, idx) => {
-        console.log(`Row ${idx}:`, {
-          skuId: r.skuId,
-          productId: r.productId,
-          runningBalanceTotalStock: r.runningBalanceTotalStock,
-          hasStock: r.runningBalanceTotalStock !== undefined && r.runningBalanceTotalStock !== null,
-          invoiceNo: r.invoiceNo
-        });
-      });
-      
-      // Compute max stock from the already loaded rows
-      const mapped = this.computeMaxStockForRows(rows);
-      console.log('Mapped rows with computed stock:', mapped);
-      
-      // Aggregate by SKU
-      const aggregated = this.aggregateBySku(mapped);
-      console.log('Aggregated rows:', aggregated);
-      this.dataSource.data = aggregated;
+      const allRows = this.inventoryService.allRows();
+      const mapped = this.computeMaxStockForRows(rows, allRows);
+      this.dataSource.data = mapped.map(row => this.toGridTransactionRow(row));
     });
   }
 
   /**
-   * Compute max runningBalanceTotalStock for each row from already loaded data
+   * Compute each row's stock value using the matching product's records for that date.
    */
-  computeMaxStockForRows(rows: any[]): InventoryRow[] {
+  computeMaxStockForRows(rows: any[], stockRows: any[] = rows): InventoryRow[] {
+    const stockByProductAndDate = new Map<string, number>();
+    for (const stockRow of stockRows) {
+      if (stockRow.runningBalanceTotalStock === undefined || stockRow.runningBalanceTotalStock === null) {
+        continue;
+      }
+
+      const stockDate = stockRow.date instanceof Date ? stockRow.date : new Date(stockRow.date || new Date());
+      const dateKey = stockDate.toISOString().split('T')[0];
+      const stock = Number(stockRow.runningBalanceTotalStock);
+      for (const [type, identifier] of [
+        ['product', stockRow.productId],
+        ['sku', stockRow.skuId || stockRow.sku]
+      ]) {
+        if (!identifier) continue;
+        const key = `${type}:${identifier}:${dateKey}`;
+        stockByProductAndDate.set(key, Math.max(stockByProductAndDate.get(key) || 0, stock));
+      }
+    }
+
     return rows.map(r => {
       let maxStock = r.runningBalanceTotalStock || 0;
-      
-      // Find max stock from all rows with same productId or SKU on the same date
-      // Only look at rows that have runningBalanceTotalStock defined (from ordersSellingTracking)
       const rowDate = r.date instanceof Date ? r.date : new Date(r.date || new Date());
-      const rowDateStr = rowDate.toISOString().split('T')[0]; // YYYY-MM-DD
-      
-      rows.forEach(otherRow => {
-        // Skip rows without runningBalanceTotalStock (from inventoryTracking)
-        if (!otherRow.runningBalanceTotalStock && otherRow.runningBalanceTotalStock !== 0) {
-          return;
-        }
-        
-        const otherDate = otherRow.date instanceof Date ? otherRow.date : new Date(otherRow.date || new Date());
-        const otherDateStr = otherDate.toISOString().split('T')[0];
-        
-        // Check if same product and same date
-        const sameProduct = (r.productId && otherRow.productId === r.productId) || 
-                           (r.skuId && otherRow.skuId === r.skuId) ||
-                           (r.sku && otherRow.sku === r.sku);
-        const sameDate = rowDateStr === otherDateStr;
-        
-        if (sameProduct && sameDate) {
-          const stock = Number(otherRow.runningBalanceTotalStock);
-          console.log('Comparing stocks:', { current: maxStock, other: stock, sku: r.skuId || r.sku });
-          if (stock > maxStock) {
-            maxStock = stock;
-          }
-        }
-      });
-      
-      console.log('Final max stock for', r.skuId || r.sku, ':', maxStock);
-      
+      const dateKey = rowDate.toISOString().split('T')[0];
+      const productStock = r.productId
+        ? stockByProductAndDate.get(`product:${r.productId}:${dateKey}`) || 0
+        : 0;
+      const sku = r.skuId || r.sku;
+      const skuStock = sku ? stockByProductAndDate.get(`sku:${sku}:${dateKey}`) || 0 : 0;
+      maxStock = Math.max(maxStock, productStock, skuStock);
+
       const beginningStock = maxStock;
       const remainingStock = beginningStock - (r.quantity || 0);
       
@@ -705,6 +685,26 @@ export class InventoryComponent implements OnInit {
         productId: r.productId || ''
       } as InventoryRow;
     });
+  }
+
+  private toGridTransactionRow(row: InventoryRow): AggregatedInventoryRow {
+    const profitPerUnit = row.sellingPrice - row.costPrice;
+    return {
+      date: row.date || new Date(),
+      productName: row.productName,
+      sku: row.sku,
+      productCode: row.productCode,
+      costPrice: row.costPrice,
+      sellingPrice: row.sellingPrice,
+      quantity: row.quantity,
+      runningBalanceTotalStock: row.runningBalanceTotalStock,
+      remainingStock: row.remainingStock,
+      profitPerUnit,
+      totalGross: row.sellingPrice * row.quantity,
+      totalProfit: profitPerUnit * row.quantity,
+      transactions: [row],
+      productId: row.productId
+    };
   }
 
   private applyTodayDefaultRange(): void {
@@ -937,7 +937,6 @@ export class InventoryComponent implements OnInit {
     });
     
     const aggregatedArray = Array.from(groups.values());
-    console.log('🎯 Aggregated data with max stock from transactions:', aggregatedArray);
     return aggregatedArray;
   }
 
