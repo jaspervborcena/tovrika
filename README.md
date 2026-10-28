@@ -1277,6 +1277,8 @@ Expected response:
 
 `total_sales` is used as the authoritative revenue value when the API is available. The overview currently keeps its existing ledger-based order-count signal as a fallback and for non-summary analytics; the API `count` field is available in the response contract for order-count integration.
 
+Sales Summary order pages and per-order line items call the authenticated Firebase Functions proxies configured as `salesSummaryDetailsApi` and `salesSummaryOrderDetailsApi`. The proxies allow the app's production origins, verify the Firebase ID token, and forward the request to the Cloud Run APIs so browsers do not call those APIs cross-origin directly. Deploy both proxy functions to the corresponding Firebase project when deploying this change.
+
 ### Order Status Tracking
 - `status` is the order's current status.
 - `statusTags` is the list of statuses that have occurred on the order, such as `OPEN`, `unpaid`, `completed`, `returned`, `refunded`, or `damage`.
