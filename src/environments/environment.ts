@@ -43,8 +43,8 @@ export const environment = {
     inventorySummaryApi: "https://asia-east1-jasperpos-dev.cloudfunctions.net/get_inventory_summary_bq",
     reconciliationSummaryApi: "https://get-recon-summary-bq-7bpeqovfmq-de.a.run.app",
     reconciliationSummaryFallbackApi: "https://asia-east1-jasperpos-dev.cloudfunctions.net/get_recon_summary_bq",
-    salesSummaryDetailsApi: "https://get-sales-summary-details-bq-3ao45uhsoq-de.a.run.app",
-    salesSummaryOrderDetailsApi: "https://get-sales-summary-order-details-bq-3ao45uhsoq-de.a.run.app",
+    salesSummaryDetailsApi: "https://asia-east1-jasperpos-dev.cloudfunctions.net/salesSummaryDetailsProxy",
+    salesSummaryOrderDetailsApi: "https://asia-east1-jasperpos-dev.cloudfunctions.net/salesSummaryOrderDetailsProxy",
   },
   inventory: {
     reconciliationMode: 'recon' as 'legacy' | 'recon'

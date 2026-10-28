@@ -92,6 +92,9 @@ A feature group is complete only when:
 - [ ] Reconnect and reconciliation process pending work once, avoid duplicate deductions, and report failures for repair.
 - [ ] Store/date filters and summary counts match the underlying scoped records.
 - [ ] Manual stock adjustments, receiving, damaged stock, and stocktake workflows preserve audit history.
+- [ ] Inventory report shows individual transaction rows, reports the matching transaction count, and paginates exactly 10 rows per page for both API and Firestore results.
+- [ ] Inventory summary cards use the full selected-period result set across page changes; SKU count is distinct and quantity, gross, profit, and remaining-stock totals match the displayed transactions.
+- [ ] Inventory report UI handles empty results, API failure with Firestore fallback, and page navigation after changing store or period without showing stale rows or totals.
 
 ### 6. Returns, refunds, damage, cancellation, and order management — P0
 
@@ -111,6 +114,9 @@ A feature group is complete only when:
 - [ ] Returns, refunds, discounts, VAT-exempt sales, and cancellations are counted according to agreed formulas.
 - [ ] Empty periods, large datasets, API errors, and stale/loading states are handled visibly.
 - [ ] Exported reports match on-screen totals and respect the selected store and date range.
+- [ ] Sales Summary integration test confirms the summary count and paginated order-details endpoint return matching data for the same store and date range, including the default Today filter.
+- [ ] Sales Summary normalizes supported API response wrappers and surfaces malformed responses or endpoint failures instead of silently displaying an empty order list.
+- [ ] Sales Summary UI opens order details for an API-returned order and displays its line items; verify the details lookup works by order ID and invoice number where supported.
 
 ### 8. Dashboard and analytics — P1
 
@@ -174,6 +180,8 @@ A feature group is complete only when:
 - [ ] Add P0 tests for invoice/order transaction outcomes, adjustment rules, and Firestore-backed stock writes.
 - [ ] Add P0 service/integration tests for checkout persistence, offline queue/reconnect, idempotency, and tenant isolation.
 - [ ] Add end-to-end smoke tests for sign-in, checkout, return/refund, reconciliation, and reporting.
+- [ ] Add UI/integration regression coverage for Inventory transaction pagination/totals and Sales Summary summary-to-details consistency.
+- [ ] Verify Sales Summary and Inventory report behavior against representative authenticated API responses or an isolated backend/emulator; unit test doubles alone do not verify deployed endpoint contracts.
 - [ ] Add P1/P2 coverage and manual device/pilot validation.
 - [ ] Establish a repeatable test command and release gate; ensure failures block release rather than being ignored.
 
@@ -181,7 +189,7 @@ Do not treat a feature as tested solely because the app builds or its component 
 
 ### Existing spec map
 
-At initial mapping, the suite contained **36 cases across 9 spec files**. The current suite has **55 cases across 15 spec files**, including checkout, FIFO utility, inventory-sale-lock, transaction, offline-sync, offline-query guard, Inventory Summary API, and no-FIFO sale snapshot coverage. Passing tests do not imply that the related production workflows are fully covered.
+At initial mapping, the suite contained **36 cases across 9 spec files**. The current suite has **61 cases across 15 spec files**, including checkout, FIFO utility, inventory-sale-lock, transaction, offline-sync, offline-query guard, Inventory Summary API, report totals/pagination, BigQuery response handling, and no-FIFO sale snapshot coverage. Passing tests do not imply that the related production workflows are fully covered.
 
 | Existing spec | Current coverage | Roadmap areas | Assessment |
 |---|---|---|---|
@@ -190,10 +198,10 @@ At initial mapping, the suite contained **36 cases across 9 spec files**. The cu
 | [pos-checkout.utils.spec.ts](../src/app/services/pos-checkout.utils.spec.ts) | Cart totals across taxable/exempt lines, product/order discounts, cache lookup fallback, and exact/insufficient/invalid payment amounts. | POS calculations and payment validation | New P0 unit coverage. Does not exercise invoice transactions, UI payment workflow, or persisted payment records. |
 | [inventory-fifo.utils.spec.ts](../src/app/services/inventory-fifo.utils.spec.ts) | Oldest-first multi-batch allocation, exact per-batch costs/COGS, pending batch reservations, planned deductions, depleted status, and insufficient batch quantity. | Inventory FIFO | New P0 unit coverage of allocation planning. Does not exercise Firestore transaction atomicity, concurrent checkout, or reconciliation writes. |
 | [inventory-sale-lock.interface.spec.ts](../src/app/interfaces/inventory-sale-lock.interface.spec.ts) | Stable lock IDs for retries and distinct IDs for repeated products across order lines/orders. | Inventory FIFO; idempotency | Pure identity-helper coverage only; does not test transaction contention or persistence. |
-| [inventory.service.spec.ts](../src/app/services/inventory.service.spec.ts) | Inventory Summary API request/auth/date formatting, API row mapping, short-period Firestore fallback, and direct Firestore reads for other periods. | Inventory reports; API fallback | Uses API and Firestore test doubles; does not validate the deployed endpoint or production Firestore indexes. |
+| [inventory.service.spec.ts](../src/app/services/inventory.service.spec.ts) | Inventory Summary API request/auth/date formatting, API row mapping, 10-row API/Firestore pagination, full-result counts, distinct-SKU/report totals, short-period fallback, and direct Firestore reads for other periods. | Inventory reports; API fallback | Uses API and Firestore test doubles; does not validate the deployed endpoint, report UI filter transitions, or production Firestore indexes. |
 | [orders-selling-tracking.inventory.spec.ts](../src/app/services/orders-selling-tracking.inventory.spec.ts) | Transaction-level write planning for FIFO splits, product stock deductions for tracked and untracked sales, sale-line locks, movement audits, and rollback when FIFO batches cannot fulfill the line. | Inventory FIFO; audit; atomicity | Runs the real service transaction callback against a transaction test double; does not use Firestore emulator or validate production transaction contention. |
 | [offline-document.inventory-sync.spec.ts](../src/app/core/services/offline-document.inventory-sync.spec.ts) | Queued sale-line sync after offline order-ID remapping and invocation of the inventory processor for a completed tracked line. | Offline storage/sync; Inventory FIFO | Uses in-memory SQLite/Firestore test doubles; does not test browser restart durability or Firestore connectivity. |
-| [bigquery.service.spec.ts](../src/app/services/bigquery.service.spec.ts) | Sales API date normalization, request parameters/auth header, order/detail parsing, and summary/status parsing. | Orders/reports; dashboard | Strongest reporting-focused unit coverage. Does not exercise the actual API/auth failure paths, report UI, aggregation correctness against source orders, or reconciliation API. |
+| [bigquery.service.spec.ts](../src/app/services/bigquery.service.spec.ts) | Sales API date normalization, request parameters/auth header, summary/order scope consistency, nested order response parsing, malformed payload handling, order-detail parsing, and summary/status parsing. | Orders/reports; dashboard | Strong reporting-focused service coverage using mocked endpoints. Does not verify deployed API responses, report UI behavior, aggregation against source records, or reconciliation API. |
 | [sales-summary-period.spec.ts](../src/app/pages/dashboard/sales/sales-summary/sales-summary-period.spec.ts) | Period defaults, today/week/custom date range resolution, and API date parameters. | Orders/reports; dashboard | Date helper coverage only; limited boundary coverage for yesterday, previous periods, timezone transitions, malformed ranges, and UI filter synchronization. |
 | [sqlite-storage.service.spec.ts](../src/app/core/services/sqlite-storage.service.spec.ts) | Settings/user persistence, active-user changes, notification/product-batch cache, offline order document queue restore, and legacy queue migration. | Offline storage/sync; users; inventory cache | Good persistence unit coverage. Does not test quota/write interruption/corruption, complete order replay, sync ordering/idempotency, conflict handling, or user-data cleanup/isolation. |
 | [store-display.util.spec.ts](../src/app/store-display.util.spec.ts) | Store label formatting and dropdown deduplication. | Company/stores; dashboard filters | Small utility coverage; no store authorization, selection synchronization, or multi-store data isolation. |
@@ -217,6 +225,16 @@ At initial mapping, the suite contained **36 cases across 9 spec files**. The cu
 - The latest full-suite run reported completion but Karma did not exit cleanly; make clean process exit part of runner reliability follow-up.
 
 **Next implementation slice:** add tests for invoice/order transaction outcomes and Firestore-backed inventory writes, then adjustment behavior and offline reconciliation. Confirm business rules (especially payment acceptance, tax rounding, and stock behavior) before encoding expected results.
+
+### Inventory and Sales Summary reporting tests — 2026-10-27
+
+- Inventory service tests: `npx ng test --watch=false --browsers=ChromeHeadless --include=src/app/services/inventory.service.spec.ts` — **6/6 passing**.
+- BigQuery/Sales Summary service tests: `npx ng test --watch=false --browsers=ChromeHeadless --include=src/app/services/bigquery.service.spec.ts` — **11/11 passing**.
+- Full suite: `npx ng test --watch=false --browsers=ChromeHeadless --progress=false` — **61/61 passing**; process exited successfully.
+- Production build: `npm run build:prod` — succeeded.
+- `git diff --check` — passed.
+- Added coverage for Inventory API and Firestore 10-row pagination, complete result counts, distinct SKU and full-result totals, plus Sales Summary totals/order page store/date consistency and supported/malformed API payloads.
+- The endpoints are mocked in these tests. Live backend contract, Sales Summary UI rendering/line-item details, and filter-transition smoke tests remain unverified.
 
 ### Baseline run — 2026-10-26
 
