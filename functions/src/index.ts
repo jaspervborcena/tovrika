@@ -13,12 +13,6 @@ if (!getApps().length) {
 
 const storage = getStorage();
 
-const salesSummaryCorsOrigins = [
-  'https://app.pos.tovrika.com',
-  'https://app.tovrika.com',
-  'http://localhost:4200'
-];
-
 const salesSummaryProxyQueryParameters = [
   'storeId',
   'from',
@@ -91,7 +85,7 @@ async function proxySalesSummaryRequest(
 
 export const salesSummaryDetailsProxy = onRequest({
   region: 'asia-east1',
-  cors: salesSummaryCorsOrigins,
+  cors: true,
   timeoutSeconds: 60
 }, async (req, res) => {
   await proxySalesSummaryRequest(
@@ -104,7 +98,7 @@ export const salesSummaryDetailsProxy = onRequest({
 
 export const salesSummaryOrderDetailsProxy = onRequest({
   region: 'asia-east1',
-  cors: salesSummaryCorsOrigins,
+  cors: true,
   timeoutSeconds: 60
 }, async (req, res) => {
   await proxySalesSummaryRequest(
