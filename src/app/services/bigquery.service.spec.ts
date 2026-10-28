@@ -1,6 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { BigQueryService, normalizeLocalDateRange } from './bigquery.service';
 import { AuthService } from './auth.service';
+import { environment } from '../../environments/environment';
 
 describe('BigQueryService', () => {
   let service: BigQueryService;
@@ -106,6 +107,51 @@ describe('BigQueryService', () => {
     expect(page.orders[0].invoiceNumber).toBe('INV-2001');
     expect(page.orders[0].totalAmount).toBe(640);
     expect(page.count).toBe(1);
+  });
+
+  it('should keep summary totals and paginated orders scoped to the same store and date range', async () => {
+    const requests: string[] = [];
+    spyOn(window, 'fetch').and.callFake(async (input: RequestInfo | URL) => {
+      const requestUrl = String(input);
+      requests.push(requestUrl);
+      if (requestUrl.startsWith(environment.api.salesSummaryApi)) {
+        return new Response(JSON.stringify({
+          success: true,
+          total_sales: 640,
+          count: 1,
+          total_items: 4
+        }), { status: 200 });
+      }
+
+      return new Response(JSON.stringify({
+        success: true,
+        count: 1,
+        orders: [{
+          order_id: 'ORD-3001',
+          invoice_number: 'INV-3001',
+          created_at: '2026-10-27T10:00:00Z',
+          total_amount: 640
+        }]
+      }), { status: 200 });
+    });
+    const start = new Date('2026-10-27T00:00:00Z');
+    const end = new Date('2026-10-27T23:59:59Z');
+
+    const summary = await service.getSalesSummaryTotals('store-1', start, end);
+    const page = await service.getSalesSummaryDetails('store-1', '2026-10-27', '2026-10-27');
+
+    expect(requests).toHaveSize(2);
+    const summaryParams = new URL(requests[0]).searchParams;
+    const ordersParams = new URL(requests[1]).searchParams;
+    expect(summaryParams.get('storeId')).toBe('store-1');
+    expect(ordersParams.get('storeId')).toBe('store-1');
+    expect(summaryParams.get('from')).toBe('20261027000000');
+    expect(summaryParams.get('to')).toBe('20261027235959');
+    expect(ordersParams.get('from')).toBe('20261027');
+    expect(ordersParams.get('to')).toBe('20261027');
+    expect(summary.totalOrders).toBe(page.count);
+    expect(page.orders).toHaveSize(1);
+    expect(page.orders[0].id).toBe('ORD-3001');
   });
 
   it('should report an invalid sales details response instead of silently showing an empty list', async () => {

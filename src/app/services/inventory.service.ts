@@ -74,6 +74,37 @@ export interface InventoryRow {
   source?: 'deduction' | 'saleSnapshot' | 'orderTracking';  // Source collection identifier
 }
 
+export interface InventoryPerformanceSummary {
+  totalSkus: number;
+  totalQuantity: number;
+  totalGross: number;
+  totalProfit: number;
+  totalRemainingStock: number;
+}
+
+export function summarizeInventoryRows(rows: InventoryRow[]): InventoryPerformanceSummary {
+  const bySku = new Map<string, { quantity: number; gross: number; profit: number; stock: number }>();
+
+  for (const row of rows) {
+    const sku = row.skuId || row.productId || 'unknown';
+    const summary = bySku.get(sku) ?? { quantity: 0, gross: 0, profit: 0, stock: 0 };
+    summary.quantity += row.quantity || 0;
+    summary.gross += (row.sellingPrice || 0) * (row.quantity || 0);
+    summary.profit += ((row.sellingPrice || 0) - (row.costPrice || 0)) * (row.quantity || 0);
+    summary.stock = Math.max(summary.stock, row.runningBalanceTotalStock || 0);
+    bySku.set(sku, summary);
+  }
+
+  return {
+    totalSkus: bySku.size,
+    totalQuantity: Array.from(bySku.values()).reduce((sum, row) => sum + row.quantity, 0),
+    totalGross: Array.from(bySku.values()).reduce((sum, row) => sum + row.gross, 0),
+    totalProfit: Array.from(bySku.values()).reduce((sum, row) => sum + row.profit, 0),
+    totalRemainingStock: Array.from(bySku.values())
+      .reduce((sum, row) => sum + row.stock - row.quantity, 0)
+  };
+}
+
 export interface InventoryItem {
   productId: string;
   branchId?: string;

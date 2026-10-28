@@ -2,7 +2,7 @@ import { TestBed } from '@angular/core/testing';
 import { Firestore } from '@angular/fire/firestore';
 import { OfflineDocumentService } from '../core/services/offline-document.service';
 import { AuthService } from './auth.service';
-import { InventoryRow, InventoryService } from './inventory.service';
+import { InventoryRow, InventoryService, summarizeInventoryRows } from './inventory.service';
 import { ProductService } from './product.service';
 
 describe('InventoryService summary source', () => {
@@ -116,6 +116,51 @@ describe('InventoryService summary source', () => {
     expect(service.rows()).toHaveSize(2);
     expect(service.rows()[0].invoiceNo).toBe('INV-11');
     expect(service.allRows()).toHaveSize(12);
+  });
+
+  it('calculates report metrics from every transaction and counts each SKU once', () => {
+    const rows: InventoryRow[] = [
+      { invoiceNo: 'INV-1', skuId: 'SKU-A', productId: 'product-a', quantity: 2, costPrice: 5, sellingPrice: 10, runningBalanceTotalStock: 20, totalGross: 20, totalProfit: 10, profitPerUnit: 5 },
+      { invoiceNo: 'INV-2', skuId: 'SKU-A', productId: 'product-a', quantity: 3, costPrice: 5, sellingPrice: 10, runningBalanceTotalStock: 18, totalGross: 30, totalProfit: 15, profitPerUnit: 5 },
+      { invoiceNo: 'INV-3', skuId: 'SKU-B', productId: 'product-b', quantity: 1, costPrice: 5, sellingPrice: 10, runningBalanceTotalStock: 10, totalGross: 10, totalProfit: 5, profitPerUnit: 5 }
+    ];
+
+    expect(summarizeInventoryRows(rows)).toEqual({
+      totalSkus: 2,
+      totalQuantity: 6,
+      totalGross: 60,
+      totalProfit: 30,
+      totalRemainingStock: 24
+    });
+  });
+
+  it('paginates Firestore fallback transactions ten per page with a full result count', async () => {
+    const firestoreRows: InventoryRow[] = Array.from({ length: 12 }, (_, index) => ({
+      invoiceNo: `INV-${index + 1}`,
+      skuId: `SKU-${index + 1}`,
+      productId: `product-${index + 1}`,
+      costPrice: 5,
+      sellingPrice: 10,
+      quantity: 1,
+      profitPerUnit: 5,
+      totalGross: 10,
+      totalProfit: 5,
+      runningBalanceTotalStock: 20
+    }));
+    spyOn(window, 'fetch').and.rejectWith(new Error('API unavailable'));
+    spyOn(service, 'fetchRowsFromCollection').and.resolveTo(firestoreRows);
+    spyOn(service, 'fetchRowsFromOrdersSellingTracking').and.resolveTo([]);
+
+    await service.loadRowsForPeriod('today', 1, 'store-1');
+    expect(service.totalCount()).toBe(12);
+    expect(service.totalPages()).toBe(2);
+    expect(service.rows()).toHaveSize(10);
+    expect(service.allRows()).toHaveSize(12);
+
+    await service.loadRowsForPeriod('today', 2, 'store-1');
+    expect(service.rows()).toHaveSize(2);
+    expect(service.rows()[0].invoiceNo).toBe('INV-11');
+    expect(service.totalCount()).toBe(12);
   });
 
   it('falls back to Firestore for supported short periods when the API fails', async () => {
