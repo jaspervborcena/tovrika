@@ -14,6 +14,8 @@ export interface OrderStatusHistoryEntry {
 
 export interface Order {
   id?: string;
+  /** Local/remote sync status; false means queued locally and awaiting Firestore confirmation. */
+  isSync?: boolean;
   /** Optional orderId coming from BigQuery / Cloud Function (documentId in storage) */
   orderId?: string;
   companyId: string;

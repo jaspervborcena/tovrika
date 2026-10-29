@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { StoreService, Store, formatStoreDisplayName } from '../../../services/store.service';
 import { StoreSelectionService } from '../../../services/store-selection.service';
 import { AuthService } from '../../../services/auth.service';
+import { SqliteStorageService } from '../../../core/services/sqlite-storage.service';
 
 @Component({
   selector: 'app-inventory',
@@ -41,6 +42,9 @@ import { AuthService } from '../../../services/auth.service';
           </ng-template>
         </div>
 
+        <div *ngIf="unsyncedInventoryCount() > 0" style="margin:0 0 1rem;padding:.75rem 1rem;background:#fffbeb;color:#92400e;border:1px solid #fcd34d;border-radius:6px;">
+          {{ unsyncedInventoryCount() }} local inventory change(s) are waiting to sync for this store.
+        </div>
         <!-- TODO: Implement inventory management -->
         <div class="placeholder">
           <p class="placeholder-text">Selected Store: {{ getSelectedStoreName() }}</p>
@@ -234,6 +238,8 @@ import { AuthService } from '../../../services/auth.service';
   `]
 })
 export class InventoryComponent implements OnInit {
+  private sqlite = inject(SqliteStorageService);
+  unsyncedInventoryCount = signal(0);
   private storeService = inject(StoreService);
   private storeSelectionService = inject(StoreSelectionService);
   private authService = inject(AuthService);
@@ -251,6 +257,7 @@ export class InventoryComponent implements OnInit {
 
   async ngOnInit() {
     await this.loadStores();
+    await this.loadUnsyncedInventory();
   }
 
   async loadStores(): Promise<void> {
@@ -282,7 +289,15 @@ export class InventoryComponent implements OnInit {
   }
 
   onStoreChange(): void {
+    void this.loadUnsyncedInventory();
     // TODO: Reload inventory data for selected store
+  }
+
+  async loadUnsyncedInventory(): Promise<void> {
+    const storeId = this.selectedStoreId();
+    const collections = ['inventoryTracking', 'ordersSellingTracking', 'productInventory'];
+    const docs = (await Promise.all(collections.map(name => this.sqlite.getOfflineDocumentsByCollection(name)))).flat();
+    this.unsyncedInventoryCount.set(docs.filter((entry: any) => entry.synced !== true && entry.data?.isSync !== true && (!storeId || entry.data?.storeId === storeId)).length);
   }
 
   getSelectedStoreName(): string {
