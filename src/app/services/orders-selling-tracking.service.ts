@@ -29,6 +29,11 @@ export class OrdersSellingTrackingService {
     );
   }
 
+  private async getInventoryBatchReferences(productId: string, storeId: string): Promise<Array<{ id: string; ref: any }>> {
+    const snapshot = await getDocs(this.createInventoryBatchQuery(productId, storeId) as any);
+    return snapshot.docs.map(batchDoc => ({ id: batchDoc.id, ref: batchDoc.ref }));
+  }
+
   private runInventoryTransaction<T>(updateFunction: (transaction: any) => Promise<T>): Promise<T> {
     return runTransaction(this.firestore, updateFunction as any);
   }
@@ -1613,6 +1618,17 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
         throw new Error('A completed sale requires a stable orderId for inventory idempotency');
       }
 
+      const batchReferencesByProduct = new Map<string, Array<{ id: string; ref: any }>>();
+      if (applyFifoNow) {
+        for (const item of items) {
+          if (item.isStockTracked !== true || batchReferencesByProduct.has(item.productId)) continue;
+          batchReferencesByProduct.set(
+            item.productId,
+            await this.getInventoryBatchReferences(item.productId, ctx.storeId)
+          );
+        }
+      }
+
       await this.runInventoryTransaction(async transaction => {
         plans.length = 0;
         const plannedProductQuantities = new Map<string, number>();
@@ -1706,19 +1722,19 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
             ref: any;
           }> = [];
           if (applyFifoNow && isFifoDeduction && fulfilledQty > 0) {
-            const batchesQuery = this.createInventoryBatchQuery(item.productId, ctx.storeId);
-            const batchesSnapshot = await transaction.get(batchesQuery as any) as any;
-            const batches = batchesSnapshot.docs
-              .map((batchDoc: any) => {
-                const data = batchDoc.data();
-                return {
-                  ...data,
-                  id: batchDoc.id,
-                  ref: batchDoc.ref,
-                  status: data.companyId === ctx.companyId ? String(data.status || '') : 'inactive',
-                  quantity: Number(data.quantity || 0)
-                };
+            const batches = [];
+            for (const batchReference of batchReferencesByProduct.get(item.productId) || []) {
+              const batchSnapshot = await transaction.get(batchReference.ref as any);
+              if (!batchSnapshot.exists()) continue;
+              const data = batchSnapshot.data() as any;
+              batches.push({
+                ...data,
+                id: batchSnapshot.id || batchReference.id,
+                ref: batchSnapshot.ref || batchReference.ref,
+                status: data.companyId === ctx.companyId ? String(data.status || '') : 'inactive',
+                quantity: Number(data.quantity || 0)
               });
+            }
 
             let pendingToReserve = pendingBatchReservations.get(item.productId);
             if (pendingToReserve === undefined) {
