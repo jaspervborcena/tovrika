@@ -397,6 +397,8 @@
                 <div 
                   *ngFor="let product of displayGridProducts()"
                   class="product-grid-item"
+                  [class.stock-tracked]="product.isStockTracked === true"
+                  [class.stock-untracked]="product.isStockTracked !== true"
                   [class.disabled]="!canInteractWithProducts()"
                   [title]="'SKU: ' + product.skuId">
                 <div class="product-image-container" (click)="openProductPreviewModal(product, $event)">
@@ -449,6 +451,8 @@
               <div 
                 *ngFor="let product of displayFavoriteGridProducts()"
                 class="product-grid-item"
+                [class.stock-tracked]="product.isStockTracked === true"
+                [class.stock-untracked]="product.isStockTracked !== true"
                 [class.disabled]="!canInteractWithProducts()"
                 [title]="'SKU: ' + product.skuId">
                 <div class="product-image-container" (click)="openProductPreviewModal(product, $event)">
@@ -497,6 +501,8 @@
                   <div 
                     *ngFor="let product of promoProducts()"
                     class="product-grid-item promo"
+                    [class.stock-tracked]="product.isStockTracked === true"
+                    [class.stock-untracked]="product.isStockTracked !== true"
                     [class.disabled]="!canInteractWithProducts()"
                     [title]="'SKU: ' + product.skuId">
                     <div class="promo-badge">PROMO</div>
@@ -2125,4 +2131,3 @@
       </svg>
       <span class="fab-badge" *ngIf="getCartItemCount() > 0 && !showReceiptPanel()">{{ getCartItemCount() }}</span>
     </button>
-
