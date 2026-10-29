@@ -15,6 +15,8 @@ describe('SqliteStorageService', () => {
   });
 
   it('stores and retrieves settings in SQLite', async () => {
+    expect(localStorage.getItem('tovrika_sqlite_database')).not.toBeNull();
+
     await service.saveSetting('offline_test', { ok: true, count: 2 });
     const value = await service.getSetting('offline_test');
     const restoredService = new SqliteStorageService();
