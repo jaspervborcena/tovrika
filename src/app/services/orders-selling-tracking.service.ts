@@ -1865,6 +1865,7 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
               sellingPrice: Number(item.unitPrice || 0),
               quantity: allocation.quantity,
               runningBalanceTotalStock: plan.updatedTotalStock,
+              isStockTracked,
               deductedAt: now,
               deductedBy: ctx.cashierId,
               createdBy: ctx.cashierId,

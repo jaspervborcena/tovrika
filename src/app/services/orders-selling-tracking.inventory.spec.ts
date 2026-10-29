@@ -126,6 +126,7 @@ describe('OrdersSellingTrackingService inventory transaction', () => {
       ['batch-old', 2, 30],
       ['batch-new', 1, 25]
     ]);
+    expect(allocations.every(entry => entry.isStockTracked === true)).toBeTrue();
     expect(allocations.every(entry => entry.saleLineIndex === 0 && entry.itemCode === 'MUG-1')).toBeTrue();
 
     const lock = writes.find(write =>
