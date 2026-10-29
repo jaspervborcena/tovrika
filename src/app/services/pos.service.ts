@@ -639,10 +639,7 @@ export class PosService {
       }
       
       // 🧾 Execute invoice transaction with NEW structure
-      // Only apply timeout when online - offline mode should work without timeout
-      let invoiceResult;
-      // Hoist the promise so the timeout-catch block can attach a .then() for delayed background ops
-      const invoicePromise = this.invoiceService.processInvoiceTransaction({
+      const invoiceResult = await this.invoiceService.processInvoiceTransaction({
         storeId: storeId,
         orderData: orderData,
         customerInfo: customerInfo, // Pass as separate parameter
@@ -650,48 +647,6 @@ export class PosService {
         saveAsOpen: saveAsOpen,     // Pass OPEN flag
         tableNumber: tableNumber    // Pass table number separately
       });
-      try {
-        // Apply very short timeout to quickly detect offline mode
-        if (this.networkService.isOnline()) {
-          console.log('🌐 Online mode: applying 2-second timeout for invoice transaction');
-          const timeoutPromise = new Promise<never>((_, reject) => 
-            setTimeout(() => reject(new Error('Invoice transaction timeout - switching to offline mode')), 2000)
-          );
-          
-          invoiceResult = await Promise.race([invoicePromise, timeoutPromise]);
-        } else {
-          console.log('📴 Offline mode: processing invoice without timeout (Firestore persistence active)');
-          invoiceResult = await invoicePromise;
-        }
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        
-        if (errorMessage.includes('timeout') && !saveAsOpen) {
-          // The batch write may still complete shortly after the timeout.
-          // Attach background ops to the still-running invoicePromise so tracking/inventory/ledger
-          // are recorded even when the 2-second race is lost.
-          console.log('⚠️ Invoice timeout — scheduling background ops on promise resolution...');
-          invoicePromise.then(result => {
-            if (result?.success && result?.orderId) {
-              console.log('⏰ Timeout-delayed background ops triggered for orderId:', result.orderId);
-              this.executeBackgroundOrderOperations(
-                company.id!,
-                storeId,
-                result.orderId,
-                result.invoiceNumber!,
-                cartSummary,
-                cartItems,
-                user.uid,
-                orderData.status || 'completed'
-              ).catch(err => console.warn('⚠️ Background operations error (non-critical):', err));
-            }
-          }).catch(() => {}); // If invoice also fails, no background ops needed
-        } else if (errorMessage.includes('network') || !this.networkService.isOnline()) {
-          console.log('⚠️ Network error detected, invoice service should handle offline mode automatically');
-        }
-        
-        throw error; // Let the invoice service handle offline processing
-      }
 
       // Check transaction result
       if (!invoiceResult.success) {

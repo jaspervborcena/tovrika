@@ -58,10 +58,23 @@ describe('OrdersSellingTrackingService inventory transaction', () => {
       return documentReferences.get(key);
     });
     spyOn(service as any, 'createInventoryBatchQuery').and.returnValue({ queryRef: true });
+    spyOn(service as any, 'getInventoryBatchReferences').and.callFake(async () =>
+      batchSnapshot.docs.map(batchDoc => ({ id: batchDoc.id, ref: batchDoc.ref }))
+    );
     spyOn(service as any, 'runInventoryTransaction').and.callFake(async (callback: any) => {
       const transaction = {
-        get: async (ref: any) => reads.find(entry => entry.ref === ref)?.snapshot ??
-          (ref?.queryRef ? batchSnapshot : emptySnapshot),
+        get: async (ref: any) => {
+          const batchDoc = batchSnapshot.docs.find(entry => entry.ref === ref);
+          if (batchDoc) {
+            return {
+              id: batchDoc.id,
+              ref: batchDoc.ref,
+              exists: () => true,
+              data: batchDoc.data
+            };
+          }
+          return reads.find(entry => entry.ref === ref)?.snapshot ?? emptySnapshot;
+        },
         set: (ref: any, data: any) => writes.push({ operation: 'set', ref, data }),
         update: (ref: any, data: any) => writes.push({ operation: 'update', ref, data })
       };
@@ -104,6 +117,7 @@ describe('OrdersSellingTrackingService inventory transaction', () => {
 
     expect(result.success).toBeTrue();
     expect(result.adjusted).toBe(1);
+    expect((service as any).getInventoryBatchReferences).toHaveBeenCalledOnceWith('product-1', 'store-1');
     expect(writes.filter(write => write.operation === 'update' && write.ref.collectionName === 'productInventory').length).toBe(2);
     const allocations = writes
       .filter(write => write.ref.collectionName === 'inventoryTracking')

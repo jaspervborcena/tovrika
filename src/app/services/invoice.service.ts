@@ -73,13 +73,7 @@ export class InvoiceService {
         where('storeId', '==', storeId)
       );
       
-      // Use very short timeout (200ms) to prevent hanging
-      const snapshot = await Promise.race([
-        getDocs(q),
-        new Promise<never>((_, reject) => 
-          setTimeout(() => reject(new Error('Invoice check timeout')), 200)
-        )
-      ]);
+      const snapshot = await getDocs(q);
       
       const exists = !snapshot.empty;
       
@@ -93,7 +87,7 @@ export class InvoiceService {
       
     } catch (error) {
       console.warn('⚠️ Error checking invoice number existence:', error);
-      // In case of error (timeout, offline, etc.), assume it doesn't exist
+      // If the duplicate check is unavailable, let Firestore handle the write.
       // Firestore offline persistence will queue the write and handle conflicts when online
       return false;
     }
@@ -128,13 +122,7 @@ export class InvoiceService {
       let useOfflineMode = false;
       
       try {
-        // Use very short timeout (300ms) for fast offline detection
-        storeSnapshot = await Promise.race([
-          getDocFromServer(storeDocRef),
-          new Promise<never>((_, reject) => 
-            setTimeout(() => reject(new Error('Store read timeout - switching to offline mode')), 300)
-          )
-        ]);
+        storeSnapshot = await getDocFromServer(storeDocRef);
       } catch (storeReadError) {
         console.warn('⚠️ Failed to read store document, switching to offline mode:', storeReadError);
         useOfflineMode = true;
