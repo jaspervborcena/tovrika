@@ -129,7 +129,7 @@ export class AuthService {
 
   /**
    * Fetch company documents for the current user and persist them into SQLite.
-   * This is a best-effort, non-blocking helper to ensure `TovrikaOfflineDB.companies` is populated.
+   * This is a best-effort, non-blocking helper to ensure SQLite's `companies` table is populated.
    */
   async saveAllCompaniesToSQLite(): Promise<void> {
     try {
@@ -1377,7 +1377,7 @@ export class AuthService {
                   this.logger.warn('Failed to normalize existing companies in SQLite (non-blocking)', { area: 'auth', payload: { error: String(migrateErr) } });
                 }
 
-                // Ensure companies are explicitly saved into TovrikaOfflineDB (best-effort)
+                // Ensure companies are explicitly saved into SQLite (best-effort)
                 try {
                   await this.saveAllCompaniesToSQLite();
                   this.logger.debug('Ensured companies saved to SQLite after login', { area: 'auth' });

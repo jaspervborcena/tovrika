@@ -4,6 +4,8 @@ import type { User } from '../../services/auth.service';
 import type { Company } from '../../interfaces/company.interface';
 import type { Store } from '../../interfaces/store.interface';
 
+let legacyIndexedDbCleanupRequested = false;
+
 export interface UserPermission {
   companyId: string;
   roleId: string;
@@ -92,6 +94,8 @@ export class SqliteStorageService {
           }
         });
 
+        this.removeLegacyIndexedDb();
+
         const savedDatabase = localStorage.getItem(this.databaseStorageKey);
         const binaryData = savedDatabase ? atob(savedDatabase) : '';
         const databaseBytes = savedDatabase
@@ -100,6 +104,7 @@ export class SqliteStorageService {
         this.db = new SQL.Database(databaseBytes ? Array.from(databaseBytes) : undefined);
         this.ensureSchema();
         this.migrateLegacyOfflineDocuments();
+        this.persistDatabase();
       })();
     }
 
@@ -660,6 +665,26 @@ export class SqliteStorageService {
       localStorage.removeItem('pendingDocuments');
     } catch {
       // Keep the legacy queue intact if it cannot be migrated safely.
+    }
+  }
+
+  private removeLegacyIndexedDb(): void {
+    if (legacyIndexedDbCleanupRequested || typeof indexedDB === 'undefined') {
+      return;
+    }
+
+    legacyIndexedDbCleanupRequested = true;
+
+    try {
+      const request = indexedDB.deleteDatabase('TovrikaOfflineDB');
+      request.onerror = () => {
+        console.error('Failed to remove the retired TovrikaOfflineDB database:', request.error);
+      };
+      request.onblocked = () => {
+        console.warn('Removal of the retired TovrikaOfflineDB database is blocked by another open tab.');
+      };
+    } catch (error) {
+      console.error('Failed to request removal of the retired TovrikaOfflineDB database:', error);
     }
   }
 

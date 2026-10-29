@@ -1,4 +1,4 @@
-import { ApplicationConfig } from '@angular/core';
+import { ApplicationConfig, inject, provideAppInitializer } from '@angular/core';
 import { provideHttpClient, withInterceptors } from '@angular/common/http';
 import { provideFirebaseApp, initializeApp } from '@angular/fire/app';
 import { authInterceptor } from './interceptors/auth.interceptor';
@@ -13,9 +13,15 @@ import { provideAnimations } from '@angular/platform-browser/animations';
 import { routes } from './app.routes';
 import { TranslateModule } from '@ngx-translate/core';
 import { importProvidersFrom } from '@angular/core';
+import { SqliteStorageService } from './core/services/sqlite-storage.service';
 
 export const appConfig: ApplicationConfig = {
   providers: [
+    provideAppInitializer(() =>
+      inject(SqliteStorageService).init().catch(error => {
+        console.error('SQLite initialization failed; continuing without app-managed offline storage.', error);
+      })
+    ),
     provideRouter(routes, withPreloading(PreloadAllModules)),
     provideAnimations(),
     provideHttpClient(

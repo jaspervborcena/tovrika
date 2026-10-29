@@ -259,7 +259,7 @@ export class PolicyAgreementComponent implements OnInit {
       // Persist acceptance flags in SQLite settings so the guard can bypass next time
       try {
         const uid = currentAuthUser.uid;
-        // Save both flags under settings (TovrikaOfflineDB.settings)
+        // Save both flags in SQLite's settings table
         await this.sqliteService.saveSetting(`isPolicyAgree_${uid}`, true);
         await this.sqliteService.saveSetting(`isTermsAgree_${uid}`, true);
         console.log('📝 Policy Agreement: Persisted isPolicyAgree and isTermsAgree in SQLite');
