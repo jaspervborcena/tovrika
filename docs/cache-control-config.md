@@ -15,24 +15,17 @@ location = /index.html {
     add_header Pragma "no-cache";
 }
 
-# For Firebase hosting, add to firebase.json:
+# For Firebase Hosting, apply this policy to the app's index.html.
+# Hashed Angular bundles can remain cached for a year because each build
+# produces new filenames.
 {
   "hosting": {
     "headers": [
       {
-        "source": "**/*.@(js|css)",
-        "headers": [
-          {
-            "key": "Cache-Control",
-            "value": "max-age=3600, must-revalidate"
-          }
-        ]
-      },
-      {
         "source": "index.html",
         "headers": [
           {
-            "key": "Cache-Control", 
+            "key": "Cache-Control",
             "value": "no-cache, no-store, must-revalidate"
           }
         ]
