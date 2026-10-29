@@ -71,7 +71,7 @@ export class OfflineDocumentService {
       }
 
       // Ensure create timestamps are applied. Use serverTimestamp when online; fallback to ISO when offline.
-      const timestampedData = applyCreateTimestamps(secureData, navigator.onLine as boolean);
+      const timestampedData = { ...applyCreateTimestamps(secureData, navigator.onLine as boolean), isSync: true };
       console.log('⏰ Timestamps applied, final data:', timestampedData);
 
       // 🔥 NEW APPROACH: Always generate ID first, then create document
@@ -120,7 +120,7 @@ export class OfflineDocumentService {
   if (navigator.onLine) {
     this.logger.info('Online creation failed, falling back to offline mode', { area: collectionName });
   const secureData = await this.securityService.addSecurityFields(data);
-  const timestampedData = applyCreateTimestamps(secureData, false);
+  const timestampedData = { ...applyCreateTimestamps(secureData, false), isSync: false };
     const tempId = this.generateTempDocumentId(collectionName);
   await this.createOfflineDocument(collectionName, tempId, timestampedData);
         this.logger.dbSuccess('Queued offline document after online failure', {
@@ -149,7 +149,7 @@ export class OfflineDocumentService {
 
     const secureData = await this.securityService.addSecurityFields(data);
     const online = navigator.onLine && !forceOffline;
-    const timestampedData = applyCreateTimestamps(secureData, online);
+    const timestampedData = { ...applyCreateTimestamps(secureData, online), isSync: online };
     if (!online) {
       const tempId = `temp_${collectionName}_${encodeURIComponent(documentId)}`;
       await this.createOfflineDocument(collectionName, tempId, timestampedData, documentId);
@@ -182,7 +182,7 @@ export class OfflineDocumentService {
       await this.createOfflineDocument(
         collectionName,
         tempId,
-        applyCreateTimestamps({ ...secureData, _offlineCreated: true }, false),
+        { ...applyCreateTimestamps({ ...secureData, _offlineCreated: true }, false), isSync: false },
         documentId
       );
       return tempId;
@@ -272,7 +272,7 @@ export class OfflineDocumentService {
       const offlineDoc: OfflineDocument = {
         id: documentId,
         collectionName,
-        data,
+        data: { ...data, isSync: false },
         isOffline: true,
         tempId: documentId, // Same as ID for offline docs
         synced: false,
@@ -605,10 +605,11 @@ export class OfflineDocumentService {
           offlineDoc.syncId ||= this.generateFirestoreCompatibleId();
           const realDocId = offlineDoc.syncId;
           await this.sqliteService.saveOfflineDocument(offlineDoc);
-          await this.createOnlineDocumentWithId(offlineDoc.collectionName, realDocId, offlineDoc.data);
+          await this.createOnlineDocumentWithId(offlineDoc.collectionName, realDocId, { ...offlineDoc.data, isSync: true });
           
           // Mark as synced
           offlineDoc.synced = true;
+          offlineDoc.data = { ...offlineDoc.data, isSync: true };
           if (offlineDoc.collectionName === 'orders') {
             offlineDoc.data._offlineId = queuedId;
           }

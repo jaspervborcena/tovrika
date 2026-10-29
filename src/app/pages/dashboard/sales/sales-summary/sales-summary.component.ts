@@ -39,6 +39,9 @@ type Order = OrderDisplay;
         <div class="header-content">
           <h1 class="page-title">Sales Summary</h1>
           <p class="page-subtitle">View and analyze your sales performance</p>
+          <p *ngIf="unsyncedLocalOrderCount() > 0" style="margin:.75rem 0 0;padding:.6rem .8rem;background:#fffbeb;color:#92400e;border-radius:6px;max-width:650px;">
+            {{ unsyncedLocalOrderCount() }} local order(s) in this date range are not synced yet.
+          </p>
         </div>
       </div>
 
@@ -264,7 +267,7 @@ type Order = OrderDisplay;
               <tr 
                 *ngFor="let order of paginatedOrders(); trackBy: trackByOrderId"
                 class="order-row">
-                <td class="invoice-number">{{ order.invoiceNumber || 'N/A' }}</td>
+                <td class="invoice-number">{{ order.invoiceNumber || 'N/A' }} <span *ngIf="$any(order).isSync === false" style="font-size:.72rem;color:#92400e;background:#fef3c7;padding:2px 6px;border-radius:10px;">Not synced</span></td>
                 <td class="order-date">
                   <div class="date">{{ formatDate(order.createdAt) }}</div>
                   <div class="time">{{ formatTime(order.createdAt) }}</div>
@@ -1919,6 +1922,7 @@ export class SalesSummaryComponent implements OnInit {
   // Signals for reactive state management
   protected readonly formatStoreDisplayName = formatStoreDisplayName;
   orders = signal<Order[]>([]);
+  unsyncedLocalOrderCount = signal(0);
   stores = signal<Store[]>([]);
   get selectedStoreId(): string {
     return this.reportFilters.selectedStoreId();
@@ -2358,6 +2362,13 @@ export class SalesSummaryComponent implements OnInit {
         customerName: order.soldTo || 'Walk-in Customer',
         paymentMethod: order.paymentMethod || 'cash'
       }));
+      const localOrderDocs = await this.sqlite.getOfflineDocumentsByCollection('orders');
+      const pendingLocalOrders = localOrderDocs
+        .filter((entry: any) => entry.synced !== true && entry.data?.isSync !== true)
+        .map((entry: any) => ({ ...entry.data, id: entry.id, isSync: false }))
+        .filter((order: any) => order.storeId === storeId && new Date(order.createdAt).getTime() >= startDate.getTime() && new Date(order.createdAt).getTime() <= endDate.getTime());
+      this.unsyncedLocalOrderCount.set(pendingLocalOrders.length);
+      transformedOrders.push(...pendingLocalOrders);
       const dedupMap = new Map<string, Order>();
       for (const o of transformedOrders) {
         const key = this.makeOrderKey(o);

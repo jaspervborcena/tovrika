@@ -761,6 +761,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
   // Orders state
   private ordersSignal = signal<any[]>([]);
   readonly orders = computed(() => this.ordersSignal());
+  readonly unsyncedOrderCount = computed(() => this.ordersSignal().filter(order => order.isSync === false).length);
 
   private _posUnpaidAmount = signal<number>(0);
   readonly posUnpaidAmount = computed(() => this._posUnpaidAmount());
