@@ -1552,6 +1552,14 @@
       box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
     }
 
+    .product-grid-item.stock-tracked {
+      border: 2px solid #16a34a;
+    }
+
+    .product-grid-item.stock-untracked {
+      border: 2px solid #eab308;
+    }
+
     .product-grid-item.promo {
       border-color: #f59e0b;
     }
