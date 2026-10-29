@@ -36,6 +36,7 @@ export class OrderService {
     const data = d.data();
     return {
       id: d.id,
+      isSync: data.isSync !== false,
       companyId: data.companyId,
       storeId: data.storeId,
       terminalId: data.terminalId,
@@ -1085,7 +1086,7 @@ public async restockOrderAndInventoryTransactional(orderId: string, performedBy 
 
       for (const queuedOrder of queuedOrders) {
         if (!queuedOrder?.id || !queuedOrder.data) continue;
-        const order = { ...queuedOrder.data, id: queuedOrder.id };
+        const order = { ...queuedOrder.data, id: queuedOrder.id, isSync: queuedOrder.synced === true || queuedOrder.data.isSync === true };
         const queuedItems = itemsByOrderId.get(queuedOrder.id);
         if (queuedItems?.length) order.items = queuedItems;
         ordersById.set(order.id, order);
