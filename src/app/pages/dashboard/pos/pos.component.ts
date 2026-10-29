@@ -4769,34 +4769,8 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
         console.log('📴 Processing in offline mode');
         await this.completeOrderWithPayment(paymentInfo, false, tableNumber);
       } else {
-        // Online mode - use short timeout to detect connection issues quickly
         console.log('🌐 Processing in online mode');
-        const orderPromise = this.completeOrderWithPayment(paymentInfo, false, tableNumber);
-        const timeoutPromise = new Promise<never>((_, reject) => 
-          setTimeout(() => reject(new Error('Connection timeout')), 5000) // Short 5 second timeout
-        );
-        
-        try {
-          await Promise.race([orderPromise, timeoutPromise]);
-        } catch (error) {
-          // Quick timeout - ask user to proceed offline
-          console.warn('⚠️ Online processing timed out, offering offline mode');
-          
-          const proceedOffline = await this.showConfirmationDialog({
-            title: '⚠️ Connection Slow or Unavailable',
-            message: 'Your internet connection is too slow or unavailable. Would you like to process this order offline? It will sync automatically when connection improves.',
-            confirmText: 'Process Offline',
-            cancelText: 'Cancel'
-          });
-          
-          if (!proceedOffline) {
-            throw new Error('Order cancelled by user due to connection issues');
-          }
-          
-          // Process offline without timeout
-          console.log('📴 User chose offline processing');
-          await this.completeOrderWithPayment(paymentInfo);
-        }
+        await this.completeOrderWithPayment(paymentInfo, false, tableNumber);
       }
       
     } catch (error) {
@@ -4902,12 +4876,11 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
         
         // Check if this is a network/timeout error
         const errorMessage = error instanceof Error ? error.message : String(error);
-        const isNetworkError = errorMessage.includes('timeout') || 
-                              errorMessage.includes('network') || 
-                              errorMessage.includes('connection') ||
-                              errorMessage.includes('Store read timeout') ||
-                              errorMessage.includes('unavailable') ||
-                              !this.networkService.isOnline();
+        const isNetworkError = errorMessage.includes('timeout') ||
+          errorMessage.includes('network') ||
+          errorMessage.includes('connection') ||
+          errorMessage.includes('unavailable') ||
+          !this.networkService.isOnline();
         
         // If already offline, the order should have been queued by Firestore offline persistence
         // In this case, don't throw - the invoice service returned the order info
