@@ -64,7 +64,7 @@ export class CompanySetupService {
 
       this.companiesSignal.set(companies);
 
-      // Best-effort: persist companies to the TovrikaOfflineDB under `companies`
+      // Best-effort: persist companies to SQLite under `companies`
       try {
         const offlineCompanies: OfflineCompany[] = companies.map(c => {
           const { stores, ...rest } = c as any;
