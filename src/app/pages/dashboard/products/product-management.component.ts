@@ -1342,8 +1342,8 @@ import * as XLSX from 'xlsx';
                 <td class="product-stock-cell">{{ product.totalStock }}</td>
                 <td class="product-price-cell">{{ displayPrice(product).toFixed(2) }}</td>
                 <td class="product-tracked-cell">
-                  <span [style.color]="isProductTracked(product) ? '#10b981' : '#ef4444'" [style.font-weight]="'600'">
-                    {{ isProductTracked(product) ? '✓' : '✗' }}
+                  <span [style.color]="product.isStockTracked === true ? '#10b981' : product.isStockTracked === false ? '#ef4444' : '#6b7280'" [style.font-weight]="'600'">
+                    {{ product.isStockTracked === true ? '✓ Tracked' : product.isStockTracked === false ? '✗ Untracked' : '? Unknown' }}
                   </span>
                 </td>
                 <td class="product-vat-cell">
@@ -1690,9 +1690,12 @@ import * as XLSX from 'xlsx';
                     type="checkbox" 
                     id="isStockTracked"
                     formControlName="isStockTracked"
+                    [disabled]="isStockTrackingControlDisabled()"
                     style="width:16px; height:16px; cursor:pointer;"/>
                   <label for="isStockTracked" style="margin:0; cursor:pointer;">
                     📦 Keep track of product quantities and inventory
+                    <span *ngIf="isStockTrackingControlDisabled() && selectedProduct?.isStockTracked === true">(locked because inventory tracking is enabled)</span>
+                    <span *ngIf="isStockTrackingControlDisabled() && selectedProduct?.isStockTracked !== true">(status unavailable until product data is refreshed)</span>
                   </label>
                 </div>
 
@@ -2451,7 +2454,7 @@ import * as XLSX from 'xlsx';
                       <td>{{ row.sellingPrice | number:'1.2-2' }}</td>
                       <td>{{ row.totalStock }}</td>
                       <td>{{ row.isVatApplicable ? '✓' : '-' }}</td>
-                      <td>{{ row.isStockTracked ? '✓' : '-' }}</td>
+                      <td>{{ row.isStockTracked === true ? 'Tracked' : row.isStockTracked === false ? 'Untracked' : 'Unknown' }}</td>
                       <td>
                         <div class="tags-display" style="min-width:120px;">
                           <div class="tab-headers-style" style="flex-wrap:wrap; gap:4px;">
@@ -2902,8 +2905,6 @@ export class ProductManagementComponent implements OnInit {
           await this.loadTags(currentPermission.storeId);
           // Load categories for the current store
           await this.categoryService.loadCategoriesByStore(currentPermission.storeId);
-          // Sync isStockTracked status with actual inventory
-          await this.syncProductTrackingStatus();
         } else {
           console.warn('No storeId available - cannot load products');
         }
@@ -2931,43 +2932,6 @@ export class ProductManagementComponent implements OnInit {
       this.tagGroups.set(groups);
     } catch (error) {
       console.error('Error loading tags:', error);
-    }
-  }
-
-  /**
-   * Sync isStockTracked status with actual inventory existence
-   * Updates products that have inventory but isStockTracked is not set to true
-   */
-  private async syncProductTrackingStatus(): Promise<void> {
-    try {
-      const products = this.products();
-      const updatePromises: Promise<void>[] = [];
-
-      for (const product of products) {
-        // Skip if already marked as tracked
-        if (product.isStockTracked === true) continue;
-        
-        // Check if product has inventory
-        if (product.id) {
-          const checkPromise = this.inventoryDataService.listBatches(product.id)
-            .then(batches => {
-              if (batches && batches.length > 0) {
-                // Product has inventory but isStockTracked is not true, update it
-                return this.productService.updateProduct(product.id!, { isStockTracked: true });
-              }
-              return Promise.resolve();
-            })
-            .catch(err => {
-              console.error(`Error checking inventory for product ${product.id}:`, err);
-            });
-          
-          updatePromises.push(checkPromise);
-        }
-      }
-
-      await Promise.all(updatePromises);
-    } catch (error) {
-      console.error('Error syncing product tracking status:', error);
     }
   }
 
@@ -3185,6 +3149,15 @@ export class ProductManagementComponent implements OnInit {
   async openEditModal(product: Product): Promise<void> {
     this.isEditMode = true;
     this.selectedProduct = product;
+    if (product.id && product.isStockTracked !== true && navigator.onLine) {
+      try {
+        await this.productService.resolveStockTracking(product.id);
+        product = this.productService.getProduct(product.id) || product;
+        this.selectedProduct = product;
+      } catch (error) {
+        console.error('Failed to resolve product stock-tracking status before editing:', error);
+      }
+    }
     const permission = this.authService.getCurrentPermission();
     
     // Load product tags into signal
@@ -3504,7 +3477,9 @@ export class ProductManagementComponent implements OnInit {
           imageUrl: formValue.imageUrl,
           isFavorite: !!formValue.isFavorite,
           // isStockTracked: Once true (has inventory), cannot be set back to false
-          isStockTracked: this.selectedProduct.isStockTracked === true ? true : !!formValue.isStockTracked,
+          isStockTracked: typeof this.selectedProduct.isStockTracked !== 'boolean'
+            ? undefined
+            : this.selectedProduct.isStockTracked === true || !!formValue.isStockTracked,
           costPrice: Number(formValue.costPrice ?? this.selectedProduct.costPrice ?? 0),
           // Tax and Discount Fields
           isVatApplicable: formValue.isVatApplicable || false,
@@ -4639,13 +4614,11 @@ export class ProductManagementComponent implements OnInit {
     return product.sellingPrice;
   }
 
-  // Check if product is tracked
-  // A product is considered tracked if:
-  // 1. isStockTracked is explicitly true, OR
-  // 2. Product has inventory batches (checked via productInventory collection)
-  // Once tracked (has inventory), it should remain true and never revert to false
-  isProductTracked(product: Product): boolean {
-    return product.isStockTracked === true;
+  isStockTrackingControlDisabled(): boolean {
+    return this.isEditMode && (
+      this.selectedProduct?.isStockTracked === true ||
+      typeof this.selectedProduct?.isStockTracked !== 'boolean'
+    );
   }
 
   // Category Autocomplete Properties and Methods
