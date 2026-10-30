@@ -240,6 +240,7 @@ export class InventoryDataService {
           // Post-commit recompute will handle sellingPrice correctly
           transaction.update(productRef, {
             totalStock: newTotal,
+            isStockTracked: true,
             lastUpdated: new Date(),
             updatedBy: user.uid
           });
@@ -252,6 +253,7 @@ export class InventoryDataService {
             companyId: permission.companyId,
             storeId: permission.storeId || '',
             totalStock: newTotal,
+            isStockTracked: true,
             sellingPrice: Number(cleanBatchData.unitPrice) || 0,
             originalPrice: Number(cleanBatchData.unitPrice) || 0,
             status: 'active',

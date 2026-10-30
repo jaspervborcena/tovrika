@@ -1296,25 +1296,14 @@ export class PosService {
 
       // Resolve isStockTracked for every item in one pass
       const items = await Promise.all(cartItems.map(async ci => {
-        const cachedProduct = this.productService.getProduct(ci.productId);
-        if (!this.networkService.isOnline() &&
-            (!cachedProduct || typeof cachedProduct.isStockTracked !== 'boolean')) {
-          throw new Error(`Cannot queue inventory for ${ci.productName}: stock-tracking status is missing from the offline product cache. Sync products before processing this sale offline.`);
-        }
-        let isStockTracked = cachedProduct?.isStockTracked === true;
-        if (this.networkService.isOnline()) {
-          try {
-            const productDoc = await getDoc(doc(this.firestore, 'products', ci.productId) as any);
-            if (productDoc.exists()) {
-              const data = productDoc.data() as any;
-              isStockTracked = data.isStockTracked === true;
-            }
-          } catch (error) {
-            throw new Error(`Could not determine stock tracking for ${ci.productName}: ${error instanceof Error ? error.message : String(error)}`);
-          }
+        let isStockTracked: boolean;
+        try {
+          isStockTracked = await this.productService.resolveStockTracking(ci.productId);
+        } catch (error) {
+          throw new Error(`Could not determine stock tracking for ${ci.productName}: ${error instanceof Error ? error.message : String(error)}`);
         }
         if (!isStockTracked) {
-          console.log(`⏭️ ${ci.productName} isStockTracked is false or unavailable in the offline product cache — tracking record only`);
+          console.log(`⏭️ ${ci.productName} is explicitly untracked; recording the sale without inventory deduction`);
         }
         return {
           productId: ci.productId,
@@ -1355,25 +1344,13 @@ export class PosService {
     }
 
     // Legacy: client-side FIFO deduction — only process tracked items
-    const trackedItems = [];
-    for (const item of cartItems) {
-      try {
-        const productDoc = await getDoc(doc(this.firestore, 'products', item.productId) as any);
-        if (productDoc.exists()) {
-          const productData = productDoc.data() as any;
-          const hasStock = Number(productData.totalStock || 0) > 0;
-          if (productData.isStockTracked === true || hasStock) {
-            trackedItems.push(item);
-          } else {
-            console.log(`⏭️ Skipping inventory deduction for ${item.productName} (no stock and isStockTracked is false)`);
-          }
-        } else {
-          console.log(`⏭️ Skipping inventory deduction for ${item.productName} (product not found)`);
-        }
-      } catch (err) {
-        console.warn(`⚠️ Error checking isStockTracked for ${item.productName}; skipping deduction because tracking status is unconfirmed:`, err);
-      }
-    }
+    const trackingResults = await Promise.all(cartItems.map(async item => ({
+      item,
+      isStockTracked: await this.productService.resolveStockTracking(item.productId)
+    })));
+    const trackedItems = trackingResults
+      .filter(result => result.isStockTracked)
+      .map(result => result.item);
 
     if (trackedItems.length === 0) {
       console.log('⏭️ No tracked items to process inventory for');

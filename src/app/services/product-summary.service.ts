@@ -160,6 +160,10 @@ export class ProductSummaryService {
       lastUpdated: new Date(),
       updatedBy: currentUser.uid
     };
+
+    if (isStockTracked) {
+      payload.isStockTracked = true;
+    }
     
     // Only overwrite stock and prices if product uses batch/stock tracking
     if (isStockTracked) {

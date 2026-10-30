@@ -398,7 +398,7 @@
                   *ngFor="let product of displayGridProducts()"
                   class="product-grid-item"
                   [class.stock-tracked]="product.isStockTracked === true"
-                  [class.stock-untracked]="product.isStockTracked !== true"
+                  [class.stock-untracked]="product.isStockTracked === false"
                   [class.disabled]="!canInteractWithProducts()"
                   [title]="'SKU: ' + product.skuId">
                 <div class="product-image-container" (click)="openProductPreviewModal(product, $event)">
@@ -452,7 +452,7 @@
                 *ngFor="let product of displayFavoriteGridProducts()"
                 class="product-grid-item"
                 [class.stock-tracked]="product.isStockTracked === true"
-                [class.stock-untracked]="product.isStockTracked !== true"
+                [class.stock-untracked]="product.isStockTracked === false"
                 [class.disabled]="!canInteractWithProducts()"
                 [title]="'SKU: ' + product.skuId">
                 <div class="product-image-container" (click)="openProductPreviewModal(product, $event)">
@@ -502,7 +502,7 @@
                     *ngFor="let product of promoProducts()"
                     class="product-grid-item promo"
                     [class.stock-tracked]="product.isStockTracked === true"
-                    [class.stock-untracked]="product.isStockTracked !== true"
+                    [class.stock-untracked]="product.isStockTracked === false"
                     [class.disabled]="!canInteractWithProducts()"
                     [title]="'SKU: ' + product.skuId">
                     <div class="promo-badge">PROMO</div>
