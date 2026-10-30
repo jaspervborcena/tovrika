@@ -108,6 +108,7 @@ describe('OrdersSellingTrackingService inventory transaction', () => {
       cashierId: 'cashier-1'
     }, [{
       productId: 'product-1',
+      productCode: 'SKU-1',
       itemCode: 'MUG-1',
       quantity: 3,
       unitPrice: 40,
@@ -149,6 +150,7 @@ describe('OrdersSellingTrackingService inventory transaction', () => {
       cashierId: 'cashier-1'
     }, [{
       productId: 'product-1',
+      productCode: 'SKU-1',
       itemCode: 'MUG-1',
       quantity: 3,
       unitPrice: 40,
@@ -157,6 +159,10 @@ describe('OrdersSellingTrackingService inventory transaction', () => {
     }]);
 
     expect(result.success).toBeFalse();
+    expect(result.errors[0].error.message).toContain('SKU-1');
+    expect(result.errors[0].error.message).toContain('Product total stock: 3');
+    expect(result.errors[0].error.message).toContain('active batch stock in store store-1: 1');
+    expect(result.errors[0].error.message).toContain('manual reconciliation is required');
     expect(writes).toEqual([]);
   });
 

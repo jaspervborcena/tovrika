@@ -561,6 +561,31 @@ export class PosService {
         throw new Error('Cart is empty');
       }
 
+      if (!saveAsOpen && this.networkService.isOnline()) {
+        const stockValidationItems = await Promise.all(cartItems.map(async item => ({
+          productId: item.productId,
+          productCode: item.productCode || this.productService.getProduct(item.productId)?.productCode,
+          productName: item.productName,
+          quantity: item.quantity,
+          isStockTracked: await this.productService.resolveStockTracking(item.productId)
+        })));
+        let stockErrors: string[];
+        try {
+          stockErrors = await this.ordersSellingTrackingService.validateOnlineCheckoutStock(
+            company.id || '',
+            storeId,
+            stockValidationItems
+          );
+        } catch (error) {
+          if (this.networkService.isOnline()) throw error;
+          console.info('Connection went offline during stock validation; inventory will be reconciled after sync.');
+          stockErrors = [];
+        }
+        if (stockErrors.length > 0) {
+          throw new Error(`Checkout blocked by inventory availability:\n${stockErrors.join('\n')}`);
+        }
+      }
+
       console.log('Processing NEW order structure for store:', storeId);
       console.log('📝 Customer info:', customerInfo);
       console.log('💳 Payment info:', payments);
@@ -892,7 +917,9 @@ export class PosService {
       ]);
       return {
         success: result.errors.length === 0,
-        errors: result.errors.map(entry => entry.error)
+        errors: result.errors.map(entry =>
+          `${entry.productCode || entry.productName || entry.productId}: ${entry.error}`
+        )
       };
     } catch (error) {
       return { success: false, errors: [error instanceof Error ? error.message : String(error)] };
@@ -1308,6 +1335,7 @@ export class PosService {
         return {
           productId: ci.productId,
           itemCode: ci.itemCode,
+          productCode: ci.productCode || this.productService.getProduct(ci.productId)?.productCode,
           productName: ci.productName,
           skuId: ci.skuId,
           quantity: ci.quantity,
@@ -1337,7 +1365,10 @@ export class PosService {
       }, items);
 
       if (!res.success) {
-        const details = res.errors.map(error => `${error.productId}: ${error.error instanceof Error ? error.error.message : String(error.error)}`).join('; ');
+        const details = res.errors.map(error => {
+          const label = error.productCode || error.productName || error.productId;
+          return `${label}: ${error.error instanceof Error ? error.error.message : String(error.error)}`;
+        }).join('; ');
         throw new Error(`Inventory transaction failed: ${details}`);
       }
       return items.some(item => item.isStockTracked);
