@@ -1,7 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { environment } from '../../environments/environment';
 import { Firestore, collection, query, where, Timestamp } from '@angular/fire/firestore';
-import { getDocs, getDoc, doc, setDoc, updateDoc, runTransaction, orderBy, limit, getAggregateFromServer, count, addDoc } from 'firebase/firestore';
+import { getDocs, getDoc, getDocsFromServer, getDocFromServer, doc, setDoc, updateDoc, runTransaction, orderBy, limit, getAggregateFromServer, count, addDoc } from 'firebase/firestore';
 import { toDateValue } from '../core/utils/date-utils';
 import { OfflineDocumentService } from '../core/services/offline-document.service';
 import { NetworkService } from '../core/services/network.service';
@@ -30,8 +30,85 @@ export class OrdersSellingTrackingService {
   }
 
   private async getInventoryBatchReferences(productId: string, storeId: string): Promise<Array<{ id: string; ref: any }>> {
-    const snapshot = await getDocs(this.createInventoryBatchQuery(productId, storeId) as any);
+    const snapshot = await getDocsFromServer(this.createInventoryBatchQuery(productId, storeId) as any);
     return snapshot.docs.map(batchDoc => ({ id: batchDoc.id, ref: batchDoc.ref }));
+  }
+
+  async validateOnlineCheckoutStock(
+    companyId: string,
+    storeId: string,
+    items: Array<{
+      productId: string;
+      productCode?: string;
+      productName?: string;
+      quantity: number;
+      isStockTracked: boolean;
+    }>
+  ): Promise<string[]> {
+    if (!this.networkService.isOnline()) {
+      return [];
+    }
+
+    const quantitiesByProduct = new Map<string, { quantity: number; productCode?: string; productName?: string }>();
+    for (const item of items) {
+      if (!item.isStockTracked) continue;
+      const current = quantitiesByProduct.get(item.productId);
+      quantitiesByProduct.set(item.productId, {
+        quantity: (current?.quantity || 0) + Math.max(0, Number(item.quantity || 0)),
+        productCode: item.productCode || current?.productCode,
+        productName: item.productName || current?.productName
+      });
+    }
+
+    const errors: string[] = [];
+    for (const [productId, item] of quantitiesByProduct) {
+      const productRef = doc(this.firestore, 'products', productId);
+      const [productSnapshot, batchesSnapshot] = await Promise.all([
+        getDocFromServer(productRef as any),
+        getDocsFromServer(this.createInventoryBatchQuery(productId, storeId) as any)
+      ]);
+      const product = productSnapshot.exists() ? productSnapshot.data() as any : null;
+      const productCode = String(product?.productCode || item.productCode || item.productName || productId);
+      if (!product) {
+        errors.push(`${productCode}: product record not found in the online database. Payment was not processed.`);
+        continue;
+      }
+
+      const activeBatchQuantity = batchesSnapshot.docs.reduce((total, batchSnapshot) => {
+        const batch = batchSnapshot.data() as any;
+        if (batch.companyId !== companyId || String(batch.status || '').toLowerCase() !== 'active') return total;
+        return total + Math.max(0, Number(batch.quantity || 0));
+      }, 0);
+      const pendingBatchDeductionQty = Math.max(0, Number(product.pendingBatchDeductionQty || 0));
+      const availableBatchQuantity = Math.max(0, activeBatchQuantity - pendingBatchDeductionQty);
+      const productTotalStock = Math.max(0, Number(product.totalStock || 0));
+      const legacyStock = Number(product.stock || 0);
+      const mismatch = Math.abs(productTotalStock - availableBatchQuantity) > 1e-9;
+      if (mismatch) {
+        console.warn('Checkout stock summary differs from active FIFO batches:', {
+          productCode,
+          productId,
+          storeId,
+          productTotalStock,
+          activeBatchQuantity,
+          pendingBatchDeductionQty,
+          availableBatchQuantity,
+          legacyStock
+        });
+      }
+
+      if (item.quantity > productTotalStock || item.quantity > availableBatchQuantity) {
+        const legacyStockNote = legacyStock !== productTotalStock ? `; legacy stock field: ${legacyStock}` : '';
+        errors.push(
+          `${productCode}: insufficient stock for ${item.quantity} requested. Product total stock: ${productTotalStock}${legacyStockNote}; ` +
+          `active FIFO batch stock in store ${storeId}: ${activeBatchQuantity}; ` +
+          `pending batch deductions: ${pendingBatchDeductionQty}; available batch stock: ${availableBatchQuantity}. ` +
+          `Manual stock reconciliation is required; no stock was changed and payment was not processed.`
+        );
+      }
+    }
+
+    return errors;
   }
 
   private runInventoryTransaction<T>(updateFunction: (transaction: any) => Promise<T>): Promise<T> {
@@ -114,7 +191,7 @@ export class OrdersSellingTrackingService {
   async processPendingInventoryForOrder(orderId: string): Promise<{
     processed: number;
     skipped: number;
-    errors: Array<{ productId: string; error: string }>;
+    errors: Array<{ productId: string; productCode?: string; productName?: string; error: string }>;
   }> {
     if (!this.networkService.isOnline()) {
       throw new Error('Inventory sale processing requires connectivity');
@@ -145,8 +222,12 @@ export class OrdersSellingTrackingService {
 
     let processed = 0;
     let skipped = 0;
-    const errors: Array<{ productId: string; error: string }> = [];
+    const errors: Array<{ productId: string; productCode?: string; productName?: string; error: string }> = [];
     for (const line of pendingLines) {
+      const productId = String(line.data.productId || '');
+      const cachedProduct = this.productService.getProduct(productId);
+      const productCode = String(line.data.productCode || cachedProduct?.productCode || '');
+      const productName = String(line.data.productName || cachedProduct?.productName || '');
       const result = await this.logSaleAndAdjustStockAtomic({
         companyId: String(line.data.companyId || ''),
         storeId: String(line.data.storeId || ''),
@@ -158,9 +239,10 @@ export class OrdersSellingTrackingService {
         cashierEmail: line.data.cashierEmail,
         cashierName: line.data.cashierName
       }, [{
-        productId: String(line.data.productId || ''),
+        productId,
         itemCode: String(line.data.itemCode || ''),
-        productName: String(line.data.productName || ''),
+        productCode,
+        productName,
         quantity: Number(line.data.quantity || 0),
         unitPrice: Number(line.data.price || 0),
         lineTotal: Number(line.data.total || 0),
@@ -187,7 +269,9 @@ export class OrdersSellingTrackingService {
         processed++;
       } else {
         errors.push({
-          productId: String(line.data.productId || ''),
+          productId,
+          productCode,
+          productName,
           error: result.errors.map(entry => entry.error instanceof Error ? entry.error.message : String(entry.error)).join('; ')
         });
       }
@@ -1588,6 +1672,7 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
     items: Array<{
       productId: string;
       itemCode?: string;
+      productCode?: string;
       productName?: string;
       quantity: number;
       unitPrice: number;
@@ -1756,7 +1841,19 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
             allocations.push(...batchPlan.allocations);
             pendingBatchReservations.set(item.productId, batchPlan.pendingReservation);
             if (batchPlan.remainingQuantity > 0) {
-              throw new Error(`Insufficient FIFO batch stock for product ${item.productId}. Short ${batchPlan.remainingQuantity}.`);
+              const activeBatchQuantity = batches.reduce(
+                (total, batch) => total + (String(batch.status || '').toLowerCase() === 'active' ? Math.max(0, Number(batch.quantity || 0)) : 0),
+                0
+              );
+              const productLabel = String(productData.productCode || item.productCode || item.productName || item.productId);
+              const legacyStock = Number(productData.stock || 0);
+              const legacyStockNote = legacyStock !== previousTotalStock ? ` (legacy stock field: ${legacyStock})` : '';
+              throw new Error(
+                `Insufficient FIFO batch stock for ${productLabel}. Product total stock: ${previousTotalStock}${legacyStockNote}; ` +
+                `active batch stock in store ${ctx.storeId}: ${activeBatchQuantity}; ` +
+                `pending batch deductions: ${Number(productData.pendingBatchDeductionQty || 0)}; ` +
+                `short: ${batchPlan.remainingQuantity}. No stock updates were committed; manual reconciliation is required.`
+              );
             }
             const allocatedQty = allocations.reduce((sum, allocation) => sum + allocation.quantity, 0);
             const allocatedCost = allocations.reduce(
@@ -1956,6 +2053,8 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
         .filter(plan => plan.fulfilledQty < Number(plan.item.quantity || 0))
         .map(plan => ({
           productId: plan.item.productId,
+          productCode: plan.item.productCode,
+          productName: plan.item.productName,
           error: `Insufficient stock. Fulfilled ${plan.fulfilledQty} of ${plan.item.quantity}.`
         }));
       return {
@@ -1998,6 +2097,7 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
     items: Array<{
       productId: string;
       itemCode?: string;
+      productCode?: string;
       productName?: string;
       quantity: number;
       unitPrice: number;
@@ -2015,7 +2115,7 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
       /** When false, skip FIFO/stock deduction but still create the tracking record */
       isStockTracked?: boolean;
     }>
-  ): Promise<{ success: boolean; tracked: number; adjusted: number; errors: Array<{ productId: string; error: any }> }> {
+  ): Promise<{ success: boolean; tracked: number; adjusted: number; errors: Array<{ productId: string; productCode?: string; productName?: string; error: any }> }> {
     try {
       const status = String(ctx.status || 'open').trim().toLowerCase();
       const completed = status === 'completed';
@@ -2086,7 +2186,12 @@ async markOrderTrackingRecovered(orderId: string, recoveredBy?: string, reason?:
         success: processing.errors.length === 0,
         tracked: items.length,
         adjusted: processing.processed,
-        errors: processing.errors.map(error => ({ productId: error.productId, error: new Error(error.error) }))
+        errors: processing.errors.map(error => ({
+          productId: error.productId,
+          productCode: error.productCode,
+          productName: error.productName,
+          error: new Error(error.error)
+        }))
       };
     } catch (error) {
       return {
