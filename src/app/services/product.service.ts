@@ -11,6 +11,7 @@ import {
   query, 
   where, 
   getDocs,
+  getDoc,
   onSnapshot,
   orderBy,
   limit,
@@ -47,6 +48,14 @@ interface ProductCacheState {
   providedIn: 'root'
 })
 export class ProductService implements OnDestroy {
+  static normalizeStockTrackingFlag(value: unknown): boolean | undefined {
+    return typeof value === 'boolean' ? value : undefined;
+  }
+
+  static resolveStockTrackingFlag(value: unknown, totalStock: unknown, hasInventory: boolean): boolean {
+    return value === true || Number(totalStock) > 0 || hasInventory;
+  }
+
   static normalizeProductTaxAndDiscountFields<T extends Partial<Product>>(product: T): T {
     const normalized = { ...product } as any;
 
@@ -79,6 +88,7 @@ export class ProductService implements OnDestroy {
   private unsubscribeSnapshot: Unsubscribe | null = null;
   private currentStoreId: string | null = null;
   private currentCompanyId: string | null = null;
+  private readonly stockTrackingReconciliationInProgress = new Set<string>();
   
   // Cache products per store to maintain snapshots when switching stores
   private productCacheByStore = new Map<string, Product[]>();
@@ -365,6 +375,7 @@ export class ProductService implements OnDestroy {
           error: null,
           hasInitialLoad: true
         });
+        this.reconcileStockTrackingFromInventory(products);
       } else {
         console.log('📭 No products found with direct query');
         this.updateCacheState({
@@ -758,6 +769,7 @@ export class ProductService implements OnDestroy {
         error: null,
         hasInitialLoad: true
       });
+      this.reconcileStockTrackingFromInventory(normalizedProducts);
 
       // Firestore snapshot with includeMetadataChanges automatically handles caching
       // No need for custom SQLite - Firestore manages its own cache
@@ -886,6 +898,7 @@ export class ProductService implements OnDestroy {
         hasDiscount: !!data['hasDiscount'] || false,
         discountType: data['discountType'] || 'percentage',
         discountValue: Number(data['discountValue'] || 0),
+        isStockTracked: ProductService.normalizeStockTrackingFlag(data['isStockTracked']),
         
         status: data['status'] || 'active',
         createdAt: this.safeToDate(data['createdAt']),
@@ -910,7 +923,7 @@ export class ProductService implements OnDestroy {
     if (value && typeof value === 'object' && value._methodName === 'serverTimestamp') {
       return new Date(); // Use current date for serverTimestamp placeholders
     }
-    
+
     // Handle Firestore Timestamp
     if (value && typeof value.toDate === 'function') {
       return value.toDate();
@@ -927,6 +940,54 @@ export class ProductService implements OnDestroy {
     } catch {
       return new Date();
     }
+  }
+
+  private reconcileStockTrackingFromInventory(products: Product[]): void {
+    const companyId = this.currentCompanyId;
+    const storeId = this.currentStoreId;
+    if (!navigator.onLine || !companyId || !storeId) {
+      return;
+    }
+
+    const candidates = products.filter(product =>
+      product.storeId === storeId &&
+      product.id &&
+      product.isStockTracked !== true
+    );
+    if (candidates.length === 0 || this.stockTrackingReconciliationInProgress.has(storeId)) {
+      return;
+    }
+
+    this.stockTrackingReconciliationInProgress.add(storeId);
+    void (async () => {
+      try {
+        const inventoryQuery = query(
+          collection(this.firestore, 'productInventory'),
+          where('companyId', '==', companyId),
+          where('storeId', '==', storeId)
+        );
+        const inventorySnapshot = await getDocs(inventoryQuery);
+        const productsWithInventory = new Set(
+          inventorySnapshot.docs
+            .map(inventoryDoc => inventoryDoc.data()['productId'])
+            .filter((productId): productId is string => typeof productId === 'string' && productId.length > 0)
+        );
+
+        for (const product of candidates) {
+          if (product.id && productsWithInventory.has(product.id)) {
+            await this.updateProduct(product.id, { isStockTracked: true });
+          }
+        }
+      } catch (error) {
+        this.logger.dbFailure(
+          'Failed to reconcile product stock tracking flags from inventory',
+          { area: 'products', companyId, storeId },
+          error
+        );
+      } finally {
+        this.stockTrackingReconciliationInProgress.delete(storeId);
+      }
+    })();
   }
 
   private transformQuantityAdjustments(adjustmentsData: any[]): any[] {
@@ -1008,6 +1069,7 @@ export class ProductService implements OnDestroy {
       hasDiscount: item.hasDiscount || false,
       discountType: item.discountType || 'percentage',
       discountValue: item.discountValue || 0,
+      isStockTracked: ProductService.normalizeStockTrackingFlag(item.isStockTracked),
       
       status: item.status || 'active',
       createdAt: item.createdAt ? new Date(item.createdAt) : new Date(),
@@ -1097,6 +1159,7 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
       // 2. Prepare product data with security fields
       const productPayload = {
         ...baseData,
+        isStockTracked: baseData.isStockTracked === true || invArr.length > 0,
         uid: currentUser.uid,
         createdBy: currentUser.uid,
         updatedBy: currentUser.uid,
@@ -1246,6 +1309,36 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
     try {
       // Prepare update data with proper Timestamp conversion
       const updateData: any = { ...updates };
+      const productRef = doc(this.firestore, 'products', productId);
+
+      if (updates.isStockTracked === false) {
+        const cachedProduct = this.getProduct(productId);
+        const existingSnapshot = navigator.onLine ? await getDoc(productRef) : null;
+        const existingData = existingSnapshot?.exists() ? existingSnapshot.data() : null;
+        const cachedBatches = cachedProduct?.storeId && cachedProduct.companyId
+          ? await this.sqliteService.getProductInventoryBatches(
+              productId,
+              cachedProduct.storeId,
+              cachedProduct.companyId
+            )
+          : [];
+        const firestoreBatches = navigator.onLine
+          ? await getDocs(query(
+              collection(this.firestore, 'productInventory'),
+              where('productId', '==', productId),
+              limit(1)
+            ))
+          : null;
+        const alreadyTracked = cachedProduct?.isStockTracked === true ||
+          existingData?.['isStockTracked'] === true ||
+          Number(existingData?.['totalStock'] ?? cachedProduct?.totalStock ?? 0) > 0 ||
+          cachedBatches.length > 0 ||
+          !!firestoreBatches?.docs.length;
+
+        if (alreadyTracked) {
+          updateData.isStockTracked = true;
+        }
+      }
 
       if ('isVatApplicable' in updates) {
         updateData.isVatApplicable = !!(updates as any).isVatApplicable;
@@ -1302,7 +1395,6 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
       
       // Use Firestore updateDoc directly for automatic offline persistence
       // Firestore will queue this update if offline and update its cache automatically
-      const productRef = doc(this.firestore, 'products', productId);
       await updateDoc(productRef, cleanedUpdateData);
       
       // Update the local cache optimistically with the cleaned/normalized data
@@ -1446,6 +1538,58 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
 
   getProduct(productId: string): Product | undefined {
     return this.products().find(product => product.id === productId);
+  }
+
+  async resolveStockTracking(productId: string): Promise<boolean> {
+    const cachedProduct = this.getProduct(productId);
+    if (!navigator.onLine) {
+      if (!cachedProduct) {
+        throw new Error(`Product ${productId} is unavailable in the offline product cache.`);
+      }
+      const cachedBatches = cachedProduct.storeId && cachedProduct.companyId
+        ? await this.sqliteService.getProductInventoryBatches(
+            productId,
+            cachedProduct.storeId,
+            cachedProduct.companyId
+          )
+        : [];
+      const resolved = ProductService.resolveStockTrackingFlag(
+        cachedProduct.isStockTracked,
+        cachedProduct.totalStock,
+        cachedBatches.length > 0
+      );
+      if (typeof cachedProduct.isStockTracked !== 'boolean' && !resolved) {
+        throw new Error(`Stock-tracking status is unavailable offline for product ${productId}.`);
+      }
+      if (cachedProduct.isStockTracked !== resolved) {
+        await this.updateProduct(productId, { isStockTracked: resolved });
+      }
+      return resolved;
+    }
+
+    const productRef = doc(this.firestore, 'products', productId);
+    const productSnapshot = await getDoc(productRef);
+    if (!productSnapshot.exists()) {
+      throw new Error(`Product ${productId} does not exist.`);
+    }
+
+    const productData = productSnapshot.data();
+    const inventorySnapshot = await getDocs(query(
+      collection(this.firestore, 'productInventory'),
+      where('productId', '==', productId),
+      limit(1)
+    ));
+    const resolved = ProductService.resolveStockTrackingFlag(
+      productData['isStockTracked'],
+      productData['totalStock'],
+      !inventorySnapshot.empty
+    );
+
+    if (productData['isStockTracked'] !== resolved) {
+      await this.updateProduct(productId, { isStockTracked: resolved });
+    }
+
+    return resolved;
   }
 
   getProductBySku(sku: string): Product | undefined {

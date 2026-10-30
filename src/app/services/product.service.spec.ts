@@ -2,6 +2,18 @@ import { ProductService } from './product.service';
 import { PosService } from './pos.service';
 
 describe('ProductService normalization', () => {
+  it('preserves explicit stock-tracking values and leaves missing values unknown', () => {
+    expect(ProductService.normalizeStockTrackingFlag(true)).toBeTrue();
+    expect(ProductService.normalizeStockTrackingFlag(false)).toBeFalse();
+    expect(ProductService.normalizeStockTrackingFlag(undefined)).toBeUndefined();
+  });
+
+  it('treats product stock or an inventory batch as tracked even if the stored flag is false', () => {
+    expect(ProductService.resolveStockTrackingFlag(false, 0, false)).toBeFalse();
+    expect(ProductService.resolveStockTrackingFlag(undefined, 4, false)).toBeTrue();
+    expect(ProductService.resolveStockTrackingFlag(false, 0, true)).toBeTrue();
+  });
+
   it('should zero VAT and discount values when their toggles are off', () => {
     const normalized = ProductService.normalizeProductTaxAndDiscountFields({
       uid: 'user-1',

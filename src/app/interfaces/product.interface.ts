@@ -50,7 +50,7 @@ export interface Product {
    * Flag to track stock levels for this product.
    * Set to true for products that need inventory tracking.
    * Set to false for services or non-tracked items (no inventory/deductions processed).
-   * Defaults to false if not specified.
+   * An omitted value is unknown and should not be treated as explicitly untracked.
    */
   isStockTracked?: boolean;
   status?: ProductStatus;
