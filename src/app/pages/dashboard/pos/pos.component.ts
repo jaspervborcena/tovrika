@@ -4783,6 +4783,7 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       // Check if this is a duplicate invoice error
       const errorMessage = error instanceof Error ? error.message : String(error);
       const isDuplicateError = errorMessage.includes('Duplicate invoice number');
+      const isInventoryMismatch = errorMessage.includes('Checkout blocked by inventory availability');
       
       // Reload the invoice number to get the latest from Firestore
       // This prevents duplicate invoice number errors on retry
@@ -4797,9 +4798,15 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       }
       
       // Show error dialog with appropriate message
-      const errorTitle = isDuplicateError ? 'Order Already Processed' : 'Payment Processing Failed';
+      const errorTitle = isDuplicateError
+        ? 'Order Already Processed'
+        : isInventoryMismatch
+          ? 'Inventory Reconciliation Required'
+          : 'Payment Processing Failed';
       const errorMsg = isDuplicateError 
         ? 'This invoice number has already been used. The invoice number has been refreshed. Please start a new order or try again.'
+        : isInventoryMismatch
+          ? `Checkout was stopped before payment. Please contact an administrator to reconcile the stock records.\n\n${errorMessage.replace('Checkout blocked by inventory availability:\n', '')}`
         : `Failed to process payment and save order. Please try again.\nReason: ${errorMessage}`;
       
       await this.showConfirmationDialog({
