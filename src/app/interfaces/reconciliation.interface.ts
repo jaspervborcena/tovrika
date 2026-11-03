@@ -1,44 +1,61 @@
 // Reconciliation interfaces
+export type ReconciliationIssueCode = 'NO_INVENTORY' | 'QTY_MISMATCH';
+export type ReconciliationItemIssueCode = ReconciliationIssueCode | 'OK';
+
+export interface ReconciliationInventoryRow {
+  inventoryTrackingId: string;
+  batchId: string | null;
+  eventType: string | null;
+  quantity: number | null;
+  createdAt: string | null;
+  deductedAt: string | null;
+  itemCode: string | null;
+  productCode: string | null;
+  productId: string | null;
+  productName: string | null;
+  runningBalanceTotalStock: number | null;
+  saleLineIndex: number | null;
+  saleTrackingId: string | null;
+  stockMovement: boolean | null;
+}
+
+export interface ReconciliationInvoiceItem {
+  invoiceNumber: string;
+  itemCode: string | null;
+  productName: string | null;
+  salesQty: number;
+  salesAmount: number;
+  salesLineCount: number;
+  inventoryQty: number;
+  quantityDifference: number;
+  issueType: ReconciliationItemIssueCode;
+  inventoryRows: ReconciliationInventoryRow[];
+}
+
+export interface ReconciliationInvoiceDetails {
+  success: boolean;
+  storeId: string;
+  invoiceNumber: string;
+  count: number;
+  items: ReconciliationInvoiceItem[];
+}
+
 export interface ReconciliationDiscrepancy {
   invoiceNumber: string;
-  orderId: string;
   storeId: string;
   storeName: string;
   orderDate: Date;
-  
-  // Tracking data (from ordersSellingTracking)
+
   trackingAmount: number;
   trackingQuantity: number;
   trackingItemCount: number;
-  trackingExists: boolean;
-  
-  // Inventory processing status
-  inventoryProcessed: boolean;
-  fifoSkipped: boolean;
-  
-  // Order flags
-  isOfflineOrder: boolean;
-  isDeferredInventory: boolean;
-  needsInventoryReprocess: boolean;
-  
-  // Severity and priority
-  severity: 'critical' | 'warning' | 'info';
-  priority: number; // 1 (highest) to 5 (lowest)
-  
-  // Recommended actions
-  reconciliationActions: ReconciliationAction[];
-  
-  // Additional context
-  orderDetails?: any;
+  salesQuantity: number;
+  inventoryQuantity: number;
+  missingInventoryItemCount: number;
+  quantityMismatchItemCount: number;
+  issues: ReconciliationIssueCode[];
+  severity: 'critical' | 'high';
   cashierName?: string;
-}
-
-export interface ReconciliationAction {
-  type: 'reprocess_inventory' | 'mark_reconciled';
-  description: string;
-  canAutomate: boolean;
-  riskLevel: 'low' | 'medium' | 'high';
-  estimatedDuration?: string;
 }
 
 export interface ReconciliationAuditLog {
@@ -75,7 +92,5 @@ export interface ReconciliationSummary {
   totalOrders: number;
   ordersWithDiscrepancies: number;
   criticalIssues: number;
-  warningIssues: number;
-  offlineOrders: number;
-  unreconciledOrders: number;
+  highIssues: number;
 }
