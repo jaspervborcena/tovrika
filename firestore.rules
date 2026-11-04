@@ -80,7 +80,7 @@ service cloud.firestore {
         request.resource.data.companyId is string &&
         request.resource.data.storeId is string &&
         request.resource.data.productId is string &&
-        request.resource.data.status in ['completed', 'cancelled', 'returned', 'refunded', 'damaged'];
+        request.resource.data.status in ['completed', 'cancelled', 'returned', 'refunded', 'damaged', 'initial_stock'];
       // Client updates are restricted to their own docs and cannot change status to reconciled/error
       allow update: if isAuthenticated() &&
         resource.data.uid == request.auth.uid &&
@@ -89,6 +89,14 @@ service cloud.firestore {
         !(request.resource.data.status in ['reconciled', 'error']);
       // Allow delete only by the creator
       allow delete: if isAuthenticated() && resource.data.uid == request.auth.uid;
+    }
+
+    match /productSkuReservations/{reservationId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() &&
+        request.resource.data.keys().hasOnly(['createdAt']) &&
+        request.resource.data.createdAt is timestamp;
+      allow update, delete: if false;
     }
 
     // Reconciliation Log - write-only by Functions; readable by authenticated users

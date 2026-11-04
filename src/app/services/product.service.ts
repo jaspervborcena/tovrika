@@ -1108,7 +1108,15 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
       await this.loadProductsRealTime(storeId);
     }
   }
-  async createProduct(productData: Omit<Product, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> {
+  private async getSkuReservationId(storeId: string, skuKey: string): Promise<string> {
+    const key = new TextEncoder().encode(JSON.stringify([storeId, skuKey]));
+    const digest = await globalThis.crypto.subtle.digest('SHA-256', key);
+    return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('');
+  }
+
+  async createProduct(
+    productData: Omit<Product, 'id' | 'createdAt' | 'updatedAt'> & { inventory?: ProductInventory[] }
+  ): Promise<string> {
     console.log('🚀 Starting atomic product creation with transaction...');
     
     try {
@@ -1121,11 +1129,9 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
       const companyId = await this.waitForAuth();
       
       // Clean undefined values that Firestore doesn't accept
-      const invArr = Array.isArray((productData as any).inventory) ? (productData as any).inventory : [];
+      const { uid, inventory: initialInventory, ...productDataWithoutUid } = productData;
+      const invArr = Array.isArray(initialInventory) ? initialInventory : [];
       console.log('📦 Initial inventory batches:', invArr.length);
-      
-      // Remove uid from productData since we'll add it in the transaction
-      const { uid, ...productDataWithoutUid } = productData;
       
       console.log('📋 Product data received for creation:', {
         category: productData.category,
@@ -1140,6 +1146,7 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
           status: (productData.status || ProductStatus.Active) as ProductStatus
         })
       );
+      baseData.skuId = String(baseData.skuId || '').trim();
       
       console.log('📋 Base data after cleaning undefined values:', {
         category: baseData.category,
@@ -1147,9 +1154,8 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
         hasCategory: !!baseData.category
       });
 
-      // Use batch writes for all-or-nothing product + inventory creation
-      const batch = writeBatch(this.firestore);
-      console.log('📦 Starting batch write for product creation...');
+      // Use a transaction for all-or-nothing product, inventory, and tracking creation.
+      console.log('📦 Preparing product creation transaction...');
 
       // 1. Create product document reference
       const productRef = doc(collection(this.firestore, 'products'));
@@ -1217,7 +1223,7 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
       productPayload.discountType = baseData?.discountType || 'percentage';
       productPayload.discountValue = Number(baseData?.discountValue || 0);
 
-      // 4. Queue product creation in batch
+      // 4. Queue product creation in transaction
       console.log('💾 Final product payload being saved:', {
         id: productId,
         category: productPayload.category,
@@ -1225,11 +1231,13 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
         hasCategory: !!productPayload.category,
         fullPayload: productPayload
       });
-      batch.set(productRef, productPayload);
-      console.log('📝 Product creation queued in batch');
+      const writes: Array<{ ref: ReturnType<typeof doc>; data: Record<string, any> }> = [
+        { ref: productRef, data: productPayload }
+      ];
+      console.log('📝 Product creation queued in transaction');
 
-      // 5. Queue inventory batch creation in batch
-      const batchRefs: string[] = [];
+      // 5. Queue inventory batch and intake tracking documents in the transaction
+      let runningBalance = 0;
       for (const batchItem of invArr) {
         const batchRef = doc(collection(this.firestore, 'productInventory'));
         const batchId = batchRef.id;
@@ -1265,20 +1273,145 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
           totalDeducted: 0
         };
 
-        batch.set(batchRef, batchData);
-        batchRefs.push(batchId);
-        console.log('📦 Batch creation queued in batch:', batchId);
+        writes.push({ ref: batchRef, data: batchData });
+        const quantity = Number(batchData.quantity) || 0;
+        runningBalance += quantity;
+        if (quantity > 0) {
+          const now = new Date();
+          const inventoryTrackingRef = doc(collection(this.firestore, 'inventoryTracking'));
+          writes.push({
+            ref: inventoryTrackingRef,
+            data: {
+              eventType: 'restock',
+              productId,
+              productName: baseData.productName || '',
+              productCode: baseData.productCode || '',
+              skuId: baseData.skuId || productId,
+              batchId,
+              refId: batchId,
+              companyId,
+              storeId: baseData.storeId || '',
+              quantity,
+              costPrice: Number(batchData.costPrice) || 0,
+              batchNumber: String(batchData.batchNumber || ''),
+              runningBalanceTotalStock: runningBalance,
+              deductedAt: now,
+              createdAt: now,
+              deductedBy: currentUser.uid,
+              createdBy: currentUser.uid,
+              note: 'Inventory restock - batch added',
+              isOffline: false,
+              syncStatus: 'SYNCED'
+            }
+          });
+        }
+        console.log('📦 Inventory batch creation queued in transaction:', batchId);
       }
 
-      console.log('✅ Batch prepared - will create product + ' + invArr.length + ' inventory batches');
-      
-      // Commit batch
-      await batch.commit();
-      console.log('🎉 Batch write committed successfully! Product created:', productId);
+      const skuId = String(baseData.skuId || '').trim();
+      const skuKey = skuId.toLowerCase();
+      const storeId = String(baseData.storeId || '').trim();
+      const reservationId = skuId && storeId ? await this.getSkuReservationId(storeId, skuKey) : null;
+      const reservationRef = reservationId
+        ? doc(this.firestore, 'productSkuReservations', reservationId)
+        : null;
+      const reservationData = reservationRef ? {
+        createdAt: new Date()
+      } : null;
+      const initialStockQuantity = Math.max(0, Number(totalStock) || 0);
+      const initialStockTrackingRef = invArr.length > 0 && productPayload.isStockTracked &&
+        initialStockQuantity > 0 && skuId && storeId
+        ? doc(collection(this.firestore, 'ordersSellingTracking'))
+        : null;
+      const now = new Date();
+      const initialStockTrackingData = initialStockTrackingRef ? {
+        eventType: 'INITIAL_STOCK',
+        status: 'initial_stock',
+        companyId,
+        storeId,
+        productId,
+        productName: baseData.productName || '',
+        productCode: baseData.productCode || '',
+        skuId,
+        cost: Number(productPayload.costPrice || 0),
+        price: 0,
+        quantity: initialStockQuantity,
+        total: 0,
+        runningBalanceTotalStock: initialStockQuantity,
+        isStockTracked: true,
+        uid: currentUser.uid,
+        createdBy: currentUser.uid,
+        updatedBy: currentUser.uid,
+        createdAt: now,
+        updatedAt: now,
+      } : null;
+
+      const assertSkuIsAvailable = async (): Promise<void> => {
+        if (!skuId || !storeId) return;
+        const cachedDuplicate = this.products().find(product =>
+          String(product.skuId || '').trim().toLowerCase() === skuKey &&
+          String(product.storeId || '').trim() === storeId
+        );
+        if (cachedDuplicate) {
+          throw new Error(`SKU "${skuId}" already exists in this store.`);
+        }
+
+        const existingSkuProducts = await getDocs(query(
+          collection(this.firestore, 'products'),
+          where('uid', '==', currentUser.uid)
+        ));
+        const duplicate = existingSkuProducts.docs.find(snapshot =>
+          String(snapshot.data()?.['skuId'] || '').trim().toLowerCase() === skuKey &&
+          String(snapshot.data()?.['storeId'] || '').trim() === storeId
+        );
+        if (duplicate) {
+          throw new Error(`SKU "${skuId}" already exists in this store.`);
+        }
+      };
+
+      if (navigator.onLine) {
+        await assertSkuIsAvailable();
+        await runTransaction(this.firestore, async transaction => {
+          if (reservationRef) {
+            const reservation = await transaction.get(reservationRef);
+            if (reservation.exists()) {
+              throw new Error(`SKU "${skuId}" has already been used in this store.`);
+            }
+          }
+
+          writes.forEach(write => transaction.set(write.ref, write.data));
+          if (reservationRef && reservationData) {
+            transaction.set(reservationRef, reservationData);
+          }
+          if (initialStockTrackingRef && initialStockTrackingData) {
+            transaction.set(initialStockTrackingRef, initialStockTrackingData);
+          }
+        });
+      } else {
+        if (initialStockTrackingRef) {
+          throw new Error('Connect to the internet before creating a stock-tracked product with initial stock so its store and SKU can be verified.');
+        }
+        if (skuId && storeId && this.products().some(product =>
+          String(product.skuId || '').trim().toLowerCase() === skuKey &&
+          String(product.storeId || '').trim() === storeId
+        )) {
+          throw new Error(`SKU "${skuId}" already exists in this store.`);
+        }
+
+        const batch = writeBatch(this.firestore);
+        writes.forEach(write => batch.set(write.ref, write.data));
+        if (initialStockTrackingRef && initialStockTrackingData) {
+          batch.set(initialStockTrackingRef, initialStockTrackingData);
+        }
+        await batch.commit();
+      }
+
+      console.log('🎉 Product creation committed successfully:', productId);
       
       // Update the local cache immediately for optimistic updates
       const newLocalProd: Product = {
-        ...productData,
+        ...productDataWithoutUid,
+        uid: currentUser.uid,
         id: productId,
         companyId,
         totalStock,

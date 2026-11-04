@@ -33,6 +33,8 @@ Example shape (optional fields omitted):
 
 Older `inventoryTracking` documents may not have `eventType`; the interface describes current records and does not migrate stored data. Do not infer an event type solely from `orderId` or a note. Audit legacy documents and decide whether to backfill or continue treating them as legacy before relying on event-type filters for historical reporting.
 
+`INITIAL_STOCK` is a separate `eventType` on `ordersSellingTracking`, not an `InventoryEventType` value. It records positive opening stock for a newly created, stock-tracked SKU (uniqueness scoped by store and SKU). Its status is `initial_stock`, and it has no order or invoice reference, so completed-sale queries do not include it. Product creation with opening stock requires an online connection so the SKU can be checked and reserved transactionally.
+
 ## Verification
 
 - Verify completed FIFO and non-batch deductions are recorded as `completed`.

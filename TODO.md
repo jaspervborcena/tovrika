@@ -11,6 +11,7 @@ This file tracks recently completed work and the next development tasks. Update 
 - [x] Use deterministic per-sale-line `inventorySaleLocks` as the idempotency marker, written atomically with batch and audit updates.
 - [x] Save offline sale lines in the SQLite document queue, sync them when online, and retry inventory processing without a separate request collection or sale-line inventory status.
 - [x] Skip inventory deductions and inventory locks for products with `isStockTracked` set to `false`.
+- [x] Record positive opening stock as a non-sale `INITIAL_STOCK` event when a new store/SKU is created, including duplicate and bulk-product workflows.
 - [x] Reconcile completed tracked sale lines that lack their processing lock.
 - [x] Load authenticated reconciliation summaries for the selected store and date range.
 - [x] Add the reconciliation invoice child grid using the authenticated invoice-details API: item-level sales/inventory comparison and inventory ledger rows.
@@ -26,6 +27,7 @@ This file tracks recently completed work and the next development tasks. Update 
 - [ ] Deploy `get_recon_invoice_details_bq` to Dev and Prod, then verify its authenticated response contract; provide a safe order identifier and server-supported correction workflow before adding reconciliation actions.
 - [ ] Clarify and align `stockMovement` semantics for `sale` snapshots; the interface comment says false for snapshots that do not change stock, while the current non-stock-tracked sale flow writes true and records no FIFO batch movement.
 - [ ] Audit legacy `inventoryTracking` documents without `eventType` and decide whether to backfill them or keep them as legacy records.
+- [ ] Migrate existing store/SKU combinations into reservations, then deploy the Firestore rules, BigQuery schema, and trigger updates before relying on `INITIAL_STOCK` production writes.
 
 ### Reliability and coverage
 
