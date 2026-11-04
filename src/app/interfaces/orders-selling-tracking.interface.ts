@@ -3,7 +3,8 @@ import {OrderDetailsStatus} from './order-details.interface';
  * Document structure for ordersSellingTracking collection
  * Fields requested: batchNumber, companyId, createdAt, createdBy, orderId, status,
  * storeId, uid, updatedAt, updatedBy, itemIndex, productId, productName, price,
- * quantity, discount, discountType, vat, total, isVatExempt
+ * quantity, discount, discountType, vat, total, isVatExempt. Initial-stock audit
+ * rows use eventType and do not represent an order or sale.
  */
 export interface OrdersSellingTrackingDoc {
   id?: string;
@@ -11,10 +12,11 @@ export interface OrdersSellingTrackingDoc {
   companyId: string;
   createdAt: Date;
   createdBy: string; // uid of creator
-  orderId: string;
+  orderId?: string;
   invoiceNumber?: string;
   customerId?: string;
   status: OrderDetailsStatus | string;
+  eventType?: 'INITIAL_STOCK';
   storeId: string;
   uid?: string; // convenience alias for createdBy (used in security rules)
   updatedAt?: Date;
@@ -26,7 +28,7 @@ export interface OrdersSellingTrackingDoc {
   productId: string;
   itemCode?: string;
   productName?: string;
-  productCode: string;
+  productCode?: string;
   skuId: string;
   cost:number;
   price: number; // unit price
