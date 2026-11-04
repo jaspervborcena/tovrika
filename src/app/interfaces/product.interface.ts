@@ -86,8 +86,10 @@ export interface QuantityAdjustment {
 
 export interface ProductInventory {
   batchId: string;
+  batchNumber?: number;
   quantity: number;
   unitPrice: number;
+  sellingPrice?: number;
   costPrice: number;
   receivedAt: Date;
   expiryDate?: Date;

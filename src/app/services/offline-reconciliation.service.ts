@@ -2,7 +2,9 @@ import { Injectable, inject } from '@angular/core';
 import { Firestore, collection, query, where, getDocs, doc, updateDoc, getDoc, Timestamp, limit, addDoc, runTransaction } from '@angular/fire/firestore';
 import { 
   ReconciliationDiscrepancy, 
-  ReconciliationAction, 
+  ReconciliationInvoiceDetails,
+  ReconciliationInvoiceItem,
+  ReconciliationIssueCode,
   ReconciliationAuditLog, 
   ReconciliationValidation,
   ReconciliationSummary 
@@ -28,7 +30,23 @@ interface ReconSummaryResponse {
   from: string;
   to: string;
   count: number;
-  rows: Array<Record<string, unknown>>;
+  rows: ReconSummaryRow[];
+}
+
+interface ReconSummaryRow {
+  invoiceNumber: string;
+  createdAt: string;
+  cashierName: string | null;
+  totalAmount: number;
+  itemCount: number;
+  salesQty: number;
+  inventoryQty: number;
+  missingInventoryItemCount: number;
+  quantityMismatchItemCount: number;
+  hasInventoryIssue: true;
+  issues: ReconciliationIssueCode[];
+  issueType: ReconciliationIssueCode | 'MULTIPLE';
+  severity: 'critical' | 'high';
 }
 
 @Injectable()
@@ -39,235 +57,34 @@ export class OfflineReconciliationService {
   private networkService = inject(NetworkService);
   private ordersSellingTrackingService = inject(OrdersSellingTrackingService);
 
-  /**
-   * Find offline orders with inventory discrepancies.
-   */
+  /** Map the invoice-level inventory exceptions returned by the reconciliation API. */
   async findDiscrepancies(
     storeId: string,
     startDate: string,
     endDate: string
   ): Promise<ReconciliationDiscrepancy[]> {
-    try {
-      console.log('🔍 Finding discrepancies for store:', storeId, 'from', startDate, 'to', endDate);
+    const [store, rows] = await Promise.all([
+      this.storeService.getStore(storeId),
+      this.fetchReconSummaryRows(storeId, startDate, endDate)
+    ]);
+    const storeName = store?.storeName || 'Unknown Store';
 
-      // Get store name
-      const store = await this.storeService.getStore(storeId);
-      const storeName = store?.storeName || 'Unknown Store';
-
-      const trackingRows = await this.fetchReconSummaryRows(storeId, startDate, endDate);
-      console.log(`📦 Found ${trackingRows.length} stock-tracked rows in date range`);
-
-      const getDateKey = (dateVal: any): string => {
-        const d = dateVal?.toDate ? dateVal.toDate() : new Date(dateVal);
-        return d.toISOString().split('T')[0];
-      };
-
-      // Daily totals for comparison (completed status only)
-      const trackingTotalsByDate = new Map<string, { amount: number; quantity: number }>();
-
-      // Build daily tracking totals first (open/completed status for offline)
-      for (const trackingData of trackingRows) {
-        const status = String(trackingData.status || '').toLowerCase();
-        if (status !== 'completed' && status !== 'open') continue;
-
-        const dateKey = getDateKey(trackingData.createdAt || trackingData.updatedAt || new Date());
-        const prev = trackingTotalsByDate.get(dateKey) || { amount: 0, quantity: 0 };
-        trackingTotalsByDate.set(dateKey, {
-          amount: prev.amount + Number(trackingData.total || 0),
-          quantity: prev.quantity + Number(trackingData.quantity || 0)
-        });
-      }
-
-      // Group by orderId and invoiceNumber
-      const orderMap = new Map<string, {
-        orderId: string;
-        invoiceNumber: string;
-        orderDate: Date;
-        cashierName: string;
-        trackingAmount: number;
-        trackingQuantity: number;
-        trackingItemCount: number;
-        products: Set<string>;
-        isOffline: boolean;
-        hasDeferredInventory: boolean;
-      }>();
-
-      for (const trackingData of trackingRows) {
-        const orderId = trackingData.orderId;
-        const productId = trackingData.productId;
-
-        if (!orderId || !productId) continue;
-
-        // Show offline captures and any completed tracked line without its processed lock.
-        const isOfflineCapture = trackingData._offlineCreated ?? trackingData.isOffline ?? false;
-        let hasDeferredInventory = false;
-        if (trackingData.isStockTracked === true && String(trackingData.status || '').toLowerCase() === 'completed') {
-          const lockId = createInventorySaleLockId(
-            orderId,
-            Number(trackingData.itemIndex ?? 0),
-            String(productId),
-            String(trackingData.itemCode || '')
-          );
-          const lockSnapshot = await getDoc(doc(this.firestore, 'inventorySaleLocks', lockId) as any);
-          hasDeferredInventory = !lockSnapshot.exists();
-        }
-        if (!isOfflineCapture && !hasDeferredInventory) continue;
-
-        if (!orderMap.has(orderId)) {
-          // Get invoice number from orders collection for accuracy
-          let invoiceNumber = trackingData.invoiceNumber;
-          
-          if (!invoiceNumber || invoiceNumber === orderId) {
-            try {
-              const orderRef = doc(this.firestore, 'orders', orderId);
-              const orderSnap = await getDoc(orderRef);
-              if (orderSnap.exists()) {
-                invoiceNumber = orderSnap.data()['invoiceNumber'] || orderId;
-              } else {
-                invoiceNumber = orderId;
-              }
-            } catch (err) {
-              console.warn(`Could not fetch order ${orderId}:`, err);
-              invoiceNumber = orderId;
-            }
-          }
-
-          orderMap.set(orderId, {
-            orderId,
-            invoiceNumber,
-            orderDate: trackingData.createdAt?.toDate ? trackingData.createdAt.toDate() : new Date(trackingData.createdAt),
-            cashierName: trackingData.cashierName || trackingData.userName || 'Unknown',
-            trackingAmount: 0,
-            trackingQuantity: 0,
-            trackingItemCount: 0,
-            products: new Set(),
-            isOffline: isOfflineCapture,
-            hasDeferredInventory
-          });
-        }
-
-        const order = orderMap.get(orderId)!;
-        order.hasDeferredInventory ||= hasDeferredInventory;
-        order.trackingAmount += Number(trackingData.total || 0);
-        order.trackingQuantity += Number(trackingData.quantity || 0);
-        order.trackingItemCount++;
-        order.products.add(productId);
-      }
-
-      const discrepancies: ReconciliationDiscrepancy[] = [];
-
-      for (const [orderId, orderData] of orderMap.entries()) {
-        const invoiceNumber = orderData.invoiceNumber;
-        const orderDateKey = getDateKey(orderData.orderDate);
-        const dailyTracking = trackingTotalsByDate.get(orderDateKey) || { amount: 0, quantity: 0 };
-
-        // Check if inventoryTracking entries exist (FIFO processed)
-        // inventoryTracking records the actual deductions made during FIFO processing
-        let inventoryProcessed = true;
-        let fifoSkipped = false;
-        
-        for (const productId of orderData.products) {
-          const inventoryTrackingQuery = query(
-            collection(this.firestore, 'inventoryTracking'),
-            where('productId', '==', productId),
-            where('orderId', '==', orderId),
-            limit(5)
-          );
-          const inventoryTrackingSnap = await getDocs(inventoryTrackingQuery);
-
-          const hasProcessedTracking = !inventoryTrackingSnap.empty && inventoryTrackingSnap.docs.some(docSnap => {
-            const data = docSnap.data() as any;
-            return !data._offlinePendingFifo;
-          });
-
-          if (!hasProcessedTracking) {
-            inventoryProcessed = false;
-            fifoSkipped = true;
-            break;
-          }
-        }
-
-        const trackingAmount = dailyTracking.amount;
-        const trackingQuantity = dailyTracking.quantity;
-        const trackingExists = true; // We already have tracking data
-
-        const isOfflineOrder = orderData.isOffline;
-
-        // Determine if needs reconciliation
-        const needsInventoryReprocess = orderData.hasDeferredInventory || !inventoryProcessed || fifoSkipped;
-
-        // Only include if there are issues
-        if (needsInventoryReprocess) {
-          // Determine severity
-          let severity: 'critical' | 'warning' | 'info' = 'info';
-          let priority = 3;
-
-          if (!inventoryProcessed) {
-            severity = 'critical';
-            priority = 1;
-          } else if (fifoSkipped) {
-            severity = 'warning';
-            priority = 2;
-          }
-
-          // Build reconciliation actions
-          const actions: ReconciliationAction[] = [];
-
-          if (needsInventoryReprocess) {
-            actions.push({
-              type: 'reprocess_inventory',
-              description: 'Reprocess FIFO inventory deduction for this order',
-              canAutomate: true,
-              riskLevel: 'medium',
-              estimatedDuration: '30 seconds'
-            });
-          }
-
-          actions.push({
-            type: 'mark_reconciled',
-            description: 'Mark order as reconciled after fixing issues',
-            canAutomate: true,
-            riskLevel: 'low',
-            estimatedDuration: '1 second'
-          });
-
-          discrepancies.push({
-            invoiceNumber,
-            orderId,
-            storeId,
-            storeName,
-            orderDate: orderData.orderDate,
-            trackingAmount,
-            trackingQuantity,
-            trackingItemCount: orderData.trackingItemCount,
-            trackingExists,
-            inventoryProcessed,
-            fifoSkipped,
-            isOfflineOrder,
-            isDeferredInventory: orderData.hasDeferredInventory,
-            needsInventoryReprocess,
-            severity,
-            priority,
-            reconciliationActions: actions,
-            orderDetails: undefined,
-            cashierName: orderData.cashierName
-          });
-        }
-      }
-
-      // Sort by priority (highest first), then by date (newest first)
-      discrepancies.sort((a, b) => {
-        if (a.priority !== b.priority) return a.priority - b.priority;
-        return b.orderDate.getTime() - a.orderDate.getTime();
-      });
-
-      console.log(`✅ Found ${discrepancies.length} orders with discrepancies`);
-      return discrepancies;
-
-    } catch (error) {
-      console.error('❌ Error finding discrepancies:', error);
-      throw error;
-    }
+    return rows.map(row => ({
+      invoiceNumber: row.invoiceNumber,
+      storeId,
+      storeName,
+      orderDate: new Date(row.createdAt),
+      trackingAmount: row.totalAmount,
+      trackingQuantity: row.salesQty,
+      trackingItemCount: row.itemCount,
+      salesQuantity: row.salesQty,
+      inventoryQuantity: row.inventoryQty,
+      missingInventoryItemCount: row.missingInventoryItemCount,
+      quantityMismatchItemCount: row.quantityMismatchItemCount,
+      issues: row.issues,
+      severity: row.severity,
+      cashierName: row.cashierName || 'Unknown'
+    }));
   }
 
   /**
@@ -285,33 +102,77 @@ export class OfflineReconciliationService {
       totalOrders: discrepancies.length,
       ordersWithDiscrepancies: discrepancies.length,
       criticalIssues: discrepancies.filter(d => d.severity === 'critical').length,
-      warningIssues: discrepancies.filter(d => d.severity === 'warning').length,
-      offlineOrders: discrepancies.filter(d => d.isOfflineOrder).length,
-      unreconciledOrders: discrepancies.filter(d => d.needsInventoryReprocess).length
+      highIssues: discrepancies.filter(d => d.severity === 'high').length
     };
+  }
+
+  async getInvoiceDetails(storeId: string, invoiceNumber: string): Promise<ReconciliationInvoiceItem[]> {
+    const endpoint = environment.api?.reconciliationInvoiceDetailsApi;
+    if (!endpoint) {
+      throw new ReconSummaryApiError(500, 'Reconciliation invoice details endpoint is not configured.');
+    }
+
+    await this.authService.waitForAuth();
+    const token = await this.authService.getFirebaseIdToken(true);
+    if (!token) {
+      throw new ReconSummaryApiError(401, 'Sign in before loading reconciliation details.');
+    }
+
+    const params = new URLSearchParams({ storeId, invoiceNumber });
+    const response = await fetch(`${endpoint}?${params.toString()}`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (!response.ok) {
+      throw new ReconSummaryApiError(response.status, `Reconciliation details request failed: ${response.status}`);
+    }
+
+    const payload = await response.json() as ReconciliationInvoiceDetails;
+    if (
+      !payload.success ||
+      payload.storeId !== storeId ||
+      payload.invoiceNumber !== invoiceNumber ||
+      !Array.isArray(payload.items)
+    ) {
+      throw new ReconSummaryApiError(500, 'Reconciliation details response was invalid.');
+    }
+
+    return payload.items.map(item => {
+      const numericFields = [
+        item.salesQty,
+        item.salesAmount,
+        item.salesLineCount,
+        item.inventoryQty,
+        item.quantityDifference
+      ];
+      const validInventoryRows = Array.isArray(item.inventoryRows) &&
+        item.inventoryRows.every(row =>
+          typeof row.inventoryTrackingId === 'string' &&
+          (row.quantity === null || typeof row.quantity === 'number') &&
+          (row.runningBalanceTotalStock === null || typeof row.runningBalanceTotalStock === 'number')
+        );
+      if (
+        item.invoiceNumber !== invoiceNumber ||
+        numericFields.some(value => typeof value !== 'number' || !Number.isFinite(value)) ||
+        !['NO_INVENTORY', 'QTY_MISMATCH', 'OK'].includes(item.issueType) ||
+        !validInventoryRows
+      ) {
+        throw new ReconSummaryApiError(500, 'Reconciliation details API returned an invalid item row.');
+      }
+      return item;
+    });
   }
 
   private async fetchReconSummaryRows(
     storeId: string,
     from: string,
     to: string
-  ): Promise<any[]> {
+  ): Promise<ReconSummaryRow[]> {
     const endpoint = environment.api?.reconciliationSummaryApi;
-    const fallbackEndpoint = environment.api?.reconciliationSummaryFallbackApi;
     if (!endpoint) {
       throw new ReconSummaryApiError(500, 'Reconciliation summary endpoint is not configured.');
     }
 
-    try {
-      return await this.requestReconSummaryRows(endpoint, storeId, from, to);
-    } catch (primaryError) {
-      if (!fallbackEndpoint || fallbackEndpoint === endpoint) {
-        throw primaryError;
-      }
-
-      console.warn('Primary reconciliation summary API failed; trying fallback endpoint.', primaryError);
-      return this.requestReconSummaryRows(fallbackEndpoint, storeId, from, to);
-    }
+    return this.requestReconSummaryRows(endpoint, storeId, from, to);
   }
 
   private async requestReconSummaryRows(
@@ -319,7 +180,7 @@ export class OfflineReconciliationService {
     storeId: string,
     from: string,
     to: string
-  ): Promise<any[]> {
+  ): Promise<ReconSummaryRow[]> {
     await this.authService.waitForAuth();
     const token = await this.authService.getFirebaseIdToken(true);
     if (!token) {
@@ -341,25 +202,29 @@ export class OfflineReconciliationService {
     }
 
     console.log('Reconciliation summary API result:', payload);
-    return payload.rows.map(row => ({
-      ...row,
-      orderId: row['orderId'] ?? row['order_id'],
-      itemIndex: row['itemIndex'] ?? row['item_index'],
-      productId: row['productId'] ?? row['product_id'],
-      itemCode: row['itemCode'] ?? row['item_code'],
-      createdAt: row['createdAt'] ?? row['created_at'],
-      updatedAt: row['updatedAt'] ?? row['updated_at'],
-      storeId: row['storeId'] ?? row['store_id'],
-      invoiceNumber: row['invoiceNumber'] ?? row['invoice_number'],
-      cashierName: row['cashierName'] ?? row['cashier_name'],
-      userName: row['userName'] ?? row['user_name'],
-      isStockTracked: row['isStockTracked'] ?? row['is_stock_tracked'],
-      quantity: row['quantity'] ?? row['soldQuantity'] ?? row['sold_quantity'],
-      total: row['total'] ?? row['totalAmount'] ?? row['total_amount'],
-      _offlineCreated: row['_offlineCreated'] ?? row['_offline_created'],
-      isOffline: row['isOffline'] ?? row['is_offline'],
-      batchReconciliationStatus: row['batchReconciliationStatus'] ?? row['batch_reconciliation_status']
-    }));
+    return payload.rows.map(row => {
+      const numericFields = [
+        row.totalAmount,
+        row.itemCount,
+        row.salesQty,
+        row.inventoryQty,
+        row.missingInventoryItemCount,
+        row.quantityMismatchItemCount
+      ];
+      const validIssues = Array.isArray(row.issues) &&
+        row.issues.every(issue => issue === 'NO_INVENTORY' || issue === 'QTY_MISMATCH');
+      if (
+        typeof row.invoiceNumber !== 'string' ||
+        typeof row.createdAt !== 'string' ||
+        !Number.isFinite(Date.parse(row.createdAt)) ||
+        numericFields.some(value => typeof value !== 'number' || !Number.isFinite(value)) ||
+        !validIssues ||
+        (row.severity !== 'critical' && row.severity !== 'high')
+      ) {
+        throw new ReconSummaryApiError(500, 'Reconciliation summary API returned an invalid invoice row.');
+      }
+      return row;
+    });
   }
 
   /**

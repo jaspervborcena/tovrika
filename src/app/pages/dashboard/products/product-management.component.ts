@@ -3598,9 +3598,7 @@ export class ProductManagementComponent implements OnInit {
           throw new Error('User not authenticated');
         }
         
-        const currentPermission = this.authService.getCurrentPermission();
-
-        const newProduct: Omit<Product, 'id' | 'createdAt' | 'updatedAt'> = ProductService.normalizeProductTaxAndDiscountFields({
+        const newProduct = ProductService.normalizeProductTaxAndDiscountFields({
           uid: currentUser.uid,  // Required by Product interface
           productName: formValue.productName,
           description: formValue.description,
@@ -3629,48 +3627,27 @@ export class ProductManagementComponent implements OnInit {
           // Product tags
           tags: this.selectedTagIds(),
           tagLabels: this.getSelectedTagLabels(),
-          
+          inventory: initialBatch && formValue.isStockTracked ? [{
+            batchId: initialBatch.batchId,
+            quantity: initialBatch.quantity,
+            unitPrice: computedOriginalPrice,
+            costPrice: initialBatch.costPrice,
+            sellingPrice: computedSellingPrice,
+            receivedAt: initialBatch.receivedAt,
+            expiryDate: initialBatch.expiryDate,
+            supplier: initialBatch.supplier,
+            status: ProductStatus.Active,
+            unitType: formValue.unitType || 'pieces',
+            isVatApplicable: formValue.isVatApplicable || false,
+            vatRate: formValue.vatRate ?? AppConstants.DEFAULT_VAT_RATE,
+            hasDiscount: !!formValue.hasDiscount,
+            discountType: formValue.discountType || 'percentage',
+            discountValue: Number(formValue.discountValue || 0)
+          }] : [],
           status: ProductStatus.Active
         });
 
         productId = await this.productService.createProduct(newProduct);
-        
-        // If initial batch exists AND stock tracking is enabled, create it in separate collection and recompute summary
-        if (hasInitial && productId && formValue.isStockTracked) {
-          try {
-            const batchData = {
-              batchId: initialBatch!.batchId,
-              quantity: initialBatch!.quantity,
-              unitPrice: computedOriginalPrice,
-              sellingPrice: computedSellingPrice,
-              costPrice: initialBatch!.costPrice,
-              receivedAt: initialBatch!.receivedAt,
-              expiryDate: initialBatch!.expiryDate,
-              supplier: initialBatch!.supplier,
-              status: ProductStatus.Active,
-              unitType: formValue.unitType || 'pieces',
-              // Preserve VAT metadata on the batch
-              isVatApplicable: formValue.isVatApplicable || false,
-              vatRate: formValue.vatRate ?? AppConstants.DEFAULT_VAT_RATE,
-              companyId: companyId,
-              storeId: storeId,
-              productId: productId
-            };
-            
-            await this.inventoryDataService.addBatch(productId, batchData);
-            
-            // Update product to set isStockTracked to true since inventory now exists
-            await this.productService.updateProduct(productId, { isStockTracked: true });
-          } catch (batchError) {
-            console.error('❌ Failed to create initial inventory batch:', batchError);
-            console.error('❌ Error details:', {
-              message: batchError instanceof Error ? batchError.message : 'Unknown error',
-              stack: batchError instanceof Error ? batchError.stack : undefined,
-              batchData: initialBatch
-            });
-            throw batchError; // Re-throw to show error to user
-          }
-        }
       }
 
       // Refresh products to show the newly created/updated product with correct data
