@@ -43,7 +43,8 @@ export class OrdersSellingTrackingService {
       productName?: string;
       quantity: number;
       isStockTracked: boolean;
-    }>
+    }>,
+    storeLabel: string = storeId
   ): Promise<string[]> {
     if (!this.networkService.isOnline()) {
       return [];
@@ -74,23 +75,45 @@ export class OrdersSellingTrackingService {
         continue;
       }
 
-      const activeBatchQuantity = batchesSnapshot.docs.reduce((total, batchSnapshot) => {
+      const activeBatches = batchesSnapshot.docs.filter(batchSnapshot => {
         const batch = batchSnapshot.data() as any;
-        if (batch.companyId !== companyId || String(batch.status || '').toLowerCase() !== 'active') return total;
+        return String(batch.status || '').toLowerCase() === 'active';
+      });
+      const activeBatchQuantityInStore = activeBatches.reduce((total, batchSnapshot) => {
+        const batch = batchSnapshot.data() as any;
         return total + Math.max(0, Number(batch.quantity || 0));
       }, 0);
+      const activeBatchesForCompany = activeBatches.filter(batchSnapshot =>
+        String((batchSnapshot.data() as any).companyId || '') === companyId
+      );
+      const activeBatchQuantity = activeBatchesForCompany.reduce((total, batchSnapshot) => {
+        const batch = batchSnapshot.data() as any;
+        return total + Math.max(0, Number(batch.quantity || 0));
+      }, 0);
+      const activeBatchesExcludedByCompany = activeBatches.length - activeBatchesForCompany.length;
       const pendingBatchDeductionQty = Math.max(0, Number(product.pendingBatchDeductionQty || 0));
       const availableBatchQuantity = Math.max(0, activeBatchQuantity - pendingBatchDeductionQty);
       const productTotalStock = Math.max(0, Number(product.totalStock || 0));
       const legacyStock = Number(product.stock || 0);
+      const batchLookupNote = activeBatchQuantity === 0
+        ? batchesSnapshot.docs.length === 0
+          ? 'Firestore returned no batches for this product and store; verify the Firebase project, product ID, and store ID.'
+          : `Firestore returned ${batchesSnapshot.docs.length} batch record(s); active quantity in this store was ${activeBatchQuantityInStore}` +
+            (activeBatchesExcludedByCompany > 0
+              ? `, but ${activeBatchesExcludedByCompany} active batch record(s) belong to a different company.`
+              : ', with no active quantity matching this company.')
+        : '';
       const mismatch = Math.abs(productTotalStock - availableBatchQuantity) > 1e-9;
       if (mismatch) {
         console.warn('Checkout stock summary differs from active FIFO batches:', {
           productCode,
           productId,
           storeId,
+          storeLabel,
           productTotalStock,
           activeBatchQuantity,
+          activeBatchQuantityInStore,
+          activeBatchesExcludedByCompany,
           pendingBatchDeductionQty,
           availableBatchQuantity,
           legacyStock
@@ -101,8 +124,9 @@ export class OrdersSellingTrackingService {
         const legacyStockNote = legacyStock !== productTotalStock ? `; legacy stock field: ${legacyStock}` : '';
         errors.push(
           `${productCode}: insufficient stock for ${item.quantity} requested. Product total stock: ${productTotalStock}${legacyStockNote}; ` +
-          `active FIFO batch stock in store ${storeId}: ${activeBatchQuantity}; ` +
+          `active FIFO batch stock in ${storeLabel}: ${activeBatchQuantity}; ` +
           `pending batch deductions: ${pendingBatchDeductionQty}; available batch stock: ${availableBatchQuantity}. ` +
+          `${batchLookupNote ? `${batchLookupNote} ` : ''}` +
           `Manual stock reconciliation is required; no stock was changed and payment was not processed.`
         );
       }

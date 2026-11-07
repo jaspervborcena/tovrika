@@ -24,6 +24,7 @@ This file tracks recently completed work and the next development tasks. Update 
 
 - [ ] Validate return and refund adjustments across invoices and summary reports.
 - [ ] Harden damage and cancellation handling so inventory, tracking, and accounting stay consistent through the full adjustment lifecycle.
+- [ ] Add a manual stock-adjustment event owned by Inventory: record quantity delta, resulting balance, reason, actor, and timestamp in `inventoryTracking`; let Reconciliation surface discrepancies and route approved corrections through Inventory, and keep stock changes out of product-catalog edits and `ordersSellingTracking`.
 - [ ] Deploy `get_recon_invoice_details_bq` to Dev and Prod, then verify its authenticated response contract; provide a safe order identifier and server-supported correction workflow before adding reconciliation actions.
 - [ ] Clarify and align `stockMovement` semantics for `sale` snapshots; the interface comment says false for snapshots that do not change stock, while the current non-stock-tracked sale flow writes true and records no FIFO batch movement.
 - [ ] Audit legacy `inventoryTracking` documents without `eventType` and decide whether to backfill them or keep them as legacy records.
