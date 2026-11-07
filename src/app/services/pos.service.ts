@@ -574,7 +574,11 @@ export class PosService {
           stockErrors = await this.ordersSellingTrackingService.validateOnlineCheckoutStock(
             company.id || '',
             storeId,
-            stockValidationItems
+            stockValidationItems,
+            [
+              store.storeCode?.trim(),
+              store.storeName?.trim() || store.branchName?.trim()
+            ].filter(Boolean).join(' - ') || storeId
           );
         } catch (error) {
           if (this.networkService.isOnline()) throw error;

@@ -35,9 +35,14 @@ Older `inventoryTracking` documents may not have `eventType`; the interface desc
 
 `INITIAL_STOCK` is a separate `eventType` on `ordersSellingTracking`, not an `InventoryEventType` value. It records positive opening stock for a newly created, stock-tracked SKU (uniqueness scoped by store and SKU). Its status is `initial_stock`, and it has no order or invoice reference, so completed-sale queries do not include it. Product creation with opening stock requires an online connection so the SKU can be checked and reserved transactionally.
 
+## Planned: manual stock adjustment
+
+A manual stock adjustment is not implemented as an `InventoryEventType` yet. The planned event belongs to Inventory and should record the quantity delta, resulting stock balance, reason, actor, and timestamp in `inventoryTracking`. Reconciliation may identify a discrepancy and initiate the correction, but the actual stock change should use the Inventory workflow. Product catalog edits should not perform stock adjustments, and adjustment events should not be written to `ordersSellingTracking`.
+
 ## Verification
 
 - Verify completed FIFO and non-batch deductions are recorded as `completed`.
 - Verify non-stock-tracked completed sales produce a `sale` snapshot with sale and price details and no FIFO batch allocation.
 - Verify damage, restock, and batch update operations produce `damage`, `restock`, and `update` records respectively.
+- When manual adjustment is implemented, verify its audit record and that Reconciliation routes corrections through Inventory without creating a sale record.
 - Check that reports handle legacy documents without `eventType`.
