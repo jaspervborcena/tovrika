@@ -1690,12 +1690,9 @@ import * as XLSX from 'xlsx';
                     type="checkbox" 
                     id="isStockTracked"
                     formControlName="isStockTracked"
-                    [disabled]="isStockTrackingControlDisabled()"
                     style="width:16px; height:16px; cursor:pointer;"/>
                   <label for="isStockTracked" style="margin:0; cursor:pointer;">
                     📦 Keep track of product quantities and inventory
-                    <span *ngIf="isStockTrackingControlDisabled() && selectedProduct?.isStockTracked === true">(locked because inventory tracking is enabled)</span>
-                    <span *ngIf="isStockTrackingControlDisabled() && selectedProduct?.isStockTracked !== true">(status unavailable until product data is refreshed)</span>
                   </label>
                 </div>
 
@@ -3149,10 +3146,12 @@ export class ProductManagementComponent implements OnInit {
   async openEditModal(product: Product): Promise<void> {
     this.isEditMode = true;
     this.selectedProduct = product;
-    if (product.id && product.isStockTracked !== true && navigator.onLine) {
+    const productId = product.id;
+    if (productId && navigator.onLine) {
       try {
-        await this.productService.resolveStockTracking(product.id);
-        product = this.productService.getProduct(product.id) || product;
+        const isStockTracked = await this.productService.resolveStockTracking(productId);
+        product = { ...product, isStockTracked };
+        this.productService.applyLocalPatch(productId, { isStockTracked });
         this.selectedProduct = product;
       } catch (error) {
         console.error('Failed to resolve product stock-tracking status before editing:', error);
@@ -3476,10 +3475,7 @@ export class ProductManagementComponent implements OnInit {
           barcodeId: formValue.barcodeId,
           imageUrl: formValue.imageUrl,
           isFavorite: !!formValue.isFavorite,
-          // isStockTracked: Once true (has inventory), cannot be set back to false
-          isStockTracked: typeof this.selectedProduct.isStockTracked !== 'boolean'
-            ? undefined
-            : this.selectedProduct.isStockTracked === true || !!formValue.isStockTracked,
+          isStockTracked: formValue.isStockTracked === true,
           costPrice: Number(formValue.costPrice ?? this.selectedProduct.costPrice ?? 0),
           // Tax and Discount Fields
           isVatApplicable: formValue.isVatApplicable || false,
@@ -4589,13 +4585,6 @@ export class ProductManagementComponent implements OnInit {
 
   displayPrice(product: Product): number {
     return product.sellingPrice;
-  }
-
-  isStockTrackingControlDisabled(): boolean {
-    return this.isEditMode && (
-      this.selectedProduct?.isStockTracked === true ||
-      typeof this.selectedProduct?.isStockTracked !== 'boolean'
-    );
   }
 
   // Category Autocomplete Properties and Methods
