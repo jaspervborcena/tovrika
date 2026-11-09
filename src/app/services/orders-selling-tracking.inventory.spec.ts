@@ -99,6 +99,22 @@ describe('OrdersSellingTrackingService inventory transaction', () => {
     TestBed.resetTestingModule();
   });
 
+  it('skips online stock validation when tracking is false or unknown', async () => {
+    const errors = await service.validateOnlineCheckoutStock('company-1', 'store-1', [
+      {
+        productId: 'untracked-product',
+        quantity: 1,
+        isStockTracked: false
+      },
+      {
+        productId: 'legacy-product',
+        quantity: 1
+      }
+    ]);
+
+    expect(errors).toEqual([]);
+  });
+
   it('commits FIFO batch deductions, allocation audits, and the sale-line lock in one transaction', async () => {
     const result = await (service as any).logSaleAndAdjustStockAtomic({
       companyId: 'company-1',

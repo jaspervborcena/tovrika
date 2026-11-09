@@ -42,7 +42,7 @@ export class OrdersSellingTrackingService {
       productCode?: string;
       productName?: string;
       quantity: number;
-      isStockTracked: boolean;
+      isStockTracked?: boolean;
     }>,
     storeLabel: string = storeId
   ): Promise<string[]> {
@@ -52,7 +52,7 @@ export class OrdersSellingTrackingService {
 
     const quantitiesByProduct = new Map<string, { quantity: number; productCode?: string; productName?: string }>();
     for (const item of items) {
-      if (!item.isStockTracked) continue;
+      if (item.isStockTracked !== true) continue;
       const current = quantitiesByProduct.get(item.productId);
       quantitiesByProduct.set(item.productId, {
         quantity: (current?.quantity || 0) + Math.max(0, Number(item.quantity || 0)),

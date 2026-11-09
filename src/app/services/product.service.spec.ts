@@ -8,10 +8,10 @@ describe('ProductService normalization', () => {
     expect(ProductService.normalizeStockTrackingFlag(undefined)).toBeUndefined();
   });
 
-  it('treats product stock or an inventory batch as tracked even if the stored flag is false', () => {
-    expect(ProductService.resolveStockTrackingFlag(false, 0, false)).toBeFalse();
-    expect(ProductService.resolveStockTrackingFlag(undefined, 4, false)).toBeTrue();
-    expect(ProductService.resolveStockTrackingFlag(false, 0, true)).toBeTrue();
+  it('tracks stock only when the product flag is explicitly true', () => {
+    expect(ProductService.resolveStockTrackingFlag(false)).toBeFalse();
+    expect(ProductService.resolveStockTrackingFlag(true)).toBeTrue();
+    expect(ProductService.resolveStockTrackingFlag(undefined)).toBeFalse();
   });
 
   it('should zero VAT and discount values when their toggles are off', () => {

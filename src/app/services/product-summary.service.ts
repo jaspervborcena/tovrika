@@ -148,9 +148,7 @@ export class ProductSummaryService {
     const currentProductData = prodSnap.exists() ? prodSnap.data() : null;
     const pendingBatchDeductionQty = Number(currentProductData?.pendingBatchDeductionQty || 0);
     const availableTotalStock = Math.max(0, totalStock - pendingBatchDeductionQty);
-    // Keep live stock updates active whenever the product still carries stock,
-    // even if the legacy isStockTracked flag was left false.
-    const isStockTracked = currentProductData?.isStockTracked === true || totalStock > 0 || activeBatches.length > 0;
+    const isStockTracked = currentProductData?.isStockTracked === true;
     
     // Build payload - only update stock if isStockTracked is true
     const payload: any = {
@@ -161,10 +159,6 @@ export class ProductSummaryService {
       updatedBy: currentUser.uid
     };
 
-    if (isStockTracked) {
-      payload.isStockTracked = true;
-    }
-    
     // Only overwrite stock and prices if product uses batch/stock tracking
     if (isStockTracked) {
       payload.totalStock = availableTotalStock;
