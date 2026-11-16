@@ -1,7 +1,7 @@
 import { Component, inject, OnInit, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { OfflineReconciliationService, ReconSummaryApiError } from '../../../services/offline-reconciliation.service';
+import { ReconciliationService, ReconSummaryApiError } from '../../../services/reconciliation.service';
 import { StoreService, formatStoreDisplayName } from '../../../services/store.service';
 import { ReportPeriod, StoreSelectionService } from '../../../services/store-selection.service';
 import { resolvePeriodDateRange } from '../../../services/report-period.utils';
@@ -18,15 +18,15 @@ import {
 } from '../../../shared/components/confirmation-dialog/confirmation-dialog.component';
 
 @Component({
-  selector: 'app-offline-order-reconciliation',
+  selector: 'app-reconciliation',
   standalone: true,
   imports: [CommonModule, FormsModule, ConfirmationDialogComponent],
-  templateUrl: './offline-order-reconciliation.component.html',
-  styleUrl: './offline-order-reconciliation.component.scss',
-  providers: [OfflineReconciliationService]
+  templateUrl: './reconciliation.component.html',
+  styleUrl: './reconciliation.component.scss',
+  providers: [ReconciliationService]
 })
-export class OfflineOrderReconciliationComponent implements OnInit {
-  private reconciliationService = inject(OfflineReconciliationService);
+export class ReconciliationComponent implements OnInit {
+  private reconciliationService = inject(ReconciliationService);
   private storeService = inject(StoreService);
   private storeSelectionService = inject(StoreSelectionService);
   private networkService = inject(NetworkService);
