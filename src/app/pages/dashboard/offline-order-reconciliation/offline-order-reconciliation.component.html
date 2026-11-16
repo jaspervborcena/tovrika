@@ -327,7 +327,7 @@
                     <button
                       *ngIf="item.issueType === 'NO_INVENTORY'"
                       class="fix-inventory-btn"
-                      (click)="fixMissingInventory(item)"
+                      (click)="requestMissingInventoryFix(item)"
                       [disabled]="!canFixInventory"
                       [attr.aria-label]="'Fix inventory for ' + (item.productName || item.itemCode || 'item')">
                       {{ fixingInventory ? 'Fixing...' : 'Fix inventory' }}
@@ -355,4 +355,10 @@
       </div>
     </div>
   </div>
+  <app-confirmation-dialog
+    *ngIf="confirmationDialogData()"
+    [dialogData]="confirmationDialogData()!"
+    (confirmed)="onInventoryFixConfirmed()"
+    (cancelled)="onInventoryFixCancelled()">
+  </app-confirmation-dialog>
 </div>

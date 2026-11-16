@@ -212,7 +212,7 @@ export class OrdersSellingTrackingService {
     });
   }
 
-  async processPendingInventoryForOrder(orderId: string): Promise<{
+  async processPendingInventoryForOrder(orderId: string, options: { trackedOnly?: boolean } = {}): Promise<{
     processed: number;
     skipped: number;
     errors: Array<{ productId: string; productCode?: string; productName?: string; error: string }>;
@@ -235,7 +235,8 @@ export class OrdersSellingTrackingService {
       }))
       .filter(line =>
         String(line.data.status || '').toLowerCase() === 'completed' &&
-        typeof line.data.isStockTracked === 'boolean'
+        typeof line.data.isStockTracked === 'boolean' &&
+        (!options.trackedOnly || line.data.isStockTracked === true)
       )
       .sort((left, right) => {
         const leftDate = left.data.createdAt?.toDate?.() ?? new Date(left.data.createdAt || 0);
@@ -247,11 +248,36 @@ export class OrdersSellingTrackingService {
     let processed = 0;
     let skipped = 0;
     const errors: Array<{ productId: string; productCode?: string; productName?: string; error: string }> = [];
+    const inventoryQuery = query(
+      collection(this.firestore, 'inventoryTracking'),
+      where('orderId', '==', orderId)
+    );
+    const inventorySnapshot = await getDocs(inventoryQuery as any);
+    const inventoryRows = inventorySnapshot.docs.map(snapshot => snapshot.data() as any);
+
     for (const line of pendingLines) {
       const productId = String(line.data.productId || '');
       const cachedProduct = this.productService.getProduct(productId);
       const productCode = String(line.data.productCode || cachedProduct?.productCode || '');
       const productName = String(line.data.productName || cachedProduct?.productName || '');
+      if (line.data.isStockTracked === true) {
+        const ledgerQuantity = this.getLedgerQuantityForSaleLine(inventoryRows, line);
+        const saleQuantity = Math.max(0, Number(line.data.quantity || 0));
+        if (ledgerQuantity >= saleQuantity) {
+          skipped++;
+          continue;
+        }
+        if (ledgerQuantity > 0) {
+          errors.push({
+            productId,
+            productCode,
+            productName,
+            error: `Inventory ledger contains ${ledgerQuantity} of ${saleQuantity} units; refusing to deduct the sale line again.`
+          });
+          continue;
+        }
+      }
+
       const result = await this.logSaleAndAdjustStockAtomic({
         companyId: String(line.data.companyId || ''),
         storeId: String(line.data.storeId || ''),
@@ -310,6 +336,28 @@ export class OrdersSellingTrackingService {
     }
 
     return { processed, skipped, errors };
+  }
+
+  private getLedgerQuantityForSaleLine(
+    inventoryRows: ReadonlyArray<Record<string, any>>,
+    line: { id: string; itemIndex: number; data: Record<string, any> }
+  ): number {
+    return inventoryRows
+      .filter(row =>
+        String(row['eventType'] || '').toLowerCase() === 'completed' &&
+        String(row['storeId'] || '') === String(line.data['storeId'] || '') &&
+        String(row['productId'] || '') === String(line.data['productId'] || '') &&
+        (
+          row['saleTrackingId'] === line.id ||
+          (!row['saleTrackingId'] &&
+            Number(row['saleLineIndex']) === line.itemIndex &&
+            String(row['itemCode'] || '') === String(line.data['itemCode'] || ''))
+        )
+      )
+      .reduce((total, row) => {
+        const quantity = Number(row['quantity']);
+        return total + (Number.isFinite(quantity) && quantity > 0 ? quantity : 0);
+      }, 0);
   }
 
   private async hasTrackingStatus(orderId: string, status: string): Promise<boolean> {
