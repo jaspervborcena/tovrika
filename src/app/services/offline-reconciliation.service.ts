@@ -162,6 +162,43 @@ export class OfflineReconciliationService {
     });
   }
 
+  async reprocessInvoiceInventory(
+    storeId: string,
+    invoiceNumber: string
+  ): Promise<{ success: boolean; message: string; error?: any }> {
+    if (!storeId || !invoiceNumber) {
+      return { success: false, message: 'A store and invoice number are required.' };
+    }
+    if (!this.networkService.isOnline()) {
+      return { success: false, message: 'Connect to the internet before fixing inventory.' };
+    }
+
+    try {
+      const ordersQuery = query(
+        collection(this.firestore, 'orders'),
+        where('invoiceNumber', '==', invoiceNumber),
+        where('storeId', '==', storeId),
+        limit(2)
+      );
+      const ordersSnapshot = await getDocs(ordersQuery);
+      if (ordersSnapshot.empty) {
+        return { success: false, message: 'Could not find this invoice in the selected store.' };
+      }
+      if (ordersSnapshot.size > 1) {
+        return { success: false, message: 'More than one order matches this invoice; no inventory was changed.' };
+      }
+
+      return this.reprocessInventory(ordersSnapshot.docs[0].id, invoiceNumber, storeId);
+    } catch (error) {
+      console.error('Error finding invoice for inventory repair:', error);
+      return {
+        success: false,
+        message: `Could not prepare inventory repair: ${error instanceof Error ? error.message : String(error)}`,
+        error
+      };
+    }
+  }
+
   private async fetchReconSummaryRows(
     storeId: string,
     from: string,
@@ -390,7 +427,11 @@ export class OfflineReconciliationService {
   /**
    * Reprocess inventory for an order using existing FIFO logic
    */
-  protected async reprocessInventory(orderId: string): Promise<{ success: boolean; message: string; error?: any }> {
+  protected async reprocessInventory(
+    orderId: string,
+    invoiceNumber = '',
+    storeId = ''
+  ): Promise<{ success: boolean; message: string; error?: any }> {
     try {
       console.log('🔄 Reprocessing inventory for order:', orderId);
       const validation = await this.validateReprocessing(orderId);
@@ -403,7 +444,7 @@ export class OfflineReconciliationService {
       }
       const result = await this.reconcileDeferredInventory(orderId);
       if (!result.success) return result;
-      await this.logReconciliationAction(orderId, '', '', 'inventory_reprocess', {
+      await this.logReconciliationAction(orderId, invoiceNumber, storeId, 'inventory_reprocess', {
         inventoryProcessed: false,
         needsReconciliation: true
       }, {
@@ -434,7 +475,10 @@ export class OfflineReconciliationService {
         (docSnap.data() as any).isStockTracked === true
       );
       if (pendingDocs.length === 0) {
-        return { success: true, message: 'No completed tracked sale lines for this order' };
+        return {
+          success: false,
+          message: 'No completed tracked sale lines were found. No inventory was changed.'
+        };
       }
 
       const orderDetailsQuery = query(

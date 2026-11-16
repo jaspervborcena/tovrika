@@ -39,6 +39,10 @@ export class OfflineOrderReconciliationComponent implements OnInit {
     return this.storeSelectionService.selectedPeriod();
   }
 
+  get canFixInventory(): boolean {
+    return this.networkService.isOnline() && !this.fixingInventory;
+  }
+
   set selectedPeriod(period: ReportPeriod) {
     this.storeSelectionService.setSelectedPeriod(period);
   }
@@ -57,6 +61,9 @@ export class OfflineOrderReconciliationComponent implements OnInit {
   detailRows: ReconciliationInvoiceItem[] = [];
   detailLoading = false;
   detailError: string | null = null;
+  fixingInventory = false;
+  actionMessage: string | null = null;
+  actionError: string | null = null;
   private detailRequestId = 0;
   
   // Filters
@@ -118,7 +125,7 @@ export class OfflineOrderReconciliationComponent implements OnInit {
       return;
     }
 
-    if (!this.networkService.isOnline) {
+    if (!this.networkService.isOnline()) {
       this.errorMessage = 'You are offline. Connect to the internet and retry.';
       this.summary = null;
       return;
@@ -126,6 +133,8 @@ export class OfflineOrderReconciliationComponent implements OnInit {
 
     this.loading = true;
     this.errorMessage = null;
+    this.actionMessage = null;
+    this.actionError = null;
     this.discrepancies = [];
     this.summary = null;
     try {
@@ -200,6 +209,66 @@ export class OfflineOrderReconciliationComponent implements OnInit {
       if (requestId === this.detailRequestId) {
         this.detailLoading = false;
       }
+    }
+  }
+
+  async fixMissingInventory(item: ReconciliationInvoiceItem): Promise<void> {
+    const discrepancy = this.selectedDiscrepancy;
+    if (
+      !discrepancy ||
+      item.issueType !== 'NO_INVENTORY' ||
+      this.fixingInventory ||
+      !this.networkService.isOnline()
+    ) {
+      return;
+    }
+
+    const itemName = item.productName || item.itemCode || 'this item';
+    const confirmed = window.confirm(
+      `Run FIFO inventory reconciliation for unprocessed tracked sale lines on invoice ${discrepancy.invoiceNumber}? This may affect other items on the same invoice.`
+    );
+    if (!confirmed) return;
+
+    this.fixingInventory = true;
+    this.actionMessage = null;
+    this.actionError = null;
+    try {
+      const result = await this.reconciliationService.reprocessInvoiceInventory(
+        discrepancy.storeId,
+        discrepancy.invoiceNumber
+      );
+      if (!result.success) {
+        this.actionError = result.message;
+        return;
+      }
+
+      await this.searchDiscrepancies();
+      try {
+        this.detailRows = await this.reconciliationService.getInvoiceDetails(
+          discrepancy.storeId,
+          discrepancy.invoiceNumber
+        );
+      } catch (error) {
+        console.error('Could not refresh invoice details after inventory repair.', error);
+        this.actionError = 'Inventory reconciliation ran, but updated item details could not be loaded.';
+      }
+
+      const refreshedDiscrepancy = this.discrepancies.find(
+        row => row.invoiceNumber === discrepancy.invoiceNumber
+      );
+      if (refreshedDiscrepancy) {
+        this.selectedDiscrepancy = refreshedDiscrepancy;
+      } else {
+        this.closeDetailModal();
+      }
+      this.actionMessage = `Inventory reconciliation completed for ${itemName}.`;
+    } catch (error) {
+      console.error('Inventory reconciliation failed.', error);
+      this.actionError = error instanceof Error
+        ? error.message
+        : 'Could not fix inventory. Please try again.';
+    } finally {
+      this.fixingInventory = false;
     }
   }
 
