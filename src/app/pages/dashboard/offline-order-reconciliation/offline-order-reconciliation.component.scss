@@ -308,6 +308,46 @@
   box-shadow: 0 2px 4px rgba(79, 70, 229, 0.2);
 }
 
+.fix-inventory-btn {
+  border: 0;
+  border-radius: 6px;
+  padding: 0.5rem 0.75rem;
+  background: #15803d;
+  color: white;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.fix-inventory-btn:hover:not(:disabled) {
+  background: #166534;
+}
+
+.fix-inventory-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.action-result {
+  max-width: 1400px;
+  margin: 0 auto 1rem;
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+}
+
+.action-success {
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  color: #166534;
+}
+
+.action-failure {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #991b1b;
+}
+
 .table-container {
   max-width: 1400px;
   margin: 0 auto;

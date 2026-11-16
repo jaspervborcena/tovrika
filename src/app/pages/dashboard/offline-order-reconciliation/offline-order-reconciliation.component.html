@@ -91,6 +91,13 @@
     <button (click)="searchDiscrepancies()" [disabled]="loading" class="go-button">Retry</button>
   </div>
 
+  <div *ngIf="actionMessage" class="action-result action-success" role="status">
+    {{ actionMessage }}
+  </div>
+  <div *ngIf="actionError" class="action-result action-failure" role="alert">
+    {{ actionError }}
+  </div>
+
   <div *ngIf="loading" class="loading-state" role="status" aria-live="polite">
     Loading reconciliation data...
   </div>
@@ -187,12 +194,12 @@
   <!-- Detail Modal -->
   <div *ngIf="showDetailModal && selectedDiscrepancy" 
        class="modal-overlay"
-       (click)="closeDetailModal()">
+       (click)="!fixingInventory && closeDetailModal()">
     <div class="modal" (click)="$event.stopPropagation()">
       <!-- Modal Header -->
       <div class="modal-header">
         <h3>📋 Reconciliation Details</h3>
-        <button class="close-btn" (click)="closeDetailModal()">×</button>
+        <button class="close-btn" (click)="closeDetailModal()" [disabled]="fixingInventory">×</button>
       </div>
 
       <!-- Modal Body -->
@@ -292,6 +299,7 @@
                   <th>Difference</th>
                   <th>Issue</th>
                   <th>Inventory rows</th>
+                  <th>Action</th>
                 </tr>
               </thead>
               <tbody>
@@ -315,9 +323,20 @@
                       </li>
                     </ul>
                   </td>
+                  <td>
+                    <button
+                      *ngIf="item.issueType === 'NO_INVENTORY'"
+                      class="fix-inventory-btn"
+                      (click)="fixMissingInventory(item)"
+                      [disabled]="!canFixInventory"
+                      [attr.aria-label]="'Fix inventory for ' + (item.productName || item.itemCode || 'item')">
+                      {{ fixingInventory ? 'Fixing...' : 'Fix inventory' }}
+                    </button>
+                    <span *ngIf="item.issueType !== 'NO_INVENTORY'">—</span>
+                  </td>
                 </tr>
                 <tr *ngIf="detailRows.length === 0">
-                  <td colspan="6">No stock-tracked item details found.</td>
+                  <td colspan="7">No stock-tracked item details found.</td>
                 </tr>
               </tbody>
             </table>
@@ -329,7 +348,8 @@
       <div class="modal-footer">
         <button 
           class="btn btn-secondary" 
-          (click)="closeDetailModal()">
+          (click)="closeDetailModal()"
+          [disabled]="fixingInventory">
           Close
         </button>
       </div>
