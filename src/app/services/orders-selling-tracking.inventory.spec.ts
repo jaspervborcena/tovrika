@@ -208,6 +208,46 @@ describe('OrdersSellingTrackingService inventory transaction', () => {
     expect(writes).toEqual([]);
   });
 
+  it('matches inventory ledger quantities to the exact sale line before retrying FIFO', () => {
+    const quantity = (service as any).getLedgerQuantityForSaleLine([
+      {
+        eventType: 'completed',
+        storeId: 'store-1',
+        productId: 'product-1',
+        saleTrackingId: 'sale-line-1',
+        quantity: 1
+      },
+      {
+        eventType: 'completed',
+        storeId: 'store-1',
+        productId: 'product-1',
+        saleLineIndex: 0,
+        itemCode: 'MUG-1',
+        quantity: 2
+      },
+      {
+        eventType: 'completed',
+        storeId: 'store-1',
+        productId: 'product-1',
+        saleTrackingId: 'another-sale-line',
+        quantity: 5
+      },
+      {
+        eventType: 'restock',
+        storeId: 'store-1',
+        productId: 'product-1',
+        saleTrackingId: 'sale-line-1',
+        quantity: 10
+      }
+    ], {
+      id: 'sale-line-1',
+      itemIndex: 0,
+      data: { storeId: 'store-1', productId: 'product-1', itemCode: 'MUG-1' }
+    });
+
+    expect(quantity).toBe(3);
+  });
+
   it('updates queued tracking locally without querying Firestore while offline', async () => {
     online = false;
     offlineDocuments = [{

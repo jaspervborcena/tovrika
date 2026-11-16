@@ -1,4 +1,4 @@
-import { Component, inject, OnInit } from '@angular/core';
+import { Component, inject, OnInit, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { OfflineReconciliationService, ReconSummaryApiError } from '../../../services/offline-reconciliation.service';
@@ -12,11 +12,15 @@ import {
   ReconciliationIssueCode,
   ReconciliationSummary
 } from '../../../interfaces/reconciliation.interface';
+import {
+  ConfirmationDialogComponent,
+  ConfirmationDialogData
+} from '../../../shared/components/confirmation-dialog/confirmation-dialog.component';
 
 @Component({
   selector: 'app-offline-order-reconciliation',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, ConfirmationDialogComponent],
   templateUrl: './offline-order-reconciliation.component.html',
   styleUrl: './offline-order-reconciliation.component.scss',
   providers: [OfflineReconciliationService]
@@ -64,6 +68,8 @@ export class OfflineOrderReconciliationComponent implements OnInit {
   fixingInventory = false;
   actionMessage: string | null = null;
   actionError: string | null = null;
+  confirmationDialogData = signal<ConfirmationDialogData | null>(null);
+  private pendingInventoryFixItem: ReconciliationInvoiceItem | null = null;
   private detailRequestId = 0;
   
   // Filters
@@ -212,7 +218,7 @@ export class OfflineOrderReconciliationComponent implements OnInit {
     }
   }
 
-  async fixMissingInventory(item: ReconciliationInvoiceItem): Promise<void> {
+  requestMissingInventoryFix(item: ReconciliationInvoiceItem): void {
     const discrepancy = this.selectedDiscrepancy;
     if (
       !discrepancy ||
@@ -223,11 +229,34 @@ export class OfflineOrderReconciliationComponent implements OnInit {
       return;
     }
 
-    const itemName = item.productName || item.itemCode || 'this item';
-    const confirmed = window.confirm(
-      `Run FIFO inventory reconciliation for unprocessed tracked sale lines on invoice ${discrepancy.invoiceNumber}? This may affect other items on the same invoice.`
-    );
-    if (!confirmed) return;
+    this.pendingInventoryFixItem = item;
+    this.confirmationDialogData.set({
+      title: 'Fix inventory discrepancy',
+      message: `Run FIFO inventory reconciliation for the unprocessed tracked sale lines on invoice ${discrepancy.invoiceNumber}? The repair checks existing inventory ledger entries and active FIFO batches. Other items on the same invoice may also be processed.`,
+      confirmText: 'Run FIFO repair',
+      cancelText: 'Cancel',
+      type: 'warning'
+    });
+  }
+
+  onInventoryFixConfirmed(): void {
+    const item = this.pendingInventoryFixItem;
+    this.closeInventoryFixDialog();
+    if (item) void this.fixMissingInventory(item);
+  }
+
+  onInventoryFixCancelled(): void {
+    this.closeInventoryFixDialog();
+  }
+
+  private closeInventoryFixDialog(): void {
+    this.confirmationDialogData.set(null);
+    this.pendingInventoryFixItem = null;
+  }
+
+  private async fixMissingInventory(item: ReconciliationInvoiceItem): Promise<void> {
+    const discrepancy = this.selectedDiscrepancy;
+    if (!discrepancy || this.fixingInventory || !this.networkService.isOnline()) return;
 
     this.fixingInventory = true;
     this.actionMessage = null;
@@ -261,7 +290,16 @@ export class OfflineOrderReconciliationComponent implements OnInit {
       } else {
         this.closeDetailModal();
       }
-      this.actionMessage = `Inventory reconciliation completed for ${itemName}.`;
+      const refreshedItem = this.detailRows.find(row =>
+        item.itemCode
+          ? row.itemCode === item.itemCode
+          : row.productName === item.productName
+      );
+      if (!this.actionError && refreshedItem && refreshedItem.issueType !== 'OK') {
+        this.actionError = `FIFO processing ran, but ${refreshedItem.productName || item.productName || 'the item'} still has a ${this.getItemIssueLabel(refreshedItem.issueType).toLowerCase()} discrepancy. Check the inventory batches and ledger.`;
+      } else if (!this.actionError) {
+        this.actionMessage = result.message;
+      }
     } catch (error) {
       console.error('Inventory reconciliation failed.', error);
       this.actionError = error instanceof Error

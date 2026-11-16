@@ -12,7 +12,7 @@ import {
 import { OrderDetails } from '../interfaces/order-details.interface';
 import { AuthService } from './auth.service';
 import { StoreService } from './store.service';
-import { NetworkService } from './network.service';
+import { NetworkService } from '../core/services/network.service';
 import { OrdersSellingTrackingService } from './orders-selling-tracking.service';
 import { environment } from '../../environments/environment';
 import { createInventorySaleLockId } from '../interfaces/inventory-sale-lock.interface';
@@ -433,17 +433,26 @@ export class OfflineReconciliationService {
     storeId = ''
   ): Promise<{ success: boolean; message: string; error?: any }> {
     try {
-      console.log('🔄 Reprocessing inventory for order:', orderId);
-      const validation = await this.validateReprocessing(orderId);
-      if (!validation.canProcess) {
+      const result = await this.ordersSellingTrackingService.processPendingInventoryForOrder(
+        orderId,
+        { trackedOnly: true }
+      );
+      if (result.errors.length > 0) {
         return {
           success: false,
-          message: `Cannot reprocess: ${validation.errors.join(', ')}`,
-          error: validation.errors
+          message: `FIFO inventory reconciliation processed ${result.processed} sale line(s) before failing: ${result.errors.map(entry => entry.error).join('; ')}`,
+          error: result.errors
         };
       }
-      const result = await this.reconcileDeferredInventory(orderId);
-      if (!result.success) return result;
+      if (result.processed === 0) {
+        return {
+          success: false,
+          message: result.skipped > 0
+            ? 'The sale line already has an inventory ledger entry or FIFO lock. No additional stock was deducted.'
+            : 'No unprocessed completed tracked sale lines were found for this invoice.'
+        };
+      }
+
       await this.logReconciliationAction(orderId, invoiceNumber, storeId, 'inventory_reprocess', {
         inventoryProcessed: false,
         needsReconciliation: true
@@ -451,13 +460,16 @@ export class OfflineReconciliationService {
         inventoryProcessed: true,
         needsReconciliation: false
       }, true);
-      return { success: true, message: 'Inventory reprocessed successfully' };
+      return {
+        success: true,
+        message: `FIFO inventory reconciliation completed for ${result.processed} tracked sale line(s).`
+      };
 
     } catch (error) {
-      console.error('❌ Error reprocessing inventory:', error);
+      console.error('Error reprocessing inventory:', error);
       return {
         success: false,
-        message: `Failed to reprocess inventory: ${error}`,
+        message: `Failed to reprocess inventory: ${error instanceof Error ? error.message : String(error)}`,
         error
       };
     }
