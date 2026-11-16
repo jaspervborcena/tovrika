@@ -5,7 +5,7 @@ This file tracks recently completed work and the next development tasks. Update 
 ## Done
 
 - [x] Update the inventory tracking event-type guide to cover `completed`, `sale`, `damage`, `restock`, and `update` records: [Inventory Tracking Event Types](./INVENTORY_TRACKING_EVENT_TYPE.md).
-- [x] Align the reconciliation grid with the invoice-level `get_recon_summary_bq` response; defer item detail and corrective actions until the API returns the required data.
+- [x] Use `get_recon_summary_bq` for the parent invoice grid and `get_recon_invoice_details_bq` for the child item/ledger grid; defer corrective actions until a server-supported workflow is available.
 - [x] Persist completed sale lines in `ordersSellingTracking` before attempting inventory processing.
 - [x] Deduct stock-tracked sales from oldest eligible batches (FIFO); write one `inventoryTracking` allocation per batch.
 - [x] Use deterministic per-sale-line `inventorySaleLocks` as the idempotency marker, written atomically with batch and audit updates.
