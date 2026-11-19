@@ -20,6 +20,13 @@
           "tovrika"
         ]
       }
+    },
+    "jasperpos-1dfd5": {
+      "hosting": {
+        "app": [
+          "jasperpos-1dfd5"
+        ]
+      }
     }
   },
   "etags": {}
