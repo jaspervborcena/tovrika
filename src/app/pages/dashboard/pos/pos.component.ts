@@ -5420,7 +5420,10 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
     const finalSelectedStore = this.selectedStoreId();
     
     if (finalStores.length === 0) {
-      console.error('❌ Desktop No stores available after all retry attempts. Using SQLite fallback...');
+      const isOffline = this.networkService.isOffline();
+      console.error(
+        `❌ Desktop No stores available after all retry attempts. Network status: ${isOffline ? 'OFFLINE' : 'ONLINE'}`
+      );
       
       // Enhanced error reporting for debugging
       console.error('🔍 STORE LOADING FAILURE ANALYSIS:');
@@ -5428,9 +5431,14 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
       console.error('  - User roles loaded:', this.userRoleService);
       console.error('  - Store service debug:', this.storeService.debugStoreStatus());
       console.error('  - Available stores signal:', this.storeService.getStores());
-      console.error('  - Network status:', this.networkService.isOffline() ? 'OFFLINE' : 'ONLINE');
+      console.error('  - Network status:', isOffline ? 'OFFLINE' : 'ONLINE');
+
+      if (!isOffline) {
+        console.error('⛔ Skipping SQLite store fallback while online to avoid selecting stale store data.');
+        return;
+      }
       
-      // FALLBACK: Use SQLite userData.permissions[0].storeId as reliable default
+      // Offline fallback: use the last store saved in the SQLite user data.
       try {
         const currentUser = this.authService.getCurrentUser();
         const offlineUserData = await this.sqliteService.getUserData(currentUser?.uid || '');
