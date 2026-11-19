@@ -1,19 +1,17 @@
-# Offline Reconciliation Flow
+# Offline Sale and Inventory Reconciliation Flow
 
-This flow documents the intended sale-line inventory workflow. A completed sale line in `ordersSellingTracking` is the inventory work source. It is not given a separate inventory status or copied to a separate request collection. Every completed sale decrements the product's `totalStock` and writes a deterministic `inventorySaleLocks` record. Stock-tracked products also use FIFO batch deductions; non-stock-tracked products skip FIFO but still write a sale audit row.
+This flow documents how completed sale lines are captured offline, synced, and processed through FIFO. The invoice-level discrepancy page and manual repair steps are documented in [reconciliation-operations.md](reconciliation-operations.md).
 
 ```mermaid
 flowchart TD
     A[Cashier completes and pays order] --> B[Persist sale lines in ordersSellingTracking]
     B --> C{Online?}
-    C -- Yes --> F[Read completed sale lines oldest-first]
+    C -- Yes --> D[Run inventory processing]
     C -- No --> G[Queue sale lines in SQLite offline document storage]
     G --> H[Sync sale lines to Firestore when connectivity returns]
-    H --> F
+    H --> D
 
-    F --> R{Processing completes within 15 seconds?}
-    R -- No --> S[Keep payment/order complete; show inventory-pending notice and manual retry]
-    R -- Yes --> I{Deterministic inventorySaleLocks record exists?}
+    D --> I{Deterministic inventorySaleLocks record exists?}
     I -- Yes --> J[Skip; line was already processed]
     I -- No --> K[Read product and calculate new totalStock]
     K --> L{Line isStockTracked?}
@@ -25,8 +23,8 @@ flowchart TD
     M --> T[Line is processed; retry skips it]
     Q --> T
 
-    P --> U[Cashier or manager retries during shift close\nor before next shift]
-    U --> F
+    P --> U[Cashier or manager retries online\nor uses the reconciliation page]
+    U --> D
 ```
 
 ## Key collections involved
@@ -35,21 +33,20 @@ flowchart TD
 - `inventoryTracking` (stock-movement audit: one row per allocated FIFO batch for tracked products, or one sale row for non-stock-tracked products)
 - `productInventory` (batch stock source of truth and FIFO deduction target)
 - SQLite `offline_documents` (durable local copy of sale-line documents waiting to sync)
-- `orderAccountingLedger`, `orderDetails`, and `reconciliationAuditLog` (accounting and broader reconciliation workflow)
+- `orders` (invoice document; `inventoryStatus` is updated after processing completes without errors)
+- `reconciliationAuditLog` (audit record for a successful manual repair from the reconciliation page)
 
 ## Notes
-- Every completed sale decrements the product's `totalStock` and is protected by a deterministic sale-line lock, regardless of `isStockTracked`. Only an explicit `isStockTracked === true` enables stock validation and FIFO; false or missing values skip both and are not inferred from total stock or inventory batches. Tracked sales write one `inventoryTracking` row per allocation. Untracked sales allow `totalStock` to go negative and write one deterministic `eventType: 'sale'` audit row using the product's `costPrice` and `sellingPrice`, with `stockMovement: true`.
+- Processing every completed sale decrements the product's `totalStock` and is protected by a deterministic sale-line lock, regardless of `isStockTracked`. Only an explicit `isStockTracked === true` enables stock validation and FIFO; false or missing values skip both and are not inferred from total stock or inventory batches. Tracked sales write one `inventoryTracking` row per allocation. Untracked sales allow `totalStock` to go negative and write one deterministic `eventType: 'sale'` audit row using the product's `costPrice` and `sellingPrice`, with `stockMovement: true`.
 - Product creation and editing persist the selected `isStockTracked` value. The edit control remains changeable even when stock or batches exist; recomputing product summaries must not promote a false or missing flag. Creating a batch is an explicit inventory action and enables tracking.
 - `itemCode` identifies the product. A particular sale line is identified by its order and line index; locks and audit entries must not be keyed only by item code, because one product can be sold repeatedly.
-- A line is processed only if its exact lock exists. The lock must be written atomically with the product quantity update and relevant batch updates/audit rows, so a failed transaction leaves the line retryable and a successful retry cannot deduct twice.
+- The exact lock marks a sale line as successfully processed. The transaction writes it atomically with the product quantity update and relevant batch updates/audit rows, so a failed transaction leaves the line retryable and a retry after success cannot deduct twice.
 - FIFO can split a tracked sale line across several batches. Each allocation records that batch's `batchId`, document `refId`, quantity, unit cost, and sale-time selling price. Summing those allocation quantities for the exact sale line should equal the sold quantity.
 - Inventory history reads non-stock-tracked sales from their `inventoryTracking` price snapshots. It suppresses the matching `ordersSellingTracking` row when an inventory-tracking record already represents that sale line, preventing duplicate report totals.
-- Offline sales must first be durably saved as completed sale-line documents in SQLite. After sync, processing can read completed lines oldest-first and skip lines with an existing lock. If inventory cannot be processed, leave the line unlocked and report it for shift-close or next-shift reconciliation.
+- Offline sales must first be durably saved as completed sale-line documents in SQLite. Offline sync prioritizes order documents, remaps their IDs in related queued documents, and then notifies sale-line listeners after the sync pass. Eligible completed sale lines are processed oldest-first and skip lines with an existing lock. If inventory cannot be processed, it remains pending for an online retry or manual reconciliation.
 - Offline checkout queues sale-line records but does not read or deduct inventory. The reconnect sync triggers product-stock and, when applicable, FIFO processing after those lines reach Firestore.
-- Online checkout waits up to 15 seconds for inventory processing. A timeout does not undo or repeat payment: it shows a pending notice with a manual inventory-only retry action. Deterministic locks make retry safe if the original transaction finishes late.
-- The order-level inventory status is marked `applied` only after every sale line finishes without errors, not after the first line.
+- Online checkout waits up to 15 seconds for inventory processing. A timeout does not undo or repeat payment: it shows a pending notice with a manual inventory-only retry action. The 15-second UI wait does not cancel an in-flight Firestore transaction; deterministic locks make retry safe if the original transaction finishes late. The offline reconnect listener does not use this UI timeout.
+- The order-level inventory status is set to `applied` after pending-line processing returns without errors. A failure on a later line can happen after earlier line transactions have committed; check the processed count before retrying.
 - This design does not use an `inventoryDeductionRequests` collection or an inventory-status field on `ordersSellingTracking`.
-- The parent invoice grid calls `GET /get_recon_summary_bq` with the selected store/date range and Firebase ID token. Dev uses `https://asia-east1-jasperpos-dev.cloudfunctions.net`; Prod uses `https://asia-east1-jasperpos-1dfd5.cloudfunctions.net`. It displays invoice/date/cashier, severity, issue counts, sales totals, and sales-versus-inventory quantity totals. The summary API does not provide FIFO status, order IDs, or item-level rows.
-- The parent grid's View Details action calls `GET /get_recon_invoice_details_bq` using `storeId`, the selected `invoiceNumber`, and the signed-in user's Firebase ID token in `Authorization: Bearer <token>`. This child grid displays per-item sales/inventory quantities, their difference, issue type, and matching inventory ledger rows. The endpoint only returns sales items and does not provide an order ID for reprocessing actions. Deployment and authenticated response-contract verification in Dev and Prod remain tracked in [TODO.md](../TODO.md); the UI shows loading, error/retry, and empty states while fetching child details.
-- Neither grid offers reprocess/mark-reconciled actions or claims that FIFO was skipped; those require a server-supported correction workflow.
-- Reconciliation searches and processing require connectivity. Offline capture itself must not depend on Firestore transactions.
+- The reconciliation page calls the configured summary API for invoice-level discrepancies and the details API for per-item quantities and inventory ledger rows. The **Fix inventory** action is shown for `NO_INVENTORY` details only; it requires internet, resolves the Firestore order, then runs the existing FIFO sale-line processor for all eligible tracked lines on that order. It may affect other items on the same invoice.
+- The repair checks existing ledger quantities and locks to avoid duplicate deductions. Insufficient batches, partial ledger entries, or mismatches between the reporting API and Firestore can still require manual investigation. See [reconciliation-operations.md](reconciliation-operations.md) for the full runbook.

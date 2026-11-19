@@ -1303,7 +1303,10 @@ export class AuthService {
           userCredential = await signInWithEmailAndPassword(this.auth, email, password);
           this.logger.info('Firebase authentication successful, loading user profile', { area: 'auth' });
         } catch (firebaseError: any) {
-          this.logger.error('Firebase authentication failed', { area: 'auth', payload: { message: firebaseError.message } }, firebaseError);
+          this.logger.error('Firebase authentication failed', {
+            area: 'auth',
+            payload: { code: firebaseError.code, message: firebaseError.message }
+          }, firebaseError);
 
           // Do not use cached credentials here. Online logins must be validated by Firebase,
           // otherwise an outdated offline password could still authenticate after a change.
@@ -1620,6 +1623,12 @@ export class AuthService {
         return 'Too many failed attempts. Please try again later.';
       case 'auth/network-request-failed':
         return 'Network error. Please check your connection and try again.';
+      case 'auth/invalid-api-key':
+        return "Sign-in is temporarily unavailable because the app's Firebase configuration is invalid. Please contact support.";
+      case 'auth/operation-not-allowed':
+        return 'Email and password sign-in is not enabled for this app. Please contact support.';
+      case 'auth/unauthorized-domain':
+        return 'This website is not authorized to sign in. Please contact support.';
       case 'auth/invalid-credential':
         return 'Invalid email or password. Please check your credentials.';
       default:
