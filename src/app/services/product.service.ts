@@ -946,11 +946,20 @@ export class ProductService implements OnDestroy {
 
   private async waitForAuth(): Promise<string> {
     return new Promise((resolve, reject) => {
-      const currentUser = this.authService.getCurrentUser();
-      const currentPermission = this.authService.getCurrentPermission();
-      
-      if (currentUser && currentPermission?.companyId) {
-        resolve(currentPermission.companyId);
+      const getCompanyId = (): string | undefined => {
+        const user = this.authService.getCurrentUser();
+        const permission = this.authService.getCurrentPermission();
+        const permissionCompanyIds = Array.isArray(user?.permissions)
+          ? user.permissions.map(item => item?.companyId)
+          : [];
+        return [permission?.companyId, user?.currentCompanyId, ...permissionCompanyIds]
+          .find(companyId => typeof companyId === 'string' && companyId.trim().length > 0)
+          ?.trim();
+      };
+
+      const initialCompanyId = getCompanyId();
+      if (this.authService.getCurrentUser() && initialCompanyId) {
+        resolve(initialCompanyId);
         return;
       }
 
@@ -958,11 +967,11 @@ export class ProductService implements OnDestroy {
       let attempts = 0;
       const checkAuth = () => {
         const user = this.authService.getCurrentUser();
-        const permission = this.authService.getCurrentPermission();
+        const companyId = getCompanyId();
         
-        if (user && permission?.companyId) {
+        if (user && companyId) {
           console.log('✅ Auth became available');
-          resolve(permission.companyId);
+          resolve(companyId);
           return;
         }
         

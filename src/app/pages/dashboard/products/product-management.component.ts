@@ -4994,7 +4994,7 @@ export class ProductManagementComponent implements OnInit {
    * Check if current user can create initial inventory (creator, store_manager)
    */
   canCreateInitialInventory(): boolean {
-    const userRole = this.authService.userRole();
+    const userRole = String(this.authService.userRole() || '').toLowerCase().replace(/[\s-]+/g, '_');
     return userRole === 'creator' || userRole === 'store_manager';
   }
 
