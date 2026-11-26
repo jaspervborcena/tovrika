@@ -41,8 +41,7 @@ export class CompanyService {
     private injector: Injector
   ) {}
 
-  // Resolve the primary companyId from user profile or permissions.
-  // Order: user.companyId (string or first non-empty in array) -> user.currentCompanyId -> permission.companyId (string or first non-empty in array)
+  // Resolve the selected company before falling back to legacy profile fields.
   private getPrimaryCompanyId(): string | undefined {
     const user: any = this.authService.getCurrentUser() as any;
     const pickFirstNonEmpty = (val: any): string | undefined => {
@@ -59,25 +58,25 @@ export class CompanyService {
       return undefined;
     };
 
-    // 1) From user document (getUserData output)
-    const fromUserDoc = pickFirstNonEmpty(user?.companyId);
-    if (fromUserDoc) return fromUserDoc;
+    // AuthService only selects currentCompanyId when it matches a permission.
+    const permission: any = this.authService.getCurrentPermission() as any;
+    const fromPermission = pickFirstNonEmpty(permission?.companyId);
+    if (fromPermission) return fromPermission;
 
-    // 2) From user's currentCompanyId selection
+    // Fall back to the explicit selection when no permission is available.
     const fromCurrentSelection = pickFirstNonEmpty(user?.currentCompanyId);
     if (fromCurrentSelection) return fromCurrentSelection;
 
-    // 2.5) From any permission entry in the user's permissions array
+    // Fall back to the first company permission.
     if (Array.isArray(user?.permissions)) {
       const ids = user.permissions.map((p: any) => p?.companyId).filter((x: any) => typeof x === 'string' || Array.isArray(x));
       const fromAnyPermission = pickFirstNonEmpty(ids);
       if (fromAnyPermission) return fromAnyPermission;
     }
 
-    // 3) From permission (supports string or array)
-    const permission: any = this.authService.getCurrentPermission() as any;
-    const fromPermission = pickFirstNonEmpty(permission?.companyId);
-    if (fromPermission) return fromPermission;
+    // Last-resort compatibility for older user documents.
+    const fromUserDoc = pickFirstNonEmpty(user?.companyId);
+    if (fromUserDoc) return fromUserDoc;
 
     return undefined;
   }
