@@ -1263,6 +1263,7 @@ async loadProductsByCompanyAndStore(companyId?: string, storeId?: string): Promi
               runningBalanceTotalStock: runningBalance,
               deductedAt: now,
               createdAt: now,
+              uid: currentUser.uid,
               deductedBy: currentUser.uid,
               createdBy: currentUser.uid,
               note: 'Inventory restock - batch added',
