@@ -1412,23 +1412,23 @@ export class CompanyProfileComponent {
       return undefined;
     };
 
-    // 1) From user document: companyId (string or array)
-    const fromUserDoc = pickFirstNonEmpty(user?.companyId);
-    if (fromUserDoc) return fromUserDoc;
+    // AuthService only selects currentCompanyId when it matches a permission.
+    const permission: any = this.authService.getCurrentPermission() as any;
+    const fromPermission = pickFirstNonEmpty(permission?.companyId);
+    if (fromPermission) return fromPermission;
 
-    // 2) From user's currentCompanyId selection
+    // Fall back to the explicit selection when no permission is available.
     const fromCurrentSelection = pickFirstNonEmpty(user?.currentCompanyId);
     if (fromCurrentSelection) return fromCurrentSelection;
 
-    // 3) From permissions array: first non-empty companyId
+    // Fall back to the first company permission.
     const perms: any[] = Array.isArray(user?.permissions) ? user.permissions : [];
     const fromAnyPermission = pickFirstNonEmpty(perms.map(p => p?.companyId));
     if (fromAnyPermission) return fromAnyPermission;
 
-    // 4) From current permission (which may itself hold string/array)
-    const permission: any = this.authService.getCurrentPermission() as any;
-    const fromPermission = pickFirstNonEmpty(permission?.companyId);
-    if (fromPermission) return fromPermission;
+    // Last-resort compatibility for older user documents.
+    const fromUserDoc = pickFirstNonEmpty(user?.companyId);
+    if (fromUserDoc) return fromUserDoc;
 
     return undefined;
   }
