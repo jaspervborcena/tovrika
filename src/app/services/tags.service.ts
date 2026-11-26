@@ -16,6 +16,7 @@ import { AuthService } from './auth.service';
 
 export interface ProductTag {
   id?: string;
+  uid?: string;
   tagId: string;
   group: string;
   label: string;
@@ -44,12 +45,21 @@ export class TagsService {
   async createTag(tag: Omit<ProductTag, 'id' | 'createdAt' | 'createdBy'>): Promise<string> {
     const currentUser = this.authService.getCurrentUser();
     const currentPermission = this.authService.getCurrentPermission();
+    if (!currentUser?.uid) {
+      throw new Error('You must be signed in to create a tag.');
+    }
+    if (!tag.storeId?.trim()) {
+      throw new Error('Select a store before creating a tag.');
+    }
+    const companyId = currentPermission?.companyId || currentUser.currentCompanyId ||
+      currentUser.permissions?.find(permission => permission.companyId)?.companyId || '';
     
     const newTag: Omit<ProductTag, 'id'> = {
       ...tag,
-      companyId: currentPermission?.companyId || '',
+      uid: currentUser.uid,
+      companyId,
       createdAt: Timestamp.now(),
-      createdBy: currentUser?.uid || ''
+      createdBy: currentUser.uid
     };
 
     try {
