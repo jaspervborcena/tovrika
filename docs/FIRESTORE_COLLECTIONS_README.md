@@ -487,10 +487,13 @@ Product variant/differentiation tag.
   "isActive": true,
   "storeId": "<storeId>",
   "companyId": "<companyId>",
+  "uid": "<uid>",
   "createdBy": "<uid>",
   "createdAt": "2026-11-16T12:00:00.000Z"
 }
 ```
+
+The `productTags` rule requires creates to include the authenticated user's UID and creator ID. Note that the global catch-all in `firestore.rules` also grants authenticated users access to unmatched documents, so it must be narrowed separately if creator-only writes are required. After changing Firestore rules, deploy them with `firebase deploy --only firestore:rules`; deploying hosting does not publish rule changes.
 
 #### `predefinedTypes`
 
