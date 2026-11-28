@@ -315,7 +315,7 @@ export const routes: Routes = [
     path: 'pos',
     loadComponent: () => import('./pages/dashboard/pos/pos.component').then(m => m.PosComponent),
     canActivate: [authGuard, policyGuard, onboardingGuard, roleGuard],
-    data: { roles: ['creator', 'store_manager', 'cashier', 'admin'] }
+    data: { roles: ['creator', 'owner', 'store_manager', 'cashier', 'admin'] }
   },
 
   {

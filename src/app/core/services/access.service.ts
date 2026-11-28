@@ -70,8 +70,8 @@ export class AccessService {
     } else if (role === 'cashier') {
       const finalPermissions = { ...this.cashierPermissions, ...permissions };
       this.permissionsSignal.set(finalPermissions);
-    } else if (role === 'creator' || role === 'store_manager') {
-      // Both creator and store_manager get all features for now
+    } else if (role === 'creator' || role === 'owner' || role === 'store_manager') {
+      // Creator/owner and store_manager get all features for now
       const finalPermissions = { ...this.defaultPermissions, ...permissions };
       this.permissionsSignal.set(finalPermissions);
     } else {

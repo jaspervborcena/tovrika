@@ -149,7 +149,11 @@ service cloud.firestore {
       allow update: if isAuthenticated() && 
                     (isOwner(resource) || 
                      (!('uid' in resource.data) && request.resource.data.uid == request.auth.uid) ||
-                     !('uid' in request.resource.data));
+                     !('uid' in request.resource.data) ||
+                     // POS checkout atomically advances the store invoice number.
+                     // Restrict this shared update to invoice-number and timestamp fields only.
+                     request.resource.data.diff(resource.data).affectedKeys()
+                       .hasOnly(['tempInvoiceNumber', 'updatedAt']));
       allow delete: if isAuthenticated() && 
                     (isOwner(resource) || !('uid' in resource.data));
     }

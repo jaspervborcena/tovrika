@@ -199,6 +199,10 @@ export class DashboardComponent implements OnInit {
         } else if (currentPermission.roleId === 'store_manager') {
           this.accessService.setPermissions({}, 'store_manager');
           return;
+        } else if (currentPermission.roleId === 'creator' || currentPermission.roleId === 'owner') {
+          this.userRole.set('creator');
+          this.accessService.setPermissions({}, 'creator');
+          return;
         }
       }
       
@@ -270,7 +274,7 @@ export class DashboardComponent implements OnInit {
     } else if (roleId === 'store_manager') {
       this.userRole.set('store_manager');
       this.accessService.setPermissions({}, 'store_manager');
-    } else if (roleId === 'creator') {
+    } else if (roleId === 'creator' || roleId === 'owner') {
       this.userRole.set('creator');
       this.accessService.setPermissions({}, 'creator');
     } else {

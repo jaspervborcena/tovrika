@@ -3170,9 +3170,9 @@ export class PosComponent implements OnInit, AfterViewInit, OnDestroy {
 
     // If multiple permissions but no specific store match, try to find by companyId
     if (offlineUserData.permissions.length > 1) {
-      // For now, prioritize permissions with 'creator' or 'admin' role
+      // Prioritize company-owner roles when restoring an offline permission selection.
       const priorityPermission = offlineUserData.permissions.find((p: any) => 
-        p.roleId === 'creator' || p.roleId === 'admin'
+        p.roleId === 'creator' || p.roleId === 'owner' || p.roleId === 'admin'
       );
       if (priorityPermission) {
         console.log('🔑 Using priority permission (creator/admin):', priorityPermission.roleId);
