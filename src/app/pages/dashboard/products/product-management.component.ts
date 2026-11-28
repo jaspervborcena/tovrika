@@ -3682,6 +3682,8 @@ export class ProductManagementComponent implements OnInit {
         toastMessage = 'Cannot save product because of tag selection. Please fix the tags and try again.';
       } else if (/category.*(duplicate|exists|already exists|invalid)/i.test(errorMessage)) {
         toastMessage = 'Cannot save product because of category. Please fix the category and try again.';
+      } else if (/permission-denied|missing or insufficient permissions/i.test(errorMessage)) {
+        toastMessage = 'Firestore denied this save. Check that the app is using the expected Firebase project and that its deployed rules allow product and related inventory writes, then sign in again.';
       } else if (/company id|store id|permission/i.test(errorMessage)) {
         toastMessage = 'Cannot save product because of store or permission settings. Please check store selection and user permissions.';
       } else if (errorMessage && !/unknown error/i.test(errorMessage)) {
